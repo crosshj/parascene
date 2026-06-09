@@ -20,6 +20,9 @@ let feedItemCardImageUrl;
 let isFeedCreationImageProcessing;
 let markFeedCardImageUnavailable;
 let setupFeedCardGroupCarousel;
+let getFeedItemGroupVideoSlides;
+let setupFeedCardGroupVideoPlaylist;
+let getFeedGroupVideoPlayer;
 /** @type {typeof import('../../shared/feedCardBuild.js').createFeedItemCard} */
 let createFeedItemCard;
 /** @type {typeof import('../../shared/safeMediaPlay.js').safeMediaPlay} */
@@ -81,6 +84,9 @@ async function loadDeps() {
 		isFeedCreationImageProcessing = feedCardBuildMod.isFeedCreationImageProcessing;
 		markFeedCardImageUnavailable = feedCardBuildMod.markFeedCardImageUnavailable;
 		setupFeedCardGroupCarousel = feedCardBuildMod.setupFeedCardGroupCarousel;
+		getFeedItemGroupVideoSlides = feedCardBuildMod.getFeedItemGroupVideoSlides;
+		setupFeedCardGroupVideoPlaylist = feedCardBuildMod.setupFeedCardGroupVideoPlaylist;
+		getFeedGroupVideoPlayer = feedCardBuildMod.getFeedGroupVideoPlayer;
 		createFeedItemCard = feedCardBuildMod.createFeedItemCard;
 
 		const safeMediaPlayMod = await import(`../../shared/safeMediaPlay.js${qs}`);
@@ -522,17 +528,24 @@ class AppRouteFeed extends HTMLElement {
 
 		// Auto-play looping preview for video feed items when in view.
 		if (isVideo && !processing) {
-			const videoEl = card.querySelector('.feed-card-video');
-			if (videoEl) {
-				videoEl.removeAttribute('poster');
-				videoEl.muted = true;
-				videoEl.playsInline = true;
-				videoEl.loop = true;
-				videoEl.setAttribute('playsinline', '');
-				videoEl.setAttribute('muted', '');
-				videoEl.setAttribute('loop', '');
-				videoEl.dataset.feedVideoSrc = item.video_url;
-				this.setupFeedVideoAutoplay(videoEl);
+			const groupVideoSlides =
+				typeof getFeedItemGroupVideoSlides === 'function' ? getFeedItemGroupVideoSlides(item) : [];
+			if (groupVideoSlides.length > 1 && imageContainer && typeof setupFeedCardGroupVideoPlaylist === 'function') {
+				const player = setupFeedCardGroupVideoPlaylist(imageContainer, item);
+				if (player) this.setupFeedVideoAutoplay(imageContainer);
+			} else {
+				const videoEl = card.querySelector('.feed-card-video');
+				if (videoEl) {
+					videoEl.removeAttribute('poster');
+					videoEl.muted = true;
+					videoEl.playsInline = true;
+					videoEl.loop = true;
+					videoEl.setAttribute('playsinline', '');
+					videoEl.setAttribute('muted', '');
+					videoEl.setAttribute('loop', '');
+					videoEl.dataset.feedVideoSrc = item.video_url;
+					this.setupFeedVideoAutoplay(videoEl);
+				}
 			}
 		} else if (isVideo && processing) {
 			const videoEl = card.querySelector('.feed-card-video');
@@ -574,13 +587,26 @@ class AppRouteFeed extends HTMLElement {
 		return card;
 	}
 
-	setupFeedVideoAutoplay(videoEl) {
+	setupFeedVideoAutoplay(target) {
+		if (!(target instanceof HTMLElement)) return;
+
+		if (target instanceof HTMLVideoElement) {
+			if (!('IntersectionObserver' in window)) {
+				const src = target.dataset.feedVideoSrc;
+				if (src) {
+					target.src = src;
+					safeMediaPlay(target);
+				}
+				return;
+			}
+		} else if (target.dataset.feedGroupVideoPlaylist !== '1') {
+			return;
+		}
+
 		if (!('IntersectionObserver' in window)) {
-			// Fallback: play immediately if observer is unavailable.
-			const src = videoEl.dataset.feedVideoSrc;
-			if (src) {
-				videoEl.src = src;
-				safeMediaPlay(videoEl);
+			if (target.dataset.feedGroupVideoPlaylist === '1' && typeof getFeedGroupVideoPlayer === 'function') {
+				const player = getFeedGroupVideoPlayer(target);
+				player?.play?.();
 			}
 			return;
 		}
@@ -589,20 +615,35 @@ class AppRouteFeed extends HTMLElement {
 			this.videoObserver = new IntersectionObserver((entries) => {
 				entries.forEach((entry) => {
 					const el = entry.target;
-					if (!(el instanceof HTMLVideoElement)) return;
-					const src = el.dataset.feedVideoSrc || "";
-					if (entry.isIntersecting) {
-						if (!el.src && src) {
-							el.src = src;
+					if (!(el instanceof HTMLElement)) return;
+					if (el instanceof HTMLVideoElement) {
+						const src = el.dataset.feedVideoSrc || '';
+						if (entry.isIntersecting) {
+							if (!el.src && src) {
+								el.src = src;
+							}
+							safeMediaPlay(el);
+							el.classList.add('is-active');
+						} else {
+							try {
+								el.pause();
+							} catch {
+								// ignore
+							}
+							el.classList.remove('is-active');
 						}
-						safeMediaPlay(el);
+						return;
+					}
+					if (el.dataset.feedGroupVideoPlaylist !== '1' || typeof getFeedGroupVideoPlayer !== 'function') {
+						return;
+					}
+					const player = getFeedGroupVideoPlayer(el);
+					if (!player) return;
+					if (entry.isIntersecting) {
+						player.play();
 						el.classList.add('is-active');
 					} else {
-						try {
-							el.pause();
-						} catch {
-							// ignore
-						}
+						player.pause();
 						el.classList.remove('is-active');
 					}
 				});
@@ -613,7 +654,7 @@ class AppRouteFeed extends HTMLElement {
 			});
 		}
 
-		this.videoObserver.observe(videoEl);
+		this.videoObserver.observe(target);
 	}
 
 	buildBlogPostCard(item) {

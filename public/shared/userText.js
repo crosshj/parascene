@@ -4,6 +4,7 @@ import {
 	attachMediaAudioLeveling,
 	primeMediaElementForAudioLeveling
 } from './mediaAudioLeveling.js';
+import { mountSequentialVideoPlayer } from './sequentialVideoPlayer.js';
 
 /**
  * Escapes text for safe HTML insertion.
@@ -1420,6 +1421,88 @@ function buildGroupEmbedPosterUrl(source, creationIdNum, shareOpts) {
 	return urlWithDelegation;
 }
 
+/** @type {WeakMap<HTMLElement, ReturnType<typeof mountSequentialVideoPlayer>>} */
+const chatEmbedGroupVideoPlayers = new WeakMap();
+
+/**
+ * @param {HTMLElement} innerCarousel
+ * @param {Array<{ url?: string, width?: number, height?: number }>} slides
+ * @param {string} posterUrl
+ * @returns {ReturnType<typeof mountSequentialVideoPlayer> | null}
+ */
+function mountChatEmbedGroupVideoPlaylist(innerCarousel, slides, posterUrl) {
+	if (!(innerCarousel instanceof HTMLElement) || !Array.isArray(slides) || slides.length <= 1) {
+		return null;
+	}
+
+	const existing = chatEmbedGroupVideoPlayers.get(innerCarousel);
+	if (existing && typeof existing.teardown === 'function') {
+		existing.teardown();
+		chatEmbedGroupVideoPlayers.delete(innerCarousel);
+	}
+
+	const stack = innerCarousel.querySelector('.connect-chat-creation-embed-group-stack');
+	if (!(stack instanceof HTMLElement)) return null;
+
+	innerCarousel.classList.add('connect-chat-creation-embed-inner--group-video-playlist');
+	innerCarousel.removeAttribute('role');
+	innerCarousel.removeAttribute('tabindex');
+	innerCarousel.removeAttribute('aria-label');
+	innerCarousel.removeAttribute('title');
+
+	for (const img of stack.querySelectorAll('.connect-chat-creation-embed-group-img')) {
+		img.remove();
+	}
+	const staticOverlay = innerCarousel.querySelector('.chat-doom-play-overlay');
+	if (staticOverlay instanceof HTMLElement) staticOverlay.remove();
+
+	const normalizedSlides = slides
+		.map((slide) => {
+			const w = Number(slide?.width);
+			const h = Number(slide?.height);
+			return {
+				url: String(slide?.url || '').trim(),
+				width: Number.isFinite(w) && w > 0 ? w : 0,
+				height: Number.isFinite(h) && h > 0 ? h : 0,
+			};
+		})
+		.filter((slide) => slide.url);
+	if (normalizedSlides.length <= 1) return null;
+
+	const player = mountSequentialVideoPlayer(stack, normalizedSlides, {
+		startIndex: 0,
+		loopPlaylist: true,
+		autoAdvanceOnEnded: true,
+		muted: true,
+		videoClass: 'connect-chat-creation-embed-group-video',
+		slotClass: 'connect-chat-creation-embed-group-video-slot sequential-video-player-slot',
+		posterUrl: typeof posterUrl === 'string' ? posterUrl.trim() : '',
+	});
+	if (!player) return null;
+
+	chatEmbedGroupVideoPlayers.set(innerCarousel, player);
+	innerCarousel.dataset.chatEmbedGroupVideoPlaylist = '1';
+
+	if ('IntersectionObserver' in window) {
+		const io = new IntersectionObserver(
+			(entries) => {
+				for (const entry of entries) {
+					if (entry.target !== innerCarousel) continue;
+					if (entry.isIntersecting) player.play();
+					else player.pause();
+				}
+			},
+			{ threshold: 0.5 }
+		);
+		io.observe(innerCarousel);
+		innerCarousel._chatEmbedGroupVideoIo = io;
+	} else {
+		player.play();
+	}
+
+	return player;
+}
+
 function buildGroupEmbedVideoSlide(source, creationIdNum, shareOpts) {
 	const meta = source?.meta && typeof source.meta === 'object' ? source.meta : null;
 	const sourceMediaType = typeof meta?.media_type === 'string' ? meta.media_type : 'image';
@@ -1954,8 +2037,16 @@ export function hydrateChatCreationEmbeds(rootEl) {
 						}
 					}
 				}
-				for (const img of groupImages) {
-					if (img instanceof HTMLImageElement) bindChatCreationEmbedMediaLoadError(wrap, img);
+				if (isGroupVideoGallery && innerCarousel instanceof HTMLElement) {
+					mountChatEmbedGroupVideoPlaylist(
+						innerCarousel,
+						groupVideoSlides,
+						groupSourceUrls[0] || ''
+					);
+				} else {
+					for (const img of groupImages) {
+						if (img instanceof HTMLImageElement) bindChatCreationEmbedMediaLoadError(wrap, img);
+					}
 				}
 				attachChatCreationEmbedDetailLinkReveal(wrap);
 				return;

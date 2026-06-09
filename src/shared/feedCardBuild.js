@@ -38,6 +38,7 @@ import {
 import { attachFeedCardCreationDragSource } from './creationComposerDrag.js';
 import { attachFeedImpressionBeacon, recordFeedImpressionOnClick } from './feedImpressionBeacon.js';
 import { openFeedBetaWhyModal } from './feedBetaWhyModal.js';
+import { mountSequentialVideoPlayer } from './sequentialVideoPlayer.js';
 
 const { buildBlogPostPublicPath, BLOG_CAMPAIGN_INTERNAL } = blogCampaignPathMod;
 const { formatDateTime, formatRelativeTime } = datetimeMod;
@@ -49,6 +50,9 @@ const { creationMetaHasChallengeSubmission } = challengeSubmitMetaMod;
 const { challengeEnteredBadgeHtml, publishedBadgeHtml } = creationBadgesMod;
 
 const html = String.raw;
+
+/** @type {WeakMap<HTMLElement, ReturnType<typeof mountSequentialVideoPlayer>>} */
+const feedGroupVideoPlayers = new WeakMap();
 
 /**
  * @param {object} item - feed row (may carry meta object or JSON string)
@@ -188,6 +192,140 @@ export function feedItemCardImageUrlCandidates(item, preferThumbnail = false) {
 		out.push(u);
 	}
 	return out;
+}
+
+function orderGroupSourcesCoverFirst(groupSourcesRaw, coverSourceId) {
+	const list = Array.isArray(groupSourcesRaw)
+		? groupSourcesRaw.filter((item) => item && typeof item === 'object')
+		: [];
+	const coverId = Number(coverSourceId);
+	if (!Number.isFinite(coverId) || coverId <= 0) return list;
+	const coverIndex = list.findIndex((item) => Number(item.id) === coverId);
+	if (coverIndex <= 0) return list;
+	const ordered = [...list];
+	const [coverSource] = ordered.splice(coverIndex, 1);
+	ordered.unshift(coverSource);
+	return ordered;
+}
+
+function buildFeedGroupVideoSlide(source, creationId) {
+	const meta = source?.meta && typeof source.meta === 'object' ? source.meta : null;
+	const sourceMediaType = typeof meta?.media_type === 'string' ? meta.media_type : 'image';
+	const videoPath = meta?.video?.file_path;
+	if (sourceMediaType !== 'video' || typeof videoPath !== 'string' || !videoPath.trim()) return null;
+	const url = appendCreationIdToMediaUrl(videoPath.trim(), creationId);
+	const width = Number(source?.width);
+	const height = Number(source?.height);
+	return {
+		url,
+		width: Number.isFinite(width) && width > 0 ? width : 0,
+		height: Number.isFinite(height) && height > 0 ? height : 0,
+	};
+}
+
+/**
+ * Ordered playable slides for grouped video feed rows.
+ * @param {object} item
+ * @returns {{ url: string, width: number, height: number }[]}
+ */
+export function getFeedItemGroupVideoSlides(item) {
+	const parsedMeta = parseFeedItemMeta(item);
+	const groupPayload =
+		parsedMeta?.group && typeof parsedMeta.group === 'object' ? parsedMeta.group : null;
+	if (groupPayload?.kind !== 'group_creations') return [];
+	const mediaTypeRaw =
+		typeof item?.media_type === 'string'
+			? item.media_type.trim().toLowerCase()
+			: typeof parsedMeta?.media_type === 'string'
+				? parsedMeta.media_type.trim().toLowerCase()
+				: 'image';
+	if (mediaTypeRaw !== 'video') return [];
+	const creationId = Number(item?.created_image_id ?? item?.id);
+	const sourcesRaw = Array.isArray(groupPayload.source_creations) ? groupPayload.source_creations : [];
+	const ordered = orderGroupSourcesCoverFirst(sourcesRaw, groupPayload.cover_source_id);
+	return ordered
+		.map((source) => buildFeedGroupVideoSlide(source, creationId))
+		.filter((slide) => slide && slide.url);
+}
+
+/**
+ * @param {HTMLElement} imageContainer
+ * @returns {ReturnType<typeof mountSequentialVideoPlayer> | null}
+ */
+export function getFeedGroupVideoPlayer(imageContainer) {
+	if (!(imageContainer instanceof HTMLElement)) return null;
+	return feedGroupVideoPlayers.get(imageContainer) || null;
+}
+
+/**
+ * Mount back-to-back group video playback on a feed card image container.
+ * @param {HTMLElement} imageContainer
+ * @param {object} item
+ * @param {{ posterUrl?: string }} [options]
+ * @returns {ReturnType<typeof mountSequentialVideoPlayer> | null}
+ */
+export function setupFeedCardGroupVideoPlaylist(imageContainer, item, options = {}) {
+	if (!(imageContainer instanceof HTMLElement) || typeof mountSequentialVideoPlayer !== 'function') {
+		return null;
+	}
+	const slides = getFeedItemGroupVideoSlides(item);
+	if (slides.length <= 1) return null;
+
+	const existing = feedGroupVideoPlayers.get(imageContainer);
+	if (existing && typeof existing.teardown === 'function') {
+		existing.teardown();
+		feedGroupVideoPlayers.delete(imageContainer);
+	}
+
+	const posterUrl =
+		typeof options.posterUrl === 'string' && options.posterUrl.trim()
+			? options.posterUrl.trim()
+			: feedItemCardImageUrl(item, false) || slides[0]?.url || '';
+
+	const imgEl = imageContainer.querySelector('.feed-card-img');
+	if (imgEl instanceof HTMLImageElement) {
+		imgEl.style.opacity = '0';
+		imgEl.removeAttribute('src');
+		imgEl.removeAttribute('data-feed-image-url');
+	}
+	const singleVideoEl = imageContainer.querySelector('.feed-card-video:not(.feed-card-group-video)');
+	if (singleVideoEl instanceof HTMLVideoElement) {
+		try {
+			singleVideoEl.pause();
+		} catch {
+			// ignore
+		}
+		singleVideoEl.remove();
+	}
+
+	let stack = imageContainer.querySelector('[data-feed-group-video-stack]');
+	if (!(stack instanceof HTMLElement)) {
+		stack = document.createElement('div');
+		stack.className = 'feed-card-group-video-stack';
+		stack.setAttribute('data-feed-group-video-stack', '1');
+		imageContainer.appendChild(stack);
+	}
+
+	const player = mountSequentialVideoPlayer(stack, slides, {
+		startIndex: 0,
+		loopPlaylist: true,
+		autoAdvanceOnEnded: true,
+		muted: true,
+		videoClass: 'feed-card-video feed-card-group-video',
+		slotClass: 'feed-card-group-video-slot sequential-video-player-slot',
+		posterUrl,
+	});
+	if (!player) return null;
+
+	feedGroupVideoPlayers.set(imageContainer, player);
+	imageContainer.classList.add('feed-card-image--group-video-playlist');
+	imageContainer.classList.remove('loading', 'error');
+	imageContainer.classList.add('loaded');
+	imageContainer.removeAttribute('data-feed-img-state');
+	imageContainer.removeAttribute('role');
+	imageContainer.removeAttribute('aria-label');
+	imageContainer.dataset.feedGroupVideoPlaylist = '1';
+	return player;
 }
 
 export function getFeedItemGroupCarouselSources(item) {
@@ -1476,18 +1614,26 @@ function finishFeedCreationCardMediaAndClick(
 
 	// Auto-play looping preview for video feed items when in view.
 	if (isVideo && !processing) {
-		const videoEl = card.querySelector('.feed-card-video');
-		if (videoEl) {
-			primeMediaElementForAudioLeveling(videoEl);
-			videoEl.removeAttribute('poster');
-			videoEl.muted = true;
-			videoEl.playsInline = true;
-			videoEl.loop = true;
-			videoEl.setAttribute('playsinline', '');
-			videoEl.setAttribute('muted', '');
-			videoEl.setAttribute('loop', '');
-			videoEl.dataset.feedVideoSrc = item.video_url;
-				if (typeof setupFeedVideo === "function") setupFeedVideo(videoEl);
+		const groupVideoSlides = getFeedItemGroupVideoSlides(item);
+		if (groupVideoSlides.length > 1 && imageContainer) {
+			const player = setupFeedCardGroupVideoPlaylist(imageContainer, item);
+			if (player && typeof setupFeedVideo === 'function') {
+				setupFeedVideo(imageContainer);
+			}
+		} else {
+			const videoEl = card.querySelector('.feed-card-video');
+			if (videoEl) {
+				primeMediaElementForAudioLeveling(videoEl);
+				videoEl.removeAttribute('poster');
+				videoEl.muted = true;
+				videoEl.playsInline = true;
+				videoEl.loop = true;
+				videoEl.setAttribute('playsinline', '');
+				videoEl.setAttribute('muted', '');
+				videoEl.setAttribute('loop', '');
+				videoEl.dataset.feedVideoSrc = item.video_url;
+				if (typeof setupFeedVideo === 'function') setupFeedVideo(videoEl);
+			}
 		}
 	} else if (isVideo && processing) {
 		const videoEl = card.querySelector('.feed-card-video');

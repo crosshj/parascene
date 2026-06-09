@@ -2680,6 +2680,21 @@ body.creation-detail-page main>section:first-of-type {
 	z-index: 1;
 }
 
+.creation-detail-group-hero-video-slot.sequential-video-slot--crossfading .creation-detail-group-hero-video.sequential-video-player-video--crossfade-in.is-active {
+	opacity: 0;
+	pointer-events: none;
+}
+
+.creation-detail-group-hero-video-slot.sequential-video-slot--crossfading.sequential-video-slot--crossfade-run .creation-detail-group-hero-video.sequential-video-player-video--crossfade-in.is-active {
+	opacity: 1;
+	pointer-events: auto;
+}
+
+.creation-detail-group-hero-video-slot.sequential-video-slot--crossfading.sequential-video-slot--crossfade-run .creation-detail-group-hero-video.sequential-video-player-video--crossfade-out.is-active {
+	opacity: 0;
+	pointer-events: none;
+}
+
 .creation-detail-group-hero-video-slot .creation-detail-group-hero-video.is-active.sequential-video-player-video--pending {
 	opacity: 0;
 	pointer-events: none;

@@ -73,6 +73,7 @@ import { initChatSidebarModals } from '../shared/components/modals/chatSidebarMo
 import {
 	createFeedItemCard,
 	feedItemToUser,
+	getFeedGroupVideoPlayer,
 	getHiddenFeedItems,
 	isFeedRowVideoCreation,
 	isChatFeedChallengePlaceholder,
@@ -6831,13 +6832,26 @@ export async function initChatPage(root, options = {}) {
 		}
 	}
 
-	function setupFeedChannelVideoAutoplay(messagesEl, videoEl) {
-		if (!(messagesEl instanceof HTMLElement) || !(videoEl instanceof HTMLVideoElement)) return;
+	function setupFeedChannelVideoAutoplay(messagesEl, target) {
+		if (!(messagesEl instanceof HTMLElement) || !(target instanceof HTMLElement)) return;
+
+		if (target instanceof HTMLVideoElement) {
+			if (!('IntersectionObserver' in window)) {
+				const src = target.dataset.feedVideoSrc;
+				if (src) {
+					target.src = src;
+					safeMediaPlay(target);
+				}
+				return;
+			}
+		} else if (target.dataset.feedGroupVideoPlaylist !== '1') {
+			return;
+		}
+
 		if (!('IntersectionObserver' in window)) {
-			const src = videoEl.dataset.feedVideoSrc;
-			if (src) {
-				videoEl.src = src;
-				safeMediaPlay(videoEl);
+			if (target.dataset.feedGroupVideoPlaylist === '1') {
+				const player = getFeedGroupVideoPlayer(target);
+				player?.play?.();
 			}
 			return;
 		}
@@ -6846,20 +6860,33 @@ export async function initChatPage(root, options = {}) {
 				(entries) => {
 					for (const entry of entries) {
 						const el = entry.target;
-						if (!(el instanceof HTMLVideoElement)) continue;
-						const src = el.dataset.feedVideoSrc || '';
-						if (entry.isIntersecting) {
-							if (!el.src && src) {
-								el.src = src;
+						if (!(el instanceof HTMLElement)) continue;
+						if (el instanceof HTMLVideoElement) {
+							const src = el.dataset.feedVideoSrc || '';
+							if (entry.isIntersecting) {
+								if (!el.src && src) {
+									el.src = src;
+								}
+								safeMediaPlay(el);
+								el.classList.add('is-active');
+							} else {
+								try {
+									el.pause();
+								} catch {
+									// ignore
+								}
+								el.classList.remove('is-active');
 							}
-							safeMediaPlay(el);
+							continue;
+						}
+						if (el.dataset.feedGroupVideoPlaylist !== '1') continue;
+						const player = getFeedGroupVideoPlayer(el);
+						if (!player) continue;
+						if (entry.isIntersecting) {
+							player.play();
 							el.classList.add('is-active');
 						} else {
-							try {
-								el.pause();
-							} catch {
-								// ignore
-							}
+							player.pause();
 							el.classList.remove('is-active');
 						}
 					}
@@ -6867,7 +6894,7 @@ export async function initChatPage(root, options = {}) {
 				{ root: messagesEl, threshold: 0.5, rootMargin: '0px 0px 0px 0px' }
 			);
 		}
-		feedChannelVideoObserver.observe(videoEl);
+		feedChannelVideoObserver.observe(target);
 	}
 
 	function maybeLoadMoreActiveFeedLanePseudoChannel() {

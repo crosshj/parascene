@@ -3657,6 +3657,148 @@ app-route-feed {
 	opacity: 1;
 }
 
+.feed-card-image--group-video-playlist .feed-card-group-video-stack {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+}
+
+.feed-card-image--group-video-playlist .feed-card-group-video-slot {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+}
+
+.feed-card-image--group-video-playlist .feed-card-group-video {
+	object-fit: cover;
+	object-position: center;
+}
+
+.feed-card-group-video-slot.sequential-video-player-slot,
+.connect-chat-creation-embed-group-video-slot.sequential-video-player-slot,
+.chat-doom-group-video-slot.sequential-video-player-slot {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+}
+
+.sequential-video-player-slot .sequential-video-player-play-overlay,
+.sequential-video-player-slot .chat-doom-play-overlay {
+	position: absolute;
+	inset: 0;
+	z-index: 4;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	pointer-events: none;
+}
+
+.sequential-video-player-slot .sequential-video-player-play-overlay[hidden],
+.sequential-video-player-slot .chat-doom-play-overlay[hidden] {
+	display: none !important;
+}
+
+.sequential-video-player-slot .chat-doom-play-overlay-inner {
+	width: 72px;
+	height: 72px;
+	border-radius: 50%;
+	background: rgba(0, 0, 0, 0.45);
+	color: #fff;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+}
+
+.sequential-video-player-slot .chat-doom-play-overlay-inner--pausehint {
+	position: static;
+	inset: auto;
+	width: 72px;
+	height: 72px;
+	border-radius: 50%;
+	background: rgba(0, 0, 0, 0.45);
+	color: #fff;
+	box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+}
+
+@media (hover: none), (pointer: coarse) {
+	.sequential-video-player-slot .chat-doom-play-overlay-inner--pausehint {
+		display: none !important;
+	}
+}
+
+.sequential-video-player-slot .chat-doom-play-glyph {
+	width: 36px;
+	height: 36px;
+	margin-left: 5px;
+	opacity: 0.95;
+}
+
+.sequential-video-player-slot .chat-doom-pause-glyph {
+	width: 34px;
+	height: 34px;
+	opacity: 0.95;
+}
+
+.connect-chat-creation-embed-inner--group-video-playlist .connect-chat-creation-embed-group-video-slot {
+	position: relative;
+	width: 100%;
+	height: 100%;
+}
+
+.connect-chat-creation-embed-inner--group-video-playlist .connect-chat-creation-embed-group-video {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.chat-doom-group-video-stack {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+}
+
+.chat-doom-group-video-slot {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+}
+
+.chat-doom-group-video-slot .chat-doom-group-video {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.sequential-video-player-slot .sequential-video-player-video {
+	transition: opacity var(--sequential-video-crossfade-ms, 0ms) ease;
+}
+
+.sequential-video-player-slot.sequential-video-slot--crossfading .sequential-video-player-video--crossfade-in.is-active {
+	opacity: 0;
+	pointer-events: none;
+}
+
+.sequential-video-player-slot.sequential-video-slot--crossfading .sequential-video-player-video--crossfade-out.is-active {
+	opacity: 1;
+}
+
+.sequential-video-player-slot.sequential-video-slot--crossfading.sequential-video-slot--crossfade-run .sequential-video-player-video--crossfade-in.is-active {
+	opacity: 1;
+	pointer-events: auto;
+}
+
+.sequential-video-player-slot.sequential-video-slot--crossfading.sequential-video-slot--crossfade-run .sequential-video-player-video--crossfade-out.is-active {
+	opacity: 0;
+	pointer-events: none;
+}
+
 .feed-card-actions {
 	display: flex;
 	align-items: center;

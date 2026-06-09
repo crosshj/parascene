@@ -651,6 +651,11 @@ export function openChatVideoGalleryLightbox(slides, hooks) {
 		const video = videos[activePlayer];
 		if (!(video instanceof HTMLVideoElement)) return;
 		if (video.paused) {
+			if (!userPaused) {
+				playOverlay.hidden = true;
+				playOverlay.setAttribute('aria-hidden', 'true');
+				return;
+			}
 			playOverlay.hidden = false;
 			playOverlay.setAttribute('aria-hidden', 'false');
 			if (playOverlayPlayIcon instanceof HTMLElement) playOverlayPlayIcon.hidden = false;

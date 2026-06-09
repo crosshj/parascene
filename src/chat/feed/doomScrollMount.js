@@ -27,9 +27,107 @@ import {
 	openDoomCommentsPopover
 } from '../doom/doomCommentsPopover.js';
 import { warmDoomSlideVideo } from './doomScrollWarm.js';
+import {
+	feedItemCardImageUrlCandidates,
+	getFeedItemGroupVideoSlides
+} from '../../shared/feedCardBuild.js';
+import { mountSequentialVideoPlayer } from '../../shared/sequentialVideoPlayer.js';
 
 /** @type {null | (() => void)} */
 let activeTeardown = null;
+
+/** @type {WeakMap<HTMLElement, ReturnType<typeof mountSequentialVideoPlayer>>} */
+const doomGroupVideoPlayers = new WeakMap();
+
+/**
+ * @param {HTMLElement | null | undefined} slide
+ * @returns {ReturnType<typeof mountSequentialVideoPlayer> | null}
+ */
+function getDoomGroupVideoPlayer(slide) {
+	if (!(slide instanceof HTMLElement)) return null;
+	return doomGroupVideoPlayers.get(slide) || null;
+}
+
+/**
+ * @param {HTMLElement | null | undefined} slide
+ * @returns {HTMLVideoElement | null}
+ */
+function resolveDoomSlideVideo(slide) {
+	if (!(slide instanceof HTMLElement)) return null;
+	const player = getDoomGroupVideoPlayer(slide);
+	if (player && typeof player.getActiveVideo === 'function') {
+		const active = player.getActiveVideo();
+		if (active instanceof HTMLVideoElement) return active;
+	}
+	const activeVid = slide.querySelector('video.chat-doom-video.is-active');
+	if (activeVid instanceof HTMLVideoElement) return activeVid;
+	const v = slide.querySelector('video.chat-doom-video');
+	return v instanceof HTMLVideoElement ? v : null;
+}
+
+/**
+ * @param {HTMLElement} slide
+ * @param {object} item
+ * @param {{ onFirstReveal?: () => void, onPlaybackStateChange?: () => void }} [hooks]
+ */
+function mountDoomGroupVideoPlaylist(slide, item, hooks = {}) {
+	const groupSlides = getFeedItemGroupVideoSlides(item);
+	if (groupSlides.length <= 1) return null;
+	const mediaFrame = slide.querySelector('.chat-doom-slide-media-frame');
+	if (!(mediaFrame instanceof HTMLElement)) return null;
+
+	const legacyVideo = slide.querySelector('video.chat-doom-video');
+	if (legacyVideo instanceof HTMLVideoElement) legacyVideo.remove();
+
+	let stack = slide.querySelector('[data-chat-doom-group-video-stack]');
+	if (!(stack instanceof HTMLElement)) {
+		stack = document.createElement('div');
+		stack.className = 'chat-doom-group-video-stack';
+		stack.setAttribute('data-chat-doom-group-video-stack', '1');
+		mediaFrame.appendChild(stack);
+	}
+
+	const posterCandidates = feedItemCardImageUrlCandidates(item, false);
+	const posterUrl = posterCandidates[0] || '';
+
+	const existing = getDoomGroupVideoPlayer(slide);
+	if (existing && typeof existing.teardown === 'function') {
+		existing.teardown();
+		doomGroupVideoPlayers.delete(slide);
+	}
+
+	const player = mountSequentialVideoPlayer(stack, groupSlides, {
+		startIndex: 0,
+		loopPlaylist: true,
+		autoAdvanceOnEnded: true,
+		muted: true,
+		videoClass: 'chat-doom-video chat-doom-group-video',
+		slotClass: 'chat-doom-group-video-slot sequential-video-player-slot',
+		posterUrl,
+		onFirstReveal: typeof hooks.onFirstReveal === 'function' ? hooks.onFirstReveal : null,
+		onPlaybackStateChange:
+			typeof hooks.onPlaybackStateChange === 'function' ? hooks.onPlaybackStateChange : null,
+	});
+	if (!player) return null;
+
+	doomGroupVideoPlayers.set(slide, player);
+	slide.dataset.chatDoomGroupVideoPlaylist = '1';
+	return player;
+}
+
+/**
+ * @param {HTMLElement | null | undefined} slide
+ */
+function rewindDoomSlidePlayback(slide) {
+	if (!(slide instanceof HTMLElement)) return;
+	const player = getDoomGroupVideoPlayer(slide);
+	if (player) {
+		player.pause();
+		void player.goToIndex(0, { autoplay: false });
+		return;
+	}
+	rewindDoomSlideVideo(slide);
+}
 
 function setChatPageDoomScrollBodyClass(on) {
 	if (typeof document === 'undefined' || !document.body) return;
@@ -160,7 +258,7 @@ export async function mountChatDoomScroll(opts) {
 	function syncMuteUi() {
 		const list = slides();
 		const slide = list[activeIdx];
-		const v = slide?.querySelector?.('video.chat-doom-video');
+		const v = resolveDoomSlideVideo(slide);
 		const uiMuted = v instanceof HTMLVideoElement ? v.muted : preferMuted;
 		if (muteOn instanceof HTMLElement) muteOn.hidden = !uiMuted;
 		if (muteOff instanceof HTMLElement) muteOff.hidden = uiMuted;
@@ -173,7 +271,15 @@ export async function mountChatDoomScroll(opts) {
 	let pauseFlashTimer = null;
 
 	function syncPlayOverlayForSlide(slide) {
-		const v = slide.querySelector('video.chat-doom-video');
+		if (slide instanceof HTMLElement && slide.dataset.chatDoomGroupVideoPlaylist === '1') {
+			const o = slide.querySelector('[data-chat-doom-play-overlay]');
+			if (o instanceof HTMLElement) {
+				o.hidden = true;
+				o.setAttribute('aria-hidden', 'true');
+			}
+			return;
+		}
+		const v = resolveDoomSlideVideo(slide);
 		const o = slide.querySelector('[data-chat-doom-play-overlay]');
 		if (!v || !o) return;
 		const playInner = o.querySelector('[data-chat-doom-play-icon]');
@@ -199,7 +305,7 @@ export async function mountChatDoomScroll(opts) {
 		o.setAttribute('aria-hidden', 'false');
 		pauseFlashTimer = window.setTimeout(() => {
 			pauseFlashTimer = null;
-			const v = slide.querySelector('video.chat-doom-video');
+			const v = resolveDoomSlideVideo(slide);
 			if (!(v instanceof HTMLVideoElement)) return;
 			hint.hidden = true;
 			if (playInner instanceof HTMLElement) playInner.hidden = false;
@@ -211,7 +317,8 @@ export async function mountChatDoomScroll(opts) {
 	 * @param {HTMLElement} slide
 	 */
 	function bindDoomSlidePlaybackUi(slide) {
-		const v = slide.querySelector('video.chat-doom-video');
+		if (slide instanceof HTMLElement && slide.dataset.chatDoomGroupVideoPlaylist === '1') return;
+		const v = resolveDoomSlideVideo(slide);
 		if (!(v instanceof HTMLVideoElement)) return;
 		const sync = () => syncPlayOverlayForSlide(slide);
 		v.addEventListener('play', () => {
@@ -226,8 +333,14 @@ export async function mountChatDoomScroll(opts) {
 
 	function appendDoomSlideForItem(item, eagerVideoLoad = false) {
 		const slide = createDoomSlideElement(item, viewerUserId ?? -1);
-		if (eagerVideoLoad) {
-			const v0 = slide.querySelector('video.chat-doom-video');
+		const groupPlayer = mountDoomGroupVideoPlaylist(slide, item, {
+			onFirstReveal: () => revealDoomSlideVideoPlayback(slide),
+			onPlaybackStateChange: () => {
+				if (slides()[activeIdx] === slide) syncPlayOverlayForSlide(slide);
+			},
+		});
+		if (!groupPlayer && eagerVideoLoad) {
+			const v0 = resolveDoomSlideVideo(slide);
 			if (v0 instanceof HTMLVideoElement) {
 				v0.preload = 'auto';
 				v0.setAttribute('data-chat-doom-warm', 'auto');
@@ -294,7 +407,7 @@ export async function mountChatDoomScroll(opts) {
 		const list = slides();
 		const slide = list[activeIdx];
 		if (!(slide instanceof HTMLElement)) return;
-		const v = slide.querySelector('video.chat-doom-video');
+		const v = resolveDoomSlideVideo(slide);
 		if (!(v instanceof HTMLVideoElement)) return;
 		detachProgressListener = bindProgressForSlide(slide, v);
 	}
@@ -387,10 +500,16 @@ export async function mountChatDoomScroll(opts) {
 		for (let i = 0; i < list.length; i += 1) {
 			if (i === exceptIdx) continue;
 			const s = list[i];
-			const v = s.querySelector('video.chat-doom-video');
+			const groupPlayer = getDoomGroupVideoPlayer(s);
+			if (groupPlayer) {
+				groupPlayer.pause();
+				rewindDoomSlidePlayback(s);
+				continue;
+			}
+			const v = resolveDoomSlideVideo(s);
 			if (!(v instanceof HTMLVideoElement)) continue;
 			v.pause();
-			rewindDoomSlideVideo(s);
+			rewindDoomSlidePlayback(s);
 		}
 	}
 
@@ -398,10 +517,16 @@ export async function mountChatDoomScroll(opts) {
 		const list = slides();
 		for (let i = 0; i < list.length; i += 1) {
 			const s = list[i];
-			const v = s.querySelector('video.chat-doom-video');
+			const groupPlayer = getDoomGroupVideoPlayer(s);
+			if (groupPlayer) {
+				groupPlayer.pause();
+				if (i !== activeIdx) rewindDoomSlidePlayback(s);
+				continue;
+			}
+			const v = resolveDoomSlideVideo(s);
 			if (!(v instanceof HTMLVideoElement)) continue;
 			v.pause();
-			if (i !== activeIdx) rewindDoomSlideVideo(s);
+			if (i !== activeIdx) rewindDoomSlidePlayback(s);
 		}
 	}
 
@@ -427,7 +552,24 @@ export async function mountChatDoomScroll(opts) {
 		const slide = list[activeIdx];
 		if (!(slide instanceof HTMLElement)) return;
 		slide.removeAttribute('data-chat-doom-user-paused');
-		const v = slide.querySelector('video.chat-doom-video');
+		const groupPlayer = getDoomGroupVideoPlayer(slide);
+		if (groupPlayer) {
+			const posterImg = slide.querySelector('img.chat-doom-poster');
+			const alreadyRevealed =
+				posterImg instanceof HTMLImageElement && posterImg.hidden;
+			if (alreadyRevealed) revealDoomSlideVideoPlayback(slide);
+			groupPlayer.setMuted(slideNsfwBlocked(slide) ? true : preferMuted);
+			if (seekToStart) {
+				void groupPlayer.goToIndex(0, { autoplay: true, force: true });
+			} else {
+				groupPlayer.play();
+			}
+			syncMuteUi();
+			syncPlayOverlayForSlide(slide);
+			attachActiveProgressListener();
+			return;
+		}
+		const v = resolveDoomSlideVideo(slide);
 		if (!(v instanceof HTMLVideoElement)) return;
 		if (seekToStart) {
 			try {
@@ -571,7 +713,7 @@ export async function mountChatDoomScroll(opts) {
 		activeIdx = best;
 		applyActiveVisual();
 		const slide = list[activeIdx];
-		const v = slide?.querySelector?.('video.chat-doom-video');
+		const v = resolveDoomSlideVideo(slide);
 		const indexChanged = prev !== activeIdx;
 		const alreadyPlaying =
 			!indexChanged &&
@@ -755,8 +897,15 @@ export async function mountChatDoomScroll(opts) {
 		if (!(media instanceof HTMLElement)) return;
 		if (t.closest('button, a')) return;
 		const slide = media.closest('.chat-doom-slide');
-		const v = slide?.querySelector('video.chat-doom-video');
-		if (!(v instanceof HTMLVideoElement) || !(slide instanceof HTMLElement)) return;
+		if (!(slide instanceof HTMLElement)) return;
+		const groupPlayer = getDoomGroupVideoPlayer(slide);
+		if (groupPlayer) {
+			ev.preventDefault();
+			groupPlayer.togglePlayPause();
+			return;
+		}
+		const v = resolveDoomSlideVideo(slide);
+		if (!(v instanceof HTMLVideoElement)) return;
 		ev.preventDefault();
 		if (v.paused) {
 			safeMediaPlay(v);
@@ -905,6 +1054,12 @@ export async function mountChatDoomScroll(opts) {
 		if (appended) {
 			scroller.appendChild(frag);
 			for (const { slide, item } of pending) {
+				mountDoomGroupVideoPlaylist(slide, item, {
+					onFirstReveal: () => revealDoomSlideVideoPlayback(slide),
+					onPlaybackStateChange: () => {
+						if (slides()[activeIdx] === slide) syncPlayOverlayForSlide(slide);
+					},
+				});
 				bindDoomSlidePlaybackUi(slide);
 				const likeBtn = slide.querySelector('button[data-like-button]');
 				if (likeBtn instanceof HTMLElement) initLikeButton(likeBtn, item);
@@ -970,6 +1125,12 @@ export async function mountChatDoomScroll(opts) {
 		}
 		scroller.appendChild(frag);
 		for (const { slide, item } of batch) {
+			mountDoomGroupVideoPlaylist(slide, item, {
+				onFirstReveal: () => revealDoomSlideVideoPlayback(slide),
+				onPlaybackStateChange: () => {
+					if (slides()[activeIdx] === slide) syncPlayOverlayForSlide(slide);
+				},
+			});
 			bindDoomSlidePlaybackUi(slide);
 			const likeBtn = slide.querySelector('button[data-like-button]');
 			if (likeBtn instanceof HTMLElement) initLikeButton(likeBtn, item);
@@ -1002,7 +1163,7 @@ export async function mountChatDoomScroll(opts) {
 			}
 			const list = slides();
 			const slide = list[anchorIndex];
-			const v = slide?.querySelector?.('video.chat-doom-video');
+			const v = resolveDoomSlideVideo(slide);
 			if (!(v instanceof HTMLVideoElement)) {
 				resolve();
 				return;
@@ -1212,8 +1373,23 @@ export async function mountChatDoomScroll(opts) {
 		muteBtn.addEventListener('click', () => {
 			const list = slides();
 			const slide = list[activeIdx];
-			const v = slide?.querySelector?.('video.chat-doom-video');
-			if (!(slide instanceof HTMLElement) || !(v instanceof HTMLVideoElement)) return;
+			const groupPlayer = getDoomGroupVideoPlayer(slide);
+			const v = resolveDoomSlideVideo(slide);
+			if (!(slide instanceof HTMLElement)) return;
+			if (groupPlayer) {
+				if (slideNsfwBlocked(slide)) return;
+				preferMuted = !groupPlayer.isMuted();
+				try {
+					sessionStorage.setItem('chatDoomPreferMuted', preferMuted ? '1' : '0');
+				} catch {
+					// ignore
+				}
+				groupPlayer.setMuted(preferMuted);
+				syncMuteUi();
+				if (!preferMuted) groupPlayer.play();
+				return;
+			}
+			if (!(v instanceof HTMLVideoElement)) return;
 			if (slideNsfwBlocked(slide)) return;
 
 			preferMuted = !v.muted;
