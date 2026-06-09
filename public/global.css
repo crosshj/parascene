@@ -3676,6 +3676,11 @@ app-route-feed {
 	object-position: center;
 }
 
+.sequential-video-player-slot--noninteractive,
+.feed-card-image--group-video-playlist .feed-card-group-video-slot {
+	pointer-events: none;
+}
+
 .feed-card-group-video-slot.sequential-video-player-slot,
 .connect-chat-creation-embed-group-video-slot.sequential-video-player-slot,
 .chat-doom-group-video-slot.sequential-video-player-slot {
@@ -3778,6 +3783,15 @@ app-route-feed {
 
 .sequential-video-player-slot .sequential-video-player-video {
 	transition: opacity var(--sequential-video-crossfade-ms, 0ms) ease;
+}
+
+.sequential-video-player-slot .sequential-video-player-video:not(.is-active) {
+	opacity: 0;
+	pointer-events: none;
+}
+
+.sequential-video-player-slot .sequential-video-player-video.is-active {
+	opacity: 1;
 }
 
 .sequential-video-player-slot.sequential-video-slot--crossfading .sequential-video-player-video--crossfade-in.is-active {

@@ -59,7 +59,8 @@ function supportsHoverPauseHint() {
  *   onPlaybackStateChange?: () => void,
  *   crossfade?: boolean,
  *   crossfadeMs?: number,
- *   overlapSec?: number
+ *   overlapSec?: number,
+ *   interactive?: boolean
  * }} [options]
  */
 export function mountSequentialVideoPlayer(container, slides, options = {}) {
@@ -93,6 +94,7 @@ export function mountSequentialVideoPlayer(container, slides, options = {}) {
 	const onFirstReveal = typeof options.onFirstReveal === 'function' ? options.onFirstReveal : null;
 	const onPlaybackStateChange =
 		typeof options.onPlaybackStateChange === 'function' ? options.onPlaybackStateChange : null;
+	const interactive = options.interactive !== false;
 	const posterUrl = typeof options.posterUrl === 'string' ? options.posterUrl.trim() : '';
 	const len = normalized.length;
 	const loopSingleClip = len <= 1 && loopPlaylist;
@@ -111,7 +113,9 @@ export function mountSequentialVideoPlayer(container, slides, options = {}) {
 	startIndex = Math.max(0, Math.min(len - 1, startIndex));
 
 	const slot = document.createElement('div');
-	slot.className = slotClass;
+	slot.className = interactive
+		? slotClass
+		: `${slotClass} sequential-video-player-slot--noninteractive`.trim();
 	slot.style.setProperty('--sequential-video-ar', '16 / 9');
 
 	let posterEl = null;
@@ -206,7 +210,7 @@ export function mountSequentialVideoPlayer(container, slides, options = {}) {
 	let slotHovered = false;
 
 	const syncPlayPauseOverlay = () => {
-		if (!placeholderHidden || advanceLock || tornDown) {
+		if (!interactive || !placeholderHidden || advanceLock || tornDown) {
 			playOverlay.hidden = true;
 			playOverlay.setAttribute('aria-hidden', 'true');
 			return;
@@ -266,9 +270,11 @@ export function mountSequentialVideoPlayer(container, slides, options = {}) {
 		syncPlayPauseOverlay();
 	};
 
-	slot.addEventListener('click', onSlotClick);
-	slot.addEventListener('mouseenter', onSlotMouseEnter);
-	slot.addEventListener('mouseleave', onSlotMouseLeave);
+	if (interactive) {
+		slot.addEventListener('click', onSlotClick);
+		slot.addEventListener('mouseenter', onSlotMouseEnter);
+		slot.addEventListener('mouseleave', onSlotMouseLeave);
+	}
 
 	const playerLoaded = [
 		{ slideIdx: -1, url: '' },
@@ -679,6 +685,7 @@ export function mountSequentialVideoPlayer(container, slides, options = {}) {
 			}
 		},
 		togglePlayPause() {
+			if (!interactive) return;
 			const video = videos[activePlayer];
 			if (!(video instanceof HTMLVideoElement) || !placeholderHidden || advanceLock || tornDown) {
 				return;
@@ -693,6 +700,13 @@ export function mountSequentialVideoPlayer(container, slides, options = {}) {
 			}
 		},
 		getActiveVideo() {
+			const current = videos[activePlayer];
+			if (
+				current instanceof HTMLVideoElement &&
+				Boolean(current.currentSrc || current.getAttribute('src'))
+			) {
+				return current;
+			}
 			const activeVideos = videos.filter(
 				(video) =>
 					video instanceof HTMLVideoElement &&
@@ -707,8 +721,10 @@ export function mountSequentialVideoPlayer(container, slides, options = {}) {
 				});
 				return activeVideos[0];
 			}
-			const fallback = videos[activePlayer];
-			return fallback instanceof HTMLVideoElement ? fallback : null;
+			return null;
+		},
+		isTransitioning() {
+			return advanceLock;
 		},
 		getVideos() {
 			return videos.filter((video) => video instanceof HTMLVideoElement);

@@ -68,7 +68,7 @@ function resolveDoomSlideVideo(slide) {
 /**
  * @param {HTMLElement} slide
  * @param {object} item
- * @param {{ onFirstReveal?: () => void, onPlaybackStateChange?: () => void }} [hooks]
+ * @param {{ onFirstReveal?: () => void, onPlaybackStateChange?: () => void, onIndexChange?: () => void }} [hooks]
  */
 function mountDoomGroupVideoPlaylist(slide, item, hooks = {}) {
 	const groupSlides = getFeedItemGroupVideoSlides(item);
@@ -107,6 +107,7 @@ function mountDoomGroupVideoPlaylist(slide, item, hooks = {}) {
 		onFirstReveal: typeof hooks.onFirstReveal === 'function' ? hooks.onFirstReveal : null,
 		onPlaybackStateChange:
 			typeof hooks.onPlaybackStateChange === 'function' ? hooks.onPlaybackStateChange : null,
+		onIndexChange: typeof hooks.onIndexChange === 'function' ? hooks.onIndexChange : null,
 	});
 	if (!player) return null;
 
@@ -333,12 +334,7 @@ export async function mountChatDoomScroll(opts) {
 
 	function appendDoomSlideForItem(item, eagerVideoLoad = false) {
 		const slide = createDoomSlideElement(item, viewerUserId ?? -1);
-		const groupPlayer = mountDoomGroupVideoPlaylist(slide, item, {
-			onFirstReveal: () => revealDoomSlideVideoPlayback(slide),
-			onPlaybackStateChange: () => {
-				if (slides()[activeIdx] === slide) syncPlayOverlayForSlide(slide);
-			},
-		});
+		const groupPlayer = mountDoomGroupVideoPlaylist(slide, item, doomGroupPlaylistHooks(slide));
 		if (!groupPlayer && eagerVideoLoad) {
 			const v0 = resolveDoomSlideVideo(slide);
 			if (v0 instanceof HTMLVideoElement) {
@@ -410,6 +406,26 @@ export async function mountChatDoomScroll(opts) {
 		const v = resolveDoomSlideVideo(slide);
 		if (!(v instanceof HTMLVideoElement)) return;
 		detachProgressListener = bindProgressForSlide(slide, v);
+	}
+
+	function doomGroupPlaylistHooks(slide) {
+		return {
+			onFirstReveal: () => revealDoomSlideVideoPlayback(slide),
+			onIndexChange: () => {
+				if (slides()[activeIdx] === slide) attachActiveProgressListener();
+			},
+			onPlaybackStateChange: () => {
+				if (slides()[activeIdx] === slide) attachActiveProgressListener();
+			},
+		};
+	}
+
+	function isDoomGroupSlidePlaybackActive(slide) {
+		const player = getDoomGroupVideoPlayer(slide);
+		if (!player) return false;
+		if (typeof player.isTransitioning === 'function' && player.isTransitioning()) return true;
+		const v = player.getActiveVideo();
+		return v instanceof HTMLVideoElement && !v.paused && v.currentTime > 0;
 	}
 
 	/** Skip swipe-audio kill only for the initial programmatic anchor scroll (mount). */
@@ -502,6 +518,9 @@ export async function mountChatDoomScroll(opts) {
 			const s = list[i];
 			const groupPlayer = getDoomGroupVideoPlayer(s);
 			if (groupPlayer) {
+				if (typeof groupPlayer.isTransitioning === 'function' && groupPlayer.isTransitioning()) {
+					continue;
+				}
 				groupPlayer.pause();
 				rewindDoomSlidePlayback(s);
 				continue;
@@ -519,6 +538,13 @@ export async function mountChatDoomScroll(opts) {
 			const s = list[i];
 			const groupPlayer = getDoomGroupVideoPlayer(s);
 			if (groupPlayer) {
+				if (
+					i === activeIdx &&
+					typeof groupPlayer.isTransitioning === 'function' &&
+					groupPlayer.isTransitioning()
+				) {
+					continue;
+				}
 				groupPlayer.pause();
 				if (i !== activeIdx) rewindDoomSlidePlayback(s);
 				continue;
@@ -559,9 +585,15 @@ export async function mountChatDoomScroll(opts) {
 				posterImg instanceof HTMLImageElement && posterImg.hidden;
 			if (alreadyRevealed) revealDoomSlideVideoPlayback(slide);
 			groupPlayer.setMuted(slideNsfwBlocked(slide) ? true : preferMuted);
+			if (typeof groupPlayer.isTransitioning === 'function' && groupPlayer.isTransitioning()) {
+				syncMuteUi();
+				syncPlayOverlayForSlide(slide);
+				attachActiveProgressListener();
+				return;
+			}
 			if (seekToStart) {
 				void groupPlayer.goToIndex(0, { autoplay: true, force: true });
-			} else {
+			} else if (!isDoomGroupSlidePlaybackActive(slide)) {
 				groupPlayer.play();
 			}
 			syncMuteUi();
@@ -713,13 +745,13 @@ export async function mountChatDoomScroll(opts) {
 		activeIdx = best;
 		applyActiveVisual();
 		const slide = list[activeIdx];
-		const v = resolveDoomSlideVideo(slide);
+		const groupPlayer = getDoomGroupVideoPlayer(slide);
+		const v = groupPlayer ? groupPlayer.getActiveVideo() : resolveDoomSlideVideo(slide);
 		const indexChanged = prev !== activeIdx;
 		const alreadyPlaying =
 			!indexChanged &&
-			v instanceof HTMLVideoElement &&
-			!v.paused &&
-			v.currentTime > 0;
+			(isDoomGroupSlidePlaybackActive(slide) ||
+				(v instanceof HTMLVideoElement && !v.paused && v.currentTime > 0));
 		if (indexChanged) {
 			playActive({ seekToStart: true });
 			void prefetchFollowForSlide(activeIdx);
@@ -1054,12 +1086,7 @@ export async function mountChatDoomScroll(opts) {
 		if (appended) {
 			scroller.appendChild(frag);
 			for (const { slide, item } of pending) {
-				mountDoomGroupVideoPlaylist(slide, item, {
-					onFirstReveal: () => revealDoomSlideVideoPlayback(slide),
-					onPlaybackStateChange: () => {
-						if (slides()[activeIdx] === slide) syncPlayOverlayForSlide(slide);
-					},
-				});
+				mountDoomGroupVideoPlaylist(slide, item, doomGroupPlaylistHooks(slide));
 				bindDoomSlidePlaybackUi(slide);
 				const likeBtn = slide.querySelector('button[data-like-button]');
 				if (likeBtn instanceof HTMLElement) initLikeButton(likeBtn, item);
@@ -1125,12 +1152,7 @@ export async function mountChatDoomScroll(opts) {
 		}
 		scroller.appendChild(frag);
 		for (const { slide, item } of batch) {
-			mountDoomGroupVideoPlaylist(slide, item, {
-				onFirstReveal: () => revealDoomSlideVideoPlayback(slide),
-				onPlaybackStateChange: () => {
-					if (slides()[activeIdx] === slide) syncPlayOverlayForSlide(slide);
-				},
-			});
+			mountDoomGroupVideoPlaylist(slide, item, doomGroupPlaylistHooks(slide));
 			bindDoomSlidePlaybackUi(slide);
 			const likeBtn = slide.querySelector('button[data-like-button]');
 			if (likeBtn instanceof HTMLElement) initLikeButton(likeBtn, item);

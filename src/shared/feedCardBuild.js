@@ -311,6 +311,7 @@ export function setupFeedCardGroupVideoPlaylist(imageContainer, item, options = 
 		loopPlaylist: true,
 		autoAdvanceOnEnded: true,
 		muted: true,
+		interactive: false,
 		videoClass: 'feed-card-video feed-card-group-video',
 		slotClass: 'feed-card-group-video-slot sequential-video-player-slot',
 		posterUrl,
