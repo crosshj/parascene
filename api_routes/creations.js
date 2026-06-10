@@ -1,6 +1,7 @@
 import express from "express";
 import Replicate from "replicate";
-import { appendCreationIdToMediaUrl, getThumbnailUrl } from "./utils/url.js";
+import { mapCreatedImageRowMediaFields } from "./utils/resolveCreationDisplayMedia.js";
+import { parseCreationMeta } from "./utils/resolveCreatedImageStorageFilename.js";
 import { getTextEmbeddingFromReplicate } from "./utils/embeddings.js";
 import { getSupabaseServiceClient } from "./utils/supabaseService.js";
 import { runSemanticSearch } from "./utils/embeddingsSearch.js";
@@ -202,18 +203,20 @@ function escapeHtml(value) {
 function mapRelatedItemsToResponse(items, viewerLikedIds, reasonMetaByCreationId = null) {
 	const likedSet = new Set((viewerLikedIds ?? []).map(String));
 	return (Array.isArray(items) ? items : []).map((item) => {
-		const rawImageUrl = item?.url ?? null;
 		const author = item?.author_display_name ?? item?.author_user_name ?? "";
 		const creationId = item?.created_image_id ?? item?.id ?? null;
 		const reasonMeta = reasonMetaByCreationId?.get?.(Number(creationId));
-		const mediaType = typeof item?.meta?.media_type === "string" ? item.meta.media_type : "image";
-		const videoMeta = item?.meta && typeof item.meta === "object" ? item.meta.video : null;
-		const rawVideoUrl =
-			videoMeta && typeof videoMeta.file_path === "string" && videoMeta.file_path
-				? videoMeta.file_path
-				: null;
-		const imageUrl = appendCreationIdToMediaUrl(rawImageUrl, creationId);
-		const videoUrl = appendCreationIdToMediaUrl(rawVideoUrl, creationId);
+		const meta = parseCreationMeta(item?.meta);
+		const mediaFields = mapCreatedImageRowMediaFields(
+			{
+				...item,
+				id: creationId,
+				file_path: item?.url ?? item?.file_path ?? null,
+				url: item?.url ?? null,
+				video_url: item?.video_url
+			},
+			{ includeMeta: true }
+		);
 		return {
 			id: item?.id,
 			title: escapeHtml(item?.title != null ? item.title : "Untitled"),
@@ -224,23 +227,24 @@ function mapRelatedItemsToResponse(items, viewerLikedIds, reasonMetaByCreationId
 			author_avatar_url: item?.author_avatar_url ?? null,
 			tags: item?.tags ?? null,
 			created_at: item?.created_at,
-			image_url: imageUrl,
-			thumbnail_url: getThumbnailUrl(imageUrl),
+			image_url: mediaFields.url,
+			thumbnail_url: mediaFields.thumbnail_url,
 			created_image_id: item?.created_image_id ?? item?.id ?? null,
 			user_id: item?.user_id ?? null,
 			like_count: Number(item?.like_count ?? 0),
 			comment_count: Number(item?.comment_count ?? 0),
 			viewer_liked: likedSet.has(String(item?.id ?? item?.created_image_id)),
-			nsfw: !!(item?.nsfw),
+			nsfw: !!(item?.nsfw ?? meta?.nsfw),
 			reason_labels: Array.isArray(reasonMeta?.labels) ? reasonMeta.labels : [],
 			reason_details: Array.isArray(reasonMeta?.details) ? reasonMeta.details : [],
 			recsys_score: Number.isFinite(Number(reasonMeta?.score)) ? Number(reasonMeta.score) : null,
 			recsys_click_score: Number.isFinite(Number(reasonMeta?.click_score)) ? Number(reasonMeta.click_score) : null,
 			recsys_click_share: Number.isFinite(Number(reasonMeta?.click_share)) ? Number(reasonMeta.click_share) : null,
-			media_type: mediaType,
-			video_url: videoUrl,
+			meta: mediaFields.meta,
+			media_type: mediaFields.media_type,
+			video_url: mediaFields.video_url,
 			doom_scroll_full_height:
-				item?.meta && typeof item.meta === "object" && item.meta.doom_scroll_full_height === true
+				meta && typeof meta === "object" && meta.doom_scroll_full_height === true
 		};
 	});
 }

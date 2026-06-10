@@ -1,16 +1,13 @@
-let formatDateTime;
-let formatRelativeTime;
 let fetchJsonWithStatusDeduped;
 let searchIcon;
-let buildProfilePath;
 let setRouteMediaBackgroundImage;
 let renderEmptyState;
 let renderEmptyLoading;
 let renderEmptyError;
 let renderGridSkeleton;
 let buildCreationCardShell;
-let processUserText;
-let hydrateUserTextLinks;
+let hydrateRouteCardMedia;
+let routeCardGroupBadgeHtml;
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -27,22 +24,11 @@ async function loadDeps() {
 	const v = getAssetVersionParam();
 	const qs = getImportQuery(v);
 	_depsPromise = (async () => {
-		const datetimeMod = await import(`../../shared/datetime.js${qs}`);
-		formatDateTime = datetimeMod.formatDateTime;
-		formatRelativeTime = datetimeMod.formatRelativeTime;
-
 		const apiMod = await import(`../../shared/api.js${qs}`);
 		fetchJsonWithStatusDeduped = apiMod.fetchJsonWithStatusDeduped;
 
 		const iconsMod = await import(`../../icons/svg-strings.js${qs}`);
 		searchIcon = iconsMod.searchIcon;
-
-		const profileLinksMod = await import(`../../shared/profileLinks.js${qs}`);
-		buildProfilePath = profileLinksMod.buildProfilePath;
-
-		const userTextMod = await import(`../../shared/userText.js${qs}`);
-		processUserText = userTextMod.processUserText;
-		hydrateUserTextLinks = userTextMod.hydrateUserTextLinks;
 
 		const routeMediaMod = await import(`../../shared/routeMedia.js${qs}`);
 		setRouteMediaBackgroundImage = routeMediaMod.setRouteMediaBackgroundImage;
@@ -57,6 +43,10 @@ async function loadDeps() {
 
 		const creationCardMod = await import(`../../shared/creationCard.js${qs}`);
 		buildCreationCardShell = creationCardMod.buildCreationCardShell;
+
+		const routeCardGroupMod = await import(`../../shared/routeCardGroupMedia.js${qs}`);
+		hydrateRouteCardMedia = routeCardGroupMod.hydrateRouteCardMedia;
+		routeCardGroupBadgeHtml = routeCardGroupMod.routeCardGroupBadgeHtml;
 
 		const aspectRatioMod = await import(`../../shared/aspectRatio.js${qs}`);
 		applyCreationMediaAspectToElement = aspectRatioMod.applyCreationMediaAspectToElement;
@@ -624,15 +614,6 @@ class AppRouteExplore extends HTMLElement {
 			const card = document.createElement('div');
 			card.className = 'route-card route-card-image';
 
-			const authorUserName = typeof item.author_user_name === 'string' ? item.author_user_name.trim() : '';
-			const authorUserId = item.user_id != null ? Number(item.user_id) : null;
-			const profileHref = buildProfilePath({ userName: authorUserName, userId: authorUserId });
-			const authorDisplayName = typeof item.author_display_name === 'string' ? item.author_display_name.trim() : '';
-			const emailPrefix = typeof item.author === 'string' && item.author.includes('@') ? item.author.split('@')[0] : '';
-			const authorLabel = authorDisplayName || authorUserName || emailPrefix || item.author || 'User';
-			const handleText = authorUserName || emailPrefix || '';
-			const handle = handleText ? `@${handleText}` : '';
-
 			card.style.cursor = 'pointer';
 			if (item.searchScore != null && Number.isFinite(Number(item.searchScore))) {
 				card.title = `Score: ${Number(item.searchScore).toFixed(4)}`;
@@ -643,16 +624,6 @@ class AppRouteExplore extends HTMLElement {
 				}
 			});
 
-			const detailsContent = html`
-				<div class="route-title">${item.title != null ? item.title : 'Untitled'}</div>
-				<div class="route-summary">${processUserText(item.summary != null ? item.summary : '')}</div>
-				<div class="route-meta" title="${formatDateTime(item.created_at)}">${formatRelativeTime(item.created_at)}</div>
-				<div class="route-meta">
-					By ${profileHref ? html`<a class="user-link" href="${profileHref}" data-profile-link>${authorLabel}</a>` :
-					authorLabel}${handle ? html` <span>(${handle})</span>` : ''}
-				</div>
-				<div class="route-meta route-meta-spacer"></div>
-				<div class="route-tags">${processUserText(item.tags || '')}</div>`;
 			const mediaType = typeof item.media_type === 'string' ? item.media_type : 'image';
 			const mediaAttrs = {
 				'data-image-id': item.created_image_id ?? '',
@@ -663,36 +634,24 @@ class AppRouteExplore extends HTMLElement {
 			}
 			card.innerHTML = buildCreationCardShell({
 				mediaAttrs,
-				detailsContentHtml: detailsContent,
+				badgesHtml: routeCardGroupBadgeHtml(item),
 				nsfw: Boolean(item.nsfw),
 			});
 
-			if (typeof hydrateUserTextLinks === 'function') {
-				hydrateUserTextLinks(card);
-			}
-
 			const mediaEl = card.querySelector('.route-media');
-			const url = mediaType === 'video'
-				? (item.image_url || item.thumbnail_url)
-				: (item.thumbnail_url || item.image_url);
-			if (mediaEl && url) {
-				mediaEl.dataset.bgUrl = url;
-				mediaEl.dataset.bgQueued = '0';
-				const index = startIndex + i;
+			const index = startIndex + i;
+			if (mediaEl && typeof hydrateRouteCardMedia === 'function') {
+				const mediaOpts = {
+					preferThumbnail: mediaType !== 'video',
+					lowPriority: !this.isRouteActive()
+				};
 				if (index < this.eagerImageCount) {
-					setRouteMediaBackgroundImage(mediaEl, url, { lowPriority: !this.isRouteActive() });
+					hydrateRouteCardMedia(mediaEl, item, { ...mediaOpts, eager: true });
 				} else if (this.imageObserver) {
-					this.imageObserver.observe(mediaEl);
+					hydrateRouteCardMedia(mediaEl, item, { ...mediaOpts, observer: this.imageObserver });
+				} else {
+					hydrateRouteCardMedia(mediaEl, item, { ...mediaOpts, eager: true });
 				}
-			}
-
-			const profileLink = card.querySelector('[data-profile-link]');
-			if (profileLink) {
-				profileLink.addEventListener('click', (e) => {
-					e.preventDefault();
-					e.stopPropagation();
-					window.location.href = profileLink.getAttribute('href') || '#';
-				});
 			}
 
 			cont.appendChild(card);

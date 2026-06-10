@@ -1,5 +1,5 @@
 import express from "express";
-import { getThumbnailUrl } from "./utils/url.js";
+import { mapCreatedImageRowMediaFields } from "./utils/resolveCreationDisplayMedia.js";
 import { composeCommentStampedReply } from "./utils/commentReplyStamp.js";
 import { notifyCommentMentions } from "./utils/activityNotifications.js";
 import { sanitizeClientReplyPreview } from "./utils/chatReplyStamp.js";
@@ -180,11 +180,18 @@ export default function createCommentsRoutes({ queries }) {
 			?? [];
 
 		let comments = (commentsRaw || []).map((row) => {
-			const createdImageUrl = row?.created_image_url ?? null;
+			const mediaFields = mapCreatedImageRowMediaFields(
+				{
+					id: row?.created_image_id,
+					file_path: row?.created_image_url,
+					meta: row?.created_image_meta
+				},
+				{ includeMeta: false }
+			);
 			return {
 				...row,
-				created_image_url: createdImageUrl,
-				created_image_thumbnail_url: getThumbnailUrl(createdImageUrl)
+				created_image_url: mediaFields.url ?? row?.created_image_url ?? null,
+				created_image_thumbnail_url: mediaFields.thumbnail_url ?? null
 			};
 		});
 

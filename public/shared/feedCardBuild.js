@@ -26,6 +26,7 @@ const [
 	feedBetaWhyModalMod,
 	feedImpressionBeaconMod,
 	sequentialVideoPlayerMod,
+	creationGroupMediaMod,
 ] = await Promise.all([
 	import(`./blogCampaignPath.js${_qs}`),
 	import(`./datetime.js${_qs}`),
@@ -39,6 +40,7 @@ const [
 	import(`./feedBetaWhyModal.js${_qs}`),
 	import(`./feedImpressionBeacon.js${_qs}`),
 	import(`./sequentialVideoPlayer.js${_qs}`),
+	import(`./creationGroupMedia.js${_qs}`),
 ]);
 
 const { buildBlogPostPublicPath, BLOG_CAMPAIGN_INTERNAL } = blogCampaignPathMod;
@@ -49,6 +51,7 @@ const { buildProfilePath } = profileLinksMod;
 const { getHelpHref } = helpUrlMod;
 const { creationMetaHasChallengeSubmission } = challengeSubmitMetaMod;
 const { challengeEnteredBadgeHtml, publishedBadgeHtml } = creationBadgesMod;
+const { groupCreationBadgeHtml, resolveGroupCoverDisplayUrl } = creationGroupMediaMod;
 const { primeMediaElementForAudioLeveling } = mediaAudioLevelingMod;
 const { openFeedBetaWhyModal } = feedBetaWhyModalMod;
 const { attachFeedImpressionBeacon, recordFeedImpressionOnClick } = feedImpressionBeaconMod;
@@ -191,6 +194,8 @@ export function feedItemCardImageUrl(item, preferThumbnail = false) {
 	if (!item) return '';
 	const creationId = Number(item?.created_image_id ?? item?.id);
 	const useThumbnail = preferThumbnail && !isFeedRowVideoCreation(item);
+	const groupCover = resolveGroupCoverDisplayUrl(item, useThumbnail);
+	if (groupCover) return groupCover;
 	if (useThumbnail) {
 		return appendCreationIdToMediaUrl(item.thumbnail_url || item.image_url || '', creationId);
 	}
@@ -795,15 +800,7 @@ function buildFeedCreationCard(
 		const isPublished = item.published === true || item.published === 1;
 		const publishedOverlay = isPublished ? publishedBadgeHtml() : '';
 		const isGroupCreation = parsedMeta?.group?.kind === 'group_creations';
-		const groupOverlay = isGroupCreation
-			? html`<span class="creation-group-badge" aria-label="Group creation" title="Group creation">
-				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"
-					stroke-linejoin="round" aria-hidden="true">
-					<rect x="3.5" y="6.5" width="9.5" height="9.5" rx="2"></rect>
-					<rect x="10.5" y="10.5" width="10" height="10" rx="2"></rect>
-				</svg>
-			</span>`
-			: '';
+		const groupOverlay = isGroupCreation ? groupCreationBadgeHtml() : '';
 		const bulkOverlayBlock =
 			creationsBulkChrome
 				? html`

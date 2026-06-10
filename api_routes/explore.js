@@ -1,6 +1,7 @@
 import express from "express";
 import { Redis } from "@upstash/redis";
-import { appendCreationIdToMediaUrl, getThumbnailUrl } from "./utils/url.js";
+import { mapCreatedImageRowMediaFields } from "./utils/resolveCreationDisplayMedia.js";
+import { parseCreationMeta } from "./utils/resolveCreatedImageStorageFilename.js";
 import { runSemanticSearch } from "./utils/embeddingsSearch.js";
 import { normalizeTag } from "./utils/tag.js";
 
@@ -28,27 +29,17 @@ function escapeHtml(value) {
 function mapExploreItemsToResponse(items) {
 	const list = Array.isArray(items) ? items : [];
 	return list.map((item) => {
-		let meta = item?.meta;
-		if (typeof meta === "string" && meta) {
-			try {
-				meta = JSON.parse(meta);
-			} catch {
-				meta = null;
-			}
-		}
-		const rawImageUrl = item?.url || null;
-		const mediaType =
-			typeof item?.media_type === "string"
-				? item.media_type
-				: (meta && typeof meta.media_type === "string" ? meta.media_type : "image");
-		const videoMeta = meta && typeof meta === "object" ? meta.video : null;
-		const rawVideoUrl =
-			typeof item?.video_url === "string" && item.video_url
-				? item.video_url
-				: (videoMeta && typeof videoMeta.file_path === "string" && videoMeta.file_path ? videoMeta.file_path : null);
-		const creationId = Number(item?.created_image_id || item?.id);
-		const imageUrl = appendCreationIdToMediaUrl(rawImageUrl, creationId);
-		const videoUrl = appendCreationIdToMediaUrl(rawVideoUrl, creationId);
+		const meta = parseCreationMeta(item?.meta);
+		const mediaFields = mapCreatedImageRowMediaFields(
+			{
+				...item,
+				id: item?.created_image_id || item?.id,
+				file_path: item?.url || item?.file_path || null,
+				url: item?.url || null,
+				video_url: item?.video_url
+			},
+			{ includeMeta: true }
+		);
 		return {
 			id: item?.id,
 			title: escapeHtml(item?.title != null ? item.title : "Untitled"),
@@ -59,17 +50,17 @@ function mapExploreItemsToResponse(items) {
 			author_avatar_url: item?.author_avatar_url ?? null,
 			tags: item?.tags,
 			created_at: item?.created_at,
-			image_url: imageUrl,
-			thumbnail_url: getThumbnailUrl(imageUrl),
+			image_url: mediaFields.url,
+			thumbnail_url: mediaFields.thumbnail_url,
 			created_image_id: item?.created_image_id || null,
 			user_id: item?.user_id || null,
 			like_count: Number(item?.like_count ?? 0),
 			comment_count: Number(item?.comment_count ?? 0),
 			viewer_liked: Boolean(item?.viewer_liked),
-			nsfw: !!(item?.nsfw),
-			meta: meta && typeof meta === "object" ? meta : null,
-			media_type: mediaType,
-			video_url: videoUrl
+			nsfw: !!(item?.nsfw ?? meta?.nsfw),
+			meta: mediaFields.meta,
+			media_type: mediaFields.media_type,
+			video_url: mediaFields.video_url
 		};
 	});
 }
@@ -446,19 +437,15 @@ export default function createExploreRoutes({ queries }) {
 			const has_more = list.length > limit;
 			const page = has_more ? list.slice(0, limit) : list;
 
-			const metaParse = (m) => (typeof m === "string" ? (() => { try { return JSON.parse(m); } catch { return null; } })() : m) ?? null;
 			const images = page.map((img) => {
-				const rawUrl = img?.file_path || (img?.filename ? `/api/images/created/${img.filename}` : null);
-				const meta = metaParse(img?.meta);
-				const url = appendCreationIdToMediaUrl(rawUrl, Number(img?.id));
+				const meta = parseCreationMeta(img?.meta);
+				const mediaFields = mapCreatedImageRowMediaFields(img, { includeMeta: true });
 				const nsfw = !!(meta && meta.nsfw);
-				const mediaType = meta && typeof meta.media_type === "string" ? meta.media_type : "image";
-				const videoUrl = meta?.video?.file_path && typeof meta.video.file_path === "string" ? meta.video.file_path : null;
 				return {
 					id: img?.id,
 					filename: img?.filename ?? null,
-					url,
-					thumbnail_url: getThumbnailUrl(url),
+					url: mediaFields.url,
+					thumbnail_url: mediaFields.thumbnail_url,
 					width: img?.width ?? null,
 					height: img?.height ?? null,
 					color: img?.color ?? null,
@@ -470,8 +457,9 @@ export default function createExploreRoutes({ queries }) {
 					description: img?.description || null,
 					user_id: img?.user_id ?? null,
 					nsfw,
-					media_type: mediaType,
-					video_url: videoUrl
+					media_type: mediaFields.media_type,
+					video_url: mediaFields.video_url,
+					meta: mediaFields.meta
 				};
 			});
 
@@ -512,19 +500,15 @@ export default function createExploreRoutes({ queries }) {
 			const has_more = list.length > limit;
 			const page = has_more ? list.slice(0, limit) : list;
 
-			const metaParse = (m) => (typeof m === "string" ? (() => { try { return JSON.parse(m); } catch { return null; } })() : m) ?? null;
 			const images = page.map((img) => {
-				const rawUrl = img?.file_path || (img?.filename ? `/api/images/created/${img.filename}` : null);
-				const meta = metaParse(img?.meta);
-				const url = appendCreationIdToMediaUrl(rawUrl, Number(img?.id));
+				const meta = parseCreationMeta(img?.meta);
+				const mediaFields = mapCreatedImageRowMediaFields(img, { includeMeta: true });
 				const nsfw = !!(meta && meta.nsfw);
-				const mediaType = meta && typeof meta.media_type === "string" ? meta.media_type : "image";
-				const videoUrl = meta?.video?.file_path && typeof meta.video.file_path === "string" ? meta.video.file_path : null;
 				return {
 					id: img?.id,
 					filename: img?.filename ?? null,
-					url,
-					thumbnail_url: getThumbnailUrl(url),
+					url: mediaFields.url,
+					thumbnail_url: mediaFields.thumbnail_url,
 					width: img?.width ?? null,
 					height: img?.height ?? null,
 					color: img?.color ?? null,
@@ -536,8 +520,9 @@ export default function createExploreRoutes({ queries }) {
 					description: img?.description || null,
 					user_id: img?.user_id ?? null,
 					nsfw,
-					media_type: mediaType,
-					video_url: videoUrl
+					media_type: mediaFields.media_type,
+					video_url: mediaFields.video_url,
+					meta: mediaFields.meta
 				};
 			});
 

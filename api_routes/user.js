@@ -18,6 +18,8 @@ import {
 	shouldLogSession
 } from "./auth.js";
 import { getBaseAppUrl, getBaseAppUrlForEmail, getThumbnailUrl } from "./utils/url.js";
+import { mapCreatedImageRowMediaFields } from "./utils/resolveCreationDisplayMedia.js";
+import { parseCreationMeta } from "./utils/resolveCreatedImageStorageFilename.js";
 import { computeWelcome, WELCOME_VERSION } from "./utils/welcome.js";
 import { resolveNotificationDisplay } from "./utils/notificationResolver.js";
 import {
@@ -1806,10 +1808,11 @@ export default function createProfileRoutes({ queries }) {
 			}
 
 			const mapped = (Array.isArray(images) ? images : []).map((img) => {
-				const url = img.file_path || (img.filename ? `/api/images/created/${img.filename}` : null);
 				const userDeleted = !!(img.unavailable_at != null && img.unavailable_at !== "");
 				const status = img.status || "completed";
-				const meta = typeof img.meta === "string" ? (() => { try { return JSON.parse(img.meta); } catch { return null; } })() : img.meta ?? null;
+				const meta = parseCreationMeta(img.meta);
+				const mediaFields = mapCreatedImageRowMediaFields(img, { includeMeta: true });
+				const url = mediaFields.url;
 				const isModeratedError = (() => {
 					if (status !== "failed" || meta == null) return false;
 					try {
@@ -1830,13 +1833,11 @@ export default function createProfileRoutes({ queries }) {
 						return false;
 					}
 				})();
-				const mediaType = meta && typeof meta.media_type === "string" ? meta.media_type : "image";
-				const videoUrl = meta?.video?.file_path && typeof meta.video.file_path === "string" ? meta.video.file_path : null;
 				return {
 					id: img.id,
 					filename: img.filename,
 					url,
-					thumbnail_url: getThumbnailUrl(url),
+					thumbnail_url: mediaFields.thumbnail_url,
 					width: img.width,
 					height: img.height,
 					color: img.color,
@@ -1847,8 +1848,9 @@ export default function createProfileRoutes({ queries }) {
 					title: img.title || null,
 					description: img.description || null,
 					nsfw: !!(meta && meta.nsfw),
-					media_type: mediaType,
-					video_url: videoUrl,
+					media_type: mediaFields.media_type,
+					video_url: mediaFields.video_url,
+					meta: mediaFields.meta,
 					is_moderated_error: isModeratedError,
 					...(isAdmin && userDeleted ? { user_deleted: true } : {})
 				};
@@ -1887,18 +1889,15 @@ export default function createProfileRoutes({ queries }) {
 			const limit = Math.min(200, Math.max(1, Number.parseInt(String(req.query?.limit ?? "24"), 10) || 24));
 			const offset = Math.max(0, Number.parseInt(String(req.query?.offset ?? "0"), 10) || 0);
 			const images = await queries.selectCreatedImagesLikedByUser.all(targetUserId, { limit, offset });
-			const metaParse = (m) => (typeof m === "string" ? (() => { try { return JSON.parse(m); } catch { return null; } })() : m) ?? null;
 			const mapped = (Array.isArray(images) ? images : []).map((img) => {
-				const url = img.file_path || (img.filename ? `/api/images/created/${img.filename}` : null);
-				const meta = metaParse(img.meta);
+				const meta = parseCreationMeta(img.meta);
+				const mediaFields = mapCreatedImageRowMediaFields(img, { includeMeta: true });
 				const nsfw = !!(meta && meta.nsfw);
-				const mediaType = meta && typeof meta.media_type === "string" ? meta.media_type : "image";
-				const videoUrl = meta?.video?.file_path && typeof meta.video.file_path === "string" ? meta.video.file_path : null;
 				return {
 					id: img.id,
 					filename: img.filename,
-					url,
-					thumbnail_url: getThumbnailUrl(url),
+					url: mediaFields.url,
+					thumbnail_url: mediaFields.thumbnail_url,
 					width: img.width,
 					height: img.height,
 					color: img.color,
@@ -1906,8 +1905,9 @@ export default function createProfileRoutes({ queries }) {
 					title: img.title || null,
 					description: img.description || null,
 					nsfw,
-					media_type: mediaType,
-					video_url: videoUrl
+					media_type: mediaFields.media_type,
+					video_url: mediaFields.video_url,
+					meta: mediaFields.meta
 				};
 			});
 			const enableNsfw = viewer?.meta?.enableNsfw === true;
@@ -1936,10 +1936,21 @@ export default function createProfileRoutes({ queries }) {
 			const limit = Math.min(200, Math.max(1, Number.parseInt(String(req.query?.limit ?? "20"), 10) || 20));
 			const offset = Math.max(0, Number.parseInt(String(req.query?.offset ?? "0"), 10) || 0);
 			const commentsRaw = await queries.selectCommentsByUser?.all(targetUserId, { limit, offset }) ?? [];
-			const comments = (Array.isArray(commentsRaw) ? commentsRaw : []).map((c) => ({
-				...c,
-				created_image_thumbnail_url: c?.created_image_url ? getThumbnailUrl(c.created_image_url) : null
-			}));
+			const comments = (Array.isArray(commentsRaw) ? commentsRaw : []).map((c) => {
+				const mediaFields = mapCreatedImageRowMediaFields(
+					{
+						id: c?.created_image_id,
+						file_path: c?.created_image_url,
+						meta: c?.created_image_meta
+					},
+					{ includeMeta: false }
+				);
+				return {
+					...c,
+					created_image_url: mediaFields.url ?? c?.created_image_url ?? null,
+					created_image_thumbnail_url: mediaFields.thumbnail_url ?? null
+				};
+			});
 			const commentIds = comments.map((c) => c.id).filter((id) => id != null);
 			const reactionsByComment = await getReactionsForCommentIds(queries, commentIds, viewer?.id ?? null);
 			for (const c of comments) {

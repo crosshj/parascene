@@ -5168,7 +5168,7 @@ export function openDb() {
 				const imageIds = [...new Set((comments ?? []).map((c) => c?.created_image_id).filter((id) => id != null))];
 				const { data: imgs, error: imgError } = await serviceClient
 					.from(prefixedTable("created_images"))
-					.select("id, title, file_path, created_at, user_id")
+					.select("id, title, file_path, filename, meta, created_at, user_id")
 					.in("id", imageIds)
 					.eq("published", true)
 					.is("unavailable_at", null);
@@ -5197,6 +5197,7 @@ export function openDb() {
 						...c,
 						created_image_title: img?.title ?? null,
 						created_image_url: img?.file_path ?? null,
+						created_image_meta: img?.meta ?? null,
 						created_image_created_at: img?.created_at ?? null,
 						created_image_user_id: creatorId ?? null,
 						creator_user_name: creatorProfile?.user_name ?? null,
@@ -6056,6 +6057,7 @@ export function openDb() {
 							meta,
 							created_image_title: image?.title ?? null,
 							created_image_url: image?.file_path ?? null,
+							created_image_meta: image?.meta ?? null,
 							created_image_created_at: image?.created_at ?? null,
 							created_image_published: image?.published ?? null,
 							created_image_user_id: image?.user_id ?? null,

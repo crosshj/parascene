@@ -22,7 +22,7 @@ function escapeAttr(v) {
  * @param {{
  *   mediaAttrs?: Record<string, string | boolean>,
  *   badgesHtml?: string,
- *   detailsContentHtml: string,
+ *   detailsContentHtml?: string,
  *   bulkOverlayHtml?: string,
  *   nsfw?: boolean,
  *   challengeGridBlur?: boolean
@@ -33,7 +33,7 @@ export function buildCreationCardShell(options) {
 	const {
 		mediaAttrs = {},
 		badgesHtml = '',
-		detailsContentHtml,
+		detailsContentHtml = '',
 		bulkOverlayHtml = '',
 		nsfw = false,
 		challengeGridBlur = false,
@@ -52,15 +52,19 @@ export function buildCreationCardShell(options) {
 			? html`<span class="route-media-challenge-blur-overlay" aria-hidden="true"></span>${challengeEnteredBadgeHtml()}`
 			: '';
 	const mediaTag = html`<div class="${mediaClass}" aria-hidden="true"${attrs ? ' ' + attrs : ''}>${blurOverlay}</div>`;
+	const detailsBlock =
+		typeof detailsContentHtml === 'string' && detailsContentHtml.trim()
+			? html`<div class="route-details">
+	<div class="route-details-content">
+${detailsContentHtml}
+	</div>
+</div>`
+			: '';
 
 	return html`<div class="route-card route-card-image">
 ${mediaTag}
 ${badgesHtml}
-<div class="route-details">
-	<div class="route-details-content">
-${detailsContentHtml}
-	</div>
-</div>
+${detailsBlock}
 ${bulkOverlayHtml}
 </div>`;
 }

@@ -19,6 +19,7 @@ import { deleteCreationEmbedding } from "./utils/embeddings.js";
 import { getSupabaseServiceClient } from "./utils/supabaseService.js";
 import { verifyQStashRequest } from "./utils/qstashVerification.js";
 import { resolveCreatedImageStorageFilename } from "./utils/resolveCreatedImageStorageFilename.js";
+import { mapCreatedImageRowMediaFields } from "./utils/resolveCreationDisplayMedia.js";
 import {
 	canSetVideoPosterFromFirstFrame,
 	getLandscapeOutpaintEligibility,
@@ -2867,22 +2868,21 @@ export default function createCreateRoutes({ queries, storage }) {
 			const imagesWithUrls = (Array.isArray(images) ? images : []).map((img) => {
 				const status = img.status || "completed";
 				const meta = parseMeta(img.meta);
-				const creationId = Number(img.id);
-				const rawUrl = status === "completed" ? (img.file_path || storage.getImageUrl(img.filename)) : null;
-				const url = appendCreationIdToMediaUrl(rawUrl, creationId);
-				const mediaType = typeof meta?.media_type === "string" ? meta.media_type : "image";
-				const videoMeta = meta && typeof meta === "object" ? meta.video : null;
-				const rawVideoUrl =
-					videoMeta && typeof videoMeta.file_path === "string" && videoMeta.file_path
-						? videoMeta.file_path
-						: null;
-				const videoUrl = appendCreationIdToMediaUrl(rawVideoUrl, creationId);
+				const mediaFields =
+					status === "completed"
+						? mapCreatedImageRowMediaFields(img, { storage, includeMeta: false })
+						: {
+							url: null,
+							thumbnail_url: null,
+							video_url: null,
+							media_type: typeof meta?.media_type === "string" ? meta.media_type : "image"
+						};
 
 				return {
 					id: img.id,
 					filename: img.filename,
-					url,
-					thumbnail_url: url ? getThumbnailUrl(url) : null,
+					url: mediaFields.url,
+					thumbnail_url: mediaFields.thumbnail_url,
 					width: img.width,
 					height: img.height,
 					color: img.color,
@@ -2895,8 +2895,8 @@ export default function createCreateRoutes({ queries, storage }) {
 					meta,
 					nsfw: !!meta?.nsfw,
 					is_moderated_error: isModeratedError(status, meta),
-					media_type: mediaType,
-					video_url: videoUrl
+					media_type: mediaFields.media_type,
+					video_url: mediaFields.video_url
 				};
 			});
 
@@ -3135,13 +3135,14 @@ export default function createCreateRoutes({ queries, storage }) {
 
 			const status = image.status || 'completed';
 			const creationIdForMedia = Number(image.id);
-			let url = status === "completed"
-				? (shareAccess
-					? `/api/share/${encodeURIComponent(shareAccess.version)}/${encodeURIComponent(shareAccess.token)}/image`
-					: (image.file_path || storage.getImageUrl(image.filename)))
-				: null;
-			if (url && !shareAccess) {
-				url = appendCreationIdToMediaUrl(url, creationIdForMedia);
+			let url = null;
+			if (status === "completed") {
+				if (shareAccess) {
+					url = `/api/share/${encodeURIComponent(shareAccess.version)}/${encodeURIComponent(shareAccess.token)}/image`;
+				} else {
+					const mediaFields = mapCreatedImageRowMediaFields(image, { storage, includeMeta: false });
+					url = mediaFields.url;
+				}
 			}
 
 			const appendLineageToMediaUrls =

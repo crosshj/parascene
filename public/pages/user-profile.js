@@ -17,6 +17,8 @@ let publishedBadgeHtml;
 let userDeletedBadgeHtml;
 let challengeEnteredBadgeHtml;
 let buildCreationCardShell;
+let hydrateRouteCardMedia;
+let routeCardGroupBadgeHtml;
 let creationMetaHasChallengeSubmission;
 let buildUserListRowHtml;
 let REACTION_ORDER;
@@ -78,6 +80,10 @@ async function loadDeps() {
 
 		const creationCardMod = await import(`../shared/creationCard.js${qs}`);
 		buildCreationCardShell = creationCardMod.buildCreationCardShell;
+
+		const routeCardGroupMod = await import(`../shared/routeCardGroupMedia.js${qs}`);
+		hydrateRouteCardMedia = routeCardGroupMod.hydrateRouteCardMedia;
+		routeCardGroupBadgeHtml = routeCardGroupMod.routeCardGroupBadgeHtml;
 
 		const challengeMetaMod = await import(`../shared/challengeSubmitMeta.js${qs}`);
 		creationMetaHasChallengeSubmission = challengeMetaMod.creationMetaHasChallengeSubmission;
@@ -802,7 +808,6 @@ function renderImageGrid(
 		const userDeleted = Boolean(item.user_deleted);
 		let publishedBadge = '';
 		let userDeletedBadge = '';
-		let publishedInfo = '';
 
 		if (userDeleted) {
 			userDeletedBadge = userDeletedBadgeHtml();
@@ -810,12 +815,6 @@ function renderImageGrid(
 
 		if (isPublished && showBadge) {
 			publishedBadge = publishedBadgeHtml();
-		}
-
-		if (isPublished && item.published_at) {
-			const publishedDate = new Date(item.published_at);
-			const publishedTimeAgo = formatRelativeTime(publishedDate);
-			publishedInfo = html`<div class="route-meta" title="${formatDateTime(publishedDate)}">Published ${publishedTimeAgo}</div>`;
 		}
 
 		const isVideo = item.media_type === 'video' || (item.meta && item.meta.media_type === 'video');
@@ -841,13 +840,7 @@ function renderImageGrid(
 			</div>
 			${userDeletedBadge}
 			${publishedBadge}
-			<div class="route-details">
-				<div class="route-details-content">
-					<div class="route-title">${escapeHtml(item.title || 'Untitled')}</div>
-					${publishedInfo}
-					<div class="route-meta">${escapeHtml(formatDate(item.created_at) || '')}</div>
-				</div>
-			</div>
+			${routeCardGroupBadgeHtml(item)}
 		`;
 
 		const avatarBtnEl = card.querySelector('.persona-mentions-set-avatar-btn');
@@ -864,10 +857,11 @@ function renderImageGrid(
 		}
 
 		const mediaEl = card.querySelector('.route-media');
-		const url = item.thumbnail_url || item.url;
-		if (mediaEl && url) {
-			mediaEl.dataset.bgUrl = url;
-			observer.observe(mediaEl);
+		if (mediaEl && typeof hydrateRouteCardMedia === 'function') {
+			hydrateRouteCardMedia(mediaEl, item, {
+				preferThumbnail: !isVideo,
+				observer,
+			});
 		}
 
 		grid.appendChild(card);
@@ -898,18 +892,12 @@ function appendImageGridCards(grid, items, showBadge = false) {
 		const userDeleted = Boolean(item.user_deleted);
 		let publishedBadge = '';
 		let userDeletedBadge = '';
-		let publishedInfo = '';
 		if (userDeleted) {
 			userDeletedBadge = userDeletedBadgeHtml();
 		}
 		if (isPublished && showBadge) {
 			publishedBadge = publishedBadgeHtml();
 		}
-		if (isPublished && item.published_at) {
-			publishedInfo = html`<div class="route-meta" title="${formatDateTime(item.published_at)}">Published ${formatRelativeTime(new Date(item.published_at))}</div>`;
-		}
-		const detailsContent = html`
-		<div class="route-title">${escapeHtml(item.title || 'Untitled')}</div>${publishedInfo}<div class="route-meta">${escapeHtml(formatDate(item.created_at) || '')}</div>`;
 		const isVideo = item.media_type === 'video' || (item.meta && item.meta.media_type === 'video');
 		const itemMeta = item.meta && typeof item.meta === 'object' ? item.meta : null;
 		const mediaAttrs = {};
@@ -918,16 +906,16 @@ function appendImageGridCards(grid, items, showBadge = false) {
 		}
 		card.innerHTML = buildCreationCardShell({
 			mediaAttrs,
-			badgesHtml: userDeletedBadge + publishedBadge,
-			detailsContentHtml: detailsContent,
+			badgesHtml: userDeletedBadge + publishedBadge + routeCardGroupBadgeHtml(item),
 			nsfw: Boolean(item.nsfw),
 			challengeGridBlur: Boolean(creationMetaHasChallengeSubmission?.(itemMeta)) && !item.nsfw,
 		});
 		const mediaEl = card.querySelector('.route-media');
-		const url = item.thumbnail_url || item.url;
-		if (mediaEl && url) {
-			mediaEl.dataset.bgUrl = url;
-			observer.observe(mediaEl);
+		if (mediaEl && typeof hydrateRouteCardMedia === 'function') {
+			hydrateRouteCardMedia(mediaEl, item, {
+				preferThumbnail: !isVideo,
+				observer,
+			});
 		}
 		grid.appendChild(card);
 	});

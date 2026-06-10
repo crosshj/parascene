@@ -16,6 +16,8 @@ let renderEmptyError;
 let renderGridSkeleton;
 let publishedBadgeHtml;
 let buildCreationCardShell;
+let hydrateRouteCardMedia;
+let routeCardGroupBadgeHtml;
 let creationMetaHasChallengeSubmission;
 let eyeHiddenIcon;
 let addToMutateQueue;
@@ -61,6 +63,10 @@ async function loadDeps() {
 
 		const creationCardMod = await import(`../../shared/creationCard.js${qs}`);
 		buildCreationCardShell = creationCardMod.buildCreationCardShell;
+
+		const routeCardGroupMod = await import(`../../shared/routeCardGroupMedia.js${qs}`);
+		hydrateRouteCardMedia = routeCardGroupMod.hydrateRouteCardMedia;
+		routeCardGroupBadgeHtml = routeCardGroupMod.routeCardGroupBadgeHtml;
 
 		const challengeMetaMod = await import(`../../shared/challengeSubmitMeta.js${qs}`);
 		creationMetaHasChallengeSubmission = challengeMetaMod.creationMetaHasChallengeSubmission;
@@ -957,12 +963,8 @@ class AppRouteCreations extends HTMLElement {
 				const imageUrl = item.url || item.thumbnail_url || '';
 				card.dataset.imageUrl = typeof imageUrl === 'string' ? imageUrl : '';
 				let publishedBadge = '';
-				let publishedInfo = '';
 				if (isPublished) {
 					publishedBadge = publishedBadgeHtml();
-				}
-				if (isPublished && item.published_at) {
-					publishedInfo = html`<div class="route-meta" title="${formatDateTime(item.published_at)}">Published ${formatRelativeTime(item.published_at)}</div>`;
 				}
 				const meta = parseMeta(item.meta);
 				const inChallenge = creationMetaHasChallengeSubmission(meta);
@@ -977,28 +979,25 @@ class AppRouteCreations extends HTMLElement {
 				if (mediaType === 'video') {
 					mediaAttrs['data-media-type'] = 'video';
 				}
-				const detailsContent = html`
-                <div class="route-title">${item.title || 'Untitled'}</div>
-                ${publishedInfo}
-                <div class="route-meta" title="${formatDateTime(item.created_at)}">Created ${formatRelativeTime(item.created_at)}</div>`;
-
 				card.innerHTML = buildCreationCardShell({
 					mediaAttrs,
-					badgesHtml: publishedBadge,
-					detailsContentHtml: detailsContent,
+					badgesHtml: publishedBadge + routeCardGroupBadgeHtml(item),
 					bulkOverlayHtml: bulkOverlay(),
 					nsfw: Boolean(item.nsfw),
 					challengeGridBlur: inChallenge && !item.nsfw,
 				});
 				const mediaEl = card.querySelector('.route-media');
-				const url = mediaType === 'video' ? (item.url || item.thumbnail_url) : (item.thumbnail_url || item.url);
-				if (mediaEl) {
+				if (mediaEl && typeof hydrateRouteCardMedia === 'function') {
+					const mediaOpts = {
+						preferThumbnail: mediaType !== 'video',
+						lowPriority: !this.isRouteActive()
+					};
 					if (index < this.eagerImageCount) {
-						setRouteMediaBackgroundImage(mediaEl, url, { lowPriority: !this.isRouteActive() });
+						hydrateRouteCardMedia(mediaEl, item, { ...mediaOpts, eager: true });
 					} else if (this.imageObserver) {
-						mediaEl.dataset.bgUrl = url;
-						mediaEl.dataset.bgQueued = '0';
-						this.imageObserver.observe(mediaEl);
+						hydrateRouteCardMedia(mediaEl, item, { ...mediaOpts, observer: this.imageObserver });
+					} else {
+						hydrateRouteCardMedia(mediaEl, item, { ...mediaOpts, eager: true });
 					}
 				}
 			}

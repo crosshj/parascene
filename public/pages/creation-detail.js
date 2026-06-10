@@ -45,6 +45,8 @@ let skeletonLine;
 let skeletonCircle;
 let skeletonPill;
 let buildCreationCardShell;
+let hydrateRouteCardMedia;
+let routeCardGroupBadgeHtml;
 let renderCommentAvatarHtml;
 let uploadImageFile;
 let createReplyIndicatorElement;
@@ -166,6 +168,10 @@ async function loadDeps() {
 
 		const creationCardMod = await import(`/shared/creationCard.js${qs}`);
 		buildCreationCardShell = creationCardMod.buildCreationCardShell;
+
+		const routeCardGroupMod = await import(`/shared/routeCardGroupMedia.js${qs}`);
+		hydrateRouteCardMedia = routeCardGroupMod.hydrateRouteCardMedia;
+		routeCardGroupBadgeHtml = routeCardGroupMod.routeCardGroupBadgeHtml;
 
 		const commentItemMod = await import(`/shared/commentItem.js${qs}`);
 		renderCommentAvatarHtml = commentItemMod.renderCommentAvatarHtml;
@@ -842,24 +848,11 @@ function recordTransitionFromQuery(currentCreationId) {
 	}).catch(() => { });
 }
 
-function initRelatedSection(root, currentCreationId, options = {}) {
+function initRelatedSection(root, currentCreationId) {
 	const container = root.querySelector('[data-related-container]');
 	const grid = root.querySelector('[data-related-grid]');
 	const sentinel = root.querySelector('[data-related-sentinel]');
 	if (!container || !grid || !sentinel) return;
-	const showRecsysDebug = options?.showRecsysDebug === true;
-
-	function escapeHtml(val) {
-		return String(val ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-	}
-
-	function decodeHtmlEntities(val) {
-		const text = String(val ?? '');
-		if (!text.includes('&')) return text;
-		const textarea = document.createElement('textarea');
-		textarea.innerHTML = text;
-		return textarea.value;
-	}
 
 	let relatedIds = [];
 	const relatedIdsSet = new Set();
@@ -878,47 +871,6 @@ function initRelatedSection(root, currentCreationId, options = {}) {
 		return rect.top <= (window.innerHeight + 240);
 	}
 
-	function setRelatedMediaBackground(mediaEl, url) {
-		if (!mediaEl || !url) return;
-		if (mediaEl.dataset.bgLoadedUrl === url) return;
-		const img = new Image();
-		img.onload = () => {
-			mediaEl.dataset.bgLoadedUrl = url;
-			mediaEl.style.backgroundImage = `url("${String(url).replace(/"/g, '\\"')}")`;
-		};
-		img.src = url;
-	}
-
-	function buildRelatedReasonRows(item) {
-		const rows = [];
-		if (Number.isFinite(Number(item?.recsys_score))) {
-			let scoreLine = `Score ${Number(item.recsys_score).toFixed(2)}`;
-			if (Number.isFinite(Number(item?.recsys_click_score))) {
-				const shareText = Number.isFinite(Number(item?.recsys_click_share))
-					? ` (${(Number(item.recsys_click_share) * 100).toFixed(1)}%)`
-					: '';
-				scoreLine += ` | Click ${Number(item.recsys_click_score).toFixed(4)}${shareText}`;
-			}
-			rows.push(scoreLine);
-		}
-		const details = Array.isArray(item?.reason_details) ? item.reason_details : [];
-		for (const d of details.slice(0, 3)) {
-			if (!d?.label) continue;
-			const relId = d.related_creation_id;
-			const relTitle = d.related_creation_title;
-			if (relId || relTitle) {
-				rows.push(`${d.label}: ${relTitle || 'Untitled'}${relId ? ` (#${relId})` : ''}`);
-			} else {
-				rows.push(String(d.label));
-			}
-		}
-		if (rows.length === 0) {
-			const labels = Array.isArray(item?.reason_labels) ? item.reason_labels : [];
-			for (const label of labels.slice(0, 3)) rows.push(String(label));
-		}
-		return rows;
-	}
-
 	function appendRelatedCards(items) {
 		if (!items || items.length === 0) return;
 		const startIndex = grid.querySelectorAll('.route-card').length;
@@ -929,28 +881,7 @@ function initRelatedSection(root, currentCreationId, options = {}) {
 			const card = document.createElement('div');
 			card.className = 'route-card route-card-image';
 			card.setAttribute('role', 'listitem');
-			const authorUserId = item.user_id != null ? Number(item.user_id) : null;
-			const profileHref = buildProfilePath({ userName: item.author_user_name, userId: authorUserId });
-			const authorLabel = item.author_display_name || item.author_user_name || item.author || 'User';
-			const handleText = item.author_user_name || '';
-			const handle = handleText ? `@${handleText}` : '';
 			const href = relatedCardUrl(cid);
-			const reasonRows = showRecsysDebug ? buildRelatedReasonRows(item) : [];
-			const reasonsHtml = showRecsysDebug && reasonRows.length > 0
-				? `<div class="creation-detail-related-reasons">${reasonRows.map((line) => `<div class="creation-detail-related-reason-line">${escapeHtml(line)}</div>`).join('')}</div>`
-				: '';
-			const detailsContent = html`
-						<div class="route-title">${escapeHtml(decodeHtmlEntities(item.title != null ? item.title : 'Untitled'))}</div>
-						<div class="route-summary">${escapeHtml(decodeHtmlEntities(item.summary != null ? item.summary : ''))}</div>
-						<div class="route-meta" title="${formatDateTime(item.created_at)}">${formatRelativeTime(item.created_at)}</div>
-						<div class="route-meta">
-							By ${profileHref ? html`<a class="user-link" href="${profileHref}"
-								data-related-profile-link>${escapeHtml(decodeHtmlEntities(authorLabel))}</a>` :
-					escapeHtml(decodeHtmlEntities(authorLabel))}${handle ? html` <span>(${handle})</span>` : ''}
-						</div>
-						${reasonsHtml}
-						<div class="route-meta route-meta-spacer"></div>
-						<div class="route-tags">${escapeHtml(item.tags ?? '')}</div>`;
 			const mediaType = typeof item.media_type === 'string' ? item.media_type : 'image';
 			const mediaAttrs = {
 				'data-related-media': true,
@@ -962,38 +893,30 @@ function initRelatedSection(root, currentCreationId, options = {}) {
 			}
 			card.innerHTML = buildCreationCardShell({
 				mediaAttrs,
-				detailsContentHtml: detailsContent,
+				badgesHtml: routeCardGroupBadgeHtml(item),
 				nsfw: Boolean(item.nsfw),
 			});
 			card.style.cursor = 'pointer';
-			card.addEventListener('click', (e) => {
-				if (e.target.closest('.user-link')) return;
+			card.addEventListener('click', () => {
 				window.location.href = href;
 			});
 			const mediaEl = card.querySelector('[data-related-media]');
-			const bgUrl = (item.thumbnail_url || item.image_url || '').trim();
-			if (mediaEl && bgUrl) {
-				mediaEl.dataset.bgUrl = bgUrl;
-				if (startIndex + i < 6) setRelatedMediaBackground(mediaEl, bgUrl);
-				else {
+			if (mediaEl && typeof hydrateRouteCardMedia === 'function') {
+				if (startIndex + i < 6) {
+					hydrateRouteCardMedia(mediaEl, item, { preferThumbnail: mediaType !== 'video', eager: true });
+				} else {
 					const io = new IntersectionObserver((entries) => {
 						entries.forEach((entry) => {
-							if (entry.isIntersecting && mediaEl.dataset.bgUrl) {
-								setRelatedMediaBackground(mediaEl, mediaEl.dataset.bgUrl);
-								io.disconnect();
-							}
+							if (!entry.isIntersecting) return;
+							hydrateRouteCardMedia(mediaEl, item, {
+								preferThumbnail: mediaType !== 'video',
+								eager: true
+							});
+							io.disconnect();
 						});
 					}, { rootMargin: '100px', threshold: 0 });
 					io.observe(mediaEl);
 				}
-			}
-			const profileLink = card.querySelector('[data-related-profile-link]');
-			if (profileLink) {
-				profileLink.addEventListener('click', (e) => {
-					e.preventDefault();
-					e.stopPropagation();
-					window.location.href = profileLink.getAttribute('href') || '#';
-				});
 			}
 			grid.appendChild(card);
 		});
@@ -4786,10 +4709,7 @@ async function loadCreation() {
 		// Related section and transition recording: only when creation is published and not failed.
 		if (isPublished && !isFailed) {
 			recordTransitionFromQuery(creationId);
-			const query = new URLSearchParams(window.location.search);
-			const debugRelated = query.get('debug_related') === '1';
-			const showRecsysDebug = isAdmin && debugRelated;
-			initRelatedSection(detailContent.parentElement, creationId, { showRecsysDebug });
+			initRelatedSection(detailContent.parentElement, creationId);
 		}
 
 	} catch (error) {

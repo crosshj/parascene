@@ -39,6 +39,10 @@ import { attachFeedCardCreationDragSource } from './creationComposerDrag.js';
 import { attachFeedImpressionBeacon, recordFeedImpressionOnClick } from './feedImpressionBeacon.js';
 import { openFeedBetaWhyModal } from './feedBetaWhyModal.js';
 import { mountSequentialVideoPlayer } from './sequentialVideoPlayer.js';
+import {
+	groupCreationBadgeHtml,
+	resolveGroupCoverDisplayUrl
+} from './creationGroupMedia.js';
 
 const { buildBlogPostPublicPath, BLOG_CAMPAIGN_INTERNAL } = blogCampaignPathMod;
 const { formatDateTime, formatRelativeTime } = datetimeMod;
@@ -165,6 +169,8 @@ export function feedItemCardImageUrl(item, preferThumbnail = false) {
 	if (!item) return '';
 	const creationId = Number(item?.created_image_id ?? item?.id);
 	const useThumbnail = preferThumbnail && !isFeedRowVideoCreation(item);
+	const groupCover = resolveGroupCoverDisplayUrl(item, useThumbnail);
+	if (groupCover) return groupCover;
 	if (useThumbnail) {
 		return appendCreationIdToMediaUrl(item.thumbnail_url || item.image_url || '', creationId);
 	}
@@ -1265,15 +1271,7 @@ function buildFeedCreationCard(
 		const isPublished = item.published === true || item.published === 1;
 		const publishedOverlay = isPublished ? publishedBadgeHtml() : '';
 		const isGroupCreation = parsedMeta?.group?.kind === 'group_creations';
-		const groupOverlay = isGroupCreation
-			? html`<span class="creation-group-badge" aria-label="Group creation" title="Group creation">
-				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"
-					stroke-linejoin="round" aria-hidden="true">
-					<rect x="3.5" y="6.5" width="9.5" height="9.5" rx="2"></rect>
-					<rect x="10.5" y="10.5" width="10" height="10" rx="2"></rect>
-				</svg>
-			</span>`
-			: '';
+		const groupOverlay = isGroupCreation ? groupCreationBadgeHtml() : '';
 		const bulkOverlayBlock =
 			creationsBulkChrome
 				? html`

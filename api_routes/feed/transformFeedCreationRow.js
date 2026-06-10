@@ -1,15 +1,11 @@
-import { appendCreationIdToMediaUrl, getThumbnailUrl } from "../utils/url.js";
+import { parseCreationMeta } from "../utils/resolveCreatedImageStorageFilename.js";
+import { resolveCreationDisplayMediaUrls } from "../utils/resolveCreationDisplayMedia.js";
 
 /**
  * Map DB feed row → API feed item (creation / explore row).
  * @param {object} item
  */
 export function transformFeedCreationRow(item) {
-	/** DB rows use `url`; assembled API items use `image_url` — both paths must stay idempotent. */
-	const rawImageUrl =
-		(typeof item.url === "string" && item.url.trim()) ||
-		(typeof item.image_url === "string" && item.image_url.trim()) ||
-		null;
 	let meta = item.meta;
 	if (typeof meta === "string" && meta) {
 		try {
@@ -18,22 +14,24 @@ export function transformFeedCreationRow(item) {
 			meta = null;
 		}
 	}
-	const mediaType =
-		typeof item.media_type === "string"
-			? item.media_type
-			: meta && typeof meta.media_type === "string"
-				? meta.media_type
-				: "image";
-	const videoMeta = meta && typeof meta === "object" ? meta.video : null;
-	const rawVideoUrl =
-		typeof item.video_url === "string" && item.video_url
-			? item.video_url
-			: videoMeta && typeof videoMeta.file_path === "string" && videoMeta.file_path
-				? videoMeta.file_path
-				: null;
 	const creationId = Number(item.created_image_id || item.id);
-	const imageUrl = appendCreationIdToMediaUrl(rawImageUrl, creationId);
-	const videoUrl = appendCreationIdToMediaUrl(rawVideoUrl, creationId);
+	const rawImageUrl =
+		(typeof item.url === "string" && item.url.trim()) ||
+		(typeof item.image_url === "string" && item.image_url.trim()) ||
+		null;
+	const media = resolveCreationDisplayMediaUrls({
+		row: {
+			...item,
+			file_path: item.file_path || rawImageUrl,
+			url: rawImageUrl,
+			video_url: item.video_url
+		},
+		meta: meta ?? parseCreationMeta(item?.meta),
+		creationId
+	});
+	const imageUrl = media.url;
+	const videoUrl = media.video_url;
+	const mediaType = media.media_type;
 
 	const feedBetaWhy =
 		item.feed_beta_why && typeof item.feed_beta_why === 'object' ? item.feed_beta_why : null;
@@ -50,7 +48,7 @@ export function transformFeedCreationRow(item) {
 		tags: item.tags,
 		created_at: item.created_at,
 		image_url: imageUrl,
-		thumbnail_url: getThumbnailUrl(imageUrl),
+		thumbnail_url: media.thumbnail_url,
 		created_image_id: item.created_image_id || null,
 		user_id: item.user_id || null,
 		like_count: Number(item.like_count ?? 0),
