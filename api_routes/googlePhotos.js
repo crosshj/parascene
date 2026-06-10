@@ -2,6 +2,13 @@ import crypto from "crypto";
 import express from "express";
 import jwt from "jsonwebtoken";
 import { getJwtSecret } from "./auth.js";
+import {
+	GOOGLE_PHOTOS_RECONNECT_MESSAGE,
+	GooglePhotosAuthError,
+	googlePhotosApiErrorPayload,
+	isGooglePhotosRefreshRevoked,
+	parseGoogleOAuthTokenError
+} from "./utils/googlePhotosAuth.js";
 import { resolveCreationImageForExport } from "./utils/resolveCreationImageForExport.js";
 import { getBaseAppUrl } from "./utils/url.js";
 
@@ -104,6 +111,10 @@ function decryptWithSecret(token, secret) {
 function requiredEnv(name) {
 	const v = String(process.env[name] || "").trim();
 	return v ? v : null;
+}
+
+function isGooglePhotosServerConfigured() {
+	return Boolean(requiredEnv("GOOGLE_PHOTOS_CLIENT_ID") && requiredEnv("GOOGLE_PHOTOS_CLIENT_SECRET"));
 }
 
 function buildScopes() {
@@ -214,14 +225,18 @@ async function refreshAccessToken({ refreshToken, clientId, clientSecret }) {
 	body.set("refresh_token", String(refreshToken || ""));
 	body.set("grant_type", "refresh_token");
 
-	const { ok, data, text } = await fetchJson(GOOGLE_OAUTH_TOKEN_URL, {
+	const { ok, status, data, text } = await fetchJson(GOOGLE_OAUTH_TOKEN_URL, {
 		method: "POST",
 		headers: { "Content-Type": "application/x-www-form-urlencoded" },
 		body
 	});
 	if (!ok) {
-		const msg = data?.error_description || data?.error || text || "Refresh failed";
-		throw new Error(String(msg));
+		const parsed = parseGoogleOAuthTokenError(data, text, "Refresh failed");
+		const err = new Error(parsed.message);
+		err.oauthError = parsed.error;
+		err.oauthDescription = parsed.description;
+		err.httpStatus = status;
+		throw err;
 	}
 	return {
 		access_token: typeof data?.access_token === "string" ? data.access_token : "",
@@ -229,6 +244,39 @@ async function refreshAccessToken({ refreshToken, clientId, clientSecret }) {
 		expires_in: typeof data?.expires_in === "number" ? data.expires_in : null,
 		token_type: typeof data?.token_type === "string" ? data.token_type : ""
 	};
+}
+
+async function revokeStaleGooglePhotosConnection(userId, queries, reason) {
+	if (!queries.revokeGooglePhotosConnection?.run) return;
+	try {
+		await queries.revokeGooglePhotosConnection.run(userId);
+		console.error(
+			"[google-photos] Revoked stale connection",
+			JSON.stringify({ userId: Number(userId) || 0, reason: String(reason || "").slice(0, 280) })
+		);
+	} catch (err) {
+		console.error(
+			"[google-photos] Failed to revoke stale connection",
+			JSON.stringify({
+				userId: Number(userId) || 0,
+				reason: String(reason || "").slice(0, 280),
+				error: err?.message ? String(err.message).slice(0, 280) : "unknown"
+			})
+		);
+	}
+}
+
+function googlePhotosErrorStatus(err, { notConnectedStatus = 400, authStatus = 401, defaultStatus = 500 } = {}) {
+	if (err instanceof GooglePhotosAuthError || err?.needsReconnect === true) return authStatus;
+	const msg = err?.message ? String(err.message) : "";
+	if (msg === "Not connected") return notConnectedStatus;
+	return defaultStatus;
+}
+
+function sendGooglePhotosError(res, err, opts = {}) {
+	const payload = googlePhotosApiErrorPayload(err, opts);
+	const status = googlePhotosErrorStatus(err, opts);
+	return res.status(status).json(payload);
 }
 
 async function createAlbum({ accessToken, title }) {
@@ -487,11 +535,26 @@ async function getGooglePhotosAccessForUser(user, queries) {
 	}
 	const refreshToken = decryptWithSecret(row.refresh_token_enc, tokenSecret());
 	if (!refreshToken) {
-		throw new Error("Not connected");
+		await revokeStaleGooglePhotosConnection(user.id, queries, "Stored credentials could not be decrypted");
+		throw new GooglePhotosAuthError(GOOGLE_PHOTOS_RECONNECT_MESSAGE);
 	}
-	const access = await refreshAccessToken({ refreshToken, clientId, clientSecret });
+	let access;
+	try {
+		access = await refreshAccessToken({ refreshToken, clientId, clientSecret });
+	} catch (err) {
+		if (isGooglePhotosRefreshRevoked(err)) {
+			await revokeStaleGooglePhotosConnection(
+				user.id,
+				queries,
+				err?.oauthDescription || err?.oauthError || err?.message || "Refresh token rejected"
+			);
+			throw new GooglePhotosAuthError(GOOGLE_PHOTOS_RECONNECT_MESSAGE, { cause: err });
+		}
+		throw err;
+	}
 	if (!access.access_token) {
-		throw new Error("Could not authorize Google Photos");
+		await revokeStaleGooglePhotosConnection(user.id, queries, "Refresh returned no access token");
+		throw new GooglePhotosAuthError(GOOGLE_PHOTOS_RECONNECT_MESSAGE);
 	}
 	return { accessToken: access.access_token, connection: row };
 }
@@ -555,16 +618,52 @@ export default function createGooglePhotosRoutes({ queries, storage }) {
 	router.get("/api/google-photos/status", async (req, res) => {
 		const user = await requireUser(req, res);
 		if (!user) return;
-		if (!queries.selectGooglePhotosConnectionByUserId?.get) {
-			return res.json({ connected: false, configured: false });
+		if (!isGooglePhotosServerConfigured() || !queries.selectGooglePhotosConnectionByUserId?.get) {
+			return res.json({ connected: false, configured: false, needsReconnect: false });
 		}
 		const row = await queries.selectGooglePhotosConnectionByUserId.get(user.id);
-		const connected = !!row && !row.revoked_at;
-		return res.json({
-			configured: true,
-			connected,
-			albumTitle: connected ? row.album_title || DEFAULT_ALBUM_TITLE : null
-		});
+		if (!row || row.revoked_at) {
+			const wasRevoked = Boolean(row?.revoked_at);
+			return res.json({
+				configured: true,
+				connected: false,
+				needsReconnect: wasRevoked,
+				authMessage: wasRevoked ? GOOGLE_PHOTOS_RECONNECT_MESSAGE : null,
+				albumTitle: null
+			});
+		}
+
+		try {
+			await getGooglePhotosAccessForUser(user, queries);
+			return res.json({
+				configured: true,
+				connected: true,
+				needsReconnect: false,
+				albumTitle: row.album_title || DEFAULT_ALBUM_TITLE
+			});
+		} catch (err) {
+			const msg = err?.message ? String(err.message) : "";
+			if (msg === "Google Photos is not configured") {
+				return res.json({ connected: false, configured: false, needsReconnect: false });
+			}
+			if (err instanceof GooglePhotosAuthError || err?.needsReconnect === true) {
+				return res.json({
+					configured: true,
+					connected: false,
+					needsReconnect: true,
+					authMessage: err.message || GOOGLE_PHOTOS_RECONNECT_MESSAGE,
+					albumTitle: null
+				});
+			}
+			return res.json({
+				configured: true,
+				connected: false,
+				needsReconnect: false,
+				authHealthy: false,
+				authMessage: msg.slice(0, 280) || "Could not verify Google Photos connection",
+				albumTitle: null
+			});
+		}
 	});
 
 	router.get("/api/google-photos/connect", async (req, res) => {
@@ -722,9 +821,7 @@ export default function createGooglePhotosRoutes({ queries, storage }) {
 				mediaItemId: created.mediaItemId || null
 			});
 		} catch (err) {
-			const msg = err?.message ? String(err.message) : "Upload failed";
-			const status = msg === "Not connected" ? 400 : 500;
-			return res.status(status).json({ error: "Upload failed", message: msg });
+			return sendGooglePhotosError(res, err, { fallbackError: "Upload failed" });
 		}
 	});
 
@@ -863,9 +960,7 @@ export default function createGooglePhotosRoutes({ queries, storage }) {
 				meta: nextMeta
 			});
 		} catch (err) {
-			const msg = err?.message ? String(err.message) : "Sync failed";
-			const status = msg === "Not connected" ? 400 : 500;
-			return res.status(status).json({ error: "Sync failed", message: msg });
+			return sendGooglePhotosError(res, err, { fallbackError: "Sync failed" });
 		}
 	});
 
@@ -897,25 +992,16 @@ export default function createGooglePhotosRoutes({ queries, storage }) {
 			return res.status(400).json({ error: "Not connected" });
 		}
 
-		const refreshToken = decryptWithSecret(row.refresh_token_enc, tokenSecret());
-		if (!refreshToken) {
-			return res.status(400).json({ error: "Not connected", message: "Invalid credentials" });
-		}
-
 		try {
-			const access = await refreshAccessToken({ refreshToken, clientId, clientSecret });
-			if (!access.access_token) {
-				return res.status(500).json({ error: "Server error", message: "Could not authorize remove" });
-			}
+			const { accessToken } = await getGooglePhotosAccessForUser(user, queries);
 			const result = await batchRemoveMediaFromAlbum({
-				accessToken: access.access_token,
+				accessToken,
 				albumId,
 				mediaItemIds
 			});
 			return res.json(result);
 		} catch (err) {
-			const msg = err?.message ? String(err.message) : "Remove failed";
-			return res.status(500).json({ error: "Remove failed", message: msg });
+			return sendGooglePhotosError(res, err, { fallbackError: "Remove failed" });
 		}
 	});
 

@@ -170,6 +170,20 @@
 			-webkit-backdrop-filter: none;
 		}
 
+		.party-grid-head--pushed {
+			flex-direction: column;
+			align-items: stretch;
+			gap: 10px;
+		}
+
+		.party-grid-head--pushed .party-grid-title {
+			align-self: flex-start;
+		}
+
+		.party-grid-head--pushed .party-gp-alert {
+			margin-top: 0;
+		}
+
 		.party-grid-head::before {
 			content: none;
 			display: none;
@@ -471,6 +485,11 @@
 		.party-btn--primary {
 			background: var(--accent);
 			color: var(--accent-fg, #fff);
+		}
+
+		.party-btn--primary:disabled {
+			opacity: 0.45;
+			cursor: not-allowed;
 		}
 
 		.party-btn--primary.party-btn--busy::after {
@@ -811,7 +830,7 @@
 		.party-detail-actions {
 			flex-shrink: 0;
 			display: flex;
-			flex-wrap: nowrap;
+			flex-wrap: wrap;
 			gap: 8px;
 			padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
 			border-top: 1px solid var(--border);
@@ -1105,6 +1124,68 @@
 			font-size: 0.78rem;
 			color: var(--party-muted);
 			line-height: 1.4;
+		}
+
+		.party-settings-linked.is-error {
+			color: var(--color-amber-fg);
+		}
+
+		.party-gp-alert {
+			display: flex;
+			flex-direction: column;
+			align-items: stretch;
+			gap: 10px;
+			margin-top: 12px;
+			padding: 12px 14px;
+			border-radius: 10px;
+			background: var(--color-amber-bg-subtle);
+			border: 1px solid color-mix(in srgb, var(--color-amber) 28%, transparent);
+		}
+
+		.party-gp-alert[hidden] {
+			display: none;
+		}
+
+		.party-gp-alert-text {
+			margin: 0;
+			flex: 1 1 auto;
+			font-size: 0.8125rem;
+			line-height: 1.45;
+			color: var(--color-amber-fg);
+		}
+
+		.party-gp-alert-btn {
+			flex: 0 0 auto;
+			align-self: flex-start;
+			white-space: nowrap;
+		}
+
+		@media (min-width: 480px) {
+			.party-gp-alert {
+				flex-direction: row;
+				align-items: center;
+				gap: 14px;
+			}
+
+			.party-gp-alert-btn {
+				align-self: center;
+			}
+		}
+
+		.party-gp-alert--review {
+			flex-shrink: 0;
+			margin: 0 16px 8px;
+			border-radius: 8px;
+		}
+
+		.party-settings-gp-actions {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 8px;
+		}
+
+		.party-settings-gp-actions .party-btn--primary {
+			flex: 1 1 auto;
 		}
 
 		.party-parties-section {
@@ -1492,8 +1573,12 @@
 					</section>
 
 					<section class="party-grid-section" aria-label="Pushed">
-						<div class="party-grid-head">
+						<div class="party-grid-head party-grid-head--pushed">
 							<h2 class="party-grid-title">Pushed</h2>
+							<div class="party-gp-alert" id="party-gp-banner" hidden>
+								<p class="party-gp-alert-text" id="party-gp-banner-text"></p>
+								<button type="button" class="btn-secondary party-gp-alert-btn" id="party-gp-banner-reconnect" hidden>Open Connections</button>
+							</div>
 						</div>
 						<div class="party-grid" id="party-sent-grid"></div>
 						<p class="party-section-empty" id="party-sent-empty" hidden>No photos pushed yet.</p>
@@ -1514,7 +1599,10 @@
 
 								<div class="party-field">
 									<p class="party-settings-linked" id="party-settings-gp-sync-hint">Connect Google Photos to sync pushed photos.</p>
-									<button type="button" class="party-btn party-btn--ghost party-settings-choose-btn" id="party-settings-gp-sync">Sync pushed photos</button>
+									<div class="party-settings-gp-actions">
+										<button type="button" class="party-btn party-btn--ghost party-settings-choose-btn" id="party-settings-gp-sync">Sync pushed photos</button>
+										<button type="button" class="party-btn party-btn--primary party-settings-choose-btn" id="party-settings-gp-reconnect" hidden>Reconnect Google Photos</button>
+									</div>
 								</div>
 							</section>
 
@@ -1581,6 +1669,14 @@
 					<div class="party-detail-source-missing" id="party-review-source-missing" hidden>Source photo not on this device. The transformed version is shown above.</div>
 					<img id="party-review-original" alt="Source photo" hidden />
 				</div>
+			</div>
+			<div class="party-gp-alert party-gp-alert--review" id="party-review-gp-notice" hidden>
+				<p class="party-gp-alert-text" id="party-review-gp-notice-text"></p>
+				<button type="button" class="btn-secondary party-gp-alert-btn" id="party-review-gp-reconnect" hidden>Open Connections</button>
+			</div>
+			<div class="party-gp-alert party-gp-alert--review" id="party-pushed-gp-notice" hidden>
+				<p class="party-gp-alert-text" id="party-pushed-gp-notice-text"></p>
+				<button type="button" class="btn-secondary party-gp-alert-btn" id="party-pushed-recover" hidden>Recover</button>
 			</div>
 			<div class="party-detail-actions" id="party-detail-actions-held" hidden>
 				<button type="button" class="party-btn party-btn--primary" id="party-transform-btn">Transform</button>
@@ -1926,6 +2022,19 @@
 					const next = this._pushed.filter((entry) => entry.creation_id !== id);
 					if (next.length === this._pushed.length) return false;
 					this._pushed = next;
+					this._party.pushed = this._clone(this._pushed);
+					this._saveJson(PARTY_SETTINGS_KEY, this._party);
+					return true;
+				},
+				setPartyPushedGooglePhotos(creationId, { mediaItemId, albumId } = {}) {
+					const id = Number(creationId);
+					if (!Number.isFinite(id) || id <= 0) return false;
+					const entry = this._pushed.find((row) => row.creation_id === id);
+					if (!entry) return false;
+					const media = typeof mediaItemId === 'string' ? mediaItemId.trim() : '';
+					const album = typeof albumId === 'string' ? albumId.trim() : '';
+					if (media) entry.google_photos_media_item_id = media;
+					if (album) entry.google_photos_album_id = album;
 					this._party.pushed = this._clone(this._pushed);
 					this._saveJson(PARTY_SETTINGS_KEY, this._party);
 					return true;
@@ -2365,6 +2474,12 @@
 					const creationId = Number(item?.creationId);
 					if (!Number.isFinite(creationId) || creationId <= 0) return Promise.resolve();
 					PartySettings.addPartyPushedCreation(creationId);
+					if (item?.googlePhotosMediaItemId) {
+						PartySettings.setPartyPushedGooglePhotos(creationId, {
+							mediaItemId: item.googlePhotosMediaItemId,
+							albumId: item.googlePhotosAlbumId
+						});
+					}
 					return this.syncState();
 				},
 				unrecordPush(creationId) {
@@ -3417,8 +3532,10 @@
 			}
 
 			const GP_SYNC_KEY_PREFIX = 'parascene_party_gp_sync_v1';
+			const gpClientPromise = import('/shared/googlePhotosClient.js');
 
 			const PartyGooglePhotos = {
+				gp: null,
 				_status: null,
 				_syncMapCache: null,
 				_syncMapGroupId: null,
@@ -3527,11 +3644,18 @@
 					return pending;
 				},
 				formatSyncHint(status, pending) {
+					const gp = PartyGooglePhotos.gp;
 					if (!status?.configured) {
 						return 'Google Photos is not available on this server.';
 					}
 					if (!PartySettings.getGroupCreationId()) {
 						return 'Link a party before syncing to Google Photos.';
+					}
+					if (status?.needsReconnect) {
+						return gp?.googlePhotosAuthMessageFromPayload(
+							status,
+							'Your Google Photos connection expired. Reconnect below to sync again.'
+						) || 'Your Google Photos connection expired. Reconnect below to sync again.';
 					}
 					if (!status?.connected) {
 						return 'Connect Google Photos to sync the party album.';
@@ -3547,12 +3671,24 @@
 						const res = await fetch('/api/google-photos/status', { credentials: 'include' });
 						const data = await res.json().catch(() => ({}));
 						this._status = {
+							statusOk: res.ok,
 							configured: res.ok && data?.configured === true,
 							connected: res.ok && data?.connected === true,
+							needsReconnect: res.ok && data?.needsReconnect === true,
+							authHealthy: res.ok && data?.authHealthy !== false,
+							authMessage: typeof data?.authMessage === 'string' ? data.authMessage : '',
 							albumTitle: typeof data?.albumTitle === 'string' ? data.albumTitle : null
 						};
 					} catch {
-						this._status = { configured: false, connected: false, albumTitle: null };
+						this._status = {
+							statusOk: false,
+							configured: false,
+							connected: false,
+							needsReconnect: false,
+							authHealthy: true,
+							authMessage: '',
+							albumTitle: null
+						};
 					}
 					return this._status;
 				},
@@ -3571,7 +3707,13 @@
 					});
 					const data = await res.json().catch(() => ({}));
 					if (!res.ok) {
-						throw new Error(data?.message || data?.error || `Upload failed (${res.status})`);
+						const gp = PartyGooglePhotos.gp;
+						const err = new Error(
+							gp?.googlePhotosErrorFromResponse(data, `Upload failed (${res.status})`) ||
+								`Upload failed (${res.status})`
+						);
+						err.needsReconnect = gp?.isGooglePhotosReconnectPayload(data) === true;
+						throw err;
 					}
 					return data;
 				},
@@ -3596,8 +3738,21 @@
 					if (!status.configured) {
 						throw new Error('Google Photos is not configured');
 					}
+					if (status.needsReconnect) {
+						const gp = PartyGooglePhotos.gp;
+						const err = new Error(
+							gp?.googlePhotosAuthMessageFromPayload(
+								status,
+								'Your Google Photos connection expired. Reconnect to continue.'
+							) || 'Your Google Photos connection expired. Reconnect to continue.'
+						);
+						err.needsReconnect = true;
+						throw err;
+					}
 					if (!status.connected) {
-						window.location.href = '/integrations#google-photos=connect';
+						const gp = PartyGooglePhotos.gp;
+						window.location.href = gp?.googlePhotosReconnectUrl('/integrations') ||
+							'/api/google-photos/connect?returnUrl=%2Fintegrations';
 						return { redirected: true, uploaded: 0, removed: 0, uploadFailed: 0 };
 					}
 
@@ -3614,7 +3769,13 @@
 					});
 					const data = await res.json().catch(() => ({}));
 					if (!res.ok) {
-						throw new Error(data?.message || data?.error || `Sync failed (${res.status})`);
+						const gp = PartyGooglePhotos.gp;
+						const err = new Error(
+							gp?.googlePhotosErrorFromResponse(data, `Sync failed (${res.status})`) ||
+								`Sync failed (${res.status})`
+						);
+						err.needsReconnect = gp?.isGooglePhotosReconnectPayload(data) === true;
+						throw err;
 					}
 
 					if (data?.meta) {
@@ -4248,9 +4409,12 @@
 					void PartyGroup.syncState();
 					void PartyTransform.start(id, this);
 				},
-				push(id, googlePhotosMeta = null) {
+				push(id, googlePhotosMeta = null, opts = {}) {
 					const item = this.items.find((it) => it.id === id);
 					if (!item || item.status !== 'ready') return false;
+					if (opts.requireGooglePhotos === true && !googlePhotosMeta?.mediaItemId) {
+						return false;
+					}
 					item.status = 'committed';
 					item.updatedAt = new Date().toISOString();
 					item.pushedAt = item.updatedAt;
@@ -4266,6 +4430,26 @@
 					this._emit();
 					PartyLog.write(`Pushed: ${id}`);
 					void PartyGroup.recordPush(item);
+					return true;
+				},
+				isMissingGooglePhotos(item) {
+					if (!item || item.status !== 'committed') return false;
+					const creationId = Number(item.creationId);
+					if (!Number.isFinite(creationId) || creationId <= 0) return false;
+					if (item.googlePhotosMediaItemId) return false;
+					return !PartyGooglePhotos.isCreationSynced(creationId);
+				},
+				unpush(id) {
+					const item = this.items.find((it) => it.id === id);
+					if (!item || item.status !== 'committed') return false;
+					item.status = 'ready';
+					delete item.pushedAt;
+					delete item.googlePhotosMediaItemId;
+					delete item.googlePhotosAlbumId;
+					item.updatedAt = new Date().toISOString();
+					this._persist();
+					this._emit();
+					PartyLog.write(`Back to queue: ${id}`);
 					return true;
 				},
 				discard(id) {
@@ -4622,11 +4806,21 @@
 					els.transformBtn?.addEventListener('click', () => { void PartyApp.onTransform(); });
 					els.discardBtn?.addEventListener('click', () => { void PartyApp.onDiscard(); });
 					els.pushedDiscardBtn?.addEventListener('click', () => { void PartyApp.onDiscard(); });
+					els.pushedRecoverBtn?.addEventListener('click', () => { void PartyApp.onRecoverPushedPhoto(); });
 					els.heldDiscardBtn?.addEventListener('click', () => { void PartyApp.onDiscard(); });
 					els.cancelBtn?.addEventListener('click', () => PartyApp.closeReview());
 					els.dismissBtn?.addEventListener('click', () => PartyApp.closeReview());
 					els.heldDismissBtn?.addEventListener('click', () => PartyApp.closeReview());
 					els.gpSyncBtn?.addEventListener('click', () => { void PartyApp.onSyncGooglePhotos(); });
+					els.gpReconnectBtn?.addEventListener('click', () => {
+						void PartyUI.onGooglePhotosFixClick(els.gpReconnectBtn);
+					});
+					els.gpBannerReconnectBtn?.addEventListener('click', () => {
+						void PartyUI.onGooglePhotosFixClick(els.gpBannerReconnectBtn);
+					});
+					els.reviewGpReconnectBtn?.addEventListener('click', () => {
+						void PartyUI.onGooglePhotosFixClick(els.reviewGpReconnectBtn);
+					});
 					els.reviewPrev?.addEventListener('click', (e) => {
 						e.preventDefault();
 						PartyApp.onReviewStep(-1);
@@ -4672,23 +4866,139 @@
 					form.elements.partyName.value = draft.party.partyName || '';
 					form.elements.prompt.value = draft.party.prompt || DEFAULT_PARTY_PROMPT;
 				},
-				async updateGooglePhotosSyncHint() {
+				async updateGooglePhotosUi() {
 					const hint = this.els.gpSyncHint;
 					const btn = this.els.gpSyncBtn;
-					if (!hint && !btn) return;
+					const reconnectBtn = this.els.gpReconnectBtn;
+					const banner = this.els.gpBanner;
+					const bannerText = this.els.gpBannerText;
+					const bannerReconnectBtn = this.els.gpBannerReconnectBtn;
 					const status = await PartyGooglePhotos.fetchStatus(true);
 					const pending = PartyGooglePhotos.countPendingSync();
+					const gp = PartyGooglePhotos.gp;
+					const gpIssue = gp?.googlePhotosPartyPushBlocked(status) === true;
+					const fixCta = gpIssue ? gp.googlePhotosPartyFixCta(status, gp) : null;
+					const message = gpIssue
+						? (gp.googlePhotosPartyPushNotice(
+							status,
+							gp,
+							'Google Photos needs attention before you can push or sync party photos.'
+						) || 'Google Photos needs attention before you can push or sync party photos.')
+						: '';
+
 					if (hint) {
 						hint.textContent = PartyGooglePhotos.formatSyncHint(status, pending);
+						hint.classList.toggle('is-error', gpIssue);
+					}
+					if (reconnectBtn) {
+						reconnectBtn.hidden = !fixCta;
+						if (fixCta?.label) reconnectBtn.textContent = fixCta.label;
+						if (fixCta) {
+							reconnectBtn.dataset.gpFixAction = fixCta.action || 'navigate';
+							reconnectBtn.dataset.gpFixHref = fixCta.href || '';
+						}
 					}
 					if (btn) {
 						const linked = Boolean(PartySettings.getGroupCreationId());
-						const canSync = status.configured && linked && (status.connected || pending > 0);
-						btn.disabled = !canSync;
+						btn.hidden = gpIssue;
+						btn.disabled = !status.configured || !linked || gpIssue || !(status.connected || pending > 0);
 						btn.textContent = pending > 0
 							? `Sync ${pending} photo${pending === 1 ? '' : 's'}`
 							: 'Sync to Google Photos';
 					}
+					if (banner) banner.hidden = !gpIssue;
+					if (bannerText) bannerText.textContent = message;
+					if (bannerReconnectBtn) {
+						bannerReconnectBtn.hidden = !fixCta;
+						if (fixCta?.label) bannerReconnectBtn.textContent = fixCta.label;
+						if (fixCta) {
+							bannerReconnectBtn.dataset.gpFixAction = fixCta.action || 'navigate';
+							bannerReconnectBtn.dataset.gpFixHref = fixCta.href || '';
+						}
+					}
+				},
+				async onGooglePhotosFixClick(btn) {
+					if (!(btn instanceof HTMLElement)) return;
+					if (btn.dataset.gpFixAction === 'refresh') {
+						await PartyGooglePhotos.fetchStatus(true);
+						await this.updateGooglePhotosUi();
+						await this.refreshReviewGooglePhotosNotice();
+						return;
+					}
+					const href = btn.dataset.gpFixHref;
+					if (href) window.location.href = href;
+				},
+				async updateGooglePhotosSyncHint() {
+					await this.updateGooglePhotosUi();
+				},
+				async refreshReviewGooglePhotosNotice() {
+					const item = PartyQueue.selectedItem();
+					const pushBtn = this.els.pushBtn;
+					if (!item || item.status !== 'ready') {
+						this.setReviewGooglePhotosNotice('');
+						if (pushBtn) pushBtn.disabled = false;
+						return;
+					}
+					const status = await PartyGooglePhotos.fetchStatus(true);
+					const gp = PartyGooglePhotos.gp;
+					if (gp?.googlePhotosPartyPushBlocked(status)) {
+						const fixCta = gp.googlePhotosPartyFixCta(status, gp);
+						this.setReviewGooglePhotosNotice(
+							gp.googlePhotosPartyPushNotice(status, gp),
+							{ fixCta }
+						);
+						if (pushBtn) pushBtn.disabled = true;
+						return;
+					}
+					this.setReviewGooglePhotosNotice('');
+					if (pushBtn) pushBtn.disabled = false;
+				},
+				setReviewGooglePhotosNotice(message = '', { fixCta = null } = {}) {
+					const notice = this.els.reviewGpNotice;
+					const noticeText = this.els.reviewGpNoticeText;
+					const fixBtn = this.els.reviewGpReconnectBtn;
+					const text = String(message || '').trim();
+					const show = Boolean(text);
+					if (notice) notice.hidden = !show;
+					if (noticeText) noticeText.textContent = text;
+					if (fixBtn) {
+						if (fixCta?.label) {
+							fixBtn.hidden = false;
+							fixBtn.textContent = fixCta.label;
+							fixBtn.dataset.gpFixAction = fixCta.action || 'navigate';
+							fixBtn.dataset.gpFixHref = fixCta.href || '';
+						} else {
+							fixBtn.hidden = true;
+							fixBtn.removeAttribute('data-gp-fix-action');
+							fixBtn.removeAttribute('data-gp-fix-href');
+						}
+					}
+				},
+				setPushedGooglePhotosNotice(message = '', { showRecover = false } = {}) {
+					const notice = this.els.pushedGpNotice;
+					const noticeText = this.els.pushedGpNoticeText;
+					const recoverBtn = this.els.pushedRecoverBtn;
+					const text = String(message || '').trim();
+					const show = Boolean(text) || showRecover;
+					if (notice) notice.hidden = !show;
+					if (noticeText) noticeText.textContent = text;
+					if (recoverBtn) recoverBtn.hidden = !showRecover;
+				},
+				async refreshPushedGooglePhotosNotice() {
+					const item = PartyQueue.selectedItem();
+					if (!item || item.status !== 'committed' || !PartyQueue.isMissingGooglePhotos(item)) {
+						this.setPushedGooglePhotosNotice('');
+						return;
+					}
+					const status = await PartyGooglePhotos.fetchStatus(true);
+					const gp = PartyGooglePhotos.gp;
+					const canVerify = gp?.googlePhotosHasWorkingConnection(status) === true;
+					this.setPushedGooglePhotosNotice(
+						canVerify
+							? 'This photo did not reach Google Photos. Recover uploads it — or moves it back to the queue if that fails.'
+							: '',
+						{ showRecover: true }
+					);
 				},
 				renderPendingGrid() {
 					const list = this.els.pendingGrid;
@@ -4829,13 +5139,27 @@
 					if (this.els.actionsHeld) this.els.actionsHeld.hidden = !isHeld;
 					if (this.els.actionsQueue) this.els.actionsQueue.hidden = isHeld || isPushed;
 					if (this.els.actionsPushed) this.els.actionsPushed.hidden = !isPushed;
+					if (isPushed) {
+						this.setReviewGooglePhotosNotice('');
+						void this.refreshPushedGooglePhotosNotice();
+					} else {
+						this.setPushedGooglePhotosNotice('');
+					}
 					if (this.els.transformBtn) {
 						this.els.transformBtn.disabled = sourceMissing || isProcessing;
 					}
 					if (this.els.redoBtn) this.els.redoBtn.disabled = isProcessing || sourceMissing;
 					if (this.els.pushBtn) {
-						this.els.pushBtn.disabled = isProcessing;
 						this.els.pushBtn.textContent = 'Push';
+						this.els.pushBtn.disabled = isProcessing || (item.status === 'ready');
+					}
+					if (item.status === 'ready') {
+						void this.refreshReviewGooglePhotosNotice();
+					} else {
+						this.setReviewGooglePhotosNotice('');
+						if (this.els.pushBtn) {
+							this.els.pushBtn.disabled = isProcessing;
+						}
 					}
 					this.updateReviewNav();
 					PartyPage.updateViewportScrollMode();
@@ -4851,12 +5175,14 @@
 					this.renderPendingGrid();
 					this.renderSentGrid();
 					this.renderReview();
+					void this.updateGooglePhotosUi();
 				}
 			};
 
 			// --- party/app ---
 			const PartyApp = {
 				async init() {
+					PartyGooglePhotos.gp = await gpClientPromise;
 					PartyHistory.init();
 					PartyPage.bindViewportSync();
 					PartyPage.bindLandscapeLock();
@@ -4883,6 +5209,13 @@
 						partyEditDelete: document.getElementById('party-edit-delete'),
 						gpSyncHint: document.getElementById('party-settings-gp-sync-hint'),
 						gpSyncBtn: document.getElementById('party-settings-gp-sync'),
+						gpReconnectBtn: document.getElementById('party-settings-gp-reconnect'),
+						gpBanner: document.getElementById('party-gp-banner'),
+						gpBannerText: document.getElementById('party-gp-banner-text'),
+						gpBannerReconnectBtn: document.getElementById('party-gp-banner-reconnect'),
+						reviewGpNotice: document.getElementById('party-review-gp-notice'),
+						reviewGpNoticeText: document.getElementById('party-review-gp-notice-text'),
+						reviewGpReconnectBtn: document.getElementById('party-review-gp-reconnect'),
 						switchPartyBtn: document.getElementById('party-switch-party-btn'),
 						pickerList: document.getElementById('party-picker-list'),
 						pickerStatus: document.getElementById('party-picker-status'),
@@ -4923,6 +5256,9 @@
 						heldDiscardBtn: document.getElementById('party-held-discard-btn'),
 						heldDismissBtn: document.getElementById('party-held-dismiss-btn'),
 						pushedDiscardBtn: document.getElementById('party-pushed-discard-btn'),
+						pushedGpNotice: document.getElementById('party-pushed-gp-notice'),
+						pushedGpNoticeText: document.getElementById('party-pushed-gp-notice-text'),
+						pushedRecoverBtn: document.getElementById('party-pushed-recover'),
 						dismissBtn: document.getElementById('party-dismiss-btn')
 					};
 					PartyUI.init(els);
@@ -5022,7 +5358,10 @@
 						btn.disabled = true;
 						btn.textContent = 'Syncing…';
 					}
-					if (hint) hint.textContent = 'Syncing Google Photos with Pushed…';
+					if (hint) {
+						hint.textContent = 'Syncing Google Photos with Pushed…';
+						hint.classList.remove('is-error');
+					}
 					try {
 						const result = await PartyGooglePhotos.syncPushed();
 						if (result?.redirected) return;
@@ -5036,7 +5375,14 @@
 							PartyLog.write(`GP sync: already matched (${result.pushedCount} pushed)`);
 						}
 					} catch (err) {
-						PartyLog.write(`GP sync error: ${err?.message || err}`);
+						const msg = err?.message || String(err);
+						PartyLog.write(`GP sync error: ${msg}`);
+						if (hint) {
+							hint.textContent = err?.needsReconnect
+								? `${msg} Use Reconnect Google Photos below.`
+								: `Google Photos sync failed: ${msg}`;
+							hint.classList.toggle('is-error', err?.needsReconnect === true);
+						}
 					} finally {
 						await PartyUI.updateGooglePhotosSyncHint();
 					}
@@ -5052,31 +5398,126 @@
 						btn.disabled = true;
 						btn.textContent = 'Pushing…';
 					}
+					PartyUI.setReviewGooglePhotosNotice('');
 
 					try {
-						const status = await PartyGooglePhotos.fetchStatus();
-						if (status.configured && !status.connected) {
-							window.location.href = '/integrations#google-photos=connect';
+						const status = await PartyGooglePhotos.fetchStatus(true);
+						const gp = PartyGooglePhotos.gp;
+
+						if (gp?.googlePhotosPartyPushBlocked(status)) {
+							const fixCta = gp.googlePhotosPartyFixCta(status, gp);
+							PartyUI.setReviewGooglePhotosNotice(
+								gp.googlePhotosPartyPushNotice(status, gp),
+								{ fixCta }
+							);
+							PartyLog.write(`Push blocked: ${gp.googlePhotosPartyPushNotice(status, gp)}`);
 							return;
 						}
 
-						let googlePhotosMeta = null;
-						if (status.configured && status.connected) {
-							const partyName = PartyGooglePhotos.partyName();
+						const partyName = PartyGooglePhotos.partyName();
+						let googlePhotosMeta;
+						try {
 							googlePhotosMeta = await PartyGooglePhotos.uploadCreation(item.creationId, partyName);
+							if (!googlePhotosMeta?.mediaItemId) {
+								throw new Error('Google Photos upload did not complete');
+							}
 							PartyLog.write(`Google Photos: ${partyName}`);
+						} catch (err) {
+							PartyUI.setReviewGooglePhotosNotice(
+								err?.needsReconnect
+									? String(err.message || 'Your Google Photos connection expired. Reconnect, then push again.')
+									: `Google Photos upload failed: ${err?.message || err}. Fix the connection, then push again.`,
+								{
+									fixCta: err?.needsReconnect && gp
+										? gp.googlePhotosPartyFixCta({ statusOk: true, configured: true, needsReconnect: true }, gp)
+										: gp?.googlePhotosPartyFixCta(status, gp)
+								}
+							);
+							PartyLog.write(`Push blocked: Google Photos upload failed: ${err?.message || err}`);
+							return;
 						}
 
-						const ok = PartyQueue.push(id, googlePhotosMeta);
-						if (!ok) return;
+						const ok = PartyQueue.push(id, googlePhotosMeta, { requireGooglePhotos: true });
+						if (!ok) {
+							PartyUI.setReviewGooglePhotosNotice(
+								'Push blocked: Google Photos upload did not complete.',
+								{ fixCta: gp?.googlePhotosPartyFixCta(status, gp) }
+							);
+							return;
+						}
 						this.closeReview();
 						PartyUI.renderAll();
 					} catch (err) {
 						PartyLog.write(`Push failed: ${err?.message || err}`);
+						const gp = PartyGooglePhotos.gp;
+						const latestStatus = await PartyGooglePhotos.fetchStatus(true);
+						PartyUI.setReviewGooglePhotosNotice(`Push failed: ${err?.message || err}`, {
+							fixCta: gp?.googlePhotosPartyFixCta(latestStatus, gp)
+						});
+					} finally {
 						if (btn) {
-							btn.disabled = false;
 							btn.textContent = 'Push';
 						}
+						void PartyUI.refreshReviewGooglePhotosNotice();
+					}
+				},
+				async _movePushedBackToQueue(id, item) {
+					const creationId = Number(item?.creationId);
+					PartyQueue.unpush(id);
+					if (Number.isFinite(creationId) && creationId > 0) {
+						PartyGooglePhotos.unmarkCreationSynced(creationId);
+						await PartyGroup.unrecordPush(creationId);
+					}
+					await PartyGroup.syncState();
+				},
+				async onRecoverPushedPhoto() {
+					const id = PartyQueue.selectedId;
+					const item = PartyQueue.selectedItem();
+					if (!id || !item || item.status !== 'committed' || !item.creationId) return;
+					if (!PartyQueue.isMissingGooglePhotos(item)) return;
+
+					const btn = PartyUI.els.pushedRecoverBtn;
+					if (btn) {
+						btn.disabled = true;
+						btn.textContent = 'Recovering…';
+					}
+
+					try {
+						const status = await PartyGooglePhotos.fetchStatus(true);
+						const gp = PartyGooglePhotos.gp;
+						if (status.configured && !gp?.googlePhotosPartyPushBlocked(status)) {
+							const partyName = PartyGooglePhotos.partyName();
+							const data = await PartyGooglePhotos.uploadCreation(item.creationId, partyName);
+							if (data?.mediaItemId) {
+								item.googlePhotosMediaItemId = String(data.mediaItemId);
+							}
+							if (data?.albumId) {
+								item.googlePhotosAlbumId = String(data.albumId);
+							}
+							PartyGooglePhotos.markCreationSynced(item.creationId, data);
+							PartySettings.setPartyPushedGooglePhotos(item.creationId, {
+								mediaItemId: data?.mediaItemId,
+								albumId: data?.albumId
+							});
+							PartyQueue._persist();
+							await PartyGroup.syncState();
+							PartyLog.write(`Recover: uploaded to Google Photos (${partyName})`);
+							PartyUI.setPushedGooglePhotosNotice('');
+							PartyUI.renderAll();
+							return;
+						}
+
+						await this._movePushedBackToQueue(id, item);
+						PartyLog.write('Recover: Google Photos unavailable — moved back to queue');
+					} catch (err) {
+						await this._movePushedBackToQueue(id, item);
+						PartyLog.write(`Recover: upload failed, moved back to queue — ${err?.message || err}`);
+					}
+
+					PartyUI.renderAll();
+					if (btn) {
+						btn.disabled = false;
+						btn.textContent = 'Recover';
 					}
 				},
 				async onDiscard() {

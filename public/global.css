@@ -17498,6 +17498,23 @@ app-modal-creation-details .creation-details-args-hint code {
 	font-weight: 500;
 }
 
+.share-action-row--gp-reconnect,
+.share-action-row--gp-connect {
+	background: var(--color-amber-bg-subtle);
+	border: 1px solid color-mix(in srgb, var(--color-amber) 36%, transparent);
+}
+
+.share-action-row--gp-reconnect .share-action-subtitle,
+.share-action-row--gp-connect .share-action-subtitle {
+	color: var(--color-amber-fg);
+}
+
+.share-action-row--gp-reconnect .share-action-cta-google-photos,
+.share-action-row--gp-connect .share-action-cta-google-photos {
+	background: color-mix(in srgb, var(--color-amber) 88%, black);
+	border-color: color-mix(in srgb, var(--color-amber) 88%, black);
+}
+
 .share-action-list {
 	display: flex;
 	flex-direction: column;

@@ -64,6 +64,10 @@ const FORWARD_MONTHS = Number(process.env.OUTLOOK_FORWARD_MONTHS || 4);
 const FORWARD_WEEKS = Math.max(FORWARD_WEEKS_SHORT, Math.round(FORWARD_MONTHS * (52 / 12)));
 const REGRESSION_WEEKS = Number(process.env.OUTLOOK_REGRESSION_WEEKS || 10);
 const REGRESSION_MONTHS = Number(process.env.OUTLOOK_REGRESSION_MONTHS || 4);
+/** Daily regression window once visit-pulse history is longer than PULSE_USE_ALL_HISTORY_DAYS. */
+const REGRESSION_DAYS = Number(process.env.OUTLOOK_REGRESSION_DAYS || 7);
+/** While pulse is young, regress on all complete days since instrumentation (not a trailing 7d slice). */
+const PULSE_USE_ALL_HISTORY_DAYS = Number(process.env.OUTLOOK_PULSE_ALL_HISTORY_DAYS || 28);
 
 const esc = (s) =>
 	String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -308,7 +312,9 @@ function chartHistoryProjection(
 		markers = [],
 		referenceY = null,
 		referenceLabel = "",
-		yAxisPercent = false
+		yAxisPercent = false,
+		trendSlope = null,
+		trendUnit = null
 	} = {}
 ) {
 	const w = 980;
@@ -355,9 +361,19 @@ function chartHistoryProjection(
 		: "";
 
 	const dividerX = hist.length > 0 ? x(hist.length - 1).toFixed(1) : padL;
+	const unit =
+		trendUnit || (labelKey === "month" ? "month" : labelKey === "week" ? "week" : "day");
+	const regressionCount =
+		unit === "month" ? REGRESSION_MONTHS : unit === "week" ? REGRESSION_WEEKS : REGRESSION_DAYS;
+	const slopeVal =
+		Number.isFinite(trendSlope)
+			? trendSlope
+			: hist.length >= 2
+				? linearRegression(hist.slice(-regressionCount).map((r) => Number(r[valueKey] || 0))).slope
+				: 0;
 	const slopeNote =
 		projRows.length && hist.length >= 2
-			? `Recent trend: ${linearRegression(hist.slice(-REGRESSION_WEEKS).map((r) => Number(r[valueKey] || 0))).slope > 0 ? "+" : ""}${linearRegression(hist.slice(-REGRESSION_WEEKS).map((r) => Number(r[valueKey] || 0))).slope.toFixed(2)}/${labelKey === "month" ? "month" : labelKey === "week" ? "week" : "day"}`
+			? `Recent trend: ${slopeVal > 0 ? "+" : ""}${slopeVal.toFixed(2)}/${unit}`
 			: "";
 
 	return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" aria-label="${esc(title)}">
@@ -892,12 +908,20 @@ function buildOutlook(growth, pulseDays, events) {
 	const pulseVisit = pulseDays
 		.filter((r) => Number(r.authed_visitors) > 0)
 		.map((r) => ({ day: String(r.day), visit_dau: Number(r.authed_visitors) }));
+	const pulseThroughDay = yesterdayUsEastDayKey();
+	const pulseVisitComplete = pulseVisit.filter((r) => r.day <= pulseThroughDay);
+	const pulseVisitPartial = pulseVisit.filter((r) => r.day > pulseThroughDay);
+	const visitUseAllPulseHistory =
+		pulseVisitComplete.length > 0 && pulseVisitComplete.length <= PULSE_USE_ALL_HISTORY_DAYS;
+	const visitRegressionDays = visitUseAllPulseHistory
+		? pulseVisitComplete.length
+		: Math.min(REGRESSION_DAYS, pulseVisitComplete.length);
 	const visitProj = projectFromRecent(
-		pulseVisit,
+		pulseVisitComplete,
 		"visit_dau",
 		"day",
 		Math.min(60, FORWARD_WEEKS * 7),
-		Math.min(14, pulseVisit.length),
+		visitRegressionDays,
 		(d, i) => toIsoDate(addDays(new Date(`${d}T00:00:00.000Z`), i))
 	);
 
@@ -1072,6 +1096,11 @@ function buildOutlook(growth, pulseDays, events) {
 		dauProj,
 		visitProj,
 		pulseVisit,
+		pulseVisitComplete,
+		pulseVisitPartial,
+		pulseThroughDay,
+		visitRegressionDays,
+		visitUseAllPulseHistory,
 		wauMilestones,
 		mauMilestones,
 		pulseMarkers,
@@ -1149,7 +1178,17 @@ async function main() {
 		forwardMonths: String(FORWARD_MONTHS),
 		forwardWeeksShort: String(FORWARD_WEEKS_SHORT),
 		regressionWeeks: String(REGRESSION_WEEKS),
+		regressionDays: String(REGRESSION_DAYS),
 		pulseFromDay: outlook.firstPulseDay,
+		visitPulsePartialNote: (() => {
+			const fitLabel = outlook.visitUseAllPulseHistory
+				? `dashed trend fits all ${outlook.visitRegressionDays} complete pulse day(s) since ${outlook.firstPulseDay}`
+				: `dashed trend fits last ${outlook.visitRegressionDays} complete day(s)`;
+			const partial = outlook.pulseVisitPartial.length
+				? ` ${outlook.pulseVisitPartial[0].day} is partial (visit DAU ${outlook.pulseVisitPartial[0].visit_dau} so far) — excluded.`
+				: "";
+			return `${fitLabel} through ${outlook.pulseThroughDay}.${partial}`;
+		})(),
 		lede:
 			"Combines all-time core-action history (since first signup) with visit pulse where it exists, then extends recent trends forward ~3–4 months. Use for direction, not forecasting.",
 		methodology:
@@ -1199,11 +1238,17 @@ async function main() {
 			{ title: "Action WAU (complete weeks)", histColor: "#2563eb", markers: outlook.wauMilestones }
 		),
 		visitDauChartHtml: chartHistoryProjection(
-			outlook.pulseVisit,
+			outlook.pulseVisitComplete,
 			outlook.visitProj.projected,
 			"visit_dau",
 			"day",
-			{ title: "Logged-in visit DAU", histColor: "#b45309", markers: outlook.pulseMarkers }
+			{
+				title: "Logged-in visit DAU",
+				histColor: "#b45309",
+				markers: outlook.pulseMarkers,
+				trendSlope: outlook.visitProj.slope,
+				trendUnit: "day"
+			}
 		),
 		commentersChartHtml: depthChart(
 			outlook.depthComplete,

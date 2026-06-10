@@ -152,6 +152,7 @@ function renderVynlyBlock(user) {
 function renderGooglePhotosBlock(status) {
 	const configured = status?.configured === true;
 	const connected = status?.connected === true;
+	const needsReconnect = status?.needsReconnect === true;
 	const albumTitle =
 		typeof status?.albumTitle === 'string' && status.albumTitle.trim()
 			? status.albumTitle.trim()
@@ -159,6 +160,17 @@ function renderGooglePhotosBlock(status) {
 
 	if (!configured) {
 		return `<p class="integrations-intro">Google Photos is not configured on this environment.</p>`;
+	}
+
+	if (needsReconnect) {
+		const msg =
+			typeof status?.authMessage === 'string' && status.authMessage.trim()
+				? escapeHtml(status.authMessage.trim())
+				: 'Your Google Photos connection expired.';
+		return `<p class="integrations-intro">${msg}</p>
+	<div class="integrations-credential-actions">
+		<button type="button" class="btn-secondary" data-int-google-photos-connect>Reconnect Google Photos</button>
+	</div>`;
 	}
 
 	if (!connected) {
@@ -490,6 +502,8 @@ async function main() {
 			setStatus(statusEl, 'Google Photos connection cancelled.', 'error');
 		} else if (hash.includes('google-photos=fail')) {
 			setStatus(statusEl, 'Google Photos connection failed.', 'error');
+		} else if (hash.includes('google-photos=connect')) {
+			window.location.href = `/api/google-photos/connect?returnUrl=${encodeURIComponent('/integrations')}`;
 		}
 	}
 

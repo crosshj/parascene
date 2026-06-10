@@ -1,3 +1,10 @@
+import {
+	googlePhotosAuthMessageFromPayload,
+	googlePhotosReconnectUrl,
+	googlePhotosRowStateFromStatus,
+	isGooglePhotosReconnectPayload
+} from "../../shared/googlePhotosClient.js";
+
 let closeIcon;
 let xIcon;
 let facebookIcon;
@@ -133,6 +140,8 @@ class AppModalShare extends HTMLElement {
 		this._vynlyShareEligible = true;
 		this._googlePhotosStatusRequestId = 0;
 		this._googlePhotosConfigured = false;
+		this._googlePhotosRowState = "hidden";
+		this._googlePhotosAuthMessage = "";
 		this._imageExportEligible = false;
 		this._isGroupCreation = false;
 
@@ -247,7 +256,7 @@ class AppModalShare extends HTMLElement {
 									<span class="share-option-icon share-option-icon-google-photos is-brand">${iconGooglePhotos}</span>
 									<span class="share-action-text">
 										<span class="share-action-title">Google Photos</span>
-										<span class="share-action-subtitle">Send to your Parascene album</span>
+										<span class="share-action-subtitle" data-google-photos-subtitle>Send to your Parascene album</span>
 									</span>
 								</span>
 								<span class="share-action-cta share-action-cta-google-photos" data-cta><span class="share-action-cta-label">Send</span></span>
@@ -505,6 +514,8 @@ class AppModalShare extends HTMLElement {
 		this._googlePhotosStatusRequestId++;
 		this._vynlyShareEligible = true;
 		this._googlePhotosConfigured = false;
+		this._googlePhotosRowState = "hidden";
+		this._googlePhotosAuthMessage = "";
 		this._imageExportEligible = false;
 		this._isGroupCreation = false;
 		const overlay = this.querySelector("[data-overlay]");
@@ -544,6 +555,7 @@ class AppModalShare extends HTMLElement {
 		if (googlePhotosBtn instanceof HTMLButtonElement) {
 			const showGoogle = this._googlePhotosConfigured && this._imageExportEligible;
 			googlePhotosBtn.style.display = showGoogle ? "" : "none";
+			this.applyGooglePhotosRowState();
 		}
 	}
 
@@ -552,6 +564,8 @@ class AppModalShare extends HTMLElement {
 		if (!(row instanceof HTMLButtonElement)) return;
 
 		row.style.display = "none";
+		this._googlePhotosRowState = "hidden";
+		this._googlePhotosAuthMessage = "";
 		if (this._isGroupCreation || !this._imageExportEligible) return;
 
 		const requestId = ++this._googlePhotosStatusRequestId;
@@ -562,10 +576,45 @@ class AppModalShare extends HTMLElement {
 			const data = await res.json().catch(() => null);
 			if (requestId !== this._googlePhotosStatusRequestId) return;
 			this._googlePhotosConfigured = data && data.configured === true;
+			this._googlePhotosRowState = googlePhotosRowStateFromStatus(data);
+			this._googlePhotosAuthMessage = googlePhotosAuthMessageFromPayload(
+				data,
+				"Your Google Photos connection expired. Reconnect to send photos."
+			);
 			row.style.display = this._googlePhotosConfigured && this._imageExportEligible ? "" : "none";
+			this.applyGooglePhotosRowState();
 		} catch {
 			// ignore
 		}
+	}
+
+	applyGooglePhotosRowState() {
+		const row = this.querySelector("[data-share-google-photos]");
+		if (!(row instanceof HTMLButtonElement)) return;
+
+		const subtitle = row.querySelector("[data-google-photos-subtitle]");
+		const cta = row.querySelector(".share-action-cta-label");
+		const state = this._googlePhotosRowState;
+
+		row.classList.remove("share-action-row--gp-reconnect", "share-action-row--gp-connect");
+		row.dataset.gpState = state;
+
+		if (state === "reconnect") {
+			row.classList.add("share-action-row--gp-reconnect");
+			if (subtitle) subtitle.textContent = this._googlePhotosAuthMessage;
+			if (cta) cta.textContent = "Reconnect";
+			return;
+		}
+
+		if (state === "connect") {
+			row.classList.add("share-action-row--gp-connect");
+			if (subtitle) subtitle.textContent = "Connect to send photos to your Parascene album";
+			if (cta) cta.textContent = "Connect";
+			return;
+		}
+
+		if (subtitle) subtitle.textContent = "Send to your Parascene album";
+		if (cta) cta.textContent = "Send";
 	}
 
 	async refreshVynlyRowVisibility() {
@@ -797,20 +846,19 @@ class AppModalShare extends HTMLElement {
 	}
 
 	async handleShareGooglePhotos(buttonEl) {
+		if (this._googlePhotosRowState === "reconnect") {
+			window.location.href = googlePhotosReconnectUrl();
+			return;
+		}
+		if (this._googlePhotosRowState === "connect") {
+			window.location.href = googlePhotosReconnectUrl("/integrations");
+			return;
+		}
+
 		await this.runCtaAction(buttonEl, async () => {
 			const creationId = Number(this._creationId);
 			if (!Number.isFinite(creationId) || creationId <= 0) {
 				throw new Error("Invalid creation");
-			}
-
-			const statusRes = await fetch("/api/google-photos/status", { credentials: "include" });
-			const status = await statusRes.json().catch(() => null);
-			if (!statusRes.ok || !status || status.configured !== true) {
-				throw new Error("Google Photos is not configured");
-			}
-			if (status.connected !== true) {
-				window.location.href = "/integrations#google-photos=connect";
-				return;
 			}
 
 			const res = await fetch("/api/google-photos/upload", {
@@ -821,8 +869,17 @@ class AppModalShare extends HTMLElement {
 			});
 			const data = await res.json().catch(() => null);
 			if (!res.ok) {
+				if (isGooglePhotosReconnectPayload(data)) {
+					this._googlePhotosRowState = "reconnect";
+					this._googlePhotosAuthMessage = googlePhotosAuthMessageFromPayload(
+						data,
+						"Your Google Photos connection expired. Reconnect to send photos."
+					);
+					this.applyGooglePhotosRowState();
+					return;
+				}
 				throw new Error(
-					(data && (data.error || data.message)) ? String(data.error || data.message) : "Upload failed"
+					(data && (data.message || data.error)) ? String(data.message || data.error) : "Upload failed"
 				);
 			}
 		}, { successLabel: "Sent", errorLabel: "Failed", resetMs: 1100 });
