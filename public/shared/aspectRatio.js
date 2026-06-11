@@ -4,6 +4,7 @@ import {
 	MUTATE_DEFAULT_MODEL,
 	MUTATE_DEFAULT_SERVER_ID,
 	PARASCENE_BLUE_SERVER_ID,
+	UPLOAD_IMAGE_METHOD_KEY,
 } from './generationDefaults.js';
 
 export const ASPECT_RATIO_PRESETS = {
@@ -12,6 +13,30 @@ export const ASPECT_RATIO_PRESETS = {
 	'9:16': [9, 16],
 	'16:9': [16, 9],
 };
+
+/** MVP aspect keys used in create composer and Parascene Blue video. */
+export const MVP_ASPECT_RATIO_KEYS = ['1:1', '9:16', '4:5', '16:9'];
+
+const ASPECT_MATCH_TOLERANCE = 0.04;
+
+function isUploadImageMethod(context) {
+	return (
+		Number(context?.serverId) === MUTATE_DEFAULT_SERVER_ID &&
+		String(context?.methodKey || '') === UPLOAD_IMAGE_METHOD_KEY
+	);
+}
+
+/** Synthetic aspect_ratio field for methods that support ratio but omit it from server config. */
+export function getVirtualAspectRatioField() {
+	return {
+		type: 'select',
+		label: 'Aspect Ratio',
+		hidden: false,
+		default: '1:1',
+		options: MVP_ASPECT_RATIO_KEYS.map((key) => ({ label: key, value: key })),
+		required: false,
+	};
+}
 
 /** Short labels for grok-imagine aspect ratio selector (matches competitor UI). */
 export const ASPECT_RATIO_SELECTOR_LABELS = {
@@ -45,6 +70,10 @@ export function modelSupportsAspectRatio(context) {
 		return true;
 	}
 
+	if (isUploadImageMethod(context)) {
+		return true;
+	}
+
 	if (serverId === PARASCENE_BLUE_SERVER_ID) {
 		const aspectField = context.fields?.aspect_ratio;
 		return Boolean(aspectField && typeof aspectField === 'object');
@@ -68,6 +97,7 @@ export function shouldUseAspectRatioSelector(context, {
 	if (!modelSupportsAspectRatio(context)) return false;
 	const aspectField = context.fields?.aspect_ratio;
 	if (aspectField && typeof aspectField === 'object') return true;
+	if (isUploadImageMethod(context)) return true;
 	if (Number(context.serverId) !== Number(serverId)) return false;
 	if (String(context.methodKey || '') !== String(methodKey)) return false;
 	return String(context.modelValue || '') === String(modelValue);
@@ -95,11 +125,78 @@ export function parseAspectRatioString(raw) {
 }
 
 /**
- * Target pixel box for a ratio key with a fixed long edge (placeholder / pending rows).
- * @param {unknown} raw
- * @param {number} [longEdge=1024]
- * @returns {{ width: number, height: number }}
+ * Pick the closest MVP preset for pixel dimensions.
+ * @param {number} width
+ * @param {number} height
+ * @param {readonly string[]} [keys]
+ * @returns {string}
  */
+export function closestAspectRatioPreset(width, height, keys = MVP_ASPECT_RATIO_KEYS) {
+	const w = Number(width);
+	const h = Number(height);
+	if (!Number.isFinite(w) || w <= 0 || !Number.isFinite(h) || h <= 0) {
+		return '1:1';
+	}
+	const actual = w / h;
+	let bestKey = '1:1';
+	let bestDelta = Infinity;
+	for (const key of keys) {
+		const preset = parseAspectRatioString(key);
+		if (!preset) continue;
+		const expected = preset[0] / preset[1];
+		const delta = Math.abs(Math.log(actual / expected));
+		if (delta < bestDelta) {
+			bestDelta = delta;
+			bestKey = key;
+		}
+	}
+	return bestKey;
+}
+
+/**
+ * @param {number} width
+ * @param {number} height
+ * @param {unknown} aspectKey
+ * @param {number} [tolerance]
+ * @returns {boolean | null} null when dimensions or key invalid
+ */
+export function dimensionsMatchAspectRatio(width, height, aspectKey, tolerance = ASPECT_MATCH_TOLERANCE) {
+	const w = Number(width);
+	const h = Number(height);
+	const parsed = parseAspectRatioString(aspectKey);
+	if (!parsed || w <= 0 || h <= 0) return null;
+	const actual = w / h;
+	const expected = parsed[0] / parsed[1];
+	return Math.abs(actual - expected) <= tolerance * expected;
+}
+
+/**
+ * Client warning copy when output/upload aspect may not match the image.
+ * @param {{ targetAspect: string, detectedAspect?: string | null, uploadAspect?: string | null, context?: string }} opts
+ * @returns {string} empty when no warning needed
+ */
+export function buildAspectRatioMismatchMessage({
+	targetAspect,
+	detectedAspect,
+	uploadAspect,
+	context = 'this job',
+}) {
+	const target = String(targetAspect || '').trim();
+	if (!target) return '';
+
+	const parts = [];
+	const upload = String(uploadAspect || '').trim();
+	const detected = String(detectedAspect || '').trim();
+
+	if (upload && upload !== target) {
+		parts.push(`The image was prepared for ${upload}, but ${context} is set to ${target}.`);
+	} else if (detected && detected !== target) {
+		parts.push(`The image looks like ${detected}, but ${context} is set to ${target}.`);
+	}
+
+	return parts.join(' ');
+}
+
 export function dimensionsForAspectRatioLongEdge(raw, longEdge = 1024) {
 	const edge = Number(longEdge);
 	const fallback = Number.isFinite(edge) && edge > 0 ? Math.round(edge) : 1024;
@@ -135,6 +232,26 @@ export function normalizeCreationMeta(meta) {
  * @param {{ width?: unknown, height?: unknown, meta?: unknown } | null | undefined} creation
  * @returns {{ w: number, h: number, source: 'args' | 'dimensions' | 'default' }}
  */
+/**
+ * Pixel dimensions for video hero playback when aspect_ratio is in job args.
+ * @param {{ width?: unknown, height?: unknown, meta?: unknown } | null | undefined} creation
+ * @param {number} [longEdge]
+ * @returns {{ width: number, height: number }}
+ */
+export function videoHeroDimensionsFromCreation(creation, longEdge = 1024) {
+	const meta = normalizeCreationMeta(creation?.meta);
+	const aspectRaw = meta?.args?.aspect_ratio;
+	if (parseAspectRatioString(aspectRaw)) {
+		return dimensionsForAspectRatioLongEdge(aspectRaw, longEdge);
+	}
+	const w = Number(creation?.width);
+	const h = Number(creation?.height);
+	if (Number.isFinite(w) && w > 0 && Number.isFinite(h) && h > 0) {
+		return { width: w, height: h };
+	}
+	return { width: longEdge, height: longEdge };
+}
+
 export function aspectRatioFromCreation(creation) {
 	const meta = normalizeCreationMeta(creation?.meta);
 	if (meta?.video_placeholder_manual === true) {

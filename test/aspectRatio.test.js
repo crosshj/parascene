@@ -2,7 +2,11 @@ import { describe, expect, test } from '@jest/globals';
 import {
 	applyHeroAspectLayoutToElement,
 	aspectRatioFromCreation,
+	buildAspectRatioMismatchMessage,
+	closestAspectRatioPreset,
 	dimensionsForAspectRatioLongEdge,
+	dimensionsMatchAspectRatio,
+	videoHeroDimensionsFromCreation,
 	TEMP_ALLOW_REPEAT_VIDEO_POSTER,
 	canSetVideoPosterFromFirstFrame,
 	hasProperVideoPlaceholderDimensions,
@@ -48,6 +52,70 @@ describe('aspectRatioFromCreation', () => {
 	test('parses preset ratios', () => {
 		expect(parseAspectRatioString('4:5')).toEqual([4, 5]);
 		expect(heroLayoutMode(4, 5)).toBe('portrait');
+	});
+});
+
+describe('closestAspectRatioPreset', () => {
+	test('detects portrait 9:16', () => {
+		expect(closestAspectRatioPreset(1080, 1920)).toBe('9:16');
+	});
+
+	test('detects square', () => {
+		expect(closestAspectRatioPreset(1024, 1024)).toBe('1:1');
+	});
+
+	test('detects landscape 16:9', () => {
+		expect(closestAspectRatioPreset(1920, 1080)).toBe('16:9');
+	});
+});
+
+describe('dimensionsMatchAspectRatio', () => {
+	test('matches preset within tolerance', () => {
+		expect(dimensionsMatchAspectRatio(576, 1024, '9:16')).toBe(true);
+		expect(dimensionsMatchAspectRatio(1024, 1024, '9:16')).toBe(false);
+	});
+});
+
+describe('buildAspectRatioMismatchMessage', () => {
+	test('warns when upload aspect differs from target', () => {
+		const msg = buildAspectRatioMismatchMessage({
+			targetAspect: '9:16',
+			uploadAspect: '1:1',
+			context: 'video output',
+		});
+		expect(msg).toContain('prepared for 1:1');
+		expect(msg).toContain('video output');
+		expect(msg).toContain('9:16');
+	});
+
+	test('warns when detected differs from target', () => {
+		const msg = buildAspectRatioMismatchMessage({
+			targetAspect: '9:16',
+			detectedAspect: '1:1',
+		});
+		expect(msg).toContain('looks like 1:1');
+	});
+
+	test('empty when aligned', () => {
+		expect(
+			buildAspectRatioMismatchMessage({
+				targetAspect: '9:16',
+				detectedAspect: '9:16',
+				uploadAspect: '9:16',
+			})
+		).toBe('');
+	});
+});
+
+describe('videoHeroDimensionsFromCreation', () => {
+	test('uses aspect_ratio args over stored square dimensions', () => {
+		expect(
+			videoHeroDimensionsFromCreation({
+				width: 1024,
+				height: 1024,
+				meta: { args: { aspect_ratio: '9:16' } },
+			})
+		).toEqual({ width: 576, height: 1024 });
 	});
 });
 

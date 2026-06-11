@@ -20,6 +20,16 @@ describe('shouldUseAspectRatioSelector', () => {
 		).toBe(true);
 	});
 
+	test('enabled for uploadImage on Parascene server', () => {
+		expect(
+			shouldUseAspectRatioSelector({
+				serverId: 1,
+				methodKey: 'uploadImage',
+				modelValue: '',
+			})
+		).toBe(true);
+	});
+
 	test('enabled for grok-imagine on server 1 replicate', () => {
 		expect(
 			shouldUseAspectRatioSelector({

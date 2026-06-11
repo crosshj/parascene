@@ -53,6 +53,7 @@ let createReplyIndicatorElement;
 let applyHeroAspectLayoutToElement;
 let getLandscapeOutpaintEligibility;
 let canSetVideoPosterFromFirstFrame;
+let videoHeroDimensionsFromCreation;
 let captureVideoFirstFrameFile;
 let openShareAudioModal;
 
@@ -183,6 +184,7 @@ async function loadDeps() {
 		applyHeroAspectLayoutToElement = aspectRatioMod.applyHeroAspectLayoutToElement;
 		getLandscapeOutpaintEligibility = aspectRatioMod.getLandscapeOutpaintEligibility;
 		canSetVideoPosterFromFirstFrame = aspectRatioMod.canSetVideoPosterFromFirstFrame;
+		videoHeroDimensionsFromCreation = aspectRatioMod.videoHeroDimensionsFromCreation;
 
 		const queueFrameMod = await import(`/shared/queueFromFrameModal.js${qs}`);
 		captureVideoFirstFrameFile = queueFrameMod.captureVideoFirstFrameFile;
@@ -206,6 +208,18 @@ function getGroupActionTarget() {
 	const imageUrl = normalizeImageUrlForQueue(filePath);
 	if (!imageUrl) return null;
 	return { sourceId: sid, imageUrl };
+}
+
+function heroVideoPlaybackDimensions(record) {
+	if (typeof videoHeroDimensionsFromCreation === 'function') {
+		return videoHeroDimensionsFromCreation(record);
+	}
+	const w = Number(record?.width);
+	const h = Number(record?.height);
+	return {
+		width: Number.isFinite(w) && w > 0 ? w : 0,
+		height: Number.isFinite(h) && h > 0 ? h : 0,
+	};
 }
 
 /** Payload for applyHeroAspectLayoutToElement (width/height + meta). */
@@ -1886,12 +1900,13 @@ async function loadCreation() {
 			}
 
 			if (!isGroupedVideoCreation) {
+				const videoDims = heroVideoPlaybackDimensions(creation);
 				void mountHeroVideoPlaybackEarly(
 					[{
 						id: Number(creation.id),
 						videoUrl: creation.video_url,
-						width: Number(creation.width),
-						height: Number(creation.height),
+						width: videoDims.width,
+						height: videoDims.height,
 					}],
 					Number(creation.id),
 					{
@@ -2126,8 +2141,17 @@ async function loadCreation() {
 				if (sourceModel) sourceMetaItems.push(`Model ${sourceModel}`);
 				if (sourceDuration) sourceMetaItems.push(`Duration ${sourceDuration}`);
 				const sourceGenerationInfo = sourceMetaItems.join(' • ');
-				const sourceWidth = Number(sourceObj.width);
-				const sourceHeight = Number(sourceObj.height);
+				const sourceDims =
+					typeof videoHeroDimensionsFromCreation === 'function'
+						? videoHeroDimensionsFromCreation({
+								width: sourceObj.width,
+								height: sourceObj.height,
+								meta: sourceMeta,
+							})
+						: {
+								width: Number(sourceObj.width),
+								height: Number(sourceObj.height),
+							};
 				const sourceMediaType = typeof sourceMeta?.media_type === 'string' ? sourceMeta.media_type : 'image';
 				const sourceVideoUrlRaw = sourceMeta?.video?.file_path;
 				const sourceVideoUrl = sourceMediaType === 'video' && typeof sourceVideoUrlRaw === 'string' && sourceVideoUrlRaw.trim()
@@ -2140,8 +2164,10 @@ async function loadCreation() {
 					filePath: sourceFilePath,
 					videoUrl: sourceVideoUrl,
 					mediaType: sourceMediaType,
-					width: Number.isFinite(sourceWidth) && sourceWidth > 0 ? sourceWidth : undefined,
-					height: Number.isFinite(sourceHeight) && sourceHeight > 0 ? sourceHeight : undefined,
+					width:
+						Number.isFinite(sourceDims.width) && sourceDims.width > 0 ? sourceDims.width : undefined,
+					height:
+						Number.isFinite(sourceDims.height) && sourceDims.height > 0 ? sourceDims.height : undefined,
 					description: sourceDescription,
 					createdAt: sourceCreatedAt,
 					prompt: sourcePrompt,

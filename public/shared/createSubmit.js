@@ -398,10 +398,54 @@ function isAcceptedCreationResponse(data) {
 }
 
 /**
+ * @param {File} file
+ * @returns {Promise<{ width: number, height: number } | null>}
+ */
+/**
+ * @param {string} url
+ * @returns {Promise<{ width: number, height: number } | null>}
+ */
+export function readImageUrlDimensions(url) {
+	const src = typeof url === 'string' ? url.trim() : '';
+	if (!src) return Promise.resolve(null);
+	return new Promise((resolve) => {
+		const img = new Image();
+		img.onload = () => {
+			const width = img.naturalWidth;
+			const height = img.naturalHeight;
+			if (width > 0 && height > 0) resolve({ width, height });
+			else resolve(null);
+		};
+		img.onerror = () => resolve(null);
+		img.src = src;
+	});
+}
+
+export async function readRasterFileDimensions(file) {
+	if (!file || !(file instanceof File)) return null;
+	const mime = String(file.type || '').toLowerCase();
+	if (!mime.startsWith('image/') || mime === 'image/svg+xml') return null;
+
+	try {
+		const bitmap = await createImageBitmap(file);
+		try {
+			const width = bitmap.width;
+			const height = bitmap.height;
+			if (width > 0 && height > 0) return { width, height };
+			return null;
+		} finally {
+			bitmap.close();
+		}
+	} catch {
+		return null;
+	}
+}
+
+/**
  * Upload a file to the generic image endpoint; returns the image URL path on success (e.g. `/api/images/generic/...`).
  * Large pasted images are downscaled / re-encoded client-side so POST bodies stay under edge payload limits (e.g. Vercel).
  * @param {File} file
- * @param {{ uploadKind?: 'edited' | 'generic' }} [options] — `generic` uses miscellaneous profile storage (`generic_*` keys); `edited` resizes to 1024² PNG (create inputs).
+ * @param {{ uploadKind?: 'edited' | 'generic', aspectRatio?: string }} [options] — `generic` uses miscellaneous profile storage (`generic_*` keys); `edited` resizes to target aspect (or 1024² when aspectRatio omitted).
  */
 export async function uploadImageFile(file, options = {}) {
 	if (!file || !(file instanceof File)) throw new Error('Invalid file');
@@ -409,12 +453,17 @@ export async function uploadImageFile(file, options = {}) {
 	const prepared = await shrinkRasterImageFileForGenericUpload(file);
 	const defaultName = uploadKind === 'generic' ? 'paste.png' : 'image.png';
 	const safeName = safeUploadHeaderFilename(prepared.name || file.name, defaultName);
+	const aspectRatio =
+		uploadKind === 'edited' && typeof options.aspectRatio === 'string'
+			? options.aspectRatio.trim()
+			: '';
 	const res = await fetch('/api/images/generic', {
 		method: 'POST',
 		headers: {
 			'Content-Type': prepared.type || file.type || 'image/png',
 			'X-upload-kind': uploadKind,
-			'X-upload-name': safeName
+			'X-upload-name': safeName,
+			...(aspectRatio ? { 'X-upload-aspect-ratio': aspectRatio } : {})
 		},
 		body: prepared,
 		credentials: 'include'

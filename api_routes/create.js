@@ -23,7 +23,9 @@ import { mapCreatedImageRowMediaFields } from "./utils/resolveCreationDisplayMed
 import {
 	canSetVideoPosterFromFirstFrame,
 	getLandscapeOutpaintEligibility,
+	parseAspectRatioString,
 } from "../public/shared/aspectRatio.js";
+import { normalizeEditedUploadBuffer } from "./utils/editedImageUpload.js";
 import { ACTIVE_SHARE_VERSION, mintShareToken, verifyShareToken } from "./utils/shareLink.js";
 import { getStyleInfo } from "./utils/createStyles.js";
 import {
@@ -2018,20 +2020,11 @@ export default function createCreateRoutes({ queries, storage }) {
 					}
 				})() : (fields.args && typeof fields.args === "object" ? fields.args : {});
 				if (files.image_file?.buffer) {
-					let imgBuf = files.image_file.buffer;
-					const meta = await sharp(imgBuf).metadata();
-					if (
-						typeof meta.width === "number" &&
-						typeof meta.height === "number" &&
-						(meta.width !== 1024 || meta.height !== 1024)
-					) {
-						imgBuf = await sharp(imgBuf)
-							.resize(1024, 1024, { fit: "cover", position: "entropy" })
-							.png()
-							.toBuffer();
-					} else {
-						imgBuf = await sharp(imgBuf).png().toBuffer();
-					}
+					const aspectRaw =
+						typeof args?.aspect_ratio === "string" && parseAspectRatioString(args.aspect_ratio)
+							? args.aspect_ratio.trim()
+							: null;
+					let imgBuf = await normalizeEditedUploadBuffer(files.image_file.buffer, aspectRaw);
 					const now = Date.now();
 					const rand = Math.random().toString(36).slice(2, 9);
 					const userPart = String(user.id).replace(/[^a-z0-9._-]/gi, "_").slice(0, 80);

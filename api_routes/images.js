@@ -4,6 +4,10 @@ import sharp from "sharp";
 import { CHAT_UPLOAD_MAX_BYTES } from "../src/shared/chatUploadMaxBytes.js";
 import { isChatMiscGenericKeyOwnedByUser, safeDecodeGenericImageKeyTail } from "./utils/chatMiscGenericKeys.js";
 import { sendBufferWithRangeSupport } from "./utils/sendBufferWithRangeSupport.js";
+import {
+	normalizeEditedUploadBuffer,
+	readUploadAspectRatioHeader,
+} from "./utils/editedImageUpload.js";
 
 function parseMeta(raw) {
 	if (raw == null) return null;
@@ -390,22 +394,8 @@ export default function createImagesRoutes({ storage, queries }) {
 
 			if (kind === "edited") {
 				try {
-					const meta = await sharp(buffer).metadata();
-					if (
-						typeof meta.width === "number" &&
-						typeof meta.height === "number" &&
-						(meta.width !== 1024 || meta.height !== 1024)
-					) {
-						buffer = await sharp(buffer)
-							.resize(1024, 1024, {
-								fit: "cover",
-								position: "entropy"
-							})
-							.png()
-							.toBuffer();
-					} else {
-						buffer = await sharp(buffer).png().toBuffer();
-					}
+					const aspectRatio = readUploadAspectRatioHeader(req);
+					buffer = await normalizeEditedUploadBuffer(buffer, aspectRatio);
 				} catch (err) {
 					return res.status(400).json({ error: "Invalid image" });
 				}

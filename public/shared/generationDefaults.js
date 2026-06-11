@@ -6,6 +6,8 @@ export const TRY_DEFAULT_MODEL = "prunaai/p-image";
 export const TRY_PROMPT_STYLE_SUFFIX = "";
 
 export const MUTATE_DEFAULT_SERVER_ID = 1;
+/** Parascene server: passthrough upload; parascene-provider resizes to aspect_ratio. */
+export const UPLOAD_IMAGE_METHOD_KEY = "uploadImage";
 export const MUTATE_DEFAULT_METHOD_KEY = "replicate";
 export const MUTATE_DEFAULT_MODEL = "xai/grok-imagine-image";
 export const MUTATE_VIDEO_DEFAULT_METHOD_KEY = "replicateVideo";

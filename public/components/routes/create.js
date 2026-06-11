@@ -3,9 +3,14 @@ import { isSystemReservedBlogCampaignId } from '../../shared/blogCampaignPath.js
 let fetchJsonWithStatusDeduped;
 let submitCreationWithPending;
 let uploadImageFile;
+let readRasterFileDimensions;
+let readImageUrlDimensions;
+let closestAspectRatioPreset;
+let buildAspectRatioMismatchMessage;
 let formatMentionsFailureForDialog;
 let renderFields;
 let shouldUseAspectRatioSelector;
+let getVirtualAspectRatioField;
 let isPromptLikeField;
 let isImageUrlField;
 let isImageUrlArrayField;
@@ -35,11 +40,17 @@ async function loadDeps() {
 		const createSubmitMod = await import(`../../shared/createSubmit.js${qs}`);
 		submitCreationWithPending = createSubmitMod.submitCreationWithPending;
 		uploadImageFile = createSubmitMod.uploadImageFile;
+		readRasterFileDimensions = createSubmitMod.readRasterFileDimensions;
+		readImageUrlDimensions = createSubmitMod.readImageUrlDimensions;
 		formatMentionsFailureForDialog = createSubmitMod.formatMentionsFailureForDialog;
 
 		const providerFormFieldsMod = await import(`../../shared/providerFormFields.js${qs}`);
 		renderFields = providerFormFieldsMod.renderFields;
-		shouldUseAspectRatioSelector = (await import(`../../shared/aspectRatio.js${qs}`)).shouldUseAspectRatioSelector;
+		const aspectRatioMod = await import(`../../shared/aspectRatio.js${qs}`);
+		shouldUseAspectRatioSelector = aspectRatioMod.shouldUseAspectRatioSelector;
+		getVirtualAspectRatioField = aspectRatioMod.getVirtualAspectRatioField;
+		closestAspectRatioPreset = aspectRatioMod.closestAspectRatioPreset;
+		buildAspectRatioMismatchMessage = aspectRatioMod.buildAspectRatioMismatchMessage;
 		isPromptLikeField = providerFormFieldsMod.isPromptLikeField;
 		isImageUrlField = providerFormFieldsMod.isImageUrlField;
 		isImageUrlArrayField = providerFormFieldsMod.isImageUrlArrayField;
@@ -1599,6 +1610,98 @@ class AppRouteCreate extends HTMLElement {
 		});
 	}
 
+	async resolveAdvancedCreateUploadAspect(file, collectedArgs, formContext) {
+		const selected =
+			typeof collectedArgs.aspect_ratio === 'string' ? collectedArgs.aspect_ratio.trim() : '';
+		const selectorOn =
+			typeof shouldUseAspectRatioSelector === 'function' &&
+			shouldUseAspectRatioSelector(formContext);
+		if (selectorOn && selected) {
+			return selected;
+		}
+		const dims =
+			typeof readRasterFileDimensions === 'function'
+				? await readRasterFileDimensions(file)
+				: null;
+		if (!dims) return selected || '1:1';
+		const detected =
+			typeof closestAspectRatioPreset === 'function'
+				? closestAspectRatioPreset(dims.width, dims.height)
+				: selected || '1:1';
+		if (selectorOn) {
+			collectedArgs.aspect_ratio = detected;
+			this.fieldValues.aspect_ratio = detected;
+		}
+		return detected;
+	}
+
+	async readFirstAdvancedCreateImageDimensions(collectedArgs, fields) {
+		for (const fieldKey of Object.keys(fields)) {
+			const field = fields[fieldKey];
+			const value = collectedArgs[fieldKey];
+			if (typeof isImageUrlField === 'function' && isImageUrlField(field)) {
+				if (value instanceof File && typeof readRasterFileDimensions === 'function') {
+					const dims = await readRasterFileDimensions(value);
+					if (dims) return dims;
+				}
+				if (typeof value === 'string' && value.trim() && typeof readImageUrlDimensions === 'function') {
+					const dims = await readImageUrlDimensions(value.trim());
+					if (dims) return dims;
+				}
+			}
+			if (typeof isImageUrlArrayField === 'function' && isImageUrlArrayField(field) && Array.isArray(value)) {
+				for (const item of value) {
+					if (item instanceof File && typeof readRasterFileDimensions === 'function') {
+						const dims = await readRasterFileDimensions(item);
+						if (dims) return dims;
+					}
+					if (typeof item === 'string' && item.trim() && typeof readImageUrlDimensions === 'function') {
+						const dims = await readImageUrlDimensions(item.trim());
+						if (dims) return dims;
+					}
+				}
+			}
+		}
+		return null;
+	}
+
+	async confirmAdvancedCreateAspectMismatch(collectedArgs, fields, formContext, methodKey) {
+		if (
+			typeof shouldUseAspectRatioSelector !== 'function' ||
+			!shouldUseAspectRatioSelector(formContext)
+		) {
+			return true;
+		}
+		const targetAspect =
+			typeof collectedArgs.aspect_ratio === 'string' ? collectedArgs.aspect_ratio.trim() : '';
+		if (!targetAspect) return true;
+		const dims = await this.readFirstAdvancedCreateImageDimensions(collectedArgs, fields);
+		const detected =
+			dims && typeof closestAspectRatioPreset === 'function'
+				? closestAspectRatioPreset(dims.width, dims.height)
+				: null;
+		const mismatchContext =
+			methodKey === 'image2video'
+				? 'video output'
+				: methodKey === 'uploadImage'
+					? 'the stored image'
+					: 'output';
+		const message =
+			typeof buildAspectRatioMismatchMessage === 'function'
+				? buildAspectRatioMismatchMessage({
+						targetAspect,
+						detectedAspect: detected,
+						context: mismatchContext,
+					})
+				: '';
+		if (!message) return true;
+		const proceedHint =
+			methodKey === 'uploadImage'
+				? `The image will be letterboxed to ${targetAspect} during processing (no pixels discarded).`
+				: `We can crop the image to ${targetAspect} and continue.`;
+		return window.confirm(`${message}\n\n${proceedHint} Proceed?`);
+	}
+
 	async handleCreateAfterSpinner(button) {
 		if (!this.selectedServer || !this.selectedMethod) {
 			this.resetCreateButton(button);
@@ -1658,10 +1761,13 @@ class AppRouteCreate extends HTMLElement {
 		});
 
 		const formContext = this.getFormFieldContext();
-		if (
-			typeof shouldUseAspectRatioSelector === 'function' &&
-			!shouldUseAspectRatioSelector(formContext)
-		) {
+		if (typeof shouldUseAspectRatioSelector === 'function' && shouldUseAspectRatioSelector(formContext)) {
+			const fromValues = this.fieldValues.aspect_ratio;
+			const fromInput = this.querySelector('#field-aspect_ratio')?.value;
+			const aspect =
+				(typeof fromValues === 'string' ? fromValues : typeof fromInput === 'string' ? fromInput : '').trim();
+			if (aspect) collectedArgs.aspect_ratio = aspect;
+		} else {
 			delete collectedArgs.aspect_ratio;
 		}
 
@@ -1671,6 +1777,13 @@ class AppRouteCreate extends HTMLElement {
 			return;
 		}
 
+		if (!(await this.confirmAdvancedCreateAspectMismatch(collectedArgs, fields, formContext, methodKey))) {
+			this.resetCreateButton(button);
+			return;
+		}
+
+		const passThroughImageUpload = methodKey === 'uploadImage';
+
 		// If any field of type image_url has a File (paste or upload), upload it first; then submit with the URL.
 		for (const fieldKey of Object.keys(fields)) {
 			const field = fields[fieldKey];
@@ -1678,7 +1791,17 @@ class AppRouteCreate extends HTMLElement {
 			const value = collectedArgs[fieldKey];
 			if (value instanceof File) {
 				try {
-					collectedArgs[fieldKey] = await uploadImageFile(value);
+					if (passThroughImageUpload) {
+						await this.resolveAdvancedCreateUploadAspect(value, collectedArgs, formContext);
+						collectedArgs[fieldKey] = await uploadImageFile(value, { uploadKind: 'generic' });
+					} else {
+						const aspectRatio = await this.resolveAdvancedCreateUploadAspect(
+							value,
+							collectedArgs,
+							formContext
+						);
+						collectedArgs[fieldKey] = await uploadImageFile(value, { aspectRatio });
+					}
 				} catch (err) {
 					this.resetCreateButton(button);
 					if (typeof this.showCreateError === 'function') {
@@ -1701,7 +1824,19 @@ class AppRouteCreate extends HTMLElement {
 			if (!hasFile) continue;
 			try {
 				collectedArgs[fieldKey] = await Promise.all(
-					arr.map((v) => (v instanceof File ? uploadImageFile(v) : Promise.resolve(v)))
+					arr.map(async (v) => {
+						if (!(v instanceof File)) return v;
+						if (passThroughImageUpload) {
+							await this.resolveAdvancedCreateUploadAspect(v, collectedArgs, formContext);
+							return uploadImageFile(v, { uploadKind: 'generic' });
+						}
+						const aspectRatio = await this.resolveAdvancedCreateUploadAspect(
+							v,
+							collectedArgs,
+							formContext
+						);
+						return uploadImageFile(v, { aspectRatio });
+					})
 				);
 			} catch (err) {
 				this.resetCreateButton(button);
@@ -1944,12 +2079,15 @@ class AppRouteCreate extends HTMLElement {
 	}
 
 	applyAspectRatioFieldVisibility(fieldsForRender, allFields) {
-		const aspectField = fieldsForRender.aspect_ratio ?? allFields?.aspect_ratio;
-		if (!aspectField || typeof aspectField !== 'object') return;
-
 		const formContext = this.getFormFieldContext();
 		const showAspectRatio =
 			typeof shouldUseAspectRatioSelector === 'function' && shouldUseAspectRatioSelector(formContext);
+
+		let aspectField = fieldsForRender.aspect_ratio ?? allFields?.aspect_ratio;
+		if ((!aspectField || typeof aspectField !== 'object') && showAspectRatio && typeof getVirtualAspectRatioField === 'function') {
+			aspectField = getVirtualAspectRatioField();
+		}
+		if (!aspectField || typeof aspectField !== 'object') return;
 
 		if (showAspectRatio) {
 			const pendingSaved =

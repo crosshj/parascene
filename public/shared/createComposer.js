@@ -20,6 +20,8 @@ import {
 } from '/shared/generationDefaults.js';
 import {
 	formatMentionsFailureForDialog,
+	readImageUrlDimensions,
+	readRasterFileDimensions,
 	submitCreationWithPending,
 	uploadImageFile,
 } from '/shared/createSubmit.js';
@@ -34,6 +36,56 @@ const BASIC_CREATE_DEFAULT_MODEL = 'xai/grok-imagine-image';
 const BASIC_MODEL_DISPLAY = 'Z-Image Turbo';
 
 const MVP_ASPECT_RATIOS = ['1:1', '9:16', '4:5', '16:9'];
+
+/** Local copy — avoid static-importing new aspectRatio.js exports (stale module cache breaks mount). */
+function closestAspectRatioPreset(width, height, keys = MVP_ASPECT_RATIOS) {
+	const w = Number(width);
+	const h = Number(height);
+	if (!Number.isFinite(w) || w <= 0 || !Number.isFinite(h) || h <= 0) return '1:1';
+	const actual = w / h;
+	let bestKey = '1:1';
+	let bestDelta = Infinity;
+	for (const key of keys) {
+		const preset = parseAspectRatioString(key);
+		if (!preset) continue;
+		const expected = preset[0] / preset[1];
+		const delta = Math.abs(Math.log(actual / expected));
+		if (delta < bestDelta) {
+			bestDelta = delta;
+			bestKey = key;
+		}
+	}
+	return bestKey;
+}
+
+function buildAspectRatioMismatchMessage({
+	targetAspect,
+	detectedAspect,
+	uploadAspect,
+	context = 'this job',
+}) {
+	const target = String(targetAspect || '').trim();
+	if (!target) return '';
+	const upload = String(uploadAspect || '').trim();
+	const detected = String(detectedAspect || '').trim();
+	if (upload && upload !== target) {
+		return `The image was prepared for ${upload}, but ${context} is set to ${target}.`;
+	}
+	if (detected && detected !== target) {
+		return `The image looks like ${detected}, but ${context} is set to ${target}.`;
+	}
+	return '';
+}
+
+function dimensionsMatchAspectRatioLocal(width, height, aspectKey) {
+	const w = Number(width);
+	const h = Number(height);
+	const preset = parseAspectRatioString(aspectKey);
+	if (!preset || w <= 0 || h <= 0) return null;
+	const actual = w / h;
+	const expected = preset[0] / preset[1];
+	return Math.abs(actual - expected) <= 0.04 * expected;
+}
 
 const STORAGE_KEYS = {
 	prompt: 'create_page_prompt',
@@ -767,6 +819,9 @@ export function mountCreateComposer(host, opts = {}) {
 	/** Parallel to attachmentItems: source creation id when attached via mutate/drop. */
 	/** @type {(number|null)[]} */
 	let attachmentMutateSourceIds = [];
+	/** Parallel to attachmentItems: aspect used for early `edited` upload (null when unknown). */
+	/** @type {(string|null)[]} */
+	let attachmentUploadAspects = [];
 	/** @type {Map<number, string>} */
 	const attachmentBlobUrls = new Map();
 	let attachmentUploadingCount = 0;
@@ -843,6 +898,11 @@ export function mountCreateComposer(host, opts = {}) {
 				if (url && !byUrl.has(url)) byUrl.set(url, sid);
 			}
 			if (byUrl.size === 0) return;
+			if (attachmentUploadAspects.length < attachmentItems.length) {
+				attachmentUploadAspects = attachmentItems.map(
+					(_, i) => attachmentUploadAspects[i] ?? null
+				);
+			}
 			attachmentMutateSourceIds = attachmentItems.map((item) => {
 				if (typeof item !== 'string') return null;
 				const trimmed = item.trim();
@@ -864,6 +924,7 @@ export function mountCreateComposer(host, opts = {}) {
 		if (!trimmed || !Number.isFinite(cid) || cid <= 0) return;
 		attachmentItems.push(trimmed);
 		attachmentMutateSourceIds.push(cid);
+		attachmentUploadAspects.push(null);
 		saveAttachmentsToStorage();
 		renderAttachmentStrip();
 		syncModeChrome();
@@ -894,13 +955,94 @@ export function mountCreateComposer(host, opts = {}) {
 		};
 	}
 
-	function shouldShowAspectSelector() {
-		return !isVideoMode() && shouldUseAspectRatioSelector(getFormFieldContext());
+	function isLtxVideoRoute(route) {
+		return (
+			route &&
+			route.methodKey === MUTATE_VIDEO_LTX_METHOD_KEY &&
+			Number(route.serverId) === Number(PARASCENE_BLUE_SERVER_ID)
+		);
 	}
 
-	/** Grok-imagine: user can pick a ratio in the popover (with or without reference images). */
+	function shouldShowAspectSelector() {
+		if (isVideoMode()) {
+			return isLtxVideoRoute(getSelectedVideoRoute());
+		}
+		return shouldUseAspectRatioSelector(getFormFieldContext());
+	}
+
+	/** User can pick output ratio (image models or LTX video). */
 	function canSelectAspectRatio() {
 		return shouldShowAspectSelector();
+	}
+
+	async function readPrimaryAttachmentDimensions() {
+		const first = attachmentItems[0];
+		if (!first) return null;
+		if (first instanceof File) {
+			return readRasterFileDimensions(first);
+		}
+		if (typeof first === 'string' && first.trim()) {
+			return readImageUrlDimensions(first.trim());
+		}
+		return null;
+	}
+
+	async function confirmAspectMismatchBeforeSubmit() {
+		if (!shouldShowAspectSelector()) return true;
+		const targetAspect = getAspectRatioForSubmit() || selectedAspect;
+		const dims = await readPrimaryAttachmentDimensions();
+		const detected = dims ? closestAspectRatioPreset(dims.width, dims.height) : null;
+		const uploadAspect =
+			attachmentUploadAspects.length > 0 ? attachmentUploadAspects[0] : null;
+		const message = buildAspectRatioMismatchMessage({
+			targetAspect,
+			detectedAspect: detected,
+			uploadAspect,
+			context: isVideoMode() ? 'video output' : 'output',
+		});
+		if (!message) return true;
+		const proceed = window.confirm(
+			`${message}\n\nWe can crop the image to ${targetAspect} and continue. Proceed?`
+		);
+		if (!proceed) return false;
+		await reconcileAttachmentsToTargetAspect(targetAspect);
+		return true;
+	}
+
+	/** Re-upload stored URLs / pending files so pixels match the requested output ratio. */
+	async function reconcileAttachmentsToTargetAspect(targetAspect) {
+		const aspect = String(targetAspect || '').trim();
+		if (!aspect || !parseAspectRatioString(aspect)) return;
+		for (let i = 0; i < attachmentItems.length; i++) {
+			const item = attachmentItems[i];
+			if (item instanceof File) {
+				attachmentUploadAspects[i] = aspect;
+				continue;
+			}
+			if (typeof item !== 'string' || !item.trim()) continue;
+			const dims = await readImageUrlDimensions(item.trim());
+			if (dims && dimensionsMatchAspectRatioLocal(dims.width, dims.height, aspect) === true) {
+				attachmentUploadAspects[i] = aspect;
+				continue;
+			}
+			try {
+				const res = await fetch(item.trim(), { credentials: 'include' });
+				if (!res.ok) continue;
+				const blob = await res.blob();
+				const file = new File([blob], 'input.png', {
+					type: blob.type && blob.type.startsWith('image/') ? blob.type : 'image/png',
+				});
+				const uploaded = await uploadImageFile(file, { aspectRatio: aspect });
+				if (typeof uploaded === 'string' && uploaded.trim()) {
+					attachmentItems[i] = uploaded.trim();
+					attachmentUploadAspects[i] = aspect;
+				}
+			} catch {
+				// server-side normalization will still attempt on submit
+			}
+		}
+		saveAttachmentsToStorage();
+		renderAttachmentStrip();
 	}
 
 	function getActiveModelList() {
@@ -1341,7 +1483,9 @@ export function mountCreateComposer(host, opts = {}) {
 				'aria-label',
 				selectable
 					? `Aspect ratio: ${displayRatio}`
-					: `Aspect ratio: 1:1 (square only for this model)`
+					: isVideoMode()
+						? 'Aspect ratio not configurable for this video model'
+						: 'Aspect ratio: 1:1 (square only for this model)'
 			);
 		}
 	}
@@ -1499,6 +1643,7 @@ export function mountCreateComposer(host, opts = {}) {
 		revokeAttachmentBlobUrls();
 		attachmentItems = [];
 		attachmentMutateSourceIds = [];
+		attachmentUploadAspects = [];
 		attachmentUploadingCount = 0;
 		saveAttachmentsToStorage();
 		renderAttachmentStrip();
@@ -1509,6 +1654,7 @@ export function mountCreateComposer(host, opts = {}) {
 		if (index < 0 || index >= attachmentItems.length) return;
 		attachmentItems.splice(index, 1);
 		attachmentMutateSourceIds.splice(index, 1);
+		attachmentUploadAspects.splice(index, 1);
 		saveAttachmentsToStorage();
 		renderAttachmentStrip();
 		syncModeChrome();
@@ -1520,31 +1666,41 @@ export function mountCreateComposer(host, opts = {}) {
 		const cid = Number(options?.mutateSourceCreationId);
 		attachmentItems.push(trimmed);
 		attachmentMutateSourceIds.push(Number.isFinite(cid) && cid > 0 ? cid : null);
+		attachmentUploadAspects.push(null);
 		saveAttachmentsToStorage();
 		renderAttachmentStrip();
 		syncModeChrome();
 	}
 
+	function getEarlyUploadAspectRatio() {
+		return shouldShowAspectSelector() ? selectedAspect : '1:1';
+	}
+
 	async function addAttachmentFromFile(file) {
 		if (!(file instanceof File)) return;
 		const index = attachmentItems.length;
+		const uploadAspect = getEarlyUploadAspectRatio();
 		attachmentItems.push(file);
 		attachmentMutateSourceIds.push(null);
+		attachmentUploadAspects.push(null);
 		attachmentUploadingCount += 1;
 		renderAttachmentStrip();
 		syncModeChrome();
 		try {
-			const uploaded = await uploadImageFile(file);
+			const uploaded = await uploadImageFile(file, { aspectRatio: uploadAspect });
 			if (typeof uploaded === 'string' && uploaded.trim()) {
 				attachmentItems[index] = uploaded.trim();
+				attachmentUploadAspects[index] = uploadAspect;
 				saveAttachmentsToStorage();
 			} else {
 				attachmentItems.splice(index, 1);
 				attachmentMutateSourceIds.splice(index, 1);
+				attachmentUploadAspects.splice(index, 1);
 			}
 		} catch (err) {
 			attachmentItems.splice(index, 1);
 			attachmentMutateSourceIds.splice(index, 1);
+			attachmentUploadAspects.splice(index, 1);
 			alert(err?.message || 'Image upload failed');
 		} finally {
 			attachmentUploadingCount = Math.max(0, attachmentUploadingCount - 1);
@@ -1559,6 +1715,7 @@ export function mountCreateComposer(host, opts = {}) {
 			.map((v) => (typeof v === 'string' ? v.trim() : ''))
 			.filter(Boolean);
 		attachmentMutateSourceIds = attachmentItems.map(() => null);
+		attachmentUploadAspects = attachmentItems.map(() => null);
 		hydrateAttachmentMutateSourcesFromQueue();
 		renderAttachmentStrip();
 		syncModeChrome();
@@ -1676,6 +1833,7 @@ export function mountCreateComposer(host, opts = {}) {
 		revokeAttachmentBlobUrls();
 		attachmentItems = [];
 		attachmentMutateSourceIds = [];
+		attachmentUploadAspects = [];
 		attachmentUploadingCount = 0;
 		try {
 			localStorage.removeItem(STORAGE_KEYS.imageEditSelection);
@@ -1846,17 +2004,28 @@ export function mountCreateComposer(host, opts = {}) {
 		aspectPopoverBody.appendChild(group);
 	}
 
-	async function resolveAttachmentUrls(uploadImageFile) {
+	async function resolveAttachmentUrls(uploadFn) {
 		const imageUrls = [];
-		for (const item of attachmentItems) {
+		for (let i = 0; i < attachmentItems.length; i++) {
+			const item = attachmentItems[i];
 			if (typeof item === 'string' && item.trim()) {
 				imageUrls.push(item.trim());
 				continue;
 			}
 			if (item instanceof File) {
-				const uploaded = await uploadImageFile(item);
+				let uploadAspect =
+					(typeof attachmentUploadAspects[i] === 'string' && attachmentUploadAspects[i].trim()) ||
+					getEarlyUploadAspectRatio();
+				if (!shouldShowAspectSelector()) {
+					const dims = await readRasterFileDimensions(item);
+					if (dims) {
+						uploadAspect = closestAspectRatioPreset(dims.width, dims.height);
+					}
+				}
+				const uploaded = await uploadFn(item, { aspectRatio: uploadAspect });
 				if (typeof uploaded === 'string' && uploaded.trim()) {
 					imageUrls.push(uploaded.trim());
+					attachmentUploadAspects[i] = uploadAspect;
 				}
 			}
 		}
@@ -1872,6 +2041,7 @@ export function mountCreateComposer(host, opts = {}) {
 			if (!userPrompt) return;
 			const route = getSelectedVideoRoute();
 			if (!route) return;
+			if (!(await confirmAspectMismatchBeforeSubmit())) return;
 			setComposerSubmitting(true);
 			let imageUrls;
 			try {
@@ -1887,20 +2057,21 @@ export function mountCreateComposer(host, opts = {}) {
 				return;
 			}
 			const primaryImage = imageUrls[0];
-			const args =
-				route.methodKey === MUTATE_VIDEO_LTX_METHOD_KEY &&
-				Number(route.serverId) === Number(PARASCENE_BLUE_SERVER_ID)
-					? {
-							seed: '',
-							model: route.value,
-							prompt: userPrompt,
-							input_images: imageUrls,
-						}
-					: {
-							prompt: userPrompt,
-							image: primaryImage,
-							model: route.value,
-						};
+			const ltxVideo = isLtxVideoRoute(route);
+			const videoAspect = ltxVideo ? getAspectRatioForSubmit() || selectedAspect : undefined;
+			const args = ltxVideo
+				? {
+						seed: '',
+						model: route.value,
+						prompt: userPrompt,
+						input_images: imageUrls,
+						...(videoAspect ? { aspect_ratio: videoAspect } : {}),
+					}
+				: {
+						prompt: userPrompt,
+						image: primaryImage,
+						model: route.value,
+					};
 			const mutateLineage = getMutateLineageForSubmit();
 			const mentions = extractMentions(userPrompt);
 			if (mentions.length === 0) {
@@ -1941,13 +2112,18 @@ export function mountCreateComposer(host, opts = {}) {
 
 		if (!userPrompt) return;
 
+		if (hasAttachment()) {
+			if (!mutateOptions.serverId || !mutateOptions.methodKey) {
+				return;
+			}
+			if (!(await confirmAspectMismatchBeforeSubmit())) {
+				return;
+			}
+		}
+
 		setComposerSubmitting(true);
 
 		if (hasAttachment()) {
-			if (!mutateOptions.serverId || !mutateOptions.methodKey) {
-				setComposerSubmitting(false);
-				return;
-			}
 			let imageUrls;
 			try {
 				imageUrls = await resolveAttachmentUrls(uploadImageFile);

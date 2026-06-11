@@ -1,6 +1,12 @@
 import { buildProviderHeaders } from "./providerAuth.js";
 import { scheduleProviderPollJob } from "./scheduleCreationJob.js";
-import { dimensionsForAspectRatioLongEdge } from "../../public/shared/aspectRatio.js";
+import {
+	dimensionsForAspectRatioLongEdge,
+	parseAspectRatioString,
+} from "../../public/shared/aspectRatio.js";
+import { letterboxImageBuffer } from "./editedImageUpload.js";
+import { UPLOAD_IMAGE_METHOD_KEY } from "../../public/shared/generationDefaults.js";
+import { normalizeProviderArgsForAspectRatio } from "./normalizeProviderInputImages.js";
 import sharp from "sharp";
 
 const PROVIDER_TIMEOUT_MS = 50_000;
@@ -190,6 +196,74 @@ async function createPlaceholderImageBuffer(width = DEFAULT_WIDTH, height = DEFA
 async function createVideoPlaceholderImageBuffer(aspectRatioRaw) {
 	const { width, height } = dimensionsForAspectRatioLongEdge(aspectRatioRaw, DEFAULT_WIDTH);
 	return await createPlaceholderImageBufferInternal(width, height);
+}
+
+/**
+ * Poster + stored width/height for completed video jobs.
+ * When aspect_ratio is set, letterbox the source into that frame (no crop) and store target pixels.
+ * @param {{
+ *   args?: Record<string, unknown> | null,
+ *   sourceImageUrl?: string | null,
+ *   fetchBuffer?: (url: string) => Promise<Buffer>,
+ *   logWarn?: (msg: string, detail?: string) => void,
+ * }} params
+ */
+async function resolveVideoJobPosterAndDimensions({
+	args,
+	sourceImageUrl,
+	fetchBuffer = fetchImageBufferFromUrl,
+	logWarn = (msg, detail) => logCreationWarn(msg, detail),
+}) {
+	const argsObj = args && typeof args === "object" ? args : {};
+	const aspectRaw = argsObj.aspect_ratio;
+	const hasTargetAspect = Boolean(parseAspectRatioString(aspectRaw));
+
+	if (hasTargetAspect) {
+		const { width: targetW, height: targetH } = dimensionsForAspectRatioLongEdge(
+			aspectRaw,
+			DEFAULT_WIDTH
+		);
+		const url = typeof sourceImageUrl === "string" ? sourceImageUrl.trim() : "";
+		let imageBuffer;
+		if (url) {
+			try {
+				const raw = await fetchBuffer(url);
+				imageBuffer = await letterboxImageBuffer(raw, aspectRaw, DEFAULT_WIDTH);
+			} catch (err) {
+				logWarn(
+					"Failed to letterbox source image for video poster; using placeholder",
+					safeErrorMessage(err)
+				);
+				imageBuffer = await createVideoPlaceholderImageBuffer(aspectRaw);
+			}
+		} else {
+			logWarn("No source image for video poster; using aspect placeholder");
+			imageBuffer = await createVideoPlaceholderImageBuffer(aspectRaw);
+		}
+		return { imageBuffer, width: targetW, height: targetH };
+	}
+
+	const url = typeof sourceImageUrl === "string" ? sourceImageUrl.trim() : "";
+	if (url) {
+		try {
+			const imageBuffer = await fetchBuffer(url);
+			let width = DEFAULT_WIDTH;
+			let height = DEFAULT_HEIGHT;
+			try {
+				const meta = await sharp(imageBuffer, { failOn: "none" }).metadata();
+				if (typeof meta.width === "number" && meta.width > 0) width = meta.width;
+				if (typeof meta.height === "number" && meta.height > 0) height = meta.height;
+			} catch {
+				// keep defaults
+			}
+			return { imageBuffer, width, height };
+		} catch (err) {
+			logWarn("Failed to fetch source image for video thumbnail", safeErrorMessage(err));
+		}
+	}
+
+	const imageBuffer = await createVideoPlaceholderImageBuffer(null);
+	return { imageBuffer, width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT };
 }
 
 async function createPlaceholderImageBufferInternal(width = DEFAULT_WIDTH, height = DEFAULT_HEIGHT) {
@@ -431,13 +505,28 @@ export async function runCreationJob({ queries, storage, payload }) {
 	let videoContentType = null;
 	let sourceImageUrlForMeta = null;
 
-	const argsForProvider = args || {};
+	let argsForProvider = args && typeof args === "object" ? { ...args } : {};
+	if (method !== UPLOAD_IMAGE_METHOD_KEY) {
+		try {
+			argsForProvider = await normalizeProviderArgsForAspectRatio({
+				args: argsForProvider,
+				storage,
+				userId,
+				fetchBuffer: fetchImageBufferFromUrl,
+			});
+		} catch (normErr) {
+			logCreationWarn("Input aspect normalization failed; sending original args", {
+				message: safeErrorMessage(normErr),
+			});
+		}
+	}
 	const asyncRequested = asyncRequestedFlag === true;
 	const providerPayload = asyncRequested
 		? { method, args: argsForProvider, async: true }
 		: { method, args: argsForProvider };
 	const providerFetchTimeoutMs =
 		asyncRequested ? PROVIDER_TIMEOUT_MS : creationMethodMayReturnVideoBytes(method) ? PROVIDER_VIDEO_FETCH_TIMEOUT_MS : PROVIDER_TIMEOUT_MS;
+
 	console.log("[Creation] Sending to provider:", JSON.stringify(providerPayload, null, 2));
 
 	try {
@@ -587,29 +676,13 @@ export async function runCreationJob({ queries, storage, payload }) {
 				null;
 			sourceImageUrlForMeta = sourceImageUrl || null;
 
-			if (sourceImageUrl) {
-				try {
-					imageBuffer = await fetchImageBufferFromUrl(sourceImageUrl);
-				} catch (thumbnailErr) {
-					logCreationWarn("Failed to fetch source image for video thumbnail; using placeholder instead", safeErrorMessage(thumbnailErr));
-					imageBuffer = await createVideoPlaceholderImageBuffer(argsForProvider.aspect_ratio);
-				}
-			} else {
-				logCreationWarn("No image_url or image provided for video; using placeholder thumbnail");
-				imageBuffer = await createVideoPlaceholderImageBuffer(argsForProvider.aspect_ratio);
-			}
-
-			try {
-				const meta = await sharp(imageBuffer, { failOn: "none" }).metadata();
-				if (typeof meta.width === "number" && meta.width > 0) {
-					width = meta.width;
-				}
-				if (typeof meta.height === "number" && meta.height > 0) {
-					height = meta.height;
-				}
-			} catch {
-				// If dimension extraction fails, fall back to defaults.
-			}
+			const posterResolved = await resolveVideoJobPosterAndDimensions({
+				args: argsForProvider,
+				sourceImageUrl,
+			});
+			imageBuffer = posterResolved.imageBuffer;
+			width = posterResolved.width;
+			height = posterResolved.height;
 		} else {
 			if (providerContentType && !providerContentType.includes("image/png")) {
 				logCreationWarn("Provider returned non-PNG; converting to PNG", { providerContentType });
@@ -1088,32 +1161,17 @@ export async function runProviderPollJob({ queries, storage, payload }) {
 				null;
 			sourceImageUrlForMeta = sourceImageUrl || null;
 
-			if (sourceImageUrl) {
-				try {
-					imageBuffer = await fetchImageBufferFromUrl(sourceImageUrl);
-				} catch (thumbnailErr) {
+			const posterResolved = await resolveVideoJobPosterAndDimensions({
+				args: originalArgs,
+				sourceImageUrl,
+				logWarn: (msg, detail) =>
 					logCreationWarn(
-						"Poll: failed to fetch source image for video thumbnail; using placeholder instead",
-						safeErrorMessage(thumbnailErr),
-					);
-					imageBuffer = await createVideoPlaceholderImageBuffer(originalArgs.aspect_ratio);
-				}
-			} else {
-				logCreationWarn("Poll: no image_url or image provided for video; using placeholder thumbnail");
-				imageBuffer = await createVideoPlaceholderImageBuffer(originalArgs.aspect_ratio);
-			}
-
-			try {
-				const meta = await sharp(imageBuffer, { failOn: "none" }).metadata();
-				if (typeof meta.width === "number" && meta.width > 0) {
-					width = meta.width;
-				}
-				if (typeof meta.height === "number" && meta.height > 0) {
-					height = meta.height;
-				}
-			} catch {
-				// If dimension extraction fails, fall back to defaults.
-			}
+						detail ? `Poll: ${msg}: ${detail}` : `Poll: ${msg}`
+					),
+			});
+			imageBuffer = posterResolved.imageBuffer;
+			width = posterResolved.width;
+			height = posterResolved.height;
 		} else {
 			if (providerContentType && !providerContentType.includes("image/png")) {
 				logCreationWarn("Poll: provider returned non-PNG; converting to PNG", { providerContentType });
