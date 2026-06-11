@@ -4,8 +4,10 @@ import {
 	MUTATE_DEFAULT_MODEL,
 	MUTATE_DEFAULT_SERVER_ID,
 	PARASCENE_BLUE_SERVER_ID,
-	UPLOAD_IMAGE_METHOD_KEY,
 } from './generationDefaults.js';
+
+/** Parascene server uploadImage — local constant avoids stale generationDefaults.js cache on deploy. */
+const UPLOAD_IMAGE_METHOD_KEY = 'uploadImage';
 
 export const ASPECT_RATIO_PRESETS = {
 	'1:1': [1, 1],
