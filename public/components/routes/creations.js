@@ -21,6 +21,7 @@ let routeCardGroupBadgeHtml;
 let creationMetaHasChallengeSubmission;
 let eyeHiddenIcon;
 let addToMutateQueue;
+let bindMobileCreationsBulkLongPress;
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -76,6 +77,9 @@ async function loadDeps() {
 
 		const mutateQueueMod = await import(`../../shared/mutateQueue.js${qs}`);
 		addToMutateQueue = mutateQueueMod.addToMutateQueue;
+
+		const bulkLongPressMod = await import(`../../shared/creationsBulkLongPress.js${qs}`);
+		bindMobileCreationsBulkLongPress = bulkLongPressMod.bindMobileCreationsBulkLongPress;
 	})();
 	return _depsPromise;
 }
@@ -159,7 +163,12 @@ class AppRouteCreations extends HTMLElement {
               <button type="button" class="btn-secondary creations-bulk-queue-btn" data-creations-bulk-queue disabled>Queue</button>
               <button type="button" class="btn-secondary creations-bulk-delete-btn" data-creations-bulk-delete disabled>Delete</button>
             </div>
-            <button type="button" class="creations-bulk-bar-close" data-creations-bulk-close aria-label="Close bulk actions">×</button>
+            <button type="button" class="modal-close creations-bulk-bar-close" data-creations-bulk-close aria-label="Close bulk actions">
+              <svg class="modal-close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
           </div>
         </div>
         <div class="route-cards content-cards-image-grid" data-creations-container aria-busy="true" aria-label="Loading">
@@ -254,6 +263,7 @@ class AppRouteCreations extends HTMLElement {
 	}
 
 	enterBulkMode() {
+		this.closeBulkDeleteModal();
 		const route = this.querySelector('.creations-route');
 		if (route) route.classList.add('is-bulk-mode');
 		const bar = this.querySelector('[data-creations-bulk-bar]');
@@ -265,6 +275,7 @@ class AppRouteCreations extends HTMLElement {
 	}
 
 	exitBulkMode() {
+		this.closeBulkDeleteModal();
 		const route = this.querySelector('.creations-route');
 		if (route) route.classList.remove('is-bulk-mode');
 		const bar = this.querySelector('[data-creations-bulk-bar]');
@@ -312,15 +323,33 @@ class AppRouteCreations extends HTMLElement {
 		}
 
 		if (container) {
-			container.addEventListener('contextmenu', (e) => {
-				if (!window.matchMedia('(max-width: 768px)').matches) return;
-				if (!e.target?.closest?.('.route-card.route-card-image[data-image-id]')) return;
-				if (e.target?.closest?.('button,input,textarea,select,label,[role="button"]')) return;
-				e.preventDefault();
-				e.stopPropagation();
-			}, true);
+			let suppressCardClickUntil = 0;
+			if (typeof bindMobileCreationsBulkLongPress === 'function') {
+				bindMobileCreationsBulkLongPress({
+					container,
+					cardSelector: '.route-card.route-card-image[data-image-id]',
+					isEnabled: () => window.matchMedia('(max-width: 768px)').matches,
+					isBulkActive: () =>
+						Boolean(this.querySelector('.creations-route')?.classList.contains('is-bulk-mode')),
+					onLongPress: (card) => {
+						this.enterBulkMode();
+						const cb = card.querySelector('[data-creations-bulk-checkbox]');
+						if (cb instanceof HTMLInputElement) cb.checked = true;
+						this.updateBulkBarSelection();
+						suppressCardClickUntil = Date.now() + 900;
+					}
+				});
+			}
 			// Use capture phase so we run before the card's click handler (which would navigate to detail)
 			container.addEventListener('click', (e) => {
+				if (
+					Date.now() < suppressCardClickUntil &&
+					e.target?.closest?.('.route-card.route-card-image[data-image-id]')
+				) {
+					e.preventDefault();
+					e.stopPropagation();
+					return;
+				}
 				const overlay = e.target.closest('[data-creations-bulk-overlay]');
 				if (!overlay) return;
 				e.stopPropagation();
@@ -762,6 +791,9 @@ class AppRouteCreations extends HTMLElement {
 		if (!this.isRouteActive()) return;
 		if (force && this.hasLoadedOnce) reset = true;
 		if (!force && !reset && this.hasLoadedOnce) return;
+		if (reset && this.hasLoadedOnce) {
+			this.exitBulkMode();
+		}
 
 		this.isLoading = true;
 		if (reset || !this.hasLoadedOnce) {

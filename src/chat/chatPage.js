@@ -32,6 +32,7 @@ import { createReplyIndicatorElement } from '../shared/replyIndicatorUi.js';
 import { plainTextReplyPreview } from '../shared/plainTextReplyPreview.js';
 import { CHAT_UPLOAD_MAX_BYTES, chatUploadMaxSizeLabel } from '../shared/chatUploadMaxBytes.js';
 import { safeMediaPlay } from '../shared/safeMediaPlay.js';
+import { bindMobileCreationsBulkLongPress } from '../shared/creationsBulkLongPress.js';
 import {
 	notificationChatHref,
 	notificationCreationHref,
@@ -8141,7 +8142,12 @@ export async function initChatPage(root, options = {}) {
 					<button type="button" class="btn-secondary creations-bulk-group-btn" data-creations-bulk-group disabled>Group</button>
 					<button type="button" class="btn-secondary creations-bulk-delete-btn" data-creations-bulk-delete disabled>Delete</button>
 				</div>
-				<button type="button" class="creations-bulk-bar-close" data-creations-bulk-close aria-label="Close bulk actions">×</button>
+				<button type="button" class="modal-close creations-bulk-bar-close" data-creations-bulk-close aria-label="Close bulk actions">
+					<svg class="modal-close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+						<line x1="18" y1="6" x2="6" y2="18"></line>
+						<line x1="6" y1="6" x2="18" y2="18"></line>
+					</svg>
+				</button>
 			</div>
 		</div>
 		<div class="creations-bulk-delete-modal-overlay" data-creations-bulk-delete-modal aria-hidden="true">
@@ -8172,6 +8178,13 @@ export async function initChatPage(root, options = {}) {
 		if (!(messagesEl instanceof HTMLElement)) return;
 		const h = messagesEl.querySelector('[data-chat-creations-bulk-host]');
 		if (h instanceof HTMLElement) {
+			if (typeof h._exitChatCreationsBulk === 'function') {
+				try {
+					h._exitChatCreationsBulk();
+				} catch {
+					// ignore
+				}
+			}
 			h._chatBulkEsc?.abort();
 			h._chatBulkCap?.abort();
 		}
@@ -8239,6 +8252,7 @@ export async function initChatPage(root, options = {}) {
 		}
 
 		function exitBulkMode() {
+			closeBulkDeleteModal();
 			routeWrap.classList.remove('is-bulk-mode');
 			if (bar) bar.setAttribute('aria-hidden', 'true');
 			for (const c of queryBulkCards()) {
@@ -8249,6 +8263,7 @@ export async function initChatPage(root, options = {}) {
 		}
 
 		function enterBulkMode() {
+			closeBulkDeleteModal();
 			routeWrap.classList.add('is-bulk-mode');
 			if (bar) bar.removeAttribute('aria-hidden');
 			for (const c of queryBulkCards()) {
@@ -8277,87 +8292,25 @@ export async function initChatPage(root, options = {}) {
 
 		const capAc = new AbortController();
 		routeWrap._chatBulkCap = capAc;
-		let longPressTimer = null;
-		let longPressPointerId = null;
-		let longPressCard = null;
-		let longPressStartX = 0;
-		let longPressStartY = 0;
 		let suppressCardClickUntil = 0;
 
-		function clearLongPressState() {
-			if (longPressTimer) {
-				clearTimeout(longPressTimer);
-				longPressTimer = null;
-			}
-			longPressPointerId = null;
-			longPressCard = null;
-			longPressStartX = 0;
-			longPressStartY = 0;
-		}
+		bindMobileCreationsBulkLongPress({
+			container: cards,
+			cardSelector: '.feed-card[data-image-id]',
+			isEnabled: () => isChatPageMobileLayout(),
+			isBulkActive: () => routeWrap.classList.contains('is-bulk-mode'),
+			onLongPress: (card) => {
+				closeMobileChromeSheet();
+				closeTopbarMenu();
+				enterBulkMode();
+				const cb = card.querySelector('[data-creations-bulk-checkbox]');
+				if (cb instanceof HTMLInputElement) cb.checked = true;
+				updateBulkBarSelection();
+				suppressCardClickUntil = Date.now() + 900;
+			},
+			signal: capAc.signal
+		});
 
-		cards.addEventListener(
-			'pointerdown',
-			(e) => {
-				if (!isChatPageMobileLayout()) return;
-				if (routeWrap.classList.contains('is-bulk-mode')) return;
-				if (e.pointerType === 'mouse') return;
-				const card = e.target?.closest?.('.feed-card[data-image-id]');
-				if (!(card instanceof HTMLElement)) return;
-				if (e.target?.closest?.('a,button,input,textarea,select,label,[role="button"]')) return;
-				clearLongPressState();
-				longPressPointerId = e.pointerId;
-				longPressCard = card;
-				longPressStartX = Number(e.clientX) || 0;
-				longPressStartY = Number(e.clientY) || 0;
-				longPressTimer = setTimeout(() => {
-					if (!(longPressCard instanceof HTMLElement)) return;
-					enterBulkMode();
-					const cb = longPressCard.querySelector('[data-creations-bulk-checkbox]');
-					if (cb instanceof HTMLInputElement) cb.checked = true;
-					updateBulkBarSelection();
-					suppressCardClickUntil = Date.now() + 700;
-					clearLongPressState();
-				}, 420);
-			},
-			{ signal: capAc.signal }
-		);
-		cards.addEventListener(
-			'pointermove',
-			(e) => {
-				if (longPressPointerId == null || e.pointerId !== longPressPointerId) return;
-				const dx = Math.abs((Number(e.clientX) || 0) - longPressStartX);
-				const dy = Math.abs((Number(e.clientY) || 0) - longPressStartY);
-				if (dx > 10 || dy > 10) clearLongPressState();
-			},
-			{ signal: capAc.signal }
-		);
-		cards.addEventListener(
-			'pointerup',
-			(e) => {
-				if (longPressPointerId == null || e.pointerId !== longPressPointerId) return;
-				clearLongPressState();
-			},
-			{ signal: capAc.signal }
-		);
-		cards.addEventListener(
-			'pointercancel',
-			(e) => {
-				if (longPressPointerId == null || e.pointerId !== longPressPointerId) return;
-				clearLongPressState();
-			},
-			{ signal: capAc.signal }
-		);
-		cards.addEventListener(
-			'contextmenu',
-			(e) => {
-				if (!isChatPageMobileLayout()) return;
-				if (!e.target?.closest?.('.feed-card[data-image-id]')) return;
-				if (e.target?.closest?.('button,input,textarea,select,label,[role="button"]')) return;
-				e.preventDefault();
-				e.stopPropagation();
-			},
-			{ capture: true, signal: capAc.signal }
-		);
 		cards.addEventListener(
 			'click',
 			(e) => {

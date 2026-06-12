@@ -14583,30 +14583,7 @@ body.view-nsfw .connect-comment-thumb[data-media-type="video"].nsfw::after {
 
 .creations-bulk-bar-close {
 	margin-left: auto;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	width: 36px;
-	height: 36px;
-	padding: 0;
-	background: transparent;
-	border: none;
-	border-radius: 6px;
-	color: var(--text-muted);
-	cursor: pointer;
-	font-size: 1.25rem;
-	line-height: 1;
-	transition: color 0.2s, background 0.2s;
-}
-
-.creations-bulk-bar-close:hover {
-	color: var(--text);
-	background: var(--surface-strong);
-}
-
-.creations-bulk-bar-close:focus-visible {
-	outline: 2px solid var(--focus);
-	outline-offset: 2px;
+	flex-shrink: 0;
 }
 
 /* Card overlay when bulk mode is active */
@@ -14662,6 +14639,11 @@ body.view-nsfw .connect-comment-thumb[data-media-type="video"].nsfw::after {
 	.creations-route .feed-card[data-image-id] {
 		-webkit-touch-callout: none;
 		user-select: none;
+	}
+
+	.creations-route.is-bulk-mode .route-card-image[data-image-id],
+	.creations-route.is-bulk-mode .feed-card[data-image-id] {
+		touch-action: manipulation;
 	}
 }
 
