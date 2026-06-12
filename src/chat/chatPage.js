@@ -1063,6 +1063,7 @@ export async function initChatPage(root, options = {}) {
 	let chatViewportRetryTimeouts = [];
 	let activeReactionPicker = null;
 	let lastChatMessagesPayload = [];
+	let chatMessagesSyncInFlight = false;
 	let chatComposerReferencedMessageId = null;
 	let activeMessageEditId = null;
 	let activeMessageEditSaving = false;
@@ -3529,9 +3530,7 @@ export async function initChatPage(root, options = {}) {
 		setupReactionTooltipTap(messagesEl);
 	}
 
-	async function afterSendSuccess(threadId) {
-		optimisticSend = null;
-		await loadMessages();
+	function finishAfterSendSuccess(threadId) {
 		const tail = lastChatMessagesPayload[lastChatMessagesPayload.length - 1];
 		const newMid = tail?.id != null ? Number(tail.id) : null;
 		if (Number.isFinite(newMid) && newMid > 0) {
@@ -3541,6 +3540,122 @@ export async function initChatPage(root, options = {}) {
 		fadeOutUnreadHighlightsInDom();
 		dispatchChatUnreadRefresh();
 		void refreshChatSidebar({ skipThreadsFetch: true });
+	}
+
+	function removeOptimisticSendRows(messagesEl) {
+		if (!messagesEl) return;
+		for (const el of messagesEl.querySelectorAll('[data-chat-optimistic-id]')) {
+			el.remove();
+		}
+	}
+
+	function decorateAppendedChatRows(messagesEl, rows) {
+		for (const row of rows) {
+			try {
+				hydrateRichUserTextEmbeds(row);
+			} catch {
+				// ignore
+			}
+			for (const b of row.querySelectorAll('.connect-chat-msg-bubble')) {
+				trimTrailingWhitespaceAfterChatEmbed(b);
+			}
+			for (const embed of row.querySelectorAll('.connect-chat-creation-embed')) {
+				trimChatCreationEmbedWhitespace(embed);
+			}
+		}
+		setupReactionTooltipTap(messagesEl);
+	}
+
+	function appendChatMessagesToDom(messagesEl, allMessages, startIdx) {
+		const viewerId = Number.isFinite(Number(chatViewerId)) ? Number(chatViewerId) : null;
+		const rowFlags = {
+			effectiveUnread: false,
+			vStart: -1,
+			vEnd: -1,
+			showAdminDelete: chatViewerIsAdmin && !activePseudoChannelSlug,
+			showHoverBar: !activePseudoChannelSlug,
+		};
+		let insertAfter = null;
+		if (startIdx > 0) {
+			for (let j = startIdx - 1; j >= 0; j--) {
+				const beforeId = Number(allMessages[j]?.id);
+				if (!Number.isFinite(beforeId) || beforeId <= 0) continue;
+				const anchor = messagesEl.querySelector(
+					`.connect-chat-msg[data-chat-message-id="${beforeId}"]`
+				);
+				if (anchor) {
+					insertAfter = anchor;
+					break;
+				}
+			}
+			if (!insertAfter) {
+				insertAfter = messagesEl.querySelector('.connect-chat-msg:last-of-type');
+			}
+			if (!insertAfter) return -1;
+		}
+		const appended = [];
+		for (let i = startIdx; i < allMessages.length; i++) {
+			const nm = allMessages[i];
+			if (getChatCanvasMetaFromMessage(nm)) continue;
+			const row = createChatMessageRowElement(nm, i, allMessages, viewerId, rowFlags);
+			if (insertAfter) {
+				messagesEl.insertBefore(row, insertAfter.nextSibling);
+			} else {
+				messagesEl.appendChild(row);
+			}
+			insertAfter = row;
+			appended.push(row);
+		}
+		if (appended.length === 0) return 0;
+		messagesEl.querySelector('.chat-page-empty-hint')?.remove();
+		updateChatLatestRowMarker(messagesEl);
+		decorateAppendedChatRows(messagesEl, appended);
+		return appended.length;
+	}
+
+	async function afterSendSuccess(threadId, confirmedMessage = null) {
+		optimisticSend = null;
+		const messagesEl = root.querySelector('[data-chat-messages]');
+		removeOptimisticSendRows(messagesEl);
+
+		const msgForUi =
+			confirmedMessage &&
+			typeof confirmedMessage === 'object' &&
+			!getChatCanvasMetaFromMessage(confirmedMessage)
+				? confirmedMessage
+				: null;
+
+		if (msgForUi && messagesEl) {
+			const mid = Number(msgForUi.id);
+			const alreadyInCache = lastChatMessagesPayload.some((m) => Number(m.id) === mid);
+			const alreadyInDom = Boolean(
+				messagesEl.querySelector(`.connect-chat-msg[data-chat-message-id="${mid}"]`)
+			);
+			if ((!alreadyInCache || !alreadyInDom) && Number.isFinite(mid) && mid > 0) {
+				const nextPayload = alreadyInCache
+					? lastChatMessagesPayload
+					: [...lastChatMessagesPayload, msgForUi];
+				const startIdx = nextPayload.findIndex((m) => Number(m.id) === mid);
+				if (startIdx < 0) {
+					await loadMessages();
+				} else {
+					const appended = appendChatMessagesToDom(messagesEl, nextPayload, startIdx);
+					if (appended > 0) {
+						if (!alreadyInCache) {
+							lastChatMessagesPayload = nextPayload;
+						}
+						if (chatStickToBottom) {
+							scrollChatMessagesToEnd();
+						}
+					} else if (appended < 0) {
+						await loadMessages();
+					}
+				}
+			}
+		} else {
+			await loadMessages();
+		}
+		finishAfterSendSuccess(threadId);
 	}
 
 	async function resendOptimisticFromUi(tempId) {
@@ -3578,7 +3693,7 @@ export async function initChatPage(root, options = {}) {
 				placeOptimisticInDom(messagesEl, optimisticSend);
 				return;
 			}
-			await afterSendSuccess(threadId);
+			await afterSendSuccess(threadId, result.message);
 		} catch (err) {
 			console.error('[Chat page] resend:', err);
 			optimisticSend = buildOptimisticSendRecord({
@@ -9067,6 +9182,209 @@ export async function initChatPage(root, options = {}) {
 		}
 	}
 
+	function chatMessageStableJson(value) {
+		try {
+			return JSON.stringify(value ?? null);
+		} catch {
+			return '';
+		}
+	}
+
+	function chatMessagePayloadDiffers(a, b) {
+		if (String(a?.body ?? '') !== String(b?.body ?? '')) return true;
+		if (getChatMessageEditedAt(a) !== getChatMessageEditedAt(b)) return true;
+		if (chatMessageStableJson(a?.reactions) !== chatMessageStableJson(b?.reactions)) return true;
+		if (chatMessageStableJson(a?.viewer_reactions) !== chatMessageStableJson(b?.viewer_reactions)) {
+			return true;
+		}
+		if (chatMessageStableJson(a?.meta) !== chatMessageStableJson(b?.meta)) return true;
+		return false;
+	}
+
+	function chatMessageOnlyReactionsDiffer(a, b) {
+		if (!chatMessagePayloadDiffers(a, b)) return false;
+		if (String(a?.body ?? '') !== String(b?.body ?? '')) return false;
+		if (getChatMessageEditedAt(a) !== getChatMessageEditedAt(b)) return false;
+		if (chatMessageStableJson(a?.meta) !== chatMessageStableJson(b?.meta)) return false;
+		return true;
+	}
+
+	function shouldSkipSelfMessageDuringOptimisticSend(m, threadId) {
+		if (!optimisticSend || optimisticSend.status !== 'pending') return false;
+		if (Number(optimisticSend.threadId) !== Number(threadId)) return false;
+		const vid = Number(chatViewerId);
+		const sid = m?.sender_id != null ? Number(m.sender_id) : null;
+		return Number.isFinite(vid) && Number.isFinite(sid) && sid === vid;
+	}
+
+	async function fetchActiveThreadMessagesForUi(threadId) {
+		if (chatSimulateConversationLoadFail()) {
+			throw new Error('Failed to fetch');
+		}
+		const res = await fetch(`/api/chat/threads/${threadId}/messages?limit=50`, {
+			credentials: 'include'
+		});
+		const data = await res.json().catch(() => ({}));
+		if (!res.ok) {
+			throw new Error(data.message || data.error || 'Failed to load messages');
+		}
+		const messages = Array.isArray(data.messages) ? data.messages : [];
+		const messagesForUiRaw = messages.filter((m) => !getChatCanvasMetaFromMessage(m));
+		const threadMetaForPriv = chatPrivateThreadMetaById(threadId);
+		let messagesForUi = messagesForUiRaw;
+		if (isPrivateChannelThreadMeta(threadMetaForPriv)) {
+			const k = await fetchPrivateThreadKey(threadId);
+			if (!k) {
+				throw new Error('Private channel key missing. Re-open using invite link.');
+			}
+			messagesForUi = [];
+			for (const m of messagesForUiRaw) {
+				if (m?.private_decrypted === true) {
+					messagesForUi.push(m);
+					continue;
+				}
+				const body = String(m?.body || '');
+				if (body.startsWith(CHAT_PRIVATE_MSG_PREFIX)) {
+					const dec = await decryptPrivateText(body.slice(CHAT_PRIVATE_MSG_PREFIX.length), k);
+					messagesForUi.push({ ...m, body: dec != null ? dec : '[Encrypted message]' });
+				} else {
+					messagesForUi.push({ ...m, body: '[Encrypted message]' });
+				}
+			}
+		}
+		return messagesForUi;
+	}
+
+	function applyChatMessagesIncremental(nextMessages, threadId) {
+		const messagesEl = root.querySelector('[data-chat-messages]');
+		if (!messagesEl || !Array.isArray(nextMessages)) return { ok: false };
+
+		const prev = lastChatMessagesPayload;
+		if (!prev.length) return { ok: false };
+
+		const prevIds = new Set(prev.map((m) => Number(m.id)));
+		const nextIds = new Set(nextMessages.map((m) => Number(m.id)));
+		const overlap = [...prevIds].filter((id) => nextIds.has(id));
+		if (overlap.length === 0) return { ok: false };
+
+		const nextNumericIds = nextMessages
+			.map((m) => Number(m.id))
+			.filter((n) => Number.isFinite(n) && n > 0);
+		if (nextNumericIds.length === 0) {
+			lastChatMessagesPayload = nextMessages;
+			return { ok: true, changed: false };
+		}
+		const nextMinId = Math.min(...nextNumericIds);
+		const prevById = new Map(prev.map((m) => [Number(m.id), m]));
+		const viewerId = Number(chatViewerId);
+		let changed = false;
+		let appendedFromOther = false;
+
+		for (const m of prev) {
+			const id = Number(m.id);
+			if (id < nextMinId || nextIds.has(id)) continue;
+			if (Number(activeMessageEditId) === id) continue;
+			const row = messagesEl.querySelector(`.connect-chat-msg[data-chat-message-id="${id}"]`);
+			if (row) {
+				row.remove();
+				changed = true;
+			}
+		}
+
+		for (const nm of nextMessages) {
+			const id = Number(nm.id);
+			const om = prevById.get(id);
+			if (!om || !chatMessagePayloadDiffers(om, nm)) continue;
+			if (Number(activeMessageEditId) === id) continue;
+			changed = true;
+			const idx = lastChatMessagesPayload.findIndex((x) => Number(x.id) === id);
+			if (idx >= 0) lastChatMessagesPayload[idx] = nm;
+			if (chatMessageOnlyReactionsDiffer(om, nm)) {
+				patchChatMessageReactionDom(id, nm);
+				updateChatHoverBarReactionState(id, nm);
+			} else {
+				replaceChatMessageRowFromPayload(id);
+			}
+		}
+
+		const firstNewIdx = nextMessages.findIndex((m) => !prevIds.has(Number(m.id)));
+		if (firstNewIdx >= 0) {
+			let appendStart = -1;
+			for (let i = firstNewIdx; i < nextMessages.length; i++) {
+				if (shouldSkipSelfMessageDuringOptimisticSend(nextMessages[i], threadId)) continue;
+				appendStart = i;
+				break;
+			}
+			if (appendStart >= 0) {
+				const n = appendChatMessagesToDom(messagesEl, nextMessages, appendStart);
+				if (n < 0) return { ok: false };
+				if (n > 0) {
+					changed = true;
+					for (let i = appendStart; i < nextMessages.length; i++) {
+						const nm = nextMessages[i];
+						if (shouldSkipSelfMessageDuringOptimisticSend(nm, threadId)) continue;
+						const sid = nm?.sender_id != null ? Number(nm.sender_id) : null;
+						if (Number.isFinite(viewerId) && Number.isFinite(sid) && sid !== viewerId) {
+							appendedFromOther = true;
+						}
+					}
+				}
+			}
+		}
+
+		let mergedPayload = nextMessages;
+		if (
+			optimisticSend &&
+			optimisticSend.status === 'pending' &&
+			Number(optimisticSend.threadId) === Number(threadId)
+		) {
+			mergedPayload = nextMessages.filter((m) => {
+				const id = Number(m.id);
+				if (prevIds.has(id)) return true;
+				return !shouldSkipSelfMessageDuringOptimisticSend(m, threadId);
+			});
+		}
+		lastChatMessagesPayload = mergedPayload;
+
+		if (changed && chatStickToBottom) {
+			scrollChatMessagesToEnd();
+		}
+		if (appendedFromOther && chatStickToBottom) {
+			void markLatestMessageRead();
+		}
+
+		return { ok: true, changed };
+	}
+
+	async function syncChatMessagesFromServer() {
+		const threadId = activeThreadId;
+		const messagesEl = root.querySelector('[data-chat-messages]');
+		if (!threadId || !messagesEl || activePseudoChannelSlug) return;
+		if (loadingThreadMessages || chatMessagesSyncInFlight) return;
+		if (!lastChatMessagesPayload.length) {
+			void loadMessages();
+			return;
+		}
+
+		chatMessagesSyncInFlight = true;
+		const prevVideoStates = captureChatVideoPlaybackStates(messagesEl);
+		try {
+			const nextMessages = await fetchActiveThreadMessagesForUi(threadId);
+			if (Number(activeThreadId) !== Number(threadId)) return;
+
+			const result = applyChatMessagesIncremental(nextMessages, threadId);
+			if (!result.ok) {
+				await loadMessages();
+				return;
+			}
+			restoreChatVideoPlaybackStates(messagesEl, prevVideoStates);
+		} catch (err) {
+			console.error('[Chat page] sync messages:', err);
+		} finally {
+			chatMessagesSyncInFlight = false;
+		}
+	}
+
 	async function loadMessages() {
 		const threadId = activeThreadId;
 		const messagesEl = root.querySelector('[data-chat-messages]');
@@ -9085,44 +9403,10 @@ export async function initChatPage(root, options = {}) {
 
 		const viewerId = chatViewerId;
 		try {
-			if (chatSimulateConversationLoadFail()) {
-				throw new Error('Failed to fetch');
-			}
 			await refreshChatCanvasesList();
 			if (isStaleChatPane(paneEpoch)) return;
-			const res = await fetch(`/api/chat/threads/${threadId}/messages?limit=50`, {
-				credentials: 'include'
-			});
-			const data = await res.json().catch(() => ({}));
-			if (!res.ok) {
-				throw new Error(data.message || data.error || 'Failed to load messages');
-			}
+			const messagesForUi = await fetchActiveThreadMessagesForUi(threadId);
 			if (isStaleChatPane(paneEpoch)) return;
-			const messages = Array.isArray(data.messages) ? data.messages : [];
-			const messagesForUiRaw = messages.filter((m) => !getChatCanvasMetaFromMessage(m));
-			const threadMetaForPriv = chatPrivateThreadMetaById(threadId);
-			let messagesForUi = messagesForUiRaw;
-			if (isPrivateChannelThreadMeta(threadMetaForPriv)) {
-				const k = await fetchPrivateThreadKey(threadId);
-				if (!k) {
-					throw new Error('Private channel key missing. Re-open using invite link.');
-				}
-				messagesForUi = [];
-				for (const m of messagesForUiRaw) {
-					if (m?.private_decrypted === true) {
-						messagesForUi.push(m);
-						continue;
-					}
-					const body = String(m?.body || '');
-					if (body.startsWith(CHAT_PRIVATE_MSG_PREFIX)) {
-						const dec = await decryptPrivateText(body.slice(CHAT_PRIVATE_MSG_PREFIX.length), k);
-						messagesForUi.push({ ...m, body: dec != null ? dec : '[Encrypted message]' });
-					} else {
-						// Never render legacy plaintext in private channels.
-						messagesForUi.push({ ...m, body: '[Encrypted message]' });
-					}
-				}
-			}
 			lastChatMessagesPayload = messagesForUi;
 			teardownChatCreationsPseudoBulkHostIfPresent(messagesEl);
 			teardownLatestMessageReadObserver();
@@ -9497,15 +9781,22 @@ export async function initChatPage(root, options = {}) {
 		const tid = Number(threadId);
 		if (!Number.isFinite(tid) || tid <= 0) return;
 		try {
-			const refetch = () => {
+			const onRoomDirty = () => {
+				if (activePseudoChannelSlug === 'challenges') {
+					void loadChallengesChannelMessages();
+				} else {
+					void syncChatMessagesFromServer();
+				}
+			};
+			const onRoomReconnect = () => {
 				if (activePseudoChannelSlug === 'challenges') {
 					void loadChallengesChannelMessages();
 				} else {
 					void loadMessages();
 				}
 			};
-			roomBroadcastTeardown = await subscribeRoomBroadcast(tid, refetch, {
-				onReconnect: refetch,
+			roomBroadcastTeardown = await subscribeRoomBroadcast(tid, onRoomDirty, {
+				onReconnect: onRoomReconnect,
 				onDeleted: () => {
 					window.location.href = '/chat#channels';
 				}
@@ -9993,7 +10284,7 @@ export async function initChatPage(root, options = {}) {
 				return;
 			}
 			clearChatComposerReplyTarget();
-			await afterSendSuccess(threadId);
+			await afterSendSuccess(threadId, result.message);
 		} catch (err) {
 			console.error('[Chat page] send:', err);
 			optimisticSend = buildOptimisticSendRecord({

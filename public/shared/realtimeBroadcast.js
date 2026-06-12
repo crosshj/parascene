@@ -101,10 +101,17 @@ export async function subscribeBroadcast({ topic, event, onBroadcast, debounceMs
  * Subscribe to `dirty` on `room:<threadId>` with debounced invalidation callback (chat thread stream).
  * Optional `extra.onDeleted` listens for `deleted` (e.g. admin removed the whole thread).
  * @param {number} threadId
- * @param {() => void} onDirty
+ * @param {(hintMessageId?: number | null) => void} onDirty — optional `afterMessageId` from broadcast payload
  * @param {{ onReconnect?: () => void; onDeleted?: () => void }} [extra]
  * @returns {Promise<() => void>}
  */
+function roomDirtyHintFromEnvelope(envelope) {
+	const raw = envelope?.payload?.afterMessageId;
+	if (raw == null) return null;
+	const n = Number(raw);
+	return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 export async function subscribeRoomBroadcast(threadId, onDirty, extra = {}) {
 	const tid = Number(threadId);
 	if (!Number.isFinite(tid) || tid <= 0) {
@@ -117,7 +124,7 @@ export async function subscribeRoomBroadcast(threadId, onDirty, extra = {}) {
 		return subscribeBroadcast({
 			topic: `room:${tid}`,
 			event: "dirty",
-			onBroadcast: () => onDirty(),
+			onBroadcast: (envelope) => onDirty(roomDirtyHintFromEnvelope(envelope)),
 			debounceMs: DEFAULT_ROOM_DEBOUNCE_MS,
 			onReconnect
 		});
@@ -136,9 +143,9 @@ export async function subscribeRoomBroadcast(threadId, onDirty, extra = {}) {
 	let prevSubscribeStatus = null;
 	let droppedAfterLive = false;
 
-	const runDirty = () => {
+	const runDirty = (envelope) => {
 		try {
-			onDirty();
+			onDirty(roomDirtyHintFromEnvelope(envelope));
 		} catch {
 			// ignore
 		}
@@ -162,11 +169,11 @@ export async function subscribeRoomBroadcast(threadId, onDirty, extra = {}) {
 	};
 
 	channel
-		.on("broadcast", { event: "dirty" }, () => {
+		.on("broadcast", { event: "dirty" }, (envelope) => {
 			if (debounceTimer != null) clearTimeout(debounceTimer);
 			debounceTimer = setTimeout(() => {
 				debounceTimer = null;
-				runDirty();
+				runDirty(envelope);
 			}, DEFAULT_ROOM_DEBOUNCE_MS);
 		})
 		.on("broadcast", { event: "deleted" }, () => {
