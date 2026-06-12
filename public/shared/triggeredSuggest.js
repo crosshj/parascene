@@ -193,8 +193,8 @@ function defaultGetInsertText(item, trigger) {
 		return cmd ? `/${cmd} ` : "";
 	}
 	if (item?.type === "style") {
-		const slug = (item?.tag ?? item?.label ?? "").toString().trim();
-		return slug ? `$${slug} ` : "";
+		const tag = (item?.tag ?? "").toString().trim();
+		return tag ? `$${tag} ` : "";
 	}
 	if ((item?.type === "user" || item?.type === "persona") && item?.sublabel) {
 		const handle = String(item.sublabel).replace(/^@/, "").trim();
@@ -1388,7 +1388,8 @@ export function attachTriggeredSuggest(textarea, options) {
 	textarea.addEventListener("focus", onFocus);
 	textarea.addEventListener("blur", onBlur);
 	textarea.addEventListener("pointerdown", onPointerDown);
-	textarea.addEventListener("keydown", onKeydown);
+	// Capture phase so Enter/Tab accept runs before composer Enter-to-submit bubble handlers.
+	textarea.addEventListener("keydown", onKeydown, true);
 }
 
 export function attachMentionSuggest(textarea) {

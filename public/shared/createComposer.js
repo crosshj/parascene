@@ -20,6 +20,7 @@ import {
 } from '/shared/generationDefaults.js';
 import {
 	formatMentionsFailureForDialog,
+	formatStylesFailureForDialog,
 	readImageUrlDimensions,
 	readRasterFileDimensions,
 	submitCreationWithPending,
@@ -686,6 +687,7 @@ function buildSubmitArgs(baseArgs, aspectRatio, formContext) {
  *   refreshAutoGrowTextareas?: (root?: Document|HTMLElement) => void,
  *   navigate?: 'none' | 'creations' | 'full',
  *   attachPromptSuggest?: (textarea: HTMLTextAreaElement) => void,
+ *   isTriggeredSuggestPopupOpen?: (field: EventTarget | null) => boolean,
  * }} [opts]
  * @returns {{ destroy: () => void, refreshModelOptions: () => Promise<void> }}
  */
@@ -696,6 +698,10 @@ export function mountCreateComposer(host, opts = {}) {
 
 	const navigate = opts.navigate === 'none' || opts.navigate === 'creations' ? opts.navigate : 'full';
 	const refreshAutoGrow = opts.refreshAutoGrowTextareas || (() => {});
+	const checkSuggestPopupOpen =
+		typeof opts.isTriggeredSuggestPopupOpen === 'function'
+			? opts.isTriggeredSuggestPopupOpen
+			: isTriggeredSuggestPopupOpen;
 
 	const storedModelValue = readStoredModelValue();
 	const storedModelLabel = readStoredModelLabel();
@@ -1699,18 +1705,20 @@ export function mountCreateComposer(host, opts = {}) {
 		});
 	}
 
-	function firstStyleSigilKey(text) {
-		const m = String(text || '').match(/\$([a-zA-Z][a-zA-Z0-9_-]*)/);
-		return m && m[1] ? m[1].toLowerCase() : '';
+	function extractStyleSigilKeys(text) {
+		const out = [];
+		const re = /\$([a-zA-Z][a-zA-Z0-9_-]*)/g;
+		let match;
+		while ((match = re.exec(String(text || ''))) !== null) {
+			if (match[1]) out.push(match[1].toLowerCase());
+		}
+		return out;
 	}
 
 	function resolveSubmitStyleKey(promptText) {
-		let key = getSelectedStyleKey();
-		if (!key || key === 'none') {
-			const fromSigil = firstStyleSigilKey(promptText);
-			if (fromSigil) key = fromSigil;
-		}
-		return key && key !== 'none' ? key : undefined;
+		const sigils = extractStyleSigilKeys(promptText);
+		if (sigils.length > 0) return sigils[sigils.length - 1];
+		return undefined;
 	}
 
 	function getSelectedStyleKey() {
@@ -1723,9 +1731,12 @@ export function mountCreateComposer(host, opts = {}) {
 
 	function syncStyleSelectionFromPrompt() {
 		if (!(promptInput instanceof HTMLTextAreaElement)) return;
-		const slug = firstStyleSigilKey(promptInput.value);
-		if (!slug) return;
-		saveStyleSelected(slug);
+		const sigils = extractStyleSigilKeys(promptInput.value);
+		if (sigils.length === 0) {
+			saveStyleSelected('none');
+			return;
+		}
+		saveStyleSelected(sigils[sigils.length - 1]);
 	}
 
 	function setComposerSubmitting(active) {
@@ -2144,7 +2155,8 @@ export function mountCreateComposer(host, opts = {}) {
 		);
 		const mutateLineage = getMutateLineageForSubmit();
 		const mentions = extractMentions(userPrompt);
-		if (mentions.length === 0) {
+		const hasStyleSigils = extractStyleSigilKeys(userPrompt).length > 0;
+		if (mentions.length === 0 && !hasStyleSigils) {
 			dispatchCreationSubmit({
 				serverId: submitRoute.serverId,
 				methodKey: submitRoute.methodKey,
@@ -2156,30 +2168,38 @@ export function mountCreateComposer(host, opts = {}) {
 			return;
 		}
 		const validateResult = await validateMentionsSimple({ args: { prompt: userPrompt } });
-		if (validateResult.ok) {
-			dispatchCreationSubmit({
-				serverId: submitRoute.serverId,
-				methodKey: submitRoute.methodKey,
-				args,
-				styleKey,
-				hydrateMentions: true,
-				...mutateLineage,
-			});
+		if (!validateResult.ok) {
+			const failedStyles = Array.isArray(validateResult.data?.failed_styles)
+				? validateResult.data.failed_styles
+				: [];
+			if (failedStyles.length > 0) {
+				alert(formatStylesFailureForDialog(validateResult.data));
+				setComposerSubmitting(false);
+				return;
+			}
+			const message = formatMentionsFailureForDialog(validateResult.data);
+			if (window.confirm(message + '\n\nSubmit anyway?')) {
+				dispatchCreationSubmit({
+					serverId: submitRoute.serverId,
+					methodKey: submitRoute.methodKey,
+					args,
+					styleKey,
+					hydrateMentions: false,
+					...mutateLineage,
+				});
+				return;
+			}
+			setComposerSubmitting(false);
 			return;
 		}
-		const message = formatMentionsFailureForDialog(validateResult.data);
-		if (window.confirm(message + '\n\nSubmit anyway?')) {
-			dispatchCreationSubmit({
-				serverId: submitRoute.serverId,
-				methodKey: submitRoute.methodKey,
-				args,
-				styleKey,
-				hydrateMentions: false,
-				...mutateLineage,
-			});
-			return;
-		}
-		setComposerSubmitting(false);
+		dispatchCreationSubmit({
+			serverId: submitRoute.serverId,
+			methodKey: submitRoute.methodKey,
+			args,
+			styleKey,
+			hydrateMentions: mentions.length > 0,
+			...mutateLineage,
+		});
 	}
 
 	// Restore state
@@ -2269,12 +2289,11 @@ export function mountCreateComposer(host, opts = {}) {
 			ev.preventDefault();
 			for (const file of imageFiles) void addAttachmentFromFile(file);
 		};
-		const enterKeySubmits = composerEnterKeySubmits();
 		const onPromptKeydown = (ev) => {
 			if (ev.key !== 'Enter' || ev.isComposing) return;
-			if (!enterKeySubmits) return;
+			if (!composerEnterKeySubmits()) return;
 			if (ev.shiftKey) return;
-			if (isTriggeredSuggestPopupOpen(promptInput)) return;
+			if (checkSuggestPopupOpen(promptInput)) return;
 			ev.preventDefault();
 			void handleSubmit();
 		};

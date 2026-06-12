@@ -31,6 +31,7 @@ import { getStyleInfo } from "./utils/createStyles.js";
 import {
 	applyPickerStyleModifiersToPrompt,
 	expandStyleSigilsForProvider,
+	extractStyleSigilTokens,
 	resolveStyleModifiersForPicker,
 	stripStyleSigilsFromPrompt
 } from "./utils/styleSigils.js";
@@ -1961,15 +1962,6 @@ export default function createCreateRoutes({ queries, storage }) {
 				mentions.push({ originalMention, normalized });
 			}
 
-			// No mentions: treat as valid.
-			if (mentions.length === 0) {
-				return res.json({
-					ok: true,
-					valid: true,
-					failed_mentions: []
-				});
-			}
-
 			const failed_mentions = [];
 			for (const m of mentions) {
 				if (!m.normalized) {
@@ -1982,19 +1974,38 @@ export default function createCreateRoutes({ queries, storage }) {
 				}
 			}
 
-			if (failed_mentions.length > 0) {
-				const parts = failed_mentions.map((f) => `${f.mention} (${f.reason})`).join(", ");
+			const failed_styles = [];
+			if (extractStyleSigilTokens(prompt).length > 0) {
+				const expanded = await expandStyleSigilsForProvider(queries, user.id, prompt);
+				if (!expanded.ok) {
+					for (const row of expanded.failed_styles || []) {
+						failed_styles.push(row);
+					}
+				}
+			}
+
+			if (failed_mentions.length > 0 || failed_styles.length > 0) {
+				const error =
+					failed_styles.length > 0 ? "Invalid style references" : "Invalid mentions";
+				const message =
+					failed_styles.length > 0
+						? (failed_styles || [])
+								.map((f) => `${f.token} (${f.reason})`)
+								.join(", ")
+						: failed_mentions.map((f) => `${f.mention} (${f.reason})`).join(", ");
 				return res.status(400).json({
-					error: "Invalid mentions",
-					message: `Character could not be found for: ${parts}.`,
-					failed_mentions
+					error,
+					message,
+					failed_mentions,
+					failed_styles
 				});
 			}
 
 			return res.json({
 				ok: true,
 				valid: true,
-				failed_mentions: []
+				failed_mentions: [],
+				failed_styles: []
 			});
 		} catch {
 			return res.status(500).json({

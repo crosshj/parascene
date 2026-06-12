@@ -23,6 +23,24 @@ export async function runVisitPulseFlush({ args = {} } = {}) {
 		throw new Error("upsertVisitPulseDay query is not available");
 	}
 
+	const force = args.force === true || args.force === "true" || args.force === 1;
+	const existing = queries.selectVisitPulseDay?.get
+		? await queries.selectVisitPulseDay.get(dayKey)
+		: null;
+	const redisEmpty = Number(snapshot.unique_visitors) === 0;
+	const dbHadData = Number(existing?.unique_visitors) > 0;
+	if (!force && redisEmpty && dbHadData) {
+		return {
+			ok: false,
+			skipped: true,
+			day: dayKey,
+			reason:
+				"Redis has no keys for this day (TTL ~72h) but DB already has visitors — refusing to overwrite. Use force only if you intend to clear the row.",
+			existing_unique_visitors: existing.unique_visitors,
+			existing_authed_visitors: existing.authed_visitors
+		};
+	}
+
 	await queries.upsertVisitPulseDay.run(snapshot);
 
 	return {

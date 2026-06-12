@@ -543,6 +543,26 @@ export function formatMentionsFailureForDialog(data) {
 	return `Some @mentions couldn't be validated:\n\n${lines.join('\n')}\n\nIf you submit, @mentions will not be expanded or understood by the image generator.`;
 }
 
+const STYLE_FAILURE_LABELS = {
+	style_not_found: 'Style not found',
+};
+
+/**
+ * Format $style validation failure for alert dialogs (composer blocks submit).
+ */
+export function formatStylesFailureForDialog(data) {
+	const failed = Array.isArray(data?.failed_styles) ? data.failed_styles : [];
+	if (failed.length === 0) {
+		return data?.message || data?.error || 'Invalid style references';
+	}
+	const lines = failed.map((f) => {
+		const token = typeof f?.token === 'string' ? f.token : '';
+		const r = STYLE_FAILURE_LABELS[f?.reason] || f?.reason || 'Unknown';
+		return token ? `• ${token} — ${r}` : `• ${r}`;
+	}).filter(Boolean);
+	return `Some $styles couldn't be found:\n\n${lines.join('\n')}\n\nPick a style from the list or remove the $token.`;
+}
+
 /**
  * Shared submit helper for /create and /creations/:id/mutate.
  * - Session pending placeholder while POST runs (promoted to server id + `creating` on success)

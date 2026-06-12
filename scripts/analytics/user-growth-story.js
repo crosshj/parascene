@@ -7,8 +7,14 @@
 import fs from 'fs/promises'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { createClient } from '@supabase/supabase-js'
 import { REPO_ROOT, loadEnv } from '../repo-root.cjs'
 import { loadReportStyleBlock } from './report-styles.js'
+import {
+	usEastDayKey,
+	usEastDayStartMs,
+	yesterdayUsEastDayKey
+} from '../../api_routes/utils/visitPulseCore.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 loadEnv()
@@ -39,7 +45,82 @@ const TZ = process.env.TZ_NAME || 'UTC'
 const LOOKBACK_DAYS = Number(process.env.LOOKBACK_DAYS || 120)
 const COHORT_WEEKS = Number(process.env.COHORT_WEEKS || 12)
 const WINDOW_DAYS = Number(process.env.WINDOW_DAYS || 30)
+const PULSE_DAY_MS = 24 * 60 * 60 * 1000
 const now = new Date()
+
+function shiftUsEastDayKey(day, deltaDays) {
+	return usEastDayKey(new Date(usEastDayStartMs(day) + deltaDays * PULSE_DAY_MS))
+}
+
+function usEastWindowDays(windowDays, toDay = yesterdayUsEastDayKey()) {
+	let fromDay = toDay
+	for (let i = 0; i < windowDays - 1; i++) fromDay = shiftUsEastDayKey(fromDay, -1)
+	return { fromDay, toDay }
+}
+
+async function loadPulseDays(fromDay, toDay) {
+	const url = process.env.SUPABASE_URL
+	const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+	if (!url || !key) return []
+	const client = createClient(url, key, { auth: { persistSession: false } })
+	const { data, error } = await client
+		.from('prsn_visit_pulse_days')
+		.select('day, unique_visitors, authed_visitors, anon_visitors, details')
+		.gte('day', fromDay)
+		.lte('day', toDay)
+		.order('day')
+	if (error) throw new Error(`Supabase pulse query failed: ${error.message}`)
+	return Array.isArray(data) ? data : []
+}
+
+function visitorKeyFromPulseVisitor(v) {
+	if (v?.visitor_key) return String(v.visitor_key)
+	if (v?.user_id != null && Number(v.user_id) > 0) return `u:${v.user_id}`
+	if (v?.client_id) return `v:${v.client_id}`
+	return null
+}
+
+function computeTrafficMau(pulseRows) {
+	const keys = new Set()
+	for (const row of pulseRows) {
+		if (Number(row.unique_visitors) <= 0) continue
+		const visitors = row.details?.visitors
+		if (Array.isArray(visitors) && visitors.length) {
+			for (const v of visitors) {
+				const key = visitorKeyFromPulseVisitor(v)
+				if (key) keys.add(key)
+			}
+		}
+	}
+	return keys.size
+}
+
+function buildPulseFunnelMetrics(fromDay, toDay, pulseRows) {
+	const activeRows = (pulseRows || []).filter((r) => Number(r.unique_visitors) > 0)
+	const firstPulseDay = activeRows.length ? String(activeRows[0].day) : null
+	let windowDayCount = 0
+	for (let d = fromDay; d <= toDay; d = shiftUsEastDayKey(d, 1)) windowDayCount++
+	return {
+		fromDay,
+		toDay,
+		firstPulseDay,
+		trafficMau: computeTrafficMau(activeRows),
+		pulseDaysWithData: activeRows.length,
+		windowDayCount,
+		hasPulse: activeRows.length > 0
+	}
+}
+
+function buildFunnelPulseNote(pulseFunnel) {
+	if (!pulseFunnel?.hasPulse) {
+		return 'Traffic (visit pulse) is not available for this window yet. Signup and later funnel stages use app DB only.'
+	}
+	const partial =
+		pulseFunnel.pulseDaysWithData < pulseFunnel.windowDayCount
+			? ` Pulse covers ${pulseFunnel.pulseDaysWithData} of ${pulseFunnel.windowDayCount} US East days in this window (instrumentation since ${pulseFunnel.firstPulseDay}).`
+			: ''
+	return `Visitors = traffic MAU (unique visitors across US East pulse days ${pulseFunnel.fromDay} → ${pulseFunnel.toDay}).${partial} Signup rate is signups ÷ traffic MAU; anonymous visitors are not linked to accounts, so treat as directional only.`
+}
 
 const n = x => Number.isFinite(x) ? x : 0
 const pct = (a, b) => !b ? '0.0%' : `${(100 * a / b).toFixed(1)}%`
@@ -279,6 +360,11 @@ function buildAnonymizedExportPayload(report) {
 		},
 		share_try_funnel: report?.shareTryFunnel || null,
 		funnel_30d_signup_cohort: {
+			traffic_mau: Number(report?.pulseFunnel?.trafficMau || 0),
+			pulse_from_day: report?.pulseFunnel?.fromDay || null,
+			pulse_to_day: report?.pulseFunnel?.toDay || null,
+			pulse_since: report?.pulseFunnel?.firstPulseDay || null,
+			pulse_days_with_data: Number(report?.pulseFunnel?.pulseDaysWithData || 0),
 			signups: Number(report?.funnel?.signup30 || 0),
 			activated_within_7d: Number(report?.funnel?.activated30 || 0),
 			retained_days_8_to_30: Number(report?.funnel?.retained30 || 0),
@@ -1013,21 +1099,29 @@ async function renderHtml(report) {
 			{ label: 'Mutations', key: 'mutations' }
 		]),
 		funnelTableHtml: table([{
-			visitors: 'N/A (not tracked in app DB)',
+			visitors: report.pulseFunnel?.hasPulse ? report.pulseFunnel.trafficMau : '—',
 			signups: report.funnel.signup30,
 			activated: report.funnel.activated30,
 			retained: report.funnel.retained30,
 			paid: report.funnel.paid30
 		}], [
-			{ label: 'Visitors', key: 'visitors' },
+			{ label: 'Visitors (traffic MAU)', key: 'visitors' },
 			{ label: 'Signups', key: 'signups' },
 			{ label: 'Activated (core action <= 7d)', key: 'activated' },
 			{ label: 'Retained (activity days 8-30)', key: 'retained' },
 			{ label: 'Paid now', key: 'paid' },
-			{ label: 'Activation rate', html: r => pct(r.activated, r.signups) },
-			{ label: 'Retention rate', html: r => pct(r.retained, r.signups) },
-			{ label: 'Paid conversion', html: r => pct(r.paid, r.signups) }
+			{
+				label: 'Signup rate',
+				html: (r) =>
+					report.pulseFunnel?.hasPulse && Number(r.visitors) > 0
+						? pct(r.signups, r.visitors)
+						: '—'
+			},
+			{ label: 'Activation rate', html: (r) => pct(r.activated, r.signups) },
+			{ label: 'Retention rate', html: (r) => pct(r.retained, r.signups) },
+			{ label: 'Paid conversion', html: (r) => pct(r.paid, r.signups) }
 		]),
+		funnelPulseNoteHtml: buildFunnelPulseNote(report.pulseFunnel),
 		shareTrySectionHtml: buildShareTrySectionHtml(report),
 		churnParagraph: `${report.churned} of ${report.prevActive} users active in the previous ${WINDOW_DAYS}-day window did not return in the latest window (${pct(report.churned, report.prevActive)}).`,
 		copyScriptHtml: buildCopyScriptHtml(anonymizedPayloadJson)
@@ -1044,8 +1138,11 @@ async function main() {
 	const sourceLabel = loaded.sourceLabel
 	const report = buildStory(users, events)
 	report.shareTryFunnel = loaded.shareTryFunnel || null
+	const pulseWindow = usEastWindowDays(WINDOW_DAYS)
+	const pulseRows = await loadPulseDays(pulseWindow.fromDay, pulseWindow.toDay)
+	report.pulseFunnel = buildPulseFunnelMetrics(pulseWindow.fromDay, pulseWindow.toDay, pulseRows)
 
-	const outStamp = toIsoDate(startOfUtcDay(now))
+	const outStamp = usEastDayKey(now)
 	const defaultOut = path.join(REPO_ROOT, '.output', 'user-growth-story', `user-growth-story-${outStamp}.html`)
 	const OUT = process.env.OUT || defaultOut
 	await fs.mkdir(path.dirname(OUT), { recursive: true })

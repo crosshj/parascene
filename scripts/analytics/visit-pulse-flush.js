@@ -6,6 +6,9 @@
  *   node scripts/analytics/visit-pulse-flush.js           # yesterday US East
  *   node scripts/analytics/visit-pulse-flush.js --day 2026-05-20
  *   node scripts/analytics/visit-pulse-flush.js --today   # today US East (partial)
+ *
+ * Only flush today or yesterday for routine updates. Older days have no Redis data (~72h TTL);
+ * re-flushing them overwrites DB with zeros unless you pass --force (almost never wanted).
  */
 
 import { loadEnv } from "../repo-root.cjs";
@@ -34,7 +37,7 @@ async function main() {
 		const { usEastDayKey } = await import("../../api_routes/utils/visitPulseCore.js");
 		day = usEastDayKey();
 	}
-	const args = day ? { day } : {};
+	const args = { ...(day ? { day } : {}), ...(hasFlag("force") ? { force: true } : {}) };
 	const result = await runVisitPulseFlush({ args });
 	console.log(JSON.stringify(result, null, 2));
 }

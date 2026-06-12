@@ -155,14 +155,6 @@ function dismissChallengeVoteModalFromBrowserHistoryIfOpen() {
 	return typeof fn === 'function' ? fn() : false;
 }
 
-const ENTER_SENDS = (() => {
-	try {
-		return window.matchMedia('(hover: hover) and (pointer: fine)').matches;
-	} catch {
-		return typeof window.innerWidth === 'number' && window.innerWidth >= 768;
-	}
-})();
-
 /** Align with `public/pages/chat.css` mobile chrome / canvas rules (`max-width: 768px`). */
 function isChatPageMobileLayout() {
 	const isLikelyMobileUa = (() => {
@@ -2883,6 +2875,7 @@ export async function initChatPage(root, options = {}) {
 				refreshAutoGrowTextareas: _cdAutogrow.refreshAutoGrowTextareas,
 				navigate: 'creations',
 				attachPromptSuggest: _cdTriggeredSuggest.attachCreateComposerSuggest,
+				isTriggeredSuggestPopupOpen: _cdTriggeredSuggest.isTriggeredSuggestPopupOpen,
 			});
 		} catch (err) {
 			console.error('[Chat page] create composer mount failed:', err);
@@ -4475,7 +4468,7 @@ export async function initChatPage(root, options = {}) {
 					cancelActiveChatMessageEdit();
 					return;
 				}
-				if (e.key === 'Enter' && !e.shiftKey && !isChatPageMobileLayout()) {
+				if (e.key === 'Enter' && !e.shiftKey && _cdAutogrow.composerEnterKeySubmits()) {
 					e.preventDefault();
 					void saveActiveChatMessageEdit();
 				}
@@ -11393,7 +11386,7 @@ export async function initChatPage(root, options = {}) {
 				void commitExploreSearchImmediateFromComposer();
 				return;
 			}
-			if (!ENTER_SENDS) return;
+			if (!_cdAutogrow.composerEnterKeySubmits()) return;
 			if (ev.shiftKey) return;
 			if (typeof isTriggeredSuggestPopupOpen === 'function' && isTriggeredSuggestPopupOpen(bodyInput)) {
 				return;

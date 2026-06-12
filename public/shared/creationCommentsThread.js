@@ -63,6 +63,7 @@ function loadDeps() {
 			hydrateRichUserTextEmbeds: userTextMod.hydrateRichUserTextEmbeds,
 			hydrateUserTextLinks: userTextMod.hydrateUserTextLinks,
 			attachAutoGrowTextarea: autogrowMod.attachAutoGrowTextarea,
+			composerEnterKeySubmits: autogrowMod.composerEnterKeySubmits,
 			attachMentionSuggest: suggestMod.attachMentionSuggest,
 			isTriggeredSuggestPopupOpen: suggestMod.isTriggeredSuggestPopupOpen,
 			addPageUsers: suggestMod.addPageUsers,
@@ -146,6 +147,7 @@ export async function mountCreationCommentsThread(container, options) {
 		hydrateRichUserTextEmbeds,
 		hydrateUserTextLinks,
 		attachAutoGrowTextarea,
+		composerEnterKeySubmits,
 		attachMentionSuggest,
 		isTriggeredSuggestPopupOpen,
 		addPageUsers,
@@ -301,14 +303,6 @@ export async function mountCreationCommentsThread(container, options) {
 		`;
 		return `<div class="creation-comments-loading" role="status" aria-live="polite" aria-busy="true">${row}${row}${row}</div>`;
 	}
-
-	const isMobileCommentInputMode = () => {
-		try {
-			return window.matchMedia('(pointer: coarse)').matches || window.innerWidth <= 768;
-		} catch {
-			return typeof window.innerWidth === 'number' && window.innerWidth <= 768;
-		}
-	};
 
 	/** Doom sheet only: lift focused fields above the overlay keyboard band. */
 	function scrollDoomSheetCommentFieldIntoView(el) {
@@ -1239,7 +1233,7 @@ export async function mountCreationCommentsThread(container, options) {
 				) {
 					return;
 				}
-				if (isMobileCommentInputMode()) return;
+				if (typeof composerEnterKeySubmits !== 'function' || !composerEnterKeySubmits()) return;
 				e.preventDefault();
 				e.stopPropagation();
 				const sb =
@@ -1267,7 +1261,7 @@ export async function mountCreationCommentsThread(container, options) {
 			return;
 		}
 		if (e.key === 'Enter' && !e.shiftKey) {
-			if (isMobileCommentInputMode()) {
+			if (typeof composerEnterKeySubmits !== 'function' || !composerEnterKeySubmits()) {
 				return;
 			}
 			e.preventDefault();
@@ -1459,7 +1453,7 @@ export async function mountCreationCommentsThread(container, options) {
 	};
 	const onComposerKeydown = (e) => {
 		if (e.key !== 'Enter' || e.shiftKey) return;
-		if (isMobileCommentInputMode()) return;
+		if (typeof composerEnterKeySubmits !== 'function' || !composerEnterKeySubmits()) return;
 		if (typeof isTriggeredSuggestPopupOpen === 'function' && isTriggeredSuggestPopupOpen(commentTextarea)) {
 			return;
 		}
