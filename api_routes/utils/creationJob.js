@@ -679,6 +679,7 @@ export async function runCreationJob({ queries, storage, payload }) {
 			const posterResolved = await resolveVideoJobPosterAndDimensions({
 				args: argsForProvider,
 				sourceImageUrl,
+				fetchBuffer: fetchImageBufferFromUrl,
 			});
 			imageBuffer = posterResolved.imageBuffer;
 			width = posterResolved.width;

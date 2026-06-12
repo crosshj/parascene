@@ -153,7 +153,7 @@ async function shrinkRasterImageFileForGenericUpload(file) {
 
 	let bitmap;
 	try {
-		bitmap = await createImageBitmap(file);
+		bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
 	} catch {
 		return file;
 	}
@@ -424,10 +424,12 @@ export function readImageUrlDimensions(url) {
 export async function readRasterFileDimensions(file) {
 	if (!file || !(file instanceof File)) return null;
 	const mime = String(file.type || '').toLowerCase();
-	if (!mime.startsWith('image/') || mime === 'image/svg+xml') return null;
+	if (mime === 'image/svg+xml') return null;
+	// Empty type is common for drag-drop; still attempt decode.
+	if (mime && !mime.startsWith('image/')) return null;
 
 	try {
-		const bitmap = await createImageBitmap(file);
+		const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
 		try {
 			const width = bitmap.width;
 			const height = bitmap.height;
@@ -445,11 +447,14 @@ export async function readRasterFileDimensions(file) {
  * Upload a file to the generic image endpoint; returns the image URL path on success (e.g. `/api/images/generic/...`).
  * Large pasted images are downscaled / re-encoded client-side so POST bodies stay under edge payload limits (e.g. Vercel).
  * @param {File} file
- * @param {{ uploadKind?: 'edited' | 'generic', aspectRatio?: string }} [options] — `generic` uses miscellaneous profile storage (`generic_*` keys); `edited` resizes to target aspect (or 1024² when aspectRatio omitted).
+ * @param {{ uploadKind?: 'edited' | 'generic', aspectRatio?: string, passthrough?: boolean }} [options]
+ *   Default is generic (temp storage, client downscale only). Pass `uploadKind: 'edited'` only when
+ *   an explicit server-side aspect transform is required at upload time.
  */
 export async function uploadImageFile(file, options = {}) {
 	if (!file || !(file instanceof File)) throw new Error('Invalid file');
-	const uploadKind = options.uploadKind === 'generic' ? 'generic' : 'edited';
+	const uploadKind =
+		options.uploadKind === 'edited' && options.passthrough !== true ? 'edited' : 'generic';
 	const prepared = await shrinkRasterImageFileForGenericUpload(file);
 	const defaultName = uploadKind === 'generic' ? 'paste.png' : 'image.png';
 	const safeName = safeUploadHeaderFilename(prepared.name || file.name, defaultName);

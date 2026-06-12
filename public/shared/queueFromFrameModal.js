@@ -382,7 +382,7 @@ function wireModalEvents(root) {
 				if (typeof deps.uploadImageFile !== 'function' || typeof deps.addToMutateQueue !== 'function') {
 					throw new Error('Queue is not available');
 				}
-				const imageUrl = await deps.uploadImageFile(file, { uploadKind: 'edited' });
+				const imageUrl = await deps.uploadImageFile(file);
 				deps.addToMutateQueue({
 					sourceId: deps.sourceId,
 					imageUrl,

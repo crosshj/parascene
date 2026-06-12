@@ -46,49 +46,33 @@ export async function letterboxImageBuffer(buffer, aspectRatioRaw, longEdge = ED
 }
 
 /**
- * Normalize a buffer for the `edited` upload path (create / mutate inputs).
- * When aspect_ratio is set, resize to that ratio (long edge 1024). Otherwise legacy 1024² cover.
+ * Normalize a buffer for the `edited` upload path (explicit server transform at upload time).
+ * When aspect_ratio is set, letterbox to that ratio (long edge 1024). Otherwise downscale long edge only.
  * @param {Buffer} buffer
  * @param {unknown} [aspectRatioRaw]
  * @returns {Promise<Buffer>}
  */
 export async function normalizeEditedUploadBuffer(buffer, aspectRatioRaw) {
+	const parsed = parseAspectRatioString(aspectRatioRaw);
+	if (parsed) {
+		return letterboxImageBuffer(buffer, aspectRatioRaw, EDITED_UPLOAD_LONG_EDGE);
+	}
+
 	const meta = await sharp(buffer).metadata();
 	const width = Number(meta.width);
 	const height = Number(meta.height);
-	const parsed = parseAspectRatioString(aspectRatioRaw);
-
-	if (parsed) {
-		const { width: targetW, height: targetH } = dimensionsForAspectRatioLongEdge(
-			aspectRatioRaw,
-			EDITED_UPLOAD_LONG_EDGE
-		);
-		if (
-			Number.isFinite(width) &&
-			width > 0 &&
-			Number.isFinite(height) &&
-			height > 0 &&
-			(width !== targetW || height !== targetH)
-		) {
-			return sharp(buffer)
-				.resize(targetW, targetH, { fit: "cover", position: "entropy" })
-				.png()
-				.toBuffer();
-		}
-		return sharp(buffer).png().toBuffer();
-	}
-
+	const maxEdge = Math.max(width, height);
 	if (
 		Number.isFinite(width) &&
 		width > 0 &&
 		Number.isFinite(height) &&
 		height > 0 &&
-		(width !== EDITED_UPLOAD_LONG_EDGE || height !== EDITED_UPLOAD_LONG_EDGE)
+		maxEdge > EDITED_UPLOAD_LONG_EDGE
 	) {
 		return sharp(buffer)
 			.resize(EDITED_UPLOAD_LONG_EDGE, EDITED_UPLOAD_LONG_EDGE, {
-				fit: "cover",
-				position: "entropy",
+				fit: "inside",
+				withoutEnlargement: true,
 			})
 			.png()
 			.toBuffer();

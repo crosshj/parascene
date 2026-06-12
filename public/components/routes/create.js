@@ -1665,41 +1665,9 @@ class AppRouteCreate extends HTMLElement {
 		return null;
 	}
 
-	async confirmAdvancedCreateAspectMismatch(collectedArgs, fields, formContext, methodKey) {
-		if (
-			typeof shouldUseAspectRatioSelector !== 'function' ||
-			!shouldUseAspectRatioSelector(formContext)
-		) {
-			return true;
-		}
-		const targetAspect =
-			typeof collectedArgs.aspect_ratio === 'string' ? collectedArgs.aspect_ratio.trim() : '';
-		if (!targetAspect) return true;
-		const dims = await this.readFirstAdvancedCreateImageDimensions(collectedArgs, fields);
-		const detected =
-			dims && typeof closestAspectRatioPreset === 'function'
-				? closestAspectRatioPreset(dims.width, dims.height)
-				: null;
-		const mismatchContext =
-			methodKey === 'image2video'
-				? 'video output'
-				: methodKey === 'uploadImage'
-					? 'the stored image'
-					: 'output';
-		const message =
-			typeof buildAspectRatioMismatchMessage === 'function'
-				? buildAspectRatioMismatchMessage({
-						targetAspect,
-						detectedAspect: detected,
-						context: mismatchContext,
-					})
-				: '';
-		if (!message) return true;
-		const proceedHint =
-			methodKey === 'uploadImage'
-				? `The image will be letterboxed to ${targetAspect} during processing (no pixels discarded).`
-				: `We can crop the image to ${targetAspect} and continue.`;
-		return window.confirm(`${message}\n\n${proceedHint} Proceed?`);
+	async confirmAdvancedCreateAspectMismatch(collectedArgs, fields, formContext) {
+		// Aspect ratio is applied when the job is submitted (server letterbox), not at paste/upload time.
+		return true;
 	}
 
 	async handleCreateAfterSpinner(button) {
@@ -1777,31 +1745,20 @@ class AppRouteCreate extends HTMLElement {
 			return;
 		}
 
-		if (!(await this.confirmAdvancedCreateAspectMismatch(collectedArgs, fields, formContext, methodKey))) {
+		if (!(await this.confirmAdvancedCreateAspectMismatch(collectedArgs, fields, formContext))) {
 			this.resetCreateButton(button);
 			return;
 		}
 
-		const passThroughImageUpload = methodKey === 'uploadImage';
-
-		// If any field of type image_url has a File (paste or upload), upload it first; then submit with the URL.
+		// If any field of type image_url has a File (paste or upload), upload first; aspect is applied at job time.
 		for (const fieldKey of Object.keys(fields)) {
 			const field = fields[fieldKey];
 			if (!isImageUrlField(field)) continue;
 			const value = collectedArgs[fieldKey];
 			if (value instanceof File) {
 				try {
-					if (passThroughImageUpload) {
-						await this.resolveAdvancedCreateUploadAspect(value, collectedArgs, formContext);
-						collectedArgs[fieldKey] = await uploadImageFile(value, { uploadKind: 'generic' });
-					} else {
-						const aspectRatio = await this.resolveAdvancedCreateUploadAspect(
-							value,
-							collectedArgs,
-							formContext
-						);
-						collectedArgs[fieldKey] = await uploadImageFile(value, { aspectRatio });
-					}
+					await this.resolveAdvancedCreateUploadAspect(value, collectedArgs, formContext);
+					collectedArgs[fieldKey] = await uploadImageFile(value);
 				} catch (err) {
 					this.resetCreateButton(button);
 					if (typeof this.showCreateError === 'function') {
@@ -1826,16 +1783,8 @@ class AppRouteCreate extends HTMLElement {
 				collectedArgs[fieldKey] = await Promise.all(
 					arr.map(async (v) => {
 						if (!(v instanceof File)) return v;
-						if (passThroughImageUpload) {
-							await this.resolveAdvancedCreateUploadAspect(v, collectedArgs, formContext);
-							return uploadImageFile(v, { uploadKind: 'generic' });
-						}
-						const aspectRatio = await this.resolveAdvancedCreateUploadAspect(
-							v,
-							collectedArgs,
-							formContext
-						);
-						return uploadImageFile(v, { aspectRatio });
+						await this.resolveAdvancedCreateUploadAspect(v, collectedArgs, formContext);
+						return uploadImageFile(v);
 					})
 				);
 			} catch (err) {
@@ -2852,7 +2801,7 @@ class AppRouteCreate extends HTMLElement {
 				return;
 			}
 			const uploaded = await Promise.all(
-				value.map((item) => (item instanceof File ? uploadImageFile(item) : Promise.resolve(item)))
+				value.map(async (item) => (item instanceof File ? uploadImageFile(item) : item))
 			);
 			if (this._imageFieldPersistTokens[fieldKey] !== token) return;
 			const normalized = uploaded

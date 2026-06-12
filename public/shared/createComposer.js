@@ -988,61 +988,8 @@ export function mountCreateComposer(host, opts = {}) {
 	}
 
 	async function confirmAspectMismatchBeforeSubmit() {
-		if (!shouldShowAspectSelector()) return true;
-		const targetAspect = getAspectRatioForSubmit() || selectedAspect;
-		const dims = await readPrimaryAttachmentDimensions();
-		const detected = dims ? closestAspectRatioPreset(dims.width, dims.height) : null;
-		const uploadAspect =
-			attachmentUploadAspects.length > 0 ? attachmentUploadAspects[0] : null;
-		const message = buildAspectRatioMismatchMessage({
-			targetAspect,
-			detectedAspect: detected,
-			uploadAspect,
-			context: isVideoMode() ? 'video output' : 'output',
-		});
-		if (!message) return true;
-		const proceed = window.confirm(
-			`${message}\n\nWe can crop the image to ${targetAspect} and continue. Proceed?`
-		);
-		if (!proceed) return false;
-		await reconcileAttachmentsToTargetAspect(targetAspect);
+		// Aspect ratio is applied when the job is submitted (server letterbox), not at attach time.
 		return true;
-	}
-
-	/** Re-upload stored URLs / pending files so pixels match the requested output ratio. */
-	async function reconcileAttachmentsToTargetAspect(targetAspect) {
-		const aspect = String(targetAspect || '').trim();
-		if (!aspect || !parseAspectRatioString(aspect)) return;
-		for (let i = 0; i < attachmentItems.length; i++) {
-			const item = attachmentItems[i];
-			if (item instanceof File) {
-				attachmentUploadAspects[i] = aspect;
-				continue;
-			}
-			if (typeof item !== 'string' || !item.trim()) continue;
-			const dims = await readImageUrlDimensions(item.trim());
-			if (dims && dimensionsMatchAspectRatioLocal(dims.width, dims.height, aspect) === true) {
-				attachmentUploadAspects[i] = aspect;
-				continue;
-			}
-			try {
-				const res = await fetch(item.trim(), { credentials: 'include' });
-				if (!res.ok) continue;
-				const blob = await res.blob();
-				const file = new File([blob], 'input.png', {
-					type: blob.type && blob.type.startsWith('image/') ? blob.type : 'image/png',
-				});
-				const uploaded = await uploadImageFile(file, { aspectRatio: aspect });
-				if (typeof uploaded === 'string' && uploaded.trim()) {
-					attachmentItems[i] = uploaded.trim();
-					attachmentUploadAspects[i] = aspect;
-				}
-			} catch {
-				// server-side normalization will still attempt on submit
-			}
-		}
-		saveAttachmentsToStorage();
-		renderAttachmentStrip();
 	}
 
 	function getActiveModelList() {
@@ -1687,10 +1634,10 @@ export function mountCreateComposer(host, opts = {}) {
 		renderAttachmentStrip();
 		syncModeChrome();
 		try {
-			const uploaded = await uploadImageFile(file, { aspectRatio: uploadAspect });
+			const uploaded = await uploadImageFile(file);
 			if (typeof uploaded === 'string' && uploaded.trim()) {
 				attachmentItems[index] = uploaded.trim();
-				attachmentUploadAspects[index] = uploadAspect;
+				attachmentUploadAspects[index] = null;
 				saveAttachmentsToStorage();
 			} else {
 				attachmentItems.splice(index, 1);
@@ -2022,10 +1969,10 @@ export function mountCreateComposer(host, opts = {}) {
 						uploadAspect = closestAspectRatioPreset(dims.width, dims.height);
 					}
 				}
-				const uploaded = await uploadFn(item, { aspectRatio: uploadAspect });
+				const uploaded = await uploadFn(item);
 				if (typeof uploaded === 'string' && uploaded.trim()) {
 					imageUrls.push(uploaded.trim());
-					attachmentUploadAspects[i] = uploadAspect;
+					attachmentUploadAspects[i] = null;
 				}
 			}
 		}

@@ -5,7 +5,7 @@ import {
 	parseAspectRatioString,
 } from "../../public/shared/aspectRatio.js";
 import { getShareBaseUrl } from "./url.js";
-import { normalizeEditedUploadBuffer } from "./editedImageUpload.js";
+import { letterboxImageBuffer } from "./editedImageUpload.js";
 
 function safeKeySegment(segment) {
 	return String(segment || "")
@@ -83,7 +83,7 @@ export async function fetchProviderInputImageBuffer(imageUrl, timeoutMs = 50_000
 }
 
 /**
- * When aspect_ratio is set, re-encode input image URLs to match (cover crop, long edge 1024).
+ * When aspect_ratio is set, re-encode input image URLs to match (letterbox, long edge 1024).
  * Honors user-requested output ratio even when the uploaded file was square or another shape.
  *
  * @param {{
@@ -145,7 +145,7 @@ export async function normalizeProviderArgsForAspectRatio({
 
 		let normalized;
 		try {
-			normalized = await normalizeEditedUploadBuffer(buffer, aspectRaw);
+			normalized = await letterboxImageBuffer(buffer, aspectRaw);
 		} catch (err) {
 			console.warn("[Creation] aspect normalize: resize failed", {
 				url: ref.url,
