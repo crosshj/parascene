@@ -134,6 +134,12 @@ html.chat-page--use-app-mobile-header body.chat-page .chat-route:has(> .chat-pag
 	margin-bottom: calc(200px + var(--app-mobile-bottom-nav-dock-inset) + env(safe-area-inset-bottom));
 }
 
+@media (min-width: 769px) {
+	body.chat-page.chat-page--create-composer-overlay .chat-page-thread-body .chat-page-messages:not(.chat-page-messages--doom-host) {
+		padding-bottom: calc(72px + env(safe-area-inset-bottom));
+	}
+}
+
 @media (max-width: 768px) {
 	body.chat-page .chat-route:has(> .chat-page-create-composer:not([hidden])) .chat-page-messages .challenge-pane-root {
 		padding-bottom: calc(200px + env(safe-area-inset-bottom));

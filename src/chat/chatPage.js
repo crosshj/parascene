@@ -71,6 +71,7 @@ import { hydrateChatAudibleNotificationsFromServer } from '/shared/chatAudibleNo
 import { formatMentionsFailureForDialog, uploadChatFile } from '/shared/createSubmit.js';
 import { subscribeUserBroadcast, subscribeRoomBroadcast } from '../shared/realtimeBroadcast.js';
 import { initChatSidebarModals } from '../shared/components/modals/chatSidebarModals.js';
+import { initCommandPalette } from '../shared/commandPalette/commandPalette.js';
 import {
 	createFeedItemCard,
 	feedItemToUser,
@@ -2838,9 +2839,12 @@ export async function initChatPage(root, options = {}) {
 			activePseudoChannelSlug === 'feed' ||
 			activePseudoChannelSlug === 'creations' ||
 			activePseudoChannelSlug === 'comments' ||
-			activePseudoChannelSlug === 'explore' ||
 			activePseudoChannelSlug === 'challenges'
 		);
+	}
+
+	function isExploreBrowseSearchOnlyRoute() {
+		return activePseudoChannelSlug === 'explore' && chatExploreCreationsBrowseView;
 	}
 
 	/** Doom scroll lane: full-screen video — no bottom composer. */
@@ -2970,6 +2974,23 @@ export async function initChatPage(root, options = {}) {
 			clearChatComposerReplyTarget();
 			return;
 		}
+		if (isExploreBrowseSearchOnlyRoute()) {
+			clearChatComposerReplyTarget();
+			if (composerForm instanceof HTMLFormElement) {
+				delete composerForm.dataset.chatComposerMode;
+			}
+			clearChatPendingAttachments();
+			if (composerForm instanceof HTMLElement) {
+				composerForm.hidden = true;
+			}
+			setMobileComposerOverlayClass(false);
+			setFeedOverlayCreateComposerVisible(false);
+			syncChatAttachmentsVisibility();
+			syncChatSendButton();
+			syncChatMessagePlaceholder();
+			syncChatExploreComposerChrome();
+			return;
+		}
 		if (!activePseudoChannelSlug && activeThreadId && chatThreadLoadFailed) {
 			if (composerForm instanceof HTMLElement) {
 				composerForm.hidden = true;
@@ -3052,6 +3073,109 @@ export async function initChatPage(root, options = {}) {
 	}
 
 	chatApplyComposerStateRef = applyComposerState;
+
+	/** First route paint (direct URL load): only auto-focus routes with a primary typing target. */
+	let chatInitialRouteOpenPending = true;
+
+	function focusChatPrimaryInputEl(el) {
+		if (!(el instanceof HTMLElement)) return;
+		if (el.disabled || el.hidden) return;
+		try {
+			el.focus({ preventScroll: true });
+		} catch {
+			el.focus();
+		}
+		if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+			try {
+				const len = el.value.length;
+				el.setSelectionRange(len, len);
+			} catch {
+				// ignore
+			}
+		}
+	}
+
+	function scheduleFocusChatRoutePrimaryInput(options = {}) {
+		const initialLoad = options.initialLoad === true;
+		const run = () => focusChatRoutePrimaryInput();
+		run();
+		requestAnimationFrame(() => {
+			run();
+			setTimeout(run, 0);
+			setTimeout(run, 48);
+			if (initialLoad) {
+				setTimeout(run, 120);
+				setTimeout(run, 320);
+			}
+		});
+	}
+
+	function shouldAutoFocusChatRoutePrimaryInput() {
+		if (chatThreadLoadFailed) return false;
+		if (activePseudoChannelSlug === 'feed_doom') return false;
+		if (shouldShowMobileSidebarFromLocation()) return false;
+		if (shouldShowChatCreateComposerOverlay()) return true;
+		if (activePseudoChannelSlug === 'explore') return true;
+		if (!activePseudoChannelSlug && activeThreadId) return true;
+		return false;
+	}
+
+	/** Focus the primary typing target for the active chat route (composer, explore search, or create overlay). */
+	function focusChatRoutePrimaryInput() {
+		if (chatThreadLoadFailed) return;
+		if (activePseudoChannelSlug === 'feed_doom') return;
+		if (shouldShowMobileSidebarFromLocation()) return;
+
+		if (activePseudoChannelSlug === 'explore') {
+			const searchInput = root.querySelector('[data-chat-explore-search-input]');
+			if (searchInput instanceof HTMLInputElement && !searchInput.disabled) {
+				const bar = root.querySelector('[data-chat-explore-search-bar]');
+				if (bar instanceof HTMLElement && bar.getAttribute('aria-hidden') !== 'true') {
+					focusChatPrimaryInputEl(searchInput);
+					return;
+				}
+			}
+			const bodyInput = root.querySelector('[data-chat-body-input]');
+			const composerForm = root.querySelector('[data-chat-composer]');
+			if (
+				bodyInput instanceof HTMLTextAreaElement &&
+				!bodyInput.disabled &&
+				composerForm instanceof HTMLElement &&
+				!composerForm.hidden &&
+				composerForm.dataset.chatComposerMode === 'explore'
+			) {
+				focusChatPrimaryInputEl(bodyInput);
+			}
+			return;
+		}
+
+		if (shouldShowChatCreateComposerOverlay()) {
+			const createComposerEl = root.querySelector('[data-chat-create-composer]');
+			const promptInput = root.querySelector('[data-create-composer-prompt]');
+			if (
+				createComposerEl instanceof HTMLElement &&
+				!createComposerEl.hidden &&
+				promptInput instanceof HTMLTextAreaElement &&
+				!promptInput.readOnly
+			) {
+				focusChatPrimaryInputEl(promptInput);
+				return;
+			}
+		}
+
+		if (!activePseudoChannelSlug && activeThreadId) {
+			const bodyInput = root.querySelector('[data-chat-body-input]');
+			const composerForm = root.querySelector('[data-chat-composer]');
+			if (
+				bodyInput instanceof HTMLTextAreaElement &&
+				!bodyInput.disabled &&
+				composerForm instanceof HTMLElement &&
+				!composerForm.hidden
+			) {
+				focusChatPrimaryInputEl(bodyInput);
+			}
+		}
+	}
 
 	function markThreadUiPending() {
 		clearChatComposerReplyTarget();
@@ -8517,7 +8641,11 @@ export async function initChatPage(root, options = {}) {
 		if (parsed.kind === 'doom_scroll') {
 			primeChatDoomPlaybackFromNavigationGesture();
 		}
+		setMobileSidebarMode(false);
+		url.hash = '';
+		markThreadUiPending();
 		history.pushState({ prsnChat: true }, '', url.pathname + url.search + url.hash);
+		syncChatSidebarPseudoStripActiveNow(url.pathname);
 		void openThreadForCurrentPath();
 	}
 
@@ -11541,6 +11669,16 @@ export async function initChatPage(root, options = {}) {
 		} finally {
 			syncChatBrowseViewBodyClass();
 			applyComposerState();
+			if (shouldShowChatCreateComposerOverlay()) {
+				setFeedOverlayCreateComposerVisible(true);
+			}
+			const isInitialRouteOpen = chatInitialRouteOpenPending;
+			if (isInitialRouteOpen) {
+				chatInitialRouteOpenPending = false;
+			}
+			if (!isInitialRouteOpen || shouldAutoFocusChatRoutePrimaryInput()) {
+				scheduleFocusChatRoutePrimaryInput({ initialLoad: isInitialRouteOpen });
+			}
 		}
 	}
 
@@ -13949,4 +14087,11 @@ export async function initChatPage(root, options = {}) {
 
 	setupChatSidebarClientNav();
 	await setupChatSidebarSectionAdds();
+
+	initCommandPalette({
+		getThreads: () => chatThreads || [],
+		getJoinedServers: () => chatJoinedServers || [],
+		getViewerId: () => chatViewerId,
+		navigateToPath: (href) => navigateWithinChatShell(href),
+	});
 }

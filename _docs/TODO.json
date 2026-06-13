@@ -22,5 +22,13 @@
     "impact": 49,
     "dependsOn": [],
     "starred": false
+  },
+  {
+    "name": "Chat command palette: mobile entry",
+    "description": "Add a search/jump button in the chat top bar to open the quick switcher on mobile (desktop uses Cmd/Ctrl+K). See _docs/PLAN_command_palette.md.",
+    "cost": 3,
+    "impact": 4,
+    "dependsOn": [],
+    "starred": false
   }
 ]
