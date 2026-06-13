@@ -1050,6 +1050,8 @@ export async function initChatPage(root, options = {}) {
 	let chatPendingImages = [];
 	/** Optimistic / failed send row (re-mounted after each loadMessages when still relevant). */
 	let optimisticSend = null;
+	/** Confirmed id while afterSendSuccess merges POST result (blocks duplicate realtime append). */
+	let settlingOwnSendMessageId = null;
 	/** @type {null | (() => void)} */
 	let chatViewportCleanup = null;
 	/** Debounced retries after focus (iOS keyboard animates; vv.height can lag). */
@@ -3600,6 +3602,16 @@ export async function initChatPage(root, options = {}) {
 		for (let i = startIdx; i < allMessages.length; i++) {
 			const nm = allMessages[i];
 			if (getChatCanvasMetaFromMessage(nm)) continue;
+			const mid = nm?.id != null ? Number(nm.id) : NaN;
+			if (Number.isFinite(mid) && mid > 0) {
+				const existing = messagesEl.querySelector(
+					`.connect-chat-msg[data-chat-message-id="${mid}"]`
+				);
+				if (existing) {
+					insertAfter = existing;
+					continue;
+				}
+			}
 			const row = createChatMessageRowElement(nm, i, allMessages, viewerId, rowFlags);
 			if (insertAfter) {
 				messagesEl.insertBefore(row, insertAfter.nextSibling);
@@ -3617,48 +3629,61 @@ export async function initChatPage(root, options = {}) {
 	}
 
 	async function afterSendSuccess(threadId, confirmedMessage = null) {
-		optimisticSend = null;
 		const messagesEl = root.querySelector('[data-chat-messages]');
-		removeOptimisticSendRows(messagesEl);
-
 		const msgForUi =
 			confirmedMessage &&
 			typeof confirmedMessage === 'object' &&
 			!getChatCanvasMetaFromMessage(confirmedMessage)
 				? confirmedMessage
 				: null;
+		const mid = msgForUi?.id != null ? Number(msgForUi.id) : NaN;
+		if (Number.isFinite(mid) && mid > 0) {
+			settlingOwnSendMessageId = mid;
+		}
 
-		if (msgForUi && messagesEl) {
-			const mid = Number(msgForUi.id);
-			const alreadyInCache = lastChatMessagesPayload.some((m) => Number(m.id) === mid);
-			const alreadyInDom = Boolean(
-				messagesEl.querySelector(`.connect-chat-msg[data-chat-message-id="${mid}"]`)
-			);
-			if ((!alreadyInCache || !alreadyInDom) && Number.isFinite(mid) && mid > 0) {
-				const nextPayload = alreadyInCache
-					? lastChatMessagesPayload
-					: [...lastChatMessagesPayload, msgForUi];
-				const startIdx = nextPayload.findIndex((m) => Number(m.id) === mid);
-				if (startIdx < 0) {
-					await loadMessages();
+		try {
+			optimisticSend = null;
+			removeOptimisticSendRows(messagesEl);
+
+			if (msgForUi && messagesEl && Number.isFinite(mid) && mid > 0) {
+				const alreadyInCache = lastChatMessagesPayload.some((m) => Number(m.id) === mid);
+				const alreadyInDom = Boolean(
+					messagesEl.querySelector(`.connect-chat-msg[data-chat-message-id="${mid}"]`)
+				);
+				if (alreadyInDom) {
+					if (!alreadyInCache) {
+						lastChatMessagesPayload = [...lastChatMessagesPayload, msgForUi];
+					}
 				} else {
-					const appended = appendChatMessagesToDom(messagesEl, nextPayload, startIdx);
-					if (appended > 0) {
-						if (!alreadyInCache) {
+					const nextPayload = alreadyInCache
+						? lastChatMessagesPayload
+						: [...lastChatMessagesPayload, msgForUi];
+					const startIdx = nextPayload.findIndex((m) => Number(m.id) === mid);
+					if (startIdx < 0) {
+						await loadMessages();
+					} else {
+						const appended = appendChatMessagesToDom(messagesEl, nextPayload, startIdx);
+						if (appended > 0) {
+							if (!alreadyInCache) {
+								lastChatMessagesPayload = nextPayload;
+							}
+							if (chatStickToBottom) {
+								scrollChatMessagesToEnd();
+							}
+						} else if (appended < 0) {
+							await loadMessages();
+						} else if (!alreadyInCache) {
 							lastChatMessagesPayload = nextPayload;
 						}
-						if (chatStickToBottom) {
-							scrollChatMessagesToEnd();
-						}
-					} else if (appended < 0) {
-						await loadMessages();
 					}
 				}
+			} else {
+				await loadMessages();
 			}
-		} else {
-			await loadMessages();
+			finishAfterSendSuccess(threadId);
+		} finally {
+			settlingOwnSendMessageId = null;
 		}
-		finishAfterSendSuccess(threadId);
 	}
 
 	async function resendOptimisticFromUi(tempId) {
@@ -9562,6 +9587,15 @@ export async function initChatPage(root, options = {}) {
 	}
 
 	function shouldSkipSelfMessageDuringOptimisticSend(m, threadId) {
+		const mid = m?.id != null ? Number(m.id) : NaN;
+		if (
+			Number.isFinite(settlingOwnSendMessageId) &&
+			settlingOwnSendMessageId > 0 &&
+			Number.isFinite(mid) &&
+			mid === settlingOwnSendMessageId
+		) {
+			return true;
+		}
 		if (!optimisticSend || optimisticSend.status !== 'pending') return false;
 		if (Number(optimisticSend.threadId) !== Number(threadId)) return false;
 		const vid = Number(chatViewerId);
