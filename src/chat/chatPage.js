@@ -1057,6 +1057,15 @@ export async function initChatPage(root, options = {}) {
 	let activeReactionPicker = null;
 	let lastChatMessagesPayload = [];
 	let chatMessagesSyncInFlight = false;
+	/** Real thread/DM: older pages loaded by scrolling up (see `loadOlderThreadMessages`). */
+	let threadMessagesHasMore = false;
+	let threadMessagesNextBefore = /** @type {string | null} */ (null);
+	let threadMessagesOlderBusy = false;
+	/** @type {IntersectionObserver | null} */
+	let threadMessagesLoadMoreObserver = null;
+	/** @type {null | (() => void)} */
+	let threadMessagesLoadMoreScrollCleanup = null;
+	const THREAD_MESSAGES_PAGE_SIZE = 50;
 	let chatComposerReferencedMessageId = null;
 	let activeMessageEditId = null;
 	let activeMessageEditSaving = false;
@@ -6758,6 +6767,399 @@ export async function initChatPage(root, options = {}) {
 		pseudoColumnPager = null;
 	}
 
+	function disconnectThreadMessagesLoadMoreObserver() {
+		if (threadMessagesLoadMoreObserver) {
+			try {
+				threadMessagesLoadMoreObserver.disconnect();
+			} catch {
+				// ignore
+			}
+			threadMessagesLoadMoreObserver = null;
+		}
+		if (typeof threadMessagesLoadMoreScrollCleanup === 'function') {
+			threadMessagesLoadMoreScrollCleanup();
+			threadMessagesLoadMoreScrollCleanup = null;
+		}
+	}
+
+	function teardownThreadMessagesLoadMore() {
+		threadMessagesHasMore = false;
+		threadMessagesNextBefore = null;
+		threadMessagesOlderBusy = false;
+		disconnectThreadMessagesLoadMoreObserver();
+	}
+
+	function threadMessagesLoadMarginPx(messagesEl) {
+		let margin = 1200;
+		if (messagesEl instanceof HTMLElement) {
+			const paneH = feedChannelMessagesUseDocumentScroll(messagesEl)
+				? feedChannelVisualViewportHeightPx()
+				: messagesEl.clientHeight;
+			if (paneH > 0) margin = Math.max(margin, Math.round(paneH * 0.75));
+		}
+		return margin;
+	}
+
+	function isThreadLoadSentinelNearTop(sentinel, messagesEl) {
+		if (!(sentinel instanceof HTMLElement) || !sentinel.isConnected) return false;
+		if (!(messagesEl instanceof HTMLElement)) return false;
+		const margin = threadMessagesLoadMarginPx(messagesEl);
+		const scrollRoot = getFeedChannelLoadScrollRoot(messagesEl);
+		const rect = sentinel.getBoundingClientRect();
+		return rect.bottom >= scrollRoot.top - margin;
+	}
+
+	function ensureThreadMessagesLoadSentinel(messagesEl) {
+		let sentinel = messagesEl.querySelector('[data-chat-thread-load-sentinel]');
+		if (sentinel instanceof HTMLElement) return sentinel;
+		sentinel = document.createElement('div');
+		sentinel.dataset.chatThreadLoadSentinel = '1';
+		sentinel.className = 'chat-page-thread-load-sentinel';
+		sentinel.setAttribute('aria-hidden', 'true');
+		sentinel.style.cssText = 'height:1px;margin:0;padding:0;flex-shrink:0;pointer-events:none';
+		messagesEl.insertBefore(sentinel, messagesEl.firstChild);
+		return sentinel;
+	}
+
+	function captureThreadScrollAnchor(messagesEl, anchorEl) {
+		const useViewport = feedChannelMessagesUseDocumentScroll(messagesEl);
+		const scrollEl = useViewport ? getFeedChannelScrollContainer(messagesEl) : null;
+		const snap = useViewport
+			? {
+					kind: 'viewport',
+					scrollY:
+						scrollEl instanceof Element
+							? scrollEl.scrollTop
+							: window.scrollY,
+					docHeight: document.documentElement.scrollHeight,
+				}
+			: {
+					kind: 'element',
+					scrollTop: messagesEl.scrollTop,
+					scrollHeight: messagesEl.scrollHeight,
+				};
+		const scrollRoot = getFeedChannelLoadScrollRoot(messagesEl);
+		let anchor = null;
+		let offset = 0;
+		const rows = messagesEl.querySelectorAll('.connect-chat-msg');
+		for (let i = 0; i < rows.length; i += 1) {
+			const row = rows[i];
+			if (!(row instanceof Element)) continue;
+			const r = row.getBoundingClientRect();
+			if (r.bottom > scrollRoot.top + 4) {
+				anchor = row;
+				offset = r.top - scrollRoot.top;
+				break;
+			}
+		}
+		if (!anchor && anchorEl instanceof Element && anchorEl.isConnected) {
+			anchor = anchorEl;
+			offset = anchor.getBoundingClientRect().top - scrollRoot.top;
+		}
+		if (!(anchor instanceof Element)) {
+			return { useViewport, anchorMessageId: null, offset: 0, snap };
+		}
+		const anchorMessageId = anchor.getAttribute('data-chat-message-id');
+		return { useViewport, anchorMessageId, offset, snap };
+	}
+
+	function resolveThreadScrollAnchorEl(messagesEl, anchorMessageId) {
+		if (typeof anchorMessageId === 'string' && anchorMessageId.trim()) {
+			const byId = messagesEl.querySelector(
+				`.connect-chat-msg[data-chat-message-id="${anchorMessageId.trim()}"]`
+			);
+			if (byId instanceof Element && byId.isConnected) return byId;
+		}
+		const fallback = messagesEl.querySelector('.connect-chat-msg');
+		return fallback instanceof Element ? fallback : null;
+	}
+
+	function restoreThreadScrollFromSnap(messagesEl, snap) {
+		if (!snap) return;
+		if (snap.kind === 'viewport') {
+			const delta = document.documentElement.scrollHeight - snap.docHeight;
+			const scrollEl = getFeedChannelScrollContainer(messagesEl);
+			const targetTop = Math.max(0, snap.scrollY + delta);
+			if (scrollEl instanceof Element) {
+				scrollEl.scrollTop = targetTop;
+			} else {
+				window.scrollTo(0, targetTop);
+			}
+			return;
+		}
+		if (messagesEl instanceof HTMLElement) {
+			messagesEl.scrollTop = snap.scrollTop + (messagesEl.scrollHeight - snap.scrollHeight);
+		}
+	}
+
+	function restoreThreadScrollAnchor(messagesEl, captured, { anchorOnly = false } = {}) {
+		if (!captured) return;
+		if (!anchorOnly && captured.snap) {
+			restoreThreadScrollFromSnap(messagesEl, captured.snap);
+		}
+		if (captured.anchorMessageId == null) return;
+		const anchor = resolveThreadScrollAnchorEl(messagesEl, captured.anchorMessageId);
+		if (!(anchor instanceof Element)) return;
+		const scrollRoot = getFeedChannelLoadScrollRoot(messagesEl);
+		const delta = anchor.getBoundingClientRect().top - scrollRoot.top - captured.offset;
+		if (!Number.isFinite(delta) || Math.abs(delta) <= 0.25) return;
+		if (captured.useViewport) {
+			const scrollEl = getFeedChannelScrollContainer(messagesEl);
+			if (scrollEl instanceof Element) {
+				scrollEl.scrollTop += delta;
+			} else {
+				window.scrollBy(0, delta);
+			}
+		} else if (messagesEl instanceof HTMLElement) {
+			messagesEl.scrollTop += delta;
+		}
+	}
+
+	/** Re-apply anchor scroll while prepended rows hydrate (embeds/images/async layout). */
+	function stabilizeThreadScrollAfterPrepend(messagesEl, captured, prependedRows = []) {
+		if (!captured) return;
+		const applySync = () => restoreThreadScrollAnchor(messagesEl, captured);
+		const applyAsync = () => restoreThreadScrollAnchor(messagesEl, captured, { anchorOnly: true });
+		applySync();
+		void messagesEl.offsetHeight;
+		requestAnimationFrame(() => {
+			applySync();
+			requestAnimationFrame(applySync);
+		});
+		if (typeof ResizeObserver === 'undefined') return;
+		const anchor = captured.anchorMessageId
+			? resolveThreadScrollAnchorEl(messagesEl, captured.anchorMessageId)
+			: null;
+		let ro = null;
+		let stopTimer = null;
+		const cleanup = () => {
+			if (ro) {
+				try {
+					ro.disconnect();
+				} catch {
+					// ignore
+				}
+				ro = null;
+			}
+			if (stopTimer != null) {
+				clearTimeout(stopTimer);
+				stopTimer = null;
+			}
+		};
+		ro = new ResizeObserver(() => {
+			if (!messagesEl.isConnected) {
+				cleanup();
+				return;
+			}
+			applyAsync();
+		});
+		const observe = (el) => {
+			if (el instanceof Element && el.isConnected) ro.observe(el);
+		};
+		if (anchor instanceof Element) observe(anchor);
+		for (const row of prependedRows) observe(row);
+		for (let sib = anchor?.previousElementSibling; sib; sib = sib.previousElementSibling) {
+			if (sib instanceof Element && sib.classList.contains('connect-chat-msg')) {
+				observe(sib);
+			}
+		}
+		stopTimer = window.setTimeout(cleanup, 6000);
+	}
+
+	function syncBoundaryGroupContinueAfterPrepend(merged, prependCount, messagesEl) {
+		if (prependCount <= 0 || prependCount >= merged.length) return;
+		const boundaryMsg = merged[prependCount];
+		const boundaryId = Number(boundaryMsg?.id);
+		if (!Number.isFinite(boundaryId) || boundaryId <= 0) return;
+		const row = messagesEl.querySelector(`.connect-chat-msg[data-chat-message-id="${boundaryId}"]`);
+		if (!(row instanceof HTMLElement)) return;
+		const prev = merged[prependCount - 1];
+		const shouldContinue = isChatMessageGroupContinue(prev, boundaryMsg);
+		const currentlyContinue = row.classList.contains('is-group-continue');
+		if (currentlyContinue === shouldContinue) return;
+		replaceChatMessageRowFromPayload(boundaryId);
+	}
+
+	function setupThreadMessagesLoadMoreScrollFallback(sentinel, messagesEl) {
+		if (!(sentinel instanceof HTMLElement) || !(messagesEl instanceof HTMLElement)) return;
+		let raf = 0;
+		const check = () => {
+			raf = 0;
+			if (!sentinel.isConnected) return;
+			if (
+				isThreadLoadSentinelNearTop(sentinel, messagesEl) &&
+				threadMessagesHasMore &&
+				!threadMessagesOlderBusy &&
+				!loadingThreadMessages &&
+				!activePseudoChannelSlug
+			) {
+				void loadOlderThreadMessages();
+			}
+		};
+		const schedule = () => {
+			if (raf) return;
+			raf = window.requestAnimationFrame(check);
+		};
+		messagesEl.addEventListener('scroll', schedule, { passive: true });
+		const docScroll = feedChannelMessagesUseDocumentScroll(messagesEl);
+		const scrollContainer = docScroll ? getFeedChannelScrollContainer(messagesEl) : null;
+		if (docScroll) {
+			window.addEventListener('scroll', schedule, { passive: true });
+			if (scrollContainer instanceof Element) {
+				scrollContainer.addEventListener('scroll', schedule, { passive: true });
+			}
+			if (window.visualViewport) {
+				window.visualViewport.addEventListener('resize', schedule);
+				window.visualViewport.addEventListener('scroll', schedule);
+			}
+		}
+		window.addEventListener('resize', schedule);
+		threadMessagesLoadMoreScrollCleanup = () => {
+			if (raf) {
+				window.cancelAnimationFrame(raf);
+				raf = 0;
+			}
+			messagesEl.removeEventListener('scroll', schedule);
+			window.removeEventListener('scroll', schedule);
+			window.removeEventListener('resize', schedule);
+			if (scrollContainer instanceof Element) {
+				scrollContainer.removeEventListener('scroll', schedule);
+			}
+			if (window.visualViewport) {
+				window.visualViewport.removeEventListener('resize', schedule);
+				window.visualViewport.removeEventListener('scroll', schedule);
+			}
+		};
+		schedule();
+	}
+
+	function setupThreadMessagesLoadMoreObserver(messagesEl) {
+		disconnectThreadMessagesLoadMoreObserver();
+		if (!threadMessagesHasMore || !threadMessagesNextBefore) return;
+		const sentinel = ensureThreadMessagesLoadSentinel(messagesEl);
+		const marginPx = String(threadMessagesLoadMarginPx(messagesEl));
+		threadMessagesLoadMoreObserver = new IntersectionObserver(
+			(entries) => {
+				for (const e of entries) {
+					if (
+						e.target === sentinel &&
+						e.isIntersecting &&
+						threadMessagesHasMore &&
+						!threadMessagesOlderBusy &&
+						!loadingThreadMessages &&
+						!activePseudoChannelSlug
+					) {
+						void loadOlderThreadMessages();
+					}
+				}
+			},
+			{
+				root: getFeedChannelIntersectionRoot(messagesEl),
+				rootMargin: `${marginPx}px 0px 0px 0px`,
+				threshold: 0,
+			}
+		);
+		threadMessagesLoadMoreObserver.observe(sentinel);
+		setupThreadMessagesLoadMoreScrollFallback(sentinel, messagesEl);
+	}
+
+	async function loadOlderThreadMessages() {
+		const threadId = activeThreadId;
+		if (
+			!threadId ||
+			activePseudoChannelSlug ||
+			threadMessagesOlderBusy ||
+			!threadMessagesHasMore ||
+			!threadMessagesNextBefore ||
+			loadingThreadMessages
+		) {
+			return;
+		}
+		const messagesEl = root.querySelector('[data-chat-messages]');
+		if (!(messagesEl instanceof HTMLElement)) return;
+		const col = lastChatMessagesPayload;
+		if (!Array.isArray(col) || col.length === 0) return;
+
+		threadMessagesOlderBusy = true;
+		chatStickToBottom = false;
+		const sentinel = messagesEl.querySelector('[data-chat-thread-load-sentinel]');
+		try {
+			const page = await fetchThreadMessagesPage(threadId, {
+				before: threadMessagesNextBefore,
+				limit: THREAD_MESSAGES_PAGE_SIZE,
+			});
+			if (Number(activeThreadId) !== Number(threadId) || activePseudoChannelSlug) return;
+
+			threadMessagesHasMore = page.hasMore;
+			threadMessagesNextBefore = page.nextBefore;
+
+			const older = Array.isArray(page.messages) ? page.messages : [];
+			if (older.length === 0) {
+				if (!threadMessagesHasMore) {
+					sentinel?.remove();
+				}
+				return;
+			}
+
+			const existingIds = new Set(
+				col.map((m) => Number(m.id)).filter((id) => Number.isFinite(id) && id > 0)
+			);
+			const filtered = older.filter((m) => {
+				const id = Number(m?.id);
+				return Number.isFinite(id) && id > 0 && !existingIds.has(id);
+			});
+			if (filtered.length === 0) {
+				if (!threadMessagesHasMore) {
+					sentinel?.remove();
+				}
+				return;
+			}
+
+			const merged = [...filtered, ...col];
+			lastChatMessagesPayload = merged;
+
+			const viewerId = Number.isFinite(Number(chatViewerId)) ? Number(chatViewerId) : null;
+			const rowFlags = {
+				effectiveUnread: false,
+				vStart: -1,
+				vEnd: -1,
+				showAdminDelete: chatViewerIsAdmin && !activePseudoChannelSlug,
+				showHoverBar: !activePseudoChannelSlug,
+			};
+			const insertBefore = messagesEl.querySelector('.connect-chat-msg');
+			// Capture scroll immediately before prepend — not before fetch (user may scroll while waiting).
+			const scrollSnap = captureThreadScrollAnchor(
+				messagesEl,
+				insertBefore instanceof Element ? insertBefore : null
+			);
+			const appendedRows = [];
+			for (let i = 0; i < filtered.length; i++) {
+				const row = createChatMessageRowElement(filtered[i], i, merged, viewerId, rowFlags);
+				if (insertBefore) {
+					messagesEl.insertBefore(row, insertBefore);
+				} else if (sentinel && sentinel.parentNode === messagesEl) {
+					messagesEl.insertBefore(row, sentinel.nextSibling);
+				} else {
+					messagesEl.prepend(row);
+				}
+				appendedRows.push(row);
+			}
+			messagesEl.querySelector('.chat-page-empty-hint')?.remove();
+			syncBoundaryGroupContinueAfterPrepend(merged, filtered.length, messagesEl);
+			decorateAppendedChatRows(messagesEl, appendedRows);
+			stabilizeThreadScrollAfterPrepend(messagesEl, scrollSnap, appendedRows);
+
+			if (!threadMessagesHasMore) {
+				sentinel?.remove();
+				disconnectThreadMessagesLoadMoreObserver();
+			}
+		} catch (err) {
+			console.error('[Chat page] thread load more:', err);
+		} finally {
+			threadMessagesOlderBusy = false;
+		}
+	}
+
 	function setupCommentsChannelLoadMoreObserver(messagesEl) {
 		disconnectCommentsChannelLoadObserver();
 		const sentinel = messagesEl.querySelector('[data-chat-comments-load-sentinel]');
@@ -6849,6 +7251,7 @@ export async function initChatPage(root, options = {}) {
 		teardownCommentsChannelLoadMore();
 		teardownFeedChannelLoadMore();
 		teardownExploreChannelLoadMore();
+		teardownThreadMessagesLoadMore();
 		messagesEl.setAttribute('aria-busy', 'true');
 		try {
 			pseudoColumnPager = createPseudoColumnPager({
@@ -7784,6 +8187,7 @@ export async function initChatPage(root, options = {}) {
 		teardownCommentsChannelLoadMore();
 		teardownFeedChannelLoadMore();
 		teardownExploreChannelLoadMore();
+		teardownThreadMessagesLoadMore();
 		messagesEl.setAttribute('aria-busy', 'true');
 		try {
 			if (isStaleChatPane(paneEpoch)) return;
@@ -8615,6 +9019,7 @@ export async function initChatPage(root, options = {}) {
 		teardownCommentsChannelLoadMore();
 		teardownFeedChannelLoadMore();
 		teardownExploreChannelLoadMore();
+		teardownThreadMessagesLoadMore();
 		messagesEl.setAttribute('aria-busy', 'true');
 		try {
 			if (isStaleChatPane(paneEpoch)) return;
@@ -8856,6 +9261,7 @@ export async function initChatPage(root, options = {}) {
 		teardownCommentsChannelLoadMore();
 		teardownFeedChannelLoadMore();
 		teardownExploreChannelLoadMore();
+		teardownThreadMessagesLoadMore();
 		messagesEl.setAttribute('aria-busy', 'true');
 		try {
 			if (isStaleChatPane(paneEpoch)) return;
@@ -9163,42 +9569,66 @@ export async function initChatPage(root, options = {}) {
 		return Number.isFinite(vid) && Number.isFinite(sid) && sid === vid;
 	}
 
-	async function fetchActiveThreadMessagesForUi(threadId) {
+	async function decryptThreadMessagesForUi(threadId, messages) {
+		const messagesForUiRaw = (Array.isArray(messages) ? messages : []).filter(
+			(m) => !getChatCanvasMetaFromMessage(m)
+		);
+		const threadMetaForPriv = chatPrivateThreadMetaById(threadId);
+		if (!isPrivateChannelThreadMeta(threadMetaForPriv)) {
+			return messagesForUiRaw;
+		}
+		const k = await fetchPrivateThreadKey(threadId);
+		if (!k) {
+			throw new Error('Private channel key missing. Re-open using invite link.');
+		}
+		const messagesForUi = [];
+		for (const m of messagesForUiRaw) {
+			if (m?.private_decrypted === true) {
+				messagesForUi.push(m);
+				continue;
+			}
+			const body = String(m?.body || '');
+			if (body.startsWith(CHAT_PRIVATE_MSG_PREFIX)) {
+				const dec = await decryptPrivateText(body.slice(CHAT_PRIVATE_MSG_PREFIX.length), k);
+				messagesForUi.push({ ...m, body: dec != null ? dec : '[Encrypted message]' });
+			} else {
+				messagesForUi.push({ ...m, body: '[Encrypted message]' });
+			}
+		}
+		return messagesForUi;
+	}
+
+	async function fetchThreadMessagesPage(threadId, opts = {}) {
 		if (chatSimulateConversationLoadFail()) {
 			throw new Error('Failed to fetch');
 		}
-		const res = await fetch(`/api/chat/threads/${threadId}/messages?limit=50`, {
-			credentials: 'include'
+		const limit = Number(opts.limit) > 0 ? Number(opts.limit) : THREAD_MESSAGES_PAGE_SIZE;
+		const qs = new URLSearchParams();
+		qs.set('limit', String(limit));
+		if (typeof opts.before === 'string' && opts.before.trim()) {
+			qs.set('before', opts.before.trim());
+		}
+		const res = await fetch(`/api/chat/threads/${threadId}/messages?${qs.toString()}`, {
+			credentials: 'include',
 		});
 		const data = await res.json().catch(() => ({}));
 		if (!res.ok) {
 			throw new Error(data.message || data.error || 'Failed to load messages');
 		}
 		const messages = Array.isArray(data.messages) ? data.messages : [];
-		const messagesForUiRaw = messages.filter((m) => !getChatCanvasMetaFromMessage(m));
-		const threadMetaForPriv = chatPrivateThreadMetaById(threadId);
-		let messagesForUi = messagesForUiRaw;
-		if (isPrivateChannelThreadMeta(threadMetaForPriv)) {
-			const k = await fetchPrivateThreadKey(threadId);
-			if (!k) {
-				throw new Error('Private channel key missing. Re-open using invite link.');
-			}
-			messagesForUi = [];
-			for (const m of messagesForUiRaw) {
-				if (m?.private_decrypted === true) {
-					messagesForUi.push(m);
-					continue;
-				}
-				const body = String(m?.body || '');
-				if (body.startsWith(CHAT_PRIVATE_MSG_PREFIX)) {
-					const dec = await decryptPrivateText(body.slice(CHAT_PRIVATE_MSG_PREFIX.length), k);
-					messagesForUi.push({ ...m, body: dec != null ? dec : '[Encrypted message]' });
-				} else {
-					messagesForUi.push({ ...m, body: '[Encrypted message]' });
-				}
-			}
-		}
-		return messagesForUi;
+		const messagesForUi = await decryptThreadMessagesForUi(threadId, messages);
+		const nextBefore =
+			typeof data.nextBefore === 'string' && data.nextBefore.trim() ? data.nextBefore.trim() : null;
+		return {
+			messages: messagesForUi,
+			hasMore: data.hasMore === true,
+			nextBefore,
+		};
+	}
+
+	async function fetchActiveThreadMessagesForUi(threadId) {
+		const page = await fetchThreadMessagesPage(threadId, { limit: THREAD_MESSAGES_PAGE_SIZE });
+		return page.messages;
 	}
 
 	function applyChatMessagesIncremental(nextMessages, threadId) {
@@ -9221,6 +9651,10 @@ export async function initChatPage(root, options = {}) {
 			return { ok: true, changed: false };
 		}
 		const nextMinId = Math.min(...nextNumericIds);
+		const olderHistory = prev.filter((m) => {
+			const id = Number(m.id);
+			return Number.isFinite(id) && id > 0 && id < nextMinId;
+		});
 		const prevById = new Map(prev.map((m) => [Number(m.id), m]));
 		const viewerId = Number(chatViewerId);
 		let changed = false;
@@ -9278,17 +9712,18 @@ export async function initChatPage(root, options = {}) {
 			}
 		}
 
-		let mergedPayload = nextMessages;
+		let mergedPayload = [...olderHistory, ...nextMessages];
 		if (
 			optimisticSend &&
 			optimisticSend.status === 'pending' &&
 			Number(optimisticSend.threadId) === Number(threadId)
 		) {
-			mergedPayload = nextMessages.filter((m) => {
+			const filteredLatest = nextMessages.filter((m) => {
 				const id = Number(m.id);
 				if (prevIds.has(id)) return true;
 				return !shouldSkipSelfMessageDuringOptimisticSend(m, threadId);
 			});
+			mergedPayload = [...olderHistory, ...filteredLatest];
 		}
 		lastChatMessagesPayload = mergedPayload;
 
@@ -9344,6 +9779,7 @@ export async function initChatPage(root, options = {}) {
 			lastMarkReadSentId = null;
 		}
 		enterThreadMessagesLoad();
+		teardownThreadMessagesLoadMore();
 		messagesEl.setAttribute('aria-busy', 'true');
 		const prevVideoStates = captureChatVideoPlaybackStates(messagesEl);
 
@@ -9351,8 +9787,11 @@ export async function initChatPage(root, options = {}) {
 		try {
 			await refreshChatCanvasesList();
 			if (isStaleChatPane(paneEpoch)) return;
-			const messagesForUi = await fetchActiveThreadMessagesForUi(threadId);
+			const page = await fetchThreadMessagesPage(threadId, { limit: THREAD_MESSAGES_PAGE_SIZE });
 			if (isStaleChatPane(paneEpoch)) return;
+			threadMessagesHasMore = page.hasMore;
+			threadMessagesNextBefore = page.nextBefore;
+			const messagesForUi = page.messages;
 			lastChatMessagesPayload = messagesForUi;
 			teardownChatCreationsPseudoBulkHostIfPresent(messagesEl);
 			teardownLatestMessageReadObserver();
@@ -9415,6 +9854,9 @@ export async function initChatPage(root, options = {}) {
 			}
 			restoreChatVideoPlaybackStates(messagesEl, prevVideoStates);
 			setupReactionTooltipTap(messagesEl);
+			if (threadMessagesHasMore && threadMessagesNextBefore) {
+				setupThreadMessagesLoadMoreObserver(messagesEl);
+			}
 			// TEMP: always land at latest message on load; disable unread jump behavior for now.
 			scrollChatMessagesToEnd('initial_load');
 			shouldAutoMarkRead = !isStaleChatPane(paneEpoch);
@@ -10659,6 +11101,7 @@ export async function initChatPage(root, options = {}) {
 		teardownCommentsChannelLoadMore();
 		teardownFeedChannelLoadMore();
 		teardownExploreChannelLoadMore();
+		teardownThreadMessagesLoadMore();
 
 		if (messagesEl) {
 			stopChatCreationsPseudoChannelPoll();
@@ -11411,6 +11854,7 @@ export async function initChatPage(root, options = {}) {
 		teardownCommentsChannelLoadMore();
 		teardownFeedChannelLoadMore();
 		teardownExploreChannelLoadMore();
+		teardownThreadMessagesLoadMore();
 		tearDownVisibilityResync();
 		tearDownRoomBroadcast();
 		closeReactionPicker();
