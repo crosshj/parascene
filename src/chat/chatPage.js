@@ -216,6 +216,7 @@ import * as challengesChannelModule from './challengesChannel.js';
 		} catch {
 			return;
 		}
+		if (isChatDoomScrollHref(pathOnly)) return;
 		if (shouldSkipCreationDetailPath(pathOnly)) return;
 		const creationId = parseCreationNavigationTargetId(hrefAttr);
 		if (!creationId) return;
@@ -289,6 +290,22 @@ function isDoomEligibleFeedVideoItem(item) {
 	if (isFeedRowVideoCreation(item)) return true;
 	const mt = typeof item.media_type === 'string' ? item.media_type.trim().toLowerCase() : '';
 	return mt !== 'image';
+}
+
+function isChatDoomScrollHref(hrefOrPathname) {
+	const raw = String(hrefOrPathname || '').trim();
+	if (!raw) return false;
+	let pathOnly = raw;
+	try {
+		if (raw.startsWith('/') && !raw.startsWith('//')) {
+			pathOnly = raw.split('?')[0].split('#')[0];
+		} else {
+			pathOnly = new URL(raw, window.location.href).pathname;
+		}
+	} catch {
+		pathOnly = raw.split('?')[0].split('#')[0];
+	}
+	return /^\/chat\/c\/feed\/doom\/\d+/.test(String(pathOnly || '').replace(/\/+$/, ''));
 }
 
 function shouldUseAppMobileHeaderForChatPath(pathname) {
@@ -8764,7 +8781,11 @@ export async function initChatPage(root, options = {}) {
 	}
 
 	function performCreationNavigationForChat(href, ev) {
-		const creationId = parseCreationNavigationTargetId(href);
+		if (isChatDoomScrollHref(href) && isChatPageMobileLayout()) {
+			navigateWithinChatShell(href, ev);
+			return;
+		}
+		const creationId = parseCreationIdFromHref(href);
 		if (creationId && shouldUseCreationDetailOverlay()) {
 			navigateToCreationDetailFromSpa(`/creations/${creationId}`, ev);
 			return;
@@ -8796,6 +8817,7 @@ export async function initChatPage(root, options = {}) {
 		if (laneSlug === 'feed') {
 			return {
 				...base,
+				resolveCreationCardHref: resolveFeedLaneVideoToDoomHref,
 				performCreationNavigation: performCreationNavigationForChat
 			};
 		}
