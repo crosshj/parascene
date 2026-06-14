@@ -25,8 +25,12 @@ let setupFeedCardGroupVideoPlaylist;
 let getFeedGroupVideoPlayer;
 /** @type {typeof import('../../shared/feedCardBuild.js').createFeedItemCard} */
 let createFeedItemCard;
+/** @type {typeof import('../../shared/creationCard.js').creationTitleDisplay} */
+let creationTitleDisplay;
 /** @type {typeof import('../../shared/safeMediaPlay.js').safeMediaPlay} */
 let safeMediaPlay;
+/** @type {typeof import('../../shared/creationDetailOverlay.js').navigateToCreationDetailFromSpa} */
+let navigateToCreationDetailFromSpa;
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -89,10 +93,25 @@ async function loadDeps() {
 		getFeedGroupVideoPlayer = feedCardBuildMod.getFeedGroupVideoPlayer;
 		createFeedItemCard = feedCardBuildMod.createFeedItemCard;
 
+		const creationCardMod = await import(`../../shared/creationCard.js${qs}`);
+		creationTitleDisplay = creationCardMod.creationTitleDisplay;
+
 		const safeMediaPlayMod = await import(`../../shared/safeMediaPlay.js${qs}`);
 		safeMediaPlay = safeMediaPlayMod.safeMediaPlay;
+
+		const overlayMod = await import(`../../shared/creationDetailOverlay.js${qs}`);
+		navigateToCreationDetailFromSpa = overlayMod.navigateToCreationDetailFromSpa;
 	})();
 	return _depsPromise;
+}
+
+function navigateToCreation(href, ev) {
+	if (typeof navigateToCreationDetailFromSpa === 'function') {
+		navigateToCreationDetailFromSpa(href, ev);
+		return;
+	}
+	if (ev && typeof ev.preventDefault === 'function') ev.preventDefault();
+	window.location.href = href;
 }
 
 const html = String.raw;
@@ -282,7 +301,8 @@ class AppRouteFeed extends HTMLElement {
 		}
 		if (item.editorial_pin === true && typeof createFeedItemCard === "function") {
 			return createFeedItemCard(item, itemIndex, {
-				setupFeedVideo: (el) => this.setupFeedVideoAutoplay(el)
+				setupFeedVideo: (el) => this.setupFeedVideoAutoplay(el),
+				performCreationNavigation: navigateToCreation
 			});
 		}
 
@@ -305,7 +325,9 @@ class AppRouteFeed extends HTMLElement {
 		const colorSeed = authorUserName || emailPrefix || String(authorUserId || '') || displayName;
 		const avatarColor = getAvatarColor(colorSeed);
 		const relativeTime = formatRelativeTime(item.created_at) || "recently";
-		const title = item.title || "";
+		const { text: title, untitled: titleUntitled } = typeof creationTitleDisplay === 'function'
+			? creationTitleDisplay(item)
+			: { text: item.title || '', untitled: false };
 		const likeCount = item.like_count ?? 0;
 		const likesText = likeCount === 1 ? "like" : "likes";
 		const profileHref = buildProfilePath({ userName: authorUserName, userId: authorUserId });
@@ -349,7 +371,7 @@ class AppRouteFeed extends HTMLElement {
           </div>
         `}
         <div class="feed-card-content">
-          <div class="feed-card-title">${title}</div>
+          <div class="feed-card-title${titleUntitled ? ' feed-card-title--untitled' : ''}">${title}</div>
           <div class="feed-card-metadata" title="${formatDateTime(item.created_at)}">
             ${profileHref
 				? html`<a class="user-link" href="${profileHref}" data-profile-link>${isFounder ? html`<span class="founder-name">${displayName}</span> <span class="founder-name">@${handle}</span>` : html`${displayName} @${handle}`}</a>`
@@ -416,7 +438,7 @@ class AppRouteFeed extends HTMLElement {
 			commentButton.addEventListener('click', (e) => {
 				e.preventDefault();
 				e.stopPropagation();
-				window.location.href = `/creations/${item.created_image_id}#comments`;
+				navigateToCreation(`/creations/${item.created_image_id}#comments`, e);
 			});
 		}
 
@@ -425,7 +447,7 @@ class AppRouteFeed extends HTMLElement {
 			detailsButton.addEventListener('click', (e) => {
 				e.preventDefault();
 				e.stopPropagation();
-				window.location.href = `/creations/${item.created_image_id}`;
+				navigateToCreation(`/creations/${item.created_image_id}`, e);
 			});
 		}
 
@@ -571,7 +593,7 @@ class AppRouteFeed extends HTMLElement {
 				if (actionsRow && actionsRow.contains(e.target)) {
 					return;
 				}
-				window.location.href = `/creations/${item.created_image_id}`;
+				navigateToCreation(`/creations/${item.created_image_id}`);
 			});
 
 			// Prevent actions row from triggering card click

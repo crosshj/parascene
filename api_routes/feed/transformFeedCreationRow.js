@@ -39,6 +39,7 @@ export function transformFeedCreationRow(item) {
 	return {
 		id: item.id,
 		title: item.title,
+		published: item.published === false || item.published === 0 ? false : true,
 		summary: item.summary,
 		author: item.author,
 		author_user_name: item.author_user_name ?? null,

@@ -43,6 +43,7 @@ import {
 	groupCreationBadgeHtml,
 	resolveGroupCoverDisplayUrl
 } from './creationGroupMedia.js';
+import { creationTitleDisplay } from './creationCard.js';
 
 const { buildBlogPostPublicPath, BLOG_CAMPAIGN_INTERNAL } = blogCampaignPathMod;
 const { formatDateTime, formatRelativeTime } = datetimeMod;
@@ -1330,7 +1331,7 @@ function buildFeedCreationCard(
 	const colorSeed = authorUserName || emailPrefix || String(authorUserId || '') || displayName;
 	const avatarColor = getAvatarColor(colorSeed);
 	const relativeTime = formatRelativeTime(item.created_at) || "recently";
-	const title = item.title || "";
+	const { text: title, untitled: titleUntitled } = creationTitleDisplay(item);
 	const profileHref = buildProfilePath({ userName: authorUserName, userId: authorUserId });
 	const isFounder = item.author_plan === "founder";
 	const avatarContent = avatarUrl ? html`<img src="${avatarUrl}" alt="">` : avatarInitial;
@@ -1367,7 +1368,7 @@ function buildFeedCreationCard(
           </div>
         `}
         <div class="feed-card-content">
-          <div class="feed-card-title">${title}</div>
+          <div class="feed-card-title${titleUntitled ? ' feed-card-title--untitled' : ''}">${title}</div>
           <div class="feed-card-metadata" title="${formatDateTime(item.created_at)}">
             ${profileHref
 			? html`<a class="user-link" href="${profileHref}" data-profile-link>${isFounder ? html`<span class="founder-name">${displayName}</span> <span class="founder-name">@${handle}</span>` : html`${displayName} @${handle}`}</a>`
@@ -1435,7 +1436,12 @@ function buildFeedCreationCard(
 		commentButton.addEventListener('click', (e) => {
 			e.preventDefault();
 			e.stopPropagation();
-			window.location.href = `/creations/${item.created_image_id}#comments`;
+			const href = `/creations/${item.created_image_id}#comments`;
+			if (typeof performCreationNavigation === 'function') {
+				performCreationNavigation(href, e);
+			} else {
+				window.location.href = href;
+			}
 		});
 	}
 
@@ -1444,7 +1450,12 @@ function buildFeedCreationCard(
 		detailsButton.addEventListener('click', (e) => {
 			e.preventDefault();
 			e.stopPropagation();
-			window.location.href = `/creations/${item.created_image_id}`;
+			const href = `/creations/${item.created_image_id}`;
+			if (typeof performCreationNavigation === 'function') {
+				performCreationNavigation(href, e);
+			} else {
+				window.location.href = href;
+			}
 		});
 	}
 

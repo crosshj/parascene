@@ -122,10 +122,9 @@ class AppModalPublish extends HTMLElement {
 							</button>
 						</div>
 						<div class="publish-field">
-							<label for="publish-title">Title <span class="field-required" data-title-required aria-hidden="true">*</span></label>
-							<input type="text" id="publish-title" name="title" placeholder="Enter a title for your creation"
-								autocapitalize="off" autocorrect="off" spellcheck="false"
-								required />
+							<label for="publish-title">Title</label>
+							<input type="text" id="publish-title" name="title" placeholder="Enter a title for your creation (optional)"
+								autocapitalize="off" autocorrect="off" spellcheck="false" />
 						</div>
 						<div class="publish-field">
 							<label for="publish-description">Description</label>
@@ -209,24 +208,8 @@ class AppModalPublish extends HTMLElement {
 			});
 		}
 
-		// Set up title input listener to enable/disable submit
-		// - Edit: title required only when creation IS published
-		// - Publish: title always required
-		const titleInput = this.querySelector('#publish-title');
-		if (titleInput && submitBtn) {
-			const updateSubmitButton = () => {
-				const hasTitle = titleInput.value.trim().length > 0;
-				if (this._mode === 'publish') {
-					submitBtn.disabled = !hasTitle;
-				} else {
-					submitBtn.disabled = this._creationPublished && !hasTitle;
-				}
-			};
-			titleInput.addEventListener('input', updateSubmitButton);
-			titleInput.addEventListener('change', updateSubmitButton);
-		}
-
 		// @ user and $ style autocomplete on title and description (same triggers as advanced create prompt)
+		const titleInput = this.querySelector('#publish-title');
 		const descriptionTextarea = this.querySelector('#publish-description');
 		loadPublishInlineSuggest().then((attachPromptInlineSuggest) => {
 			if (titleInput && typeof attachPromptInlineSuggest === 'function') {
@@ -299,12 +282,6 @@ class AppModalPublish extends HTMLElement {
 		this.updateModalContent();
 		this.open();
 
-		// Disable submit button initially; will be enabled once title has text
-		const submitBtn = this.querySelector('[data-publish-submit]');
-		if (submitBtn) {
-			submitBtn.disabled = true;
-		}
-
 		if (!creationId) {
 			this.showAlert('Invalid creation ID', true);
 			return;
@@ -344,13 +321,6 @@ class AppModalPublish extends HTMLElement {
 				this.readIsVideoCreation(creation),
 				this.readDoomFullHeightFromCreation(creation)
 			);
-
-			// Update submit button state based on title (required for publish)
-			const submitBtn2 = this.querySelector('[data-publish-submit]');
-			if (submitBtn2) {
-				const hasTitle = titleInput && titleInput.value.trim().length > 0;
-				submitBtn2.disabled = !hasTitle;
-			}
 
 			// Focus title input
 			if (titleInput) {
@@ -413,35 +383,25 @@ class AppModalPublish extends HTMLElement {
 		const submitTextEl = this.querySelector('[data-submit-text]');
 		const submitBtn = this.querySelector('[data-publish-submit]');
 		const titleInput = this.querySelector('#publish-title');
-		const titleRequiredSpan = this.querySelector('[data-title-required]');
 
 		if (this._mode === 'edit') {
 			if (titleEl) titleEl.textContent = 'Edit Creation';
 			if (submitTextEl) submitTextEl.textContent = 'Save Changes';
-			const titleRequired = this._creationPublished; // published → required; draft → optional
 			if (submitBtn) {
-				const hasTitle = titleInput && titleInput.value.trim().length > 0;
-				submitBtn.disabled = titleRequired && !hasTitle;
+				submitBtn.disabled = false;
 				const icon = submitBtn.querySelector('svg path');
 				if (icon) icon.setAttribute('d', 'M11.5 2.5L13.5 4.5L5.5 12.5H3.5V10.5L11.5 2.5Z');
 			}
-			if (titleInput) {
-				if (titleRequired) titleInput.setAttribute('required', '');
-				else titleInput.removeAttribute('required');
-			}
-			if (titleRequiredSpan) titleRequiredSpan.style.display = titleRequired ? '' : 'none';
+			if (titleInput) titleInput.removeAttribute('required');
 		} else {
 			if (titleEl) titleEl.textContent = 'Publish Creation';
 			if (submitTextEl) submitTextEl.textContent = 'Publish';
 			if (submitBtn) {
-				const hasTitle = titleInput && titleInput.value.trim().length > 0;
-				submitBtn.disabled = !hasTitle; // publish: title always required
+				submitBtn.disabled = false;
 				const icon = submitBtn.querySelector('svg path');
 				if (icon) icon.setAttribute('d', 'M1.5 8L14.5 1.5L10.5 14.5L8 9L1.5 8Z');
 			}
-			// Publish: title always required
-			if (titleInput) titleInput.setAttribute('required', '');
-			if (titleRequiredSpan) titleRequiredSpan.style.display = '';
+			if (titleInput) titleInput.removeAttribute('required');
 		}
 	}
 
@@ -520,16 +480,6 @@ class AppModalPublish extends HTMLElement {
 		const doomScrollFullHeight = this._creationIsVideo && doomFullHeightCheckbox
 			? doomFullHeightCheckbox.checked
 			: undefined;
-
-		// Title rules:
-		// - Publish: always required
-		// - Edit: required only when creation IS published
-		const needTitle = this._mode === 'publish' || (this._mode === 'edit' && this._creationPublished);
-		if (needTitle && !title) {
-			this.showAlert('Title is required', true);
-			titleInput.focus();
-			return;
-		}
 
 		// Hide any existing alert
 		this.hideAlert();

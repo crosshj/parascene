@@ -67,6 +67,7 @@ class AppNavigationMobile extends HTMLElement {
 		this.handleNavClick = this.handleNavClick.bind(this);
 		this.handleRouteChange = this.handleRouteChange.bind(this);
 		this.handleFeedBetaChanged = this.handleFeedBetaChanged.bind(this);
+		this.handleOverlayDismissed = this.handleOverlayDismissed.bind(this);
 		this.feedBetaEnabled = false;
 	}
 
@@ -82,6 +83,7 @@ class AppNavigationMobile extends HTMLElement {
 		window.addEventListener('popstate', this.handleRouteChange);
 		document.addEventListener('route-change', this.handleRouteChange);
 		document.addEventListener('feed-beta-changed', this.handleFeedBetaChanged);
+		document.addEventListener('prsn-creation-detail-overlay-dismissed', this.handleOverlayDismissed);
 		setTimeout(() => this.handleRouteChange(), 0);
 	}
 
@@ -89,6 +91,7 @@ class AppNavigationMobile extends HTMLElement {
 		window.removeEventListener('popstate', this.handleRouteChange);
 		document.removeEventListener('route-change', this.handleRouteChange);
 		document.removeEventListener('feed-beta-changed', this.handleFeedBetaChanged);
+		document.removeEventListener('prsn-creation-detail-overlay-dismissed', this.handleOverlayDismissed);
 	}
 
 	handleFeedBetaChanged(event) {
@@ -98,6 +101,10 @@ class AppNavigationMobile extends HTMLElement {
 		}
 		this.render();
 		this.setupEventListeners();
+	}
+
+	handleOverlayDismissed() {
+		this.handleRouteChange();
 	}
 
 	setupEventListeners() {

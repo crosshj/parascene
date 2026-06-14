@@ -10,6 +10,11 @@ import { renderCommentAvatarHtml } from './commentItem.js';
 import { processUserText } from './userText.js';
 import { REACTION_ORDER, REACTION_ICONS } from '../icons/svg-strings.js';
 import { createReplyIndicatorElement } from './replyIndicatorUi.js';
+import {
+	navigateToCreationDetailFromSpa,
+	parseCreationNavigationTargetId,
+	shouldUseCreationDetailOverlay,
+} from './creationDetailOverlay.js';
 
 function escapeHtml(str) {
 	return String(str ?? '')
@@ -18,6 +23,24 @@ function escapeHtml(str) {
 		.replace(/>/g, '&gt;')
 		.replace(/"/g, '&quot;')
 		.replace(/'/g, '&#039;');
+}
+
+function isChatDoomScrollContext() {
+	if (document.body?.classList?.contains('chat-page--doom-scroll')) return true;
+	return /^\/chat\/c\/feed\/doom\/\d+/.test(String(window.location.pathname || ''));
+}
+
+function navigateConnectCommentToCreation(href, ev) {
+	if (isChatDoomScrollContext()) {
+		window.location.href = href;
+		return;
+	}
+	if (parseCreationNavigationTargetId(href) && shouldUseCreationDetailOverlay()) {
+		if (ev && typeof ev.preventDefault === 'function') ev.preventDefault();
+		navigateToCreationDetailFromSpa(href, ev);
+		return;
+	}
+	window.location.href = href;
 }
 
 /**
@@ -70,12 +93,12 @@ export function createConnectCommentRowElement(comment, opts = {}) {
 			const target = e.target;
 			if (target instanceof HTMLElement && target.closest('a')) return;
 			if (target instanceof HTMLElement && target.closest('.msg-reply-indicator-inner')) return;
-			window.location.href = href;
+			navigateConnectCommentToCreation(href, e);
 		});
 		row.addEventListener('keydown', (e) => {
 			if (e.key === 'Enter' || e.key === ' ') {
 				e.preventDefault();
-				window.location.href = href;
+				navigateConnectCommentToCreation(href, e);
 			}
 		});
 	}

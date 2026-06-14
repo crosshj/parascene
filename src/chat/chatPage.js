@@ -19,6 +19,15 @@ import {
 	openChatAttachmentPreviewLightbox as openChatAttachmentPreviewLightboxShared,
 	openChatInlineImageLightbox as openChatInlineImageLightboxShared,
 } from '../shared/chatInlineImageLightbox.js';
+import {
+	handleCreationDetailOverlayPopstate,
+	isCreationDetailOverlayHistoryActive,
+	isCreationDetailOverlayOpen,
+	navigateToCreationDetailFromSpa,
+	parseCreationIdFromHref,
+	parseCreationNavigationTargetId,
+	shouldUseCreationDetailOverlay,
+} from '../shared/creationDetailOverlay.js';
 import * as _cdEmptyState from '../shared/emptyState.js';
 import * as _cdAutogrow from '../shared/autogrow.js';
 import * as _cdTriggeredSuggest from '../shared/triggeredSuggest.js';
@@ -143,6 +152,81 @@ import * as challengesChannelModule from './challengesChannel.js';
 		window.location.href = href;
 	}
 	document.addEventListener('click', onDoomDetailBarClickCapture, true);
+})();
+
+(function installChatCreationDetailOverlayClickCapture() {
+	function shouldSkipCreationDetailPath(pathname) {
+		return /^\/creations\/\d+\/(edit|mutate)\/?$/.test(String(pathname || '').replace(/\/+$/, ''));
+	}
+
+	function isChatDoomScrollNavigationContext() {
+		if (document.body?.classList?.contains('chat-page--doom-scroll')) return true;
+		return /^\/chat\/c\/feed\/doom\/\d+/.test(String(window.location.pathname || ''));
+	}
+
+	function isChatPageShellActive() {
+		return (
+			document.body?.classList?.contains('chat-page') ||
+			document.documentElement?.classList?.contains('chat-page') ||
+			document.body?.dataset?.entry === 'chat'
+		);
+	}
+
+	function onChatCreationDetailClickCapture(ev) {
+		if (!isChatPageShellActive()) return;
+		if (isChatDoomScrollNavigationContext()) return;
+		if (ev.defaultPrevented) return;
+		if (typeof ev.button === 'number' && ev.button !== 0) return;
+		if (ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
+
+		const commentRow = ev.target?.closest?.('.connect-comment[data-href]');
+		if (commentRow instanceof HTMLElement) {
+			if (ev.target?.closest?.('a')) return;
+			if (ev.target?.closest?.('.msg-reply-indicator-inner')) return;
+			const href = (commentRow.dataset.href || '').trim();
+			if (!href) return;
+			let pathOnly = href;
+			try {
+				pathOnly = new URL(href, window.location.origin).pathname;
+			} catch {
+				pathOnly = href.split('?')[0].split('#')[0];
+			}
+			if (shouldSkipCreationDetailPath(pathOnly)) return;
+			const creationId = parseCreationNavigationTargetId(href);
+			if (!creationId) return;
+			ev.preventDefault();
+			ev.stopPropagation();
+			closeChatInlineImageLightbox();
+			navigateToCreationDetailFromSpa(href, ev);
+			return;
+		}
+
+		const anchor = ev.target?.closest?.('a[href]');
+		if (!(anchor instanceof HTMLAnchorElement)) return;
+		if (anchor.hasAttribute('data-profile-link')) return;
+		if (anchor.closest?.('[data-chat-doom-comments]')) return;
+
+		const hrefAttr = (anchor.getAttribute('href') || '').trim();
+		if (!hrefAttr) return;
+		let pathOnly = hrefAttr;
+		try {
+			const url = new URL(hrefAttr, window.location.origin);
+			if (url.origin !== window.location.origin) return;
+			pathOnly = url.pathname;
+		} catch {
+			return;
+		}
+		if (shouldSkipCreationDetailPath(pathOnly)) return;
+		const creationId = parseCreationNavigationTargetId(hrefAttr);
+		if (!creationId) return;
+
+		ev.preventDefault();
+		ev.stopPropagation();
+		closeChatInlineImageLightbox();
+		navigateToCreationDetailFromSpa(hrefAttr, ev);
+	}
+
+	document.addEventListener('click', onChatCreationDetailClickCapture, true);
 })();
 
 /**
@@ -1116,6 +1200,8 @@ export async function initChatPage(root, options = {}) {
 	let chatSidebarModalsApi = null;
 	/** @type {null | (() => void)} */
 	let chatSidebarPopstateHandler = null;
+	/** @type {null | ((e: Event) => void)} */
+	let chatSidebarOverlayDismissHandler = null;
 	/** @type {null | (() => void)} */
 	let chatSidebarVisibilityHandler = null;
 	/** @type {null | ((e: PointerEvent) => void)} */
@@ -5125,6 +5211,7 @@ export async function initChatPage(root, options = {}) {
 	 * Runs on sidebar click before async pane work so highlight matches immediately; also covers patch failures.
 	 */
 	function syncChatSidebarPseudoStripActiveNow(pathname) {
+		if (isCreationDetailOverlayOpen() || isCreationDetailOverlayHistoryActive()) return;
 		const sidebar = document.querySelector('[data-chat-sidebar]');
 		if (!sidebar) return;
 		const listEl = sidebar.querySelector('[data-chat-sidebar-pseudo-list]');
@@ -6144,7 +6231,13 @@ export async function initChatPage(root, options = {}) {
 					document.dispatchEvent(new CustomEvent('close-all-modals'));
 					const href = notificationPrimaryHref(notification);
 					if (href) {
-						window.location.href = href;
+						if (parseCreationNavigationTargetId(href) && shouldUseCreationDetailOverlay()) {
+							navigateToCreationDetailFromSpa(href);
+						} else if (notificationChatHref(notification)) {
+							navigateWithinChatShell(href);
+						} else {
+							window.location.href = href;
+						}
 						return;
 					}
 					if (notification.type === 'tip') {
@@ -6343,8 +6436,11 @@ export async function initChatPage(root, options = {}) {
 		};
 		document.addEventListener('click', chatSidebarNotificationsOutsideClickHandler);
 
-		chatSidebarPopstateHandler = () => {
+		chatSidebarPopstateHandler = (e) => {
 			if (dismissChallengeVoteModalFromBrowserHistoryIfOpen()) {
+				return;
+			}
+			if (handleCreationDetailOverlayPopstate(e)) {
 				return;
 			}
 			if (closeChatInlineImageLightboxFromPopstateIfOpen()) {
@@ -6357,6 +6453,19 @@ export async function initChatPage(root, options = {}) {
 			void openThreadForCurrentPath();
 		};
 		window.addEventListener('popstate', chatSidebarPopstateHandler);
+
+		chatSidebarOverlayDismissHandler = (e) => {
+			const detail = e && typeof e === 'object' ? e.detail : null;
+			const pathname =
+				detail && typeof detail.pathname === 'string' && detail.pathname.trim()
+					? detail.pathname
+					: window.location.pathname;
+			syncChatSidebarPseudoStripActiveNow(pathname);
+		};
+		document.addEventListener(
+			'prsn-creation-detail-overlay-dismissed',
+			chatSidebarOverlayDismissHandler
+		);
 	}
 
 	/** Plus buttons → section-specific modals (new DM, servers, channels). */
@@ -8631,6 +8740,11 @@ export async function initChatPage(root, options = {}) {
 		const parsed = parseChatPathname(url.pathname);
 		const spaKinds = new Set(['thread', 'channel', 'doom_scroll', 'dm']);
 		if (!spaKinds.has(parsed.kind)) {
+			const creationId = parseCreationIdFromHref(url.pathname + url.search + url.hash);
+			if (creationId && shouldUseCreationDetailOverlay()) {
+				navigateToCreationDetailFromSpa(url.pathname + url.search + url.hash, ev);
+				return;
+			}
 			window.location.assign(url.pathname + url.search + url.hash);
 			return;
 		}
@@ -8647,6 +8761,15 @@ export async function initChatPage(root, options = {}) {
 		history.pushState({ prsnChat: true }, '', url.pathname + url.search + url.hash);
 		syncChatSidebarPseudoStripActiveNow(url.pathname);
 		void openThreadForCurrentPath();
+	}
+
+	function performCreationNavigationForChat(href, ev) {
+		const creationId = parseCreationNavigationTargetId(href);
+		if (creationId && shouldUseCreationDetailOverlay()) {
+			navigateToCreationDetailFromSpa(`/creations/${creationId}`, ev);
+			return;
+		}
+		navigateWithinChatShell(href, ev);
 	}
 
 	const feedChannelMobileSpotlightOptions = {
@@ -8673,11 +8796,13 @@ export async function initChatPage(root, options = {}) {
 		if (laneSlug === 'feed') {
 			return {
 				...base,
-				resolveCreationCardHref: resolveFeedLaneVideoToDoomHref,
-				performCreationNavigation: navigateWithinChatShell
+				performCreationNavigation: performCreationNavigationForChat
 			};
 		}
-		return base;
+		return {
+			...base,
+			performCreationNavigation: performCreationNavigationForChat
+		};
 	}
 
 	function insertChatCreationsPseudoBulkChrome(routeWrap, cardsEl) {
@@ -11203,6 +11328,10 @@ export async function initChatPage(root, options = {}) {
 	}
 
 	async function openThreadForCurrentPath() {
+		if (isCreationDetailOverlayOpen() || isCreationDetailOverlayHistoryActive()) return;
+		if (parseCreationIdFromHref(window.location.pathname) && document.body.classList.contains('chat-page')) {
+			return;
+		}
 		syncChatSidebarPseudoStripActiveNow(window.location.pathname);
 		const messagesEl = root.querySelector('[data-chat-messages]');
 		const errEl = root.querySelector('[data-chat-error]');
@@ -12082,6 +12211,13 @@ export async function initChatPage(root, options = {}) {
 			window.removeEventListener('popstate', chatSidebarPopstateHandler);
 			chatSidebarPopstateHandler = null;
 		}
+		if (typeof chatSidebarOverlayDismissHandler === 'function') {
+			document.removeEventListener(
+				'prsn-creation-detail-overlay-dismissed',
+				chatSidebarOverlayDismissHandler
+			);
+			chatSidebarOverlayDismissHandler = null;
+		}
 		if (typeof chatSidebarVisibilityHandler === 'function') {
 			document.removeEventListener('visibilitychange', chatSidebarVisibilityHandler);
 			chatSidebarVisibilityHandler = null;
@@ -12245,7 +12381,7 @@ export async function initChatPage(root, options = {}) {
 			if (!cid) return;
 			e.preventDefault();
 			e.stopPropagation();
-			window.location.href = `/creations/${encodeURIComponent(cid)}`;
+			performCreationNavigationForChat(`/creations/${encodeURIComponent(cid)}`, e);
 		},
 		true
 	);
@@ -14010,6 +14146,9 @@ export async function initChatPage(root, options = {}) {
 		// cleared so it falls through to openThreadForCurrentPath() and leaves the lane.
 		if (dismissChallengeVoteModalFromBrowserHistoryIfOpen()) {
 			e.stopImmediatePropagation();
+			return;
+		}
+		if (handleCreationDetailOverlayPopstate(e)) {
 			return;
 		}
 		if (closeChatInlineImageLightboxFromPopstateIfOpen()) {

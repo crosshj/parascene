@@ -290,7 +290,7 @@ header .logo,
 }
 
 /* App shell nav only — chat uses `<header class="chat-page-topbar">` / `<header class="chat-page-mobile-chrome">`, not this block. */
-header:not(.chat-page-topbar):not(.chat-page-mobile-chrome) {
+header:not(.chat-page-topbar):not(.chat-page-mobile-chrome):not(.creation-detail-overlay-chrome) {
 	position: sticky;
 	top: 0;
 	z-index: 1000;
@@ -323,7 +323,7 @@ header:not(.chat-page-topbar):not(.chat-page-mobile-chrome) {
 
 /* Subtle royal purple dark theme header */
 @media (prefers-color-scheme: dark) {
-	header:not(.chat-page-topbar):not(.chat-page-mobile-chrome) {
+	header:not(.chat-page-topbar):not(.chat-page-mobile-chrome):not(.creation-detail-overlay-chrome) {
 		background: linear-gradient(to bottom,
 				rgba(26, 22, 40, 1) 0%,
 				rgba(26, 22, 40, 0.95) 20%,
@@ -334,7 +334,7 @@ header:not(.chat-page-topbar):not(.chat-page-mobile-chrome) {
 }
 
 /* Subtle gradient overlay for additional depth */
-header:not(.chat-page-topbar):not(.chat-page-mobile-chrome)::before {
+header:not(.chat-page-topbar):not(.chat-page-mobile-chrome):not(.creation-detail-overlay-chrome)::before {
 	content: '';
 	position: absolute;
 	top: 0;
@@ -350,7 +350,7 @@ header:not(.chat-page-topbar):not(.chat-page-mobile-chrome)::before {
 }
 
 @media (prefers-color-scheme: dark) {
-	header:not(.chat-page-topbar):not(.chat-page-mobile-chrome)::before {
+	header:not(.chat-page-topbar):not(.chat-page-mobile-chrome):not(.creation-detail-overlay-chrome)::before {
 		background: linear-gradient(to bottom,
 				rgba(255, 255, 255, 0.05) 0%,
 				rgba(255, 255, 255, 0.02) 30%,
@@ -392,7 +392,7 @@ app-navigation {
 		z-index: 1000;
 	}
 
-	header:not(.chat-page-topbar):not(.chat-page-mobile-chrome) {
+	header:not(.chat-page-topbar):not(.chat-page-mobile-chrome):not(.creation-detail-overlay-chrome) {
 		padding: 4px 0px;
 		position: sticky;
 		top: 0;
@@ -541,18 +541,18 @@ header .header-actions {
 	flex-shrink: 0;
 }
 
-header:not(.chat-page-topbar):not(.chat-page-mobile-chrome) h1,
-header:not(.chat-page-topbar):not(.chat-page-mobile-chrome) p {
+header:not(.chat-page-topbar):not(.chat-page-mobile-chrome):not(.creation-detail-overlay-chrome) h1,
+header:not(.chat-page-topbar):not(.chat-page-mobile-chrome):not(.creation-detail-overlay-chrome) p {
 	max-width: 960px;
 	margin: 0 auto;
 }
 
-header:not(.chat-page-topbar):not(.chat-page-mobile-chrome) h1 {
+header:not(.chat-page-topbar):not(.chat-page-mobile-chrome):not(.creation-detail-overlay-chrome) h1 {
 	font-size: 1.75rem;
 	letter-spacing: -0.02em;
 }
 
-header:not(.chat-page-topbar):not(.chat-page-mobile-chrome) p {
+header:not(.chat-page-topbar):not(.chat-page-mobile-chrome):not(.creation-detail-overlay-chrome) p {
 	margin-top: 6px;
 	color: var(--text-muted);
 }
@@ -3369,6 +3369,12 @@ app-route-feed {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	word-break: break-word;
+}
+
+.feed-card-title--untitled {
+	color: var(--text-muted);
+	font-style: italic;
+	font-weight: 200;
 }
 
 .feed-card-metadata {
@@ -12668,7 +12674,44 @@ button.msg-reply-indicator-inner:hover {
 	text-overflow: ellipsis;
 }
 
-/* Full-screen viewer for pasted generic images (chat.js opens on link click). */
+/* Full-screen iframe overlay (creation detail on SPA shells). */
+.creation-detail-overlay {
+	position: fixed;
+	inset: 0;
+	z-index: 100000;
+	background: var(--bg);
+}
+
+.creation-detail-overlay-frame {
+	position: absolute;
+	inset: 0;
+	z-index: 1;
+	width: 100%;
+	height: 100%;
+	border: 0;
+	background: var(--bg);
+}
+
+body.creation-detail-overlay-open {
+	overflow: hidden;
+	position: fixed;
+	width: 100%;
+	left: 0;
+	right: 0;
+}
+
+body.chat-page.creation-detail-overlay-open {
+	position: static;
+	width: auto;
+	left: auto;
+	right: auto;
+}
+
+body.creation-detail-embed app-navigation,
+body.creation-detail-embed app-navigation-mobile {
+	display: none !important;
+}
+
 .chat-inline-image-lightbox {
 	position: fixed;
 	inset: 0;

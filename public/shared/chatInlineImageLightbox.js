@@ -2,6 +2,11 @@ import { copyIcon, linkIcon2 } from '/icons/svg-strings.js';
 import { DEFAULT_APP_ORIGIN } from './userText.js';
 import { createModalDismissButton } from './modalDismiss.js';
 import {
+	navigateToCreationDetailFromSpa,
+	parseCreationNavigationTargetId,
+	shouldUseCreationDetailOverlay,
+} from './creationDetailOverlay.js';
+import {
 	attachMediaAudioLeveling,
 	primeMediaElementForAudioLeveling
 } from './mediaAudioLeveling.js';
@@ -241,6 +246,14 @@ function mountInlineImageLightboxCreationFooter(overlay, creationIdRaw) {
 	goBtn.innerHTML =
 		`<span class="chat-inline-image-lightbox-footer-btn-lead" aria-hidden="true">${linkIcon2()}</span>` +
 		`<span>Go To Creation</span>`;
+	goBtn.addEventListener('click', (e) => {
+		if (document.body?.classList?.contains('chat-page--doom-scroll')) return;
+		if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+		if (!parseCreationNavigationTargetId(detailPath) || !shouldUseCreationDetailOverlay()) return;
+		e.preventDefault();
+		closeChatInlineImageLightbox();
+		navigateToCreationDetailFromSpa(detailPath, e);
+	});
 
 	const copyBtn = document.createElement('button');
 	copyBtn.type = 'button';

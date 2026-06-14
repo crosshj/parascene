@@ -8,6 +8,8 @@ let renderGridSkeleton;
 let buildCreationCardShell;
 let hydrateRouteCardMedia;
 let routeCardGroupBadgeHtml;
+/** @type {typeof import('../../shared/creationDetailOverlay.js').navigateToCreationDetailFromSpa} */
+let navigateToCreationDetailFromSpa;
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -50,8 +52,20 @@ async function loadDeps() {
 
 		const aspectRatioMod = await import(`../../shared/aspectRatio.js${qs}`);
 		applyCreationMediaAspectToElement = aspectRatioMod.applyCreationMediaAspectToElement;
+
+		const overlayMod = await import(`../../shared/creationDetailOverlay.js${qs}`);
+		navigateToCreationDetailFromSpa = overlayMod.navigateToCreationDetailFromSpa;
 	})();
 	return _depsPromise;
+}
+
+function navigateToCreation(href, ev) {
+	if (typeof navigateToCreationDetailFromSpa === 'function') {
+		navigateToCreationDetailFromSpa(href, ev);
+		return;
+	}
+	if (ev && typeof ev.preventDefault === 'function') ev.preventDefault();
+	window.location.href = href;
 }
 
 const html = String.raw;
@@ -620,7 +634,7 @@ class AppRouteExplore extends HTMLElement {
 			}
 			card.addEventListener('click', () => {
 				if (item.created_image_id) {
-					window.location.href = `/creations/${item.created_image_id}`;
+					navigateToCreation(`/creations/${item.created_image_id}`);
 				}
 			});
 

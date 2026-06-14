@@ -71,6 +71,7 @@ class AppNavigation extends HTMLElement {
 		this.hasParsedRoutes = false;
 		this.feedBetaEnabled = false;
 		this.handleFeedBetaChanged = this.handleFeedBetaChanged.bind(this);
+		this.handleOverlayDismissed = this.handleOverlayDismissed.bind(this);
 	}
 
 	static get observedAttributes() {
@@ -110,6 +111,7 @@ class AppNavigation extends HTMLElement {
 		document.addEventListener('chat-unread-refresh', this._onChatUnreadRefresh);
 		document.addEventListener('visibilitychange', this._onDocumentVisibilityChatTitle);
 		document.addEventListener('feed-beta-changed', this.handleFeedBetaChanged);
+		document.addEventListener('prsn-creation-detail-overlay-dismissed', this.handleOverlayDismissed);
 		this.loadNotificationCount();
 		this.loadCreditsCount();
 		// Don't show credits callout until claim status is known from API.
@@ -140,6 +142,7 @@ class AppNavigation extends HTMLElement {
 		document.removeEventListener('chat-unread-refresh', this._onChatUnreadRefresh);
 		document.removeEventListener('visibilitychange', this._onDocumentVisibilityChatTitle);
 		document.removeEventListener('feed-beta-changed', this.handleFeedBetaChanged);
+		document.removeEventListener('prsn-creation-detail-overlay-dismissed', this.handleOverlayDismissed);
 		try {
 			restoreChatGlobalUnreadFavicon();
 		} catch {
@@ -155,6 +158,10 @@ class AppNavigation extends HTMLElement {
 	handleFeedBetaChanged(event) {
 		this.feedBetaEnabled = event?.detail?.enabled === true;
 		applyFeedBetaNavLabelsToDom(this.feedBetaEnabled);
+	}
+
+	handleOverlayDismissed() {
+		this.handleRouteChange();
 	}
 
 	attributeChangedCallback(name, oldValue, newValue) {

@@ -18,6 +18,15 @@ describe('transformFeedCreationRow', () => {
 		expect(item.media_type).toBe('video');
 	});
 
+	test('marks feed creation rows as published for untitled display', () => {
+		const item = transformFeedCreationRow({
+			created_image_id: 42,
+			title: null
+		});
+		expect(item.published).toBe(true);
+		expect(item.title).toBeNull();
+	});
+
 	test('second transform keeps image_url (doom route must not strip posters)', () => {
 		const row = {
 			created_image_id: 10127,

@@ -4,6 +4,7 @@ let enableLikeButtons;
 let getCreationLikeCount;
 let initLikeButton;
 let fetchJsonWithStatusDeduped;
+let invalidateAppCaches;
 let getAvatarColor;
 let fetchCreatedImageActivity;
 let postCreatedImageComment;
@@ -57,6 +58,84 @@ let videoHeroDimensionsFromCreation;
 let captureVideoFirstFrameFile;
 let openShareAudioModal;
 
+/** Viewer followed these user ids this session (optimistic; survives loadCreation re-renders). */
+const sessionFollowedUserIds = new Set();
+
+function markCreatorFollowedInSession(userId) {
+	const id = Number(userId);
+	if (Number.isFinite(id) && id > 0) sessionFollowedUserIds.add(id);
+}
+
+function sessionViewerFollowsCreator(creatorId, apiViewerFollows) {
+	const id = Number(creatorId);
+	if (Number.isFinite(id) && id > 0 && sessionFollowedUserIds.has(id)) return true;
+	return Boolean(apiViewerFollows);
+}
+
+function invalidateCreatorProfileCache(userId) {
+	const id = Number(userId);
+	if (!Number.isFinite(id) || id <= 0) return;
+	if (typeof invalidateAppCaches === 'function') {
+		invalidateAppCaches({ urls: [`/api/users/${id}/profile`] });
+	}
+}
+
+function isCreationDetailEmbed() {
+	return window.__ps_creation_detail_embed === true;
+}
+
+function postMessageToParentOverlay(payload) {
+	if (!isCreationDetailEmbed() || window.parent === window) return false;
+	try {
+		window.parent.postMessage(payload, window.location.origin);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+function navigateFromCreationDetailEmbed(href) {
+	const raw = String(href || '').trim();
+	if (!raw) return;
+	try {
+		const url = new URL(raw, window.location.origin);
+		if (url.origin !== window.location.origin) {
+			window.location.assign(url.href);
+			return;
+		}
+		const m = url.pathname.match(/^\/creations\/(\d+)\/?$/);
+		if (m) {
+			const id = Number(m[1]);
+			if (Number.isFinite(id) && id > 0) {
+				postMessageToParentOverlay({ type: 'prsn-creation-detail-overlay-navigate', creationId: id });
+				return;
+			}
+		}
+		if (url.pathname === '/creations' || url.pathname === '/feed' || url.pathname === '/explore') {
+			postMessageToParentOverlay({ type: 'prsn-creation-detail-overlay-close' });
+			return;
+		}
+	} catch {
+		// fall through
+	}
+	window.location.assign(raw);
+}
+
+function bindCreationDetailEmbedNavigation() {
+	if (!isCreationDetailEmbed()) return;
+	document.addEventListener('click', (e) => {
+		const link = e.target?.closest?.('a[href^="/creations/"]');
+		if (!link) return;
+		const href = link.getAttribute('href') || '';
+		if (/\/edit\/?(?:\?|#|$)|\/mutate(?:\?|#|$)/.test(href)) return;
+		e.preventDefault();
+		e.stopPropagation();
+		navigateFromCreationDetailEmbed(href);
+	}, true);
+}
+
+bindCreationDetailEmbedNavigation();
+
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
 	return meta?.getAttribute('content')?.trim() || '';
@@ -88,6 +167,7 @@ async function loadDeps() {
 
 		const apiMod = await import(`/shared/api.js${qs}`);
 		fetchJsonWithStatusDeduped = apiMod.fetchJsonWithStatusDeduped;
+		invalidateAppCaches = apiMod.invalidateAppCaches;
 
 		const avatarMod = await import(`/shared/avatar.js${qs}`);
 		getAvatarColor = avatarMod.getAvatarColor;
@@ -196,6 +276,73 @@ async function loadDeps() {
 }
 
 const html = String.raw;
+
+/** Static skeleton for detail content — safe before loadDeps() and for SSR first paint. */
+const CREATION_DETAIL_CONTENT_SKELETON_HTML = `<div class="creation-detail-skeleton" aria-label="Loading" aria-busy="true">
+	<div class="creation-detail-title-row">
+		<div class="skeleton skeleton-line" style="width: 72%; max-width: 320px;"></div>
+	</div>
+	<div class="creation-detail-action-strip">
+		<div class="creation-detail-action-strip-scroll">
+			<div class="creation-detail-action-strip-avatar"><span class="skeleton skeleton-circle" style="width: 40px; height: 40px;" aria-hidden="true"></span></div>
+			<div class="creation-detail-action-strip-creator-info">
+				<div class="skeleton skeleton-line skeleton-line--short" style="margin-bottom: 4px;"></div>
+				<div class="skeleton skeleton-line skeleton-line--medium"></div>
+			</div>
+			<span class="skeleton skeleton-pill" style="width: 72px; height: 34px;" aria-hidden="true"></span>
+			<span class="skeleton skeleton-pill" style="width: 64px; height: 34px;" aria-hidden="true"></span>
+			<span class="skeleton skeleton-pill" style="width: 88px; height: 34px;" aria-hidden="true"></span>
+			<span class="skeleton skeleton-circle" style="width: 34px; height: 34px;" aria-hidden="true"></span>
+		</div>
+	</div>
+	<div class="creation-detail-skeleton-description" style="margin-bottom: 40px;">
+		<span class="skeleton skeleton-line" style="display: block; margin-bottom: 8px;"></span>
+		<span class="skeleton skeleton-line" style="display: block; margin-bottom: 12px; width: 95%;"></span>
+		<span class="skeleton skeleton-line skeleton-line--medium" style="display: block; margin-bottom: 12px;"></span>
+	</div>
+	<div class="comment-input">
+		<div class="comment-avatar"><span class="skeleton skeleton-circle" style="width: 32px; height: 32px;" aria-hidden="true"></span></div>
+		<div class="comment-input-body">
+			<span class="skeleton skeleton-line" style="display: block; height: 40px; border-radius: 8px;"></span>
+		</div>
+	</div>
+	<div class="comments-toolbar">
+		<div class="skeleton skeleton-line" style="width: 120px;"></div>
+		<div class="skeleton skeleton-line" style="width: 100px; margin-left: auto;"></div>
+	</div>
+	<div class="comment-list">
+		<div class="creation-detail-skeleton-comment"><span class="skeleton skeleton-circle" style="width: 32px; height: 32px;" aria-hidden="true"></span><div><span class="skeleton skeleton-line skeleton-line--short" style="display: block; margin-bottom: 4px;"></span><span class="skeleton skeleton-line skeleton-line--medium" style="display: block;"></span></div></div>
+		<div class="creation-detail-skeleton-comment"><span class="skeleton skeleton-circle" style="width: 32px; height: 32px;" aria-hidden="true"></span><div><span class="skeleton skeleton-line skeleton-line--medium" style="display: block; margin-bottom: 4px;"></span><span class="skeleton skeleton-line skeleton-line--short" style="display: block;"></span></div></div>
+	</div>
+</div>`;
+
+function showCreationDetailContentSkeleton(detailContent = document.querySelector('[data-detail-content]')) {
+	if (!(detailContent instanceof HTMLElement)) return;
+	detailContent.innerHTML = CREATION_DETAIL_CONTENT_SKELETON_HTML;
+}
+
+function prepareCreationDetailHeroForLoad(
+	imageEl = document.querySelector('[data-image]'),
+	imageWrapper = imageEl?.closest?.('.creation-detail-image-wrapper'),
+	{ resetMedia = false } = {}
+) {
+	if (!(imageWrapper instanceof HTMLElement)) return;
+	imageWrapper.classList.add('image-loading');
+	if (resetMedia) {
+		imageWrapper.classList.remove(
+			'image-error',
+			'image-error-moderated',
+			'hero-video-revealed',
+			'hero-video-pending',
+			'group-carousel-active',
+			'group-video-playlist-active'
+		);
+		if (imageEl instanceof HTMLImageElement) {
+			imageEl.style.visibility = 'hidden';
+		}
+	}
+}
+
 const TIP_MIN_VISIBLE_BALANCE = 10.0;
 const GROUP_MOVE_LEFT_BTN_SVG = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg>';
 
@@ -602,17 +749,12 @@ function renderCreationDetailMoreMenu(menuData, escapeFn) {
 
 /** Skeleton placeholder for creation-detail-info while content is loading. Mirrors the loaded layout for a smooth transition. */
 function renderCreationDetailSkeleton() {
-	return html`
+	if (typeof skeletonCircle === 'function') {
+		return html`
 <div class="creation-detail-skeleton" aria-label="Loading" aria-busy="true">
 	<div class="creation-detail-title-row">
 		<div class="skeleton skeleton-line" style="width: 72%; max-width: 320px;"></div>
 	</div>
-	<div class="creation-detail-title-row">
-		<div class="skeleton skeleton-line" style="width: 62%; max-width: 220px;"></div>
-	</div>
-	<!-- <div class="creation-detail-title-byline creation-detail-title-byline-mobile">
-		<span class="skeleton skeleton-line skeleton-line--short"></span>
-	</div> -->
 	<div class="creation-detail-action-strip">
 		<div class="creation-detail-action-strip-scroll">
 			<div class="creation-detail-action-strip-avatar">${skeletonCircle(40)}</div>
@@ -654,6 +796,135 @@ function renderCreationDetailSkeleton() {
 		</div>
 	</div>
 </div>`;
+	}
+	return CREATION_DETAIL_CONTENT_SKELETON_HTML;
+}
+
+/** Placeholder ancestor strip while lineage API fetches run in the background. */
+function renderLineageAncestorsPlaceholder(ancestorCount) {
+	const count = Math.max(1, Math.min(Number(ancestorCount) || 1, 6));
+	const thumbs = Array.from({ length: count }, (_, index) => {
+		const arrow = index < count - 1
+			? '<span class="creation-detail-history-arrow" aria-hidden="true">→</span>'
+			: '';
+		return `<span class="creation-detail-history-thumb-link creation-detail-history-thumb-placeholder skeleton" aria-hidden="true"></span>${arrow}`;
+	}).join('');
+	return html`
+		<div class="creation-detail-history-wrap" data-lineage-deferred-mount aria-busy="true" aria-label="Loading ancestors">
+			<div class="creation-detail-history-header">
+				<div class="creation-detail-history-label">Ancestors</div>
+			</div>
+			<div class="creation-detail-history creation-detail-history--loading">
+				${thumbs}
+				<span class="creation-detail-history-current creation-detail-history-current--placeholder skeleton" aria-hidden="true"></span>
+			</div>
+		</div>`;
+}
+
+function buildLineageSectionHtmlFromPrefetch(lineagePrefetch, ctx) {
+	const {
+		creationId,
+		enableNsfw,
+		showUnobscured,
+		escapeHtml,
+		currentIndicatorHtml,
+		lineageVideoPlayBtnHtml,
+	} = ctx;
+	const historyIds = lineagePrefetch.historyIds;
+	const historyChainIds = lineagePrefetch.historyChainIds;
+	const nsfwById = lineagePrefetch.nsfwById;
+	const childrenList = lineagePrefetch.childrenList;
+
+	let ancestorsHtml = '';
+	if (historyIds.length > 0 && historyChainIds.length >= 2) {
+		const nonCurrentIds = lineagePrefetch.nonCurrentIds;
+		const directParentSet = new Set(lineagePrefetch.directParentIds);
+		const usePlusBetween = directParentSet.size >= 2;
+		const slotById = new Map(lineagePrefetch.ancestorSlots.map((s) => [s.id, s]));
+
+		const parts = nonCurrentIds.map((id, index) => {
+			const slot = slotById.get(id) || { id, mode: 'inaccessible' };
+			const isLastAncestor = index === nonCurrentIds.length - 1;
+			const nextId = nonCurrentIds[index + 1];
+			const bothDirect = usePlusBetween && !isLastAncestor && directParentSet.has(id) && directParentSet.has(nextId);
+			const separator = bothDirect ? '+' : '→';
+			const nsfw = nsfwById.get(String(id)) === true;
+			if (!enableNsfw && nsfw) {
+				return `<button type="button" class="creation-detail-history-thumb-link creation-detail-history-nsfw-blank creation-detail-history-lineage-btn" data-lineage-ancestor-open="${id}"
+					aria-label="${escapeHtml(`Lineage #${id}: hidden (NSFW)`)}">#${id}</button><span class="creation-detail-history-arrow" aria-hidden="true">${separator}</span>`;
+			}
+			const nsfwClass = enableNsfw && nsfw ? (showUnobscured ? ' nsfw nsfw-revealed' : ' nsfw') : '';
+			const dataCreationId = enableNsfw && nsfw ? ` data-creation-id="${id}"` : '';
+
+			if (slot.mode === 'lineage-open') {
+				const t = (slot.thumb || '').trim();
+				const inner = t
+					? `<span class="creation-detail-history-fallback" data-history-fallback style="display: none;">#${id}</span><img class="creation-detail-history-thumb" src="${escapeHtml(t)}" alt="" loading="lazy" />`
+					: `<span class="creation-detail-history-fallback" data-history-fallback>#${id}</span><img class="creation-detail-history-thumb" data-history-img alt="" loading="lazy" style="display: none;" />`;
+				const pubHint = slot.published ? 'Published — open for details or full page' : 'Open for details';
+				return `
+				<button
+					type="button"
+					class="creation-detail-history-thumb-link creation-detail-history-lineage-btn${nsfwClass}"
+					data-lineage-ancestor-open="${id}"
+					aria-label="${escapeHtml(`Lineage #${id}: ${pubHint}`)}"${dataCreationId}
+				>${inner}</button>
+				<span class="creation-detail-history-arrow" aria-hidden="true">${separator}</span>
+			`;
+			}
+			return `
+				<button type="button" class="creation-detail-history-thumb-link creation-detail-history-unavailable creation-detail-history-lineage-btn" data-lineage-ancestor-open="${id}"
+					aria-label="${escapeHtml(`Lineage #${id}: not available in preview — open for details`)}" title="Not available in preview">#${id}</button>
+				<span class="creation-detail-history-arrow" aria-hidden="true">${separator}</span>
+			`;
+		}).join('');
+
+		ancestorsHtml = html`
+			<div class="creation-detail-history-wrap">
+				<div class="creation-detail-history-header">
+					<div class="creation-detail-history-label">Ancestors</div>
+				</div>
+				<div class="creation-detail-history" data-creation-history>
+					${parts}${currentIndicatorHtml}${lineageVideoPlayBtnHtml}
+				</div>
+			</div>
+		`;
+	}
+
+	let childrenHtml = '';
+	if (Array.isArray(childrenList) && childrenList.length > 0) {
+		const childParts = childrenList.map((child) => {
+			const cid = child.id;
+			const childNsfw = !!child.nsfw;
+			const thumbUrl = (child.thumbnail_url || child.url || '').trim();
+			if (!enableNsfw && childNsfw) {
+				return `<span class="creation-detail-history-thumb-link creation-detail-history-nsfw-blank" data-child-id="${cid}" aria-label="${escapeHtml(`Creation #${cid} (hidden)`)}">#${cid}</span>`;
+			}
+			const nsfwClass = enableNsfw && childNsfw ? (showUnobscured ? ' nsfw nsfw-revealed' : ' nsfw') : '';
+			const dataCreationId = enableNsfw && childNsfw ? ` data-creation-id="${cid}"` : '';
+			return `
+				<a
+					class="creation-detail-history-thumb-link${nsfwClass}"
+					href="/creations/${cid}"
+					aria-label="${escapeHtml(`Go to creation #${cid}`)}"
+					data-child-id="${cid}"${dataCreationId}
+				>
+					<span class="creation-detail-history-fallback" data-child-fallback>#${cid}</span>
+					<img class="creation-detail-history-thumb" data-child-img alt="" loading="lazy" style="display: none;" data-bg-url="${escapeHtml(thumbUrl)}" />
+				</a>
+			`;
+		}).join('');
+		childrenHtml = html`
+			<div class="creation-detail-history-wrap">
+				<div class="creation-detail-history-label">Children</div>
+				<div class="creation-detail-history" data-creation-children>
+					${childParts}
+				</div>
+			</div>
+		`;
+	}
+
+	return { sectionHtml: ancestorsHtml + (childrenHtml || ''), historyIds, historyChainIds };
 }
 
 /** Renders visible actions as pills in the action strip. Only actions with inKebabMenu === false are shown (items in the more menu are not duplicated as pills). */
@@ -719,6 +990,58 @@ function formatDuration(meta) {
 		return `${hours}h ${remMin}m`;
 	}
 	return rem > 0 ? `${minutes}m ${rem}s` : `${minutes}m`;
+}
+
+function buildDescriptionMetaItems({
+	serverName = '',
+	methodName = '',
+	displayModel = '',
+	durationStr = '',
+	isPublished = false,
+	publishedTimeAgo = '',
+	publishedAtTitle = '',
+	escapeHtml = (v) => String(v ?? '')
+} = {}) {
+	const metaItems = [];
+	if (serverName && serverName !== 'Parascene') {
+		metaItems.push(
+			html`<span class="creation-detail-description-meta-label">Server</span> <span class="creation-detail-description-meta-value">${escapeHtml(serverName)}</span>`
+		);
+	}
+	if (methodName && methodName !== 'Replicate') {
+		metaItems.push(
+			html`<span class="creation-detail-description-meta-label">Method</span> <span class="creation-detail-description-meta-value">${escapeHtml(methodName)}</span>`
+		);
+	}
+	if (displayModel) {
+		metaItems.push(
+			html`<span class="creation-detail-description-meta-label">Model</span> <span class="creation-detail-description-meta-value">${escapeHtml(displayModel)}</span>`
+		);
+	}
+	if (durationStr) {
+		metaItems.push(
+			html`<span class="creation-detail-description-meta-label">Duration</span> <span class="creation-detail-description-meta-value">${escapeHtml(durationStr)}</span>`
+		);
+	}
+	if (isPublished) {
+		const publishedValue = publishedTimeAgo || publishedAtTitle || '';
+		if (publishedValue) {
+			metaItems.push(
+				html`<span class="creation-detail-description-meta-label">Published</span> <span class="creation-detail-description-meta-value"${publishedAtTitle ? ` title="${escapeHtml(publishedAtTitle)}"` : ''}>${escapeHtml(publishedValue)}</span>`
+			);
+		}
+	} else if (!isPublished) {
+		metaItems.push(
+			html`<span class="creation-detail-description-meta-label">Published</span> <span class="creation-detail-description-meta-value">Not published</span>`
+		);
+	}
+	return metaItems;
+}
+
+function buildDescriptionMetaLineHtml(options = {}) {
+	const metaItems = buildDescriptionMetaItems(options);
+	if (!metaItems.length) return '';
+	return html`<div class="creation-detail-description-meta-line">${metaItems.join(' • ')}</div>`;
 }
 
 function setupCollapsibleDescription(rootEl) {
@@ -791,6 +1114,10 @@ function setupCollapsibleDescription(rootEl) {
 // This ensures we capture navigation events
 
 // Get creation ID from URL
+function isCreationDetailPagePathname(pathname) {
+	return /^\/creations\/\d+$/.test(String(pathname || ''));
+}
+
 function getCreationId() {
 	// Only use injected share context while we're actually on a share-mounted URL.
 	// Otherwise it "sticks" across navigation and breaks header/mobile nav routing.
@@ -803,6 +1130,14 @@ function getCreationId() {
 	const pathname = window.location.pathname;
 	const match = pathname.match(/^\/creations\/(\d+)$/);
 	return match ? parseInt(match[1], 10) : null;
+}
+
+/** Full-page creation detail: browser back to feed/chat/etc. must load that document (not only change the URL). */
+function navigateToCurrentUrlIfLeftCreationDetail() {
+	if (isCreationDetailEmbed()) return;
+	if (isCreationDetailPagePathname(window.location.pathname)) return;
+	const path = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+	window.location.assign(path);
 }
 
 function isShareMountedView() {
@@ -862,7 +1197,7 @@ function recordTransitionFromQuery(currentCreationId) {
 	}).catch(() => { });
 }
 
-function initRelatedSection(root, currentCreationId) {
+function initRelatedSection(root, currentCreationId, options = {}) {
 	const container = root.querySelector('[data-related-container]');
 	const grid = root.querySelector('[data-related-grid]');
 	const sentinel = root.querySelector('[data-related-sentinel]');
@@ -874,6 +1209,15 @@ function initRelatedSection(root, currentCreationId) {
 	let isLoading = false;
 	let randomMode = false;
 	let relatedObserver = null;
+	let firstBatchReported = false;
+
+	function notifyFirstRelatedBatch(meta) {
+		if (firstBatchReported) return;
+		firstBatchReported = true;
+		if (typeof options.onFirstBatchReady === 'function') {
+			options.onFirstBatchReady(meta);
+		}
+	}
 
 	function relatedCardUrl(createdImageId) {
 		return `/creations/${createdImageId}?from=${currentCreationId}`;
@@ -912,6 +1256,10 @@ function initRelatedSection(root, currentCreationId) {
 			});
 			card.style.cursor = 'pointer';
 			card.addEventListener('click', () => {
+				if (isCreationDetailEmbed()) {
+					navigateFromCreationDetailEmbed(href);
+					return;
+				}
 				window.location.href = href;
 			});
 			const mediaEl = card.querySelector('[data-related-media]');
@@ -939,6 +1287,7 @@ function initRelatedSection(root, currentCreationId) {
 	async function loadRelated(excludeIds = null) {
 		if (isLoading) return;
 		isLoading = true;
+		const relatedFetchStart = performance.now();
 		try {
 			const params = new URLSearchParams();
 			params.set('limit', String(RELATED_BATCH_SIZE));
@@ -974,7 +1323,15 @@ function initRelatedSection(root, currentCreationId) {
 			}
 			if (items.length > 0) {
 				container.style.display = '';
+				const renderStart = performance.now();
 				appendRelatedCards(items);
+				notifyFirstRelatedBatch({
+					count: items.length,
+					fetchMs: Math.round(performance.now() - relatedFetchStart),
+					renderMs: Math.round(performance.now() - renderStart)
+				});
+			} else if (!firstBatchReported && relatedIds.length === 0) {
+				notifyFirstRelatedBatch({ count: 0, fetchMs: Math.round(performance.now() - relatedFetchStart), renderMs: 0 });
 			}
 			if (!hasMore) {
 				randomMode = true;
@@ -1022,6 +1379,163 @@ function initRelatedSection(root, currentCreationId) {
 const originalPushState = history.pushState.bind(history);
 const originalReplaceState = history.replaceState.bind(history);
 
+if (window.history && 'scrollRestoration' in window.history) {
+	window.history.scrollRestoration = 'manual';
+}
+
+function resetCreationDetailScroll() {
+	const apply = () => {
+		window.scrollTo(0, 0);
+		if (document.documentElement) document.documentElement.scrollTop = 0;
+		if (document.body) document.body.scrollTop = 0;
+	};
+	apply();
+	requestAnimationFrame(() => {
+		apply();
+		requestAnimationFrame(apply);
+	});
+}
+
+/**
+ * Per-load performance tracker for creation detail.
+ * Logs time-to-ready per major UI region and the slowest step within each region.
+ */
+function createCreationDetailPerfTracker({ creationId, loadToken, isCurrentLoad }) {
+	const pageStart = performance.now();
+	const partLabels = {
+		skeleton: 'Skeleton',
+		creationApi: 'Creation API',
+		likeMeta: 'Like metadata',
+		viewerProfile: 'Viewer profile',
+		lineage: 'Lineage (ancestors/children)',
+		creatorProfile: 'Creator profile',
+		detailPanel: 'Detail panel',
+		contentAboveComments: 'Content above comments',
+		hero: 'Hero media',
+		groupHero: 'Group hero carousel',
+		comments: 'Comments',
+		related: 'Related creations'
+	};
+	/** @type {Record<string, { label: string, startedAt: number, steps: object[], readyAt: number|null, bottleneck: string|null, bottleneckMs: number, meta: object|null }>} */
+	const parts = Object.create(null);
+	const pendingReady = new Set();
+
+	function ensurePart(name) {
+		if (!parts[name]) {
+			parts[name] = {
+				label: partLabels[name] || name,
+				startedAt: performance.now(),
+				steps: [],
+				readyAt: null,
+				bottleneck: null,
+				bottleneckMs: 0,
+				meta: null
+			};
+		}
+		return parts[name];
+	}
+
+	function expectReady(...names) {
+		for (const name of names) pendingReady.add(name);
+	}
+
+	function recordStep(partName, stepName, ms, meta) {
+		const part = ensurePart(partName);
+		const rounded = Math.round(ms * 10) / 10;
+		part.steps.push({ name: stepName, ms: rounded, meta: meta || null });
+		if (ms > part.bottleneckMs) {
+			part.bottleneckMs = ms;
+			part.bottleneck = stepName;
+		}
+	}
+
+	async function timeAsync(partName, stepName, fn) {
+		const t0 = performance.now();
+		try {
+			return await fn();
+		} finally {
+			recordStep(partName, stepName, performance.now() - t0);
+		}
+	}
+
+	function markReady(partName, extraMeta) {
+		const part = ensurePart(partName);
+		if (part.readyAt != null) return;
+		part.readyAt = performance.now();
+		if (extraMeta && typeof extraMeta === 'object') {
+			part.meta = { ...(part.meta || {}), ...extraMeta };
+		}
+		pendingReady.delete(partName);
+	}
+
+	function skipPart(partName, reason) {
+		pendingReady.delete(partName);
+		const part = ensurePart(partName);
+		part.readyAt = performance.now();
+		part.meta = { skipped: reason || true };
+	}
+
+	async function waitAndLog(maxMs = 15000) {
+		const deadline = performance.now() + maxMs;
+		while (pendingReady.size > 0 && performance.now() < deadline && isCurrentLoad()) {
+			await new Promise((resolve) => setTimeout(resolve, 25));
+		}
+		logReport(pendingReady.size > 0 ? 'partial-timeout' : 'final');
+	}
+
+	function logReport(reason) {
+		if (!isCurrentLoad()) return;
+		const now = performance.now();
+		const rows = Object.values(parts).map((p) => {
+			const readyAt = p.readyAt ?? now;
+			return {
+				part: p.label,
+				timeToReadyMs: Math.round(readyAt - pageStart),
+				partActiveMs: Math.round(readyAt - p.startedAt),
+				bottleneck: p.bottleneck,
+				bottleneckMs: Math.round(p.bottleneckMs),
+				steps: p.steps,
+				meta: p.meta
+			};
+		});
+		rows.sort((a, b) => b.timeToReadyMs - a.timeToReadyMs);
+		const totalMs = Math.round(now - pageStart);
+		const aboveComments = rows.find((r) => r.part === partLabels.contentAboveComments);
+		const summaryLines = rows.map((r) => {
+			const slow = r.bottleneck ? `${r.bottleneck} (${r.bottleneckMs}ms)` : '—';
+			return `  ${r.part}: ${r.timeToReadyMs}ms ready — slowest: ${slow}`;
+		});
+		const aboveCommentsLead = aboveComments
+			? `★ ${aboveComments.part}: ${aboveComments.timeToReadyMs}ms — slowest gate: ${aboveComments.bottleneck || '—'}${aboveComments.bottleneckMs ? ` (${aboveComments.bottleneckMs}ms)` : ''}\n`
+			: '';
+		// eslint-disable-next-line no-console
+		console.log(
+			`[creation-detail perf] #${creationId} load#${loadToken} — ${totalMs}ms total (${reason})\n` +
+			aboveCommentsLead +
+			summaryLines.join('\n')
+		);
+		// eslint-disable-next-line no-console
+		console.log('[creation-detail perf detail]', {
+			creationId,
+			loadToken,
+			reason,
+			totalMs,
+			pending: [...pendingReady],
+			parts: rows
+		});
+	}
+
+	return {
+		pageStart,
+		expectReady,
+		recordStep,
+		timeAsync,
+		markReady,
+		skipPart,
+		waitAndLog
+	};
+}
+
 async function loadCreation() {
 	const detailContent = document.querySelector('[data-detail-content]');
 	const imageEl = document.querySelector('[data-image]');
@@ -1040,6 +1554,9 @@ async function loadCreation() {
 
 	if (!detailContent || !imageEl || !backgroundEl) return;
 
+	showCreationDetailContentSkeleton(detailContent);
+	prepareCreationDetailHeroForLoad(imageEl, imageWrapper);
+
 	if (creationDetailInlineLightboxMod && !detailContent.dataset.prsnInlineLightboxBound) {
 		detailContent.dataset.prsnInlineLightboxBound = '1';
 		creationDetailInlineLightboxMod.bindChatInlineImageLightboxClickDelegation(detailContent, {
@@ -1050,6 +1567,27 @@ async function loadCreation() {
 
 	const loadToken = ++loadCreationSequence;
 	const isCurrentLoad = () => loadToken === loadCreationSequence;
+	/** @type {{ current: ReturnType<typeof createCreationDetailPerfTracker> | null }} */
+	const perfRef = { current: null };
+
+	function markHeroReady(meta) {
+		perfRef.current?.markReady('hero', meta);
+	}
+
+	function applyLoadedImageState() {
+		const modIcon = imageWrapper?.querySelector('.creation-detail-error-icon-moderated');
+		if (modIcon) modIcon.remove();
+		if (!heroVideoAwaitingReveal()) {
+			imageWrapper?.classList.remove('image-loading', 'image-error', 'image-error-moderated');
+		}
+		const url = String(heroImageDisplayedUrl() || '').trim();
+		if (url) {
+			imageEl.dataset.currentUrl = url;
+			setHeroBackgroundUrl(url);
+		}
+		imageEl.style.visibility = 'visible';
+		markHeroReady({ state: 'image' });
+	}
 
 	function heroImageDisplayedUrl() {
 		return (
@@ -1065,20 +1603,6 @@ async function loadCreation() {
 		if (imageWrapper.classList.contains('group-video-playlist-active')) return false;
 		if (imageWrapper.classList.contains('hero-video-pending')) return true;
 		return heroPlaybackVideoHasSource(videoEl) && !imageWrapper.classList.contains('hero-video-revealed');
-	}
-
-	function applyLoadedImageState() {
-		const modIcon = imageWrapper?.querySelector('.creation-detail-error-icon-moderated');
-		if (modIcon) modIcon.remove();
-		if (!heroVideoAwaitingReveal()) {
-			imageWrapper?.classList.remove('image-loading', 'image-error', 'image-error-moderated');
-		}
-		const url = String(heroImageDisplayedUrl() || '').trim();
-		if (url) {
-			imageEl.dataset.currentUrl = url;
-			setHeroBackgroundUrl(url);
-		}
-		imageEl.style.visibility = 'visible';
 	}
 
 	function ensureHeroImageVisible() {
@@ -1358,6 +1882,9 @@ async function loadCreation() {
 		if (urlsMatch(currentUrl, url)) {
 			imageEl.dataset.currentUrl = url;
 			if (hasLoadedHeroImage()) {
+				if (!heroVideoAwaitingReveal()) {
+					applyLoadedImageState();
+				}
 				return;
 			}
 			imageWrapper?.classList.remove('image-error', 'image-error-moderated');
@@ -1402,6 +1929,7 @@ async function loadCreation() {
 				clearHeroImage();
 				imageWrapper?.classList.remove('image-loading');
 				imageWrapper?.classList.add('image-error');
+				markHeroReady({ state: 'image-preload-error' });
 				return;
 			}
 			delete imageEl.dataset.pendingUrl;
@@ -1645,7 +2173,8 @@ async function loadCreation() {
 
 	teardownGroupHeroCarousel();
 
-	detailContent.innerHTML = renderCreationDetailSkeleton();
+	// Skeleton already shown at top of loadCreation; refresh in case DOM was cleared elsewhere.
+	showCreationDetailContentSkeleton(detailContent);
 
 	// Attach image load/error handlers once, so broken-image icons never show
 	if (!imageEl.dataset.fallbackAttached) {
@@ -1665,6 +2194,7 @@ async function loadCreation() {
 			setHeroBackgroundUrl('');
 			// Hide default browser broken-image UI
 			imageEl.style.visibility = 'hidden';
+			markHeroReady({ state: 'image-error' });
 		});
 	}
 
@@ -1719,6 +2249,7 @@ async function loadCreation() {
 					// ignore
 				}
 				if (videoMutedBadgeEl) videoMutedBadgeEl.hidden = true;
+				markHeroReady({ state: 'video-error' });
 			});
 		}
 
@@ -1758,6 +2289,11 @@ async function loadCreation() {
 		return;
 	}
 
+	perfRef.current = createCreationDetailPerfTracker({ creationId, loadToken, isCurrentLoad });
+	const perf = perfRef.current;
+	perf.expectReady('skeleton', 'creationApi', 'contentAboveComments', 'hero');
+	perf.markReady('skeleton');
+
 	try {
 		const headers = {};
 		if (window.__ps_share_context && typeof window.__ps_share_context === 'object') {
@@ -1786,10 +2322,12 @@ async function loadCreation() {
 			}
 		}
 
-		const response = await fetch(`/api/create/images/${creationId}${challengeSubmitQs}`, {
-			credentials: 'include',
-			headers
-		});
+		const response = await perf.timeAsync('creationApi', 'fetch', () =>
+			fetch(`/api/create/images/${creationId}${challengeSubmitQs}`, {
+				credentials: 'include',
+				headers
+			})
+		);
 		if (!response.ok) {
 			if (response.status === 404) {
 				// eslint-disable-next-line no-console
@@ -1809,8 +2347,14 @@ async function loadCreation() {
 			throw new Error('Failed to load creation');
 		}
 
-		const creation = await response.json();
+		const creation = await perf.timeAsync('creationApi', 'parseJson', () => response.json());
 		if (!isCurrentLoad()) return;
+		perf.markReady('creationApi', {
+			status: creation.status || 'completed',
+			mediaType: typeof creation.media_type === 'string' ? creation.media_type : (creation.meta?.media_type || 'image')
+		});
+
+		perf.expectReady('viewerProfile', 'creatorProfile', 'lineage');
 
 		// Fetch direct children (published creations with mutate_of_id = this id), order by created_at
 		const childrenPromise = fetch(`/api/create/images/${creationId}/children`, { credentials: 'include' })
@@ -1821,6 +2365,103 @@ async function loadCreation() {
 
 		const status = creation.status || 'completed';
 		const meta = creation.meta || null;
+
+		const creatorIdEarly = Number(creation?.creator?.id ?? creation?.user_id ?? 0);
+
+		const viewerProfilePromise = perf.timeAsync('viewerProfile', 'fetch', async () => {
+			try {
+				return await fetchJsonWithStatusDeduped('/api/profile', { credentials: 'include' }, { windowMs: 2000 });
+			} catch {
+				return { ok: false };
+			}
+		});
+
+		const creatorProfilePromise = (Number.isFinite(creatorIdEarly) && creatorIdEarly > 0)
+			? perf.timeAsync('creatorProfile', 'fetch', async () => {
+				try {
+					return await fetchJsonWithStatusDeduped(
+						`/api/users/${creatorIdEarly}/profile`,
+						{ credentials: 'include' },
+						{ windowMs: 800 }
+					);
+				} catch {
+					return { ok: false };
+				}
+			})
+			: Promise.resolve({ ok: false });
+
+		const historyRawPrefetch = meta?.history;
+		const historyIdsPrefetch = Array.isArray(historyRawPrefetch)
+			? historyRawPrefetch.map((v) => Number(v)).filter((n) => Number.isFinite(n) && n > 0)
+			: [];
+		const historyChainIdsPrefetch = [];
+		const seenHistoryPrefetch = new Set();
+		for (const id of historyIdsPrefetch) {
+			if (seenHistoryPrefetch.has(id)) continue;
+			seenHistoryPrefetch.add(id);
+			historyChainIdsPrefetch.push(id);
+		}
+		const creationIdNum = Number(creationId);
+		if (!seenHistoryPrefetch.has(creationIdNum)) {
+			historyChainIdsPrefetch.push(creationIdNum);
+		}
+
+		const lineagePrefetchPromise = (async () => {
+			const nsfwById = new Map();
+			let ancestorSlots = [];
+			let nonCurrentIds = [];
+			const directParentIds = Array.isArray(meta?.direct_parent_ids)
+				? meta.direct_parent_ids.map((v) => Number(v)).filter((n) => Number.isFinite(n) && n > 0)
+				: [];
+
+			if (historyIdsPrefetch.length > 0 && historyChainIdsPrefetch.length >= 2) {
+				nonCurrentIds = historyChainIdsPrefetch.filter((id) => id !== creationIdNum);
+				try {
+					await perf.timeAsync('lineage', 'nsfwFlags', async () => {
+						const flagsRes = await fetch(`/api/creations/nsfw-flags?ids=${nonCurrentIds.join(',')}`, { credentials: 'include' });
+						if (flagsRes.ok) {
+							const flags = await flagsRes.json();
+							if (flags && typeof flags === 'object') {
+								for (const [k, v] of Object.entries(flags)) nsfwById.set(k, v === true);
+							}
+						}
+					});
+				} catch {
+					// ignore
+				}
+
+				ancestorSlots = await perf.timeAsync('lineage', 'ancestorSlots', () =>
+					Promise.all(nonCurrentIds.map(async (id) => {
+						try {
+							const res = await fetch(`/api/create/images/${id}${lineageOfQuerySuffix}`, lineageFetchInit);
+							if (!res.ok) return { id, mode: 'inaccessible' };
+							const c = await res.json().catch(() => null);
+							if (!c) return { id, mode: 'inaccessible' };
+							const pub = c.published === true || c.published === 1;
+							const thumb =
+								(c.thumbnail_url && String(c.thumbnail_url).trim()) ||
+								(c.url && String(c.url).trim()) ||
+								null;
+							return { id, mode: 'lineage-open', thumb, published: pub };
+						} catch {
+							return { id, mode: 'inaccessible' };
+						}
+					}))
+				);
+			}
+
+			const childrenList = await perf.timeAsync('lineage', 'children', () => childrenPromise);
+			return {
+				historyIds: historyIdsPrefetch,
+				historyChainIds: historyChainIdsPrefetch,
+				nsfwById,
+				ancestorSlots,
+				nonCurrentIds,
+				directParentIds,
+				childrenList,
+			};
+		})();
+
 		const challengeSubmissions = Array.isArray(meta?.challenge_submissions) ? meta.challenge_submissions : [];
 		const hasChallengeSubmission = challengeSubmissions.length > 0;
 		const mediaType = typeof creation.media_type === 'string'
@@ -1836,18 +2477,24 @@ async function loadCreation() {
 		// When the detail page is served at a share URL (/s/...), don't touch likes for private/unpublished creations.
 		// Likes are a "public surface area" and we don't want extra API calls here.
 		if (!shareMounted) {
+			perf.expectReady('likeMeta');
 			try {
-				const likeRes = await fetch(`/api/created-images/${creationId}/like`, { credentials: 'include' });
-				if (likeRes.ok) {
-					const meta = await likeRes.json();
-					likeMeta = {
-						like_count: Number(meta?.like_count ?? 0),
-						viewer_liked: Boolean(meta?.viewer_liked)
-					};
-				}
+				await perf.timeAsync('likeMeta', 'fetch', async () => {
+					const likeRes = await fetch(`/api/created-images/${creationId}/like`, { credentials: 'include' });
+					if (likeRes.ok) {
+						const meta = await likeRes.json();
+						likeMeta = {
+							like_count: Number(meta?.like_count ?? 0),
+							viewer_liked: Boolean(meta?.viewer_liked)
+						};
+					}
+				});
 			} catch {
 				// ignore like meta load failures
 			}
+			perf.markReady('likeMeta');
+		} else {
+			perf.skipPart('likeMeta', 'share-mounted');
 		}
 		if (!isCurrentLoad()) return;
 
@@ -1911,6 +2558,7 @@ async function loadCreation() {
 					Number(creation.id),
 					{
 						posterUrl: typeof bgUrl === 'string' ? bgUrl.trim() : '',
+						onFirstReveal: () => markHeroReady({ state: 'video' }),
 					}
 				);
 			} else if (pendingGroupVideoPlaylist) {
@@ -1920,6 +2568,7 @@ async function loadCreation() {
 			const modIcon = imageWrapper?.querySelector('.creation-detail-error-icon-moderated');
 			if (modIcon) modIcon.remove();
 			showHeroLoadingPlaceholder();
+			markHeroReady({ state: 'creating' });
 		} else if (isFailed) {
 			resetHeroVideo();
 			clearHeroImage();
@@ -1951,6 +2600,7 @@ async function loadCreation() {
 			} else {
 				imageWrapper?.classList.add('image-error');
 			}
+			markHeroReady({ state: 'failed' });
 		}
 
 		// Format date (tooltip only; no visible "time ago" on this page)
@@ -1960,28 +2610,24 @@ async function loadCreation() {
 		// Generate title from published title or use default
 		const isPublished = creation.published === true || creation.published === 1;
 		const shareMountedPrivate = shareMounted && !isPublished;
-		const displayTitle = creation.title || 'Untitled';
-		const isUntitled = !creation.title;
-		const groupTitleForSourceLabels =
-			typeof creation.title === 'string' && creation.title.trim()
-				? creation.title.trim()
-				: 'Untitled';
+		const titleRaw =
+			typeof creation.title === 'string' ? creation.title.trim() : '';
+		const isUntitled = isPublished && !titleRaw;
+		const displayTitle = titleRaw || (isUntitled ? 'Untitled' : '');
+		const groupTitleForSourceLabels = titleRaw || 'Untitled';
 
 		// Check if current user owns this creation
 		let currentUserId = null;
 		let currentUser = null;
 		let currentUserProfile = null;
-		try {
-			const profile = await fetchJsonWithStatusDeduped('/api/profile', { credentials: 'include' }, { windowMs: 2000 });
-			if (!isCurrentLoad()) return;
-			if (profile.ok) {
-				currentUser = profile.data ?? null;
-				currentUserProfile = currentUser?.profile ?? null;
-				currentUserId = currentUser?.id ?? null;
-			}
-		} catch {
-			// ignore
+		const profile = await perf.timeAsync('contentAboveComments', 'waitViewerProfile', () => viewerProfilePromise);
+		if (!isCurrentLoad()) return;
+		if (profile.ok) {
+			currentUser = profile.data ?? null;
+			currentUserProfile = currentUser?.profile ?? null;
+			currentUserId = currentUser?.id ?? null;
 		}
+		perf.markReady('viewerProfile');
 
 		const isOwner =
 			currentUserId != null &&
@@ -2140,6 +2786,12 @@ async function loadCreation() {
 				if (sourceMethodName && sourceMethodName !== 'Replicate') sourceMetaItems.push(`Method ${sourceMethodName}`);
 				if (sourceModel) sourceMetaItems.push(`Model ${sourceModel}`);
 				if (sourceDuration) sourceMetaItems.push(`Duration ${sourceDuration}`);
+				const sourceMetaParts = {
+					serverName: sourceServerName,
+					methodName: sourceMethodName,
+					displayModel: sourceModel,
+					durationStr: sourceDuration
+				};
 				const sourceGenerationInfo = sourceMetaItems.join(' • ');
 				const sourceDims =
 					typeof videoHeroDimensionsFromCreation === 'function'
@@ -2172,6 +2824,7 @@ async function loadCreation() {
 					createdAt: sourceCreatedAt,
 					prompt: sourcePrompt,
 					generationInfo: sourceGenerationInfo,
+					metaParts: sourceMetaParts,
 					meta: sourceMeta
 				};
 			})
@@ -2278,45 +2931,15 @@ async function loadCreation() {
 			`;
 		}
 
-		// Published display:
-		// - Show "Published {time ago}" directly under the user identification line.
-		// - Keep description as its own block further down.
+		// Published time is shown on the model/duration meta line.
 		const publishedDateRaw = creation.published_at || creation.created_at || null;
 		const publishedDate = publishedDateRaw ? new Date(publishedDateRaw) : null;
 		const hasPublishedDate = publishedDate instanceof Date && Number.isFinite(publishedDate.valueOf());
 		const publishedTimeAgo = hasPublishedDate ? formatRelativeTime(publishedDate) : '';
 		const publishedAtTitle = hasPublishedDate ? formatDateTime(publishedDate) : '';
 
-		let publishedLabel = '';
-		if (isPublished) {
-			publishedLabel = html`
-				<div class="creation-detail-author-published" ${publishedAtTitle ? `title="${publishedAtTitle}" ` : ''}>
-					Published${publishedTimeAgo ? ` ${publishedTimeAgo}` : ''}
-				</div>
-			`;
-		}
-
-		// Mobile-only byline under title: "@handle Published 3 hr. ago" or "@handle Not Published"
-		const mobileBylineText = isPublished ? (`Published${publishedTimeAgo ? ` ${publishedTimeAgo}` : ''}`) : 'Not Published';
-
 		// Show description whenever it exists, regardless of publication status
-		// History thumbnails (mutations lineage)
-		const historyRaw = meta?.history;
-		const historyIds = Array.isArray(historyRaw)
-			? historyRaw.map((v) => Number(v)).filter((n) => Number.isFinite(n) && n > 0)
-			: [];
-
-		const historyChainIds = [];
-		const seenHistoryIds = new Set();
-		for (const id of historyIds) {
-			if (seenHistoryIds.has(id)) continue;
-			seenHistoryIds.add(id);
-			historyChainIds.push(id);
-		}
-		if (!seenHistoryIds.has(creationId)) {
-			historyChainIds.push(creationId);
-		}
-
+		// History thumbnails (mutations lineage) — prefetched in parallel after creation API
 		const lineageVideoPlayGlyphSvg =
 			'<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"></path></svg>';
 		const currentIndicatorHtml = `
@@ -2332,147 +2955,18 @@ async function loadCreation() {
 			</button>
 		`;
 
-		// Ancestors: lineage chain (current "lineage" content). NSFW ancestors: blank + no link when !enableNsfw; blurred/unobscured when enableNsfw.
-		let ancestorsHtml = '';
-		let nsfwById = new Map();
-		if (historyIds.length > 0 && historyChainIds.length >= 2) {
-			const nonCurrentIds = historyChainIds.filter((id) => id !== creationId);
-			try {
-				const flagsRes = await fetch(`/api/creations/nsfw-flags?ids=${nonCurrentIds.join(',')}`, { credentials: 'include' });
-				if (flagsRes.ok) {
-					const flags = await flagsRes.json();
-					if (flags && typeof flags === 'object') {
-						for (const [k, v] of Object.entries(flags)) nsfwById.set(k, v === true);
-					}
-				}
-			} catch {
-				// ignore
-			}
-			const directParentIds = Array.isArray(meta?.direct_parent_ids)
-				? meta.direct_parent_ids.map((v) => Number(v)).filter((n) => Number.isFinite(n) && n > 0)
-				: [];
-			const directParentSet = new Set(directParentIds);
-			const usePlusBetween = directParentSet.size >= 2;
-
-			async function fetchAncestorLineageSlot(id) {
-				if (!enableNsfw && nsfwById.get(String(id)) === true) {
-					return { id, mode: 'nsfw-hidden' };
-				}
-				try {
-					const res = await fetch(`/api/create/images/${id}${lineageOfQuerySuffix}`, lineageFetchInit);
-					if (!res.ok) return { id, mode: 'inaccessible' };
-					const c = await res.json().catch(() => null);
-					if (!c) return { id, mode: 'inaccessible' };
-					const pub = c.published === true || c.published === 1;
-					const thumb =
-						(c.thumbnail_url && String(c.thumbnail_url).trim()) ||
-						(c.url && String(c.url).trim()) ||
-						null;
-					return {
-						id,
-						mode: 'lineage-open',
-						thumb,
-						published: pub
-					};
-				} catch {
-					return { id, mode: 'inaccessible' };
-				}
-			}
-
-			const ancestorSlots = await Promise.all(nonCurrentIds.map((id) => fetchAncestorLineageSlot(id)));
-			const slotById = new Map(ancestorSlots.map((s) => [s.id, s]));
-
-			const parts = nonCurrentIds.map((id, index) => {
-				const slot = slotById.get(id) || { id, mode: 'inaccessible' };
-				const isLastAncestor = index === nonCurrentIds.length - 1;
-				const nextId = nonCurrentIds[index + 1];
-				const bothDirect = usePlusBetween && !isLastAncestor && directParentSet.has(id) && directParentSet.has(nextId);
-				const separator = bothDirect ? '+' : '→';
-				const nsfw = nsfwById.get(String(id)) === true;
-				if (slot.mode === 'nsfw-hidden') {
-					return `<button type="button" class="creation-detail-history-thumb-link creation-detail-history-nsfw-blank creation-detail-history-lineage-btn" data-lineage-ancestor-open="${id}"
-						aria-label="${escapeHtml(`Lineage #${id}: hidden (NSFW)`)}">#${id}</button><span class="creation-detail-history-arrow" aria-hidden="true">${separator}</span>`;
-				}
-				const nsfwClass = enableNsfw && nsfw ? (showUnobscured ? ' nsfw nsfw-revealed' : ' nsfw') : '';
-				const dataCreationId = enableNsfw && nsfw ? ` data-creation-id="${id}"` : '';
-
-				if (slot.mode === 'lineage-open') {
-					const t = (slot.thumb || '').trim();
-					const inner = t
-						? `<span class="creation-detail-history-fallback" data-history-fallback style="display: none;">#${id}</span><img class="creation-detail-history-thumb" src="${escapeHtml(t)}" alt="" loading="lazy" />`
-						: `<span class="creation-detail-history-fallback" data-history-fallback>#${id}</span><img class="creation-detail-history-thumb" data-history-img alt="" loading="lazy" style="display: none;" />`;
-					const pubHint = slot.published ? 'Published — open for details or full page' : 'Open for details';
-					return `
-				<button
-					type="button"
-					class="creation-detail-history-thumb-link creation-detail-history-lineage-btn${nsfwClass}"
-					data-lineage-ancestor-open="${id}"
-					aria-label="${escapeHtml(`Lineage #${id}: ${pubHint}`)}"${dataCreationId}
-				>${inner}</button>
-				<span class="creation-detail-history-arrow" aria-hidden="true">${separator}</span>
-			`;
-				}
-				return `
-				<button type="button" class="creation-detail-history-thumb-link creation-detail-history-unavailable creation-detail-history-lineage-btn" data-lineage-ancestor-open="${id}"
-					aria-label="${escapeHtml(`Lineage #${id}: not available in preview — open for details`)}" title="Not available in preview">#${id}</button>
-				<span class="creation-detail-history-arrow" aria-hidden="true">${separator}</span>
-			`;
-			}).join('');
-
-			ancestorsHtml = html`
-				<div class="creation-detail-history-wrap">
-					<div class="creation-detail-history-header">
-						<div class="creation-detail-history-label">Ancestors</div>
-					</div>
-					<div class="creation-detail-history" data-creation-history>
-						${parts}${currentIndicatorHtml}${lineageVideoPlayBtnHtml}
-					</div>
-				</div>
-			`;
-		}
+		const hasAncestorLineage = historyIdsPrefetch.length > 0 && historyChainIdsPrefetch.length >= 2;
+		const deferLineageSection = hasAncestorLineage;
+		let historyIds = historyIdsPrefetch;
+		const lineageSectionHtml = deferLineageSection
+			? renderLineageAncestorsPlaceholder(historyChainIdsPrefetch.length - 1)
+			: '';
 
 		// Full chain for lineage modal prev/next (ancestors then current), same order as history strip + current.
 		const lineageModalChainIdsOrdered =
-			historyIds.length > 0 && historyChainIds.length >= 2 ? [...historyChainIds] : [];
+			historyIdsPrefetch.length > 0 && historyChainIdsPrefetch.length >= 2 ? [...historyChainIdsPrefetch] : [];
 
-		// Children: direct derivatives (mutate_of_id = this creation). NSFW children: blank + no link when !enableNsfw; blurred/unobscured when enableNsfw.
-		const childrenList = await childrenPromise;
-		let childrenHtml = '';
-		if (Array.isArray(childrenList) && childrenList.length > 0) {
-			const childParts = childrenList.map((child) => {
-				const cid = child.id;
-				const childNsfw = !!child.nsfw;
-				const thumbUrl = (child.thumbnail_url || child.url || '').trim();
-				if (!enableNsfw && childNsfw) {
-					return `<span class="creation-detail-history-thumb-link creation-detail-history-nsfw-blank" data-child-id="${cid}" aria-label="${escapeHtml(`Creation #${cid} (hidden)`)}">#${cid}</span>`;
-				}
-				const nsfwClass = enableNsfw && childNsfw ? (showUnobscured ? ' nsfw nsfw-revealed' : ' nsfw') : '';
-				const dataCreationId = enableNsfw && childNsfw ? ` data-creation-id="${cid}"` : '';
-				return `
-				<a
-					class="creation-detail-history-thumb-link${nsfwClass}"
-					href="/creations/${cid}"
-					aria-label="${escapeHtml(`Go to creation #${cid}`)}"
-					data-child-id="${cid}"${dataCreationId}
-				>
-					<span class="creation-detail-history-fallback" data-child-fallback>#${cid}</span>
-					<img class="creation-detail-history-thumb" data-child-img alt="" loading="lazy" style="display: none;" data-bg-url="${escapeHtml(thumbUrl)}" />
-				</a>
-			`;
-			}).join('');
-			childrenHtml = html`
-				<div class="creation-detail-history-wrap">
-					<div class="creation-detail-history-label">Children</div>
-					<div class="creation-detail-history" data-creation-children>
-						${childParts}
-					</div>
-				</div>
-			`;
-		}
-
-		const lineageSectionHtml = ancestorsHtml + (childrenHtml || '');
-
-		// Meta-derived values for description section (Server, Method, Duration, Prompt)
+		// Children are hydrated with ancestors when the deferred lineage prefetch completes.
 		const args = meta?.args ?? null;
 		const isPlainObject = args && typeof args === 'object' && !Array.isArray(args);
 		const storedUserPrompt = typeof meta?.user_prompt === 'string' ? meta.user_prompt.trim() : '';
@@ -2518,7 +3012,8 @@ async function loadCreation() {
 				</div>
 			`
 			: '';
-		const hasMetaInDescription = !!(serverName || methodName || displayModel || durationStr);
+		const hasPublishedMeta = isPublished ? hasPublishedDate : true;
+		const hasMetaInDescription = !!(serverName || methodName || displayModel || durationStr || hasPublishedMeta);
 		const showDescriptionBlock =
 			descriptionText || hasPromptSection || hasStyle || lineageSectionHtml || hasMetaInDescription;
 
@@ -2570,20 +3065,16 @@ async function loadCreation() {
 
 			const descriptionInnerHtml = descriptionParts.length ? descriptionParts.join('') : '';
 
-			// Build Server/Method/Duration line (outside collapsible)
-			let metaLineHtml = '';
-			if (serverName || methodName || displayModel || durationStr) {
-				const metaItems = [];
-				if (serverName && serverName !== 'Parascene') metaItems.push(html`<span class="creation-detail-description-meta-label">Server</span> <span
-	class="creation-detail-description-meta-value">${escapeHtml(serverName)}</span>`);
-				if (methodName && methodName !== 'Replicate') metaItems.push(html`<span class="creation-detail-description-meta-label">Method</span> <span
-	class="creation-detail-description-meta-value">${escapeHtml(methodName)}</span>`);
-				if (displayModel) metaItems.push(html`<span class="creation-detail-description-meta-label">Model</span> <span
-	class="creation-detail-description-meta-value">${escapeHtml(displayModel)}</span>`);
-				if (durationStr) metaItems.push(html`<span class="creation-detail-description-meta-label">Duration</span> <span
-	class="creation-detail-description-meta-value">${escapeHtml(durationStr)}</span>`);
-				metaLineHtml = html`<div class="creation-detail-description-meta-line">${metaItems.join(' • ')}</div>`;
-			}
+			const metaLineHtml = buildDescriptionMetaLineHtml({
+				serverName,
+				methodName,
+				displayModel,
+				durationStr,
+				isPublished,
+				publishedTimeAgo,
+				publishedAtTitle,
+				escapeHtml
+			});
 
 			descriptionHtml = html`
 				<div class="creation-detail-published${lineageSectionHtml ? ' has-history' : ''}">
@@ -2642,24 +3133,18 @@ async function loadCreation() {
 		let viewerFollowsCreator = false;
 		let creatorFollowerCount = 0;
 
-		if (Number.isFinite(creatorId) && creatorId > 0) {
-			try {
-				const profileSummary = await fetchJsonWithStatusDeduped(
-					`/api/users/${creatorId}/profile`,
-					{ credentials: 'include' },
-					{ windowMs: 800 }
+		const profileSummary = await perf.timeAsync('contentAboveComments', 'waitCreatorProfile', () => creatorProfilePromise);
+		if (profileSummary.ok && profileSummary.data) {
+			creatorFollowerCount = Number(profileSummary.data.stats?.followers_count ?? 0) || 0;
+			if (currentUserId && currentUserId !== creatorId) {
+				viewerFollowsCreator = sessionViewerFollowsCreator(
+					creatorId,
+					profileSummary.data.viewer_follows
 				);
-				if (profileSummary.ok && profileSummary.data) {
-					creatorFollowerCount = Number(profileSummary.data.stats?.followers_count ?? 0) || 0;
-					if (currentUserId && currentUserId !== creatorId) {
-						viewerFollowsCreator = Boolean(profileSummary.data.viewer_follows);
-						canShowFollowButton = !viewerFollowsCreator;
-					}
-				}
-			} catch {
-				// ignore follow state load failures; follow button will be hidden
+				canShowFollowButton = !viewerFollowsCreator;
 			}
 		}
+		perf.markReady('creatorProfile');
 
 		const viewerUserName = typeof currentUserProfile?.user_name === 'string' ? currentUserProfile.user_name.trim() : '';
 		const viewerDisplayName = typeof currentUserProfile?.display_name === 'string' ? currentUserProfile.display_name.trim() : '';
@@ -2836,16 +3321,19 @@ async function loadCreation() {
 
 		if (!isCurrentLoad()) return;
 
+		const hasNsfwTag = Boolean(creation.nsfw ?? creation.meta?.nsfw);
+		const needsTitleSlot = Boolean(displayTitle || (isGroupCreation && groupSources.length > 0));
+		const showTitleRow = needsTitleSlot || hasNsfwTag || hasChallengeSubmission;
+
+		const detailRenderStart = performance.now();
 		detailContent.innerHTML = html`
-			<div class="creation-detail-title-row">
-				${(creation.nsfw ?? creation.meta?.nsfw) ? html`<span class="creation-detail-nsfw-tag">NSFW</span>` : ''}
+			${showTitleRow ? html`<div class="creation-detail-title-row">
+				${hasNsfwTag ? html`<span class="creation-detail-nsfw-tag">NSFW</span>` : ''}
 				${hasChallengeSubmission ? html`<span class="creation-detail-challenge-chip" title="Entered in a community challenge">${challengeTrophyIconSvg}<span class="creation-detail-challenge-chip-label">Challenge entry</span></span>` :
 				''}
-				<div class="creation-detail-title${isUntitled ? ' creation-detail-title-untitled' : ''}">${escapeHtml(displayTitle)}
-				</div>
-			</div>
-			${hasChallengeSubmission && isOwner ? '' : html`<div class="creation-detail-title-byline creation-detail-title-byline-mobile">${escapeHtml(creatorHandle)}
-				${escapeHtml(mobileBylineText)}</div>`}
+				${needsTitleSlot ? html`<div class="creation-detail-title${isUntitled ? ' creation-detail-title-untitled' : ''}"${displayTitle ? '' : ' hidden'}>${displayTitle ? escapeHtml(displayTitle) : ''}</div>` : ''}
+			</div>` : ''}
+			${!(hasChallengeSubmission && isOwner) && !isPublished ? html`<div class="creation-detail-title-byline creation-detail-title-byline-mobile">${escapeHtml(creatorHandle)} Not Published</div>` : ''}
 			${challengeDetailBannerHtml}
 			${renderCreationDetailActionStrip(stripData, escapeHtml)}
 			${renderCreationDetailMoreMenu(menuData, escapeHtml)}
@@ -2979,6 +3467,8 @@ async function loadCreation() {
 			</div>
 		`;
 
+		perf.recordStep('contentAboveComments', 'renderDom', performance.now() - detailRenderStart);
+
 		/* When showing initial only (no avatar image), set --avatar-bg so the class uses it; with image, CSS uses var(--surface-strong) */
 		const founderFlairEl = detailContent.querySelector('[data-founder-flair-avatar-bg]');
 		if (founderFlairEl && !viewerAvatarUrl) founderFlairEl.style.setProperty('--avatar-bg', viewerColor);
@@ -3004,12 +3494,15 @@ async function loadCreation() {
 		}
 
 		// After rendering description (and initial scaffold), hydrate link titles + media embeds.
+		const detailHydrateStart = performance.now();
 		if (typeof hydrateRichUserTextEmbeds === 'function') {
 			hydrateRichUserTextEmbeds(detailContent);
 		} else {
 			hydrateUserTextLinks(detailContent);
 		}
+		perf.recordStep('contentAboveComments', 'hydrateEmbeds', performance.now() - detailHydrateStart);
 		setupCollapsibleDescription(detailContent);
+		perf.markReady('contentAboveComments');
 
 		const copyPromptBtn = detailContent.querySelector('[data-copy-prompt-btn]');
 		if (copyPromptBtn instanceof HTMLButtonElement) {
@@ -3515,23 +4008,93 @@ async function loadCreation() {
 			await loadLineageModalAtCurrentIndex();
 		}
 
-		const historyRootForLineage = detailContent.querySelector('[data-creation-history]');
-		if (historyRootForLineage) {
-			historyRootForLineage.addEventListener('click', (e) => {
+		async function hydrateLineageThumbnailsInDetail() {
+			if (historyIds.length === 0) return;
+			const historyRoot = detailContent.querySelector('[data-creation-history]');
+			if (!historyRoot) return;
+			const needThumb = Array.from(
+				historyRoot.querySelectorAll('button[data-lineage-ancestor-open] img[data-history-img]')
+			).filter((img) => img instanceof HTMLImageElement && !(img.getAttribute('src') || '').trim());
+			if (needThumb.length === 0) return;
+			const results = await Promise.allSettled(
+				needThumb.map((img) => {
+					const btn = img.closest('button[data-lineage-ancestor-open]');
+					const raw = btn && btn.getAttribute('data-lineage-ancestor-open');
+					const id = raw != null ? Number(raw) : NaN;
+					if (!Number.isFinite(id) || id <= 0) return Promise.resolve(null);
+					return fetch(`/api/create/images/${id}${lineageOfQuerySuffix}`, lineageFetchInit)
+						.then((r) => (r.ok ? r.json() : null))
+						.then((c) => (c?.thumbnail_url || c?.url || '').trim() || null);
+				})
+			);
+			for (let i = 0; i < needThumb.length; i++) {
+				const img = needThumb[i];
+				const r = results[i];
+				const url = r.status === 'fulfilled' ? r.value : null;
+				if (!url || !(img instanceof HTMLImageElement)) continue;
+				img.src = url;
+				img.style.display = '';
+				const fallback = img.closest('button')?.querySelector('[data-history-fallback]');
+				if (fallback instanceof HTMLElement) fallback.style.display = 'none';
+			}
+		}
+
+		function hydrateLineageChildrenThumbnails() {
+			const childrenRoot = detailContent.querySelector('[data-creation-children]');
+			if (!childrenRoot) return;
+			const imgs = childrenRoot.querySelectorAll('img[data-child-img][data-bg-url]');
+			for (const img of imgs) {
+				if (!(img instanceof HTMLImageElement)) continue;
+				const bgUrl = (img.getAttribute('data-bg-url') || '').trim();
+				if (!bgUrl) continue;
+				img.src = bgUrl;
+				img.style.display = '';
+				const link = img.closest('a');
+				if (link && showUnobscured && link.classList.contains('nsfw')) {
+					link.classList.add('nsfw-revealed');
+				}
+				const fallback = link?.querySelector('[data-child-fallback]');
+				if (fallback instanceof HTMLElement) fallback.style.display = 'none';
+			}
+		}
+
+		function wireLineageVideoPlaylistBtn() {
+			const lineageVideoPlaylistBtn = detailContent.querySelector('[data-lineage-video-playlist-btn]');
+			if (!(lineageVideoPlaylistBtn instanceof HTMLButtonElement) || lineageModalChainIdsOrdered.length < 2) return;
+			if (lineageVideoPlaylistBtn.dataset.lineagePlaylistWired === '1') return;
+			lineageVideoPlaylistBtn.dataset.lineagePlaylistWired = '1';
+			lineageVideoPlaylistBtn.addEventListener('click', (e) => {
+				e.preventDefault();
+				void openLineageVideoPlaylist();
+			});
+			void (async () => {
+				const slides = await collectLineageVideoSlidesOldestFirst();
+				if (slides.length >= 2) lineageVideoPlaylistBtn.hidden = false;
+			})();
+		}
+
+		if (!detailContent.dataset.lineageAncestorClickBound) {
+			detailContent.dataset.lineageAncestorClickBound = '1';
+			detailContent.addEventListener('click', (e) => {
 				const btn = e.target.closest('[data-lineage-ancestor-open]');
-				if (!btn || !historyRootForLineage.contains(btn)) return;
+				const historyRoot = detailContent.querySelector('[data-creation-history]');
+				if (!btn || !historyRoot || !historyRoot.contains(btn)) return;
 				e.preventDefault();
 				const raw = btn.getAttribute('data-lineage-ancestor-open');
 				const id = Number(raw);
 				if (!Number.isFinite(id) || id <= 0) return;
 				void openLineageModal(id);
 			});
-			historyRootForLineage.addEventListener(
+		}
+		if (!detailContent.dataset.lineageHistoryThumbErrorBound) {
+			detailContent.dataset.lineageHistoryThumbErrorBound = '1';
+			detailContent.addEventListener(
 				'error',
 				(e) => {
 					const t = e.target;
 					if (!(t instanceof HTMLImageElement) || !t.classList.contains('creation-detail-history-thumb')) return;
-					if (!historyRootForLineage.contains(t)) return;
+					const historyRoot = detailContent.querySelector('[data-creation-history]');
+					if (!historyRoot || !historyRoot.contains(t)) return;
 					t.style.display = 'none';
 					const fb = t.closest('button')?.querySelector('[data-history-fallback]');
 					if (fb instanceof HTMLElement) fb.style.removeProperty('display');
@@ -3567,69 +4130,50 @@ async function loadCreation() {
 			});
 		}
 
-		const lineageVideoPlaylistBtn = detailContent.querySelector('[data-lineage-video-playlist-btn]');
-		if (lineageVideoPlaylistBtn instanceof HTMLButtonElement && lineageModalChainIdsOrdered.length >= 2) {
-			lineageVideoPlaylistBtn.addEventListener('click', (e) => {
-				e.preventDefault();
-				void openLineageVideoPlaylist();
-			});
-			void (async () => {
-				const slides = await collectLineageVideoSlidesOldestFirst();
-				if (slides.length >= 2) lineageVideoPlaylistBtn.hidden = false;
-			})();
-		}
+		void (async () => {
+			const lineagePrefetch = await perf.timeAsync('lineage', 'deferredHydrate', () => lineagePrefetchPromise);
+			if (!isCurrentLoad()) return;
 
-		// Hydrate ancestor thumbnails when the slot had no thumb URL (rare): fill img[data-history-img] inside lineage buttons.
-		if (historyIds.length > 0) {
-			const historyRoot = detailContent.querySelector('[data-creation-history]');
-			if (historyRoot) {
-				const needThumb = Array.from(
-					historyRoot.querySelectorAll('button[data-lineage-ancestor-open] img[data-history-img]')
-				).filter((img) => img instanceof HTMLImageElement && !(img.getAttribute('src') || '').trim());
-				if (needThumb.length > 0) {
-					const results = await Promise.allSettled(
-						needThumb.map((img) => {
-							const btn = img.closest('button[data-lineage-ancestor-open]');
-							const raw = btn && btn.getAttribute('data-lineage-ancestor-open');
-							const id = raw != null ? Number(raw) : NaN;
-							if (!Number.isFinite(id) || id <= 0) return Promise.resolve(null);
-							return fetch(`/api/create/images/${id}${lineageOfQuerySuffix}`, lineageFetchInit)
-								.then((r) => (r.ok ? r.json() : null))
-								.then((c) => (c?.thumbnail_url || c?.url || '').trim() || null);
-						})
-					);
-					for (let i = 0; i < needThumb.length; i++) {
-						const img = needThumb[i];
-						const r = results[i];
-						const url = r.status === 'fulfilled' ? r.value : null;
-						if (!url || !(img instanceof HTMLImageElement)) continue;
-						img.src = url;
-						img.style.display = '';
-						const fallback = img.closest('button')?.querySelector('[data-history-fallback]');
-						if (fallback instanceof HTMLElement) fallback.style.display = 'none';
+			const built = buildLineageSectionHtmlFromPrefetch(lineagePrefetch, {
+				creationId,
+				enableNsfw,
+				showUnobscured,
+				escapeHtml,
+				currentIndicatorHtml,
+				lineageVideoPlayBtnHtml,
+			});
+			historyIds = built.historyIds;
+			const sectionHtml = built.sectionHtml;
+
+			if (sectionHtml) {
+				const mount = detailContent.querySelector('[data-lineage-deferred-mount]');
+				if (mount) {
+					mount.outerHTML = sectionHtml;
+				} else {
+					const publishedEl = detailContent.querySelector('.creation-detail-published');
+					const metaLine = publishedEl?.querySelector('.creation-detail-description-meta-line');
+					if (publishedEl && metaLine) {
+						metaLine.insertAdjacentHTML('beforebegin', sectionHtml);
+					} else if (publishedEl) {
+						publishedEl.insertAdjacentHTML('beforeend', sectionHtml);
 					}
 				}
+				const publishedEl = detailContent.querySelector('.creation-detail-published');
+				if (publishedEl) publishedEl.classList.add('has-history');
+				await hydrateLineageThumbnailsInDetail();
+				hydrateLineageChildrenThumbnails();
+				wireLineageVideoPlaylistBtn();
+			} else {
+				const mount = detailContent.querySelector('[data-lineage-deferred-mount]');
+				if (mount) mount.remove();
 			}
-		}
 
-		// Hydrate children thumbnails (URLs from API). NSFW blanks are spans with no img; for NSFW links add nsfw-revealed when showUnobscured.
-		const childrenRoot = detailContent.querySelector('[data-creation-children]');
-		if (childrenRoot) {
-			const imgs = childrenRoot.querySelectorAll('img[data-child-img][data-bg-url]');
-			for (const img of imgs) {
-				if (!(img instanceof HTMLImageElement)) continue;
-				const bgUrl = (img.getAttribute('data-bg-url') || '').trim();
-				if (!bgUrl) continue;
-				img.src = bgUrl;
-				img.style.display = '';
-				const link = img.closest('a');
-				if (link && showUnobscured && link.classList.contains('nsfw')) {
-					link.classList.add('nsfw-revealed');
-				}
-				const fallback = link?.querySelector('[data-child-fallback]');
-				if (fallback instanceof HTMLElement) fallback.style.display = 'none';
-			}
-		}
+			perf.markReady('lineage', {
+				ancestorCount: historyIds.length,
+				childCount: Array.isArray(lineagePrefetch.childrenList) ? lineagePrefetch.childrenList.length : 0,
+				deferred: true
+			});
+		})();
 
 		const likeButtons = detailContent.querySelectorAll('button[data-like-button]');
 		if (!shareMountedPrivate) {
@@ -4015,8 +4559,12 @@ async function loadCreation() {
 					return;
 				}
 
+				markCreatorFollowedInSession(targetId);
+				invalidateCreatorProfileCache(targetId);
+
 				// Once the viewer follows the creator, hide all follow buttons.
 				followButtons.forEach((btn) => { btn.style.display = 'none'; });
+				busy = false;
 			});
 		});
 
@@ -4459,6 +5007,11 @@ async function loadCreation() {
 		}
 
 		if (isGroupCreation && groupSources.length > 0) {
+			if (groupSources.length > 1) {
+				perf.expectReady('groupHero');
+			} else {
+				perf.skipPart('groupHero', 'single-source');
+			}
 			const sourceById = new Map(groupSources.map((source) => [Number(source.id), source]));
 			const orderedSourceIds = groupSources.map((source) => Number(source.id)).filter((id) => Number.isFinite(id) && id > 0);
 			const sourceIndexById = new Map(orderedSourceIds.map((id, index) => [id, index]));
@@ -4494,7 +5047,21 @@ async function loadCreation() {
 				}
 				syncSetCoverButton();
 				if (titleEl) {
-					titleEl.textContent = source.title || 'Untitled';
+					const sourceTitleRaw =
+						typeof source.title === 'string' ? source.title.trim() : '';
+					if (sourceTitleRaw) {
+						titleEl.textContent = sourceTitleRaw;
+						titleEl.hidden = false;
+						titleEl.classList.remove('creation-detail-title-untitled');
+					} else if (isPublished) {
+						titleEl.textContent = 'Untitled';
+						titleEl.hidden = false;
+						titleEl.classList.add('creation-detail-title-untitled');
+					} else {
+						titleEl.textContent = '';
+						titleEl.hidden = true;
+						titleEl.classList.remove('creation-detail-title-untitled');
+					}
 				}
 				if (mainDescriptionEl) {
 					const descriptionParts = [];
@@ -4514,7 +5081,24 @@ async function loadCreation() {
 					}
 				}
 				if (mainMetaLineEl) {
-					mainMetaLineEl.textContent = source.generationInfo || '';
+					const parts = source.metaParts && typeof source.metaParts === 'object' ? source.metaParts : {};
+					const metaItems = buildDescriptionMetaItems({
+						serverName: parts.serverName || '',
+						methodName: parts.methodName || '',
+						displayModel: parts.displayModel || '',
+						durationStr: parts.durationStr || '',
+						isPublished,
+						publishedTimeAgo,
+						publishedAtTitle,
+						escapeHtml: (v) => String(v ?? '')
+							.replace(/&/g, '&amp;')
+							.replace(/</g, '&lt;')
+							.replace(/>/g, '&gt;')
+							.replace(/"/g, '&quot;')
+							.replace(/'/g, '&#39;')
+					});
+					mainMetaLineEl.innerHTML = metaItems.join(' • ');
+					mainMetaLineEl.hidden = !metaItems.length;
 				}
 
 				if (shouldUpdateMedia) {
@@ -4608,6 +5192,7 @@ async function loadCreation() {
 
 					const mounted = await mountHeroVideoPlaybackEarly(groupSources, Number(cover.id), {
 						posterUrl,
+						onFirstReveal: () => markHeroReady({ state: 'group-video' }),
 						onIndexChange: groupSources.length > 1
 							? (index) => {
 								const sourceId = orderedSourceIds[index];
@@ -4618,7 +5203,12 @@ async function loadCreation() {
 							: null,
 					});
 					groupVideoPlaylistEnabled = mounted;
-					if (!isCurrentLoad() || !mounted) return;
+					if (!isCurrentLoad()) return;
+					if (!mounted) {
+						perf.skipPart('groupHero', 'video-mount-failed');
+						return;
+					}
+					perf.markReady('groupHero', { mode: 'video-playlist', sourceCount: groupSources.length });
 
 					if (hasGroupHeroNavigation && groupHeroPrevBtn instanceof HTMLButtonElement && groupHeroNextBtn instanceof HTMLButtonElement) {
 						groupHeroPrevBtn.hidden = false;
@@ -4632,13 +5222,26 @@ async function loadCreation() {
 					if (!isCurrentLoad()) return;
 					const cover = groupSources[0];
 					const coverUrl = typeof cover?.filePath === 'string' ? cover.filePath.trim() : '';
-					if (!coverUrl) return;
+					if (!coverUrl) {
+						perf.skipPart('groupHero', 'no-cover-url');
+						return;
+					}
 					const coverLoaded = await preloadHeroImageUrl(coverUrl);
-					if (!isCurrentLoad() || !coverLoaded?.ok) return;
+					if (!isCurrentLoad()) return;
+					if (!coverLoaded?.ok) {
+						perf.skipPart('groupHero', 'cover-preload-failed');
+						return;
+					}
 
-					const mounted = await mountGroupHeroCarousel(groupSources, Number(cover.id));
+					const mounted = await perf.timeAsync('groupHero', 'mountCarousel', () =>
+						mountGroupHeroCarousel(groupSources, Number(cover.id))
+					);
 					groupCarouselEnabled = mounted;
-					if (!mounted) return;
+					if (!mounted) {
+						perf.skipPart('groupHero', 'carousel-mount-failed');
+						return;
+					}
+					perf.markReady('groupHero', { mode: 'image-carousel', sourceCount: groupSources.length });
 
 					const remainingUrls = groupSources
 						.slice(1)
@@ -4685,6 +5288,8 @@ async function loadCreation() {
 			}
 			// Keep the cover media from the main load path as-is to avoid reloading and flicker.
 			setActiveGroupSource(groupSources[0].id, { updateMedia: false });
+		} else {
+			perf.skipPart('groupHero', isGroupCreation ? 'no-sources' : 'not-group');
 		}
 
 		const ungroupBtn = detailContent.querySelector('[data-ungroup-btn]');
@@ -4714,29 +5319,56 @@ async function loadCreation() {
 
 		const commentsHost = detailContent.querySelector('[data-creation-comments-host]');
 		if (commentsHost instanceof HTMLElement) {
+			perf.expectReady('comments');
 			const threadQs = getImportQuery(getAssetVersionParam());
-			const threadMod = await import(`/shared/creationCommentsThread.js${threadQs}`);
-			await threadMod.mountCreationCommentsThread(commentsHost, {
-				createdImageId: creationId,
-				viewer: {
-					id: currentUserId,
-					userName: viewerUserName,
-					displayName: viewerDisplayName,
-					avatarUrl: viewerAvatarUrl,
-					plan: viewerPlan ? 'founder' : null,
-					color: viewerColor,
-					initial: viewerInitial,
-				},
-				isAdmin,
-				autoScrollOnHash: true,
-			});
+			const threadMod = await perf.timeAsync('comments', 'importModule', () =>
+				import(`/shared/creationCommentsThread.js${threadQs}`)
+			);
+			await perf.timeAsync('comments', 'mount', () =>
+				threadMod.mountCreationCommentsThread(commentsHost, {
+					createdImageId: creationId,
+					viewer: {
+						id: currentUserId,
+						userName: viewerUserName,
+						displayName: viewerDisplayName,
+						avatarUrl: viewerAvatarUrl,
+						plan: viewerPlan ? 'founder' : null,
+						color: viewerColor,
+						initial: viewerInitial,
+					},
+					isAdmin,
+					autoScrollOnHash: true,
+				})
+			);
+			perf.markReady('comments');
+		} else {
+			perf.skipPart('comments', 'not-published-or-failed');
 		}
 
 		// Related section and transition recording: only when creation is published and not failed.
 		if (isPublished && !isFailed) {
 			recordTransitionFromQuery(creationId);
-			initRelatedSection(detailContent.parentElement, creationId);
+			perf.expectReady('related');
+			initRelatedSection(detailContent.parentElement, creationId, {
+				onFirstBatchReady: (meta) => {
+					if (meta?.fetchMs != null) {
+						perf.recordStep('related', 'fetch', meta.fetchMs);
+					}
+					if (meta?.renderMs != null) {
+						perf.recordStep('related', 'renderCards', meta.renderMs);
+					}
+					perf.markReady('related', meta || null);
+				},
+			});
+		} else {
+			perf.skipPart('related', 'not-published-or-failed');
 		}
+
+		if (isCurrentLoad()) {
+			resetCreationDetailScroll();
+		}
+
+		void perf.waitAndLog();
 
 	} catch (error) {
 		console.error("Error loading creation detail:", error);
@@ -4786,20 +5418,26 @@ function isCurrentCreationVideoForVynly() {
 }
 
 async function checkAndLoadCreation() {
-	await loadDeps();
 	const creationId = getCreationId();
+	// Show skeleton + hero loading immediately when navigating to a new creation (before loadDeps).
+	if (creationId && creationId !== currentCreationId) {
+		resetCreationDetailScroll();
+		showCreationDetailContentSkeleton();
+		prepareCreationDetailHeroForLoad(undefined, undefined, { resetMedia: currentCreationId != null });
+	}
+	await loadDeps();
 	// console.log('checkAndLoadCreation called, creationId:', creationId, 'currentCreationId:', currentCreationId);
 	// Only reload if the creation ID has changed
 	if (creationId && creationId !== currentCreationId) {
 		// console.log('Creation ID changed, loading new creation');
 		currentCreationId = creationId;
 		loadCreation();
-		// Reset scroll to top
-		window.scrollTo(0, 0);
+		resetCreationDetailScroll();
 	} else if (!creationId && currentCreationId !== null) {
 		// If we're no longer on a creation detail page, reset
 		// console.log('No longer on creation detail page');
 		currentCreationId = null;
+		navigateToCurrentUrlIfLeftCreationDetail();
 	}
 }
 
@@ -5512,11 +6150,13 @@ window.addEventListener('popstate', (e) => {
 	if (creationDetailInlineLightboxMod?.closeChatInlineImageLightboxFromPopstateIfOpen?.()) {
 		return;
 	}
-	// Check if we're still on a creation detail page
 	const creationId = getCreationId();
 	if (creationId) {
+		resetCreationDetailScroll();
 		checkAndLoadCreation();
+		return;
 	}
+	navigateToCurrentUrlIfLeftCreationDetail();
 }, true);
 
 // Override pushState and replaceState to detect programmatic navigation
@@ -5564,8 +6204,8 @@ const pathnameCheck = setInterval(() => {
 		if (creationId) {
 			checkAndLoadCreation();
 		} else {
-			// If we're no longer on a creation detail page, clear interval
 			clearInterval(pathnameCheck);
+			navigateToCurrentUrlIfLeftCreationDetail();
 		}
 	}
 }, 100);

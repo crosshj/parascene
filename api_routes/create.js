@@ -4581,7 +4581,7 @@ export default function createCreateRoutes({ queries, storage }) {
 	});
 
 	// POST /api/create/images/:id/publish - Publish a creation.
-	// Title is always required when publishing.
+	// Title is optional; published creations without one display as "Untitled".
 	router.post("/api/create/images/:id/publish", async (req, res) => {
 		const user = await requireUser(req, res);
 		if (!user) return;
@@ -4589,9 +4589,8 @@ export default function createCreateRoutes({ queries, storage }) {
 		try {
 			const { title, description, nsfw, doom_scroll_full_height: doomScrollFullHeight } = req.body;
 
-			if (!title || title.trim() === '') {
-				return res.status(400).json({ error: "Title is required" });
-			}
+			const titleValue =
+				typeof title === "string" && title.trim() !== "" ? title.trim() : null;
 
 			// Get the image to verify ownership or admin status
 			const image = await queries.selectCreatedImageById.get(
@@ -4637,7 +4636,7 @@ export default function createCreateRoutes({ queries, storage }) {
 			const publishResult = await queries.publishCreatedImage.run(
 				req.params.id,
 				user.id,
-				title.trim(),
+				titleValue,
 				description ? description.trim() : null,
 				isAdmin
 			);
@@ -4726,9 +4725,7 @@ export default function createCreateRoutes({ queries, storage }) {
 	});
 
 	// PUT /api/create/images/:id - Update a creation's title/description.
-	// Title rules:
-	// - Edit modal, creation NOT published  → title optional (can save description/NSFW only).
-	// - Edit modal, creation IS published  → title required.
+	// Title is optional; published creations without one display as "Untitled".
 	router.put("/api/create/images/:id", async (req, res) => {
 		const user = await requireUser(req, res);
 		if (!user) return;
@@ -4758,18 +4755,12 @@ export default function createCreateRoutes({ queries, storage }) {
 			const targetImage = image || anyImage;
 			const isAdmin = user.role === 'admin';
 			const isOwner = image && image.user_id === user.id;
-			const isPublished = targetImage.published === 1 || targetImage.published === true;
-
-			// Title required when creation IS published; optional when not published (draft).
-			const hasTitle = typeof title === 'string' && title.trim() !== '';
-			if (isPublished && !hasTitle) {
-				return res.status(400).json({ error: "Title is required" });
-			}
-
-			// Title: use provided non-empty string, otherwise keep existing when optional (published)
-			const titleValue = hasTitle
-				? title.trim()
-				: (targetImage.title != null ? String(targetImage.title).trim() : '');
+			const titleValue =
+				typeof title === "string"
+					? (title.trim() || null)
+					: (targetImage.title != null && String(targetImage.title).trim()
+						? String(targetImage.title).trim()
+						: null);
 
 			// Update the image
 			const updateResult = await queries.updateCreatedImage.run(

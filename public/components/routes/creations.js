@@ -22,6 +22,8 @@ let creationMetaHasChallengeSubmission;
 let eyeHiddenIcon;
 let addToMutateQueue;
 let bindMobileCreationsBulkLongPress;
+/** @type {typeof import('../../shared/creationDetailOverlay.js').navigateToCreationDetailFromSpa} */
+let navigateToCreationDetailFromSpa;
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -80,8 +82,20 @@ async function loadDeps() {
 
 		const bulkLongPressMod = await import(`../../shared/creationsBulkLongPress.js${qs}`);
 		bindMobileCreationsBulkLongPress = bulkLongPressMod.bindMobileCreationsBulkLongPress;
+
+		const overlayMod = await import(`../../shared/creationDetailOverlay.js${qs}`);
+		navigateToCreationDetailFromSpa = overlayMod.navigateToCreationDetailFromSpa;
 	})();
 	return _depsPromise;
+}
+
+function navigateToCreation(href, ev) {
+	if (typeof navigateToCreationDetailFromSpa === 'function') {
+		navigateToCreationDetailFromSpa(href, ev);
+		return;
+	}
+	if (ev && typeof ev.preventDefault === 'function') ev.preventDefault();
+	window.location.href = href;
 }
 
 const html = String.raw;
@@ -974,7 +988,7 @@ class AppRouteCreations extends HTMLElement {
 				const isModerated = item.is_moderated_error === true;
 				card.style.cursor = 'pointer';
 				card.dataset.imageId = String(item.id);
-				card.addEventListener('click', () => { window.location.href = `/creations/${item.id}`; });
+				card.addEventListener('click', () => { navigateToCreation(`/creations/${item.id}`); });
 				card.innerHTML = html`
 					<div class="route-media route-media-error${isModerated ? ' route-media-error-moderated' : ''}" data-image-id="${item.id}" data-status="failed" aria-hidden="true">${isModerated ? html`<span class="route-media-error-moderated-icon" role="img" aria-label="Content moderated">${eyeHiddenIcon()}</span>` : ''}</div>
 					<div class="route-details">
@@ -988,7 +1002,7 @@ class AppRouteCreations extends HTMLElement {
 				`;
 			} else {
 				card.style.cursor = 'pointer';
-				card.addEventListener('click', () => { window.location.href = `/creations/${item.id}`; });
+				card.addEventListener('click', () => { navigateToCreation(`/creations/${item.id}`); });
 				const isPublished = item.published === true || item.published === 1;
 				card.dataset.imageId = String(item.id);
 				card.dataset.published = isPublished ? '1' : '0';
