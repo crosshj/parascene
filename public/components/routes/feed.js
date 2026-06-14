@@ -833,6 +833,11 @@ class AppRouteFeed extends HTMLElement {
 		}
 
 		this.isLoading = true;
+		if (force || !container.querySelector('.skeleton-feed-card')) {
+			container.innerHTML = renderFeedCardsSkeleton(4);
+			container.setAttribute('aria-busy', 'true');
+			container.setAttribute('aria-label', 'Loading');
+		}
 		try {
 			// Get current user ID
 			let currentUserId = null;

@@ -454,6 +454,8 @@ let renderFeedCardsSkeleton;
 let renderGridSkeleton;
 /** @type {((count?: number) => string) | undefined} */
 let renderCommentRowsSkeleton;
+/** @type {((count?: number) => string) | undefined} */
+let renderChatThreadSkeleton;
 /** @type {(() => string) | undefined} */
 let renderChallengePaneSkeleton;
 let toggleChatMessageReaction;
@@ -610,6 +612,7 @@ async function loadDeps() {
 	renderFeedCardsSkeleton = _cdSkeleton.renderFeedCardsSkeleton;
 	renderGridSkeleton = _cdSkeleton.renderGridSkeleton;
 	renderCommentRowsSkeleton = _cdSkeleton.renderCommentRowsSkeleton;
+	renderChatThreadSkeleton = _cdSkeleton.renderChatThreadSkeleton;
 	renderChallengePaneSkeleton = _cdSkeleton.renderChallengePaneSkeleton;
 }
 
@@ -11329,11 +11332,16 @@ export async function initChatPage(root, options = {}) {
 				retryBtn.className = 'btn-outlined chat-page-pane-load-retry';
 				retryBtn.textContent = 'Retry';
 				retryBtn.addEventListener('click', () => {
-					messagesEl.innerHTML = renderEmptyState({
-						loading: true,
-						loadingAriaLabel: 'Loading',
-						className: 'chat-page-thread-loading'
-					});
+					messagesEl.innerHTML =
+						typeof renderChatThreadSkeleton === 'function'
+							? `<div class="chat-thread-channel-loading" aria-busy="true" aria-label="Loading">${renderChatThreadSkeleton(12)}</div>`
+							: renderEmptyState({
+									loading: true,
+									loadingVariant: 'chat-thread',
+									loadingAriaLabel: 'Loading',
+									className: 'chat-thread-channel-loading',
+								});
+					resetAndLockChatMessagesScrollForSkeleton(messagesEl, 'thread');
 					messagesEl.setAttribute('aria-busy', 'true');
 					if (typeof cta.onRetry === 'function') cta.onRetry();
 				});
@@ -11422,8 +11430,12 @@ export async function initChatPage(root, options = {}) {
 			const channelSlugForLoading =
 				parsed.kind === 'channel' ? String(parsed.slug || '').trim().toLowerCase() : '';
 			if (parsed.kind === 'doom_scroll') {
-				messagesEl.innerHTML =
-					'<div class="chat-doom-scroll-loading route-loading chat-page-thread-loading" aria-busy="true" aria-label="Loading"></div>';
+				messagesEl.innerHTML = renderEmptyState({
+					loading: true,
+					loadingVariant: 'doom-scroll',
+					loadingAriaLabel: 'Loading',
+					className: 'chat-doom-scroll-loading chat-page-thread-loading',
+				});
 				resetAndLockChatMessagesScrollForSkeleton(messagesEl, 'feed');
 			} else if (channelSlugForLoading === 'feed' && typeof renderFeedCardsSkeleton === 'function') {
 				const spotlightHtml = getChatFeedMobileSpotlightHtml();
@@ -11436,15 +11448,15 @@ export async function initChatPage(root, options = {}) {
 				messagesEl.innerHTML = `<div class="chat-comments-channel-loading" aria-busy="true" aria-label="Loading">${renderCommentRowsSkeleton(10)}</div>`;
 				resetAndLockChatMessagesScrollForSkeleton(messagesEl, 'comments');
 			} else if (channelSlugForLoading === 'challenges') {
-				if (typeof renderChallengePaneSkeleton === 'function') {
-					messagesEl.innerHTML = `<div class="challenge-pane-root" aria-busy="true" aria-label="Loading">${renderChallengePaneSkeleton()}</div>`;
-				} else {
-					messagesEl.innerHTML = renderEmptyState({
-						loading: true,
-						loadingAriaLabel: 'Loading',
-						className: 'chat-page-thread-loading'
-					});
-				}
+				messagesEl.innerHTML =
+					typeof renderChallengePaneSkeleton === 'function'
+						? `<div class="challenge-pane-root" aria-busy="true" aria-label="Loading">${renderChallengePaneSkeleton()}</div>`
+						: renderEmptyState({
+								loading: true,
+								loadingVariant: 'challenge',
+								loadingAriaLabel: 'Loading',
+								className: 'challenge-pane-root',
+							});
 				resetAndLockChatMessagesScrollForSkeleton(messagesEl, 'challenges');
 			} else if (channelSlugForLoading === 'explore' || channelSlugForLoading === 'creations') {
 				const creationsCls = channelSlugForLoading === 'creations' ? ' creations-route' : '';
@@ -11468,16 +11480,22 @@ export async function initChatPage(root, options = {}) {
 				} else {
 					messagesEl.innerHTML = renderEmptyState({
 						loading: true,
-						loadingAriaLabel: 'Loading',
-						className: 'chat-page-thread-loading'
+						loadingVariant: channelSlugForLoading === 'creations' && chatExploreCreationsBrowseView ? 'grid' : 'feed',
+						loadingAriaLabel: pendingExploreSearch ? 'Searching' : 'Loading',
+						className: `chat-page-thread-loading feed-route chat-feed-channel-route${creationsCls}${browseCls}`,
 					});
 				}
 			} else {
-				messagesEl.innerHTML = renderEmptyState({
-					loading: true,
-					loadingAriaLabel: 'Loading',
-					className: 'chat-page-thread-loading'
-				});
+				messagesEl.innerHTML =
+					typeof renderChatThreadSkeleton === 'function'
+						? `<div class="chat-thread-channel-loading" aria-busy="true" aria-label="Loading">${renderChatThreadSkeleton(12)}</div>`
+						: renderEmptyState({
+								loading: true,
+								loadingVariant: 'chat-thread',
+								loadingAriaLabel: 'Loading',
+								className: 'chat-thread-channel-loading',
+							});
+				resetAndLockChatMessagesScrollForSkeleton(messagesEl, 'thread');
 			}
 			messagesEl.setAttribute('aria-busy', 'true');
 		}

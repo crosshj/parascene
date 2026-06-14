@@ -4,6 +4,7 @@
  */
 
 const OVERLAY_ID = 'prsn-creation-detail-overlay';
+const SHELL_OUT_VEIL_ID = 'prsn-creation-detail-shell-out-veil';
 const HISTORY_FLAG = 'prsnCreationDetailOverlay';
 const OVERLAY_STORE_KEY = '__prsnCreationDetailOverlay';
 
@@ -225,8 +226,124 @@ function notifyOverlayDismissed(returnPath) {
 	}
 }
 
+function showCreationDetailShellOutVeil() {
+	let veil = document.getElementById(SHELL_OUT_VEIL_ID);
+	if (!(veil instanceof HTMLElement)) {
+		veil = document.createElement('div');
+		veil.id = SHELL_OUT_VEIL_ID;
+		veil.className = 'creation-detail-overlay-shell-out-veil';
+		veil.setAttribute('role', 'status');
+		veil.setAttribute('aria-live', 'polite');
+		veil.setAttribute('aria-label', 'Loading');
+		document.body.appendChild(veil);
+	}
+	veil.hidden = false;
+	document.body.classList.add('creation-detail-overlay-shell-out');
+}
+
 /**
- * @param {{ fromPopstate?: boolean }} [options]
+ * Leave overlay and navigate the parent shell to a full-page route (e.g. mutate).
+ * @param {string} href
+ */
+export function shellOutFromCreationDetailOverlay(href) {
+	const raw = String(href || '').trim();
+	if (!raw) return;
+	let targetPath;
+	try {
+		const url = new URL(raw, window.location.origin);
+		if (url.origin !== window.location.origin) return;
+		targetPath = url.pathname + url.search + url.hash;
+	} catch {
+		return;
+	}
+	const store = getOverlayStore();
+	const returnPath =
+		store.overlayReturnPath ||
+		(typeof window.history?.state?.prsnOverlayReturnPath === 'string'
+			? window.history.state.prsnOverlayReturnPath
+			: null);
+	showCreationDetailShellOutVeil();
+	closeCreationDetailOverlay({ skipScrollRestore: true });
+	try {
+		if (returnPath) {
+			window.history.replaceState({}, '', returnPath);
+		}
+	} catch {
+		// ignore
+	}
+	const navigate = () => {
+		window.location.assign(targetPath);
+	};
+	requestAnimationFrame(() => {
+		requestAnimationFrame(navigate);
+	});
+}
+
+export function isCreationDetailEmbedFrame() {
+	return window.__ps_creation_detail_embed === true && window.parent !== window;
+}
+
+/**
+ * Iframe → parent: delegate same-origin navigation to the overlay shell.
+ * @param {string} href
+ * @returns {boolean}
+ */
+export function requestCreationDetailEmbedRoute(href) {
+	const raw = String(href || '').trim();
+	if (!raw || !isCreationDetailEmbedFrame()) return false;
+	try {
+		window.parent.postMessage(
+			{ type: 'prsn-creation-detail-overlay-route', href: raw },
+			window.location.origin
+		);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Parent routing for navigations initiated inside the embed iframe.
+ * @param {string} href
+ */
+export function routeCreationDetailOverlayFromEmbed(href) {
+	const raw = String(href || '').trim();
+	if (!raw) return;
+	let url;
+	try {
+		url = new URL(raw, window.location.origin);
+		if (url.origin !== window.location.origin) {
+			shellOutFromCreationDetailOverlay(url.href);
+			return;
+		}
+	} catch {
+		return;
+	}
+
+	const path = (url.pathname || '/').replace(/\/+$/, '') || '/';
+	const target = url.pathname + url.search + url.hash;
+
+	if (/^\/creations\/\d+\/(edit|mutate)\/?$/.test(path)) {
+		shellOutFromCreationDetailOverlay(target);
+		return;
+	}
+
+	let creationId = parseCreationNavigationTargetId(target);
+	if (creationId) {
+		openCreationDetailOverlay(creationId);
+		return;
+	}
+
+	if (path === '/creations' || path === '/feed' || path === '/explore' || path === '/challenges') {
+		dismissCreationDetailOverlayViaHistory();
+		return;
+	}
+
+	shellOutFromCreationDetailOverlay(target);
+}
+
+/**
+ * @param {{ fromPopstate?: boolean, skipScrollRestore?: boolean }} [options]
  */
 export function closeCreationDetailOverlay(options = {}) {
 	const store = getOverlayStore();
@@ -246,7 +363,9 @@ export function closeCreationDetailOverlay(options = {}) {
 	}
 	store.overlayEl = null;
 	document.body.classList.remove('creation-detail-overlay-open');
-	restoreOverlayScrollPositions();
+	if (!options.skipScrollRestore) {
+		restoreOverlayScrollPositions();
+	}
 	store.overlayReturnPath = null;
 	notifyOverlayDismissed(returnPath);
 }
@@ -355,6 +474,14 @@ function ensureOverlayMessageListener() {
 			const id = Number(data.creationId);
 			if (!Number.isFinite(id) || id <= 0) return;
 			openCreationDetailOverlay(id);
+			return;
+		}
+		if (data.type === 'prsn-creation-detail-overlay-shell-out') {
+			shellOutFromCreationDetailOverlay(data.href);
+			return;
+		}
+		if (data.type === 'prsn-creation-detail-overlay-route') {
+			routeCreationDetailOverlayFromEmbed(data.href);
 		}
 	});
 }

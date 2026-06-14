@@ -461,7 +461,11 @@ class AppRouteExplore extends HTMLElement {
 		this._searchSemanticSettled = false;
 		this._searchFirstList = undefined;
 
-		resultsEl.innerHTML = renderEmptyLoading({ className: 'route-empty-image-grid', loadingAriaLabel: 'Searching' });
+		resultsEl.innerHTML = renderEmptyLoading({
+			className: 'route-empty-image-grid',
+			loadingAriaLabel: 'Searching',
+			loadingVariant: 'grid',
+		});
 
 		const q = encodeURIComponent(trimmed);
 		const keywordUrl = `/api/explore/search?q=${q}&limit=${EXPLORE_PAGE_SIZE}`;

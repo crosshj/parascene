@@ -94,43 +94,52 @@ function postMessageToParentOverlay(payload) {
 	}
 }
 
-function navigateFromCreationDetailEmbed(href) {
+function requestCreationDetailEmbedRoute(href) {
+	const raw = String(href || '').trim();
+	if (!raw) return false;
+	return postMessageToParentOverlay({
+		type: 'prsn-creation-detail-overlay-route',
+		href: raw,
+	});
+}
+
+function shellOutFromCreationDetailEmbed(href) {
 	const raw = String(href || '').trim();
 	if (!raw) return;
-	try {
-		const url = new URL(raw, window.location.origin);
-		if (url.origin !== window.location.origin) {
-			window.location.assign(url.href);
-			return;
-		}
-		const m = url.pathname.match(/^\/creations\/(\d+)\/?$/);
-		if (m) {
-			const id = Number(m[1]);
-			if (Number.isFinite(id) && id > 0) {
-				postMessageToParentOverlay({ type: 'prsn-creation-detail-overlay-navigate', creationId: id });
-				return;
-			}
-		}
-		if (url.pathname === '/creations' || url.pathname === '/feed' || url.pathname === '/explore') {
-			postMessageToParentOverlay({ type: 'prsn-creation-detail-overlay-close' });
-			return;
-		}
-	} catch {
-		// fall through
-	}
+	if (requestCreationDetailEmbedRoute(raw)) return;
 	window.location.assign(raw);
+}
+
+function navigateFromCreationDetailEmbed(href) {
+	shellOutFromCreationDetailEmbed(href);
+}
+
+function shouldInterceptCreationDetailEmbedLink(link, e) {
+	if (!(link instanceof HTMLAnchorElement)) return false;
+	if (e.defaultPrevented) return false;
+	if (typeof e.button === 'number' && e.button !== 0) return false;
+	if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return false;
+	const href = (link.getAttribute('href') || '').trim();
+	if (!href || href.startsWith('#') || href.startsWith('mailto:') || href.startsWith('tel:')) return false;
+	if (link.hasAttribute('download')) return false;
+	if (link.target === '_blank') return false;
+	try {
+		const url = new URL(href, window.location.origin);
+		if (url.origin !== window.location.origin) return false;
+	} catch {
+		return false;
+	}
+	return true;
 }
 
 function bindCreationDetailEmbedNavigation() {
 	if (!isCreationDetailEmbed()) return;
 	document.addEventListener('click', (e) => {
-		const link = e.target?.closest?.('a[href^="/creations/"]');
-		if (!link) return;
-		const href = link.getAttribute('href') || '';
-		if (/\/edit\/?(?:\?|#|$)|\/mutate(?:\?|#|$)/.test(href)) return;
+		const link = e.target?.closest?.('a[href]');
+		if (!shouldInterceptCreationDetailEmbedLink(link, e)) return;
 		e.preventDefault();
 		e.stopPropagation();
-		navigateFromCreationDetailEmbed(href);
+		navigateFromCreationDetailEmbed(link.getAttribute('href') || '');
 	}, true);
 }
 
@@ -5309,7 +5318,7 @@ async function loadCreation() {
 						ungroupBtn.disabled = false;
 						return;
 					}
-					window.location.href = '/chat/c/creations';
+					shellOutFromCreationDetailEmbed('/chat/c/creations');
 				} catch (err) {
 					alert(err?.message || 'Failed to ungroup creation');
 					ungroupBtn.disabled = false;
@@ -5519,12 +5528,12 @@ document.addEventListener('click', (e) => {
 			const groupId = getCreationId();
 			if (!groupId || !Number.isFinite(Number(groupId))) return;
 			const sourceQuery = `?source_id=${encodeURIComponent(String(target.sourceId))}`;
-			window.location.href = `/creations/${groupId}/mutate${sourceQuery}`;
+			shellOutFromCreationDetailEmbed(`/creations/${groupId}/mutate${sourceQuery}`);
 			return;
 		}
 		const creationId = getCreationId();
 		if (!creationId) return;
-		window.location.href = `/creations/${creationId}/mutate`;
+		shellOutFromCreationDetailEmbed(`/creations/${creationId}/mutate`);
 	}
 });
 
@@ -6009,9 +6018,9 @@ async function handleDelete(isPermanent) {
 				userName: lastCreationMeta?.creator?.user_name || lastCreationMeta?.user_name || null,
 				userId: lastCreationMeta.user_id
 			});
-			window.location.href = profilePath || `/user/${lastCreationMeta.user_id}`;
+			shellOutFromCreationDetailEmbed(profilePath || `/user/${lastCreationMeta.user_id}`);
 		} else {
-			window.location.href = '/creations';
+			shellOutFromCreationDetailEmbed('/creations');
 		}
 	} catch (error) {
 		// console.error('Error deleting creation:', error);
@@ -6091,7 +6100,7 @@ async function handleRetry() {
 		if (header && typeof header.navigateToRoute === 'function') {
 			header.navigateToRoute('creations');
 		} else {
-			window.location.href = '/creations';
+			shellOutFromCreationDetailEmbed('/creations');
 		}
 	} catch (error) {
 		alert(error.message || 'Failed to retry creation. Please try again.');

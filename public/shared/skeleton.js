@@ -217,3 +217,51 @@ export function renderChallengePaneSkeleton() {
 		</div>
 	</div>`;
 }
+
+/**
+ * One chat message row skeleton (meta + bubble lines) for thread/DM/channel loading.
+ * @param {string[]} [lineWidths]
+ * @returns {string}
+ */
+export function renderChatThreadMessageSkeleton(lineWidths = ['72%', '48%']) {
+	const lines = (Array.isArray(lineWidths) ? lineWidths : ['72%'])
+		.map((width) => skeletonLine(width))
+		.join('');
+	return `<div class="skeleton-chat-msg-row" aria-hidden="true">
+		<div class="skeleton-chat-msg-inner">
+			<div class="skeleton-chat-msg-meta">
+				${skeletonCircle(28)}
+				${skeletonLine('34%', 'skeleton-line--short')}
+				${skeletonLine('16%', 'skeleton-line--short')}
+			</div>
+			<div class="skeleton-chat-msg-bubble">${lines}</div>
+		</div>
+	</div>`;
+}
+
+/**
+ * @param {number} [count]
+ * @returns {string}
+ */
+export function renderChatThreadSkeleton(count = 12) {
+	const lineSets = [
+		['78%', '52%'],
+		['64%'],
+		['88%', '60%', '40%'],
+		['55%'],
+		['70%', '45%'],
+		['50%'],
+	];
+	const n = Math.max(1, Math.min(14, Number(count) || 12));
+	return `<div class="skeleton-chat-thread" aria-hidden="true">${Array.from({ length: n }, (_, i) =>
+		renderChatThreadMessageSkeleton(lineSets[i % lineSets.length])
+	).join('')}</div>`;
+}
+
+/**
+ * Full-viewport doom-scroll lane placeholder while the first slide loads.
+ * @returns {string}
+ */
+export function renderDoomScrollSkeleton() {
+	return `<div class="skeleton-doom-scroll" aria-hidden="true"><div class="skeleton-doom-scroll-hero"></div></div>`;
+}

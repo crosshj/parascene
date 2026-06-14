@@ -4,6 +4,7 @@ import { createModalDismissButton } from './modalDismiss.js';
 import {
 	navigateToCreationDetailFromSpa,
 	parseCreationNavigationTargetId,
+	requestCreationDetailEmbedRoute,
 	shouldUseCreationDetailOverlay,
 } from './creationDetailOverlay.js';
 import {
@@ -249,7 +250,13 @@ function mountInlineImageLightboxCreationFooter(overlay, creationIdRaw) {
 	goBtn.addEventListener('click', (e) => {
 		if (document.body?.classList?.contains('chat-page--doom-scroll')) return;
 		if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-		if (!parseCreationNavigationTargetId(detailPath) || !shouldUseCreationDetailOverlay()) return;
+		if (!parseCreationNavigationTargetId(detailPath)) return;
+		if (requestCreationDetailEmbedRoute(detailPath)) {
+			e.preventDefault();
+			closeChatInlineImageLightbox();
+			return;
+		}
+		if (!shouldUseCreationDetailOverlay()) return;
 		e.preventDefault();
 		closeChatInlineImageLightbox();
 		navigateToCreationDetailFromSpa(detailPath, e);
