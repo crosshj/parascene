@@ -180,8 +180,20 @@ function syncOverlayFrameToCreationId(creationId) {
 	if (!(store.overlayFrame instanceof HTMLIFrameElement)) return;
 	if (store.overlayCreationId === id) return;
 	store.overlayCreationId = id;
-	store.overlayFrame.src = `${creationDetailUrl(id)}?embed=1`;
-	store.overlayFrame.title = `Creation #${id}`;
+	const url = `${creationDetailUrl(id)}?embed=1`;
+	const frame = store.overlayFrame;
+	frame.title = `Creation #${id}`;
+	// Replace (don't push) so browser back only walks the parent overlay stack, not iframe history.
+	try {
+		const win = frame.contentWindow;
+		if (win) {
+			win.location.replace(url);
+			return;
+		}
+	} catch {
+		// ignore
+	}
+	frame.src = url;
 }
 
 function overlayLanePathname(returnPath) {
@@ -261,7 +273,10 @@ export function handleCreationDetailOverlayPopstate(ev) {
 	const stillInOverlayStack = Boolean(state?.[HISTORY_FLAG]);
 
 	if (stillInOverlayStack) {
-		const id = Number(state?.prsnCreationDetailId);
+		let id = Number(state?.prsnCreationDetailId);
+		if (!Number.isFinite(id) || id <= 0) {
+			id = Number(parseCreationIdFromHref(window.location.pathname));
+		}
 		if (Number.isFinite(id) && id > 0) {
 			syncOverlayFrameToCreationId(id);
 		}

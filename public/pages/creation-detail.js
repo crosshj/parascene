@@ -6150,6 +6150,10 @@ window.addEventListener('popstate', (e) => {
 	if (creationDetailInlineLightboxMod?.closeChatInlineImageLightboxFromPopstateIfOpen?.()) {
 		return;
 	}
+	// Embed overlay: parent shell owns the history stack; don't reload from iframe popstate alone.
+	if (isCreationDetailEmbed()) {
+		return;
+	}
 	const creationId = getCreationId();
 	if (creationId) {
 		resetCreationDetailScroll();
@@ -6196,17 +6200,19 @@ document.addEventListener('route-change', (e) => {
 
 // Also monitor pathname changes directly as a fallback
 let lastPathname = window.location.pathname;
-const pathnameCheck = setInterval(() => {
-	const currentPathname = window.location.pathname;
-	if (currentPathname !== lastPathname) {
-		lastPathname = currentPathname;
-		const creationId = getCreationId();
-		if (creationId) {
-			checkAndLoadCreation();
-		} else {
-			clearInterval(pathnameCheck);
-			navigateToCurrentUrlIfLeftCreationDetail();
+if (!isCreationDetailEmbed()) {
+	const pathnameCheck = setInterval(() => {
+		const currentPathname = window.location.pathname;
+		if (currentPathname !== lastPathname) {
+			lastPathname = currentPathname;
+			const creationId = getCreationId();
+			if (creationId) {
+				checkAndLoadCreation();
+			} else {
+				clearInterval(pathnameCheck);
+				navigateToCurrentUrlIfLeftCreationDetail();
+			}
 		}
-	}
-}, 100);
+	}, 100);
+}
 
