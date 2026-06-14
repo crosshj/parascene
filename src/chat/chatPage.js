@@ -1924,6 +1924,8 @@ export async function initChatPage(root, options = {}) {
 		if (shouldUseViewportScrollForChatMessages() && pseudoLane) {
 			document.documentElement.dataset.chatViewportScrollLock = '1';
 			document.body.dataset.chatViewportScrollLock = '1';
+		} else if (!pseudoLane) {
+			window.scrollTo(0, 0);
 		}
 	}
 
@@ -11430,12 +11432,8 @@ export async function initChatPage(root, options = {}) {
 			const channelSlugForLoading =
 				parsed.kind === 'channel' ? String(parsed.slug || '').trim().toLowerCase() : '';
 			if (parsed.kind === 'doom_scroll') {
-				messagesEl.innerHTML = renderEmptyState({
-					loading: true,
-					loadingVariant: 'doom-scroll',
-					loadingAriaLabel: 'Loading',
-					className: 'chat-doom-scroll-loading chat-page-thread-loading',
-				});
+				messagesEl.innerHTML =
+					'<div class="chat-doom-scroll-loading route-loading chat-page-thread-loading" aria-busy="true" aria-label="Loading"></div>';
 				resetAndLockChatMessagesScrollForSkeleton(messagesEl, 'feed');
 			} else if (channelSlugForLoading === 'feed' && typeof renderFeedCardsSkeleton === 'function') {
 				const spotlightHtml = getChatFeedMobileSpotlightHtml();

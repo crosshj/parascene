@@ -7,7 +7,6 @@
 import {
 	renderChallengePaneSkeleton,
 	renderChatThreadSkeleton,
-	renderDoomScrollSkeleton,
 	renderFeedCardsSkeleton,
 	renderGridSkeleton,
 } from './skeleton.js';
@@ -25,12 +24,11 @@ function escapeHtml(text) {
 /**
  * @param {string} [className]
  * @param {string} [explicitVariant]
- * @returns {'feed' | 'grid' | 'chat-thread' | 'doom-scroll' | 'challenge'}
+ * @returns {'feed' | 'grid' | 'chat-thread' | 'challenge'}
  */
 function resolveLoadingVariant(className, explicitVariant) {
 	if (explicitVariant) return explicitVariant;
 	const cls = String(className || '');
-	if (cls.includes('chat-doom-scroll-loading')) return 'doom-scroll';
 	if (cls.includes('chat-page-thread-loading')) return 'chat-thread';
 	if (cls.includes('challenge-pane')) return 'challenge';
 	if (cls.includes('feed')) return 'feed';
@@ -38,7 +36,7 @@ function resolveLoadingVariant(className, explicitVariant) {
 }
 
 /**
- * @param {'feed' | 'grid' | 'chat-thread' | 'doom-scroll' | 'challenge'} variant
+ * @param {'feed' | 'grid' | 'chat-thread' | 'challenge'} variant
  * @returns {string}
  */
 function renderLoadingSkeletonContent(variant) {
@@ -47,8 +45,6 @@ function renderLoadingSkeletonContent(variant) {
 			return renderFeedCardsSkeleton(4);
 		case 'chat-thread':
 			return renderChatThreadSkeleton(12);
-		case 'doom-scroll':
-			return renderDoomScrollSkeleton();
 		case 'challenge':
 			return renderChallengePaneSkeleton();
 		default:
@@ -59,7 +55,7 @@ function renderLoadingSkeletonContent(variant) {
 /**
  * @param {{
  *   loading?: boolean;
- *   loadingVariant?: 'feed' | 'grid' | 'chat-thread' | 'doom-scroll' | 'challenge';
+ *   loadingVariant?: 'feed' | 'grid' | 'chat-thread' | 'challenge';
  *   title?: string;
  *   message?: string;
  *   messageHtml?: string;
@@ -123,7 +119,7 @@ export function renderEmptyState(options = {}) {
 
 /**
  * Loading only, for image-grid context (full-width empty cell).
- * @param {{ className?: string; loadingAriaLabel?: string; loadingVariant?: 'feed' | 'grid' | 'chat-thread' | 'doom-scroll' | 'challenge' }} options
+ * @param {{ className?: string; loadingAriaLabel?: string; loadingVariant?: 'feed' | 'grid' | 'chat-thread' | 'challenge' }} options
  * @returns {string}
  */
 export function renderEmptyLoading(options = {}) {

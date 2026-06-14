@@ -17,7 +17,6 @@ let isImageUrlArrayField;
 let loadMutateQueue;
 let attachAutoGrowTextarea;
 let attachPromptInlineSuggest;
-let renderCreateFormSkeleton;
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -63,9 +62,6 @@ async function loadDeps() {
 
 		const suggestMod = await import(`../../shared/triggeredSuggest.js${qs}`);
 		attachPromptInlineSuggest = suggestMod.attachPromptInlineSuggest;
-
-		const skeletonMod = await import(`../../shared/skeleton.js${qs}`);
-		renderCreateFormSkeleton = skeletonMod.renderCreateFormSkeleton;
 	})();
 	return _depsPromise;
 }
@@ -215,9 +211,7 @@ class AppRouteCreate extends HTMLElement {
 		this._serversLoading = true;
 		this.innerHTML = html`
       <div class="create-route">
-        <div class="create-route-loading" data-create-loading>
-          ${renderCreateFormSkeleton()}
-        </div>
+        <div class="create-route-loading" data-create-loading aria-busy="true"></div>
         <div class="create-route-content" data-create-content hidden aria-hidden="true">
         <div class="create-route-empty-wrap route-empty route-empty-state" data-create-empty hidden aria-hidden="true">
           <div class="route-empty-title">No servers available</div>

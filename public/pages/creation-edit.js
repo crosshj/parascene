@@ -18,7 +18,6 @@ let MUTATE_VIDEO_LTX_SERVER_ID;
 let MUTATE_VIDEO_LTX_METHOD_KEY;
 let MUTATE_VIDEO_LTX_MODEL;
 let renderEmptyState;
-let renderEmptyLoading;
 let renderEmptyError;
 let addToMutateQueue;
 let clearMutateQueue;
@@ -75,7 +74,6 @@ async function loadDeps() {
 		MUTATE_VIDEO_LTX_MODEL = generationDefaultsMod.MUTATE_VIDEO_LTX_MODEL;
 		const emptyStateMod = await import(`/shared/emptyState.js${qs}`);
 		renderEmptyState = emptyStateMod.renderEmptyState;
-		renderEmptyLoading = emptyStateMod.renderEmptyLoading;
 		renderEmptyError = emptyStateMod.renderEmptyError;
 
 		const mutateQueueMod = await import(`/shared/mutateQueue.js${qs}`);
@@ -253,8 +251,6 @@ async function loadEditPage() {
 		editContent.innerHTML = renderEmptyState({ title: 'Invalid creation ID' });
 		return;
 	}
-
-	editContent.innerHTML = renderEmptyLoading({});
 
 	try {
 		const searchParams = new URLSearchParams(window.location.search);

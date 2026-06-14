@@ -181,18 +181,6 @@ export function renderServerCardsSkeleton(count = 4) {
 }
 
 /**
- * @returns {string} HTML for create form skeleton
- */
-export function renderCreateFormSkeleton() {
-	return `<div class="create-route-skeleton" aria-busy="true" aria-label="Loading servers">
-		${skeletonLine('40%')}
-		${skeletonLine('90%', 'skeleton-line--medium')}
-		${skeletonPill('100%', 44)}
-		${skeletonPill('100%', 44)}
-	</div>`;
-}
-
-/**
  * Chat #challenges pane — title + badge, hero image, Vote, two time lines, Details, Reward.
  * @returns {string} HTML skeleton (wrap in `.challenge-pane-root` in chat messages column)
  */
@@ -256,12 +244,4 @@ export function renderChatThreadSkeleton(count = 12) {
 	return `<div class="skeleton-chat-thread" aria-hidden="true">${Array.from({ length: n }, (_, i) =>
 		renderChatThreadMessageSkeleton(lineSets[i % lineSets.length])
 	).join('')}</div>`;
-}
-
-/**
- * Full-viewport doom-scroll lane placeholder while the first slide loads.
- * @returns {string}
- */
-export function renderDoomScrollSkeleton() {
-	return `<div class="skeleton-doom-scroll" aria-hidden="true"><div class="skeleton-doom-scroll-hero"></div></div>`;
 }

@@ -8146,12 +8146,26 @@ body.chat-page .chat-page-messages pre {
 
 /* Thread open: skeleton loading states fill the messages column. */
 body.chat-page .chat-page-messages .route-loading.chat-page-thread-loading,
-body.chat-page .chat-page-messages .route-loading-skeleton.chat-page-thread-loading,
-body.chat-page .chat-page-messages .chat-thread-channel-loading {
+body.chat-page .chat-page-messages .route-loading-skeleton.chat-page-thread-loading {
 	flex: 1 1 auto;
 	align-self: stretch;
 	min-height: 120px;
 	width: 100%;
+}
+
+.chat-page-messages .chat-thread-channel-loading {
+	flex-shrink: 0;
+	width: 100%;
+	max-width: 100%;
+	box-sizing: border-box;
+}
+
+.chat-thread-channel-loading.route-empty.route-loading-skeleton {
+	padding: 0;
+	align-items: stretch;
+	justify-content: flex-start;
+	text-align: left;
+	min-height: 0;
 }
 
 .chat-page-empty-hint {
@@ -16445,15 +16459,10 @@ body.view-nsfw .connect-comment-thumb[data-media-type="video"].nsfw::after {
 	width: 100%;
 }
 
-.route-loading-skeleton--chat-thread {
+.route-loading-skeleton--chat-thread:not(.chat-thread-channel-loading) {
 	padding-block: 8px 16px;
 	width: 100%;
 	box-sizing: border-box;
-}
-
-.route-loading-skeleton--doom-scroll {
-	min-height: 100dvh;
-	padding: 0;
 }
 
 .route-loading-skeleton--challenge:not(.challenge-pane-root) {
@@ -16469,12 +16478,8 @@ body.view-nsfw .connect-comment-thumb[data-media-type="video"].nsfw::after {
 }
 
 .chat-thread-channel-loading {
-	display: flex;
-	flex-direction: column;
-	flex: 1 1 auto;
-	flex-shrink: 0;
+	display: block;
 	width: 100%;
-	min-height: 100%;
 	box-sizing: border-box;
 }
 
@@ -16483,9 +16488,7 @@ body.view-nsfw .connect-comment-thumb[data-media-type="video"].nsfw::after {
 	flex-direction: column;
 	gap: 10px;
 	width: 100%;
-	min-height: 100%;
-	flex: 1 1 auto;
-	padding: 4px 0 8px;
+	padding: 0 0 8px;
 	box-sizing: border-box;
 }
 
@@ -16534,36 +16537,6 @@ body.view-nsfw .connect-comment-thumb[data-media-type="video"].nsfw::after {
 
 .skeleton-chat-msg-bubble .skeleton-line {
 	height: calc(0.9375rem * 1.45);
-}
-
-.skeleton-doom-scroll {
-	width: 100%;
-	min-height: 100dvh;
-}
-
-.skeleton-doom-scroll-hero {
-	width: 100%;
-	min-height: 100dvh;
-	border-radius: 0;
-	overflow: hidden;
-	background: var(--skeleton);
-	position: relative;
-}
-
-.skeleton-doom-scroll-hero::after {
-	content: '';
-	position: absolute;
-	inset: 0;
-	background: linear-gradient(90deg, transparent, var(--skeleton-shine), transparent);
-	background-size: 300vw 100%;
-	animation: skeleton-shimmer 1.6s ease-in-out infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-	.skeleton-doom-scroll-hero::after {
-		animation: none;
-		display: none;
-	}
 }
 
 /* Composite skeleton layouts (reusable across Feed, Explore, Creations, profile, Connect) */

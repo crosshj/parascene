@@ -3360,13 +3360,15 @@ body.chat-page .chat-page-send-btn .chat-page-send-icon {
 		padding-bottom: calc(88px + env(safe-area-inset-bottom));
 	}
 
-	body.chat-page .chat-page-messages .route-loading.chat-page-thread-loading,
-	body.chat-page .chat-page-messages .route-loading-skeleton.chat-page-thread-loading,
-	body.chat-page .chat-page-messages .chat-thread-channel-loading,
 	body.chat-page .chat-page-messages .chat-page-pane-load-error.route-empty.route-empty-state {
 		align-items: flex-start;
 		padding-top: max(96px, calc(56px + env(safe-area-inset-top, 0px) + 40px));
 		box-sizing: border-box;
+	}
+
+	body.chat-page .chat-page-messages .chat-thread-channel-loading {
+		padding-top: 0;
+		margin-top: 0;
 	}
 }
 
@@ -4282,11 +4284,6 @@ body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-rail
 .chat-doom-scroll-loading {
 	min-height: 100dvh;
 	padding: 0;
-}
-
-.chat-doom-scroll-loading.route-loading-skeleton {
-	display: block;
-	width: 100%;
 }
 
 .chat-doom-error-title {

@@ -982,15 +982,9 @@ body.prsn-creation-composer-drag-active .create-composer:not(.is-drop-target) .c
 
 /* app-route-create (createAdvanced): form, tabs, dialogs, image fields — in creations.css for faster load */
 
-/* Create route: skeleton until servers loaded */
+/* Create route: blank until servers loaded */
 app-route-create .create-route .create-route-loading[hidden] {
 	display: none;
-}
-
-app-route-create .create-route .create-route-skeleton {
-	display: flex;
-	flex-direction: column;
-	gap: 1rem;
 }
 
 app-route-create .create-route .create-route-content[hidden] {
