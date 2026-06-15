@@ -3,6 +3,7 @@ import path from "path";
 import sharp from "sharp";
 import { RELATED_PARAM_DEFAULTS, RELATED_PARAM_KEYS } from "./relatedParams.js";
 import { getThumbnailUrl } from "../api_routes/utils/url.js";
+import { isRecommendableCreationRow } from "../api_routes/utils/recommendableCreations.js";
 import { putAnchorCreationFirst } from "../api_routes/feed/doomSiteVideoTimeline.js";
 import { createSelectFeedBetaSitewideCatalog } from "./feedBetaSitewideCatalog.js";
 
@@ -5621,19 +5622,23 @@ export function openDb() {
 			}
 		},
 		selectFeedItemsByCreationIds: {
-			all: async (ids) => {
+			all: async (ids, options = {}) => {
 				const safeIds = Array.isArray(ids)
 					? ids.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0)
 					: [];
 				if (safeIds.length === 0) return [];
+				const recommendableOnly = options.recommendableOnly === true;
 				// prsn_created_images has title, description (no summary column); use description for summary
 				const { data: images, error: imgError } = await serviceClient
 					.from(prefixedTable("created_images"))
-					.select("id, title, description, created_at, user_id, filename, file_path, meta")
+					.select("id, title, description, created_at, user_id, filename, file_path, meta, published, unavailable_at")
 					.in("id", safeIds);
 				if (imgError) throw imgError;
 				const orderById = new Map(safeIds.map((id, i) => [Number(id), i]));
-				const sorted = (images ?? []).slice().sort((a, b) => (orderById.get(Number(a.id)) ?? 999) - (orderById.get(Number(b.id)) ?? 999));
+				let sorted = (images ?? []).slice().sort((a, b) => (orderById.get(Number(a.id)) ?? 999) - (orderById.get(Number(b.id)) ?? 999));
+				if (recommendableOnly) {
+					sorted = sorted.filter(isRecommendableCreationRow);
+				}
 				const createdImageIds = sorted.map((r) => r.id).filter((id) => id != null);
 				if (createdImageIds.length === 0) return [];
 				const { data: countRows, error: countError } = await serviceClient

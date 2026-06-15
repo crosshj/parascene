@@ -217,7 +217,7 @@ export default function createExploreRoutes({ queries }) {
 			if (Array.isArray(cachedIds) && cachedIds.length > 0 && queries.selectFeedItemsByCreationIds?.all) {
 				// Fast path: use cached ID list and fetch just those creations, preserving order.
 				try {
-					const items = await queries.selectFeedItemsByCreationIds.all(cachedIds);
+					const items = await queries.selectFeedItemsByCreationIds.all(cachedIds, { recommendableOnly: true });
 					filtered = Array.isArray(items) ? items : [];
 				} catch {
 					// If this optimized path fails, fall back to full in-memory search.
@@ -385,7 +385,7 @@ export default function createExploreRoutes({ queries }) {
 			}
 			let rows;
 			try {
-				rows = await feedByCreation(dedupedIds);
+				rows = await feedByCreation(dedupedIds, { recommendableOnly: true });
 			} catch (dbErr) {
 				console.error("[explore search/semantic] feed lookup:", dbErr);
 				const reason = dbErr?.message && String(dbErr.message).length < 100 ? String(dbErr.message) : "Database lookup failed.";

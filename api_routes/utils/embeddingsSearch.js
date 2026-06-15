@@ -6,6 +6,7 @@
 import Replicate from "replicate";
 import { getSupabaseServiceClient } from "./supabaseService.js";
 import { getTextEmbeddingFromReplicate } from "./embeddings.js";
+import { filterRecommendableCreationIds } from "./recommendableCreations.js";
 
 const RPC_NEAREST = "prsn_created_embeddings_nearest";
 const SEARCH_CACHE_TABLE = "prsn_search_embedding_cache";
@@ -87,7 +88,13 @@ export async function runSemanticSearch(opts) {
 	}
 	const hasMore = Array.isArray(nearestRaw) && nearestRaw.length > limit;
 	const nearest = hasMore ? nearestRaw.slice(0, limit) : (nearestRaw ?? []);
-	const ids = nearest.map((r) => Number(r?.created_image_id)).filter((n) => Number.isFinite(n) && n > 0);
-	const idToDistance = new Map((nearest ?? []).map((r) => [Number(r.created_image_id), Number(r.distance)]));
+	const rawIds = nearest.map((r) => Number(r?.created_image_id)).filter((n) => Number.isFinite(n) && n > 0);
+	const ids = await filterRecommendableCreationIds(supabase, rawIds);
+	const idSet = new Set(ids);
+	const idToDistance = new Map(
+		(nearest ?? [])
+			.map((r) => [Number(r.created_image_id), Number(r.distance)])
+			.filter(([id]) => idSet.has(id))
+	);
 	return { ids, idToDistance, hasMore };
 }

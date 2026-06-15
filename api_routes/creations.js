@@ -5,6 +5,7 @@ import { parseCreationMeta } from "./utils/resolveCreatedImageStorageFilename.js
 import { getTextEmbeddingFromReplicate } from "./utils/embeddings.js";
 import { getSupabaseServiceClient } from "./utils/supabaseService.js";
 import { runSemanticSearch } from "./utils/embeddingsSearch.js";
+import { filterRecommendableCreationIds } from "./utils/recommendableCreations.js";
 import { recommendWithDataSource } from "../db/recommend/recsysWrapper.js";
 
 const RELATED_LIMIT_CAP = 40;
@@ -484,10 +485,18 @@ export default function createCreationsRoutes({ queries }) {
 						});
 						if (!rpcErr && Array.isArray(nearestRaw) && nearestRaw.length > 0) {
 							semanticPageFull = nearestRaw.length >= semLimit;
+							const candidateRows = nearestRaw
+								.map((r) => ({ id: Number(r?.created_image_id), distance: Number(r?.distance) }))
+								.filter((x) => Number.isFinite(x.id) && x.id > 0 && !excludeSet.has(x.id) && x.distance <= semanticDistanceMax);
+							const recommendableIds = new Set(
+								await filterRecommendableCreationIds(
+									supabaseClient,
+									candidateRows.map((x) => x.id)
+								)
+							);
 							semanticByDistance = new Map(
-								nearestRaw
-									.map((r) => ({ id: Number(r?.created_image_id), distance: Number(r?.distance) }))
-									.filter((x) => Number.isFinite(x.id) && x.id > 0 && !excludeSet.has(x.id) && x.distance <= semanticDistanceMax)
+								candidateRows
+									.filter((x) => recommendableIds.has(x.id))
 									.map((x) => [x.id, x.distance])
 							);
 						}
@@ -547,10 +556,17 @@ export default function createCreationsRoutes({ queries }) {
 							});
 							if (!rpcErr && Array.isArray(nearestRaw)) {
 								const filled = new Set(ids);
+								const candidateIds = nearestRaw
+									.map((r) => Number(r?.created_image_id))
+									.filter((fid) => Number.isFinite(fid) && fid > 0 && !excludeSet.has(fid) && !filled.has(fid));
+								const recommendableIds = new Set(
+									await filterRecommendableCreationIds(supabaseClient, candidateIds)
+								);
 								for (const r of nearestRaw) {
 									const fid = Number(r?.created_image_id);
 									const dist = Number(r?.distance);
 									if (!Number.isFinite(fid) || fid <= 0 || excludeSet.has(fid) || filled.has(fid)) continue;
+									if (!recommendableIds.has(fid)) continue;
 									if (dist > semanticDistanceMax) continue;
 									filled.add(fid);
 									ids.push(fid);
@@ -575,7 +591,9 @@ export default function createCreationsRoutes({ queries }) {
 			}
 
 			const feedByCreation = queries.selectFeedItemsByCreationIds?.all;
-			const items = typeof feedByCreation === "function" ? await feedByCreation(ids) : [];
+			const items = typeof feedByCreation === "function"
+				? await feedByCreation(ids, { recommendableOnly: true })
+				: [];
 			const viewerLikedIds = typeof queries.selectViewerLikedCreationIds?.all === "function"
 				? await queries.selectViewerLikedCreationIds.all(req.auth?.userId, ids)
 				: [];
@@ -630,7 +648,10 @@ export default function createCreationsRoutes({ queries }) {
 				console.error("[creations] semantic-related RPC:", rpcErr);
 				return res.status(500).json({ error: "Similarity search failed." });
 			}
-			const ids = (nearest ?? []).map((r) => Number(r?.created_image_id)).filter((n) => Number.isFinite(n) && n > 0);
+			const ids = await filterRecommendableCreationIds(
+				supabase,
+				(nearest ?? []).map((r) => Number(r?.created_image_id)).filter((n) => Number.isFinite(n) && n > 0)
+			);
 			if (ids.length === 0) {
 				const feedByCreation = queries.selectFeedItemsByCreationIds?.all;
 				const mainRows = typeof feedByCreation === "function" ? await feedByCreation([id]) : [];
@@ -640,7 +661,9 @@ export default function createCreationsRoutes({ queries }) {
 
 			const feedByCreation = queries.selectFeedItemsByCreationIds?.all;
 			const mainRows = typeof feedByCreation === "function" ? await feedByCreation([id]) : [];
-			const neighbourRows = await feedByCreation(ids);
+			const neighbourRows = typeof feedByCreation === "function"
+				? await feedByCreation(ids, { recommendableOnly: true })
+				: [];
 			const idToDistance = new Map((nearest ?? []).map((r) => [Number(r.created_image_id), Number(r.distance)]));
 			const orderIdx = new Map(ids.map((id, i) => [id, i]));
 			const sorted = neighbourRows.slice().sort((a, b) => (orderIdx.get(Number(a.id)) ?? 999) - (orderIdx.get(Number(b.id)) ?? 999));
@@ -679,7 +702,9 @@ export default function createCreationsRoutes({ queries }) {
 			if (ids.length === 0) return res.json({ items: [], distances: {}, has_more: false });
 
 			const feedByCreation = queries.selectFeedItemsByCreationIds?.all;
-			const neighbourRows = await feedByCreation(ids);
+			const neighbourRows = typeof feedByCreation === "function"
+				? await feedByCreation(ids, { recommendableOnly: true })
+				: [];
 			const orderIdx = new Map(ids.map((id, i) => [id, i]));
 			const sorted = neighbourRows.slice().sort((a, b) => (orderIdx.get(Number(a.id)) ?? 999) - (orderIdx.get(Number(b.id)) ?? 999));
 			const items = mapRelatedItemsToResponse(sorted, [], null).map((item) => ({

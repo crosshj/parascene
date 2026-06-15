@@ -5420,6 +5420,14 @@ export default function createCreateRoutes({ queries, storage }) {
 			if (queries.deleteFeedItemByCreatedImageId?.run) {
 				await queries.deleteFeedItemByCreatedImageId.run(parseInt(req.params.id));
 			}
+			const supabase = getSupabaseServiceClient();
+			if (supabase) {
+				try {
+					await deleteCreationEmbedding(supabase, parseInt(req.params.id));
+				} catch (err) {
+					console.warn("[create] Failed to delete embedding on user delete:", err?.message || err);
+				}
+			}
 			return res.json({ success: true, message: "Image deleted successfully" });
 		} catch (error) {
 			return res.status(500).json({ error: "Failed to delete image" });
