@@ -3,12 +3,14 @@
  * Address bar uses canonical `/creations/:id`; browser back closes overlay and restores the lane URL.
  */
 
+import { MODAL_DISMISS_ICON_SVG } from './modalDismiss.js';
+
 const OVERLAY_ID = 'prsn-creation-detail-overlay';
 const SHELL_OUT_VEIL_ID = 'prsn-creation-detail-shell-out-veil';
 const HISTORY_FLAG = 'prsnCreationDetailOverlay';
 const OVERLAY_STORE_KEY = '__prsnCreationDetailOverlay';
 
-/** @returns {{ overlayEl: HTMLElement | null, overlayFrame: HTMLIFrameElement | null, overlayCreationId: number | null, overlayReturnPath: string | null, overlaySavedScrollPositions: Array<{ el: HTMLElement, top: number } | { window: true, top: number }>, overlayBodyScrollLockTop: number | null }} */
+/** @returns {{ overlayEl: HTMLElement | null, overlayFrame: HTMLIFrameElement | null, overlayCreationId: number | null, overlayReturnPath: string | null, overlaySavedScrollPositions: Array<{ el: HTMLElement, top: number } | { window: true, top: number }>, overlayBodyScrollLockTop: number | null, overlayPushCount: number, overlayDismissEntirePending: boolean }} */
 function getOverlayStore() {
 	if (!window[OVERLAY_STORE_KEY]) {
 		window[OVERLAY_STORE_KEY] = {
@@ -18,6 +20,8 @@ function getOverlayStore() {
 			overlayReturnPath: null,
 			overlaySavedScrollPositions: [],
 			overlayBodyScrollLockTop: null,
+			overlayPushCount: 0,
+			overlayDismissEntirePending: false,
 		};
 	}
 	return window[OVERLAY_STORE_KEY];
@@ -159,8 +163,17 @@ function captureReturnPathBeforeOverlayPush() {
 	return window.location.pathname + window.location.search + window.location.hash;
 }
 
-function pushOverlayHistoryEntry(creationId) {
+/**
+ * @param {number} creationId
+ * @param {{ stackPush?: boolean }} [options]
+ */
+function pushOverlayHistoryEntry(creationId, options = {}) {
 	const store = getOverlayStore();
+	if (options.stackPush) {
+		store.overlayPushCount = Math.max(1, Number(store.overlayPushCount) || 1) + 1;
+	} else {
+		store.overlayPushCount = 1;
+	}
 	try {
 		const returnPath = captureReturnPathBeforeOverlayPush();
 		store.overlayReturnPath = returnPath;
@@ -171,6 +184,7 @@ function pushOverlayHistoryEntry(creationId) {
 		);
 	} catch {
 		store.overlayReturnPath = null;
+		store.overlayPushCount = 0;
 	}
 }
 
@@ -335,7 +349,7 @@ export function routeCreationDetailOverlayFromEmbed(href) {
 	}
 
 	if (path === '/creations' || path === '/feed' || path === '/explore' || path === '/challenges') {
-		dismissCreationDetailOverlayViaHistory();
+		dismissEntireCreationDetailOverlay();
 		return;
 	}
 
@@ -367,16 +381,68 @@ export function closeCreationDetailOverlay(options = {}) {
 		restoreOverlayScrollPositions();
 	}
 	store.overlayReturnPath = null;
+	store.overlayPushCount = 0;
+	store.overlayDismissEntirePending = false;
 	notifyOverlayDismissed(returnPath);
 }
 
-/** Header back / embed close — pop history only; popstate tears down or steps within overlay. */
+function overlayReturnPathFromStore() {
+	const store = getOverlayStore();
+	if (typeof store.overlayReturnPath === 'string' && store.overlayReturnPath) {
+		return store.overlayReturnPath;
+	}
+	const state = window.history?.state;
+	if (state && typeof state === 'object' && typeof state.prsnOverlayReturnPath === 'string') {
+		return state.prsnOverlayReturnPath;
+	}
+	return null;
+}
+
+function fallbackDismissEntireCreationDetailOverlay() {
+	const store = getOverlayStore();
+	const returnPath = overlayReturnPathFromStore();
+	store.overlayDismissEntirePending = false;
+	store.overlayPushCount = 0;
+	try {
+		if (returnPath) {
+			const curState = window.history?.state;
+			const baseState = curState && typeof curState === 'object' ? { ...curState } : {};
+			delete baseState[HISTORY_FLAG];
+			delete baseState.prsnCreationDetailId;
+			delete baseState.prsnOverlayReturnPath;
+			window.history.replaceState(baseState, '', returnPath);
+		}
+	} catch {
+		// ignore
+	}
+	closeCreationDetailOverlay();
+}
+
+/** Header back — one history step; popstate tears down or steps within overlay. */
 function dismissCreationDetailOverlayViaHistory() {
 	if (!isCreationDetailOverlayOpen()) return;
 	try {
 		window.history.back();
 	} catch {
 		// ignore
+	}
+}
+
+/** Header X / embed close — exit the whole overlay stack back to the lane in one gesture. */
+export function dismissEntireCreationDetailOverlay() {
+	if (!isCreationDetailOverlayOpen()) return;
+	const store = getOverlayStore();
+	if (store.overlayDismissEntirePending) return;
+	const count = Math.max(1, Number(store.overlayPushCount) || 1);
+	if (count === 1) {
+		dismissCreationDetailOverlayViaHistory();
+		return;
+	}
+	store.overlayDismissEntirePending = true;
+	try {
+		window.history.go(-count);
+	} catch {
+		fallbackDismissEntireCreationDetailOverlay();
 	}
 }
 
@@ -387,6 +453,15 @@ function dismissCreationDetailOverlayViaHistory() {
  */
 export function handleCreationDetailOverlayPopstate(ev) {
 	if (!isCreationDetailOverlayOpen()) return false;
+
+	const store = getOverlayStore();
+	if (store.overlayDismissEntirePending) {
+		store.overlayDismissEntirePending = false;
+		store.overlayPushCount = 0;
+		closeCreationDetailOverlay({ fromPopstate: true });
+		if (ev && typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
+		return true;
+	}
 
 	const state = window.history?.state;
 	const stillInOverlayStack = Boolean(state?.[HISTORY_FLAG]);
@@ -467,7 +542,7 @@ function ensureOverlayMessageListener() {
 		const data = event.data;
 		if (!data || typeof data !== 'object') return;
 		if (data.type === 'prsn-creation-detail-overlay-close') {
-			dismissCreationDetailOverlayViaHistory();
+			dismissEntireCreationDetailOverlay();
 			return;
 		}
 		if (data.type === 'prsn-creation-detail-overlay-navigate') {
@@ -494,6 +569,21 @@ function ensureOverlayPopstateListener() {
 	}, true);
 }
 
+function ensureOverlayEscapeListener() {
+	if (document.documentElement.dataset.prsnCreationOverlayEscapeBound === '1') return;
+	document.documentElement.dataset.prsnCreationOverlayEscapeBound = '1';
+	document.addEventListener(
+		'keydown',
+		(e) => {
+			if (e.key !== 'Escape' || e.defaultPrevented) return;
+			if (!isCreationDetailOverlayOpen()) return;
+			e.preventDefault();
+			dismissEntireCreationDetailOverlay();
+		},
+		true
+	);
+}
+
 function buildOverlayChrome(creationId) {
 	const toolbar = document.createElement('header');
 	toolbar.className = 'creation-detail-overlay-chrome';
@@ -513,7 +603,14 @@ function buildOverlayChrome(creationId) {
 		'<span class="chat-page-header-title-text">Creation</span>' +
 		'</span>';
 
-	toolbar.append(backBtn, title);
+	const closeBtn = document.createElement('button');
+	closeBtn.type = 'button';
+	closeBtn.className = 'modal-dismiss creation-detail-overlay-dismiss';
+	closeBtn.setAttribute('aria-label', 'Close');
+	closeBtn.innerHTML = MODAL_DISMISS_ICON_SVG;
+	closeBtn.addEventListener('click', () => dismissEntireCreationDetailOverlay());
+
+	toolbar.append(backBtn, title, closeBtn);
 
 	const frame = document.createElement('iframe');
 	frame.className = 'creation-detail-overlay-frame';
@@ -547,10 +644,11 @@ export function openCreationDetailOverlay(creationId) {
 
 	ensureOverlayMessageListener();
 	ensureOverlayPopstateListener();
+	ensureOverlayEscapeListener();
 
 	if (isCreationDetailOverlayOpen() && store.overlayFrame) {
 		syncOverlayFrameToCreationId(id);
-		pushOverlayHistoryEntry(id);
+		pushOverlayHistoryEntry(id, { stackPush: true });
 		return;
 	}
 
@@ -595,3 +693,4 @@ export function navigateToCreationDetailFromSpa(href, ev) {
 
 ensureOverlayMessageListener();
 ensureOverlayPopstateListener();
+ensureOverlayEscapeListener();

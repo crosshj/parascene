@@ -58,6 +58,9 @@ let videoHeroDimensionsFromCreation;
 let captureVideoFirstFrameFile;
 let openShareAudioModal;
 
+/** Set true locally when debugging creation-detail page load timing in the console. */
+const CREATION_DETAIL_LOG_PAGE_LOAD_TIMING = false;
+
 /** Viewer followed these user ids this session (optimistic; survives loadCreation re-renders). */
 const sessionFollowedUserIds = new Set();
 
@@ -132,6 +135,62 @@ function shouldInterceptCreationDetailEmbedLink(link, e) {
 	return true;
 }
 
+function requestCreationDetailEmbedClose() {
+	return postMessageToParentOverlay({
+		type: 'prsn-creation-detail-overlay-close',
+	});
+}
+
+function creationDetailHostModalIsOpen(host) {
+	if (!(host instanceof HTMLElement)) return false;
+	if (host.shadowRoot?.querySelector('.open')) return true;
+	const overlay = host.querySelector(
+		'.modal-overlay, .publish-modal-overlay, [data-overlay], [data-tip-creator-modal], [data-publish-modal]'
+	);
+	return overlay instanceof HTMLElement && overlay.classList.contains('open');
+}
+
+/** True when Escape should close a page-local layer instead of dismissing the overlay. */
+function creationDetailPageHasOpenEscapeTarget() {
+	if (document.querySelector('.chat-inline-image-lightbox')) return true;
+
+	const lineageModal = document.querySelector('[data-lineage-modal]');
+	if (lineageModal instanceof HTMLElement && lineageModal.classList.contains('open')) return true;
+
+	const setAvatarModal = document.querySelector('[data-set-avatar-modal]');
+	if (setAvatarModal instanceof HTMLElement && setAvatarModal.getAttribute('aria-hidden') === 'false') {
+		return true;
+	}
+
+	const challengeSubmitModal = document.querySelector('[data-challenge-submit-modal]');
+	if (
+		challengeSubmitModal instanceof HTMLElement &&
+		challengeSubmitModal.getAttribute('aria-hidden') === 'false'
+	) {
+		return true;
+	}
+
+	for (const dialog of document.querySelectorAll('dialog')) {
+		if (dialog instanceof HTMLDialogElement && dialog.open) return true;
+	}
+
+	if (document.querySelector('.comment-sticker-modal-overlay[aria-hidden="false"]')) return true;
+
+	for (const tag of [
+		'app-modal-profile',
+		'app-modal-credits',
+		'app-modal-notifications',
+		'app-modal-publish',
+		'app-modal-creation-details',
+		'app-modal-share',
+		'app-modal-tip-creator',
+	]) {
+		if (creationDetailHostModalIsOpen(document.querySelector(tag))) return true;
+	}
+
+	return false;
+}
+
 function bindCreationDetailEmbedNavigation() {
 	if (!isCreationDetailEmbed()) return;
 	document.addEventListener('click', (e) => {
@@ -143,7 +202,23 @@ function bindCreationDetailEmbedNavigation() {
 	}, true);
 }
 
+function bindCreationDetailEmbedEscape() {
+	if (!isCreationDetailEmbed()) return;
+	document.addEventListener(
+		'keydown',
+		(e) => {
+			if (e.key !== 'Escape' || e.defaultPrevented) return;
+			if (creationDetailPageHasOpenEscapeTarget()) return;
+			if (!requestCreationDetailEmbedClose()) return;
+			e.preventDefault();
+			e.stopPropagation();
+		},
+		true
+	);
+}
+
 bindCreationDetailEmbedNavigation();
+bindCreationDetailEmbedEscape();
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -1392,7 +1467,50 @@ if (window.history && 'scrollRestoration' in window.history) {
 	window.history.scrollRestoration = 'manual';
 }
 
-function resetCreationDetailScroll() {
+/** Per-load scroll engagement — avoid stealing position after the user has scrolled. */
+const creationDetailScrollEngagement = {
+	loadToken: 0,
+	userScrolled: false,
+	listenerBound: false,
+};
+
+function bindCreationDetailScrollEngagementListener() {
+	if (creationDetailScrollEngagement.listenerBound) return;
+	creationDetailScrollEngagement.listenerBound = true;
+	window.addEventListener(
+		'scroll',
+		() => {
+			const y = window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
+			if (y > 0) {
+				creationDetailScrollEngagement.userScrolled = true;
+			}
+		},
+		{ passive: true, capture: true }
+	);
+}
+
+/**
+ * @param {number} loadToken
+ * @param {{ resetUserScrolled?: boolean }} [options]
+ */
+function beginCreationDetailScrollEngagement(loadToken, options = {}) {
+	bindCreationDetailScrollEngagementListener();
+	creationDetailScrollEngagement.loadToken = loadToken;
+	if (options.resetUserScrolled) {
+		creationDetailScrollEngagement.userScrolled = false;
+	}
+}
+
+function creationDetailUserHasScrolled() {
+	return creationDetailScrollEngagement.userScrolled;
+}
+
+/**
+ * @param {{ force?: boolean }} [options] — force: true for new-creation navigation only
+ */
+function resetCreationDetailScroll(options = {}) {
+	const { force = false } = options;
+	if (!force && creationDetailUserHasScrolled()) return;
 	const apply = () => {
 		window.scrollTo(0, 0);
 		if (document.documentElement) document.documentElement.scrollTop = 0;
@@ -1485,6 +1603,7 @@ function createCreationDetailPerfTracker({ creationId, loadToken, isCurrentLoad 
 	}
 
 	async function waitAndLog(maxMs = 15000) {
+		if (!CREATION_DETAIL_LOG_PAGE_LOAD_TIMING) return;
 		const deadline = performance.now() + maxMs;
 		while (pendingReady.size > 0 && performance.now() < deadline && isCurrentLoad()) {
 			await new Promise((resolve) => setTimeout(resolve, 25));
@@ -1493,6 +1612,7 @@ function createCreationDetailPerfTracker({ creationId, loadToken, isCurrentLoad 
 	}
 
 	function logReport(reason) {
+		if (!CREATION_DETAIL_LOG_PAGE_LOAD_TIMING) return;
 		if (!isCurrentLoad()) return;
 		const now = performance.now();
 		const rows = Object.values(parts).map((p) => {
@@ -1575,6 +1695,7 @@ async function loadCreation() {
 	}
 
 	const loadToken = ++loadCreationSequence;
+	beginCreationDetailScrollEngagement(loadToken);
 	const isCurrentLoad = () => loadToken === loadCreationSequence;
 	/** @type {{ current: ReturnType<typeof createCreationDetailPerfTracker> | null }} */
 	const perfRef = { current: null };
@@ -5373,7 +5494,7 @@ async function loadCreation() {
 			perf.skipPart('related', 'not-published-or-failed');
 		}
 
-		if (isCurrentLoad()) {
+		if (isCurrentLoad() && !creationDetailUserHasScrolled()) {
 			resetCreationDetailScroll();
 		}
 
@@ -5430,7 +5551,9 @@ async function checkAndLoadCreation() {
 	const creationId = getCreationId();
 	// Show skeleton + hero loading immediately when navigating to a new creation (before loadDeps).
 	if (creationId && creationId !== currentCreationId) {
-		resetCreationDetailScroll();
+		const nextLoadToken = loadCreationSequence + 1;
+		beginCreationDetailScrollEngagement(nextLoadToken, { resetUserScrolled: true });
+		resetCreationDetailScroll({ force: true });
 		showCreationDetailContentSkeleton();
 		prepareCreationDetailHeroForLoad(undefined, undefined, { resetMedia: currentCreationId != null });
 	}
@@ -5441,7 +5564,6 @@ async function checkAndLoadCreation() {
 		// console.log('Creation ID changed, loading new creation');
 		currentCreationId = creationId;
 		loadCreation();
-		resetCreationDetailScroll();
 	} else if (!creationId && currentCreationId !== null) {
 		// If we're no longer on a creation detail page, reset
 		// console.log('No longer on creation detail page');
@@ -6165,7 +6287,6 @@ window.addEventListener('popstate', (e) => {
 	}
 	const creationId = getCreationId();
 	if (creationId) {
-		resetCreationDetailScroll();
 		checkAndLoadCreation();
 		return;
 	}

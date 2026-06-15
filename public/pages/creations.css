@@ -5079,6 +5079,29 @@ button.creation-detail-history-thumb-link.creation-detail-history-unavailable.cr
 	transform: none;
 }
 
+.creation-detail-overlay-chrome .creation-detail-overlay-dismiss {
+	flex-shrink: 0;
+	width: 46px;
+	height: 46px;
+	padding: 0;
+	margin: auto;
+	color: var(--text);
+}
+
+.creation-detail-overlay-chrome .creation-detail-overlay-dismiss:hover {
+	color: var(--text);
+	background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.creation-detail-overlay-chrome .creation-detail-overlay-dismiss:active {
+	transform: scale(0.96);
+}
+
+.creation-detail-overlay-chrome .creation-detail-overlay-dismiss:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
+}
+
 @media (min-width: 769px) {
 	.creation-detail-lineage-modal-overlay {
 		padding: 8px 12px;
