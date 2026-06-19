@@ -13,4 +13,4 @@ CREATE TABLE IF NOT EXISTS prsn_visit_pulse_days (
 
 ALTER TABLE prsn_visit_pulse_days ENABLE ROW LEVEL SECURITY;
 
-COMMENT ON TABLE prsn_visit_pulse_days IS 'Parascene: daily visit pulse rollup from Redis (15-min activity ranges per visitor in details). Summary columns for cross-day trends; details for same-day timeline.';
+COMMENT ON TABLE prsn_visit_pulse_days IS 'Parascene: daily visit pulse rollup from Redis (15-min activity ranges per visitor in details). details.feed_impressions = feed-beta dwell/click counts + concentration metrics (no per-user/creation lists). Summary columns for cross-day trends; details for same-day timeline.';

@@ -1,0 +1,80 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Click-next — {{periodLabel}}</title>
+<meta name="darkreader-lock" />
+{{!styleBlock}}
+<p class="small report-chrome"><a href=".">Up one folder</a></p>
+<h1>Click-next browsing</h1>
+<p class="small">Generated: {{generatedAt}} · {{periodLabel}} · {{dataNote}}</p>
+<div class="copy-row report-chrome">
+	<button type="button" id="copy-click-next-summary">Copy summary JSON</button>
+	<button type="button" id="copy-click-next-raw">Copy raw JSON</button>
+	<span class="copy-status" id="copy-click-next-status" aria-live="polite"></span>
+</div>
+
+<section class="grid">
+	<div class="card">
+		<div class="small">Total click-nexts</div>
+		<div>{{totalClicks}}</div>
+	</div>
+	<div class="card">
+		<div class="small">Unique paths (from → to)</div>
+		<div>{{uniquePaths}}</div>
+	</div>
+	<div class="card">
+		<div class="small">Source creations</div>
+		<div>{{sourceCreations}}</div>
+	</div>
+	<div class="card">
+		<div class="small">Destination creations</div>
+		<div>{{destCreations}}</div>
+	</div>
+	<div class="card">
+		<div class="small">Repeat paths (count &gt; 1)</div>
+		<div>{{repeatPaths}}</div>
+	</div>
+	<div class="card">
+		<div class="small">Paths active last 7d</div>
+		<div>{{pathsActiveLast7d}}</div>
+	</div>
+	<div class="card">
+		<div class="small">Paths active prior 7d</div>
+		<div>{{pathsActivePrior7d}}</div>
+	</div>
+	<div class="card">
+		<div class="small">First / last activity (ET)</div>
+		<div>{{firstActivityDay}} → {{lastActivityDay}}</div>
+	</div>
+</section>
+
+<section>
+	<h2>Story</h2>
+	<ul>{{!observationsHtml}}</ul>
+	<p class="small">{{!limitationNote}}</p>
+</section>
+
+<section>
+	<h2>Recent activity (proxy)</h2>
+	<p class="small">Pairs whose <strong>most recent</strong> click fell on each US East day. Not daily click volume — see footnote above.</p>
+	<div class="chart-wrap">{{!dailyActivityChartHtml}}</div>
+</section>
+
+<section>
+	<h2>Weekly paths touched</h2>
+	<p class="small">Count of from→to pairs with last activity in each US East week (Mon–Sun).</p>
+	<div class="chart-wrap">{{!weeklyActivityChartHtml}}</div>
+</section>
+
+<section>
+	<h2>Top paths</h2>
+	<p class="small">Highest lifetime click counts on a single from → to edge.</p>
+	{{!topPathsTableHtml}}
+</section>
+
+<section>
+	<h2>Top source creations</h2>
+	<p class="small">Creations users most often click <em>from</em> into related items (outgoing click-nexts summed).</p>
+	{{!topSourcesTableHtml}}
+</section>
+
+{{!copyScriptHtml}}

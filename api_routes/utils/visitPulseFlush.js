@@ -1,5 +1,9 @@
 import { openDb } from "../../db/index.js";
 import {
+	attachFeedImpressionsToPulseSnapshot,
+	buildFeedImpressionSnapshotFromRedis
+} from "./feedImpressionPulse.js";
+import {
 	buildDaySnapshotFromRedis,
 	usEastDayKey,
 	yesterdayUsEastDayKey
@@ -15,7 +19,9 @@ export async function runVisitPulseFlush({ args = {} } = {}) {
 	const rawDay = typeof args?.day === "string" ? args.day.trim() : "";
 	const dayKey = /^\d{4}-\d{2}-\d{2}$/.test(rawDay) ? rawDay : yesterdayUsEastDayKey();
 
-	const snapshot = await buildDaySnapshotFromRedis(dayKey);
+	let snapshot = await buildDaySnapshotFromRedis(dayKey);
+	const feedSnapshot = await buildFeedImpressionSnapshotFromRedis(dayKey);
+	snapshot = attachFeedImpressionsToPulseSnapshot(snapshot, feedSnapshot);
 	snapshot.flushed_at = new Date().toISOString();
 
 	const { queries } = await openDb({ quiet: true });
@@ -29,6 +35,9 @@ export async function runVisitPulseFlush({ args = {} } = {}) {
 		: null;
 	const redisEmpty = Number(snapshot.unique_visitors) === 0;
 	const dbHadData = Number(existing?.unique_visitors) > 0;
+	const feedRedisEmpty = Number(feedSnapshot?.unique_impressors) === 0;
+	const dbHadFeed =
+		Number(existing?.details?.feed_impressions?.unique_impressors) > 0;
 	if (!force && redisEmpty && dbHadData) {
 		return {
 			ok: false,
@@ -41,6 +50,16 @@ export async function runVisitPulseFlush({ args = {} } = {}) {
 		};
 	}
 
+	if (!force && feedRedisEmpty && dbHadFeed && existing?.details?.feed_impressions) {
+		snapshot = {
+			...snapshot,
+			details: {
+				...(snapshot.details && typeof snapshot.details === "object" ? snapshot.details : {}),
+				feed_impressions: existing.details.feed_impressions
+			}
+		};
+	}
+
 	await queries.upsertVisitPulseDay.run(snapshot);
 
 	return {
@@ -50,7 +69,9 @@ export async function runVisitPulseFlush({ args = {} } = {}) {
 		authed_visitors: snapshot.authed_visitors,
 		anon_visitors: snapshot.anon_visitors,
 		total_hits: snapshot.total_hits,
-		total_active_blocks: snapshot.total_active_blocks
+		total_active_blocks: snapshot.total_active_blocks,
+		feed_impression_users: snapshot.details?.feed_impressions?.unique_impressors ?? 0,
+		feed_impressions_total: snapshot.details?.feed_impressions?.total_impressions ?? 0
 	};
 }
 

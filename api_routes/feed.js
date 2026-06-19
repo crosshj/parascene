@@ -23,6 +23,7 @@ import { parseFeedBetaAckFromQuery } from "./feedBeta/continuation.js";
 import { loadFeedBetaSeenSetForUser } from "./feedBeta/seen.js";
 import { addFeedBetaSeenIdsToRedis } from "./feedBeta/seenRedis.js";
 import { parseFeedImpressionBody, parseFeedImpressionsBatchBody } from "./feedBeta/userCreationSeen.js";
+import { recordFeedImpressionsToRedis } from "./utils/feedImpressionPulse.js";
 import { createFeedTiming, wrapTimedPromise } from "./feed/feedTiming.js";
 import { buildChallengeEngagementFeedItemForViewer } from "./feed/challengeEngagementItem.js";
 import { primeFeedBetaRedisFromPipeline } from "./feedBeta/feedBetaRedisBundle.js";
@@ -333,6 +334,11 @@ export default function createFeedRoutes({ queries }) {
 				user.id,
 				items.map((item) => item.creationId)
 			);
+			try {
+				await recordFeedImpressionsToRedis(user.id, items);
+			} catch (pulseErr) {
+				console.warn("[POST /api/feed/impressions] pulse rollup", pulseErr?.message || pulseErr);
+			}
 			return res.json({ ok: true, processed: items.length, added });
 		} catch (err) {
 			console.warn("[POST /api/feed/impressions]", err?.message || err);
@@ -357,6 +363,11 @@ export default function createFeedRoutes({ queries }) {
 		}
 		try {
 			const added = await addFeedBetaSeenIdsToRedis(user.id, [parsed.creationId]);
+			try {
+				await recordFeedImpressionsToRedis(user.id, [parsed]);
+			} catch (pulseErr) {
+				console.warn("[POST /api/feed/impression] pulse rollup", pulseErr?.message || pulseErr);
+			}
 			return res.json({ ok: true, added: added > 0 });
 		} catch (err) {
 			console.warn("[POST /api/feed/impression]", err?.message || err);

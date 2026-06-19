@@ -1,0 +1,129 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Visit pulse — {{periodLabel}}</title>
+<meta name="darkreader-lock" />
+{{!styleBlock}}
+<p class="small report-chrome"><a href=".">Up one folder</a></p>
+<h1>Visit pulse — {{periodLabel}}</h1>
+<p class="small">Generated: {{generatedAt}} · {{windowDays}} US East partition day(s) ({{fromDay}} → {{toDay}}) · {{pulseDaysNote}}</p>
+<div class="copy-row report-chrome">
+	<button type="button" id="copy-pulse-period-summary">Copy summary JSON</button>
+	<button type="button" id="copy-pulse-period-raw">Copy raw JSON</button>
+	<span class="copy-status" id="copy-pulse-period-status" aria-live="polite"></span>
+</div>
+
+<section class="grid">
+	<div class="card">
+		<div class="small">Avg traffic DAU</div>
+		<div>{{avgTrafficDau}}</div>
+	</div>
+	<div class="card">
+		<div class="small">Avg logged-in visit DAU</div>
+		<div>{{avgVisitDau}}</div>
+	</div>
+	<div class="card">
+		<div class="small">Traffic WAU (window)</div>
+		<div>{{trafficWau}}</div>
+	</div>
+	<div class="card">
+		<div class="small">Visit WAU (logged-in)</div>
+		<div>{{visitWau}}</div>
+	</div>
+	<div class="card">
+		<div class="small">Busiest weekday</div>
+		<div>{{busiestDow}}</div>
+	</div>
+	<div class="card">
+		<div class="small">Busiest hour — all / logged-in (ET)</div>
+		<div>{{busiestHour}} / {{busiestAuthedHour}}</div>
+	</div>
+	<div class="card">
+		<div class="small">Weekday avg traffic</div>
+		<div>{{weekdayAvgTraffic}}</div>
+	</div>
+	<div class="card">
+		<div class="small">Weekend avg traffic</div>
+		<div>{{weekendAvgTraffic}}</div>
+	</div>
+</section>
+
+<section>
+	<h2>Story</h2>
+	<ul>{{!observationsHtml}}</ul>
+	<p class="small">Passive traffic only (visit pulse). Pair with <strong>engagement monthly</strong> for logged-in actions, activation, and milestones.</p>
+</section>
+
+<section>
+	<h2>Daily traffic</h2>
+	<p class="small">Unique visitors per US East day. Dashed line = linear trend.</p>
+	<div class="chart-wrap">{{!trafficDailyChartHtml}}</div>
+</section>
+
+<section>
+	<h2>Logged-in visit DAU</h2>
+	<p class="small">Authed visitors per day (pulse summary).</p>
+	<div class="chart-wrap">{{!visitDailyChartHtml}}</div>
+</section>
+
+<section>
+	<h2>Feed impressions (beta)</h2>
+	<p class="small">Logged-in users with feed dwell/click beacons per day (from pulse flush rollup).</p>
+	<div class="chart-wrap">{{!feedImpressorsChartHtml}}</div>
+</section>
+
+<section class="grid-2">
+	<div class="card">
+		<h2>By day of week — all traffic</h2>
+		<p class="small">Average traffic DAU per weekday (Mon–Sun US East). Sample size = days of that weekday in window.</p>
+		<div class="chart-wrap">{{!dowTrafficChartHtml}}</div>
+	</div>
+	<div class="card">
+		<h2>By day of week — logged-in</h2>
+		<p class="small">Average logged-in visit DAU per weekday. Separate scale from all traffic.</p>
+		<div class="chart-wrap">{{!dowVisitChartHtml}}</div>
+	</div>
+</section>
+
+<section>
+	<h2>Weekday breakdown</h2>
+	{{!dowTableHtml}}
+</section>
+
+<section class="grid-2">
+	<div class="card">
+		<h2>By hour — all traffic</h2>
+		<p class="small">Average stacked active visitors per hour (ET), across pulse days in window.</p>
+		<div class="chart-wrap">{{!hourProfileAllChartHtml}}</div>
+	</div>
+	<div class="card">
+		<h2>By hour — logged-in</h2>
+		<p class="small">Logged-in active visitors per hour (ET). Own scale so small values stay visible.</p>
+		<div class="chart-wrap">{{!hourProfileAuthedChartHtml}}</div>
+	</div>
+</section>
+
+<section class="grid-2">
+	<div class="card">
+		<h2>Weekday × hour — all traffic</h2>
+		<p class="small">Average active visitors per hour for each weekday (darker = busier).</p>
+		<div class="chart-wrap">{{!heatmapAllHtml}}</div>
+	</div>
+	<div class="card">
+		<h2>Weekday × hour — logged-in</h2>
+		<p class="small">Logged-in visitors only. Own color scale.</p>
+		<div class="chart-wrap">{{!heatmapAuthedHtml}}</div>
+	</div>
+</section>
+
+<section>
+	<h2>Peak days</h2>
+	{{!peakDaysTableHtml}}
+</section>
+
+<section>
+	<h2>Logged-in visitors (most active days)</h2>
+	<p class="small">Users with the most distinct US East pulse days in this window.</p>
+	{{!topAuthedTableHtml}}
+</section>
+
+{{!copyScriptHtml}}

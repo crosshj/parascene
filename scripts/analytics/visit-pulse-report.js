@@ -448,7 +448,8 @@ function buildVisitPulseSummaryPayload(bundle) {
 				chart_color: colorMap.get(Number(v.user_id)) ?? null,
 				active_hours: et.visitorActiveHourLabels(v, dayStartMs)
 			})),
-		anonymous: anonTables
+		anonymous: anonTables,
+		feed_impressions: row?.details?.feed_impressions ?? null
 	};
 }
 
@@ -900,6 +901,44 @@ async function adjacentPulseDayKey(dayKey, deltaDays) {
 	return usEastDayKey(new Date(usEastDayStartMs(dayKey) + deltaDays * PULSE_DAY_MS));
 }
 
+function buildFeedImpressionsSectionHtml(feed) {
+	if (!feed || !Number(feed.unique_impressors)) {
+		return '<p class="small">No feed impressions recorded for this day.</p>';
+	}
+	const uc = feed.concentration?.users;
+	const cc = feed.concentration?.creations;
+	const pct = (n) => `${Math.round((Number(n) || 0) * 100)}%`;
+	const userConc = uc
+		? `${pct(uc.top1_share)} top user · effective ${uc.effective_n} of ${feed.unique_impressors}`
+		: "—";
+	const creationConc = cc
+		? `${pct(cc.top1_share)} top creation · effective ${cc.effective_n} of ${feed.unique_creations ?? 0}`
+		: "—";
+	return `<div class="grid">
+		<div class="card">
+			<div class="small">Impressors (logged-in)</div>
+			<div>${esc(String(feed.unique_impressors))}</div>
+		</div>
+		<div class="card">
+			<div class="small">Total impressions</div>
+			<div>${esc(String(feed.total_impressions ?? 0))}</div>
+		</div>
+		<div class="card">
+			<div class="small">Dwell / click</div>
+			<div>${esc(String(feed.dwell_impressions ?? 0))} / ${esc(String(feed.click_impressions ?? 0))}</div>
+		</div>
+		<div class="card">
+			<div class="small">User concentration</div>
+			<div class="small">${esc(userConc)}</div>
+		</div>
+		<div class="card">
+			<div class="small">Creation concentration</div>
+			<div class="small">${esc(creationConc)}</div>
+		</div>
+	</div>
+	<p class="small">Concentration: top1_share = largest slice of impressions; effective_n ≈ how many equal participants would match this spread (higher = broader).</p>`;
+}
+
 async function renderVisitPulseHtml(bundle) {
 	const { dayKey, source, row, activeNow, tzLabel, dayStartMs, stack, et, displayTz } = bundle;
 	const hourTotals = stack.hourTotals || [];
@@ -948,6 +987,7 @@ async function renderVisitPulseHtml(bundle) {
 		peakHourCount: String(stack.peakHour.n),
 		peakHourLabel: et.partitionHourShortLabel(stack.peakHour.h, dayStartMs),
 		displayTz,
+		feedImpressionsSectionHtml: buildFeedImpressionsSectionHtml(row?.details?.feed_impressions),
 		easternTz: EASTERN_TZ,
 		authedChartSvg: authedHourChartSvg({
 			series: stack.series,
