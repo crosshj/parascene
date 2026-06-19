@@ -149,7 +149,7 @@ function createEasternFormatters() {
 		if (!Number.isFinite(ms)) return "?";
 		const parts = wallHour12.formatToParts(new Date(ms));
 		const h = Number(parts.find((p) => p.type === "hour")?.value);
-		const dp = parts.find((p) => p.type === "dayPeriod")?.value;
+		const dp = String(parts.find((p) => p.type === "dayPeriod")?.value || "").toLowerCase();
 		if (!Number.isFinite(h) || !dp) return "?";
 		if (h === 12 && dp === "am") return "12a";
 		if (h === 12 && dp === "pm") return "12p";
