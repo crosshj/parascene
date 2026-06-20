@@ -55,6 +55,7 @@ import {
 	validateChallengeSubmission
 } from "./utils/challengeSubmitShared.js";
 import { resolveCreationImageForExport } from "./utils/resolveCreationImageForExport.js";
+import { applySourceShareUrlToMutateArgsWhenMatching } from "./utils/mutateLineageImageUrl.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -2397,7 +2398,7 @@ export default function createCreateRoutes({ queries, storage }) {
 				}
 
 				// Unpublished sources: provider cannot use /api/images/created/:filename (403).
-				// Use share URL so provider can fetch without auth. Replace string image_url fields or first URL in image_url_array fields (e.g. input_images).
+				// Use share URL when the submitted input is the source image itself — not alternate inputs (e.g. generic frame captures).
 				const sourcePublished = source.published === 1 || source.published === true;
 				if (!sourcePublished && source.status === "completed" && source.filename) {
 					try {
@@ -2407,24 +2408,15 @@ export default function createCreateRoutes({ queries, storage }) {
 							sharedByUserId: user.id
 						});
 						const shareUrl = `${providerBase}/api/share/${encodeURIComponent(ACTIVE_SHARE_VERSION)}/${encodeURIComponent(token)}/image`;
-						const stringKey =
-							imageUrlKeys.includes("image_url")
-								? "image_url"
-								: imageUrlKeys.length === 1
-									? imageUrlKeys[0]
-									: null;
-						if (stringKey) {
-							safeArgs[stringKey] = shareUrl;
-							meta.args[stringKey] = shareUrl;
-						}
-						for (const arrKey of imageUrlArrayKeys) {
-							if (!Array.isArray(safeArgs[arrKey]) || safeArgs[arrKey].length === 0) continue;
-							if (typeof safeArgs[arrKey][0] !== "string") continue;
-							const next = [...safeArgs[arrKey]];
-							next[0] = shareUrl;
-							safeArgs[arrKey] = next;
-							meta.args[arrKey] = next;
-						}
+						applySourceShareUrlToMutateArgsWhenMatching({
+							safeArgs,
+							metaArgs: meta.args,
+							shareUrl,
+							imageUrlKeys,
+							imageUrlArrayKeys,
+							sourceFilename: source.filename,
+							baseOrigin: providerBase,
+						});
 					} catch {
 						// If mint fails, keep existing URLs; provider may 403 for unpublished
 					}
@@ -2457,7 +2449,7 @@ export default function createCreateRoutes({ queries, storage }) {
 					meta.history = [...priorIds, sourceId];
 					meta.mutate_of_id = sourceId;
 					meta.direct_parent_ids = [sourceId];
-					// Unpublished source: use share URL so provider can fetch (same as mutate flow).
+					// Unpublished source: use share URL when input matches source image (not generic frame uploads).
 					const sourcePublished = source.published === 1 || source.published === true;
 					if (!sourcePublished && source.status === "completed" && source.filename) {
 						try {
@@ -2467,24 +2459,15 @@ export default function createCreateRoutes({ queries, storage }) {
 								sharedByUserId: user.id
 							});
 							const shareUrl = `${providerBase}/api/share/${encodeURIComponent(ACTIVE_SHARE_VERSION)}/${encodeURIComponent(token)}/image`;
-							const stringKey =
-								imageUrlKeys.includes("image_url")
-									? "image_url"
-									: imageUrlKeys.length === 1
-										? imageUrlKeys[0]
-										: null;
-							if (stringKey) {
-								safeArgs[stringKey] = shareUrl;
-								meta.args[stringKey] = shareUrl;
-							}
-							for (const arrKey of imageUrlArrayKeys) {
-								if (!Array.isArray(safeArgs[arrKey]) || safeArgs[arrKey].length === 0) continue;
-								if (typeof safeArgs[arrKey][0] !== "string") continue;
-								const next = [...safeArgs[arrKey]];
-								next[0] = shareUrl;
-								safeArgs[arrKey] = next;
-								meta.args[arrKey] = next;
-							}
+							applySourceShareUrlToMutateArgsWhenMatching({
+								safeArgs,
+								metaArgs: meta.args,
+								shareUrl,
+								imageUrlKeys,
+								imageUrlArrayKeys,
+								sourceFilename: source.filename,
+								baseOrigin: providerBase,
+							});
 						} catch {
 							// If mint fails, keep existing URLs
 						}

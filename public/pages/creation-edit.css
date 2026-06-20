@@ -334,6 +334,15 @@
 	text-align: center;
 }
 
+.creation-edit-route .creation-edit-footer .create-page-footer-link {
+	color: inherit;
+	font-size: 0.85rem;
+}
+
+.creation-edit-route .creation-edit-footer .create-page-footer-link:hover {
+	color: inherit;
+}
+
 .creation-edit-route .creation-edit-queue-link:hover:not(:disabled) {
 	color: inherit;
 }

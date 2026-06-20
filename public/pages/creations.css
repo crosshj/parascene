@@ -1653,6 +1653,10 @@ app-route-create .create-route .image-thumb-container .image-thumb-wrap.loaded .
 	opacity: 1;
 }
 
+app-route-create .create-route .image-thumb-wrap--lightbox {
+	cursor: zoom-in;
+}
+
 app-route-create .create-route .image-choose-btn {
 	padding: 0.5rem 0.75rem;
 	font-size: 0.875rem;
@@ -6357,13 +6361,10 @@ app-route-create .create-route-blog-campaign-simple-note {
 @media (max-width: 768px) {
 	.creation-detail-queue-frame-overlay {
 		padding: 12px;
-		align-items: flex-end;
 	}
 
 	.creation-detail-queue-frame-dialog {
 		width: 100%;
 		max-height: 88vh;
-		border-bottom-left-radius: 0;
-		border-bottom-right-radius: 0;
 	}
 }

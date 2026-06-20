@@ -9,11 +9,12 @@ const _qs = (() => {
 	const v = document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() || '';
 	return v ? `?v=${encodeURIComponent(v)}` : '';
 })();
-const [{ attachAutoGrowTextarea }, { loadMutateQueue, removeFromMutateQueueByImageUrl }, { createImagePickerModalDom, wireImagePickerModal }] =
+const [{ attachAutoGrowTextarea }, { loadMutateQueue, removeFromMutateQueueByImageUrl }, { createImagePickerModalDom, wireImagePickerModal }, { getMutateQueuePrefillForProviderFields }] =
 	await Promise.all([
 		import(`./autogrow.js${_qs}`),
 		import(`./mutateQueue.js${_qs}`),
-		import(`./imagePickerModal.js${_qs}`)
+		import(`./imagePickerModal.js${_qs}`),
+		import(`./mutateQueueSync.js${_qs}`)
 	]);
 
 // --- Field type detection (used to choose handler) ---
@@ -323,16 +324,42 @@ function createBooleanField(fieldKey, field, context) {
 	return wrapper;
 }
 
+function wireImageThumbLightboxClick(thumbImg, options = {}) {
+	if (!(thumbImg instanceof HTMLImageElement)) return;
+	const thumbWrap = thumbImg.closest('.image-thumb-wrap');
+	if (thumbWrap instanceof HTMLElement) {
+		thumbWrap.classList.add('image-thumb-wrap--lightbox');
+	}
+	thumbImg.addEventListener('click', (e) => {
+		e.preventDefault();
+		e.stopPropagation();
+		const src = String(thumbImg.currentSrc || thumbImg.getAttribute('src') || '').trim();
+		if (!src) return;
+		import(`./chatInlineImageLightbox.js${_qs}`).then(({ openChatInlineImageLightbox }) => {
+			const meta = { sourceImg: thumbImg };
+			if (typeof options.getGallery === 'function') {
+				const gallery = options.getGallery(thumbImg);
+				if (gallery && Array.isArray(gallery.urls) && gallery.urls.length > 1) {
+					meta.galleryUrls = gallery.urls;
+					meta.galleryImgs = gallery.imgs;
+					meta.galleryIndex = gallery.index;
+				}
+			}
+			openChatInlineImageLightbox(src, meta);
+		});
+	});
+}
+
 function createImageField(fieldKey, field, context) {
 	const { inputClassName, fieldIdPrefix, onValueChange } = context;
 	const defaultValue = typeof field?.default === 'string' ? field.default : '';
 	let initialValue = defaultValue;
-	if (!initialValue && typeof window !== 'undefined' && window.location?.pathname === '/create') {
+	if (typeof window !== 'undefined' && window.location?.pathname === '/create') {
 		try {
-			const queued = loadMutateQueue();
-			const first = queued.find((item) => typeof item?.imageUrl === 'string' && item.imageUrl.trim());
-			if (first) {
-				initialValue = first.imageUrl.trim();
+			const prefill = getMutateQueuePrefillForProviderFields({ [fieldKey]: field });
+			const fromQueue = prefill[fieldKey];
+			if (typeof fromQueue === 'string' && fromQueue.trim()) {
+				initialValue = fromQueue.trim();
 			}
 		} catch {
 			// ignore storage errors
@@ -360,6 +387,7 @@ function createImageField(fieldKey, field, context) {
 	thumbImg.className = 'image-thumb';
 	thumbImg.alt = '';
 	thumbWrap.appendChild(thumbImg);
+	wireImageThumbLightboxClick(thumbImg);
 	const removeBtn = document.createElement('button');
 	removeBtn.type = 'button';
 	removeBtn.className = 'image-pick-another';
@@ -526,14 +554,12 @@ function createImageArrayField(fieldKey, field, context) {
 	const { inputClassName, fieldIdPrefix, onValueChange } = context;
 	const defaultArr = parseImageArrayDefault(field?.default);
 	let initialItems = [...defaultArr];
-	if (initialItems.length === 0 && typeof window !== 'undefined' && window.location?.pathname === '/create') {
+	if (typeof window !== 'undefined' && window.location?.pathname === '/create') {
 		try {
-			const queued = loadMutateQueue();
-			const urls = queued
-				.map((item) => (typeof item?.imageUrl === 'string' ? item.imageUrl.trim() : ''))
-				.filter(Boolean);
-			if (urls.length) {
-				initialItems = urls;
+			const prefill = getMutateQueuePrefillForProviderFields({ [fieldKey]: field });
+			const fromQueue = prefill[fieldKey];
+			if (Array.isArray(fromQueue) && fromQueue.length > 0) {
+				initialItems = fromQueue;
 			}
 		} catch {
 			// ignore storage errors
@@ -672,6 +698,18 @@ function createImageArrayField(fieldKey, field, context) {
 			if (src) img.src = src;
 
 			thumbWrap.appendChild(img);
+			wireImageThumbLightboxClick(img, {
+				getGallery(clickedImg) {
+					const imgs = Array.from(listEl.querySelectorAll('.image-thumb')).filter(
+						(node) => node instanceof HTMLImageElement
+					);
+					const urls = imgs
+						.map((node) => String(node.currentSrc || node.getAttribute('src') || '').trim())
+						.filter(Boolean);
+					const index = imgs.indexOf(clickedImg);
+					return { urls, imgs, index: index >= 0 ? index : 0 };
+				},
+			});
 
 			if (index > 0) {
 				const moveLeftBtn = document.createElement('button');

@@ -3001,6 +3001,7 @@ export async function initChatPage(root, options = {}) {
 				attachPromptSuggest: _cdTriggeredSuggest.attachCreateComposerSuggest,
 				isTriggeredSuggestPopupOpen: _cdTriggeredSuggest.isTriggeredSuggestPopupOpen,
 			});
+			chatCreateComposerApi?.syncFromSharedSettings?.();
 		} catch (err) {
 			console.error('[Chat page] create composer mount failed:', err);
 		}
@@ -3013,6 +3014,7 @@ export async function initChatPage(root, options = {}) {
 		}
 		if (visible) {
 			refreshChatCreateComposerModelsIfVisible();
+			chatCreateComposerApi?.syncFromSharedSettings?.();
 		}
 		if (!document.body) return;
 		const shouldUseOverlay = Boolean(visible) && !shouldShowMobileSidebarFromLocation();
@@ -6500,6 +6502,8 @@ export async function initChatPage(root, options = {}) {
 					? detail.pathname
 					: window.location.pathname;
 			syncChatSidebarPseudoStripActiveNow(pathname);
+			chatCreateComposerApi?.syncFromMutateQueue?.();
+			chatCreateComposerApi?.syncFromSharedSettings?.();
 		};
 		document.addEventListener(
 			'prsn-creation-detail-overlay-dismissed',

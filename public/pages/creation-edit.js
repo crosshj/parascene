@@ -20,9 +20,10 @@ let MUTATE_VIDEO_LTX_MODEL;
 let renderEmptyState;
 let renderEmptyError;
 let addToMutateQueue;
-let clearMutateQueue;
+let replaceMutateQueueSingleItem;
 let loadMutateQueue;
 let removeFromMutateQueueByImageUrl;
+let syncMutatePageToAdvancedCreate;
 let applyHeroAspectLayoutToElement;
 let aspectRatioFromCreation;
 let closestAspectRatioPreset;
@@ -80,9 +81,12 @@ async function loadDeps() {
 
 		const mutateQueueMod = await import(`/shared/mutateQueue.js${qs}`);
 		addToMutateQueue = mutateQueueMod.addToMutateQueue;
-		clearMutateQueue = mutateQueueMod.clearMutateQueue;
+		replaceMutateQueueSingleItem = mutateQueueMod.replaceMutateQueueSingleItem;
 		loadMutateQueue = mutateQueueMod.loadMutateQueue;
 		removeFromMutateQueueByImageUrl = mutateQueueMod.removeFromMutateQueueByImageUrl;
+
+		const mutateQueueSyncMod = await import(`/shared/mutateQueueSync.js${qs}`);
+		syncMutatePageToAdvancedCreate = mutateQueueSyncMod.syncMutatePageToAdvancedCreate;
 
 		const aspectRatioMod = await import(`/shared/aspectRatio.js${qs}`);
 		applyHeroAspectLayoutToElement = aspectRatioMod.applyHeroAspectLayoutToElement;
@@ -145,8 +149,11 @@ function cancelMutatePromptDraftPersist() {
 function prepareCreationsPageAfterMutateSubmit({ mutateOfId, normalizedImageUrl, published }) {
 	cancelMutatePromptDraftPersist();
 	try {
-		clearMutateQueue();
-		addToMutateQueue({ sourceId: mutateOfId, imageUrl: normalizedImageUrl, published });
+		replaceMutateQueueSingleItem({
+			sourceId: mutateOfId,
+			imageUrl: normalizedImageUrl,
+			published,
+		});
 	} catch (_) { }
 }
 
@@ -507,6 +514,8 @@ async function loadEditPage() {
 				<footer class="create-page-footer creation-edit-footer">
 					<nav class="create-page-footer-nav" aria-label="Mutate actions">
 						<button type="button" class="creation-edit-queue-link create-page-footer-link" data-queue-mutate-btn>Queue for later</button>
+						<span class="create-page-footer-sep" aria-hidden="true">·</span>
+						<a href="/create" class="create-page-footer-link create-switch-to-advanced" data-mutate-advanced-mode>Advanced Mode</a>
 					</nav>
 				</footer>
 			</div>
@@ -952,6 +961,47 @@ async function loadEditPage() {
 				}, remaining);
 			};
 			queueBtns.forEach((queueBtn) => queueBtn.addEventListener('click', onQueueClick));
+		}
+
+		const advancedModeLink = editContent.querySelector('[data-mutate-advanced-mode]');
+		if (advancedModeLink instanceof HTMLAnchorElement) {
+			advancedModeLink.addEventListener('click', (e) => {
+				e.preventDefault();
+				cancelMutatePromptDraftPersist();
+				const tabsEl = editContent.querySelector('app-tabs');
+				const mode = mutateModeFromTabOrDataset(
+					tabsEl?.getAttribute?.('active') || activeMode
+				);
+				const rawEngine = editContent.dataset.mutateI2vEngine;
+				const i2vEngine = rawEngine === 'wan' || rawEngine === 'replicate' ? 'wan' : 'ltx';
+				const activePromptEl = editContent.querySelector(
+					'app-tabs tab:not([hidden]) [data-edit-prompt]'
+				);
+				const prompt =
+					activePromptEl instanceof HTMLTextAreaElement ? activePromptEl.value || '' : '';
+				const aspectRatio =
+					String(editContent.dataset.mutateAspectRatio || '').trim() || '1:1';
+				const sourceId = Number(editContent.dataset.mutateSourceId || '');
+				const imageUrl = toParasceneImageUrl(editContent.dataset.mutateImageUrl || '');
+				const published = editContent.dataset.mutatePublished === '1';
+				try {
+					if (typeof syncMutatePageToAdvancedCreate === 'function') {
+						syncMutatePageToAdvancedCreate({
+							mode,
+							i2vEngine,
+							prompt,
+							aspectRatio,
+							imageUrl,
+							sourceId,
+							published,
+						});
+					}
+				} catch {
+					// ignore storage errors
+				}
+				document.cookie = 'create_editor=; path=/; max-age=0';
+				window.location.href = '/create';
+			});
 		}
 	} catch {
 		editContent.innerHTML = renderEmptyState({

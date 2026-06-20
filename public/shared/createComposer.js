@@ -28,7 +28,20 @@ import {
 import { isTriggeredSuggestPopupOpen } from '/shared/triggeredSuggest.js';
 import { composerEnterKeySubmits } from '/shared/autogrow.js';
 import { bindCreateComposerCreationDropTargets } from '/shared/creationComposerDrag.js';
-import { addToMutateQueue, loadMutateQueue } from '/shared/mutateQueue.js';
+import { addToMutateQueue, loadMutateQueue, removeFromMutateQueueByImageUrl } from '/shared/mutateQueue.js';
+import {
+	MUTATE_QUEUE_UPDATED_EVENT,
+	buildAttachmentSnapshotFromQueue,
+	mutateQueueImageUrlsMatch,
+	syncMutateQueueFromComposerAttachments,
+} from '/shared/mutateQueueSync.js';
+import {
+	CREATE_SETTINGS_UPDATED_EVENT,
+	mergeSharedSettingsIntoSessionSelections,
+	readSharedCreateSettings,
+	resolveSharedPrompt,
+	writeSharedCreateSettingsFromComposerSnapshot,
+} from '/shared/createSettingsSync.js';
 
 const BASIC_CREATE_DEFAULT_SERVER_ID = 1;
 const BASIC_CREATE_DEFAULT_METHOD_KEY = 'replicate';
@@ -945,12 +958,6 @@ export function mountCreateComposer(host, opts = {}) {
 		const trimmed = typeof url === 'string' ? url.trim() : '';
 		const cid = Number(creationId);
 		if (!trimmed || !Number.isFinite(cid) || cid <= 0) return;
-		attachmentItems.push(trimmed);
-		attachmentMutateSourceIds.push(cid);
-		attachmentUploadAspects.push(null);
-		saveAttachmentsToStorage();
-		renderAttachmentStrip();
-		syncModeChrome();
 		try {
 			addToMutateQueue({
 				sourceId: cid,
@@ -960,6 +967,29 @@ export function mountCreateComposer(host, opts = {}) {
 		} catch {
 			// ignore storage errors
 		}
+	}
+
+	function applyQueueSnapshotToAttachments(options = {}) {
+		const snapshots = buildAttachmentSnapshotFromQueue();
+		if (snapshots.length === 0 && !options.allowEmpty) return;
+		revokeAttachmentBlobUrls();
+		attachmentItems = snapshots.map((item) => item.imageUrl);
+		attachmentMutateSourceIds = snapshots.map((item) =>
+			Number.isFinite(item.sourceId) && item.sourceId > 0 ? item.sourceId : null
+		);
+		attachmentUploadAspects = snapshots.map(() => null);
+		saveAttachmentsToStorage();
+		renderAttachmentStrip();
+		syncModeChrome();
+	}
+
+	function isUrlInMutateQueue(url) {
+		const trimmed = typeof url === 'string' ? url.trim() : '';
+		if (!trimmed) return false;
+		return loadMutateQueue().some((item) => {
+			const itemUrl = typeof item?.imageUrl === 'string' ? item.imageUrl.trim() : '';
+			return itemUrl && mutateQueueImageUrlsMatch(trimmed, itemUrl);
+		});
 	}
 
 	function getFormFieldContext() {
@@ -1536,16 +1566,57 @@ export function mountCreateComposer(host, opts = {}) {
 		} catch (_) {}
 	}
 
-	function saveAttachmentsToStorage() {
+	function syncFromSharedSettings() {
 		try {
-			const urls = attachmentItems
-				.filter((item) => typeof item === 'string' && item.trim())
-				.map((item) => String(item).trim());
+			const settings = readSharedCreateSettings();
+			const prompt = resolveSharedPrompt(settings);
+			if (promptInput instanceof HTMLTextAreaElement && promptInput.value !== prompt) {
+				promptInput.value = prompt;
+				syncStyleSelectionFromPrompt();
+				updateSubmitButtonState();
+				try {
+					refreshAutoGrow(host);
+				} catch (_) {}
+			}
+			const savedAspect = settings.aspectRatio?.trim();
+			if (savedAspect && MVP_ASPECT_RATIOS.includes(savedAspect) && savedAspect !== selectedAspect) {
+				selectedAspect = savedAspect;
+				syncAspectFooterState();
+				buildAspectPopover();
+			}
+			const storedMode = settings.outputMode;
+			if ((storedMode === 'video' || storedMode === 'image') && storedMode !== outputMode) {
+				setOutputMode(storedMode);
+			}
+			const modelRoute = settings.modelRoute?.trim();
+			if (modelRoute) {
+				const list = getActiveModelList();
+				if (list.some((o) => o.value === modelRoute) && modelRoute !== selectedModel) {
+					applySelectedModel(modelRoute);
+				}
+			}
+		} catch (_) {}
+	}
+
+	function saveAttachmentsToStorage() {
+		const urls = [];
+		const sourceIds = [];
+		for (let i = 0; i < attachmentItems.length; i++) {
+			const item = attachmentItems[i];
+			if (typeof item !== 'string' || !item.trim()) continue;
+			urls.push(item.trim());
+			const sid = attachmentMutateSourceIds[i];
+			sourceIds.push(Number.isFinite(sid) && sid > 0 ? sid : null);
+		}
+		try {
 			if (urls.length > 0) {
 				localStorage.setItem(STORAGE_KEYS.imageEditSelection, JSON.stringify(urls));
 			} else {
 				localStorage.removeItem(STORAGE_KEYS.imageEditSelection);
 			}
+		} catch (_) {}
+		try {
+			syncMutateQueueFromComposerAttachments(urls, sourceIds);
 		} catch (_) {}
 	}
 
@@ -1622,6 +1693,15 @@ export function mountCreateComposer(host, opts = {}) {
 
 	function removeAttachmentAt(index) {
 		if (index < 0 || index >= attachmentItems.length) return;
+		const removed = attachmentItems[index];
+		if (typeof removed === 'string' && removed.trim() && isUrlInMutateQueue(removed.trim())) {
+			try {
+				removeFromMutateQueueByImageUrl(removed.trim());
+			} catch {
+				// ignore storage errors
+			}
+			return;
+		}
 		attachmentItems.splice(index, 1);
 		attachmentMutateSourceIds.splice(index, 1);
 		attachmentUploadAspects.splice(index, 1);
@@ -2270,8 +2350,22 @@ export function mountCreateComposer(host, opts = {}) {
 			const saved = readStoredAttachmentUrls();
 			if (saved.length > 0) restoreAttachments(saved);
 		}
-		hydrateAttachmentMutateSourcesFromQueue();
+		applyQueueSnapshotToAttachments();
 	} catch (_) {}
+
+	syncFromSharedSettings();
+
+	const onMutateQueueUpdated = () => {
+		applyQueueSnapshotToAttachments({ allowEmpty: true });
+	};
+	document.addEventListener(MUTATE_QUEUE_UPDATED_EVENT, onMutateQueueUpdated);
+	teardownFns.push(() => document.removeEventListener(MUTATE_QUEUE_UPDATED_EVENT, onMutateQueueUpdated));
+
+	const onCreateSettingsUpdated = () => syncFromSharedSettings();
+	document.addEventListener(CREATE_SETTINGS_UPDATED_EVENT, onCreateSettingsUpdated);
+	teardownFns.push(() =>
+		document.removeEventListener(CREATE_SETTINGS_UPDATED_EVENT, onCreateSettingsUpdated)
+	);
 
 	syncModeChrome();
 	void ensureMethodCreditsCache();
@@ -2374,6 +2468,18 @@ export function mountCreateComposer(host, opts = {}) {
 	if (advancedLink) {
 		const onAdvanced = (e) => {
 			e.preventDefault();
+			if (attachmentUploadingCount > 0) return;
+			savePrompt();
+			saveAspectRatio(selectedAspect);
+			saveAttachmentsToStorage();
+			writeSharedCreateSettingsFromComposerSnapshot({
+				prompt: promptInput?.value || '',
+				aspectRatio: selectedAspect,
+				outputMode,
+				modelRoute: selectedModel,
+				styleSelected: getSelectedStyleKey(),
+			});
+			mergeSharedSettingsIntoSessionSelections();
 			document.cookie = 'create_editor=; path=/; max-age=0';
 			window.location.href = '/create';
 		};
@@ -2457,6 +2563,8 @@ export function mountCreateComposer(host, opts = {}) {
 
 	return {
 		refreshModelOptions,
+		syncFromMutateQueue: () => applyQueueSnapshotToAttachments({ allowEmpty: true }),
+		syncFromSharedSettings,
 		destroy() {
 			clearTimeout(promptSaveTimer);
 			setAspectPopoverOpen(false);

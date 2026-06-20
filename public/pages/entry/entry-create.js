@@ -28,18 +28,30 @@ export async function init(version) {
 	]);
 	const { waitForComponents } = await import(`../../shared/pageInit.js${qs}`);
 	const { refreshAutoGrowTextareas } = await import(`../../shared/autogrow.js${qs}`);
+	const createSettingsSyncMod = await import(`../../shared/createSettingsSync.js${qs}`);
 	const isAdvanced = document.body.classList.contains('create-page-advanced');
 	await waitForComponents(isAdvanced ? TAGS_ADVANCED : TAGS_BASIC);
-	runCreatePageInit(refreshAutoGrowTextareas);
+	runCreatePageInit(refreshAutoGrowTextareas, createSettingsSyncMod);
 }
 
-function runCreatePageInit(refreshAutoGrowTextareas) {
+function runCreatePageInit(refreshAutoGrowTextareas, createSettingsSyncMod = {}) {
+	const persistSharedStyleSelected =
+		typeof createSettingsSyncMod.persistSharedStyleSelected === 'function'
+			? createSettingsSyncMod.persistSharedStyleSelected
+			: null;
+	const notifyCreateSettingsUpdated =
+		typeof createSettingsSyncMod.notifyCreateSettingsUpdated === 'function'
+			? createSettingsSyncMod.notifyCreateSettingsUpdated
+			: null;
 	if (!document.body.classList.contains('create-page') && !document.body.classList.contains('create-page-advanced')) return;
 	const BASIC_CREATE_DEFAULT_SERVER_ID = 1;
 	const BASIC_CREATE_DEFAULT_METHOD_KEY = 'replicate';
 	const BASIC_CREATE_DEFAULT_MODEL = 'xai/grok-imagine-image';
 	const BASIC_IMAGE_EDIT_CARRYOVER_KEY = 'create_page_image_edit_carryover';
 	const BASIC_IMAGE_EDIT_SELECTION_KEY = 'create_page_image_edit_selection';
+	const assetVersion =
+		document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() || '';
+	const sharedQs = assetVersion ? `?v=${encodeURIComponent(assetVersion)}` : '';
 
 	const changeLink = document.getElementById('create-change-image-link');
 	const area = document.querySelector('.create-image-edit-area');
@@ -71,7 +83,7 @@ function runCreatePageInit(refreshAutoGrowTextareas) {
 		return t.startsWith('/') && !t.startsWith('//');
 	}
 
-	function clearImageEditPreview() {
+	function clearImageEditPreview({ fromQueueSync = false } = {}) {
 		const box = area?.closest('.create-image-edit-box');
 		if (!box || !area) return;
 		imageEditValue = null;
@@ -84,6 +96,11 @@ function runCreatePageInit(refreshAutoGrowTextareas) {
 		try {
 			localStorage.removeItem(BASIC_IMAGE_EDIT_SELECTION_KEY);
 		} catch (_) {}
+		if (!fromQueueSync) {
+			try {
+				if (typeof removeMutateQueueHeadFn === 'function') removeMutateQueueHeadFn();
+			} catch (_) {}
+		}
 		if (typeof updateEditImageButtonState === 'function') updateEditImageButtonState();
 	}
 
@@ -140,10 +157,7 @@ function runCreatePageInit(refreshAutoGrowTextareas) {
 							const uploaded = await uploadImageFile(value);
 							if (typeof uploaded === 'string' && uploaded.trim()) {
 								applyImageEditSelection(uploaded.trim());
-								try {
-									localStorage.setItem(BASIC_IMAGE_EDIT_SELECTION_KEY, uploaded.trim());
-									localStorage.setItem(STORAGE_KEYS.tab, 'image-edit');
-								} catch (_) {}
+								persistBasicImageSelection(uploaded.trim());
 							}
 						} catch (err) {
 							alert(err?.message || 'Image upload failed');
@@ -153,10 +167,7 @@ function runCreatePageInit(refreshAutoGrowTextareas) {
 					if (typeof value === 'string' && value.trim()) {
 						const next = value.trim();
 						applyImageEditSelection(next);
-						try {
-							localStorage.setItem(BASIC_IMAGE_EDIT_SELECTION_KEY, next);
-							localStorage.setItem(STORAGE_KEYS.tab, 'image-edit');
-						} catch (_) {}
+						persistBasicImageSelection(next);
 						return;
 					}
 					applyImageEditSelection(value);
@@ -182,6 +193,72 @@ function runCreatePageInit(refreshAutoGrowTextareas) {
 			if (next) applyImageEditSelection(next);
 		}
 	} catch (_) {}
+
+	/** @type {(() => string) | null} */
+	let getPrimaryQueueImageUrlFn = null;
+	/** @type {((url: string) => boolean) | null} */
+	let replaceMutateQueueHeadFn = null;
+	/** @type {(() => boolean) | null} */
+	let removeMutateQueueHeadFn = null;
+
+	function syncBasicImageToQueue(url) {
+		const trimmed = typeof url === 'string' ? url.trim() : '';
+		if (!trimmed) return;
+		try {
+			if (typeof replaceMutateQueueHeadFn === 'function') replaceMutateQueueHeadFn(trimmed);
+		} catch (_) {}
+	}
+
+	function persistBasicImageSelection(url) {
+		const trimmed = typeof url === 'string' ? url.trim() : '';
+		if (!trimmed) return;
+		syncBasicImageToQueue(trimmed);
+		try {
+			localStorage.setItem(BASIC_IMAGE_EDIT_SELECTION_KEY, trimmed);
+			localStorage.setItem('create_page_tab', 'image-edit');
+		} catch (_) {}
+	}
+
+	function getQueueHeadUrl() {
+		try {
+			const url = typeof getPrimaryQueueImageUrlFn === 'function' ? getPrimaryQueueImageUrlFn() : '';
+			return typeof url === 'string' ? url.trim() : '';
+		} catch {
+			return '';
+		}
+	}
+
+	function hasBasicMutateImageSource() {
+		return Boolean(getQueueHeadUrl()) || Boolean(imageEditValue);
+	}
+
+	void import(`../../shared/mutateQueueSync.js${sharedQs}`).then((mod) => {
+			const {
+				getPrimaryQueueImageUrl,
+				MUTATE_QUEUE_UPDATED_EVENT,
+				replaceMutateQueueHead,
+				removeMutateQueueHead,
+			} = mod;
+			getPrimaryQueueImageUrlFn = getPrimaryQueueImageUrl;
+			replaceMutateQueueHeadFn = replaceMutateQueueHead;
+			removeMutateQueueHeadFn = removeMutateQueueHead;
+			const primary = getPrimaryQueueImageUrl();
+			if (primary && !imageEditValue) {
+				applyImageEditSelection(primary);
+			}
+			document.addEventListener(MUTATE_QUEUE_UPDATED_EVENT, () => {
+				const next = getPrimaryQueueImageUrl();
+				if (next) {
+					applyImageEditSelection(next);
+					try {
+						localStorage.setItem(BASIC_IMAGE_EDIT_SELECTION_KEY, next);
+					} catch (_) {}
+					if (typeof updateEditImageButtonState === 'function') updateEditImageButtonState();
+					return;
+				}
+				if (imageEditValue) clearImageEditPreview({ fromQueueSync: true });
+			});
+	});
 
 	if (area) {
 		area.addEventListener('click', () => {
@@ -222,8 +299,13 @@ function runCreatePageInit(refreshAutoGrowTextareas) {
 	}
 	function savePrompts() {
 		try {
-			if (textToImagePrompt) localStorage.setItem(STORAGE_KEYS.promptText, textToImagePrompt.value || '');
-			if (imageEditPrompt) localStorage.setItem(STORAGE_KEYS.promptImageEdit, imageEditPrompt.value || '');
+			const textValue = textToImagePrompt?.value || '';
+			const editValue = imageEditPrompt?.value || '';
+			if (textToImagePrompt) localStorage.setItem(STORAGE_KEYS.promptText, textValue);
+			if (imageEditPrompt) localStorage.setItem(STORAGE_KEYS.promptImageEdit, editValue);
+			const unified = editValue.trim() || textValue;
+			localStorage.setItem('create_page_prompt', unified);
+			notifyCreateSettingsUpdated?.();
 		} catch (_) {}
 	}
 	function saveStyleIndex(index) {
@@ -233,7 +315,8 @@ function runCreatePageInit(refreshAutoGrowTextareas) {
 	}
 	function saveStyleSelected(value) {
 		try {
-			localStorage.setItem(STORAGE_KEYS.styleSelected, String(value ?? ''));
+			if (persistSharedStyleSelected) persistSharedStyleSelected(String(value ?? ''));
+			else localStorage.setItem(STORAGE_KEYS.styleSelected, String(value ?? ''));
 		} catch (_) {}
 	}
 
@@ -565,7 +648,7 @@ function runCreatePageInit(refreshAutoGrowTextareas) {
 
 	function updateEditImageButtonState() {
 		if (!editImageBtn) return;
-		const hasImage = Boolean(imageEditValue);
+		const hasImage = hasBasicMutateImageSource();
 		const hasPrompt = (imageEditPrompt?.value || '').trim().length > 0;
 		const hasMutate = Boolean(mutateOptions.serverId && mutateOptions.methodKey);
 		editImageBtn.disabled = !hasImage || !hasPrompt || !hasMutate;
@@ -580,21 +663,26 @@ function runCreatePageInit(refreshAutoGrowTextareas) {
 	if (editImageBtn) {
 		editImageBtn.addEventListener('click', async () => {
 			const userPrompt = (imageEditPrompt?.value || '').trim();
-			if (!userPrompt || !imageEditValue) return;
+			if (!userPrompt || !hasBasicMutateImageSource()) return;
 			if (!mutateOptions.serverId || !mutateOptions.methodKey) return;
-			let imageUrl;
-			if (imageEditValue instanceof File) {
-				try {
-					const v = document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() || '';
-					const qs = v ? `?v=${encodeURIComponent(v)}` : '';
-					const { uploadImageFile } = await import(`../../shared/createSubmit.js${qs}`);
-					imageUrl = await uploadImageFile(imageEditValue);
-				} catch (err) {
-					alert(err?.message || 'Image upload failed');
-					return;
+
+			let imageUrl = getQueueHeadUrl();
+			if (!imageUrl) {
+				if (imageEditValue instanceof File) {
+					try {
+						const v =
+							document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() ||
+							'';
+						const qs = v ? `?v=${encodeURIComponent(v)}` : '';
+						const { uploadImageFile } = await import(`../../shared/createSubmit.js${qs}`);
+						imageUrl = await uploadImageFile(imageEditValue);
+					} catch (err) {
+						alert(err?.message || 'Image upload failed');
+						return;
+					}
+				} else {
+					imageUrl = typeof imageEditValue === 'string' ? imageEditValue.trim() : '';
 				}
-			} else {
-				imageUrl = typeof imageEditValue === 'string' ? imageEditValue : '';
 			}
 			if (!imageUrl) {
 				alert('Please choose an image.');
@@ -605,6 +693,8 @@ function runCreatePageInit(refreshAutoGrowTextareas) {
 			const { MUTATE_DEFAULT_MODEL } = await import(`../../shared/generationDefaults.js${qs}`);
 			const args = { prompt: userPrompt, image_url: imageUrl, model: MUTATE_DEFAULT_MODEL };
 			const { submitCreationWithPending, formatMentionsFailureForDialog } = await import(`../../shared/createSubmit.js${qs}`);
+			const { getMutateLineageForImageUrls } = await import(`../../shared/mutateQueueSync.js${qs}`);
+			const mutateLineage = getMutateLineageForImageUrls([imageUrl]);
 			const doSubmit = (hydrateMentions) => {
 				submitCreationWithPending({
 					serverId: mutateOptions.serverId,
@@ -612,6 +702,7 @@ function runCreatePageInit(refreshAutoGrowTextareas) {
 					args,
 					hydrateMentions,
 					navigate: 'full',
+					...mutateLineage,
 				});
 			};
 			const mentions = extractMentions(userPrompt);

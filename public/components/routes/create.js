@@ -14,7 +14,15 @@ let getVirtualAspectRatioField;
 let isPromptLikeField;
 let isImageUrlField;
 let isImageUrlArrayField;
-let loadMutateQueue;
+let getMutateLineageForImageUrls;
+let getMutateQueuePrefillForProviderFields;
+let syncMutateQueueFromProviderFieldValues;
+let MUTATE_QUEUE_UPDATED_EVENT;
+let mergeSharedSettingsIntoSessionSelections;
+let getSharedFieldValueOverrides;
+let getSharedAdvancedPrompt;
+let readSharedCreateSettings;
+let syncCreatePageSelectionsToSharedStorage;
 let attachAutoGrowTextarea;
 let attachPromptInlineSuggest;
 
@@ -54,8 +62,18 @@ async function loadDeps() {
 		isImageUrlField = providerFormFieldsMod.isImageUrlField;
 		isImageUrlArrayField = providerFormFieldsMod.isImageUrlArrayField;
 
-		const mutateQueueMod = await import(`../../shared/mutateQueue.js${qs}`);
-		loadMutateQueue = mutateQueueMod.loadMutateQueue;
+		const mutateQueueSyncMod = await import(`../../shared/mutateQueueSync.js${qs}`);
+		getMutateLineageForImageUrls = mutateQueueSyncMod.getMutateLineageForImageUrls;
+		getMutateQueuePrefillForProviderFields = mutateQueueSyncMod.getMutateQueuePrefillForProviderFields;
+		syncMutateQueueFromProviderFieldValues = mutateQueueSyncMod.syncMutateQueueFromProviderFieldValues;
+		MUTATE_QUEUE_UPDATED_EVENT = mutateQueueSyncMod.MUTATE_QUEUE_UPDATED_EVENT;
+
+		const createSettingsSyncMod = await import(`../../shared/createSettingsSync.js${qs}`);
+		mergeSharedSettingsIntoSessionSelections = createSettingsSyncMod.mergeSharedSettingsIntoSessionSelections;
+		getSharedFieldValueOverrides = createSettingsSyncMod.getSharedFieldValueOverrides;
+		getSharedAdvancedPrompt = createSettingsSyncMod.getSharedAdvancedPrompt;
+		readSharedCreateSettings = createSettingsSyncMod.readSharedCreateSettings;
+		syncCreatePageSelectionsToSharedStorage = createSettingsSyncMod.syncCreatePageSelectionsToSharedStorage;
 
 		const autogrowMod = await import(`../../shared/autogrow.js${qs}`);
 		attachAutoGrowTextarea = autogrowMod.attachAutoGrowTextarea;
@@ -154,10 +172,16 @@ class AppRouteCreate extends HTMLElement {
 		this._imageFieldPersistTokens = Object.create(null);
 		this._pendingSavedFieldValues = null;
 		this._crossMethodImageCarryover = null;
+		this.handleMutateQueueUpdated = this.handleMutateQueueUpdated.bind(this);
 	}
 
 	async connectedCallback() {
 		await loadDeps();
+		try {
+			mergeSharedSettingsIntoSessionSelections();
+		} catch (_) {
+			// Ignore storage errors
+		}
 		let showBlogTab = false;
 		try {
 			// Dedicated dedupe key: generic /api/profile responses can be cached from before login (401);
@@ -363,6 +387,9 @@ class AppRouteCreate extends HTMLElement {
       </div>
     `;
 		this.setupEventListeners();
+		if (typeof MUTATE_QUEUE_UPDATED_EVENT === 'string' && MUTATE_QUEUE_UPDATED_EVENT) {
+			document.addEventListener(MUTATE_QUEUE_UPDATED_EVENT, this.handleMutateQueueUpdated);
+		}
 		if (this._showBlogTab) {
 			this.setupBlogTab();
 		}
@@ -382,8 +409,14 @@ class AppRouteCreate extends HTMLElement {
 	}
 
 	disconnectedCallback() {
+		if (typeof this._flushSharedSettingsOnLeave === 'function') {
+			window.removeEventListener('pagehide', this._flushSharedSettingsOnLeave);
+		}
 		document.removeEventListener('credits-updated', this.handleCreditsUpdated);
 		document.removeEventListener('parascene:servers-config-updated', this.handleServersConfigUpdated);
+		if (typeof MUTATE_QUEUE_UPDATED_EVENT === 'string' && MUTATE_QUEUE_UPDATED_EVENT) {
+			document.removeEventListener(MUTATE_QUEUE_UPDATED_EVENT, this.handleMutateQueueUpdated);
+		}
 		if (this._boundPreviewEscape) {
 			document.removeEventListener('keydown', this._boundPreviewEscape);
 		}
@@ -575,6 +608,14 @@ class AppRouteCreate extends HTMLElement {
 
 		document.addEventListener('credits-updated', this.handleCreditsUpdated);
 		document.addEventListener('parascene:servers-config-updated', this.handleServersConfigUpdated);
+		this._flushSharedSettingsOnLeave = () => {
+			try {
+				this.flushSharedCreateSettingsToStorage();
+			} catch (_) {
+				// Ignore storage errors
+			}
+		};
+		window.addEventListener('pagehide', this._flushSharedSettingsOnLeave);
 	}
 
 	/** True if both arrays match id, name, and server_config (so we can skip re-rendering). */
@@ -803,6 +844,27 @@ class AppRouteCreate extends HTMLElement {
 		if (costQueryEl) costQueryEl.hidden = !hasAtLeastOneSwitch;
 	}
 
+	flushSharedCreateSettingsToStorage() {
+		const fields = this.selectedMethod?.fields || {};
+		const fieldValues = { ...this.fieldValues };
+		for (const [fieldKey, field] of Object.entries(fields)) {
+			if (!isPromptLikeField(fieldKey, field)) continue;
+			let el = this.querySelector(`#field-${fieldKey}`);
+			if (el?.classList?.contains('form-switch')) {
+				el = el.querySelector('.form-switch-input');
+			}
+			if (el && typeof el.value === 'string') {
+				fieldValues[fieldKey] = el.value;
+			}
+		}
+		syncCreatePageSelectionsToSharedStorage({
+			fieldValues,
+			methodFields: fields,
+			serverId: this.selectedServer?.id,
+			methodKey: this.getMethodKey(),
+		});
+	}
+
 	saveAdvancedOptions() {
 		try {
 			const options = {};
@@ -818,6 +880,13 @@ class AppRouteCreate extends HTMLElement {
 			const selections = stored ? JSON.parse(stored) : {};
 			selections.advancedOptions = options;
 			sessionStorage.setItem(this.storageKey, JSON.stringify(selections));
+			syncCreatePageSelectionsToSharedStorage({
+				fieldValues: this.fieldValues,
+				methodFields: this.selectedMethod?.fields,
+				serverId: this.selectedServer?.id,
+				methodKey: this.getMethodKey(),
+				advancedPrompt: typeof options.prompt === 'string' ? options.prompt : '',
+			});
 		} catch (e) {
 			// Ignore storage errors
 		}
@@ -838,7 +907,10 @@ class AppRouteCreate extends HTMLElement {
 			// Restore prompt value; query-param prompt supersedes saved
 			const promptInput = this.querySelector("[data-advanced-prompt]");
 			if (promptInput) {
-				const value = this._promptFromUrl ?? (typeof options.prompt === "string" ? options.prompt : "");
+				const sharedPrompt = this._promptFromUrl ? '' : getSharedAdvancedPrompt();
+				const value =
+					this._promptFromUrl ??
+					(sharedPrompt || (typeof options.prompt === 'string' ? options.prompt : ''));
 				if (value) {
 					promptInput.value = value;
 					const refresh = attachAutoGrowTextarea(promptInput);
@@ -1314,6 +1386,26 @@ class AppRouteCreate extends HTMLElement {
 				fieldsForRender[fieldKey] = field;
 				return;
 			}
+
+			if (typeof window !== 'undefined' && window.location?.pathname === '/create') {
+				try {
+					const prefill = getMutateQueuePrefillForProviderFields({ [fieldKey]: field });
+					if (isImageUrlField(field) && typeof prefill[fieldKey] === 'string' && prefill[fieldKey].trim()) {
+						const url = prefill[fieldKey].trim();
+						fieldsForRender[fieldKey] = { ...field, default: url };
+						this.fieldValues[fieldKey] = url;
+						return;
+					}
+					if (isImageUrlArrayField(field) && Array.isArray(prefill[fieldKey]) && prefill[fieldKey].length > 0) {
+						fieldsForRender[fieldKey] = { ...field, default: [...prefill[fieldKey]] };
+						this.fieldValues[fieldKey] = [...prefill[fieldKey]];
+						return;
+					}
+				} catch {
+					// ignore storage errors
+				}
+			}
+
 			if (pendingSaved && isImageUrlField(field)) {
 				const saved = pendingSaved[fieldKey];
 				if (typeof saved === 'string' && saved.trim()) {
@@ -1796,50 +1888,30 @@ class AppRouteCreate extends HTMLElement {
 		const isStandaloneCreatePage = window.location.pathname === '/create';
 		const argsToSend = collectedArgs || {};
 		let mutateParentIds = [];
+		let mutateOfIdFromQueue;
 
-		// Map any queued images used as inputs to their parent creation IDs so they become ancestors.
-		// Use normalized URLs so relative/absolute or different origins still match; backend then replaces
-		// unpublished image URLs with share URLs so the provider can fetch them (same as mutate flow).
 		try {
-			const queueItems = loadMutateQueue();
-			if (Array.isArray(queueItems) && queueItems.length > 0) {
-				const byNormalizedUrl = new Map();
-				queueItems.forEach((item) => {
-					const url = typeof item?.imageUrl === 'string' ? item.imageUrl.trim() : '';
-					const sid = Number(item?.sourceId);
-					if (!url || !Number.isFinite(sid) || sid <= 0) return;
-					const norm = normalizeImageUrlForMatch(url);
-					if (norm && !byNormalizedUrl.has(norm)) byNormalizedUrl.set(norm, sid);
-					// Also key by raw URL so exact match still works
-					if (url && !byNormalizedUrl.has(url)) byNormalizedUrl.set(url, sid);
-				});
-				if (byNormalizedUrl.size > 0) {
-					const parentSet = new Set();
-					Object.keys(fields).forEach((fieldKey) => {
-						const field = fields[fieldKey];
-						if (isImageUrlField(field)) {
-							const v = argsToSend[fieldKey];
-							if (typeof v === 'string') {
-								const trimmed = v.trim();
-								const id = byNormalizedUrl.get(trimmed) ?? byNormalizedUrl.get(normalizeImageUrlForMatch(trimmed));
-								if (Number.isFinite(id) && id > 0) parentSet.add(id);
-							}
-						} else if (isImageUrlArrayField(field)) {
-							const arr = argsToSend[fieldKey];
-							if (Array.isArray(arr)) {
-								arr.forEach((v) => {
-									if (typeof v !== 'string') return;
-									const trimmed = v.trim();
-									const id = byNormalizedUrl.get(trimmed) ?? byNormalizedUrl.get(normalizeImageUrlForMatch(trimmed));
-									if (Number.isFinite(id) && id > 0) parentSet.add(id);
-								});
-							}
-						}
-					});
-					if (parentSet.size > 0) {
-						mutateParentIds = Array.from(parentSet);
+			const imageUrls = [];
+			Object.keys(fields).forEach((fieldKey) => {
+				const field = fields[fieldKey];
+				if (isImageUrlField(field)) {
+					const v = argsToSend[fieldKey];
+					if (typeof v === 'string' && v.trim()) imageUrls.push(v.trim());
+				} else if (isImageUrlArrayField(field)) {
+					const arr = argsToSend[fieldKey];
+					if (Array.isArray(arr)) {
+						arr.forEach((v) => {
+							if (typeof v === 'string' && v.trim()) imageUrls.push(v.trim());
+						});
 					}
 				}
+			});
+			const lineage = getMutateLineageForImageUrls(imageUrls);
+			if (Array.isArray(lineage.mutateParentIds) && lineage.mutateParentIds.length > 0) {
+				mutateParentIds = lineage.mutateParentIds;
+			}
+			if (Number.isFinite(lineage.mutateOfId) && lineage.mutateOfId > 0) {
+				mutateOfIdFromQueue = lineage.mutateOfId;
 			}
 		} catch {
 			// ignore storage errors
@@ -1849,7 +1921,7 @@ class AppRouteCreate extends HTMLElement {
 		const prompt = typeof argsToSend?.prompt === 'string' ? String(argsToSend.prompt) : '';
 		const mentions = this.extractMentions(prompt);
 
-		const mutateOfId = mutateParentIds.length === 1 ? mutateParentIds[0] : undefined;
+		const mutateOfId = mutateOfIdFromQueue ?? (mutateParentIds.length === 1 ? mutateParentIds[0] : undefined);
 		const doSubmit = (hydrateMentions) => {
 			submitCreationWithPending({
 				serverId: this.selectedServer.id,
@@ -1944,6 +2016,22 @@ class AppRouteCreate extends HTMLElement {
 			});
 			selections.advancedOptions = options;
 			sessionStorage.setItem(this.storageKey, JSON.stringify(selections));
+			syncCreatePageSelectionsToSharedStorage({
+				fieldValues: fieldValuesForStorage,
+				methodFields: this.selectedMethod?.fields,
+				serverId: this.selectedServer?.id,
+				methodKey: this.getMethodKey(),
+			});
+			if (typeof window !== 'undefined' && window.location?.pathname === '/create') {
+				try {
+					syncMutateQueueFromProviderFieldValues(
+						fieldValuesForStorage,
+						this.selectedMethod?.fields
+					);
+				} catch {
+					// ignore storage errors
+				}
+			}
 		} catch (e) {
 			// Ignore storage errors
 		}
@@ -2037,9 +2125,16 @@ class AppRouteCreate extends HTMLElement {
 				this._pendingSavedFieldValues && typeof this._pendingSavedFieldValues === 'object'
 					? this._pendingSavedFieldValues
 					: null;
+			let sharedAspect = '';
+			try {
+				sharedAspect = readSharedCreateSettings()?.aspectRatio?.trim() || '';
+			} catch {
+				sharedAspect = '';
+			}
 			const saved =
 				(typeof this.fieldValues.aspect_ratio === 'string' && this.fieldValues.aspect_ratio.trim()) ||
 				(typeof pendingSaved?.aspect_ratio === 'string' && pendingSaved.aspect_ratio.trim()) ||
+				sharedAspect ||
 				'';
 			const fieldWithDefault = saved
 				? { ...aspectField, hidden: false, default: saved }
@@ -2111,6 +2206,11 @@ class AppRouteCreate extends HTMLElement {
 							if (selections.fieldValues && Object.keys(selections.fieldValues).length > 0) {
 								Promise.resolve().then(() => {
 									this.restoreFieldValues(selections.fieldValues);
+									this.syncAdvancedImageFieldsFromMutateQueue();
+								});
+							} else {
+								Promise.resolve().then(() => {
+									this.syncAdvancedImageFieldsFromMutateQueue();
 								});
 							}
 						}
@@ -2698,11 +2798,32 @@ class AppRouteCreate extends HTMLElement {
 
 	restoreFieldValues(savedFieldValues) {
 		const fields = this.selectedMethod?.fields || {};
-		if (typeof savedFieldValues.aspect_ratio === 'string' && savedFieldValues.aspect_ratio.trim()) {
-			this.fieldValues.aspect_ratio = savedFieldValues.aspect_ratio.trim();
+		let sharedOverrides = {};
+		try {
+			sharedOverrides = getSharedFieldValueOverrides(fields);
+		} catch {
+			sharedOverrides = {};
+		}
+		const mergedSavedFieldValues = {
+			...(savedFieldValues && typeof savedFieldValues === 'object' ? savedFieldValues : {}),
+			...sharedOverrides,
+		};
+		let queuePrefill = {};
+		if (typeof window !== 'undefined' && window.location?.pathname === '/create') {
+			try {
+				queuePrefill = getMutateQueuePrefillForProviderFields(fields);
+			} catch {
+				queuePrefill = {};
+			}
+		}
+		if (
+			typeof mergedSavedFieldValues.aspect_ratio === 'string' &&
+			mergedSavedFieldValues.aspect_ratio.trim()
+		) {
+			this.fieldValues.aspect_ratio = mergedSavedFieldValues.aspect_ratio.trim();
 		}
 
-		const fieldKeys = Object.keys(savedFieldValues);
+		const fieldKeys = Object.keys(mergedSavedFieldValues);
 		const orderedKeys = [
 			...fieldKeys.filter((key) => key === 'model'),
 			...fieldKeys.filter((key) => key === 'aspect_ratio'),
@@ -2733,8 +2854,20 @@ class AppRouteCreate extends HTMLElement {
 			// Query-param prompt supersedes saved prompt on Basic tab
 			if (this._promptFromUrl && isPromptLikeField(fieldKey, fields[fieldKey])) return;
 
+			const field = fields[fieldKey];
+			if (isImageUrlField(field) && typeof queuePrefill[fieldKey] === 'string' && queuePrefill[fieldKey].trim()) {
+				return;
+			}
+			if (
+				isImageUrlArrayField(field) &&
+				Array.isArray(queuePrefill[fieldKey]) &&
+				queuePrefill[fieldKey].length > 0
+			) {
+				return;
+			}
+
 			if (fieldKey === 'aspect_ratio') {
-				const savedValue = savedFieldValues[fieldKey];
+				const savedValue = mergedSavedFieldValues[fieldKey];
 				if (savedValue !== undefined && savedValue !== null && String(savedValue).trim()) {
 					this.fieldValues.aspect_ratio = String(savedValue).trim();
 					restoreAspectRatioSelection(savedValue);
@@ -2747,7 +2880,7 @@ class AppRouteCreate extends HTMLElement {
 				el = el.querySelector('.form-switch-input');
 			}
 			if (el) {
-				const savedValue = savedFieldValues[fieldKey];
+				const savedValue = mergedSavedFieldValues[fieldKey];
 				if (savedValue !== undefined && savedValue !== null && savedValue !== '') {
 					if (el.type === 'checkbox') {
 						el.checked = savedValue === true || savedValue === 'true';
@@ -2808,10 +2941,49 @@ class AppRouteCreate extends HTMLElement {
 		}
 	}
 
-	/**
-	 * Persist an attached advanced image so Basic mode's Image Edit can prefill it.
-	 * Supports URL strings directly and uploads File values to get a URL before switching.
-	 */
+	handleMutateQueueUpdated() {
+		if (typeof window !== 'undefined' && window.location.pathname !== '/create') return;
+		this.syncAdvancedImageFieldsFromMutateQueue();
+	}
+
+	syncAdvancedImageFieldsFromMutateQueue() {
+		const fields = this.selectedMethod?.fields;
+		if (!fields || typeof fields !== 'object') return;
+
+		let prefill;
+		try {
+			prefill = getMutateQueuePrefillForProviderFields(fields);
+		} catch {
+			return;
+		}
+		if (!prefill || typeof prefill !== 'object' || Object.keys(prefill).length === 0) return;
+
+		let changed = false;
+		for (const [fieldKey, field] of Object.entries(fields)) {
+			if (!field || typeof field !== 'object') continue;
+			if (isImageUrlField(field) && typeof prefill[fieldKey] === 'string' && prefill[fieldKey].trim()) {
+				const next = prefill[fieldKey].trim();
+				if (this.fieldValues[fieldKey] !== next) {
+					this.fieldValues[fieldKey] = next;
+					changed = true;
+				}
+			}
+			if (isImageUrlArrayField(field) && Array.isArray(prefill[fieldKey]) && prefill[fieldKey].length > 0) {
+				const next = prefill[fieldKey].map((v) => String(v).trim()).filter(Boolean);
+				const current = Array.isArray(this.fieldValues[fieldKey]) ? this.fieldValues[fieldKey] : [];
+				if (JSON.stringify(current) !== JSON.stringify(next)) {
+					this.fieldValues[fieldKey] = next;
+					changed = true;
+				}
+			}
+		}
+
+		if (!changed) return;
+		this.renderFields();
+		this.updateButtonState();
+		this.saveSelections();
+	}
+
 	async persistImageForBasicMode() {
 		const fields = this.selectedMethod?.fields;
 		if (!fields || typeof fields !== 'object') return;
