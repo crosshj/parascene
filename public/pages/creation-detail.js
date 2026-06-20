@@ -2826,7 +2826,7 @@ async function loadCreation() {
 			Boolean(creation.video_url) &&
 			typeof canSetVideoPosterFromFirstFrame === 'function' &&
 			canSetVideoPosterFromFirstFrame(creation);
-		const showAdminVideoTools = isAdmin && !adminViewingUserDeleted && (status === 'completed' || status === 'failed');
+		const showAdminVideoTools = isAdmin && !adminViewingUserDeleted && (status === 'completed' || status === 'failed' || status === 'creating');
 		const normalizedImageUrlForQueue = showQueueForLater ? normalizeImageUrlForQueue(creation.url) : '';
 		let isQueuedForLater = false;
 		if (showQueueForLater && normalizedImageUrlForQueue) {

@@ -339,7 +339,8 @@ class AppRouteCreations extends HTMLElement {
 		if (container) {
 			let suppressCardClickUntil = 0;
 			if (typeof bindMobileCreationsBulkLongPress === 'function') {
-				bindMobileCreationsBulkLongPress({
+				this._bulkLongPressCancel?.();
+				this._bulkLongPressCancel = bindMobileCreationsBulkLongPress({
 					container,
 					cardSelector: '.route-card.route-card-image[data-image-id]',
 					isEnabled: () => window.matchMedia('(max-width: 768px)').matches,
@@ -761,6 +762,10 @@ class AppRouteCreations extends HTMLElement {
 			this.stopPolling();
 			return;
 		}
+		const route = this.querySelector('.creations-route');
+		if (route?.classList.contains('is-bulk-mode')) {
+			return;
+		}
 
 		try {
 			const result = await fetchJsonWithStatusDeduped("/api/create/images", {
@@ -835,6 +840,7 @@ class AppRouteCreations extends HTMLElement {
 
 			const creations = creationsRaw;
 
+			this._bulkLongPressCancel?.();
 			cont.innerHTML = "";
 			cont.removeAttribute('aria-busy');
 			cont.removeAttribute('aria-label');

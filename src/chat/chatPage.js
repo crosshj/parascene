@@ -8262,6 +8262,10 @@ export async function initChatPage(root, options = {}) {
 			return;
 		}
 		if (loadingPseudoChannelMessages) return;
+		const bulkHost = messagesEl.querySelector('[data-chat-creations-bulk-host]');
+		if (bulkHost instanceof HTMLElement && bulkHost.classList.contains('is-bulk-mode')) {
+			return;
+		}
 		try {
 			const result = await fetchJsonWithStatusDeduped(
 				'/api/create/images',

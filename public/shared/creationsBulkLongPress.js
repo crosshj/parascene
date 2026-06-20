@@ -16,6 +16,7 @@ const DEFAULT_MOVE_THRESHOLD_PX = 18;
  * @param {(target: EventTarget | null) => boolean} [opts.shouldIgnoreTarget]
  * @param {AbortSignal} [opts.signal]
  * @param {number} [opts.longPressMs]
+ * @returns {{ cancel: () => void } | undefined}
  */
 export function bindMobileCreationsBulkLongPress({
 	container,
@@ -79,7 +80,8 @@ export function bindMobileCreationsBulkLongPress({
 		startY = 0;
 	};
 
-	const absorbGestureTail = () => {
+	const absorbGestureTail = (tailPointerId) => {
+		if (tailPointerId == null) return;
 		let done = false;
 		const finish = () => {
 			if (done) return;
@@ -91,6 +93,7 @@ export function bindMobileCreationsBulkLongPress({
 			clearTimeout(fallback);
 		};
 		const onEnd = (ev) => {
+			if (ev.type.startsWith('pointer') && ev.pointerId !== tailPointerId) return;
 			try {
 				ev.preventDefault();
 			} catch {
@@ -111,10 +114,13 @@ export function bindMobileCreationsBulkLongPress({
 	};
 
 	const activate = () => {
-		if (!(card instanceof HTMLElement)) {
+		timer = null;
+		if (!(card instanceof HTMLElement) || !card.isConnected) {
 			clearState();
 			return;
 		}
+		const activePointerId = pointerId;
+		const activeCard = card;
 		try {
 			if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
 				navigator.vibrate(12);
@@ -122,10 +128,18 @@ export function bindMobileCreationsBulkLongPress({
 		} catch {
 			// ignore
 		}
-		onLongPress(card);
-		absorbGestureTail();
+		onLongPress(activeCard);
+		absorbGestureTail(activePointerId);
 		clearState();
 	};
+
+	if (signal) {
+		if (signal.aborted) {
+			clearState();
+			return { cancel: clearState };
+		}
+		signal.addEventListener('abort', clearState, { once: true });
+	}
 
 	const opts = signal ? { signal } : undefined;
 
@@ -188,4 +202,6 @@ export function bindMobileCreationsBulkLongPress({
 		},
 		{ capture: true, ...opts }
 	);
+
+	return { cancel: clearState };
 }

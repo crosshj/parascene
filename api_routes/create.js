@@ -11,7 +11,13 @@ import {
 	getShareBaseUrl
 } from "./utils/url.js";
 import { buildProviderHeaders } from "./utils/providerAuth.js";
-import { runCreationJob, runProviderPollJob, PROVIDER_TIMEOUT_MS } from "./utils/creationJob.js";
+import {
+	runCreationJob,
+	runProviderPollJob,
+	PROVIDER_TIMEOUT_MS,
+	fetchImageBufferFromUrl,
+	createPlaceholderImageBuffer,
+} from "./utils/creationJob.js";
 import { runLandscapeJob } from "./utils/landscapeJob.js";
 import { scheduleCreationJob, scheduleLandscapeJob } from "./utils/scheduleCreationJob.js";
 import { scheduleEmbeddingJob } from "./utils/embeddingJob.js";
@@ -4930,7 +4936,7 @@ export default function createCreateRoutes({ queries, storage }) {
 		}
 	});
 
-	// POST /api/create/images/:id/admin-add-video - Admin only: add or replace video on a completed creation.
+	// POST /api/create/images/:id/admin-add-video - Admin only: add or replace video (including repair on failed/incomplete rows).
 	router.post("/api/create/images/:id/admin-add-video", async (req, res) => {
 		const user = await requireUser(req, res);
 		if (!user) return;
@@ -4947,10 +4953,6 @@ export default function createCreateRoutes({ queries, storage }) {
 		const image = await queries.selectCreatedImageByIdAnyUser?.get(id);
 		if (!image) {
 			return res.status(404).json({ error: "Creation not found" });
-		}
-
-		if ((image.status || "") !== "completed") {
-			return res.status(400).json({ error: "Only completed creations can have a video added" });
 		}
 
 		if (typeof storage.uploadVideo !== "function") {
@@ -4984,9 +4986,27 @@ export default function createCreateRoutes({ queries, storage }) {
 			});
 
 			const existingMeta = parseMeta(image.meta) || {};
+			const imageStatus = image.status || "completed";
+			const isRepair = imageStatus !== "completed";
+			const argsObj = existingMeta.args && typeof existingMeta.args === "object" ? existingMeta.args : {};
+			const sourceFromArgs =
+				(typeof argsObj.image_url === "string" && argsObj.image_url) ||
+				(typeof argsObj.image === "string" && argsObj.image) ||
+				(Array.isArray(argsObj.input_images) && typeof argsObj.input_images[0] === "string" && argsObj.input_images[0]) ||
+				null;
 			const mergedMeta = {
 				...existingMeta,
 				media_type: "video",
+				...(isRepair
+					? {
+						completed_at: existingMeta.completed_at || new Date().toISOString(),
+						provider_status: "succeeded",
+						admin_video_repaired_at: new Date().toISOString(),
+					}
+					: {}),
+				...(!existingMeta.source_image_url && sourceFromArgs
+					? { source_image_url: String(sourceFromArgs).trim() }
+					: {}),
 				video: {
 					filename: videoFilename,
 					file_path: videoUrl,
@@ -4994,14 +5014,53 @@ export default function createCreateRoutes({ queries, storage }) {
 				}
 			};
 
-			const updateResult = await queries.updateCreatedImageMeta.run(id, image.user_id, mergedMeta);
-			if (updateResult.changes === 0) {
-				return res.status(500).json({ error: "Failed to update creation meta" });
+			const hasThumbnail = image.file_path && String(image.file_path).trim() !== "";
+			if (!hasThumbnail && typeof storage.uploadImage === "function") {
+				let thumbBuffer;
+				try {
+					thumbBuffer = sourceFromArgs
+						? await fetchImageBufferFromUrl(String(sourceFromArgs).trim())
+						: await createPlaceholderImageBuffer();
+				} catch {
+					thumbBuffer = await createPlaceholderImageBuffer();
+				}
+				const thumbFilename = `${image.user_id}_${id}_${timestamp}_${random}.png`;
+				const thumbUrl = await storage.uploadImage(thumbBuffer, thumbFilename);
+				let width = image.width ?? null;
+				let height = image.height ?? null;
+				try {
+					const metaSharp = await sharp(thumbBuffer, { failOn: "none" }).metadata();
+					if (typeof metaSharp.width === "number" && metaSharp.width > 0) width = metaSharp.width;
+					if (typeof metaSharp.height === "number" && metaSharp.height > 0) height = metaSharp.height;
+				} catch {
+					// keep existing or null
+				}
+				const completedResult = await queries.updateCreatedImageJobCompleted.run(id, image.user_id, {
+					filename: thumbFilename,
+					file_path: thumbUrl,
+					width,
+					height,
+					color: image.color ?? null,
+					meta: mergedMeta
+				});
+				if (completedResult.changes === 0) {
+					return res.status(500).json({ error: "Failed to update creation with thumbnail" });
+				}
+			} else {
+				const updateResult = await queries.updateCreatedImageMeta.run(id, image.user_id, mergedMeta);
+				if (updateResult.changes === 0) {
+					return res.status(500).json({ error: "Failed to update creation meta" });
+				}
+			}
+
+			if (isRepair && typeof queries.updateCreatedImageStatus?.run === "function") {
+				await queries.updateCreatedImageStatus.run(id, image.user_id, "completed");
 			}
 
 			return res.json({
 				ok: true,
-				video_url: videoUrl
+				video_url: videoUrl,
+				repaired: isRepair
 			});
 		} catch (err) {
 			// console.error("Error adding admin video:", err);
