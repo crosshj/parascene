@@ -3,6 +3,8 @@
  * Lived as end-of-body inline script in `pages/chat.html`; bundled so one JS request carries it.
  * Early head bootstrap (scroll, mobile header class, storage CSS vars) stays in `chat.html`.
  */
+import { isVisualViewportPinchZoomed } from './chatVisualViewportPinchZoom.js';
+
 export function initChatViewportShellSync() {
 	const shell = document.getElementById('chatShell');
 	const root = document.querySelector('[data-chat-page]');
@@ -48,6 +50,17 @@ export function initChatViewportShellSync() {
 		);
 	}
 
+	function clearShellVisualViewportInlineStyles() {
+		try {
+			shell.style.removeProperty('top');
+			shell.style.removeProperty('left');
+			shell.style.removeProperty('width');
+			shell.style.removeProperty('height');
+		} catch {
+			// ignore
+		}
+	}
+
 	function syncToVisualViewport() {
 		const vv = window.visualViewport;
 		if (!vv) {
@@ -64,6 +77,10 @@ export function initChatViewportShellSync() {
 	}
 
 	function onViewportChange() {
+		if (isVisualViewportPinchZoomed()) {
+			clearShellVisualViewportInlineStyles();
+			return;
+		}
 		if (isFeedLikePathname()) {
 			syncToVisualViewport();
 			try {

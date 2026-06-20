@@ -39,6 +39,7 @@ import * as _cdPseudoChannelColumnPager from '../shared/pseudoChannelColumnPager
 import * as _cdSkeleton from '../shared/skeleton.js';
 import { createReplyIndicatorElement } from '../shared/replyIndicatorUi.js';
 import { plainTextReplyPreview } from '../shared/plainTextReplyPreview.js';
+import { isVisualViewportPinchZoomed } from './chatVisualViewportPinchZoom.js';
 import { CHAT_UPLOAD_MAX_BYTES, chatUploadMaxSizeLabel } from '../shared/chatUploadMaxBytes.js';
 import { safeMediaPlay } from '../shared/safeMediaPlay.js';
 import { bindMobileCreationsBulkLongPress } from '../shared/creationsBulkLongPress.js';
@@ -3986,6 +3987,14 @@ export async function initChatPage(root, options = {}) {
 	function applyChatRootHeightFromVisualViewport() {
 		const el = document.documentElement;
 		if (!el.classList.contains('chat-page')) return;
+		if (isVisualViewportPinchZoomed()) {
+			try {
+				el.style.removeProperty('--chat-vh');
+			} catch {
+				// ignore
+			}
+			return;
+		}
 		const vv = window.visualViewport;
 		const ih =
 			typeof window.innerHeight === 'number' && Number.isFinite(window.innerHeight)
@@ -4031,6 +4040,14 @@ export async function initChatPage(root, options = {}) {
 		teardownChatViewportSync();
 		const nudge = () => nudgeChatScrollIfStuckToBottom();
 		const onViewport = () => {
+			if (isVisualViewportPinchZoomed()) {
+				try {
+					document.documentElement.style.removeProperty('--chat-vh');
+				} catch {
+					// ignore
+				}
+				return;
+			}
 			applyChatRootHeightFromVisualViewport();
 			nudge();
 		};
