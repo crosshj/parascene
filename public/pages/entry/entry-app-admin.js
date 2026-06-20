@@ -26,6 +26,7 @@ export async function init(version) {
 	await Promise.all([
 		import(`../../components/navigation/index.js${qs}`),
 		import(`../../components/modals/profile.js${qs}`),
+		import(`../../components/modals/about.js`),
 		import(`../../components/modals/credits.js${qs}`),
 		import(`../../components/modals/notifications.js${qs}`),
 		import(`../../components/modals/server.js${qs}`),

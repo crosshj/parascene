@@ -12,6 +12,7 @@ export async function init(version) {
 	await import(`../../components/navigation/index.js${qs}`);
 	await import(`../../components/navigation/mobile.js${qs}`);
 	await import(`../../components/modals/profile.js${qs}`);
+	await import(`../../components/modals/about.js${qs}`);
 	await import(`../../components/modals/notifications.js${qs}`);
 	await import(`../../components/modals/credits.js${qs}`);
 	const { waitForComponents } = await import(`../../shared/pageInit.js${qs}`);

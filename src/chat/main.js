@@ -10,6 +10,7 @@ import '../shared/components/navigation/mobile.js';
 import '../shared/components/modals/profile.js';
 import '../shared/components/modals/notifications.js';
 import '../shared/components/modals/credits.js';
+import '../shared/components/modals/about.js';
 import { initChatViewportShellSync } from './chatViewportShellSync.js';
 import { waitForComponents } from '../shared/waitForComponents.js';
 import { applyNsfwPreference } from '../shared/nsfwView.js';

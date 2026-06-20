@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "prebuild": "node scripts/check-rollup-devdeps.mjs",
+    "prebuild": "node scripts/check-rollup-devdeps.mjs && node scripts/stamp-build-info.mjs",
     "build": "rollup -c src/rollup.config.mjs",
     "watch": "NODE_ENV=dev PORT=2367 nodemon api/index.js",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest",

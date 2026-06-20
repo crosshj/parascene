@@ -114,7 +114,7 @@
   "functions": {
     "api/index.js": {
       "maxDuration": 60,
-      "includeFiles": "_docs/**, pages/**"
+      "includeFiles": "_docs/**, pages/**, public/.build-info.json, package.json"
     },
     "api/worker/create.js": {
       "maxDuration": 300

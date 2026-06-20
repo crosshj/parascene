@@ -23,6 +23,7 @@ export async function init(version) {
 		import(`../../components/navigation/mobile.js${qs}`),
 		import(`../../components/elements/tabs.js${qs}`),
 		import(`../../components/modals/profile.js${qs}`),
+		import(`../../components/modals/about.js`),
 		import(`../../components/modals/credits.js${qs}`),
 		import(`../../components/modals/notifications.js${qs}`),
 	]);

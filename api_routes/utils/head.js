@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { getBuildMetadata } from "./buildInfo.js";
 import { getCanonicalUrlForRequest } from "./url.js";
 
 const html = String.raw;
@@ -56,6 +57,10 @@ function escapeHtmlUrl(url) {
 		.replace(/>/g, "&gt;");
 }
 
+function escapeHtmlAttr(value) {
+	return escapeHtmlUrl(value);
+}
+
 /** Tokens for replacePageTokens.
  * - V: "?v=xxx" (version is always set after env/fs fallback in getAssetVersion).
  * - V_PARAM: raw version for JS cache-busting.
@@ -64,11 +69,15 @@ function escapeHtmlUrl(url) {
  */
 export function getPageTokens(req, extra = {}) {
 	const v = getAssetVersion();
+	const build = getBuildMetadata();
 	const defaultDescription =
 		"parascene is a community that uses AI, ML, and algorithms to support creation. Join us for creativity, entertainment, and involvement.";
 	const tokens = {
 		V: v ? `?v=${v}` : "",
 		V_PARAM: v,
+		BUILD_COMMIT: escapeHtmlAttr(build.commit || ""),
+		BUILD_DEPLOYED_AT: escapeHtmlAttr(build.deployedAt || ""),
+		APP_VERSION: escapeHtmlAttr(build.version || ""),
 		OG_URL_TAG: "",
 		PAGE_META_DESCRIPTION: defaultDescription
 	};
@@ -158,6 +167,9 @@ function getCommonHead() {
 		<link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;400;600;700;800&display=swap" rel="stylesheet">
 		{{GLOBAL_CSS_LINK}}
 		<meta name="asset-version" content="{{V_PARAM}}" />
+		<meta name="build-commit" content="{{BUILD_COMMIT}}" />
+		<meta name="build-deployed-at" content="{{BUILD_DEPLOYED_AT}}" />
+		<meta name="app-version" content="{{APP_VERSION}}" />
 		{{PRSN_FEED_BETA_BOOT}}
 		{{PRSN_SUPABASE_BOOT}}
 		<script type="module" src="{{ENTRY_MODULE_SRC}}"></script>

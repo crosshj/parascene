@@ -2,8 +2,9 @@ import { fetchJsonWithStatusDeduped } from '../../api.js';
 import { buildProfilePath } from '../../profileLinks.js';
 import { clearChatAudibleNotificationsStorage } from '/shared/chatAudibleNotificationsPref.js';
 import { getHelpHref } from '../../helpUrl.js';
-import { userProfileIcon, gearIcon, globeIcon, helpIcon, logOutIcon } from '/icons/svg-strings.js';
+import { userProfileIcon, gearIcon, globeIcon, helpIcon, logOutIcon, infoIcon } from '/icons/svg-strings.js';
 import { confirmAndHardReloadAfterClearingCaches } from '/shared/clearClientCaches.js';
+import { openAboutModal } from './about.js';
 
 function clearLogoutSideEffects() {
 	try {
@@ -166,6 +167,10 @@ class AppAccountMenu extends HTMLElement {
 					<span class="account-menu-label">Help</span>
 				</a>
 				<div class="account-menu-divider" aria-hidden="true"></div>
+				<button type="button" class="account-menu-item" data-action="about" role="menuitem">
+					${infoIcon('account-menu-svg')}
+					<span class="account-menu-label">About</span>
+				</button>
 				<button type="button" class="account-menu-item" data-action="clear-cache" role="menuitem">
 					${gearIcon('account-menu-svg')}
 					<span class="account-menu-label">Clear cache</span>
@@ -243,6 +248,12 @@ class AppAccountMenu extends HTMLElement {
 			form.action = '/logout';
 			document.body.appendChild(form);
 			form.submit();
+			return;
+		}
+		if (action === 'about') {
+			e.preventDefault();
+			this.close();
+			await openAboutModal();
 			return;
 		}
 		if (action === 'clear-cache') {

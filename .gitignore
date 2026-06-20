@@ -146,6 +146,7 @@ vite.config.ts.timestamp-*
 .env*.local
 .DS_Store
 public/.asset-version-dev
+public/.build-info.json
 public/build/
 # Local: `touch .no-minify-chat-bundle` to skip terser on `npm run build` (see src/rollup.config.mjs)
 .no-minify-chat-bundle

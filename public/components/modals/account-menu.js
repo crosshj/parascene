@@ -7,6 +7,7 @@ let gearIcon;
 let helpIcon;
 let globeIcon;
 let logOutIcon;
+let infoIcon;
 let confirmAndHardReloadAfterClearingCaches;
 
 function getAssetVersionParam() {
@@ -38,6 +39,7 @@ async function loadAccountMenuDeps() {
 		helpIcon = iconsMod.helpIcon;
 		globeIcon = iconsMod.globeIcon;
 		logOutIcon = iconsMod.logOutIcon;
+		infoIcon = iconsMod.infoIcon;
 		const clearMod = await import(`../../shared/clearClientCaches.js${qs}`);
 		confirmAndHardReloadAfterClearingCaches = clearMod.confirmAndHardReloadAfterClearingCaches;
 	})();
@@ -206,6 +208,10 @@ class AppAccountMenu extends HTMLElement {
 					<span class="account-menu-label">Help</span>
 				</a>
 				<div class="account-menu-divider" aria-hidden="true"></div>
+				<button type="button" class="account-menu-item" data-action="about" role="menuitem">
+					${infoIcon('account-menu-svg')}
+					<span class="account-menu-label">About</span>
+				</button>
 				<button type="button" class="account-menu-item" data-action="clear-cache" role="menuitem">
 					${gearIcon('account-menu-svg')}
 					<span class="account-menu-label">Clear cache</span>
@@ -285,6 +291,16 @@ class AppAccountMenu extends HTMLElement {
 			form.action = '/logout';
 			document.body.appendChild(form);
 			form.submit();
+			return;
+		}
+		if (action === 'about') {
+			e.preventDefault();
+			this.close();
+			await loadAccountMenuDeps();
+			const v = getAssetVersionParam();
+			const qs = getImportQuery(v);
+			const aboutMod = await import(`./about.js${qs}`);
+			await aboutMod.openAboutModal();
 			return;
 		}
 		if (action === 'clear-cache') {
