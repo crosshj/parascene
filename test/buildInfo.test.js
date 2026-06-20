@@ -1,7 +1,7 @@
 import { getBuildMetadata } from "../api_routes/utils/buildInfo.js";
 
 describe("getBuildMetadata", () => {
-	const envKeys = ["VERCEL_GIT_COMMIT_SHA", "BUILD_ID", "BUILD_TIME", "ASSET_VERSION"];
+	const envKeys = ["VERCEL_GIT_COMMIT_SHA", "VERCEL_GIT_REPO_OWNER", "VERCEL_GIT_REPO_SLUG", "BUILD_ID", "BUILD_TIME", "ASSET_VERSION"];
 
 	let savedEnv = {};
 
@@ -22,10 +22,15 @@ describe("getBuildMetadata", () => {
 
 	test("prefers Vercel commit SHA and BUILD_TIME", () => {
 		process.env.VERCEL_GIT_COMMIT_SHA = "abc123def4567890abcdef1234567890abcdef12";
+		process.env.VERCEL_GIT_REPO_OWNER = "crosshj";
+		process.env.VERCEL_GIT_REPO_SLUG = "parascene";
 		process.env.BUILD_TIME = "2026-06-20T18:30:00.000Z";
 
 		const meta = getBuildMetadata();
 		expect(meta.commit).toBe("abc123def4567890abcdef1234567890abcdef12");
+		expect(meta.commitUrl).toBe(
+			"https://github.com/crosshj/parascene/commit/abc123def4567890abcdef1234567890abcdef12"
+		);
 		expect(meta.deployedAt).toBe("2026-06-20T18:30:00.000Z");
 		expect(meta.version).toMatch(/\d+\.\d+\.\d+/);
 	});

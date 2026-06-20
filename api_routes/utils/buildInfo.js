@@ -53,6 +53,30 @@ function tryDevStampMtimeIso() {
 	}
 }
 
+const DEFAULT_GITHUB_REPO = "crosshj/parascene";
+
+function getGitHubRepoSlug() {
+	const owner = process.env.VERCEL_GIT_REPO_OWNER?.trim();
+	const slug = process.env.VERCEL_GIT_REPO_SLUG?.trim();
+	if (owner && slug) return `${owner}/${slug}`;
+	try {
+		const url = execSync("git remote get-url origin", { cwd: _projectRoot, encoding: "utf8" }).trim();
+		const match = url.match(/github\.com[/:]([^/]+)\/([^/.]+?)(?:\.git)?$/i);
+		if (match) return `${match[1]}/${match[2]}`;
+	} catch {
+		// ignore
+	}
+	return DEFAULT_GITHUB_REPO;
+}
+
+function getGitHubCommitUrl(commit) {
+	const sha = String(commit || "").trim();
+	if (!/^[0-9a-f]{7,40}$/i.test(sha)) return "";
+	const repo = getGitHubRepoSlug();
+	if (!repo) return "";
+	return `https://github.com/${repo}/commit/${sha}`;
+}
+
 /**
  * Build metadata for About UI and `<meta name="build-*">` tags.
  */
@@ -72,6 +96,7 @@ export function getBuildMetadata() {
 		"";
 	return {
 		commit,
+		commitUrl: getGitHubCommitUrl(commit),
 		deployedAt,
 		version: getPackageVersion()
 	};

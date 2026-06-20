@@ -5,6 +5,7 @@ function readMeta(name) {
 export function getClientBuildInfo() {
 	return {
 		commit: readMeta("build-commit"),
+		commitUrl: readMeta("build-commit-url"),
 		deployedAt: readMeta("build-deployed-at"),
 		version: readMeta("app-version")
 	};

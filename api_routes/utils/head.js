@@ -76,6 +76,7 @@ export function getPageTokens(req, extra = {}) {
 		V: v ? `?v=${v}` : "",
 		V_PARAM: v,
 		BUILD_COMMIT: escapeHtmlAttr(build.commit || ""),
+		BUILD_COMMIT_URL: escapeHtmlAttr(build.commitUrl || ""),
 		BUILD_DEPLOYED_AT: escapeHtmlAttr(build.deployedAt || ""),
 		APP_VERSION: escapeHtmlAttr(build.version || ""),
 		OG_URL_TAG: "",
@@ -168,6 +169,7 @@ function getCommonHead() {
 		{{GLOBAL_CSS_LINK}}
 		<meta name="asset-version" content="{{V_PARAM}}" />
 		<meta name="build-commit" content="{{BUILD_COMMIT}}" />
+		<meta name="build-commit-url" content="{{BUILD_COMMIT_URL}}" />
 		<meta name="build-deployed-at" content="{{BUILD_DEPLOYED_AT}}" />
 		<meta name="app-version" content="{{APP_VERSION}}" />
 		{{PRSN_FEED_BETA_BOOT}}

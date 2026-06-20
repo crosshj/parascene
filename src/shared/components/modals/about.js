@@ -84,8 +84,23 @@ class AppModalAbout extends HTMLElement {
 		}
 		if (commitEl) {
 			const short = formatBuildCommit(info.commit);
-			commitEl.textContent = info.commit ? `Build ${short}` : 'Build unknown';
-			commitEl.title = info.commit || '';
+			const label = info.commit ? `Build ${short}` : 'Build unknown';
+			const url = String(info.commitUrl || '').trim();
+			commitEl.textContent = '';
+			commitEl.removeAttribute('title');
+			if (url && info.commit) {
+				const link = document.createElement('a');
+				link.href = url;
+				link.className = 'about-commit-link';
+				link.textContent = label;
+				link.target = '_blank';
+				link.rel = 'noopener noreferrer';
+				link.title = info.commit;
+				commitEl.appendChild(link);
+			} else {
+				commitEl.textContent = label;
+				if (info.commit) commitEl.title = info.commit;
+			}
 		}
 		if (deployedEl) {
 			const when = formatDeployedAt(info.deployedAt);
@@ -207,6 +222,15 @@ class AppModalAbout extends HTMLElement {
 				.about-detail-value[data-about-commit] {
 					font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 					font-size: 0.84rem;
+				}
+				.about-commit-link {
+					color: var(--text-muted);
+					text-decoration: none;
+					transition: color 0.15s ease;
+				}
+				.about-commit-link:hover {
+					color: var(--accent);
+					text-decoration: underline;
 				}
 				.about-footer {
 					padding: 20px 32px 28px;
