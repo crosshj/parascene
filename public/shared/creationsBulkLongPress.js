@@ -1,10 +1,11 @@
 /**
  * Mobile long-press → bulk selection on creation cards.
- * Uses pointer capture + a one-shot gesture tail so iOS does not leave a stuck touch/click layer.
+ * Arms on hold threshold, activates on pointer up so DOM updates never run mid-gesture (iOS click lockup).
  */
 
 const DEFAULT_LONG_MS = 420;
 const DEFAULT_MOVE_THRESHOLD_PX = 18;
+const GHOST_CLICK_MS = 520;
 
 /**
  * @param {object} opts
@@ -50,6 +51,8 @@ export function bindMobileCreationsBulkLongPress({
 	let pointerId = null;
 	/** @type {HTMLElement | null} */
 	let card = null;
+	/** @type {HTMLElement | null} */
+	let armedCard = null;
 	let startX = 0;
 	let startY = 0;
 
@@ -60,11 +63,11 @@ export function bindMobileCreationsBulkLongPress({
 		}
 	};
 
-	const releaseCapture = () => {
-		if (!(card instanceof HTMLElement) || pointerId == null) return;
+	const releaseCapture = (capCard, capPointerId) => {
+		if (!(capCard instanceof HTMLElement) || capPointerId == null) return;
 		try {
-			if (card.hasPointerCapture?.(pointerId)) {
-				card.releasePointerCapture(pointerId);
+			if (capCard.hasPointerCapture?.(capPointerId)) {
+				capCard.releasePointerCapture(capPointerId);
 			}
 		} catch {
 			// ignore
@@ -73,54 +76,41 @@ export function bindMobileCreationsBulkLongPress({
 
 	const clearState = () => {
 		clearTimer();
-		releaseCapture();
+		const capCard = card;
+		const capPointerId = pointerId;
 		pointerId = null;
 		card = null;
+		armedCard = null;
 		startX = 0;
 		startY = 0;
+		releaseCapture(capCard, capPointerId);
 	};
 
-	const absorbGestureTail = (tailPointerId) => {
-		if (tailPointerId == null) return;
-		let done = false;
-		const finish = () => {
-			if (done) return;
-			done = true;
-			document.removeEventListener('pointerup', onEnd, true);
-			document.removeEventListener('pointercancel', onEnd, true);
-			document.removeEventListener('touchend', onEnd, true);
-			document.removeEventListener('touchcancel', onEnd, true);
-			clearTimeout(fallback);
-		};
-		const onEnd = (ev) => {
-			if (ev.type.startsWith('pointer') && ev.pointerId !== tailPointerId) return;
-			try {
+	const blockGhostClick = (targetCard) => {
+		if (!(targetCard instanceof HTMLElement)) return;
+		const until = Date.now() + GHOST_CLICK_MS;
+		const onClick = (ev) => {
+			if (Date.now() > until) {
+				document.removeEventListener('click', onClick, true);
+				return;
+			}
+			const t = ev.target;
+			if (!(t instanceof Node)) return;
+			if (targetCard === t || targetCard.contains(t)) {
 				ev.preventDefault();
-			} catch {
-				// ignore
-			}
-			try {
 				ev.stopPropagation();
-			} catch {
-				// ignore
 			}
-			finish();
 		};
-		document.addEventListener('pointerup', onEnd, true);
-		document.addEventListener('pointercancel', onEnd, true);
-		document.addEventListener('touchend', onEnd, true);
-		document.addEventListener('touchcancel', onEnd, true);
-		const fallback = setTimeout(finish, 800);
+		document.addEventListener('click', onClick, true);
+		setTimeout(() => document.removeEventListener('click', onClick, true), GHOST_CLICK_MS + 40);
 	};
 
-	const activate = () => {
+	const armLongPress = () => {
 		timer = null;
 		if (!(card instanceof HTMLElement) || !card.isConnected) {
 			clearState();
 			return;
 		}
-		const activePointerId = pointerId;
-		const activeCard = card;
 		try {
 			if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
 				navigator.vibrate(12);
@@ -128,9 +118,26 @@ export function bindMobileCreationsBulkLongPress({
 		} catch {
 			// ignore
 		}
-		onLongPress(activeCard);
-		absorbGestureTail(activePointerId);
+		armedCard = card;
+	};
+
+	const finishPointer = (e) => {
+		if (pointerId == null || e.pointerId !== pointerId) return;
+		const armed = armedCard instanceof HTMLElement ? armedCard : null;
 		clearState();
+		if (!(armed instanceof HTMLElement)) return;
+		try {
+			e.preventDefault();
+		} catch {
+			// ignore
+		}
+		try {
+			e.stopPropagation();
+		} catch {
+			// ignore
+		}
+		onLongPress(armed);
+		blockGhostClick(armed);
 	};
 
 	if (signal) {
@@ -165,9 +172,9 @@ export function bindMobileCreationsBulkLongPress({
 				// ignore
 			}
 
-			timer = setTimeout(activate, longPressMs);
+			timer = setTimeout(armLongPress, longPressMs);
 		},
-		{ ...opts, passive: false }
+		opts
 	);
 
 	container.addEventListener(
@@ -183,13 +190,8 @@ export function bindMobileCreationsBulkLongPress({
 		opts
 	);
 
-	const onPointerEnd = (e) => {
-		if (pointerId == null || e.pointerId !== pointerId) return;
-		clearState();
-	};
-
-	container.addEventListener('pointerup', onPointerEnd, opts);
-	container.addEventListener('pointercancel', onPointerEnd, opts);
+	container.addEventListener('pointerup', finishPointer, opts);
+	container.addEventListener('pointercancel', finishPointer, opts);
 
 	container.addEventListener(
 		'contextmenu',
