@@ -25,6 +25,8 @@ let loadMutateQueue;
 let removeFromMutateQueueByImageUrl;
 let applyHeroAspectLayoutToElement;
 let aspectRatioFromCreation;
+let closestAspectRatioPreset;
+let parseAspectRatioString;
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -85,6 +87,8 @@ async function loadDeps() {
 		const aspectRatioMod = await import(`/shared/aspectRatio.js${qs}`);
 		applyHeroAspectLayoutToElement = aspectRatioMod.applyHeroAspectLayoutToElement;
 		aspectRatioFromCreation = aspectRatioMod.aspectRatioFromCreation;
+		closestAspectRatioPreset = aspectRatioMod.closestAspectRatioPreset;
+		parseAspectRatioString = aspectRatioMod.parseAspectRatioString;
 
 		await import(`/components/elements/tabs.js${qs}`);
 	})();
@@ -238,6 +242,49 @@ function applyMutateSourceAspectLayout(wrap, creation, img) {
 	wrap.style.setProperty('--hero-aspect-ratio', `${w} / ${h}`);
 	wrap.classList.add(`hero-layout-${mode}`);
 	if (mode === 'portrait') wrap.classList.add('hero-portrait-by-width');
+}
+
+function normalizeCreationMetaLocal(meta) {
+	if (meta && typeof meta === 'object') return meta;
+	if (typeof meta === 'string') {
+		try {
+			return JSON.parse(meta);
+		} catch {
+			return null;
+		}
+	}
+	return null;
+}
+
+/** Closest MVP preset for mutate i2v (prefer job args, then pixels from row or loaded preview). */
+function resolveMutateSourceAspectRatio(creation, img) {
+	const meta = normalizeCreationMetaLocal(creation?.meta);
+	const fromArgRaw = meta?.args?.aspect_ratio;
+	if (typeof parseAspectRatioString === 'function' && parseAspectRatioString(fromArgRaw)) {
+		return String(fromArgRaw).trim();
+	}
+
+	let w = Number(creation?.width);
+	let h = Number(creation?.height);
+	if (img instanceof HTMLImageElement && img.naturalWidth > 0 && img.naturalHeight > 0) {
+		w = img.naturalWidth;
+		h = img.naturalHeight;
+	}
+	if (!(Number.isFinite(w) && w > 0 && Number.isFinite(h) && h > 0) && typeof aspectRatioFromCreation === 'function') {
+		const ratio = aspectRatioFromCreation(creation);
+		w = ratio.w;
+		h = ratio.h;
+	}
+	if (typeof closestAspectRatioPreset === 'function') {
+		return closestAspectRatioPreset(w, h);
+	}
+	return '1:1';
+}
+
+function persistMutateAspectRatioDataset(editContent, creation, img) {
+	if (!(editContent instanceof HTMLElement)) return;
+	const aspectRatio = resolveMutateSourceAspectRatio(creation, img);
+	if (aspectRatio) editContent.dataset.mutateAspectRatio = aspectRatio;
 }
 
 async function loadEditPage() {
@@ -507,6 +554,7 @@ async function loadEditPage() {
 			thumb.style.opacity = '0';
 			const onPreviewLoad = () => {
 				applyMutateSourceAspectLayout(thumbWrap, creation, thumb);
+				persistMutateAspectRatioDataset(editContent, creation, thumb);
 				thumbWrap.classList.remove('image-loading');
 				thumbWrap.classList.remove('image-error');
 				thumb.style.opacity = '';
@@ -559,6 +607,13 @@ async function loadEditPage() {
 		editContent.dataset.mutateImageUrl = sourceImageUrl;
 		editContent.dataset.mutatePublished =
 			creation.published === true || creation.published === 1 ? '1' : '0';
+
+		const sourceThumb = editContent.querySelector('[data-source-thumb]');
+		if (sourceThumb instanceof HTMLImageElement && sourceThumb.complete && sourceThumb.naturalWidth > 0) {
+			persistMutateAspectRatioDataset(editContent, creation, sourceThumb);
+		} else {
+			persistMutateAspectRatioDataset(editContent, creation);
+		}
 
 		const normalizedImageUrlForQueue = toParasceneImageUrl(sourceImageUrl);
 		let isImageQueued = false;
@@ -965,6 +1020,7 @@ document.addEventListener('click', (e) => {
 		});
 		let methodKey;
 		let args;
+		const aspectRatio = String(container?.dataset?.mutateAspectRatio || '').trim() || '1:1';
 		if (activeMode === 'image-to-video' && i2vEngineFromDom === 'ltx') {
 			methodKey = MUTATE_VIDEO_LTX_METHOD_KEY;
 			args = {
@@ -972,6 +1028,7 @@ document.addEventListener('click', (e) => {
 				model: MUTATE_VIDEO_LTX_MODEL,
 				prompt,
 				input_images: [normalizedImageUrl],
+				aspect_ratio: aspectRatio,
 			};
 		} else if (activeMode === 'image-to-video') {
 			methodKey = MUTATE_VIDEO_DEFAULT_METHOD_KEY;
