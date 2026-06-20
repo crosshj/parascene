@@ -2267,6 +2267,20 @@ body.creation-detail-page.creation-detail-embed main {
 	padding-bottom: 0;
 }
 
+/* Embed iframe: same hidden-scrollbar pattern as .creation-detail-action-strip-scroll / .chat-page-messages. */
+html.creation-detail-embed-doc,
+body.creation-detail-page.creation-detail-embed {
+	scrollbar-width: none;
+	-ms-overflow-style: none;
+}
+
+html.creation-detail-embed-doc::-webkit-scrollbar,
+body.creation-detail-page.creation-detail-embed::-webkit-scrollbar {
+	width: 0;
+	height: 0;
+	display: none;
+}
+
 @media (max-width: 768px) {
 	/* Keep app chrome pinned on long creation-detail comment threads (mobile Safari can let sticky drift). */
 	body.creation-detail-page app-navigation {
@@ -2293,6 +2307,17 @@ body.creation-detail-page.creation-detail-embed main {
 	body.creation-detail-page.creation-detail-embed main {
 		padding-top: var(--creation-detail-embed-chrome-top);
 		padding-bottom: 0;
+	}
+
+	body.creation-detail-page:not(.creation-detail-embed) {
+		scrollbar-width: none;
+		-ms-overflow-style: none;
+	}
+
+	body.creation-detail-page:not(.creation-detail-embed)::-webkit-scrollbar {
+		width: 0;
+		height: 0;
+		display: none;
 	}
 }
 

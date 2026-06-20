@@ -83,62 +83,50 @@ function invalidateCreatorProfileCache(userId) {
 	}
 }
 
+const _creationDetailRuntimeQs = (() => {
+	const meta = document.querySelector('meta[name="asset-version"]');
+	const v = meta?.getAttribute('content')?.trim() || '';
+	return v ? `?v=${encodeURIComponent(v)}` : '';
+})();
+
 function isCreationDetailEmbed() {
 	return window.__ps_creation_detail_embed === true;
 }
 
-function postMessageToParentOverlay(payload) {
-	if (!isCreationDetailEmbed() || window.parent === window) return false;
-	try {
-		window.parent.postMessage(payload, window.location.origin);
-		return true;
-	} catch {
-		return false;
+/** @type {Promise<typeof import('/shared/creationDetailRuntime.js')> | null} */
+let creationDetailRuntimeReady = null;
+
+function ensureCreationDetailRuntime() {
+	if (!creationDetailRuntimeReady) {
+		creationDetailRuntimeReady = import(`/shared/creationDetailRuntime.js${_creationDetailRuntimeQs}`)
+			.then((mod) => {
+				mod.bindCreationDetailEmbedNavigation();
+				mod.bindCreationDetailEmbedEscape(creationDetailPageHasOpenEscapeTarget);
+				mod.registerCreationDetailRefreshHandler(loadCreation);
+				return mod;
+			})
+			.catch((err) => {
+				creationDetailRuntimeReady = null;
+				console.error('[creation-detail] failed to load embed runtime', err);
+				throw err;
+			});
 	}
+	return creationDetailRuntimeReady;
 }
 
-function requestCreationDetailEmbedRoute(href) {
+async function refreshAfterMutation(reason, options) {
+	const mod = await ensureCreationDetailRuntime();
+	return mod.refreshAfterMutation(reason, options);
+}
+
+function navigateCreationDetail(href) {
 	const raw = String(href || '').trim();
-	if (!raw) return false;
-	return postMessageToParentOverlay({
-		type: 'prsn-creation-detail-overlay-route',
-		href: raw,
-	});
+	if (!raw || raw.startsWith('#')) return;
+	void ensureCreationDetailRuntime().then((mod) => mod.navigate(raw));
 }
 
-function shellOutFromCreationDetailEmbed(href) {
-	const raw = String(href || '').trim();
-	if (!raw) return;
-	if (requestCreationDetailEmbedRoute(raw)) return;
-	window.location.assign(raw);
-}
-
-function navigateFromCreationDetailEmbed(href) {
-	shellOutFromCreationDetailEmbed(href);
-}
-
-function shouldInterceptCreationDetailEmbedLink(link, e) {
-	if (!(link instanceof HTMLAnchorElement)) return false;
-	if (e.defaultPrevented) return false;
-	if (typeof e.button === 'number' && e.button !== 0) return false;
-	if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return false;
-	const href = (link.getAttribute('href') || '').trim();
-	if (!href || href.startsWith('#') || href.startsWith('mailto:') || href.startsWith('tel:')) return false;
-	if (link.hasAttribute('download')) return false;
-	if (link.target === '_blank') return false;
-	try {
-		const url = new URL(href, window.location.origin);
-		if (url.origin !== window.location.origin) return false;
-	} catch {
-		return false;
-	}
-	return true;
-}
-
-function requestCreationDetailEmbedClose() {
-	return postMessageToParentOverlay({
-		type: 'prsn-creation-detail-overlay-close',
-	});
+function shellOut(href) {
+	navigateCreationDetail(href);
 }
 
 function creationDetailHostModalIsOpen(host) {
@@ -190,35 +178,6 @@ function creationDetailPageHasOpenEscapeTarget() {
 
 	return false;
 }
-
-function bindCreationDetailEmbedNavigation() {
-	if (!isCreationDetailEmbed()) return;
-	document.addEventListener('click', (e) => {
-		const link = e.target?.closest?.('a[href]');
-		if (!shouldInterceptCreationDetailEmbedLink(link, e)) return;
-		e.preventDefault();
-		e.stopPropagation();
-		navigateFromCreationDetailEmbed(link.getAttribute('href') || '');
-	}, true);
-}
-
-function bindCreationDetailEmbedEscape() {
-	if (!isCreationDetailEmbed()) return;
-	document.addEventListener(
-		'keydown',
-		(e) => {
-			if (e.key !== 'Escape' || e.defaultPrevented) return;
-			if (creationDetailPageHasOpenEscapeTarget()) return;
-			if (!requestCreationDetailEmbedClose()) return;
-			e.preventDefault();
-			e.stopPropagation();
-		},
-		true
-	);
-}
-
-bindCreationDetailEmbedNavigation();
-bindCreationDetailEmbedEscape();
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -1221,7 +1180,7 @@ function navigateToCurrentUrlIfLeftCreationDetail() {
 	if (isCreationDetailEmbed()) return;
 	if (isCreationDetailPagePathname(window.location.pathname)) return;
 	const path = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-	window.location.assign(path);
+	navigateCreationDetail(path);
 }
 
 function isShareMountedView() {
@@ -1340,11 +1299,7 @@ function initRelatedSection(root, currentCreationId, options = {}) {
 			});
 			card.style.cursor = 'pointer';
 			card.addEventListener('click', () => {
-				if (isCreationDetailEmbed()) {
-					navigateFromCreationDetailEmbed(href);
-					return;
-				}
-				window.location.href = href;
+				navigateCreationDetail(href);
 			});
 			const mediaEl = card.querySelector('[data-related-media]');
 			if (mediaEl && typeof hydrateRouteCardMedia === 'function') {
@@ -1682,6 +1637,8 @@ async function loadCreation() {
 	const groupHeroImageBySourceId = new Map();
 
 	if (!detailContent || !imageEl || !backgroundEl) return;
+
+	await loadDeps();
 
 	showCreationDetailContentSkeleton(detailContent);
 	prepareCreationDetailHeroForLoad(imageEl, imageWrapper);
@@ -4410,7 +4367,7 @@ async function loadCreation() {
 						body: JSON.stringify({ creation_id: creationId })
 					}, { windowMs: 0 });
 					if (result.ok) {
-						window.location.reload();
+						await refreshAfterMutation('profile-updated', { creationId });
 						return;
 					}
 					const errMsg = result.data?.error || 'Failed to set profile picture';
@@ -4475,7 +4432,7 @@ async function loadCreation() {
 						}
 						return;
 					}
-					await loadCreation();
+					await refreshAfterMutation('status-changed', { creationId });
 				} catch {
 					if (adminVideoError) {
 						adminVideoError.textContent = 'Upload failed. Please try again.';
@@ -4512,7 +4469,7 @@ async function loadCreation() {
 						}
 						return;
 					}
-					await loadCreation();
+					await refreshAfterMutation('status-changed', { creationId });
 				} catch {
 					if (adminRestoreUserDeletedErr instanceof HTMLElement) {
 						adminRestoreUserDeletedErr.textContent = 'Request failed. Please try again.';
@@ -4560,7 +4517,7 @@ async function loadCreation() {
 							: detail || 'Could not recover video from provider.';
 					}
 					if (ok) {
-						await loadCreation();
+						await refreshAfterMutation('status-changed', { creationId });
 					} else if (adminVideoErrorEl && (detail || !res.ok)) {
 						adminVideoErrorEl.textContent = adminProviderRepairStatus?.textContent || detail || 'Recovery failed';
 						adminVideoErrorEl.style.display = '';
@@ -4820,7 +4777,7 @@ async function loadCreation() {
 				}
 				closeChallengeSubmitModal();
 				showToast('Submitted to challenge');
-				loadCreation();
+				refreshAfterMutation('status-changed', { creationId });
 			} catch (err) {
 				const msg = err?.message || 'Could not submit';
 				if (challengeSubmitModalError instanceof HTMLElement) {
@@ -4868,7 +4825,7 @@ async function loadCreation() {
 						return;
 					}
 					showToast('Removed from challenge');
-					loadCreation();
+					refreshAfterMutation('status-changed', { creationId });
 				} catch (err) {
 					showToast(err?.message || 'Could not remove from challenge');
 				} finally {
@@ -5120,7 +5077,7 @@ async function loadCreation() {
 						}
 						fileInput.value = '';
 						submitBtn.disabled = true;
-						loadCreation();
+						refreshAfterMutation('status-changed', { creationId });
 					} catch (err) {
 						if (errorEl) {
 							errorEl.textContent = err?.message || 'Upload failed';
@@ -5283,7 +5240,7 @@ async function loadCreation() {
 							btn.disabled = false;
 							return;
 						}
-						await loadCreation();
+						await refreshAfterMutation('status-changed', { creationId });
 					} catch (err) {
 						alert(err?.message || 'Failed to reorder group sources');
 						btn.disabled = false;
@@ -5409,7 +5366,7 @@ async function loadCreation() {
 							syncSetCoverButton();
 							return;
 						}
-						await loadCreation();
+						await refreshAfterMutation('status-changed', { creationId });
 					} catch (err) {
 						alert(err?.message || 'Failed to set cover');
 						syncSetCoverButton();
@@ -5439,7 +5396,7 @@ async function loadCreation() {
 						ungroupBtn.disabled = false;
 						return;
 					}
-					shellOutFromCreationDetailEmbed('/chat/c/creations');
+					shellOut('/chat/c/creations');
 				} catch (err) {
 					alert(err?.message || 'Failed to ungroup creation');
 					ungroupBtn.disabled = false;
@@ -5572,17 +5529,25 @@ async function checkAndLoadCreation() {
 	}
 }
 
-// Set up modal event listeners
-document.addEventListener('DOMContentLoaded', () => {
-	checkAndLoadCreation();
-});
+async function bootCreationDetailPage() {
+	await ensureCreationDetailRuntime();
+	await checkAndLoadCreation();
+}
+
+if (document.readyState === 'loading') {
+	document.addEventListener('DOMContentLoaded', () => {
+		void bootCreationDetailPage();
+	});
+} else {
+	void bootCreationDetailPage();
+}
 
 document.addEventListener('creation-video-placeholder-updated', (event) => {
 	const detail = event?.detail || {};
 	const updatedId = Number(detail.creationId);
 	const pageId = Number(getCreationId());
 	if (!Number.isFinite(updatedId) || !Number.isFinite(pageId) || updatedId !== pageId) return;
-	loadCreation();
+	void refreshAfterMutation('status-changed', { creationId: pageId });
 });
 
 // Open modal when publish button is clicked
@@ -5650,12 +5615,12 @@ document.addEventListener('click', (e) => {
 			const groupId = getCreationId();
 			if (!groupId || !Number.isFinite(Number(groupId))) return;
 			const sourceQuery = `?source_id=${encodeURIComponent(String(target.sourceId))}`;
-			shellOutFromCreationDetailEmbed(`/creations/${groupId}/mutate${sourceQuery}`);
+			shellOut(`/creations/${groupId}/mutate${sourceQuery}`);
 			return;
 		}
 		const creationId = getCreationId();
 		if (!creationId) return;
-		shellOutFromCreationDetailEmbed(`/creations/${creationId}/mutate`);
+		shellOut(`/creations/${creationId}/mutate`);
 	}
 });
 
@@ -5960,7 +5925,7 @@ async function landscapePollUntilDone(creationId) {
 		if (typeof lurl === 'string' && (lurl.startsWith('http') || lurl.startsWith('/'))) {
 			lastCreationMeta = creation;
 			openLandscapeModal(creationId, { landscapeUrl: lurl, isOwner: landscapeModalIsOwner, isLoading: false });
-			loadCreation();
+			void refreshAfterMutation('status-changed', { creationId });
 			return;
 		}
 	}
@@ -6068,7 +6033,7 @@ if (landscapeRemoveBtn) {
 			const res = await fetch(`/api/create/images/${creationId}/landscape`, { method: 'DELETE', credentials: 'include' });
 			if (!res.ok) throw new Error('Failed to remove');
 			landscapeModal?.close();
-			loadCreation();
+			void refreshAfterMutation('status-changed', { creationId });
 		} catch (err) {
 			alert(err?.message || 'Failed to remove landscape');
 		} finally {
@@ -6134,15 +6099,17 @@ async function handleDelete(isPermanent) {
 			throw new Error(error.error || 'Failed to delete creation');
 		}
 
+		await refreshAfterMutation('deleted', { creationId, skipContentRefresh: true });
+
 		// Success: after permanent delete (admin), go back to that user's profile; otherwise creations list
 		if (resolvedPermanent && lastCreationMeta?.user_id) {
 			const profilePath = buildProfilePath({
 				userName: lastCreationMeta?.creator?.user_name || lastCreationMeta?.user_name || null,
 				userId: lastCreationMeta.user_id
 			});
-			shellOutFromCreationDetailEmbed(profilePath || `/user/${lastCreationMeta.user_id}`);
+			shellOut(profilePath || `/user/${lastCreationMeta.user_id}`);
 		} else {
-			shellOutFromCreationDetailEmbed('/creations');
+			shellOut('/creations');
 		}
 	} catch (error) {
 		// console.error('Error deleting creation:', error);
@@ -6213,7 +6180,13 @@ async function handleRetry() {
 			}));
 		}
 
-		// Same creation row is now "creating"; navigate and refresh list
+		// Same creation row is now "creating"; refresh lanes and leave detail
+		if (isCreationDetailEmbed()) {
+			await refreshAfterMutation('status-changed', { creationId, skipContentRefresh: true });
+			shellOut('/creations');
+			return;
+		}
+
 		const creationsRoute = document.querySelector("app-route-creations");
 		if (creationsRoute && typeof creationsRoute.loadCreations === "function") {
 			await creationsRoute.loadCreations({ force: true, background: false });
@@ -6222,7 +6195,7 @@ async function handleRetry() {
 		if (header && typeof header.navigateToRoute === 'function') {
 			header.navigateToRoute('creations');
 		} else {
-			shellOutFromCreationDetailEmbed('/creations');
+			shellOut('/creations');
 		}
 	} catch (error) {
 		alert(error.message || 'Failed to retry creation. Please try again.');
@@ -6262,8 +6235,7 @@ async function handleUnpublish() {
 			throw new Error(error.error || 'Failed to unpublish creation');
 		}
 
-		// Success - reload the page to show updated state
-		window.location.reload();
+		await refreshAfterMutation('unpublished', { creationId });
 	} catch (error) {
 		// console.error('Error unpublishing creation:', error);
 		alert(error.message || 'Failed to unpublish creation. Please try again.');

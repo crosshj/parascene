@@ -8,6 +8,13 @@ const html = String.raw;
 const TIP_MIN_VISIBLE_BALANCE = 10.0;
 const TIP_LARGE_AMOUNT_WARNING = 5.0;
 
+function loadCreationDetailRuntime() {
+	const meta = document.querySelector('meta[name="asset-version"]');
+	const v = meta?.getAttribute('content')?.trim() || '';
+	const qs = v ? `?v=${encodeURIComponent(v)}` : '';
+	return import(`../../shared/creationDetailRuntime.js${qs}`);
+}
+
 class AppModalTipCreator extends HTMLElement {
 	constructor() {
 		super();
@@ -271,9 +278,8 @@ class AppModalTipCreator extends HTMLElement {
 			document.dispatchEvent(new CustomEvent('user-updated', { detail: { userId: toUserId } }));
 			this.close();
 			if (createdImageId !== null) {
-				try {
-					window.location.reload();
-				} catch {}
+				const { refreshAfterMutation } = await loadCreationDetailRuntime();
+				await refreshAfterMutation('status-changed', { creationId: createdImageId });
 			}
 		} catch (err) {
 			const message = err?.message || 'Failed to tip credits.';

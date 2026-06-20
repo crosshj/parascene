@@ -208,6 +208,24 @@ class AppRouteFeed extends HTMLElement {
 		if (initialRoute === 'feed') {
 			this.loadFeed();
 		}
+		this.shellSyncHandler = (e) => {
+			this.handleCreationDetailShellSync(e?.detail);
+		};
+		document.addEventListener('prsn-creation-detail-overlay-shell-sync', this.shellSyncHandler);
+	}
+
+	handleCreationDetailShellSync(detail) {
+		if (!detail || typeof detail !== 'object') return;
+		const scopes = Array.isArray(detail.scopes) ? detail.scopes : [];
+		if (!scopes.includes('feed') && !scopes.includes('creation')) return;
+		if (detail.reason === 'deleted' || detail.reason === 'unpublished') return;
+		const route =
+			window.__CURRENT_ROUTE__ ||
+			(window.location.pathname === '/' || window.location.pathname === ''
+				? 'feed'
+				: window.location.pathname.slice(1).split('/')[0]);
+		if (route !== 'feed') return;
+		this.loadFeed({ force: true });
 	}
 
 	disconnectedCallback() {
@@ -219,6 +237,9 @@ class AppRouteFeed extends HTMLElement {
 		}
 		if (this.feedPreferenceHandler) {
 			document.removeEventListener('feed-preference-changed', this.feedPreferenceHandler);
+		}
+		if (this.shellSyncHandler) {
+			document.removeEventListener('prsn-creation-detail-overlay-shell-sync', this.shellSyncHandler);
 		}
 		if (this.feedObserver) {
 			this.feedObserver.disconnect();

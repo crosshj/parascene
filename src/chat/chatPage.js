@@ -9489,6 +9489,35 @@ export async function initChatPage(root, options = {}) {
 		await loadMoreFeedLanePseudoChannelMessages('explore');
 	}
 
+	function handleCreationDetailEmbedShellSync(detail) {
+		if (!detail || typeof detail !== 'object') return;
+		const scopes = Array.isArray(detail.scopes) ? detail.scopes : [];
+		const hasScope = (name) => scopes.includes(name);
+		const reason = String(detail.reason || '');
+
+		if (reason === 'deleted') return;
+
+		const refreshCreationsLane =
+			activePseudoChannelSlug === 'creations' &&
+			(hasScope('creations') || hasScope('chat-creations') || hasScope('creation'));
+		const refreshFeedLane =
+			activePseudoChannelSlug === 'feed' &&
+			(hasScope('feed') || hasScope('chat-feed') || hasScope('creation'));
+		const refreshExploreLane =
+			activePseudoChannelSlug === 'explore' &&
+			(hasScope('explore') || hasScope('chat-explore') || hasScope('creation'));
+
+		if (refreshCreationsLane) {
+			void loadCreationsChannelMessages({ forceFreshFirstPage: true });
+		}
+		if (refreshFeedLane && reason !== 'unpublished') {
+			void loadFeedChannelMessages();
+		}
+		if (refreshExploreLane && reason !== 'unpublished') {
+			void loadExploreChannelMessages({ searchQuery: exploreQueryRef.q });
+		}
+	}
+
 	function mergeExploreSearchKeywordSemantic(keyword, semantic, preferSemanticFirst) {
 		const k = 60;
 		const keywordItems = Array.isArray(keyword) ? keyword : [];
@@ -14281,6 +14310,9 @@ export async function initChatPage(root, options = {}) {
 	document.addEventListener('visibilitychange', chatSidebarVisibilityHandler);
 	document.addEventListener('creations-pending-updated', () => {
 		if (activePseudoChannelSlug === 'creations') maybeStartChatCreationsPseudoChannelPoll();
+	});
+	document.addEventListener('prsn-creation-detail-overlay-shell-sync', (e) => {
+		handleCreationDetailEmbedShellSync(e?.detail);
 	});
 
 	setupChatSidebarClientNav();

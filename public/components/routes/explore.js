@@ -147,6 +147,20 @@ class AppRouteExplore extends HTMLElement {
 				if (this.hasMore) this.observeLoadMoreSentinel();
 			});
 		}
+		this.shellSyncHandler = (e) => {
+			this.handleCreationDetailShellSync(e?.detail);
+		};
+		document.addEventListener('prsn-creation-detail-overlay-shell-sync', this.shellSyncHandler);
+	}
+
+	handleCreationDetailShellSync(detail) {
+		if (!detail || typeof detail !== 'object') return;
+		const scopes = Array.isArray(detail.scopes) ? detail.scopes : [];
+		if (!scopes.includes('explore') && !scopes.includes('creation')) return;
+		if (detail.reason === 'deleted' || detail.reason === 'unpublished') return;
+		if (this.isRouteActive()) {
+			this.loadExplore({ reset: true });
+		}
 	}
 
 	setupRouteListener() {
@@ -282,6 +296,9 @@ class AppRouteExplore extends HTMLElement {
 		}
 		if (this.nsfwPreferenceHandler) {
 			document.removeEventListener('nsfw-preference-changed', this.nsfwPreferenceHandler);
+		}
+		if (this.shellSyncHandler) {
+			document.removeEventListener('prsn-creation-detail-overlay-shell-sync', this.shellSyncHandler);
 		}
 		this.sentinelObserver?.disconnect();
 		this.sentinelObserver = null;

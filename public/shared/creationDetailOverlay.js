@@ -4,6 +4,10 @@
  */
 
 import { MODAL_DISMISS_ICON_SVG } from './modalDismiss.js';
+import {
+	applyCreationDetailEmbedShellSync,
+	CREATION_DETAIL_SHELL_SYNC_MESSAGE,
+} from './creationDetailEmbedShell.js';
 
 const OVERLAY_ID = 'prsn-creation-detail-overlay';
 const SHELL_OUT_VEIL_ID = 'prsn-creation-detail-shell-out-veil';
@@ -188,16 +192,15 @@ function pushOverlayHistoryEntry(creationId, options = {}) {
 	}
 }
 
-function syncOverlayFrameToCreationId(creationId) {
-	const store = getOverlayStore();
+function embedFrameUrl(creationId) {
+	return `${creationDetailUrl(creationId)}?embed=1`;
+}
+
+function assignOverlayFrameUrl(frame, url, creationId) {
 	const id = Number(creationId);
-	if (!Number.isFinite(id) || id <= 0) return;
-	if (!(store.overlayFrame instanceof HTMLIFrameElement)) return;
-	if (store.overlayCreationId === id) return;
-	store.overlayCreationId = id;
-	const url = `${creationDetailUrl(id)}?embed=1`;
-	const frame = store.overlayFrame;
-	frame.title = `Creation #${id}`;
+	if (Number.isFinite(id) && id > 0) {
+		frame.title = `Creation #${id}`;
+	}
 	// Replace (don't push) so browser back only walks the parent overlay stack, not iframe history.
 	try {
 		const win = frame.contentWindow;
@@ -209,6 +212,26 @@ function syncOverlayFrameToCreationId(creationId) {
 		// ignore
 	}
 	frame.src = url;
+}
+
+function syncOverlayFrameToCreationId(creationId) {
+	const store = getOverlayStore();
+	const id = Number(creationId);
+	if (!Number.isFinite(id) || id <= 0) return;
+	if (!(store.overlayFrame instanceof HTMLIFrameElement)) return;
+	if (store.overlayCreationId === id) return;
+	store.overlayCreationId = id;
+	assignOverlayFrameUrl(store.overlayFrame, embedFrameUrl(id), id);
+}
+
+/** Force embed reload for the current (or given) creation — e.g. after publish inside the iframe. */
+function reloadCreationDetailOverlayFrame(creationId) {
+	const store = getOverlayStore();
+	const id = Number(creationId ?? store.overlayCreationId);
+	if (!Number.isFinite(id) || id <= 0) return;
+	if (!(store.overlayFrame instanceof HTMLIFrameElement)) return;
+	store.overlayCreationId = id;
+	assignOverlayFrameUrl(store.overlayFrame, embedFrameUrl(id), id);
 }
 
 function overlayLanePathname(returnPath) {
@@ -431,19 +454,9 @@ function dismissCreationDetailOverlayViaHistory() {
 /** Header X / embed close — exit the whole overlay stack back to the lane in one gesture. */
 export function dismissEntireCreationDetailOverlay() {
 	if (!isCreationDetailOverlayOpen()) return;
-	const store = getOverlayStore();
-	if (store.overlayDismissEntirePending) return;
-	const count = Math.max(1, Number(store.overlayPushCount) || 1);
-	if (count === 1) {
-		dismissCreationDetailOverlayViaHistory();
-		return;
-	}
-	store.overlayDismissEntirePending = true;
-	try {
-		window.history.go(-count);
-	} catch {
-		fallbackDismissEntireCreationDetailOverlay();
-	}
+	// replaceState + close: reliable one-click dismiss even when overlayPushCount drifted
+	// from duplicate same-URL history entries (e.g. iframe full reload after publish).
+	fallbackDismissEntireCreationDetailOverlay();
 }
 
 /**
@@ -470,6 +483,12 @@ export function handleCreationDetailOverlayPopstate(ev) {
 		let id = Number(state?.prsnCreationDetailId);
 		if (!Number.isFinite(id) || id <= 0) {
 			id = Number(parseCreationIdFromHref(window.location.pathname));
+		}
+		const curId = Number(store.overlayCreationId);
+		if (Number.isFinite(id) && id > 0 && Number.isFinite(curId) && curId > 0 && id === curId) {
+			fallbackDismissEntireCreationDetailOverlay();
+			if (ev && typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
+			return true;
 		}
 		if (Number.isFinite(id) && id > 0) {
 			syncOverlayFrameToCreationId(id);
@@ -557,6 +576,19 @@ function ensureOverlayMessageListener() {
 		}
 		if (data.type === 'prsn-creation-detail-overlay-route') {
 			routeCreationDetailOverlayFromEmbed(data.href);
+			return;
+		}
+		if (data.type === CREATION_DETAIL_SHELL_SYNC_MESSAGE) {
+			applyCreationDetailEmbedShellSync(data);
+			return;
+		}
+		if (data.type === 'prsn-creation-detail-overlay-refresh') {
+			const id = Number(data.creationId);
+			if (Number.isFinite(id) && id > 0) {
+				reloadCreationDetailOverlayFrame(id);
+			} else {
+				reloadCreationDetailOverlayFrame();
+			}
 		}
 	});
 }
@@ -647,8 +679,13 @@ export function openCreationDetailOverlay(creationId) {
 	ensureOverlayEscapeListener();
 
 	if (isCreationDetailOverlayOpen() && store.overlayFrame) {
-		syncOverlayFrameToCreationId(id);
-		pushOverlayHistoryEntry(id, { stackPush: true });
+		const curId = Number(store.overlayCreationId);
+		if (curId === id) {
+			reloadCreationDetailOverlayFrame(id);
+		} else {
+			syncOverlayFrameToCreationId(id);
+			pushOverlayHistoryEntry(id, { stackPush: true });
+		}
 		return;
 	}
 

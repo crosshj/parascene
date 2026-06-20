@@ -5,12 +5,12 @@
  * Future: loading indicator, page transitions.
  */
 
+import { navigateFromModal } from './creationDetailRuntime.js';
 
 export function closeModalsAndNavigate(href) {
 	if (!href || typeof href !== 'string') return;
 	const trimmed = href.trim();
 	if (!trimmed || trimmed === '#') return;
 
-	document.dispatchEvent(new CustomEvent('close-all-modals'));
-	window.location.href = trimmed;
+	navigateFromModal(trimmed);
 }

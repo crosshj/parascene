@@ -1244,6 +1244,10 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 				pageHtml = pageHtml.replace("<!--APP_HEADER-->", "");
 				pageHtml = pageHtml.replace("<!--APP_MOBILE_BOTTOM_NAV-->", "");
 				pageHtml = pageHtml.replace(
+					'<html lang="en">',
+					'<html lang="en" class="creation-detail-embed-doc">'
+				);
+				pageHtml = pageHtml.replace(
 					'<body class="creation-detail-page">',
 					'<body class="creation-detail-page creation-detail-embed">'
 				);

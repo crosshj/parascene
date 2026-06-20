@@ -8,7 +8,8 @@
     "build": "rollup -c src/rollup.config.mjs",
     "watch": "NODE_ENV=dev PORT=2367 nodemon api/index.js",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest",
-    "test:int": "RUN_INTEGRATION_TESTS=true NODE_OPTIONS=--experimental-vm-modules jest --config jest.integration.config.js"
+    "test:int": "RUN_INTEGRATION_TESTS=true NODE_OPTIONS=--experimental-vm-modules jest --config jest.integration.config.js",
+    "check:creation-detail-embed": "node scripts/check-creation-detail-embed.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",

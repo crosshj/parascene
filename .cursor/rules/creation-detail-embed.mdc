@@ -1,0 +1,32 @@
+---
+description: Creation detail embed runtime — navigation and mutations
+globs:
+  - public/pages/creation-detail.js
+  - public/components/modals/publish.js
+  - public/components/modals/tip-creator.js
+  - public/shared/creationDetailRuntime.js
+  - src/shared/creationDetailRuntime.js
+  - public/shared/creationDetailEmbedShell.js
+  - public/shared/creationDetailOverlay.js
+---
+
+# Creation detail embed
+
+See `_docs/PLAN_creation_detail_embed.md` for invariants and migration status.
+
+## Rules
+
+- Embed mode: parent owns history; iframe must not `location.reload`, `location.href =`, `assign`, or `replace` for same-origin app routes.
+- All creation-detail navigation and post-mutation refresh goes through `creationDetailRuntime.js`.
+- Mutations: `refreshAfterMutation(reason, { creationId })` — registers handler calls `loadCreation`; embed notifies parent via shell sync.
+- Navigation: `navigate(href)` (in-overlay), `shellOut(href)` (leave overlay), `navigateFromModal(href)` (modals), `requestCloseOverlay()` (Escape).
+- Do not add scattered `if (isCreationDetailEmbed())` branches for reload/href; extend the runtime if a new intent is needed.
+
+## API (creationDetailRuntime.js)
+
+- `registerCreationDetailRefreshHandler(fn)` — page registers `loadCreation`
+- `refreshAfterMutation(reason, options?)` — reasons: published, unpublished, deleted, edited, status-changed, profile-updated
+- `navigate(href)` / `shellOut(href)` / `navigateFromModal(href)` / `requestCloseOverlay()`
+- `bindCreationDetailEmbedNavigation()` / `bindCreationDetailEmbedEscape(hasOpenEscapeTarget)`
+
+Run `npm run check:creation-detail-embed` after edits to embed-capable files.

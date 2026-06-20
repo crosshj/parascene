@@ -25,6 +25,15 @@ async function loadDeps() {
 	return _depsPromise;
 }
 
+let _runtimePromise;
+async function loadCreationDetailRuntime() {
+	if (_runtimePromise) return _runtimePromise;
+	const v = getAssetVersionParam();
+	const qs = getImportQuery(v);
+	_runtimePromise = import(`../../shared/creationDetailRuntime.js${qs}`);
+	return _runtimePromise;
+}
+
 let _suggestPromise;
 async function loadPublishInlineSuggest() {
 	if (_suggestPromise) return _suggestPromise;
@@ -456,6 +465,29 @@ class AppModalPublish extends HTMLElement {
 		}
 	}
 
+	resetSubmitLoadingUi() {
+		const titleInput = this.querySelector('#publish-title');
+		const descriptionTextarea = this.querySelector('#publish-description');
+		const nsfwCheckbox = this.querySelector('#publish-nsfw');
+		const doomFullHeightCheckbox = this.querySelector('#publish-doom-full-height');
+		const loadingOverlay = this.querySelector('.publish-modal-loading');
+		const submitBtn = this.querySelector('[data-publish-submit]');
+		const cancelLink = this.querySelector('.publish-cancel-link');
+		if (loadingOverlay) loadingOverlay.classList.remove('active');
+		if (titleInput) titleInput.disabled = false;
+		if (descriptionTextarea) descriptionTextarea.disabled = false;
+		if (nsfwCheckbox) nsfwCheckbox.disabled = false;
+		if (doomFullHeightCheckbox) {
+			doomFullHeightCheckbox.disabled = !this._creationIsVideo;
+		}
+		if (submitBtn) submitBtn.disabled = false;
+		if (cancelLink) {
+			cancelLink.style.pointerEvents = '';
+			cancelLink.style.opacity = '';
+		}
+		this._loading = false;
+	}
+
 	async handleSubmit() {
 		if (this._loading) return;
 
@@ -503,6 +535,10 @@ class AppModalPublish extends HTMLElement {
 			} else {
 				await this.handlePublishSubmit(title, description, nsfw, doomScrollFullHeight);
 			}
+			const { isCreationDetailEmbed } = await loadCreationDetailRuntime();
+			if (isCreationDetailEmbed()) {
+				this.resetSubmitLoadingUi();
+			}
 		} catch (error) {
 			// console.error(`Error ${this._mode === 'edit' ? 'updating' : 'publishing'} creation:`, error);
 			this.showAlert(error.message || `Failed to ${this._mode === 'edit' ? 'update' : 'publish'} creation. Please try again.`, true);
@@ -542,8 +578,14 @@ class AppModalPublish extends HTMLElement {
 			throw new Error(error.error || 'Failed to publish creation');
 		}
 
-		// Success - navigate to creation detail page
-		window.location.href = `/creations/${this._creationId}`;
+		this.close();
+		const { refreshAfterMutation, isCreationDetailEmbed, navigate } = await loadCreationDetailRuntime();
+		if (isCreationDetailEmbed()) {
+			await refreshAfterMutation('published', { creationId: this._creationId });
+			return;
+		}
+
+		navigate(`/creations/${this._creationId}`);
 	}
 
 	async handleEditSubmit(title, description, nsfw, doomScrollFullHeight) {
@@ -566,8 +608,12 @@ class AppModalPublish extends HTMLElement {
 			throw new Error(error.error || 'Failed to update creation');
 		}
 
-		// Success - reload the page to show updated data
-		window.location.reload();
+		this.close();
+		const { refreshAfterMutation, isCreationDetailEmbed } = await loadCreationDetailRuntime();
+		await refreshAfterMutation('edited', {
+			creationId: this._creationId,
+			standaloneReload: !isCreationDetailEmbed(),
+		});
 	}
 }
 

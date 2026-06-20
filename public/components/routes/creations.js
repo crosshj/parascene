@@ -226,6 +226,10 @@ class AppRouteCreations extends HTMLElement {
 			}
 		};
 		document.addEventListener('creations-pending-updated', this.pendingUpdateHandler);
+		this.shellSyncHandler = (e) => {
+			this.handleCreationDetailShellSync(e?.detail);
+		};
+		document.addEventListener('prsn-creation-detail-overlay-shell-sync', this.shellSyncHandler);
 		this.setupImageLazyLoading();
 
 		const initialRoute = window.__CURRENT_ROUTE__ || null;
@@ -709,6 +713,16 @@ class AppRouteCreations extends HTMLElement {
 		}
 	}
 
+	handleCreationDetailShellSync(detail) {
+		if (!detail || typeof detail !== 'object') return;
+		const scopes = Array.isArray(detail.scopes) ? detail.scopes : [];
+		if (!scopes.includes('creations') && !scopes.includes('creation')) return;
+		if (detail.reason === 'deleted') return;
+		if (this.isRouteActive()) {
+			this.loadCreations({ force: true });
+		}
+	}
+
 	disconnectedCallback() {
 		this.stopPolling();
 		if (this._boundBulkEscape) {
@@ -722,6 +736,9 @@ class AppRouteCreations extends HTMLElement {
 		}
 		if (this.pendingUpdateHandler) {
 			document.removeEventListener('creations-pending-updated', this.pendingUpdateHandler);
+		}
+		if (this.shellSyncHandler) {
+			document.removeEventListener('prsn-creation-detail-overlay-shell-sync', this.shellSyncHandler);
 		}
 		if (this.intersectionObserver) {
 			this.intersectionObserver.disconnect();
