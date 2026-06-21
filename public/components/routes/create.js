@@ -19,6 +19,7 @@ let getMutateLineageForImageUrls;
 let getMutateQueuePrefillForProviderFields;
 let syncMutateQueueFromProviderFieldValues;
 let MUTATE_QUEUE_UPDATED_EVENT;
+let MUTATE_QUEUE_STORAGE_KEY;
 let mergeSharedSettingsIntoSessionSelections;
 let getSharedFieldValueOverrides;
 let getSharedModelForContext;
@@ -74,6 +75,7 @@ async function loadDeps() {
 		getMutateQueuePrefillForProviderFields = mutateQueueSyncMod.getMutateQueuePrefillForProviderFields;
 		syncMutateQueueFromProviderFieldValues = mutateQueueSyncMod.syncMutateQueueFromProviderFieldValues;
 		MUTATE_QUEUE_UPDATED_EVENT = mutateQueueSyncMod.MUTATE_QUEUE_UPDATED_EVENT;
+		MUTATE_QUEUE_STORAGE_KEY = mutateQueueSyncMod.MUTATE_QUEUE_STORAGE_KEY;
 
 		const createSettingsSyncMod = await import(`../../shared/createSettingsSync.js${qs}`);
 		mergeSharedSettingsIntoSessionSelections = createSettingsSyncMod.mergeSharedSettingsIntoSessionSelections;
@@ -188,6 +190,8 @@ class AppRouteCreate extends HTMLElement {
 		this._pendingSavedFieldValues = null;
 		this._crossMethodImageCarryover = null;
 		this.handleMutateQueueUpdated = this.handleMutateQueueUpdated.bind(this);
+		this.handleMutateQueueStorageSync = this.handleMutateQueueStorageSync.bind(this);
+		this.handlePageShowForMutateQueue = this.handlePageShowForMutateQueue.bind(this);
 	}
 
 	async connectedCallback() {
@@ -408,6 +412,8 @@ class AppRouteCreate extends HTMLElement {
 		if (typeof MUTATE_QUEUE_UPDATED_EVENT === 'string' && MUTATE_QUEUE_UPDATED_EVENT) {
 			document.addEventListener(MUTATE_QUEUE_UPDATED_EVENT, this.handleMutateQueueUpdated);
 		}
+		window.addEventListener('storage', this.handleMutateQueueStorageSync);
+		window.addEventListener('pageshow', this.handlePageShowForMutateQueue);
 		if (this._showBlogTab) {
 			this.setupBlogTab();
 		}
@@ -450,6 +456,8 @@ class AppRouteCreate extends HTMLElement {
 		if (typeof MUTATE_QUEUE_UPDATED_EVENT === 'string' && MUTATE_QUEUE_UPDATED_EVENT) {
 			document.removeEventListener(MUTATE_QUEUE_UPDATED_EVENT, this.handleMutateQueueUpdated);
 		}
+		window.removeEventListener('storage', this.handleMutateQueueStorageSync);
+		window.removeEventListener('pageshow', this.handlePageShowForMutateQueue);
 		if (this._boundPreviewEscape) {
 			document.removeEventListener('keydown', this._boundPreviewEscape);
 		}
@@ -1662,15 +1670,18 @@ class AppRouteCreate extends HTMLElement {
 			if (typeof window !== 'undefined' && window.location?.pathname === '/create') {
 				try {
 					const prefill = getMutateQueuePrefillForProviderFields({ [fieldKey]: field });
-					if (isImageUrlField(field) && typeof prefill[fieldKey] === 'string' && prefill[fieldKey].trim()) {
-						const url = prefill[fieldKey].trim();
+					if (isImageUrlField(field)) {
+						const url = typeof prefill[fieldKey] === 'string' ? prefill[fieldKey].trim() : '';
 						fieldsForRender[fieldKey] = { ...field, default: url };
 						this.fieldValues[fieldKey] = url;
 						return;
 					}
-					if (isImageUrlArrayField(field) && Array.isArray(prefill[fieldKey]) && prefill[fieldKey].length > 0) {
-						fieldsForRender[fieldKey] = { ...field, default: [...prefill[fieldKey]] };
-						this.fieldValues[fieldKey] = [...prefill[fieldKey]];
+					if (isImageUrlArrayField(field)) {
+						const urls = Array.isArray(prefill[fieldKey])
+							? prefill[fieldKey].map((v) => String(v).trim()).filter(Boolean)
+							: [];
+						fieldsForRender[fieldKey] = { ...field, default: urls };
+						this.fieldValues[fieldKey] = urls;
 						return;
 					}
 				} catch {
@@ -1784,8 +1795,10 @@ class AppRouteCreate extends HTMLElement {
 						}
 					}
 					this.updateButtonState();
-					this.saveSelections();
-					this.persistImageFieldSelection(fieldKey, value);
+					if (!this._renderingFields) {
+						this.saveSelections();
+						this.persistImageFieldSelection(fieldKey, value);
+					}
 					if (fieldKey === 'model' && !this._renderingFields) {
 						this.syncAspectRatioFieldVisibility();
 					}
@@ -3155,14 +3168,16 @@ class AppRouteCreate extends HTMLElement {
 			if (this._promptFromUrl && isPromptLikeField(fieldKey, fields[fieldKey])) return;
 
 			const field = fields[fieldKey];
-			if (isImageUrlField(field) && typeof queuePrefill[fieldKey] === 'string' && queuePrefill[fieldKey].trim()) {
+			if (isImageUrlField(field)) {
+				const url = typeof queuePrefill[fieldKey] === 'string' ? queuePrefill[fieldKey].trim() : '';
+				this.fieldValues[fieldKey] = url;
 				return;
 			}
-			if (
-				isImageUrlArrayField(field) &&
-				Array.isArray(queuePrefill[fieldKey]) &&
-				queuePrefill[fieldKey].length > 0
-			) {
+			if (isImageUrlArrayField(field)) {
+				const urls = Array.isArray(queuePrefill[fieldKey])
+					? queuePrefill[fieldKey].map((v) => String(v).trim()).filter(Boolean)
+					: [];
+				this.fieldValues[fieldKey] = urls;
 				return;
 			}
 
@@ -3246,9 +3261,27 @@ class AppRouteCreate extends HTMLElement {
 		this.syncAdvancedImageFieldsFromMutateQueue();
 	}
 
+	handleMutateQueueStorageSync(event) {
+		const key =
+			typeof MUTATE_QUEUE_STORAGE_KEY === 'string' && MUTATE_QUEUE_STORAGE_KEY
+				? MUTATE_QUEUE_STORAGE_KEY
+				: 'mutateQueue:v1';
+		if (!event || event.key !== key) return;
+		this.handleMutateQueueUpdated();
+	}
+
+	handlePageShowForMutateQueue() {
+		this.handleMutateQueueUpdated();
+	}
+
 	syncAdvancedImageFieldsFromMutateQueue() {
 		const fields = this.selectedMethod?.fields;
 		if (!fields || typeof fields !== 'object') return;
+
+		const hasImageField = Object.values(fields).some(
+			(field) => field?.type === 'image_url' || field?.type === 'image_url_array'
+		);
+		if (!hasImageField) return;
 
 		let prefill;
 		try {
@@ -3256,20 +3289,24 @@ class AppRouteCreate extends HTMLElement {
 		} catch {
 			return;
 		}
-		if (!prefill || typeof prefill !== 'object' || Object.keys(prefill).length === 0) return;
+		prefill = prefill && typeof prefill === 'object' ? prefill : {};
 
 		let changed = false;
 		for (const [fieldKey, field] of Object.entries(fields)) {
 			if (!field || typeof field !== 'object') continue;
-			if (isImageUrlField(field) && typeof prefill[fieldKey] === 'string' && prefill[fieldKey].trim()) {
-				const next = prefill[fieldKey].trim();
-				if (this.fieldValues[fieldKey] !== next) {
+			if (isImageUrlField(field)) {
+				const next = typeof prefill[fieldKey] === 'string' ? prefill[fieldKey].trim() : '';
+				const current =
+					typeof this.fieldValues[fieldKey] === 'string' ? this.fieldValues[fieldKey].trim() : '';
+				if (current !== next) {
 					this.fieldValues[fieldKey] = next;
 					changed = true;
 				}
 			}
-			if (isImageUrlArrayField(field) && Array.isArray(prefill[fieldKey]) && prefill[fieldKey].length > 0) {
-				const next = prefill[fieldKey].map((v) => String(v).trim()).filter(Boolean);
+			if (isImageUrlArrayField(field)) {
+				const next = Array.isArray(prefill[fieldKey])
+					? prefill[fieldKey].map((v) => String(v).trim()).filter(Boolean)
+					: [];
 				const current = Array.isArray(this.fieldValues[fieldKey]) ? this.fieldValues[fieldKey] : [];
 				if (JSON.stringify(current) !== JSON.stringify(next)) {
 					this.fieldValues[fieldKey] = next;

@@ -31,6 +31,7 @@ import {
 } from './generationDefaults.js';
 
 export const MUTATE_QUEUE_UPDATED_EVENT = 'mutate-queue-updated';
+export const MUTATE_QUEUE_STORAGE_KEY = 'mutateQueue:v1';
 
 export const CREATE_ATTACHMENT_STORAGE_KEYS = {
 	imageEditSelection: 'create_page_image_edit_selection',
