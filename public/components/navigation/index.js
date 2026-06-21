@@ -71,23 +71,24 @@ function isLegacyStandaloneWorkflowDocument() {
 	if (window.__ps_create_embed === true || window.__ps_creation_edit_embed === true) {
 		return false;
 	}
+	if (document.body.classList.contains('creation-edit-page')) return true;
 	return (
 		document.body.classList.contains('create-page') ||
-		document.body.classList.contains('create-page-advanced') ||
-		document.body.classList.contains('creation-edit-page')
+		document.body.classList.contains('create-page-advanced')
 	);
 }
 
 function pathnameMatchesLegacyWorkflowDocument(pathname) {
 	const p = normalizeNavPathname(pathname);
-	if (
-		document.body.classList.contains('create-page') ||
-		document.body.classList.contains('create-page-advanced')
-	) {
-		return p === '/create';
-	}
+	// Mutate page also has `create-page` — check edit/mutate before generic create.
 	if (document.body.classList.contains('creation-edit-page')) {
 		return /^\/creations\/\d+\/(edit|mutate)$/.test(p);
+	}
+	if (document.body.classList.contains('create-page-advanced')) {
+		return p === '/create';
+	}
+	if (document.body.classList.contains('create-page')) {
+		return p === '/create';
 	}
 	return false;
 }
