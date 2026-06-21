@@ -16,22 +16,46 @@ function getImportQuery(version) {
 
 export async function init(version) {
 	const qs = getImportQuery(version);
-	await Promise.all([
-		import(`../../components/navigation/index.js${qs}`),
-		import(`../../components/navigation/mobile.js${qs}`),
+	const isEmbed = document.body.classList.contains('create-page-embed');
+	const isAdvanced = document.body.classList.contains('create-page-advanced');
+	const importPromises = [
 		import(`../../components/modals/profile.js${qs}`),
 		import(`../../components/modals/about.js${qs}`),
 		import(`../../components/modals/credits.js${qs}`),
 		import(`../../components/modals/notifications.js${qs}`),
 		import(`../../components/modals/server.js${qs}`),
 		import(`../../components/elements/tabs.js${qs}`),
-		import(`../../components/routes/create.js${qs}`),
-	]);
+	];
+	if (!isEmbed) {
+		importPromises.push(
+			import(`../../components/navigation/index.js${qs}`),
+			import(`../../components/navigation/mobile.js${qs}`)
+		);
+	}
+	if (isAdvanced) {
+		importPromises.push(import(`../../components/routes/create.js${qs}`));
+	}
+	await Promise.all(importPromises);
 	const { waitForComponents } = await import(`../../shared/pageInit.js${qs}`);
 	const { refreshAutoGrowTextareas } = await import(`../../shared/autogrow.js${qs}`);
 	const createSettingsSyncMod = await import(`../../shared/createSettingsSync.js${qs}`);
-	const isAdvanced = document.body.classList.contains('create-page-advanced');
-	await waitForComponents(isAdvanced ? TAGS_ADVANCED : TAGS_BASIC);
+	const waitTags = isEmbed
+		? (isAdvanced ? ['app-route-create'] : ['app-tabs'])
+		: (isAdvanced ? TAGS_ADVANCED : TAGS_BASIC);
+	await waitForComponents(waitTags);
+	if (isEmbed) {
+		const runtimeMod = await import(`../../shared/createPageRuntime.js${qs}`);
+		runtimeMod.bindCreatePageEmbedNavigation();
+		runtimeMod.bindCreatePageEmbedEscape(() => false);
+	} else if (!isAdvanced) {
+		const runtimeMod = await import(`../../shared/createPageRuntime.js${qs}`);
+		const advancedLink = document.querySelector('.create-switch-to-advanced');
+		if (advancedLink) {
+			advancedLink.addEventListener('click', (e) => {
+				runtimeMod.switchCreateEditorMode('advanced', e);
+			});
+		}
+	}
 	runCreatePageInit(refreshAutoGrowTextareas, createSettingsSyncMod);
 }
 
@@ -53,6 +77,20 @@ function runCreatePageInit(refreshAutoGrowTextareas, createSettingsSyncMod = {})
 	const assetVersion =
 		document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() || '';
 	const sharedQs = assetVersion ? `?v=${encodeURIComponent(assetVersion)}` : '';
+
+	function isCreatePageEmbedMode() {
+		return document.body.classList.contains('create-page-embed');
+	}
+
+	function createSubmitNavigateMode() {
+		return isCreatePageEmbedMode() ? 'none' : 'full';
+	}
+
+	async function afterCreateSubmitInEmbed(result) {
+		if (!isCreatePageEmbedMode() || !result?.id) return;
+		const runtimeMod = await import(`../../shared/createPageRuntime.js${sharedQs}`);
+		runtimeMod.refreshAfterSubmit({ creationId: result.id });
+	}
 
 	const changeLink = document.getElementById('create-change-image-link');
 	const area = document.querySelector('.create-image-edit-area');
@@ -598,8 +636,8 @@ function runCreatePageInit(refreshAutoGrowTextareas, createSettingsSyncMod = {})
 					},
 					styleKey: styleKey !== 'none' ? styleKey : undefined,
 					hydrateMentions,
-					navigate: 'full',
-				});
+					navigate: createSubmitNavigateMode(),
+				}).then((result) => afterCreateSubmitInEmbed(result));
 			};
 			const mentions = extractMentions(userPrompt);
 			if (mentions.length === 0) {
@@ -682,9 +720,9 @@ function runCreatePageInit(refreshAutoGrowTextareas, createSettingsSyncMod = {})
 					methodKey: mutateOptions.methodKey,
 					args,
 					hydrateMentions,
-					navigate: 'full',
+					navigate: createSubmitNavigateMode(),
 					...mutateLineage,
-				});
+				}).then((result) => afterCreateSubmitInEmbed(result));
 			};
 			const mentions = extractMentions(userPrompt);
 			if (mentions.length === 0) {

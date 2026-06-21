@@ -39,6 +39,31 @@ function getAssetVersionParam() {
 	return meta?.getAttribute('content')?.trim() || '';
 }
 
+function isCreatePageEmbed() {
+	return document.body?.classList.contains('create-page-embed');
+}
+
+function isStandaloneCreatePagePath() {
+	return window.location.pathname === '/create' && !isCreatePageEmbed();
+}
+
+async function afterCreateRouteSubmitInEmbed(result) {
+	if (!isCreatePageEmbed() || !result?.id) return;
+	const v = getAssetVersionParam();
+	const qs = v ? `?v=${encodeURIComponent(v)}` : '';
+	const runtimeMod = await import(`../../shared/createPageRuntime.js${qs}`);
+	runtimeMod.refreshAfterSubmit({ creationId: result.id });
+}
+
+async function openBlogEditorFromCreate(id) {
+	if (!id) return;
+	const href = `/create/blog/${id}`;
+	const v = getAssetVersionParam();
+	const qs = v ? `?v=${encodeURIComponent(v)}` : '';
+	const { openFullPageRoute } = await import(`../../shared/createPageRuntime.js${qs}`);
+	openFullPageRoute(href);
+}
+
 function getImportQuery(version) {
 	return version && typeof version === 'string' ? `?v=${encodeURIComponent(version)}` : '';
 }
@@ -196,6 +221,16 @@ class AppRouteCreate extends HTMLElement {
 
 	async connectedCallback() {
 		await loadDeps();
+		if (isCreatePageEmbed()) {
+			const v = getAssetVersionParam();
+			const qs = v ? `?v=${encodeURIComponent(v)}` : '';
+			const runtimeMod = await import(`../../shared/createPageRuntime.js${qs}`);
+			runtimeMod.bindCreatePageEmbedNavigation();
+			runtimeMod.bindCreatePageEmbedEscape(() => {
+				const confirm = this.querySelector('.create-route-advanced-confirm[aria-hidden="false"]');
+				return confirm instanceof HTMLElement;
+			});
+		}
 		try {
 			mergeSharedSettingsIntoSessionSelections();
 		} catch (_) {
@@ -574,16 +609,23 @@ class AppRouteCreate extends HTMLElement {
 
 		const switchToBasic = this.querySelector('[data-create-switch-to-basic]');
 		if (switchToBasic) {
-			switchToBasic.addEventListener('click', async (e) => {
-				e.preventDefault();
-				try {
-					await this.persistImageForBasicMode();
-				} catch (_) {
-					// Ignore carryover errors and still switch mode.
-				}
-				document.cookie = 'create_editor=simple; path=/; max-age=31536000';
-				window.location.href = '/create';
-			});
+			switchToBasic.addEventListener(
+				'click',
+				async (e) => {
+					e.preventDefault();
+					e.stopPropagation();
+					try {
+						await this.persistImageForBasicMode();
+					} catch (_) {
+						// Ignore carryover errors and still switch mode.
+					}
+					const v = getAssetVersionParam();
+					const qs = v ? `?v=${encodeURIComponent(v)}` : '';
+					const { switchCreateEditorMode } = await import(`../../shared/createPageRuntime.js${qs}`);
+					switchCreateEditorMode('basic', e);
+				},
+				true
+			);
 		}
 
 		// Restore and persist active tab (Basic / Advanced / Blog); sync with URL hash (#basic, #advanced, #blog)
@@ -1422,17 +1464,17 @@ class AppRouteCreate extends HTMLElement {
 		}
 		const runSubmit = (hydrateMentions) => {
 			this.closeAdvancedConfirm();
-			const isStandaloneCreatePage = window.location.pathname === '/create';
+			const isStandaloneCreatePage = isStandaloneCreatePagePath();
 			submitCreationWithPending({
 				serverId: pending.serverId,
 				methodKey: 'advanced_generate',
 				args: pending.args,
 				creditCost: pending.cost,
 				hydrateMentions,
-				navigate: isStandaloneCreatePage ? 'full' : 'spa',
+				navigate: isStandaloneCreatePage ? 'full' : (isCreatePageEmbed() ? 'none' : 'spa'),
 				onInsufficientCredits: async () => { await this.loadCredits(); },
 				onError: async () => { await this.loadCredits(); }
-			});
+			}).then((result) => afterCreateRouteSubmitInEmbed(result));
 		};
 
 		const prompt = typeof pending?.args?.prompt === 'string' ? pending.args.prompt : '';
@@ -2185,7 +2227,7 @@ class AppRouteCreate extends HTMLElement {
 		}
 
 		// Standalone create page (/create) needs full navigation to /creations; SPA only works when create is in-app.
-		const isStandaloneCreatePage = window.location.pathname === '/create';
+		const isStandaloneCreatePage = isStandaloneCreatePagePath();
 		const argsToSend = collectedArgs || {};
 		let mutateParentIds = [];
 		let mutateOfIdFromQueue;
@@ -2230,7 +2272,7 @@ class AppRouteCreate extends HTMLElement {
 				mutateOfId,
 				mutateParentIds,
 				hydrateMentions,
-				navigate: isStandaloneCreatePage ? 'full' : 'spa',
+				navigate: isStandaloneCreatePage ? 'full' : (isCreatePageEmbed() ? 'none' : 'spa'),
 				onInsufficientCredits: async () => {
 					this.resetCreateButton(button);
 					await this.loadCredits();
@@ -2239,7 +2281,7 @@ class AppRouteCreate extends HTMLElement {
 					this.resetCreateButton(button);
 					await this.loadCredits();
 				}
-			});
+			}).then((result) => afterCreateRouteSubmitInEmbed(result));
 		};
 
 		async function runMentionsCheckAndSubmit() {
@@ -2975,7 +3017,7 @@ class AppRouteCreate extends HTMLElement {
 		}
 		const id = data?.post?.id;
 		if (id) {
-			window.location.href = `/create/blog/${id}`;
+			void openBlogEditorFromCreate(id);
 		}
 	}
 
@@ -3087,7 +3129,7 @@ class AppRouteCreate extends HTMLElement {
 		container.querySelectorAll("[data-blog-edit]").forEach((btn) => {
 			btn.addEventListener("click", () => {
 				const id = btn.getAttribute("data-blog-edit");
-				if (id) window.location.href = `/create/blog/${id}`;
+				if (id) void openBlogEditorFromCreate(id);
 			});
 		});
 		container.querySelectorAll("[data-blog-delete]").forEach((btn) => {

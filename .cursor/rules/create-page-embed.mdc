@@ -1,0 +1,22 @@
+---
+description: Create page embed runtime — navigation and submit
+globs:
+  - public/pages/entry/entry-create.js
+  - public/components/routes/create.js
+  - public/shared/createPageRuntime.js
+---
+
+# Create page embed
+
+See `_docs/PLAN_create_mutate_embed.md` for invariants.
+
+## Rules
+
+- Embed mode: parent owns history; iframe must not `location.reload`, `location.href =`, `assign`, or `replace` for same-origin app routes except via runtime fallbacks for standalone.
+- Navigation and post-submit refresh go through `createPageRuntime.js`.
+- Submit in embed: `navigate: 'none'` on `submitCreationWithPending`, then `refreshAfterSubmit({ creationId })`.
+- Blog editor: `shellOut('/create/blog/:id')` from embed.
+- Navigation: `navigate(href)` (in-overlay), `shellOut(href)` (leave overlay), `requestCloseOverlay()` (Escape).
+- Basic ↔ advanced: `switchCreateEditorMode('basic'|'advanced')` sets `create_editor` cookie and reloads overlay iframe (`forceReload`); do not shell out to `/create` for mode switches.
+
+Run `npm run check:workflow-embed` after edits to embed-capable files.

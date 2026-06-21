@@ -3,6 +3,8 @@ import {
 	shouldContinueCreationsPoll,
 	hasPendingCreationsReloadHint,
 	computeCreationsPollHasListUpdates,
+	findCreationsPollStatusUpdates,
+	prunePendingCreationsSession,
 } from '../../shared/creationsInFlightPoller.js';
 
 let formatDateTime;
@@ -24,6 +26,8 @@ let addToMutateQueue;
 let bindMobileCreationsBulkLongPress;
 /** @type {typeof import('../../shared/creationDetailOverlay.js').navigateToCreationDetailFromSpa} */
 let navigateToCreationDetailFromSpa;
+/** @type {typeof import('../../shared/creationDetailOverlay.js').navigateToCreateFromSpa} */
+let navigateToCreateFromSpa;
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -85,6 +89,7 @@ async function loadDeps() {
 
 		const overlayMod = await import(`../../shared/creationDetailOverlay.js${qs}`);
 		navigateToCreationDetailFromSpa = overlayMod.navigateToCreationDetailFromSpa;
+		navigateToCreateFromSpa = overlayMod.navigateToCreateFromSpa;
 	})();
 	return _depsPromise;
 }
@@ -92,6 +97,15 @@ async function loadDeps() {
 function navigateToCreation(href, ev) {
 	if (typeof navigateToCreationDetailFromSpa === 'function') {
 		navigateToCreationDetailFromSpa(href, ev);
+		return;
+	}
+	if (ev && typeof ev.preventDefault === 'function') ev.preventDefault();
+	window.location.href = href;
+}
+
+function navigateToCreate(href, ev) {
+	if (typeof navigateToCreateFromSpa === 'function') {
+		navigateToCreateFromSpa(href, ev);
 		return;
 	}
 	if (ev && typeof ev.preventDefault === 'function') ev.preventDefault();
@@ -221,9 +235,12 @@ class AppRouteCreations extends HTMLElement {
 		this.setupLoadMoreFallback();
 		this.updateLoadMoreFallback();
 		this.pendingUpdateHandler = () => {
-			if (this.isActiveRoute) {
-				this.loadCreations({ force: true });
+			if (!this.isRouteActive()) return;
+			if (this.hasLoadedOnce) {
+				this.syncPendingCreationsFromSession();
+				return;
 			}
+			this.loadCreations({ force: true });
 		};
 		document.addEventListener('creations-pending-updated', this.pendingUpdateHandler);
 		this.shellSyncHandler = (e) => {
@@ -718,8 +735,142 @@ class AppRouteCreations extends HTMLElement {
 		const scopes = Array.isArray(detail.scopes) ? detail.scopes : [];
 		if (!scopes.includes('creations') && !scopes.includes('creation')) return;
 		if (detail.reason === 'deleted') return;
-		if (this.isRouteActive()) {
-			this.loadCreations({ force: true });
+		if (!this.isRouteActive()) return;
+		if (
+			detail.reason === 'create-submitted' ||
+			detail.reason === 'mutate-submitted' ||
+			detail.reason === 'status-changed'
+		) {
+			this.syncPendingCreationsFromSession();
+			const container = this.querySelector('[data-creations-container]');
+			if (container && !this.pollInterval && shouldContinueCreationsPoll(container)) {
+				this.startPolling();
+			}
+			return;
+		}
+		this.loadCreations({ force: true });
+	}
+
+	/** Incrementally merge session pending/creating placeholders into the grid (no full reload). */
+	syncPendingCreationsFromSession() {
+		const container = this.querySelector('[data-creations-container]');
+		if (!container || !this.isRouteActive()) return;
+
+		const pendingCreations = this.getPendingCreations();
+		const inFlight = pendingCreations.filter((item) => {
+			const status = item?.status || 'pending';
+			return status === 'pending' || status === 'creating';
+		});
+
+		for (const item of inFlight) {
+			const status = item.status || 'pending';
+			const id = String(item.id || '');
+			if (!id) continue;
+
+			let media = container.querySelector(`.route-media[data-image-id="${id}"]`);
+			if (!media && item.placeholder_id) {
+				media = container.querySelector(
+					`.route-media[data-image-id="${String(item.placeholder_id)}"]`
+				);
+				if (media) {
+					media.setAttribute('data-image-id', id);
+					const card = media.closest('.route-card');
+					if (card instanceof HTMLElement) {
+						card.dataset.imageId = id;
+					}
+				}
+			}
+			if (media) {
+				const wantStatus = status === 'pending' ? 'pending' : 'creating';
+				if (media.getAttribute('data-status') !== wantStatus) {
+					media.setAttribute('data-status', wantStatus);
+				}
+			}
+		}
+
+		const sessionIds = new Set(inFlight.map((p) => String(p.id)));
+		container.querySelectorAll('.route-media[data-image-id^="pending-"]').forEach((media) => {
+			const pid = media.getAttribute('data-image-id');
+			if (!pid || sessionIds.has(pid)) return;
+			const keptByPlaceholder = inFlight.some(
+				(p) => p.placeholder_id && String(p.placeholder_id) === pid
+			);
+			if (keptByPlaceholder) return;
+			media.closest('.route-card')?.remove();
+		});
+
+		const toPrepend = inFlight.filter((item) => {
+			const id = String(item.id || '');
+			return id && !container.querySelector(`.route-media[data-image-id="${id}"]`);
+		});
+		if (!toPrepend.length) return;
+
+		if (container.querySelector('.route-empty-image-grid, .route-empty')) {
+			container.innerHTML = '';
+			if (this.imageObserver) this.imageObserver.disconnect();
+			this.imageLoadQueue = [];
+			this.imageLoadsInFlight = 0;
+			this.setupImageLazyLoading();
+		}
+
+		this.prependCreationCards(container, toPrepend);
+		this.hasLoadedOnce = true;
+		if (!this.pollInterval) this.startPolling();
+	}
+
+	replaceCreationCard(container, item) {
+		const id = String(item?.id ?? '');
+		if (!id) return false;
+		const existingMedia = container.querySelector(`.route-media[data-image-id="${id}"]`);
+		const existing = existingMedia?.closest('.route-card');
+		if (!(existing instanceof HTMLElement)) return false;
+		const cards = container.querySelectorAll('.route-card');
+		const index = Math.max(0, Array.from(cards).indexOf(existing));
+		existing.replaceWith(this.buildCreationCardElement(item, index));
+		return true;
+	}
+
+	applyPolledCreationUpdates(creationsFromApi) {
+		const container = this.querySelector('[data-creations-container]');
+		if (!container) return false;
+		const updates = findCreationsPollStatusUpdates(creationsFromApi, container);
+		let any = false;
+		for (const { apiRow } of updates) {
+			if (this.replaceCreationCard(container, apiRow)) any = true;
+		}
+		return any;
+	}
+
+	applyCreationsPollResult(creationsFromApi, { creationsResultOk = true } = {}) {
+		const container = this.querySelector('[data-creations-container]');
+		if (!container || !this.isRouteActive()) return;
+
+		prunePendingCreationsSession(creationsFromApi, {
+			creationsResultOk,
+			dispatchEvent: true,
+		});
+		this.syncPendingCreationsFromSession();
+		this.applyPolledCreationUpdates(creationsFromApi);
+
+		if (!shouldContinueCreationsPoll(container)) {
+			this.stopPolling();
+		} else if (!this.pollInterval) {
+			this.startPolling();
+		}
+	}
+
+	async fetchAndApplyCreationsPollResult() {
+		try {
+			const result = await fetchJsonWithStatusDeduped(
+				'/api/create/images',
+				{ credentials: 'include' },
+				{ windowMs: 300 }
+			);
+			if (!result.ok) return;
+			const creations = Array.isArray(result.data?.images) ? result.data.images : [];
+			this.applyCreationsPollResult(creations, { creationsResultOk: true });
+		} catch {
+			// ignore
 		}
 	}
 
@@ -793,15 +944,11 @@ class AppRouteCreations extends HTMLElement {
 			const creations = Array.isArray(result.data?.images) ? result.data.images : [];
 			const hasUpdates = computeCreationsPollHasListUpdates(creations, container);
 			const hasPending = hasPendingCreationsReloadHint(container);
-
-			const now = Date.now();
-			const throttleMs = 5000;
-			const wouldReload = hasUpdates || hasPending;
-			const throttleOk = hasUpdates || (now - this.lastLoadFromCheckAt >= throttleMs);
-			if (wouldReload && throttleOk) {
-				this.lastLoadFromCheckAt = now;
-				this.loadCreations({ force: true });
+			if (!hasUpdates && !hasPending) {
+				if (!shouldContinueCreationsPoll(container)) this.stopPolling();
+				return;
 			}
+			this.applyCreationsPollResult(creations, { creationsResultOk: true });
 		} catch (error) {
 			// console.error("Error checking for updates:", error);
 		}
@@ -809,10 +956,22 @@ class AppRouteCreations extends HTMLElement {
 
 	refreshOnActivate() {
 		const hasPending = this.getPendingCreations().length > 0;
-		const hasLoading = this.querySelectorAll('.route-media[data-image-id][data-status="creating"]').length > 0;
+		const hasLoading =
+			this.querySelectorAll(
+				'.route-media[data-image-id][data-status="creating"], .route-media[data-image-id][data-status="pending"]'
+			).length > 0;
 
-		if (!this.hasLoadedOnce || hasPending || hasLoading) {
+		if (!this.hasLoadedOnce) {
 			this.loadCreations({ force: true });
+			return;
+		}
+
+		if (hasPending || hasLoading) {
+			this.syncPendingCreationsFromSession();
+			if (hasLoading) {
+				void this.fetchAndApplyCreationsPollResult();
+			}
+			if (!this.pollInterval) this.startPolling();
 			return;
 		}
 
@@ -931,6 +1090,13 @@ class AppRouteCreations extends HTMLElement {
 					buttonHref: '/create',
 				});
 
+				const emptyCta = cont.querySelector('.route-empty-button[href="/create"]');
+				if (emptyCta) {
+					emptyCta.addEventListener('click', (e) => {
+						navigateToCreate('/create', e);
+					});
+				}
+
 				this.hasLoadedOnce = true;
 				this.creationsOffset = 0;
 				this.hasMoreCreations = false;
@@ -962,26 +1128,37 @@ class AppRouteCreations extends HTMLElement {
 
 	appendCreationCards(cont, items, startEagerIndex) {
 		items.forEach((item, i) => {
-			const index = startEagerIndex + i;
-			const card = document.createElement("div");
-			card.className = "route-card route-card-image";
+			cont.appendChild(this.buildCreationCardElement(item, startEagerIndex + i));
+		});
+	}
 
-			const meta = parseMeta(item.meta);
-			const rawStatus = item.status || 'completed';
-			const timedOut = isTimedOut(rawStatus, meta);
-			const status = timedOut && rawStatus === 'creating' ? 'failed' : rawStatus;
+	prependCreationCards(cont, items) {
+		const sorted = [...items].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+		sorted.forEach((item, i) => {
+			cont.insertBefore(this.buildCreationCardElement(item, i), cont.firstChild);
+		});
+	}
 
-			const isPending = status === 'pending';
-			const isCreating = status === 'creating';
-			const isFailed = status === 'failed';
+	buildCreationCardElement(item, index) {
+		const card = document.createElement('div');
+		card.className = 'route-card route-card-image';
 
-			const bulkOverlay = () => html`
+		const meta = parseMeta(item.meta);
+		const rawStatus = item.status || 'completed';
+		const timedOut = isTimedOut(rawStatus, meta);
+		const status = timedOut && rawStatus === 'creating' ? 'failed' : rawStatus;
+
+		const isPending = status === 'pending';
+		const isCreating = status === 'creating';
+		const isFailed = status === 'failed';
+
+		const bulkOverlay = () => html`
 			<div class="creations-card-bulk-overlay" data-creations-bulk-overlay aria-hidden="true">
 				<input type="checkbox" class="creations-card-bulk-checkbox" data-creations-bulk-checkbox aria-label="Select creation" />
 			</div>`;
 
-			if (isPending) {
-				card.innerHTML = html`
+		if (isPending) {
+			card.innerHTML = html`
             <div class="route-media loading" data-image-id="${item.id}" data-status="pending" aria-hidden="true"></div>
             <div class="route-details">
               <div class="route-details-content">
@@ -991,9 +1168,9 @@ class AppRouteCreations extends HTMLElement {
               </div>
             </div>
           `;
-				if (this.isActiveRoute && !this.pollInterval) this.startPolling();
-			} else if (isCreating) {
-				card.innerHTML = html`
+			if (this.isActiveRoute && !this.pollInterval) this.startPolling();
+		} else if (isCreating) {
+			card.innerHTML = html`
             <div class="route-media loading" data-image-id="${item.id}" data-status="creating" aria-hidden="true"></div>
             <div class="route-details">
               <div class="route-details-content">
@@ -1003,16 +1180,16 @@ class AppRouteCreations extends HTMLElement {
               </div>
             </div>
           `;
-				if (this.isActiveRoute && !this.pollInterval) this.startPolling();
-			} else if (isFailed) {
-				const reason =
-					(meta && typeof meta.error === 'string' && meta.error) ||
-					(meta && meta.error_code === 'timeout' ? 'This creation timed out.' : 'This creation failed.');
-				const isModerated = item.is_moderated_error === true;
-				card.style.cursor = 'pointer';
-				card.dataset.imageId = String(item.id);
-				card.addEventListener('click', () => { navigateToCreation(`/creations/${item.id}`); });
-				card.innerHTML = html`
+			if (this.isActiveRoute && !this.pollInterval) this.startPolling();
+		} else if (isFailed) {
+			const reason =
+				(meta && typeof meta.error === 'string' && meta.error) ||
+				(meta && meta.error_code === 'timeout' ? 'This creation timed out.' : 'This creation failed.');
+			const isModerated = item.is_moderated_error === true;
+			card.style.cursor = 'pointer';
+			card.dataset.imageId = String(item.id);
+			card.addEventListener('click', () => { navigateToCreation(`/creations/${item.id}`); });
+			card.innerHTML = html`
 					<div class="route-media route-media-error${isModerated ? ' route-media-error-moderated' : ''}" data-image-id="${item.id}" data-status="failed" aria-hidden="true">${isModerated ? html`<span class="route-media-error-moderated-icon" role="img" aria-label="Content moderated">${eyeHiddenIcon()}</span>` : ''}</div>
 					<div class="route-details">
 					<div class="route-details-content">
@@ -1023,55 +1200,54 @@ class AppRouteCreations extends HTMLElement {
 					</div>
 					${bulkOverlay()}
 				`;
-			} else {
-				card.style.cursor = 'pointer';
-				card.addEventListener('click', () => { navigateToCreation(`/creations/${item.id}`); });
-				const isPublished = item.published === true || item.published === 1;
-				card.dataset.imageId = String(item.id);
-				card.dataset.published = isPublished ? '1' : '0';
-				const imageUrl = item.url || item.thumbnail_url || '';
-				card.dataset.imageUrl = typeof imageUrl === 'string' ? imageUrl : '';
-				let publishedBadge = '';
-				if (isPublished) {
-					publishedBadge = publishedBadgeHtml();
-				}
-				const meta = parseMeta(item.meta);
-				const inChallenge = creationMetaHasChallengeSubmission(meta);
-				const mediaType =
-					typeof item.media_type === 'string'
-						? item.media_type
-						: (meta && typeof meta.media_type === 'string' ? meta.media_type : 'image');
-				const mediaAttrs = {
-					'data-image-id': String(item.id),
-					'data-status': 'completed'
+		} else {
+			card.style.cursor = 'pointer';
+			card.addEventListener('click', () => { navigateToCreation(`/creations/${item.id}`); });
+			const isPublished = item.published === true || item.published === 1;
+			card.dataset.imageId = String(item.id);
+			card.dataset.published = isPublished ? '1' : '0';
+			const imageUrl = item.url || item.thumbnail_url || '';
+			card.dataset.imageUrl = typeof imageUrl === 'string' ? imageUrl : '';
+			let publishedBadge = '';
+			if (isPublished) {
+				publishedBadge = publishedBadgeHtml();
+			}
+			const itemMeta = parseMeta(item.meta);
+			const inChallenge = creationMetaHasChallengeSubmission(itemMeta);
+			const mediaType =
+				typeof item.media_type === 'string'
+					? item.media_type
+					: (itemMeta && typeof itemMeta.media_type === 'string' ? itemMeta.media_type : 'image');
+			const mediaAttrs = {
+				'data-image-id': String(item.id),
+				'data-status': 'completed'
+			};
+			if (mediaType === 'video') {
+				mediaAttrs['data-media-type'] = 'video';
+			}
+			card.innerHTML = buildCreationCardShell({
+				mediaAttrs,
+				badgesHtml: publishedBadge + routeCardGroupBadgeHtml(item),
+				bulkOverlayHtml: bulkOverlay(),
+				nsfw: Boolean(item.nsfw),
+				challengeGridBlur: inChallenge && !item.nsfw,
+			});
+			const mediaEl = card.querySelector('.route-media');
+			if (mediaEl && typeof hydrateRouteCardMedia === 'function') {
+				const mediaOpts = {
+					preferThumbnail: mediaType !== 'video',
+					lowPriority: !this.isRouteActive()
 				};
-				if (mediaType === 'video') {
-					mediaAttrs['data-media-type'] = 'video';
-				}
-				card.innerHTML = buildCreationCardShell({
-					mediaAttrs,
-					badgesHtml: publishedBadge + routeCardGroupBadgeHtml(item),
-					bulkOverlayHtml: bulkOverlay(),
-					nsfw: Boolean(item.nsfw),
-					challengeGridBlur: inChallenge && !item.nsfw,
-				});
-				const mediaEl = card.querySelector('.route-media');
-				if (mediaEl && typeof hydrateRouteCardMedia === 'function') {
-					const mediaOpts = {
-						preferThumbnail: mediaType !== 'video',
-						lowPriority: !this.isRouteActive()
-					};
-					if (index < this.eagerImageCount) {
-						hydrateRouteCardMedia(mediaEl, item, { ...mediaOpts, eager: true });
-					} else if (this.imageObserver) {
-						hydrateRouteCardMedia(mediaEl, item, { ...mediaOpts, observer: this.imageObserver });
-					} else {
-						hydrateRouteCardMedia(mediaEl, item, { ...mediaOpts, eager: true });
-					}
+				if (index < this.eagerImageCount) {
+					hydrateRouteCardMedia(mediaEl, item, { ...mediaOpts, eager: true });
+				} else if (this.imageObserver) {
+					hydrateRouteCardMedia(mediaEl, item, { ...mediaOpts, observer: this.imageObserver });
+				} else {
+					hydrateRouteCardMedia(mediaEl, item, { ...mediaOpts, eager: true });
 				}
 			}
-			cont.appendChild(card);
-		});
+		}
+		return card;
 	}
 
 	async loadMoreCreations() {

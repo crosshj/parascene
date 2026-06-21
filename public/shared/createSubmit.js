@@ -237,6 +237,7 @@ function promotePendingCreation({ pendingKey, pendingId, serverId, creationToken
 			if (item?.id !== pendingId) return item;
 			return {
 				...item,
+				placeholder_id: pendingId,
 				id: Number.isFinite(sid) && sid > 0 ? sid : item.id,
 				status: status || 'creating',
 				creation_token:
@@ -317,9 +318,20 @@ function isOnCreationsPath() {
 	return normalizePathname(window.location.pathname) === '/creations';
 }
 
+function isOnChatCreationsPath() {
+	const p = normalizePathname(window.location.pathname);
+	if (p === '/creations') return true;
+	const parts = p.split('/').filter(Boolean);
+	return parts.length >= 3 && parts[0] === 'chat' && parts[1] === 'c' && parts[2] === 'creations';
+}
+
 function refreshCreationsRoute() {
 	try {
 		const creationsRoute = document.querySelector('app-route-creations');
+		if (creationsRoute && typeof creationsRoute.syncPendingCreationsFromSession === 'function') {
+			creationsRoute.syncPendingCreationsFromSession();
+			return;
+		}
 		if (creationsRoute && typeof creationsRoute.loadCreations === 'function') {
 			void creationsRoute.loadCreations();
 			return;
@@ -347,13 +359,17 @@ function navigateToCreations({ mode, creationId, forceFreshFirstPage = true }) {
 		document.body?.classList.contains('chat-page') &&
 		document.querySelector('[data-chat-page]');
 	if (onChatPage) {
-		const path = '/creations';
-		const current = normalizePathname(window.location.pathname);
-		if (current !== path) {
-			window.history.pushState({ prsnChat: true }, '', path);
+		if (isOnChatCreationsPath()) {
+			document.dispatchEvent(new CustomEvent('creations-pending-updated'));
+			return;
 		}
+		const path = '/creations';
+		window.history.pushState({ prsnChat: true }, '', path);
 		document.dispatchEvent(
-			new CustomEvent('prsn-chat-open-path', { bubbles: true, detail })
+			new CustomEvent('prsn-chat-open-path', {
+				bubbles: true,
+				detail,
+			})
 		);
 		return;
 	}
@@ -657,7 +673,7 @@ export async function submitCreationWithPending({
 			navigateToCreations({
 				mode: navigate,
 				creationId: serverId,
-				forceFreshFirstPage: true,
+				forceFreshFirstPage: !isOnChatCreationsPath() && !isOnCreationsPath(),
 			});
 		} else {
 			refreshCreationsRoute();

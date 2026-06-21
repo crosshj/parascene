@@ -1,0 +1,20 @@
+---
+description: Creation mutate embed runtime — navigation and submit
+globs:
+  - public/pages/creation-edit.js
+  - public/shared/creationEditRuntime.js
+---
+
+# Creation mutate embed
+
+See `_docs/PLAN_create_mutate_embed.md` for invariants.
+
+## Rules
+
+- Embed mode: parent owns history; iframe must not `location.reload`, `location.href =`, `assign`, or `replace` for same-origin app routes.
+- Navigation and post-submit refresh go through `creationEditRuntime.js`.
+- Submit in embed: `navigate: 'none'` on `submitCreationWithPending`, then `refreshAfterSubmit({ creationId })`.
+- Navigation: `navigate(href)` (in-overlay), `shellOut(href)` (leave overlay), `requestCloseOverlay()` (Escape).
+- Do not add scattered `if (isCreationEditEmbed())` branches for reload/href; extend the runtime if a new intent is needed.
+
+Run `npm run check:workflow-embed` after edits to embed-capable files.

@@ -1262,6 +1262,12 @@ function buildFeedCreationCard(
 		} else {
 			card.removeAttribute('data-creation-status');
 		}
+	} else if (isFeedCreationImageProcessing(item) && item.id != null && item.id !== '') {
+		card.setAttribute('data-creation-id', String(item.id));
+		const stRaw = item?.status;
+		const st =
+			typeof stRaw === 'string' ? stRaw.trim().toLowerCase() : 'creating';
+		card.setAttribute('data-creation-status', st === 'pending' ? 'pending' : 'creating');
 	}
 
 	if (hideFeedCardMetadata) {

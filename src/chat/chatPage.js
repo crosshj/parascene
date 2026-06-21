@@ -24,6 +24,8 @@ import {
 	isCreationDetailOverlayHistoryActive,
 	isCreationDetailOverlayOpen,
 	navigateToCreationDetailFromSpa,
+	navigateToCreateFromSpa,
+	navigateToMutateFromSpa,
 	parseCreationIdFromHref,
 	parseCreationNavigationTargetId,
 	shouldUseCreationDetailOverlay,
@@ -1221,6 +1223,7 @@ export async function initChatPage(root, options = {}) {
 	}
 	let chatCreationsPollInterval = null;
 	let chatCreationsPollLastReloadAt = 0;
+	let chatCreationsAuthorHintsCache = null;
 
 	function isExploreComposerLoadLocked() {
 		return exploreChannelSearchLoading || exploreBrowseMessagesLoading;
@@ -8304,50 +8307,127 @@ export async function initChatPage(root, options = {}) {
 	 * @param {object[]} creationsFromApi
 	 */
 	function pruneChatCreationsPendingSession(creationsFromApi) {
-		const pending =
-			typeof creationsPollMod.getPendingCreationsFromSession === 'function'
-				? creationsPollMod.getPendingCreationsFromSession()
-				: [];
-		if (!Array.isArray(pending) || pending.length === 0) return;
-		const creations = Array.isArray(creationsFromApi) ? creationsFromApi : [];
-		const nowMs = Date.now();
-		const PENDING_TTL_MS = 3000;
-		const creationsByToken = new Map();
-		for (const item of creations) {
-			if (!item || typeof item !== 'object') continue;
-			const rawMeta = item.meta;
-			let meta = rawMeta && typeof rawMeta === 'object' ? rawMeta : null;
-			if (!meta && typeof rawMeta === 'string') {
-				try {
-					meta = JSON.parse(rawMeta);
-				} catch {
-					meta = null;
+		creationsPollMod.prunePendingCreationsSession(creationsFromApi, {
+			creationsResultOk: true,
+			dispatchEvent: true,
+		});
+	}
+
+	function resolveChatCreationsCardsHost() {
+		const messagesEl = root.querySelector('[data-chat-messages]');
+		if (!(messagesEl instanceof HTMLElement)) return null;
+		return messagesEl.querySelector('[data-feed-channel-cards]');
+	}
+
+	function syncChatCreationsLaneFromSession() {
+		if (activePseudoChannelSlug !== 'creations') return;
+		const cards = resolveChatCreationsCardsHost();
+		if (!(cards instanceof HTMLElement)) {
+			void loadCreationsChannelMessages({ forceFreshFirstPage: false });
+			return;
+		}
+		const viewerId = chatViewerId;
+		const hints = chatCreationsAuthorHintsCache || {};
+		const pending = creationsPollMod.getPendingCreationsFromSession();
+		const inFlight = pending.filter((item) => {
+			const status = item?.status || 'pending';
+			return status === 'pending' || status === 'creating';
+		});
+
+		for (const item of inFlight) {
+			const status = item.status || 'pending';
+			const id = String(item.id || '');
+			if (!id) continue;
+			let card = cards.querySelector(`.feed-card[data-creation-id="${id}"]`);
+			if (!card && item.placeholder_id) {
+				card = cards.querySelector(
+					`.feed-card[data-creation-id="${String(item.placeholder_id)}"]`
+				);
+				if (card instanceof HTMLElement) {
+					card.setAttribute('data-creation-id', id);
+					const want = status === 'pending' ? 'pending' : 'creating';
+					card.setAttribute('data-creation-status', want);
+				}
+			} else if (card instanceof HTMLElement) {
+				const want = status === 'pending' ? 'pending' : 'creating';
+				if (card.getAttribute('data-creation-status') !== want) {
+					card.setAttribute('data-creation-status', want);
 				}
 			}
-			const token = meta && typeof meta.creation_token === 'string' ? meta.creation_token : null;
-			if (token) creationsByToken.set(token, true);
 		}
-		const pendingWithinTtl = pending.filter((p) => {
-			const createdAtRaw = typeof p?.created_at === 'string' ? p.created_at : '';
-			const createdAtMs = createdAtRaw ? Date.parse(createdAtRaw) : NaN;
-			if (!Number.isFinite(createdAtMs)) return true;
-			return nowMs - createdAtMs <= PENDING_TTL_MS;
+
+		const sessionIds = new Set(inFlight.map((p) => String(p.id)));
+		cards.querySelectorAll('.feed-card[data-creation-id^="pending-"]').forEach((card) => {
+			const pid = card.getAttribute('data-creation-id');
+			if (!pid || sessionIds.has(pid)) return;
+			const kept = inFlight.some(
+				(p) => p.placeholder_id && String(p.placeholder_id) === pid
+			);
+			if (kept) return;
+			card.remove();
 		});
-		const filtered = pendingWithinTtl.filter((p) => {
-			const token = typeof p?.creation_token === 'string' ? p.creation_token : null;
-			if (!token) return true;
-			return !creationsByToken.has(token);
+
+		const toPrepend = inFlight.filter((item) => {
+			const id = String(item.id || '');
+			return id && !cards.querySelector(`.feed-card[data-creation-id="${id}"]`);
 		});
-		const oldPendingStr = JSON.stringify(pending);
-		const newPendingStr = JSON.stringify(filtered);
-		if (oldPendingStr === newPendingStr) return;
-		try {
-			sessionStorage.setItem('pendingCreations', newPendingStr);
-		} catch {
-			// ignore storage write errors
+		if (!toPrepend.length) return;
+
+		const messagesEl = root.querySelector('[data-chat-messages]');
+		const opts = feedCardOptionsForPseudoLane(
+			(el) => setupFeedChannelVideoAutoplay(messagesEl, el),
+			'creations'
+		);
+		for (const item of toPrepend.sort(
+			(a, b) => new Date(b.created_at) - new Date(a.created_at)
+		)) {
+			const feedItem = mapPendingCreationToFeedItem(item, viewerId, hints);
+			cards.insertBefore(createFeedItemCard(feedItem, 0, opts), cards.firstChild);
 		}
-		// Notify other views only when the value changed to avoid event loops.
-		document.dispatchEvent(new CustomEvent('creations-pending-updated'));
+		maybeStartChatCreationsPseudoChannelPoll();
+	}
+
+	function applyChatCreationsPolledUpdates(creationsFromApi) {
+		const messagesEl = root.querySelector('[data-chat-messages]');
+		const cards = resolveChatCreationsCardsHost();
+		if (!(messagesEl instanceof HTMLElement) || !(cards instanceof HTMLElement)) return false;
+		const updates = creationsPollMod.findCreationsPollStatusUpdates(creationsFromApi, messagesEl);
+		if (!updates.length) return false;
+		const viewerId = chatViewerId;
+		const hints = chatCreationsAuthorHintsCache || {};
+		const opts = feedCardOptionsForPseudoLane(
+			(el) => setupFeedChannelVideoAutoplay(messagesEl, el),
+			'creations'
+		);
+		let any = false;
+		for (const { creationId, apiRow } of updates) {
+			const card = cards.querySelector(`.feed-card[data-creation-id="${creationId}"]`);
+			if (!(card instanceof HTMLElement)) continue;
+			const idx = Array.from(cards.children).indexOf(card);
+			const feedItem = mapUserCreatedImageApiRowToFeedItem(apiRow, viewerId, hints);
+			card.replaceWith(createFeedItemCard(feedItem, idx >= 0 ? idx : 0, opts));
+			any = true;
+		}
+		return any;
+	}
+
+	function applyChatCreationsPollResult(creationsFromApi, { creationsResultOk = true } = {}) {
+		if (activePseudoChannelSlug !== 'creations') return;
+		creationsPollMod.prunePendingCreationsSession(creationsFromApi, {
+			creationsResultOk,
+			dispatchEvent: true,
+		});
+		syncChatCreationsLaneFromSession();
+		applyChatCreationsPolledUpdates(creationsFromApi);
+		const messagesEl = root.querySelector('[data-chat-messages]');
+		if (
+			messagesEl instanceof HTMLElement &&
+			!creationsPollMod.shouldContinueCreationsPoll(messagesEl)
+		) {
+			stopChatCreationsPseudoChannelPoll();
+		} else {
+			maybeStartChatCreationsPseudoChannelPoll();
+		}
 	}
 
 	async function chatCreationsPseudoChannelPollTick() {
@@ -8373,16 +8453,15 @@ export async function initChatPage(root, options = {}) {
 			);
 			if (!result.ok) return;
 			const creations = Array.isArray(result.data?.images) ? result.data.images : [];
-			pruneChatCreationsPendingSession(creations);
 			const hasUpdates = creationsPollMod.computeCreationsPollHasListUpdates(creations, messagesEl);
 			const hasPending = creationsPollMod.hasPendingCreationsReloadHint(messagesEl);
-			const now = Date.now();
-			const wouldReload = hasUpdates || hasPending;
-			const throttleOk = hasUpdates || now - chatCreationsPollLastReloadAt >= 5000;
-			if (wouldReload && throttleOk) {
-				chatCreationsPollLastReloadAt = now;
-				await loadCreationsChannelMessages({ forceFreshFirstPage: true });
+			if (!hasUpdates && !hasPending) {
+				if (!creationsPollMod.shouldContinueCreationsPoll(messagesEl)) {
+					stopChatCreationsPseudoChannelPoll();
+				}
+				return;
 			}
+			applyChatCreationsPollResult(creations, { creationsResultOk: true });
 		} catch {
 			// ignore
 		}
@@ -8909,6 +8988,16 @@ export async function initChatPage(root, options = {}) {
 		}
 		if (url.origin !== window.location.origin) {
 			window.location.assign(url.href);
+			return;
+		}
+		const pathOnly = (url.pathname || '/').replace(/\/+$/, '') || '/';
+		const target = url.pathname + url.search + url.hash;
+		if (pathOnly === '/create' && shouldUseCreationDetailOverlay()) {
+			navigateToCreateFromSpa(target, ev);
+			return;
+		}
+		if (/^\/creations\/\d+\/(edit|mutate)$/.test(pathOnly) && shouldUseCreationDetailOverlay()) {
+			navigateToMutateFromSpa(target, ev);
 			return;
 		}
 		const parsed = parseChatPathname(url.pathname);
@@ -9482,6 +9571,7 @@ export async function initChatPage(root, options = {}) {
 			if (isStaleChatPane(paneEpoch)) return;
 
 			const creationsAuthorHints = await resolveCreationsChannelAuthorHints();
+			chatCreationsAuthorHintsCache = creationsAuthorHints;
 			if (isStaleChatPane(paneEpoch)) return;
 
 			pseudoColumnPager = createPseudoColumnPager({
@@ -9639,6 +9729,15 @@ export async function initChatPage(root, options = {}) {
 			(hasScope('explore') || hasScope('chat-explore') || hasScope('creation'));
 
 		if (refreshCreationsLane) {
+			if (
+				reason === 'create-submitted' ||
+				reason === 'mutate-submitted' ||
+				reason === 'status-changed'
+			) {
+				syncChatCreationsLaneFromSession();
+				maybeStartChatCreationsPseudoChannelPoll();
+				return;
+			}
 			void loadCreationsChannelMessages({ forceFreshFirstPage: true });
 		}
 		if (refreshFeedLane && reason !== 'unpublished') {
@@ -11550,6 +11649,22 @@ export async function initChatPage(root, options = {}) {
 		const messagesEl = root.querySelector('[data-chat-messages]');
 		const errEl = root.querySelector('[data-chat-error]');
 		const parsed = parseChatPathname(window.location.pathname);
+
+		const forceFreshCreations = chatCreationsNavigateDetail?.forceFreshFirstPage === true;
+		if (
+			!forceFreshCreations &&
+			parsed.kind === 'channel' &&
+			String(parsed.slug || '').trim().toLowerCase() === 'creations' &&
+			activePseudoChannelSlug === 'creations'
+		) {
+			const cardsHost = messagesEl?.querySelector('[data-feed-channel-cards]');
+			if (cardsHost instanceof HTMLElement && pseudoColumnPager) {
+				syncChatCreationsLaneFromSession();
+				maybeStartChatCreationsPseudoChannelPoll();
+				return;
+			}
+		}
+
 		if (parsed.kind === 'doom_scroll' && !isChatPageMobileLayout()) {
 			window.location.replace(`/creations/${encodeURIComponent(String(parsed.startCreationId))}`);
 			return;
@@ -11796,9 +11911,15 @@ export async function initChatPage(root, options = {}) {
 					if (messagesEl) {
 						messagesEl.removeAttribute('aria-busy');
 					}
+					const forceFresh = chatCreationsNavigateDetail?.forceFreshFirstPage === true;
+					const cardsHost = messagesEl?.querySelector('[data-feed-channel-cards]');
+					if (!forceFresh && cardsHost instanceof HTMLElement && pseudoColumnPager) {
+						syncChatCreationsLaneFromSession();
+						maybeStartChatCreationsPseudoChannelPoll();
+						return;
+					}
 					await loadCreationsChannelMessages({
-						forceFreshFirstPage:
-							chatCreationsNavigateDetail?.forceFreshFirstPage === true,
+						forceFreshFirstPage: forceFresh,
 					});
 					return;
 				}
@@ -14388,6 +14509,16 @@ export async function initChatPage(root, options = {}) {
 			e && typeof e === 'object' && e.detail && typeof e.detail === 'object'
 				? e.detail
 				: { forceFreshFirstPage: true };
+		const forceFresh = chatCreationsNavigateDetail?.forceFreshFirstPage === true;
+		if (!forceFresh && activePseudoChannelSlug === 'creations') {
+			const cards = root.querySelector('[data-chat-messages] [data-feed-channel-cards]');
+			if (cards instanceof HTMLElement && pseudoColumnPager) {
+				syncChatCreationsLaneFromSession();
+				maybeStartChatCreationsPseudoChannelPoll();
+				chatCreationsNavigateDetail = null;
+				return;
+			}
+		}
 		void openThreadForCurrentPath().finally(() => {
 			chatCreationsNavigateDetail = null;
 		});
@@ -14453,7 +14584,10 @@ export async function initChatPage(root, options = {}) {
 	};
 	document.addEventListener('visibilitychange', chatFeedVisibilityHandler);
 	document.addEventListener('creations-pending-updated', () => {
-		if (activePseudoChannelSlug === 'creations') maybeStartChatCreationsPseudoChannelPoll();
+		if (activePseudoChannelSlug === 'creations') {
+			syncChatCreationsLaneFromSession();
+			maybeStartChatCreationsPseudoChannelPoll();
+		}
 	});
 	document.addEventListener('prsn-creation-detail-overlay-shell-sync', (e) => {
 		handleCreationDetailEmbedShellSync(e?.detail);

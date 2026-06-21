@@ -54,6 +54,8 @@ export function defaultScopesForCreationShellSyncReason(reason) {
 				CREATION_DETAIL_SHELL_SCOPE.CREATION,
 			];
 		case 'status-changed':
+		case 'mutate-submitted':
+		case 'create-submitted':
 			return [
 				CREATION_DETAIL_SHELL_SCOPE.CREATIONS,
 				CREATION_DETAIL_SHELL_SCOPE.CHAT_CREATIONS,
@@ -104,7 +106,12 @@ export function normalizeCreationDetailShellSyncDetail(payload) {
  */
 export function notifyCreationDetailEmbedShellSync(options = {}) {
 	if (typeof window === 'undefined') return false;
-	if (window.__ps_creation_detail_embed !== true || window.parent === window) return false;
+	const inEmbedFrame =
+		(window.__ps_creation_detail_embed === true ||
+			window.__ps_creation_edit_embed === true ||
+			window.__ps_create_embed === true) &&
+		window.parent !== window;
+	if (!inEmbedFrame) return false;
 	const creationId = Number(options.creationId);
 	if (!Number.isFinite(creationId) || creationId <= 0) return false;
 	const reason = String(options.reason || 'refreshed').trim() || 'refreshed';

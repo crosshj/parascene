@@ -29,6 +29,13 @@ let aspectRatioFromCreation;
 let closestAspectRatioPreset;
 let parseAspectRatioString;
 let attachPromptFieldClear;
+let creationEditNavigate;
+let switchCreateEditorMode;
+let creationEditShellOut;
+let creationEditRefreshAfterSubmit;
+let bindCreationEditEmbedNavigation;
+let bindCreationEditEmbedEscape;
+let isCreationEditEmbed;
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -97,6 +104,17 @@ async function loadDeps() {
 
 		const promptFieldClearMod = await import(`/shared/promptFieldClear.js${qs}`);
 		attachPromptFieldClear = promptFieldClearMod.attachPromptFieldClear;
+
+		const creationEditRuntimeMod = await import(`/shared/creationEditRuntime.js${qs}`);
+		creationEditNavigate = creationEditRuntimeMod.navigate;
+		creationEditShellOut = creationEditRuntimeMod.shellOut;
+		creationEditRefreshAfterSubmit = creationEditRuntimeMod.refreshAfterSubmit;
+		bindCreationEditEmbedNavigation = creationEditRuntimeMod.bindCreationEditEmbedNavigation;
+		bindCreationEditEmbedEscape = creationEditRuntimeMod.bindCreationEditEmbedEscape;
+		isCreationEditEmbed = creationEditRuntimeMod.isCreationEditEmbed;
+
+		const createPageRuntimeMod = await import(`/shared/createPageRuntime.js${qs}`);
+		switchCreateEditorMode = createPageRuntimeMod.switchCreateEditorMode;
 
 		await import(`/components/elements/tabs.js${qs}`);
 	})();
@@ -587,14 +605,14 @@ async function loadEditPage() {
 			thumbWrap.addEventListener('click', (e) => {
 				e.preventDefault();
 				e.stopPropagation();
-				window.location.href = creationDetailHref;
+				creationEditNavigate(creationDetailHref);
 			});
 		});
 
 		editContent.querySelectorAll('[data-source-link]').forEach((linkEl) => {
 			linkEl.addEventListener('click', (e) => {
 				e.preventDefault();
-				window.location.href = creationDetailHref;
+				creationEditNavigate(creationDetailHref);
 			});
 		});
 
@@ -1000,8 +1018,7 @@ async function loadEditPage() {
 				} catch {
 					// ignore storage errors
 				}
-				document.cookie = 'create_editor=; path=/; max-age=0';
-				window.location.href = '/create';
+				switchCreateEditorMode('advanced', e);
 			});
 		}
 	} catch {
@@ -1013,7 +1030,18 @@ async function loadEditPage() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-	void loadEditPage();
+	void loadDeps().then(() => {
+		if (typeof bindCreationEditEmbedNavigation === 'function') {
+			bindCreationEditEmbedNavigation();
+		}
+		if (typeof bindCreationEditEmbedEscape === 'function') {
+			bindCreationEditEmbedEscape(() => {
+				const modal = document.querySelector('[data-creation-edit-i2v-modal][aria-hidden="false"]');
+				return modal instanceof HTMLElement;
+			});
+		}
+		void loadEditPage();
+	});
 });
 
 document.addEventListener('click', (e) => {
@@ -1103,7 +1131,15 @@ document.addEventListener('click', (e) => {
 			...(Number.isFinite(mutateGroupId) && mutateGroupId > 0 ? { mutateGroupId } : {}),
 			args,
 			hydrateMentions,
-			navigate: 'full'
+			navigate: typeof isCreationEditEmbed === 'function' && isCreationEditEmbed() ? 'none' : 'full',
+		}).then((result) => {
+			if (typeof isCreationEditEmbed === 'function' && isCreationEditEmbed() && result?.id) {
+				if (typeof creationEditRefreshAfterSubmit === 'function') {
+					creationEditRefreshAfterSubmit({ creationId: result.id });
+				}
+			}
+		}).catch(() => {
+			btn.disabled = false;
 		});
 	};
 

@@ -12,15 +12,20 @@ import {
 const OVERLAY_ID = 'prsn-creation-detail-overlay';
 const SHELL_OUT_VEIL_ID = 'prsn-creation-detail-shell-out-veil';
 const HISTORY_FLAG = 'prsnCreationDetailOverlay';
+const WORKFLOW_DISMISS_MESSAGE = 'prsn-workflow-overlay-dismiss';
 const OVERLAY_STORE_KEY = '__prsnCreationDetailOverlay';
 
-/** @returns {{ overlayEl: HTMLElement | null, overlayFrame: HTMLIFrameElement | null, overlayCreationId: number | null, overlayReturnPath: string | null, overlaySavedScrollPositions: Array<{ el: HTMLElement, top: number } | { window: true, top: number }>, overlayBodyScrollLockTop: number | null, overlayPushCount: number, overlayDismissEntirePending: boolean }} */
+/** @typedef {'detail'|'mutate'|'create'} OverlayPageKind */
+
+/** @returns {{ overlayEl: HTMLElement | null, overlayFrame: HTMLIFrameElement | null, overlayCreationId: number | null, overlayPage: OverlayPageKind | null, overlayFramePath: string | null, overlayReturnPath: string | null, overlaySavedScrollPositions: Array<{ el: HTMLElement, top: number } | { window: true, top: number }>, overlayBodyScrollLockTop: number | null, overlayPushCount: number, overlayDismissEntirePending: boolean }} */
 function getOverlayStore() {
 	if (!window[OVERLAY_STORE_KEY]) {
 		window[OVERLAY_STORE_KEY] = {
 			overlayEl: null,
 			overlayFrame: null,
 			overlayCreationId: null,
+			overlayPage: null,
+			overlayFramePath: null,
 			overlayReturnPath: null,
 			overlaySavedScrollPositions: [],
 			overlayBodyScrollLockTop: null,
@@ -61,6 +66,9 @@ function isChatDoomScrollPath(pathname) {
 function isOverlayLanePath(pathname) {
 	const p = String(pathname || '').replace(/\/+$/, '') || '/';
 	if (/^\/creations\/\d+(\/(edit|mutate))?$/.test(p)) {
+		return Boolean(window.history?.state?.[HISTORY_FLAG]);
+	}
+	if (p === '/create') {
 		return Boolean(window.history?.state?.[HISTORY_FLAG]);
 	}
 	if (document.body?.classList?.contains('chat-page--doom-scroll')) return false;
@@ -149,7 +157,64 @@ function creationDetailUrl(creationId) {
 	return `/creations/${encodeURIComponent(String(creationId))}`;
 }
 
-function buildOverlayHistoryState(creationId, returnPath) {
+/**
+ * @param {string} href
+ * @param {{ bustCache?: boolean }} [options]
+ * @returns {{ kind: OverlayPageKind, creationId: number | null, canonicalUrl: string, embedUrl: string } | null}
+ */
+export function parseOverlayTarget(href, options = {}) {
+	const raw = String(href || '').trim();
+	if (!raw) return null;
+	let url;
+	try {
+		url = new URL(raw, window.location.origin);
+		if (url.origin !== window.location.origin) return null;
+	} catch {
+		return null;
+	}
+
+	const path = (url.pathname || '/').replace(/\/+$/, '') || '/';
+	const canonicalUrl = url.pathname + url.search + url.hash;
+	const embedParams = new URLSearchParams(url.search);
+	embedParams.set('embed', '1');
+	if (options.bustCache) {
+		embedParams.set('_reload', String(Date.now()));
+	}
+	const embedQuery = embedParams.toString();
+	const embedUrl = `${path}${embedQuery ? `?${embedQuery}` : '?embed=1'}${url.hash}`;
+
+	const detailMatch = path.match(/^\/creations\/(\d+)$/);
+	if (detailMatch) {
+		const id = Number(detailMatch[1]);
+		if (!Number.isFinite(id) || id <= 0) return null;
+		return { kind: 'detail', creationId: id, canonicalUrl, embedUrl };
+	}
+
+	const mutateMatch = path.match(/^\/creations\/(\d+)\/(edit|mutate)$/);
+	if (mutateMatch) {
+		const id = Number(mutateMatch[1]);
+		if (!Number.isFinite(id) || id <= 0) return null;
+		return { kind: 'mutate', creationId: id, canonicalUrl, embedUrl };
+	}
+
+	if (path === '/create') {
+		return { kind: 'create', creationId: null, canonicalUrl, embedUrl };
+	}
+
+	return null;
+}
+
+function overlayTitleForKind(kind) {
+	if (kind === 'mutate') return 'Mutate';
+	if (kind === 'create') return 'Create';
+	return 'Creation';
+}
+
+/**
+ * @param {{ kind: OverlayPageKind, creationId: number | null, canonicalUrl: string }} target
+ * @param {string | null} returnPath
+ */
+function buildOverlayHistoryState(target, returnPath) {
 	const curState = window.history?.state;
 	const baseState = curState && typeof curState === 'object' ? curState : {};
 	const existingReturn =
@@ -157,7 +222,9 @@ function buildOverlayHistoryState(creationId, returnPath) {
 	return {
 		...baseState,
 		[HISTORY_FLAG]: true,
-		prsnCreationDetailId: creationId,
+		prsnOverlayPage: target.kind,
+		prsnCreationDetailId: target.creationId,
+		prsnOverlayHref: target.canonicalUrl,
 		prsnOverlayReturnPath: returnPath || existingReturn || null,
 	};
 }
@@ -177,10 +244,10 @@ function captureReturnPathBeforeOverlayPush() {
 }
 
 /**
- * @param {number} creationId
+ * @param {{ kind: OverlayPageKind, creationId: number | null, canonicalUrl: string }} target
  * @param {{ stackPush?: boolean }} [options]
  */
-function pushOverlayHistoryEntry(creationId, options = {}) {
+function pushOverlayHistoryForTarget(target, options = {}) {
 	const store = getOverlayStore();
 	if (options.stackPush) {
 		store.overlayPushCount = Math.max(1, Number(store.overlayPushCount) || 1) + 1;
@@ -191,9 +258,9 @@ function pushOverlayHistoryEntry(creationId, options = {}) {
 		const returnPath = captureReturnPathBeforeOverlayPush();
 		store.overlayReturnPath = returnPath;
 		window.history.pushState(
-			buildOverlayHistoryState(creationId, returnPath),
+			buildOverlayHistoryState(target, returnPath),
 			'',
-			creationDetailUrl(creationId)
+			target.canonicalUrl
 		);
 	} catch {
 		store.overlayReturnPath = null;
@@ -205,9 +272,14 @@ function embedFrameUrl(creationId) {
 	return `${creationDetailUrl(creationId)}?embed=1`;
 }
 
-function assignOverlayFrameUrl(frame, url, creationId) {
-	const id = Number(creationId);
-	if (Number.isFinite(id) && id > 0) {
+function assignOverlayFrameUrl(frame, url, target) {
+	const kind = target?.kind || 'detail';
+	const id = Number(target?.creationId);
+	if (kind === 'mutate' && Number.isFinite(id) && id > 0) {
+		frame.title = `Mutate #${id}`;
+	} else if (kind === 'create') {
+		frame.title = 'Create';
+	} else if (Number.isFinite(id) && id > 0) {
 		frame.title = `Creation #${id}`;
 	}
 	// Replace (don't push) so browser back only walks the parent overlay stack, not iframe history.
@@ -223,24 +295,64 @@ function assignOverlayFrameUrl(frame, url, creationId) {
 	frame.src = url;
 }
 
-function syncOverlayFrameToCreationId(creationId) {
+/**
+ * @param {{ kind: OverlayPageKind, creationId: number | null, canonicalUrl: string, embedUrl: string }} target
+ * @param {{ forceReload?: boolean }} [options]
+ */
+function syncOverlayFrameToTarget(target, options = {}) {
 	const store = getOverlayStore();
-	const id = Number(creationId);
-	if (!Number.isFinite(id) || id <= 0) return;
 	if (!(store.overlayFrame instanceof HTMLIFrameElement)) return;
-	if (store.overlayCreationId === id) return;
-	store.overlayCreationId = id;
-	assignOverlayFrameUrl(store.overlayFrame, embedFrameUrl(id), id);
+	if (!options.forceReload && store.overlayFramePath === target.canonicalUrl) return;
+	store.overlayPage = target.kind;
+	store.overlayCreationId = target.creationId;
+	store.overlayFramePath = target.canonicalUrl;
+	assignOverlayFrameUrl(store.overlayFrame, target.embedUrl, target);
+	updateOverlayChromeTitle(target.kind);
 }
 
-/** Force embed reload for the current (or given) creation — e.g. after publish inside the iframe. */
-function reloadCreationDetailOverlayFrame(creationId) {
+function syncOverlayFrameToCreationId(creationId) {
+	syncOverlayFrameToTarget({
+		kind: 'detail',
+		creationId: Number(creationId),
+		canonicalUrl: creationDetailUrl(creationId),
+		embedUrl: embedFrameUrl(creationId),
+	});
+}
+
+function syncOverlayFrameFromLocation() {
+	const target = parseOverlayTarget(
+		window.location.pathname + window.location.search + window.location.hash
+	);
+	if (!target) return;
+	syncOverlayFrameToTarget(target);
+}
+
+/** Force embed reload for the current overlay target. */
+function reloadWorkflowOverlayFrame(target) {
 	const store = getOverlayStore();
-	const id = Number(creationId ?? store.overlayCreationId);
-	if (!Number.isFinite(id) || id <= 0) return;
+	const resolved =
+		target ||
+		parseOverlayTarget(store.overlayFramePath || window.location.pathname + window.location.search);
+	if (!resolved) return;
 	if (!(store.overlayFrame instanceof HTMLIFrameElement)) return;
-	store.overlayCreationId = id;
-	assignOverlayFrameUrl(store.overlayFrame, embedFrameUrl(id), id);
+	store.overlayPage = resolved.kind;
+	store.overlayCreationId = resolved.creationId;
+	store.overlayFramePath = resolved.canonicalUrl;
+	assignOverlayFrameUrl(store.overlayFrame, resolved.embedUrl, resolved);
+}
+
+function reloadCreationDetailOverlayFrame(creationId) {
+	const id = Number(creationId);
+	if (!Number.isFinite(id) || id <= 0) {
+		reloadWorkflowOverlayFrame();
+		return;
+	}
+	reloadWorkflowOverlayFrame({
+		kind: 'detail',
+		creationId: id,
+		canonicalUrl: creationDetailUrl(id),
+		embedUrl: embedFrameUrl(id),
+	});
 }
 
 function overlayLanePathname(returnPath) {
@@ -351,8 +463,9 @@ export function requestCreationDetailEmbedRoute(href) {
 /**
  * Parent routing for navigations initiated inside the embed iframe.
  * @param {string} href
+ * @param {{ forceReload?: boolean }} [options]
  */
-export function routeCreationDetailOverlayFromEmbed(href) {
+export function routeCreationDetailOverlayFromEmbed(href, options = {}) {
 	const raw = String(href || '').trim();
 	if (!raw) return;
 	let url;
@@ -368,15 +481,26 @@ export function routeCreationDetailOverlayFromEmbed(href) {
 
 	const path = (url.pathname || '/').replace(/\/+$/, '') || '/';
 	const target = url.pathname + url.search + url.hash;
+	const openOpts = { forceReload: Boolean(options.forceReload) };
 
 	if (/^\/creations\/\d+\/(edit|mutate)\/?$/.test(path)) {
+		openWorkflowOverlayFromHref(target, openOpts);
+		return;
+	}
+
+	if (path === '/create') {
+		openWorkflowOverlayFromHref(target, openOpts);
+		return;
+	}
+
+	if (/^\/create\/blog\//.test(path)) {
 		shellOutFromCreationDetailOverlay(target);
 		return;
 	}
 
 	let creationId = parseCreationNavigationTargetId(target);
 	if (creationId) {
-		openCreationDetailOverlay(creationId);
+		openWorkflowOverlayFromHref(`/creations/${creationId}`);
 		return;
 	}
 
@@ -440,6 +564,8 @@ export function closeCreationDetailOverlay(options = {}) {
 	}
 	store.overlayFrame = null;
 	store.overlayCreationId = null;
+	store.overlayPage = null;
+	store.overlayFramePath = null;
 
 	if (store.overlayEl?.parentNode) {
 		store.overlayEl.parentNode.removeChild(store.overlayEl);
@@ -478,6 +604,8 @@ function fallbackDismissEntireCreationDetailOverlay() {
 			const baseState = curState && typeof curState === 'object' ? { ...curState } : {};
 			delete baseState[HISTORY_FLAG];
 			delete baseState.prsnCreationDetailId;
+			delete baseState.prsnOverlayPage;
+			delete baseState.prsnOverlayHref;
 			delete baseState.prsnOverlayReturnPath;
 			window.history.replaceState(baseState, '', returnPath);
 		}
@@ -526,19 +654,13 @@ export function handleCreationDetailOverlayPopstate(ev) {
 	const stillInOverlayStack = Boolean(state?.[HISTORY_FLAG]);
 
 	if (stillInOverlayStack) {
-		let id = Number(state?.prsnCreationDetailId);
-		if (!Number.isFinite(id) || id <= 0) {
-			id = Number(parseCreationIdFromHref(window.location.pathname));
-		}
-		const curId = Number(store.overlayCreationId);
-		if (Number.isFinite(id) && id > 0 && Number.isFinite(curId) && curId > 0 && id === curId) {
+		const locPath = window.location.pathname + window.location.search;
+		if (store.overlayFramePath && locPath === store.overlayFramePath) {
 			fallbackDismissEntireCreationDetailOverlay();
 			if (ev && typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
 			return true;
 		}
-		if (Number.isFinite(id) && id > 0) {
-			syncOverlayFrameToCreationId(id);
-		}
+		syncOverlayFrameFromLocation();
 		if (ev && typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
 		return true;
 	}
@@ -617,7 +739,7 @@ function ensureOverlayMessageListener() {
 		if (data.type === 'prsn-creation-detail-overlay-navigate') {
 			const id = Number(data.creationId);
 			if (!Number.isFinite(id) || id <= 0) return;
-			openCreationDetailOverlay(id);
+			openWorkflowOverlayFromHref(`/creations/${id}`);
 			return;
 		}
 		if (data.type === 'prsn-creation-detail-overlay-shell-out') {
@@ -625,7 +747,18 @@ function ensureOverlayMessageListener() {
 			return;
 		}
 		if (data.type === 'prsn-creation-detail-overlay-route') {
-			routeCreationDetailOverlayFromEmbed(data.href);
+			routeCreationDetailOverlayFromEmbed(data.href, {
+				forceReload: Boolean(data.forceReload),
+			});
+			return;
+		}
+		if (data.type === WORKFLOW_DISMISS_MESSAGE) {
+			try {
+				document.dispatchEvent(new CustomEvent('creations-pending-updated'));
+			} catch {
+				// ignore
+			}
+			dismissEntireCreationDetailOverlay();
 			return;
 		}
 		if (data.type === CREATION_DETAIL_SHELL_SYNC_MESSAGE) {
@@ -666,10 +799,19 @@ function ensureOverlayEscapeListener() {
 	);
 }
 
-function buildOverlayChrome(creationId) {
+function updateOverlayChromeTitle(kind) {
+	const store = getOverlayStore();
+	const titleEl = store.overlayEl?.querySelector?.('.chat-page-header-title-text');
+	if (!(titleEl instanceof HTMLElement)) return;
+	titleEl.textContent = overlayTitleForKind(kind);
+}
+
+function buildOverlayChrome(target) {
+	const kind = target?.kind || 'detail';
+	const creationId = Number(target?.creationId);
 	const toolbar = document.createElement('header');
 	toolbar.className = 'creation-detail-overlay-chrome';
-	toolbar.setAttribute('aria-label', 'Creation');
+	toolbar.setAttribute('aria-label', overlayTitleForKind(kind));
 
 	const backBtn = document.createElement('button');
 	backBtn.type = 'button';
@@ -682,7 +824,7 @@ function buildOverlayChrome(creationId) {
 	title.className = 'chat-page-mobile-chrome-title';
 	title.innerHTML =
 		'<span class="chat-page-mobile-chrome-channel-part">' +
-		'<span class="chat-page-header-title-text">Creation</span>' +
+		`<span class="chat-page-header-title-text">${overlayTitleForKind(kind)}</span>` +
 		'</span>';
 
 	const closeBtn = document.createElement('button');
@@ -696,9 +838,17 @@ function buildOverlayChrome(creationId) {
 
 	const frame = document.createElement('iframe');
 	frame.className = 'creation-detail-overlay-frame';
-	frame.setAttribute('title', `Creation #${creationId}`);
+	if (kind === 'mutate' && Number.isFinite(creationId) && creationId > 0) {
+		frame.setAttribute('title', `Mutate #${creationId}`);
+	} else if (kind === 'create') {
+		frame.setAttribute('title', 'Create');
+	} else if (Number.isFinite(creationId) && creationId > 0) {
+		frame.setAttribute('title', `Creation #${creationId}`);
+	} else {
+		frame.setAttribute('title', 'Creation');
+	}
 	frame.setAttribute('loading', 'eager');
-	frame.src = `${creationDetailUrl(creationId)}?embed=1`;
+	frame.src = target?.embedUrl || embedFrameUrl(creationId);
 	frame.addEventListener('load', () => {
 		try {
 			const win = frame.contentWindow;
@@ -716,11 +866,15 @@ function buildOverlayChrome(creationId) {
 }
 
 /**
- * @param {number|string} creationId
+ * @param {string} href
+ * @param {{ forceReload?: boolean }} [options]
  */
-export function openCreationDetailOverlay(creationId) {
-	const id = Number(creationId);
-	if (!Number.isFinite(id) || id <= 0) return;
+export function openWorkflowOverlayFromHref(href, options = {}) {
+	const target = parseOverlayTarget(href, { bustCache: Boolean(options.forceReload) });
+	if (!target) {
+		shellOutFromCreationDetailOverlay(href);
+		return;
+	}
 
 	const store = getOverlayStore();
 
@@ -729,12 +883,11 @@ export function openCreationDetailOverlay(creationId) {
 	ensureOverlayEscapeListener();
 
 	if (isCreationDetailOverlayOpen() && store.overlayFrame) {
-		const curId = Number(store.overlayCreationId);
-		if (curId === id) {
-			reloadCreationDetailOverlayFrame(id);
+		if (store.overlayFramePath === target.canonicalUrl) {
+			reloadWorkflowOverlayFrame(target);
 		} else {
-			syncOverlayFrameToCreationId(id);
-			pushOverlayHistoryEntry(id, { stackPush: true });
+			syncOverlayFrameToTarget(target);
+			pushOverlayHistoryForTarget(target, { stackPush: true });
 		}
 		return;
 	}
@@ -743,14 +896,17 @@ export function openCreationDetailOverlay(creationId) {
 		closeCreationDetailOverlay();
 	}
 
-	store.overlayCreationId = id;
+	store.overlayCreationId = target.creationId;
+	store.overlayPage = target.kind;
+	store.overlayFramePath = target.canonicalUrl;
+
 	const shell = document.createElement('div');
 	shell.id = OVERLAY_ID;
 	shell.className = 'creation-detail-overlay';
 	shell.setAttribute('role', 'dialog');
 	shell.setAttribute('aria-modal', 'true');
 
-	const { toolbar, frame } = buildOverlayChrome(id);
+	const { toolbar, frame } = buildOverlayChrome(target);
 	shell.append(frame, toolbar);
 	captureOverlayScrollPositions();
 	lockOverlayBodyScroll();
@@ -760,7 +916,45 @@ export function openCreationDetailOverlay(creationId) {
 	store.overlayEl = shell;
 	store.overlayFrame = frame;
 
-	pushOverlayHistoryEntry(id);
+	pushOverlayHistoryForTarget(target);
+}
+
+/**
+ * @param {number|string} creationId
+ */
+export function openCreationDetailOverlay(creationId) {
+	const id = Number(creationId);
+	if (!Number.isFinite(id) || id <= 0) return;
+	openWorkflowOverlayFromHref(creationDetailUrl(id));
+}
+
+/**
+ * SPA navigation hook for mutate links.
+ * @param {string} href
+ * @param {MouseEvent} [ev]
+ */
+export function navigateToMutateFromSpa(href, ev) {
+	if (ev && typeof ev.preventDefault === 'function') ev.preventDefault();
+	if (!parseOverlayTarget(href) || !shouldUseCreationDetailOverlay()) {
+		window.location.assign(href);
+		return;
+	}
+	openWorkflowOverlayFromHref(href);
+}
+
+/**
+ * SPA navigation hook for create links (all overlay-capable shells, including chat).
+ * @param {string} href
+ * @param {MouseEvent} [ev]
+ * @param {{ forceReload?: boolean }} [options]
+ */
+export function navigateToCreateFromSpa(href = '/create', ev, options = {}) {
+	if (ev && typeof ev.preventDefault === 'function') ev.preventDefault();
+	if (!parseOverlayTarget(href) || !shouldUseCreationDetailOverlay()) {
+		window.location.assign(href);
+		return;
+	}
+	openWorkflowOverlayFromHref(href, { forceReload: Boolean(options.forceReload) });
 }
 
 /**
@@ -775,9 +969,53 @@ export function navigateToCreationDetailFromSpa(href, ev) {
 		window.location.assign(href);
 		return;
 	}
-	openCreationDetailOverlay(id);
+	openWorkflowOverlayFromHref(`/creations/${id}`);
+}
+
+function shouldInterceptWorkflowSpaLink(link, e) {
+	if (!(link instanceof HTMLAnchorElement)) return false;
+	if (e.defaultPrevented) return false;
+	if (typeof e.button === 'number' && e.button !== 0) return false;
+	if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return false;
+	if (link.target === '_blank' || link.hasAttribute('download')) return false;
+	const href = (link.getAttribute('href') || '').trim();
+	if (!href || href.startsWith('#')) return false;
+	return true;
+}
+
+/** Capture /create and /creations/:id/mutate links in app SPA shells (empty states, footers, etc.). */
+function bindWorkflowOverlaySpaLinkIntercepts() {
+	if (document.documentElement.dataset.prsnWorkflowLinkInterceptBound === '1') return;
+	document.documentElement.dataset.prsnWorkflowLinkInterceptBound = '1';
+	document.addEventListener(
+		'click',
+		(e) => {
+			const link = e.target?.closest?.('a[href]');
+			if (!shouldInterceptWorkflowSpaLink(link, e)) return;
+
+			let url;
+			try {
+				url = new URL(link.getAttribute('href') || '', window.location.origin);
+				if (url.origin !== window.location.origin) return;
+			} catch {
+				return;
+			}
+
+			const path = (url.pathname || '/').replace(/\/+$/, '') || '/';
+			const target = url.pathname + url.search + url.hash;
+
+			if (path === '/create' || /^\/creations\/\d+\/(edit|mutate)$/.test(path)) {
+				if (!shouldUseCreationDetailOverlay()) return;
+				e.preventDefault();
+				e.stopPropagation();
+				openWorkflowOverlayFromHref(target);
+			}
+		},
+		true
+	);
 }
 
 ensureOverlayMessageListener();
 ensureOverlayPopstateListener();
 ensureOverlayEscapeListener();
+bindWorkflowOverlaySpaLinkIntercepts();

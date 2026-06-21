@@ -34,6 +34,66 @@ function isMyCreationsCreateDestination(pathname) {
 	);
 }
 
+function normalizeNavPathname(pathname) {
+	return String(pathname || '').replace(/\/+$/, '') || '/';
+}
+
+function isServerSentPathname(pathname) {
+	const p = normalizeNavPathname(pathname);
+	return (
+		p === '/create' ||
+		p === '/pricing' ||
+		p === '/integrations' ||
+		p === '/prompt-library' ||
+		p.startsWith('/chat/') ||
+		/^\/creations\/\d+(\/(edit|mutate))?$/.test(p) ||
+		p.startsWith('/s/') ||
+		p === '/help' ||
+		p.startsWith('/help/') ||
+		p === '/user' ||
+		/^\/user\/\d+$/.test(p) ||
+		/^\/p\/[a-z0-9][a-z0-9_-]{2,23}$/i.test(p) ||
+		/^\/t\/[a-z0-9][a-z0-9_-]{1,31}$/i.test(p) ||
+		p.startsWith('/styles/')
+	);
+}
+
+function isLegacyStandaloneWorkflowDocument() {
+	if (document.body.classList.contains('create-page-embed')) return false;
+	if (document.body.classList.contains('creation-edit-embed')) return false;
+	if (window.__ps_create_embed === true || window.__ps_creation_edit_embed === true) {
+		return false;
+	}
+	return (
+		document.body.classList.contains('create-page') ||
+		document.body.classList.contains('create-page-advanced') ||
+		document.body.classList.contains('creation-edit-page')
+	);
+}
+
+function pathnameMatchesLegacyWorkflowDocument(pathname) {
+	const p = normalizeNavPathname(pathname);
+	if (
+		document.body.classList.contains('create-page') ||
+		document.body.classList.contains('create-page-advanced')
+	) {
+		return p === '/create';
+	}
+	if (document.body.classList.contains('creation-edit-page')) {
+		return /^\/creations\/\d+\/(edit|mutate)$/.test(p);
+	}
+	return false;
+}
+
+/** Standalone create/mutate pages: popstate must load the previous document, not SPA-route in place. */
+function reloadLegacyWorkflowDocumentIfPathMismatch() {
+	if (!isLegacyStandaloneWorkflowDocument()) return false;
+	if (pathnameMatchesLegacyWorkflowDocument(window.location.pathname)) return false;
+	const target = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+	window.location.assign(target);
+	return true;
+}
+
 const AVATAR_URL_STORAGE_KEY = 'profile-avatar-url';
 
 class AppNavigation extends HTMLElement {
@@ -331,23 +391,8 @@ class AppNavigation extends HTMLElement {
 	}
 
 	navigateToRoute(route) {
-		// Check if we're on a server-sent or standalone page (create, creation detail, pricing, etc.)
-		// If so, use full page navigation for ANY route change
-		const isServerSentPage = window.location.pathname === '/create' ||
-			window.location.pathname === '/pricing' ||
-			window.location.pathname === '/integrations' ||
-			window.location.pathname === '/prompt-library' ||
-			window.location.pathname.startsWith('/chat/') ||
-			/^\/creations\/\d+(\/(edit|mutate))?$/.test(window.location.pathname) ||
-			window.location.pathname.startsWith('/s/') ||
-			(window.location.pathname === '/help' || window.location.pathname.startsWith('/help/')) ||
-			window.location.pathname === '/user' ||
-			/^\/user\/\d+$/.test(window.location.pathname) ||
-			/^\/p\/[a-z0-9][a-z0-9_-]{2,23}$/i.test(window.location.pathname) ||
-			/^\/t\/[a-z0-9][a-z0-9_-]{1,31}$/i.test(window.location.pathname) ||
-			window.location.pathname.startsWith('/styles/');
-		if (isServerSentPage) {
-			// Use full page navigation for server-sent pages
+		// Server-sent / standalone pages use full navigation for any route change.
+		if (isServerSentPathname(window.location.pathname)) {
 			window.location.href = `/${route}`;
 			return;
 		}
@@ -931,6 +976,8 @@ class AppNavigation extends HTMLElement {
 	handleRouteChange() {
 		const pathname = window.location.pathname;
 
+		if (reloadLegacyWorkflowDocumentIfPathMismatch()) return;
+
 		// Logged-in user on auth URL (e.g. /auth#login from another tab) → redirect to app so we don't show a blank content area
 		if (pathname === '/auth' || pathname === '/auth.html') {
 			const params = new URLSearchParams(window.location.search);
@@ -949,19 +996,7 @@ class AppNavigation extends HTMLElement {
 
 		// If we're on a server-sent page (like creation detail, pricing), don't handle route changes
 		// Any navigation should result in a full page load
-		const isServerSentPage = 			pathname === '/pricing' ||
-			pathname === '/integrations' ||
-			pathname === '/prompt-library' ||
-			pathname.startsWith('/chat/') ||
-			/^\/creations\/\d+(\/(edit|mutate))?$/.test(pathname) ||
-			pathname.startsWith('/s/') ||
-			(pathname === '/help' || pathname.startsWith('/help/')) ||
-			pathname === '/user' ||
-			/^\/user\/\d+$/.test(pathname) ||
-			/^\/p\/[a-z0-9][a-z0-9_-]{2,23}$/i.test(pathname) ||
-			/^\/t\/[a-z0-9][a-z0-9_-]{1,31}$/i.test(pathname) ||
-			pathname.startsWith('/styles/');
-		if (isServerSentPage) {
+		if (isServerSentPathname(pathname)) {
 			return;
 		}
 
@@ -1218,7 +1253,11 @@ class AppNavigation extends HTMLElement {
 						new CustomEvent('open-account-menu', { bubbles: true, detail: { anchor: button } })
 					);
 				} else if (action === 'create') {
-					window.location.href = '/create';
+					const v = getAssetVersionParam();
+					const qs = v ? `?v=${encodeURIComponent(v)}` : '';
+					void import(`../../shared/creationDetailOverlay.js${qs}`).then((mod) => {
+						mod.navigateToCreateFromSpa('/create');
+					});
 				}
 			});
 		});

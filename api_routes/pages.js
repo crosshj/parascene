@@ -991,13 +991,33 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 				// ignore
 			}
 
-			if (headerHtml) {
-				pageHtml = pageHtml.replace("<!--APP_HEADER-->", headerHtml);
+			const embedOverlay = req.query?.embed === '1' || req.query?.embed === 1;
+
+			if (embedOverlay) {
+				pageHtml = pageHtml.replace("<!--APP_HEADER-->", "");
+				pageHtml = pageHtml.replace("<!--APP_MOBILE_BOTTOM_NAV-->", "");
+				pageHtml = pageHtml.replace(
+					'<html lang="en">',
+					'<html lang="en" class="create-page-embed-doc">'
+				);
+				const bodyClass = useSimple ? 'create-page' : 'create-page-advanced';
+				pageHtml = pageHtml.replace(
+					`<body class="${bodyClass}">`,
+					`<body class="${bodyClass} create-page-embed">`
+				);
+				pageHtml = pageHtml.replace(
+					'</head>',
+					'<script>window.__ps_create_embed=true;</script></head>'
+				);
+			} else {
+				if (headerHtml) {
+					pageHtml = pageHtml.replace("<!--APP_HEADER-->", headerHtml);
+				}
+				pageHtml = pageHtml.replace(
+					"<!--APP_MOBILE_BOTTOM_NAV-->",
+					includeMobileBottomNav ? "<app-navigation-mobile></app-navigation-mobile>" : ""
+				);
 			}
-			pageHtml = pageHtml.replace(
-				"<!--APP_MOBILE_BOTTOM_NAV-->",
-				includeMobileBottomNav ? "<app-navigation-mobile></app-navigation-mobile>" : ""
-			);
 
 			pageHtml = injectCommonHead(pageHtml, getPageTokens(req));
 
@@ -1122,13 +1142,32 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 				// console.warn("Failed to extract role header for creation mutate page:", error?.message || error);
 			}
 
-			if (headerHtml) {
-				pageHtml = pageHtml.replace("<!--APP_HEADER-->", headerHtml);
+			const embedOverlay = req.query?.embed === '1' || req.query?.embed === 1;
+
+			if (embedOverlay) {
+				pageHtml = pageHtml.replace("<!--APP_HEADER-->", "");
+				pageHtml = pageHtml.replace("<!--APP_MOBILE_BOTTOM_NAV-->", "");
+				pageHtml = pageHtml.replace(
+					'<html lang="en">',
+					'<html lang="en" class="creation-edit-embed-doc">'
+				);
+				pageHtml = pageHtml.replace(
+					'<body class="creation-edit-page create-page">',
+					'<body class="creation-edit-page create-page creation-edit-embed">'
+				);
+				pageHtml = pageHtml.replace(
+					'</head>',
+					'<script>window.__ps_creation_edit_embed=true;</script></head>'
+				);
+			} else {
+				if (headerHtml) {
+					pageHtml = pageHtml.replace("<!--APP_HEADER-->", headerHtml);
+				}
+				pageHtml = pageHtml.replace(
+					"<!--APP_MOBILE_BOTTOM_NAV-->",
+					includeMobileBottomNav ? "<app-navigation-mobile></app-navigation-mobile>" : ""
+				);
 			}
-			pageHtml = pageHtml.replace(
-				"<!--APP_MOBILE_BOTTOM_NAV-->",
-				includeMobileBottomNav ? "<app-navigation-mobile></app-navigation-mobile>" : ""
-			);
 
 			pageHtml = injectCommonHead(pageHtml, getPageTokens(req));
 

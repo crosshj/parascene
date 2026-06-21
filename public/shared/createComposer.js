@@ -2583,7 +2583,7 @@ export function mountCreateComposer(host, opts = {}) {
 	}
 
 	if (advancedLink) {
-		const onAdvanced = (e) => {
+		const onAdvanced = async (e) => {
 			e.preventDefault();
 			if (attachmentUploadingCount > 0) return;
 			savePrompt();
@@ -2600,8 +2600,18 @@ export function mountCreateComposer(host, opts = {}) {
 			}
 			writeSharedCreateSettingsFromComposerSnapshot(snapshot);
 			mergeSharedSettingsIntoSessionSelections();
-			document.cookie = 'create_editor=; path=/; max-age=0';
-			window.location.href = '/create';
+			try {
+				const v =
+					document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() ||
+					'';
+				const qs = v ? `?v=${encodeURIComponent(v)}` : '';
+				const runtimeMod = await import(`/shared/createPageRuntime.js${qs}`);
+				runtimeMod.setCreateEditorMode('advanced');
+				const { navigateToCreateFromSpa } = await import(`/shared/creationDetailOverlay.js${qs}`);
+				navigateToCreateFromSpa('/create', e, { forceReload: true });
+			} catch {
+				window.location.assign('/create');
+			}
 		};
 		advancedLink.addEventListener('click', onAdvanced);
 		teardownFns.push(() => advancedLink.removeEventListener('click', onAdvanced));

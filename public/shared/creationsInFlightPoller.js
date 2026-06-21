@@ -99,21 +99,126 @@ export function mergeSessionPendingIntoFeedItems(feedItems, mapPending) {
 }
 
 export function computeCreationsPollHasListUpdates(creationsFromApi, root) {
-	if (!root) return false;
+	return findCreationsPollStatusUpdates(creationsFromApi, root).length > 0;
+}
+
+function normalizeCreationListStatus(status) {
+	if (status == null || status === '') return '';
+	return String(status).trim().toLowerCase();
+}
+
+function isInFlightCreationStatus(status) {
+	const st = normalizeCreationListStatus(status);
+	return st === 'creating' || st === 'pending';
+}
+
+/**
+ * Rows whose in-flight DOM card should be replaced with API data (e.g. creating → completed).
+ * @param {unknown[]} creationsFromApi
+ * @param {ParentNode|null} root
+ * @returns {Array<{ creationId: string, apiRow: object }>}
+ */
+export function findCreationsPollStatusUpdates(creationsFromApi, root) {
+	if (!root) return [];
 	const list = Array.isArray(creationsFromApi) ? creationsFromApi : [];
-	for (const el of root.querySelectorAll('.route-media[data-image-id][data-status="creating"]')) {
-		const creationId = el.getAttribute('data-image-id');
-		const updatedCreation = list.find((c) => c != null && String(c.id) === String(creationId));
-		if (updatedCreation && updatedCreation.status && updatedCreation.status !== 'creating') {
-			return true;
+	const byId = new Map();
+	for (const row of list) {
+		if (row?.id != null) byId.set(String(row.id), row);
+	}
+
+	const updates = [];
+	const seen = new Set();
+
+	const consider = (creationId, domStatus) => {
+		if (!creationId || seen.has(creationId)) return;
+		const apiRow = byId.get(String(creationId));
+		if (!apiRow) return;
+		const apiStatus = normalizeCreationListStatus(apiRow.status);
+		const dom = normalizeCreationListStatus(domStatus);
+		if (!isInFlightCreationStatus(dom)) return;
+		if (apiStatus === dom) return;
+		if (isInFlightCreationStatus(apiStatus)) return;
+		seen.add(creationId);
+		updates.push({ creationId: String(creationId), apiRow });
+	};
+
+	for (const el of root.querySelectorAll(
+		'.route-media[data-image-id][data-status="creating"], .route-media[data-image-id][data-status="pending"]'
+	)) {
+		consider(el.getAttribute('data-image-id'), el.getAttribute('data-status'));
+	}
+	for (const el of root.querySelectorAll(
+		'.feed-card[data-creation-id][data-creation-status="creating"], .feed-card[data-creation-id][data-creation-status="pending"]'
+	)) {
+		consider(el.getAttribute('data-creation-id'), el.getAttribute('data-creation-status'));
+	}
+
+	return updates;
+}
+
+const DEFAULT_PENDING_TTL_MS = 3000;
+
+/**
+ * Drop session pending rows that are stale or already visible from the API list.
+ * @param {unknown[]} creationsFromApi
+ * @param {{ dispatchEvent?: boolean, ttlMs?: number, creationsResultOk?: boolean }} [options]
+ * @returns {boolean} whether sessionStorage changed
+ */
+export function prunePendingCreationsSession(creationsFromApi, options = {}) {
+	const {
+		dispatchEvent = false,
+		ttlMs = DEFAULT_PENDING_TTL_MS,
+		creationsResultOk = true,
+	} = options;
+	const pendingCreations = getPendingCreationsFromSession();
+	if (!pendingCreations.length) return false;
+
+	const creations = Array.isArray(creationsFromApi) ? creationsFromApi : [];
+	const nowMs = Date.now();
+	const creationsByToken = new Map();
+	for (const item of creations) {
+		const meta = parseCreationMeta(item?.meta);
+		const token = meta && typeof meta.creation_token === 'string' ? meta.creation_token : null;
+		if (token) creationsByToken.set(token, item);
+	}
+
+	const pendingWithinTtl = creationsResultOk
+		? pendingCreations.filter((p) => {
+				const createdAtRaw = typeof p?.created_at === 'string' ? p.created_at : '';
+				const createdAtMs = createdAtRaw ? Date.parse(createdAtRaw) : NaN;
+				if (!Number.isFinite(createdAtMs)) return true;
+				return nowMs - createdAtMs <= ttlMs;
+			})
+		: pendingCreations;
+
+	const filteredPending = pendingWithinTtl.filter((p) => {
+		const token = typeof p.creation_token === 'string' ? p.creation_token : null;
+		if (!token) return true;
+		return !creationsByToken.has(token);
+	});
+
+	const shouldPurge = pendingCreations.some((p) => {
+		const token = typeof p?.creation_token === 'string' ? p.creation_token : null;
+		return Boolean(token) && creationsByToken.has(token);
+	});
+	const ttlPurged = filteredPending.length !== pendingCreations.length;
+	if (!shouldPurge && !ttlPurged) return false;
+
+	const newPendingStr = JSON.stringify(filteredPending);
+	const oldPendingStr = sessionStorage.getItem('pendingCreations') || '[]';
+	if (newPendingStr === oldPendingStr) return false;
+
+	try {
+		sessionStorage.setItem('pendingCreations', newPendingStr);
+	} catch {
+		return false;
+	}
+	if (dispatchEvent) {
+		try {
+			document.dispatchEvent(new CustomEvent('creations-pending-updated'));
+		} catch {
+			// ignore
 		}
 	}
-	for (const el of root.querySelectorAll('.feed-card[data-creation-id][data-creation-status="creating"]')) {
-		const creationId = el.getAttribute('data-creation-id');
-		const updatedCreation = list.find((c) => c != null && String(c.id) === String(creationId));
-		if (updatedCreation && updatedCreation.status && updatedCreation.status !== 'creating') {
-			return true;
-		}
-	}
-	return false;
+	return true;
 }

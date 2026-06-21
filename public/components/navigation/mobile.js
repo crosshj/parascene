@@ -137,9 +137,13 @@ class AppNavigationMobile extends HTMLElement {
 		const isPrimaryPseudo = isChatPrimaryPseudoRoute(route);
 		const isChatNavTarget = isChatNavTargetPath(targetPath);
 
-		// Create is a standalone page; full navigation to/from it
+		// Create: workflow overlay on all SPA shells (app + chat); fallback full page when overlay unavailable.
 		if (route === 'create') {
-			window.location.href = '/create';
+			const v = getAssetVersionParam();
+			const qs = v ? `?v=${encodeURIComponent(v)}` : '';
+			void import(`../../shared/creationDetailOverlay.js${qs}`).then((mod) => {
+				mod.navigateToCreateFromSpa('/create');
+			});
 			return;
 		}
 		if (route === 'connect' && isOnChatPage) {

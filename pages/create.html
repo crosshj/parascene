@@ -235,16 +235,6 @@
 	</main>
 	<script>
 		(function () {
-			var link = document.getElementById('create-switch-to-advanced');
-			if (link) {
-				link.addEventListener('click', function (e) {
-					e.preventDefault();
-					document.cookie = 'create_editor=; path=/; max-age=0';
-					window.location.href = '/create';
-				});
-			}
-		})();
-		(function () {
 			var el = document.querySelector('.create-style-cards');
 			if (!el) return;
 			var columns = el.querySelectorAll('.create-style-column');

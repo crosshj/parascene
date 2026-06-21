@@ -1,9 +1,32 @@
-import { homeIcon } from '/icons/svg-strings.js';
-import {
-	applyFeedBetaNavLabelsToDom,
-	feedNavLabel,
-	readFeedBetaEnabledSync
-} from '../../feedBetaNav.js';
+let homeIcon;
+let feedNavLabel;
+let readFeedBetaEnabledSync;
+let applyFeedBetaNavLabelsToDom;
+
+function getAssetVersionParam() {
+	const meta = document.querySelector('meta[name="asset-version"]');
+	return meta?.getAttribute('content')?.trim() || '';
+}
+
+function getImportQuery(version) {
+	return version && typeof version === 'string' ? `?v=${encodeURIComponent(version)}` : '';
+}
+
+let _depsPromise;
+async function loadDeps() {
+	if (_depsPromise) return _depsPromise;
+	const v = getAssetVersionParam();
+	const qs = getImportQuery(v);
+	_depsPromise = (async () => {
+		const iconsMod = await import(`../../icons/svg-strings.js${qs}`);
+		homeIcon = iconsMod.homeIcon;
+		const feedBetaNavMod = await import(`../../shared/feedBetaNav.js${qs}`);
+		feedNavLabel = feedBetaNavMod.feedNavLabel;
+		readFeedBetaEnabledSync = feedBetaNavMod.readFeedBetaEnabledSync;
+		applyFeedBetaNavLabelsToDom = feedBetaNavMod.applyFeedBetaNavLabelsToDom;
+	})();
+	return _depsPromise;
+}
 
 const html = String.raw;
 const CHAT_FIRST_ROUTE_PATHS = {
@@ -57,9 +80,13 @@ class AppNavigationMobile extends HTMLElement {
 		this.feedBetaEnabled = false;
 	}
 
-	connectedCallback() {
-		this.feedBetaEnabled = readFeedBetaEnabledSync();
-		applyFeedBetaNavLabelsToDom(this.feedBetaEnabled);
+	async connectedCallback() {
+		await loadDeps();
+		this.feedBetaEnabled =
+			typeof readFeedBetaEnabledSync === 'function' ? readFeedBetaEnabledSync() : false;
+		if (typeof applyFeedBetaNavLabelsToDom === 'function') {
+			applyFeedBetaNavLabelsToDom(this.feedBetaEnabled);
+		}
 		this.render();
 		this.setupEventListeners();
 		window.addEventListener('popstate', this.handleRouteChange);
@@ -78,7 +105,9 @@ class AppNavigationMobile extends HTMLElement {
 
 	handleFeedBetaChanged(event) {
 		this.feedBetaEnabled = event?.detail?.enabled === true;
-		applyFeedBetaNavLabelsToDom(this.feedBetaEnabled);
+		if (typeof applyFeedBetaNavLabelsToDom === 'function') {
+			applyFeedBetaNavLabelsToDom(this.feedBetaEnabled);
+		}
 		this.render();
 		this.setupEventListeners();
 		this.handleRouteChange();
@@ -108,9 +137,13 @@ class AppNavigationMobile extends HTMLElement {
 		const isPrimaryPseudo = isChatPrimaryPseudoRoute(route);
 		const isChatNavTarget = isChatNavTargetPath(targetPath);
 
-		// Create is a standalone page; full navigation to/from it
+		// Create: workflow overlay on all SPA shells (app + chat); fallback full page when overlay unavailable.
 		if (route === 'create') {
-			window.location.href = '/create';
+			const v = getAssetVersionParam();
+			const qs = v ? `?v=${encodeURIComponent(v)}` : '';
+			void import(`../../shared/creationDetailOverlay.js${qs}`).then((mod) => {
+				mod.navigateToCreateFromSpa('/create');
+			});
 			return;
 		}
 		if (route === 'connect' && isOnChatPage) {
@@ -284,7 +317,10 @@ class AppNavigationMobile extends HTMLElement {
 	}
 
 	render() {
-		const homeLabel = feedNavLabel('Home', this.feedBetaEnabled);
+		const homeLabel =
+			typeof feedNavLabel === 'function'
+				? feedNavLabel('Home', this.feedBetaEnabled)
+				: 'Home';
 		const feedBetaCls = this.feedBetaEnabled ? ' mobile-bottom-nav-item--feed-beta' : '';
 		this.innerHTML = html`
       <div class="mobile-bottom-nav-wrap" aria-label="Mobile actions">
