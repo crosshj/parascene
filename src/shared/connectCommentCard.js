@@ -88,6 +88,8 @@ export function createConnectCommentRowElement(comment, opts = {}) {
 		row.setAttribute('role', 'link');
 		row.tabIndex = 0;
 		row.dataset.href = href;
+		const previewFull = imageUrl || resolvedThumb;
+		if (previewFull) row.dataset.previewImageUrl = previewFull;
 		row.setAttribute('aria-label', `Open creation ${createdImageTitle}`);
 		row.addEventListener('click', (e) => {
 			const target = e.target;

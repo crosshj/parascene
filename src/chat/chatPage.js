@@ -195,6 +195,28 @@ import * as challengesChannelModule from './challengesChannel.js';
 			if (shouldSkipCreationDetailPath(pathOnly)) return;
 			const creationId = parseCreationNavigationTargetId(href);
 			if (!creationId) return;
+
+			const thumbHit = ev.target?.closest?.('.connect-comment-thumb');
+			if (thumbHit instanceof HTMLElement) {
+				const previewSrc = (commentRow.dataset.previewImageUrl || '').trim();
+				const thumbImg = commentRow.querySelector('.connect-comment-thumb-img');
+				const src =
+					previewSrc ||
+					(thumbImg instanceof HTMLImageElement
+						? String(thumbImg.currentSrc || thumbImg.src || '').trim()
+						: '');
+				if (src) {
+					ev.preventDefault();
+					ev.stopPropagation();
+					closeChatInlineImageLightbox();
+					openChatInlineImageLightboxShared(src, {
+						creationId,
+						...(thumbImg instanceof HTMLImageElement ? { sourceImg: thumbImg } : {}),
+					});
+					return;
+				}
+			}
+
 			ev.preventDefault();
 			ev.stopPropagation();
 			closeChatInlineImageLightbox();

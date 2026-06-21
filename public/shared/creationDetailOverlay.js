@@ -380,6 +380,43 @@ export function routeCreationDetailOverlayFromEmbed(href) {
 }
 
 /**
+ * Parent shell: open inline lightbox above the creation-detail overlay (from embed iframe).
+ * @param {object} data
+ */
+export function openInlineLightboxFromEmbed(data) {
+	if (isCreationDetailEmbedFrame()) return;
+	const kind = String(data?.kind || 'image').trim() || 'image';
+	void import('./chatInlineImageLightbox.js')
+		.then((mod) => {
+			mod.closeChatInlineImageLightbox({ stripHistory: false });
+			if (kind === 'video-gallery') {
+				const slides = Array.isArray(data?.slides) ? data.slides : [];
+				const hooksRaw = data?.hooks && typeof data.hooks === 'object' ? data.hooks : {};
+				mod.openChatVideoGalleryLightbox(slides, hooksRaw);
+				return;
+			}
+			if (kind === 'attachment') {
+				const src = String(data?.src || '').trim();
+				const attachmentKind = String(data?.attachmentKind || 'video').trim() || 'video';
+				const meta =
+					data?.creationMeta && typeof data.creationMeta === 'object' ? data.creationMeta : {};
+				mod.openChatAttachmentPreviewLightbox(src, attachmentKind, {
+					creationId: meta.creationId,
+				});
+				return;
+			}
+			const src = String(data?.src || '').trim();
+			if (!src) return;
+			const meta =
+				data?.creationMeta && typeof data.creationMeta === 'object' ? data.creationMeta : {};
+			mod.openChatInlineImageLightbox(src, meta);
+		})
+		.catch(() => {
+			// ignore
+		});
+}
+
+/**
  * @param {{ fromPopstate?: boolean, skipScrollRestore?: boolean }} [options]
  */
 export function closeCreationDetailOverlay(options = {}) {
@@ -560,6 +597,10 @@ function ensureOverlayMessageListener() {
 		if (event.origin !== window.location.origin) return;
 		const data = event.data;
 		if (!data || typeof data !== 'object') return;
+		if (data.type === 'prsn-open-inline-lightbox') {
+			openInlineLightboxFromEmbed(data);
+			return;
+		}
 		if (data.type === 'prsn-creation-detail-overlay-close') {
 			dismissEntireCreationDetailOverlay();
 			return;

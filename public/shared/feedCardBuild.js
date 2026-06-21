@@ -1091,6 +1091,67 @@ function buildFeedCreationCard(
 }
 
 /**
+ * @param {HTMLElement} card
+ * @param {boolean} creationsBulkChrome
+ * @param {EventTarget | null} target
+ * @returns {boolean}
+ */
+function shouldIgnoreFeedCardCreationNavTarget(card, creationsBulkChrome, target) {
+	if (!(target instanceof Node)) return true;
+	if (creationsBulkChrome && /** @type {Element} */ (target).closest?.('[data-creations-bulk-overlay]')) {
+		return true;
+	}
+	if (/** @type {Element} */ (target).closest?.('[data-profile-link]')) return true;
+	if (/** @type {Element} */ (target).closest?.('.feed-card-group-nav')) return true;
+	if (/** @type {Element} */ (target).closest?.('.feed-card-menu') || /** @type {Element} */ (target).closest?.('[data-feed-menu]')) {
+		return true;
+	}
+	const actionsRow = card.querySelector('.feed-card-actions');
+	if (actionsRow && actionsRow.contains(target)) return true;
+	return false;
+}
+
+function isMobileFeedCardTapFallbackEnabled() {
+	try {
+		if (window.matchMedia('(max-width: 768px)').matches) return true;
+		return window.matchMedia('(pointer: coarse)').matches;
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * iOS/Android sometimes omit `click` after a quick tap on feed tiles; pointerup fallback dedupes with click.
+ * @param {HTMLElement} card
+ * @param {boolean} creationsBulkChrome
+ * @param {(ev: Event) => void} navigate
+ */
+function bindMobileFeedCardCreationTapFallback(card, creationsBulkChrome, navigate) {
+	if (!isMobileFeedCardTapFallbackEnabled()) return;
+	let clickHandled = false;
+	const markClickHandled = () => {
+		clickHandled = true;
+		window.setTimeout(() => {
+			clickHandled = false;
+		}, 450);
+	};
+	card.addEventListener('click', markClickHandled, true);
+	card.addEventListener(
+		'pointerup',
+		(e) => {
+			if (e.pointerType === 'mouse') return;
+			if (clickHandled) return;
+			if (shouldIgnoreFeedCardCreationNavTarget(card, creationsBulkChrome, e.target)) return;
+			window.requestAnimationFrame(() => {
+				if (clickHandled) return;
+				navigate(e);
+			});
+		},
+		{ passive: true }
+	);
+}
+
+/**
  * @param {boolean} isVideo
  * @param {boolean} preferThumbnail
  * @param {boolean} creationsBulkChrome
@@ -1183,8 +1244,7 @@ function finishFeedCreationCardMediaAndClick(
 		// Make the entire card clickable except the actions row (including when preview URL is missing)
 		card.style.cursor = 'pointer';
 
-		// Add click handler to the card
-		card.addEventListener('click', (e) => {
+		const navigateFeedCardToCreation = (e) => {
 			if (creationsBulkChrome && e.target?.closest?.('[data-creations-bulk-overlay]')) {
 				return;
 			}
@@ -1213,7 +1273,11 @@ function finishFeedCreationCardMediaAndClick(
 				recordFeedImpressionOnClick(item);
 				window.location.href = href;
 			}
-		});
+		};
+
+		// Add click handler to the card
+		card.addEventListener('click', navigateFeedCardToCreation);
+		bindMobileFeedCardCreationTapFallback(card, creationsBulkChrome, navigateFeedCardToCreation);
 
 		// Prevent actions row from triggering card click
 		const actionsRow = card.querySelector('.feed-card-actions');

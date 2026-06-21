@@ -8,7 +8,7 @@ import { getAvatarColor } from './avatar.js';
 import { buildProfilePath } from './profileLinks.js';
 import { renderCommentAvatarHtml } from './commentItem.js';
 import { processUserText } from './userText.js';
-import { REACTION_ORDER, REACTION_ICONS } from '../icons/svg-strings.js';
+import { REACTION_ORDER, REACTION_ICONS } from '/icons/svg-strings.js';
 import { createReplyIndicatorElement } from './replyIndicatorUi.js';
 import {
 	navigateToCreationDetailFromSpa,
@@ -88,6 +88,8 @@ export function createConnectCommentRowElement(comment, opts = {}) {
 		row.setAttribute('role', 'link');
 		row.tabIndex = 0;
 		row.dataset.href = href;
+		const previewFull = imageUrl || resolvedThumb;
+		if (previewFull) row.dataset.previewImageUrl = previewFull;
 		row.setAttribute('aria-label', `Open creation ${createdImageTitle}`);
 		row.addEventListener('click', (e) => {
 			const target = e.target;
