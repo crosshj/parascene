@@ -9,6 +9,7 @@ import {
 	videoHeroDimensionsFromCreation,
 	TEMP_ALLOW_REPEAT_VIDEO_POSTER,
 	canSetVideoPosterFromFirstFrame,
+	shouldAutoSetVideoPosterOnPublish,
 	hasProperVideoPlaceholderDimensions,
 	heroLayoutMode,
 	isText2VideoCreation,
@@ -261,6 +262,16 @@ describe('video poster from first frame eligibility', () => {
 			meta: { ...t2vBase.meta, video_placeholder_manual: true },
 		};
 		expect(canSetVideoPosterFromFirstFrame(row)).toBe(TEMP_ALLOW_REPEAT_VIDEO_POSTER);
+	});
+
+	test('shouldAutoSetVideoPosterOnPublish skips manual posters', () => {
+		expect(shouldAutoSetVideoPosterOnPublish({ ...t2vBase, width: 576, height: 1024 })).toBe(true);
+		expect(
+			shouldAutoSetVideoPosterOnPublish({
+				...t2vBase,
+				meta: { ...t2vBase.meta, video_placeholder_manual: true },
+			})
+		).toBe(false);
 	});
 
 	test('legacy dimension check still flags mismatched posters', () => {

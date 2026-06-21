@@ -43,6 +43,25 @@ async function loadPublishInlineSuggest() {
 	return _suggestPromise;
 }
 
+let shouldAutoSetVideoPosterOnPublish;
+let captureVideoFirstFrameFile;
+
+let _videoPosterDepsPromise;
+async function loadVideoPosterDeps() {
+	if (_videoPosterDepsPromise) return _videoPosterDepsPromise;
+	const v = getAssetVersionParam();
+	const qs = getImportQuery(v);
+	_videoPosterDepsPromise = (async () => {
+		const [aspectMod, frameMod] = await Promise.all([
+			import(`../../shared/aspectRatio.js${qs}`),
+			import(`../../shared/queueFromFrameModal.js${qs}`),
+		]);
+		shouldAutoSetVideoPosterOnPublish = aspectMod.shouldAutoSetVideoPosterOnPublish;
+		captureVideoFirstFrameFile = frameMod.captureVideoFirstFrameFile;
+	})();
+	return _videoPosterDepsPromise;
+}
+
 const html = String.raw;
 
 /**
@@ -75,6 +94,7 @@ class AppModalPublish extends HTMLElement {
 		this._isOpen = false;
 		this._mode = 'publish'; // 'publish' or 'edit'
 		this._creationId = null;
+		this._creation = null;
 		this._creationPublished = false; // set when opening edit
 		this._creationIsVideo = false;
 		this._loading = false;
@@ -287,6 +307,7 @@ class AppModalPublish extends HTMLElement {
 	async openPublish(creationId) {
 		this._mode = 'publish';
 		this._creationId = creationId;
+		this._creation = null;
 		this.setDoomFullHeightFieldState(false, false);
 		this.updateModalContent();
 		this.open();
@@ -311,6 +332,7 @@ class AppModalPublish extends HTMLElement {
 			if (requestId !== this._openRequestId) return;
 
 			const creation = await response.json();
+			this._creation = creation;
 			const titleInput = this.querySelector('#publish-title');
 			const descriptionTextarea = this.querySelector('#publish-description');
 
@@ -445,6 +467,7 @@ class AppModalPublish extends HTMLElement {
 		if (doomFullHeightCheckbox) doomFullHeightCheckbox.checked = false;
 		this.setDoomFullHeightFieldState(false, false);
 		if (submitBtn) submitBtn.disabled = true;
+		this._creation = null;
 		this.hideAlert();
 	}
 
@@ -558,7 +581,62 @@ class AppModalPublish extends HTMLElement {
 		}
 	}
 
+	async maybeSetVideoPosterFromFirstFrame() {
+		const creation = this._creation;
+		const creationId = this._creationId;
+		if (!creation || !creationId) return;
+
+		await loadVideoPosterDeps();
+		if (typeof shouldAutoSetVideoPosterOnPublish !== 'function' || !shouldAutoSetVideoPosterOnPublish(creation)) {
+			return;
+		}
+		if (typeof captureVideoFirstFrameFile !== 'function') return;
+
+		const videoUrl = typeof creation.video_url === 'string' ? creation.video_url.trim() : '';
+		if (!videoUrl) return;
+
+		const heroVideo = document.querySelector('video[data-video]');
+		const useHeroVideo =
+			heroVideo instanceof HTMLVideoElement &&
+			heroVideo.videoWidth > 0 &&
+			heroVideo.videoHeight > 0;
+		const { file, width, height } = await captureVideoFirstFrameFile(
+			videoUrl,
+			Number(creationId),
+			{ existingVideo: useHeroVideo ? heroVideo : null }
+		);
+
+		const formData = new FormData();
+		formData.append('image', file);
+		formData.append('video_width', String(width));
+		formData.append('video_height', String(height));
+		const res = await fetch(`/api/create/images/${creationId}/video-placeholder`, {
+			method: 'POST',
+			credentials: 'include',
+			body: formData,
+		});
+		const data = await res.json().catch(() => ({}));
+		if (!res.ok) {
+			throw new Error(data?.message || data?.error || 'Could not set video poster');
+		}
+
+		document.dispatchEvent(new CustomEvent('creation-video-placeholder-updated', {
+			detail: {
+				creationId: Number(creationId),
+				url: data?.url,
+				width: data?.width,
+				height: data?.height,
+			},
+		}));
+	}
+
 	async handlePublishSubmit(title, description, nsfw, doomScrollFullHeight) {
+		try {
+			await this.maybeSetVideoPosterFromFirstFrame();
+		} catch {
+			// Best-effort: publish even if poster capture fails (user can set poster manually).
+		}
+
 		const response = await fetch(`/api/create/images/${this._creationId}/publish`, {
 			method: 'POST',
 			headers: {

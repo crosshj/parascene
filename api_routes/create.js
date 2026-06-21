@@ -24,7 +24,11 @@ import { scheduleEmbeddingJob } from "./utils/embeddingJob.js";
 import { deleteCreationEmbedding } from "./utils/embeddings.js";
 import { getSupabaseServiceClient } from "./utils/supabaseService.js";
 import { verifyQStashRequest } from "./utils/qstashVerification.js";
-import { resolveCreatedImageStorageFilename } from "./utils/resolveCreatedImageStorageFilename.js";
+import {
+	resolveCreatedImageRowForCreatedMediaPath,
+	resolveCreatedImageStorageFilename,
+} from "./utils/resolveCreatedImageStorageFilename.js";
+import { invalidateFeedBetaCatalogSnapshot } from "./feedBeta/catalogSnapshot.js";
 import { mapCreatedImageRowMediaFields } from "./utils/resolveCreationDisplayMedia.js";
 import {
 	canSetVideoPosterFromFirstFrame,
@@ -159,27 +163,11 @@ export default function createCreateRoutes({ queries, storage }) {
 		const variant = req.query?.variant;
 
 		try {
-			let image = null;
-
-			// Landscape files are stored under "landscape/{userId}_{imageId}_{ts}_{rand}.png"
-			// They don't have their own created_images row, so we derive imageId from the filename
-			// and look up the original creation.
-			if (filename.startsWith("landscape/")) {
-				const afterPrefix = filename.slice("landscape/".length);
-				const baseName = afterPrefix.split("/").pop() || "";
-				const withoutExt = baseName.replace(/\.[^.]+$/, "");
-				const parts = withoutExt.split("_");
-				const imageId = Number(parts[1]); // landscape/{userId}_{imageId}_{timestamp}_{random}.png
-
-				if (!Number.isFinite(imageId) || imageId <= 0) {
-					return res.status(404).json({ error: "Image not found" });
-				}
-
-				image = await queries.selectCreatedImageByIdAnyUser?.get(imageId);
-			} else {
-				// Main created image: look up by filename column
-				image = await queries.selectCreatedImageByFilename?.get(filename);
-			}
+			const image = await resolveCreatedImageRowForCreatedMediaPath({
+				queries,
+				filename,
+				query: req.query,
+			});
 
 			if (!image) {
 				return res.status(404).json({ error: "Image not found" });
@@ -303,8 +291,12 @@ export default function createCreateRoutes({ queries, storage }) {
 				return res.status(403).json({ error: "Access denied" });
 			}
 
-			// Fetch image buffer from storage
-			const imageBuffer = await storage.getImageBuffer(filename, { variant });
+			// Serve current storage key when the URL path is a stale filename (e.g. after video poster update).
+			const storageFilename =
+				filename.startsWith("landscape/")
+					? filename
+					: (resolveCreatedImageStorageFilename(image) || filename);
+			const imageBuffer = await storage.getImageBuffer(storageFilename, { variant });
 			const png = await ensurePngBuffer(imageBuffer);
 
 			// Set appropriate content type
@@ -5197,6 +5189,9 @@ export default function createCreateRoutes({ queries, storage }) {
 			if (updateResult.changes === 0) {
 				return res.status(500).json({ error: "Failed to update creation poster" });
 			}
+
+			await bumpFeedVersionCounter();
+			void invalidateFeedBetaCatalogSnapshot().catch(() => {});
 
 			return res.json({
 				ok: true,

@@ -132,6 +132,23 @@ export async function loadFeedBetaCatalogSnapshotFromRedis() {
 }
 
 /**
+ * Drop cached sitewide catalog so the next feed pull hydrates fresh poster URLs from DB.
+ */
+export async function invalidateFeedBetaCatalogSnapshot() {
+	const { invalidateFeedBetaCatalogMemCache } = await import('./catalogSnapshotCache.js');
+	invalidateFeedBetaCatalogMemCache();
+	const r = getFeedBetaRedis();
+	if (!r) return false;
+	try {
+		await r.del(FEED_BETA_CATALOG_REDIS_KEY);
+		return true;
+	} catch (err) {
+		console.warn('[feedBeta catalogRedis] invalidate', err?.message || err);
+		return false;
+	}
+}
+
+/**
  * @param {object} snapshot
  */
 export async function saveFeedBetaCatalogSnapshotToRedis(snapshot) {

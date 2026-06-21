@@ -532,6 +532,17 @@ export function canSetVideoPosterFromFirstFrame(creation) {
 	return true;
 }
 
+/**
+ * Text-to-video publish flow: capture first frame when still on auto placeholder.
+ * @param {{ status?: unknown, width?: unknown, height?: unknown, meta?: unknown, media_type?: unknown, video_url?: unknown } | null | undefined} creation
+ * @returns {boolean}
+ */
+export function shouldAutoSetVideoPosterOnPublish(creation) {
+	if (!canSetVideoPosterFromFirstFrame(creation)) return false;
+	const meta = normalizeCreationMeta(creation?.meta);
+	return meta?.video_placeholder_manual !== true;
+}
+
 /** @deprecated Use canSetVideoPosterFromFirstFrame */
 export function needsManualVideoPlaceholder(creation) {
 	return canSetVideoPosterFromFirstFrame(creation) && !hasProperVideoPlaceholderDimensions(creation);
