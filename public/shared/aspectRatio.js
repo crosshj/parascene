@@ -1,9 +1,6 @@
 /** Known aspect ratio keys (provider / create UI). */
 import {
-	MUTATE_DEFAULT_METHOD_KEY,
-	MUTATE_DEFAULT_MODEL,
 	MUTATE_DEFAULT_SERVER_ID,
-	PARASCENE_BLUE_SERVER_ID,
 } from './generationDefaults.js';
 
 /** Parascene server uploadImage — local constant avoids stale generationDefaults.js cache on deploy. */
@@ -51,58 +48,33 @@ export const ASPECT_RATIO_SELECTOR_LABELS = {
 	'9:16': 'phone',
 };
 
+/** True when method config exposes an aspect_ratio field object. */
+export function methodHasAspectRatioField(fields) {
+	const aspectField = fields?.aspect_ratio;
+	return Boolean(aspectField && typeof aspectField === 'object');
+}
+
 /**
- * Client-side capability until the provider exposes per-model aspect_ratio support.
- * Replicate shares one method.fields.aspect_ratio across all models; only grok honors it today.
- * Parascene Blue methods opt in via their own field config.
- * @param {{ serverId?: unknown, methodKey?: unknown, modelValue?: unknown, fields?: Record<string, unknown> | null } | null | undefined} context
+ * Whether the active method supports aspect_ratio (provider field config or uploadImage resize flow).
+ * @param {{ serverId?: unknown, methodKey?: unknown, fields?: Record<string, unknown> | null } | null | undefined} context
  * @returns {boolean}
  */
 export function modelSupportsAspectRatio(context) {
 	if (!context || typeof context !== 'object') return false;
-	const modelValue = String(context.modelValue ?? '').trim();
-	const serverId = Number(context.serverId);
-	const methodKey = String(context.methodKey || '');
-
-	if (
-		serverId === MUTATE_DEFAULT_SERVER_ID &&
-		methodKey === MUTATE_DEFAULT_METHOD_KEY &&
-		modelValue === MUTATE_DEFAULT_MODEL
-	) {
-		return true;
-	}
-
-	if (isUploadImageMethod(context)) {
-		return true;
-	}
-
-	if (serverId === PARASCENE_BLUE_SERVER_ID) {
-		const aspectField = context.fields?.aspect_ratio;
-		return Boolean(aspectField && typeof aspectField === 'object');
-	}
-
-	return false;
+	if (isUploadImageMethod(context)) return true;
+	return methodHasAspectRatioField(context.fields);
 }
 
 /**
- * Visual aspect ratio picker when the active model supports aspect_ratio.
+ * Visual aspect ratio picker when the active method exposes aspect_ratio in provider config.
  * Callers should pass `fields` from the method config when available.
  * @param {{ serverId?: unknown, methodKey?: unknown, modelValue?: unknown, fields?: Record<string, unknown> | null } | null | undefined} context
  * @returns {boolean}
  */
-export function shouldUseAspectRatioSelector(context, {
-	serverId = MUTATE_DEFAULT_SERVER_ID,
-	methodKey = MUTATE_DEFAULT_METHOD_KEY,
-	modelValue = MUTATE_DEFAULT_MODEL,
-} = {}) {
+export function shouldUseAspectRatioSelector(context) {
 	if (!context || typeof context !== 'object') return false;
-	if (!modelSupportsAspectRatio(context)) return false;
-	const aspectField = context.fields?.aspect_ratio;
-	if (aspectField && typeof aspectField === 'object') return true;
 	if (isUploadImageMethod(context)) return true;
-	if (Number(context.serverId) !== Number(serverId)) return false;
-	if (String(context.methodKey || '') !== String(methodKey)) return false;
-	return String(context.modelValue || '') === String(modelValue);
+	return methodHasAspectRatioField(context.fields);
 }
 
 /** Non-square ratios that use the extended detail-hero layout (1:1 keeps legacy square box). */

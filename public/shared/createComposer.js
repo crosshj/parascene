@@ -594,6 +594,32 @@ function collectVideoModelOptionsFromServers(servers) {
 	return sortVideoModelOptions(options.length > 0 ? options : [ltxFallback]);
 }
 
+async function fetchComposerServers() {
+	try {
+		const result = await fetchServersForComposer();
+		if (!result?.ok) return [];
+		return Array.isArray(result.data?.servers) ? result.data.servers : [];
+	} catch {
+		return [];
+	}
+}
+
+/**
+ * @param {unknown[]} servers
+ * @param {number} serverId
+ * @param {string} methodKey
+ * @returns {Record<string, unknown> | null}
+ */
+function resolveMethodFieldsFromServers(servers, serverId, methodKey) {
+	const server = servers.find((s) => Number(s?.id) === Number(serverId));
+	const cfg = parseServerConfig(server);
+	const methods = cfg?.methods;
+	if (!methods || typeof methods !== 'object') return null;
+	const methodDef = /** @type {Record<string, { fields?: Record<string, unknown> }>} */ (methods)[methodKey];
+	const fields = methodDef?.fields;
+	return fields && typeof fields === 'object' ? fields : null;
+}
+
 async function fetchBasicModelOptions() {
 	const fallback = [
 		toImageModelOption(
@@ -912,6 +938,8 @@ export function mountCreateComposer(host, opts = {}) {
 		serverId: MUTATE_DEFAULT_SERVER_ID,
 		methodKey: MUTATE_DEFAULT_METHOD_KEY,
 	};
+	/** @type {unknown[]} */
+	let composerServers = [];
 	/** @type {Map<string, number>} */
 	const methodCreditByKey = new Map();
 	let methodCreditsFetchStarted = false;
@@ -1024,17 +1052,24 @@ export function mountCreateComposer(host, opts = {}) {
 
 	function getFormFieldContext() {
 		if (isVideoMode()) {
+			const route = getSelectedVideoRoute();
 			return {
-				serverId: BASIC_CREATE_DEFAULT_SERVER_ID,
-				methodKey: BASIC_CREATE_DEFAULT_METHOD_KEY,
-				modelValue: '',
+				serverId: route?.serverId ?? BASIC_CREATE_DEFAULT_SERVER_ID,
+				methodKey: route?.methodKey ?? BASIC_CREATE_DEFAULT_METHOD_KEY,
+				modelValue: route?.value ?? '',
+				fields: route
+					? resolveMethodFieldsFromServers(composerServers, route.serverId, route.methodKey)
+					: null,
 			};
 		}
 		const route = getSelectedImageRoute();
+		const serverId = route?.serverId ?? BASIC_CREATE_DEFAULT_SERVER_ID;
+		const methodKey = route?.methodKey ?? BASIC_CREATE_DEFAULT_METHOD_KEY;
 		return {
-			serverId: route?.serverId ?? BASIC_CREATE_DEFAULT_SERVER_ID,
-			methodKey: route?.methodKey ?? BASIC_CREATE_DEFAULT_METHOD_KEY,
+			serverId,
+			methodKey,
 			modelValue: route?.value ?? selectedModel,
+			fields: resolveMethodFieldsFromServers(composerServers, serverId, methodKey),
 		};
 	}
 
@@ -1260,10 +1295,12 @@ export function mountCreateComposer(host, opts = {}) {
 	}
 
 	async function refreshModelOptions() {
-		const [imageOpts, videoOpts] = await Promise.all([
+		const [imageOpts, videoOpts, servers] = await Promise.all([
 			fetchBasicModelOptions(),
 			fetchVideoModelOptions(),
+			fetchComposerServers(),
 		]);
+		composerServers = servers;
 		imageModelOptions =
 			Array.isArray(imageOpts) && imageOpts.length > 0
 				? imageOpts

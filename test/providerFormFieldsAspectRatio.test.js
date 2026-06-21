@@ -30,17 +30,36 @@ describe('shouldUseAspectRatioSelector', () => {
 		).toBe(true);
 	});
 
-	test('enabled for grok-imagine on server 1 replicate', () => {
+	test('enabled for replicate when method fields include aspect_ratio', () => {
+		expect(
+			shouldUseAspectRatioSelector({
+				serverId: 1,
+				methodKey: 'replicate',
+				modelValue: 'prunaai/p-image',
+				fields: REPLICATE_ASPECT_FIELD,
+			})
+		).toBe(true);
+	});
+
+	test('enabled for replicatePro when method fields include aspect_ratio', () => {
+		expect(
+			shouldUseAspectRatioSelector({
+				serverId: 1,
+				methodKey: 'replicatePro',
+				modelValue: 'some/pro-model',
+				fields: REPLICATE_ASPECT_FIELD,
+			})
+		).toBe(true);
+	});
+
+	test('disabled without aspect_ratio field in method config', () => {
 		expect(
 			shouldUseAspectRatioSelector({
 				serverId: 1,
 				methodKey: 'replicate',
 				modelValue: 'xai/grok-imagine-image',
 			})
-		).toBe(true);
-	});
-
-	test('disabled for other servers without aspect_ratio field', () => {
+		).toBe(false);
 		expect(
 			shouldUseAspectRatioSelector({
 				serverId: 2,
@@ -48,9 +67,6 @@ describe('shouldUseAspectRatioSelector', () => {
 				modelValue: 'xai/grok-imagine-image',
 			})
 		).toBe(false);
-	});
-
-	test('disabled for other methods without aspect_ratio field', () => {
 		expect(
 			shouldUseAspectRatioSelector({
 				serverId: 1,
@@ -60,28 +76,18 @@ describe('shouldUseAspectRatioSelector', () => {
 		).toBe(false);
 	});
 
-	test('disabled for other models without aspect_ratio field', () => {
-		expect(
-			shouldUseAspectRatioSelector({
-				serverId: 1,
-				methodKey: 'replicate',
-				modelValue: 'prunaai/p-image',
-			})
-		).toBe(false);
-	});
-
-	test('disabled for replicate models that share aspect_ratio field but do not support it', () => {
+	test('modelSupportsAspectRatio follows provider aspect_ratio field', () => {
 		const context = {
 			serverId: 1,
 			methodKey: 'replicate',
 			modelValue: 'prunaai/p-image',
 			fields: REPLICATE_ASPECT_FIELD,
 		};
-		expect(modelSupportsAspectRatio(context)).toBe(false);
-		expect(shouldUseAspectRatioSelector(context)).toBe(false);
+		expect(modelSupportsAspectRatio(context)).toBe(true);
+		expect(shouldUseAspectRatioSelector(context)).toBe(true);
 	});
 
-	test('enabled for grok when replicate method exposes hidden aspect_ratio field', () => {
+	test('enabled when replicate method exposes hidden aspect_ratio field', () => {
 		expect(
 			shouldUseAspectRatioSelector({
 				serverId: 1,
