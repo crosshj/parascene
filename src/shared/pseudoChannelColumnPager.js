@@ -94,6 +94,27 @@ export function createPseudoColumnPager(opts) {
 		return filtered;
 	}
 
+	function prependFreshItems(pageItems) {
+		const raw = Array.isArray(pageItems) ? pageItems : [];
+		const keySet = new Set();
+		for (const x of items) {
+			const k = getItemKey(x);
+			if (k) keySet.add(k);
+		}
+		const filtered = [];
+		for (const it of raw) {
+			const k = getItemKey(it);
+			if (k) {
+				if (keySet.has(k)) continue;
+				keySet.add(k);
+			}
+			filtered.push(it);
+		}
+		if (filtered.length === 0) return [];
+		items = [...filtered, ...items];
+		return filtered;
+	}
+
 	async function loadInitial() {
 		if (initialBusy) {
 			return { ok: false, reason: 'busy' };
@@ -141,6 +162,7 @@ export function createPseudoColumnPager(opts) {
 		reset,
 		loadInitial,
 		loadOlder,
+		prependFreshItems,
 		getItems: () => [...items],
 		getHasMore: () => hasMore,
 		isInitialBusy: () => initialBusy,

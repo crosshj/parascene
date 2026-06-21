@@ -1239,6 +1239,7 @@ export async function initChatPage(root, options = {}) {
 	let activeReactionPicker = null;
 	let lastChatMessagesPayload = [];
 	let chatMessagesSyncInFlight = false;
+	let chatFeedSyncInFlight = false;
 	/** Real thread/DM: older pages loaded by scrolling up (see `loadOlderThreadMessages`). */
 	let threadMessagesHasMore = false;
 	let threadMessagesNextBefore = /** @type {string | null} */ (null);
@@ -1299,6 +1300,7 @@ export async function initChatPage(root, options = {}) {
 	let chatSidebarOverlayDismissHandler = null;
 	/** @type {null | (() => void)} */
 	let chatSidebarVisibilityHandler = null;
+	let chatFeedVisibilityHandler = null;
 	/** @type {null | ((e: PointerEvent) => void)} */
 	let chatToolbarOutsidePointerHandler = null;
 	/** @type {null | ((e: MouseEvent) => void)} */
@@ -3300,7 +3302,7 @@ export async function initChatPage(root, options = {}) {
 		if (activePseudoChannelSlug === 'feed_doom') return false;
 		if (shouldShowMobileSidebarFromLocation()) return false;
 		if (shouldShowChatCreateComposerOverlay()) return true;
-		if (activePseudoChannelSlug === 'explore') return true;
+		if (activePseudoChannelSlug === 'explore') return !isChatPageMobileLayout();
 		if (!activePseudoChannelSlug && activeThreadId) return true;
 		return false;
 	}
@@ -3312,24 +3314,26 @@ export async function initChatPage(root, options = {}) {
 		if (shouldShowMobileSidebarFromLocation()) return;
 
 		if (activePseudoChannelSlug === 'explore') {
-			const searchInput = root.querySelector('[data-chat-explore-search-input]');
-			if (searchInput instanceof HTMLInputElement && !searchInput.disabled) {
-				const bar = root.querySelector('[data-chat-explore-search-bar]');
-				if (bar instanceof HTMLElement && bar.getAttribute('aria-hidden') !== 'true') {
-					focusChatPrimaryInputEl(searchInput);
-					return;
+			if (!isChatPageMobileLayout()) {
+				const searchInput = root.querySelector('[data-chat-explore-search-input]');
+				if (searchInput instanceof HTMLInputElement && !searchInput.disabled) {
+					const bar = root.querySelector('[data-chat-explore-search-bar]');
+					if (bar instanceof HTMLElement && bar.getAttribute('aria-hidden') !== 'true') {
+						focusChatPrimaryInputEl(searchInput);
+						return;
+					}
 				}
-			}
-			const bodyInput = root.querySelector('[data-chat-body-input]');
-			const composerForm = root.querySelector('[data-chat-composer]');
-			if (
-				bodyInput instanceof HTMLTextAreaElement &&
-				!bodyInput.disabled &&
-				composerForm instanceof HTMLElement &&
-				!composerForm.hidden &&
-				composerForm.dataset.chatComposerMode === 'explore'
-			) {
-				focusChatPrimaryInputEl(bodyInput);
+				const bodyInput = root.querySelector('[data-chat-body-input]');
+				const composerForm = root.querySelector('[data-chat-composer]');
+				if (
+					bodyInput instanceof HTMLTextAreaElement &&
+					!bodyInput.disabled &&
+					composerForm instanceof HTMLElement &&
+					!composerForm.hidden &&
+					composerForm.dataset.chatComposerMode === 'explore'
+				) {
+					focusChatPrimaryInputEl(bodyInput);
+				}
 			}
 			return;
 		}
@@ -8558,6 +8562,55 @@ export async function initChatPage(root, options = {}) {
 		};
 	}
 
+	async function syncFeedChannelFromServer() {
+		if (activePseudoChannelSlug !== 'feed') return;
+		const messagesEl = root.querySelector('[data-chat-messages]');
+		if (!messagesEl || loadingPseudoChannelMessages || chatFeedSyncInFlight) return;
+		if (!pseudoColumnPager || !pseudoColumnPager.getItems().length) {
+			void loadFeedChannelMessages();
+			return;
+		}
+		// Mobile alternating layout is initial-only; skip focus refresh rather than full re-render.
+		if (shouldChatFeedUseMobileAlternatingLayout()) return;
+
+		chatFeedSyncInFlight = true;
+		const prevVideoStates = captureChatVideoPlaybackStates(messagesEl);
+		try {
+			const fetchPage = createChatFeedFetchPage({
+				fetchJsonWithStatusDeduped,
+				getHiddenFeedItems,
+				pageSize: FEED_CHANNEL_PAGE_SIZE,
+				mobileChatSlotPack: false,
+			});
+			const { pageItems } = await fetchPage({ initial: true, items: [] });
+			if (activePseudoChannelSlug !== 'feed') return;
+			const freshItems =
+				typeof pseudoColumnPager.prependFreshItems === 'function'
+					? pseudoColumnPager.prependFreshItems(pageItems)
+					: [];
+			if (!freshItems.length) {
+				restoreChatVideoPlaybackStates(messagesEl, prevVideoStates);
+				return;
+			}
+
+			addPageUsers(freshItems.map(feedItemToUser));
+			const cards = resolveFeedLaneCardsHost(messagesEl, 'feed');
+			if (!cards) return;
+
+			const scrollSnap = capturePseudoFeedLaneScroll(messagesEl);
+			const renderFeedCard = createFeedChannelCardRenderer(messagesEl);
+			for (let i = freshItems.length - 1; i >= 0; i -= 1) {
+				cards.insertBefore(renderFeedCard(freshItems[i], i), cards.firstElementChild);
+			}
+			restorePseudoFeedLaneScroll(messagesEl, scrollSnap);
+			restoreChatVideoPlaybackStates(messagesEl, prevVideoStates);
+		} catch (err) {
+			console.error('[Chat page] sync feed channel:', err);
+		} finally {
+			chatFeedSyncInFlight = false;
+		}
+	}
+
 	async function loadFeedChannelMessages() {
 		const messagesEl = root.querySelector('[data-chat-messages]');
 		if (!messagesEl) return;
@@ -10598,8 +10651,9 @@ export async function initChatPage(root, options = {}) {
 				void loadChallengesChannelMessages();
 				return;
 			}
+			if (activePseudoChannelSlug) return;
 			if (!activeThreadId || loadingThreadMessages) return;
-			void loadMessages();
+			void syncChatMessagesFromServer();
 		};
 		document.addEventListener('visibilitychange', onVis);
 		visibilityResyncCleanup = () => document.removeEventListener('visibilitychange', onVis);
@@ -12389,6 +12443,10 @@ export async function initChatPage(root, options = {}) {
 		if (typeof chatSidebarVisibilityHandler === 'function') {
 			document.removeEventListener('visibilitychange', chatSidebarVisibilityHandler);
 			chatSidebarVisibilityHandler = null;
+		}
+		if (typeof chatFeedVisibilityHandler === 'function') {
+			document.removeEventListener('visibilitychange', chatFeedVisibilityHandler);
+			chatFeedVisibilityHandler = null;
 		}
 		if (typeof chatToolbarOutsidePointerHandler === 'function') {
 			document.removeEventListener('pointerdown', chatToolbarOutsidePointerHandler, true);
@@ -14388,6 +14446,12 @@ export async function initChatPage(root, options = {}) {
 		void refreshChatSidebar({ skipThreadsFetch: true });
 	};
 	document.addEventListener('visibilitychange', chatSidebarVisibilityHandler);
+	chatFeedVisibilityHandler = () => {
+		if (document.visibilityState !== 'visible') return;
+		if (activePseudoChannelSlug !== 'feed' || loadingPseudoChannelMessages) return;
+		void syncFeedChannelFromServer();
+	};
+	document.addEventListener('visibilitychange', chatFeedVisibilityHandler);
 	document.addEventListener('creations-pending-updated', () => {
 		if (activePseudoChannelSlug === 'creations') maybeStartChatCreationsPseudoChannelPoll();
 	});
