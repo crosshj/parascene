@@ -53,6 +53,9 @@ export function createConnectCommentRowElement(comment, opts = {}) {
 
 	const createdImageId = Number(comment?.created_image_id);
 	const href = (Number.isFinite(createdImageId) && createdImageId > 0) ? `/creations/${createdImageId}` : null;
+	const thumbUrl = typeof comment?.created_image_thumbnail_url === 'string' ? comment.created_image_thumbnail_url.trim() : '';
+	const imageUrl = typeof comment?.created_image_url === 'string' ? comment.created_image_url.trim() : '';
+	const resolvedThumb = thumbUrl || imageUrl || '';
 
 	const displayName = (typeof comment?.display_name === 'string' && comment.display_name.trim())
 		? comment.display_name.trim()
@@ -111,9 +114,6 @@ export function createConnectCommentRowElement(comment, opts = {}) {
 		thumbWrap.setAttribute('data-media-type', 'video');
 	}
 	thumbWrap.setAttribute('aria-hidden', 'true');
-	const thumbUrl = typeof comment?.created_image_thumbnail_url === 'string' ? comment.created_image_thumbnail_url.trim() : '';
-	const imageUrl = typeof comment?.created_image_url === 'string' ? comment.created_image_url.trim() : '';
-	const resolvedThumb = thumbUrl || imageUrl || '';
 	if (resolvedThumb) {
 		const img = document.createElement('img');
 		img.src = resolvedThumb;

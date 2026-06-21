@@ -43,6 +43,15 @@ function getMobileNavTargetPath(route) {
 	return CHAT_FIRST_ROUTE_PATHS[key] || `/${key}`;
 }
 
+function isChatPrimaryPseudoRoute(route) {
+	const key = typeof route === 'string' ? route.trim().toLowerCase() : '';
+	return (
+		Object.prototype.hasOwnProperty.call(CHAT_FIRST_ROUTE_PATHS, key) &&
+		key !== 'connect' &&
+		key !== 'create'
+	);
+}
+
 function isChatNavTargetPath(targetPath) {
 	if (typeof targetPath !== 'string') return false;
 	const normalized = targetPath.trim().toLowerCase();
@@ -124,8 +133,9 @@ class AppNavigationMobile extends HTMLElement {
 		if (!route) return;
 		const targetPath = getMobileNavTargetPath(route);
 		if (!targetPath) return;
-		const isChatFirstTarget = isChatNavTargetPath(targetPath);
 		const isOnChatPage = isCurrentDocumentChatShell();
+		const isPrimaryPseudo = isChatPrimaryPseudoRoute(route);
+		const isChatNavTarget = isChatNavTargetPath(targetPath);
 
 		// Create is a standalone page; full navigation to/from it
 		if (route === 'create') {
@@ -148,32 +158,22 @@ class AppNavigationMobile extends HTMLElement {
 			this.handleRouteChange();
 			return;
 		}
-		if (isChatFirstTarget) {
+		if (isPrimaryPseudo && isOnChatPage) {
+			this.navigateChatShellInPage(targetPath);
+			return;
+		}
+		if (isPrimaryPseudo && document.body?.dataset?.entry !== 'app') {
+			window.location.href = targetPath;
+			return;
+		}
+		if (isChatNavTarget) {
 			// Entering chat from non-chat pages should hard-navigate, but switching
 			// between chat channels should be in-page.
 			if (!isOnChatPage) {
 				window.location.href = targetPath;
 				return;
 			}
-			// If we're currently in /chat#channels mobile sidebar mode, hide that chrome
-			// immediately before route change so transition feels instant.
-			if (document.body?.classList?.contains('chat-page--mobile-sidebar-open')) {
-				document.body.classList.remove('chat-page--mobile-sidebar-open');
-				// Let chat page state logic decide header/footer visibility per route/view.
-			}
-			const next = `${targetPath}${window.location.search || ''}`;
-			const cur = `${window.location.pathname}${window.location.search || ''}${window.location.hash || ''}`;
-			if (next !== cur) {
-				this.resetSectionScrollAfterRouteChange();
-				window.history.pushState({ prsnChat: true }, '', next);
-				try {
-					window.dispatchEvent(new PopStateEvent('popstate'));
-				} catch {
-					window.dispatchEvent(new Event('popstate'));
-				}
-				this.resetSectionScrollAfterRouteChange();
-			}
-			this.handleRouteChange();
+			this.navigateChatShellInPage(targetPath.split('#')[0] || targetPath);
 			return;
 		}
 		if (window.location.pathname === '/create') {
@@ -235,6 +235,25 @@ class AppNavigationMobile extends HTMLElement {
 			this.resetSectionScroll();
 			requestAnimationFrame(() => this.resetSectionScroll());
 		});
+	}
+
+	navigateChatShellInPage(targetPath) {
+		if (document.body?.classList?.contains('chat-page--mobile-sidebar-open')) {
+			document.body.classList.remove('chat-page--mobile-sidebar-open');
+		}
+		const next = `${targetPath}${window.location.search || ''}`;
+		const cur = `${window.location.pathname}${window.location.search || ''}${window.location.hash || ''}`;
+		if (next !== cur) {
+			this.resetSectionScrollAfterRouteChange();
+			window.history.pushState({ prsnChat: true }, '', next);
+			try {
+				window.dispatchEvent(new PopStateEvent('popstate'));
+			} catch {
+				window.dispatchEvent(new Event('popstate'));
+			}
+			this.resetSectionScrollAfterRouteChange();
+		}
+		this.handleRouteChange();
 	}
 
 	handleRouteChange() {
