@@ -21,10 +21,13 @@ let syncMutateQueueFromProviderFieldValues;
 let MUTATE_QUEUE_UPDATED_EVENT;
 let mergeSharedSettingsIntoSessionSelections;
 let getSharedFieldValueOverrides;
+let getSharedModelForContext;
 let getSharedAdvancedPrompt;
+let getSharedAspectRatio;
 let readSharedCreateSettings;
 let syncCreatePageSelectionsToSharedStorage;
 let persistSharedPrompt;
+let persistSharedAspectRatio;
 let CREATE_SETTINGS_UPDATED_EVENT;
 let attachPromptFieldClear;
 let attachAutoGrowTextarea;
@@ -75,10 +78,13 @@ async function loadDeps() {
 		const createSettingsSyncMod = await import(`../../shared/createSettingsSync.js${qs}`);
 		mergeSharedSettingsIntoSessionSelections = createSettingsSyncMod.mergeSharedSettingsIntoSessionSelections;
 		getSharedFieldValueOverrides = createSettingsSyncMod.getSharedFieldValueOverrides;
+		getSharedModelForContext = createSettingsSyncMod.getSharedModelForContext;
 		getSharedAdvancedPrompt = createSettingsSyncMod.getSharedAdvancedPrompt;
+		getSharedAspectRatio = createSettingsSyncMod.getSharedAspectRatio;
 		readSharedCreateSettings = createSettingsSyncMod.readSharedCreateSettings;
 		syncCreatePageSelectionsToSharedStorage = createSettingsSyncMod.syncCreatePageSelectionsToSharedStorage;
 		persistSharedPrompt = createSettingsSyncMod.persistSharedPrompt;
+		persistSharedAspectRatio = createSettingsSyncMod.persistSharedAspectRatio;
 		CREATE_SETTINGS_UPDATED_EVENT = createSettingsSyncMod.CREATE_SETTINGS_UPDATED_EVENT;
 
 		const promptFieldClearMod = await import(`../../shared/promptFieldClear.js${qs}`);
@@ -295,7 +301,7 @@ class AppRouteCreate extends HTMLElement {
               <div class="form-group">
                 <label class="form-label" for="advanced-prompt">Prompt</label>
                 <div class="create-prompt-wrap">
-                  <textarea class="form-input prompt-editor" id="advanced-prompt" data-advanced-prompt rows="3" placeholder="Enter a prompt..."></textarea>
+                  <textarea class="form-input prompt-editor" id="advanced-prompt" data-advanced-prompt data-autogrow="true" rows="3" placeholder="Enter a prompt..."></textarea>
                   <a href="#" class="create-prompt-clear" tabindex="-1" aria-label="Clear field" data-prompt-clear>clear</a>
                 </div>
               </div>
@@ -415,15 +421,19 @@ class AppRouteCreate extends HTMLElement {
 		// Attach autogrow and mention suggest to prompt textarea
 		const promptTextarea = this.querySelector('[data-advanced-prompt]');
 		if (promptTextarea) {
-			attachAutoGrowTextarea(promptTextarea);
+			this._advancedPromptAutogrow = attachAutoGrowTextarea(promptTextarea);
 			attachPromptInlineSuggest(promptTextarea);
 			if (typeof attachPromptFieldClear === 'function') {
 				attachPromptFieldClear(promptTextarea, {
 					afterClear: () => {
-						const refresh = attachAutoGrowTextarea(promptTextarea);
-						if (typeof refresh === 'function') refresh();
+						this._refreshAdvancedPromptGrow();
 					},
 				});
+			}
+			const tabsEl = this.querySelector('app-tabs');
+			if (tabsEl?.getAttribute('active') === 'advanced') {
+				requestAnimationFrame(() => this._refreshAdvancedPromptGrow());
+				setTimeout(() => this._refreshAdvancedPromptGrow(), 60);
 			}
 		}
 	}
@@ -632,6 +642,9 @@ class AppRouteCreate extends HTMLElement {
 				}
 				if (window.location.pathname === '/create' && window.location.hash !== `#${id}`) {
 					window.history.replaceState(null, '', `/create#${id}`);
+				}
+				if (id === 'advanced') {
+					requestAnimationFrame(() => this._refreshAdvancedPromptGrow());
 				}
 			});
 			this._createTabHashCleanup = () => window.removeEventListener('hashchange', syncTabFromHash);
@@ -923,19 +936,73 @@ class AppRouteCreate extends HTMLElement {
 				if (!isPromptLikeField(fieldKey, field)) continue;
 				const fromValues = this.fieldValues[fieldKey];
 				if (typeof fromValues === 'string' && fromValues.trim()) {
-					persistSharedPrompt(fromValues.trim(), { notify: false });
+					persistSharedPrompt(fromValues, { notify: false });
 					return;
 				}
 				const el = this.querySelector(`#field-${fieldKey}`);
 				if (el && typeof el.value === 'string' && el.value.trim()) {
-					persistSharedPrompt(el.value.trim(), { notify: false });
+					persistSharedPrompt(el.value, { notify: false });
 					return;
 				}
 			}
 		}
 		const advancedPrompt = this.querySelector('[data-advanced-prompt]');
 		if (advancedPrompt && typeof advancedPrompt.value === 'string' && advancedPrompt.value.trim()) {
-			persistSharedPrompt(advancedPrompt.value.trim(), { notify: false });
+			persistSharedPrompt(advancedPrompt.value, { notify: false });
+		}
+	}
+
+	_persistOutgoingAspectRatioBeforeSwitch() {
+		let aspect = '';
+		if (typeof this.fieldValues.aspect_ratio === 'string' && this.fieldValues.aspect_ratio.trim()) {
+			aspect = this.fieldValues.aspect_ratio.trim();
+		} else {
+			const hidden = this.querySelector('#field-aspect_ratio');
+			if (hidden instanceof HTMLInputElement && hidden.value.trim()) {
+				aspect = hidden.value.trim();
+			} else {
+				const selected = this.querySelector(
+					'[data-field-key="aspect_ratio"] .aspect-ratio-option[aria-checked="true"]'
+				);
+				const fromOption = selected?.getAttribute?.('data-value');
+				if (typeof fromOption === 'string' && fromOption.trim()) {
+					aspect = fromOption.trim();
+				}
+			}
+		}
+		if (!aspect) {
+			try {
+				aspect = getSharedAspectRatio() || '';
+			} catch {
+				aspect = '';
+			}
+		}
+		if (aspect && typeof persistSharedAspectRatio === 'function') {
+			persistSharedAspectRatio(aspect, { notify: false });
+		}
+	}
+
+	applySharedAspectRatioToFieldValues() {
+		const current = this.fieldValues.aspect_ratio;
+		if (current !== undefined && current !== null && String(current).trim() !== '') return;
+
+		const pendingSaved =
+			this._pendingSavedFieldValues && typeof this._pendingSavedFieldValues === 'object'
+				? this._pendingSavedFieldValues
+				: null;
+		if (pendingSaved && typeof pendingSaved.aspect_ratio === 'string' && pendingSaved.aspect_ratio.trim()) {
+			this.fieldValues.aspect_ratio = pendingSaved.aspect_ratio.trim();
+			return;
+		}
+
+		let aspect = '';
+		try {
+			aspect = getSharedAspectRatio() || '';
+		} catch {
+			aspect = '';
+		}
+		if (aspect) {
+			this.fieldValues.aspect_ratio = aspect;
 		}
 	}
 
@@ -956,6 +1023,43 @@ class AppRouteCreate extends HTMLElement {
 			if (current !== undefined && current !== null && String(current).trim() !== '') continue;
 			this.fieldValues[fieldKey] = prompt;
 		}
+	}
+
+	applySharedModelToFieldValues() {
+		const fields = this.selectedMethod?.fields;
+		if (!fields?.model) return;
+
+		const current = this.fieldValues.model;
+		if (current !== undefined && current !== null && String(current).trim() !== '') return;
+
+		const pendingSaved =
+			this._pendingSavedFieldValues && typeof this._pendingSavedFieldValues === 'object'
+				? this._pendingSavedFieldValues
+				: null;
+		if (pendingSaved && typeof pendingSaved.model === 'string' && pendingSaved.model.trim()) {
+			this.fieldValues.model = pendingSaved.model.trim();
+			return;
+		}
+
+		let model = '';
+		try {
+			model =
+				getSharedModelForContext(this.selectedServer?.id, this.getMethodKey()) || '';
+		} catch {
+			model = '';
+		}
+		if (model.trim()) {
+			this.fieldValues.model = model.trim();
+		}
+	}
+
+	_refreshAdvancedPromptGrow() {
+		const promptInput = this.querySelector('[data-advanced-prompt]');
+		if (!(promptInput instanceof HTMLTextAreaElement)) return;
+		if (typeof this._advancedPromptAutogrow !== 'function') {
+			this._advancedPromptAutogrow = attachAutoGrowTextarea(promptInput);
+		}
+		this._advancedPromptAutogrow();
 	}
 
 	saveAdvancedOptions() {
@@ -1018,8 +1122,7 @@ class AppRouteCreate extends HTMLElement {
 		try {
 			if (promptInput instanceof HTMLTextAreaElement) {
 				promptInput.value = prompt;
-				const refresh = attachAutoGrowTextarea(promptInput);
-				if (refresh) refresh();
+				this._refreshAdvancedPromptGrow();
 				this.updateAdvancedCreateButton();
 			}
 			if (!fields || typeof fields !== 'object') return;
@@ -1059,8 +1162,7 @@ class AppRouteCreate extends HTMLElement {
 					this._promptFromUrl ??
 					(sharedPrompt || (typeof options.prompt === 'string' ? options.prompt : ''));
 				promptInput.value = typeof value === 'string' ? value : '';
-				const refresh = attachAutoGrowTextarea(promptInput);
-				if (refresh) refresh();
+				this._refreshAdvancedPromptGrow();
 			}
 			this.updateAdvancedCreateButton();
 		} catch (e) {
@@ -1366,6 +1468,7 @@ class AppRouteCreate extends HTMLElement {
 		if (!server) return;
 
 		this._persistOutgoingPromptBeforeSwitch();
+		this._persistOutgoingAspectRatioBeforeSwitch();
 		this.selectedServer = server;
 		this.selectedMethod = null;
 		this.fieldValues = {};
@@ -1373,7 +1476,24 @@ class AppRouteCreate extends HTMLElement {
 		this.renderMethodOptions(false, { persist });
 		this.hideFieldsGroup();
 		this.updateButtonState();
-		if (persist) this.saveSelections();
+		if (persist) {
+			let serverConfig = server.server_config;
+			if (typeof serverConfig === 'string') {
+				try {
+					serverConfig = JSON.parse(serverConfig);
+				} catch {
+					serverConfig = null;
+				}
+			}
+			const methodKeys =
+				serverConfig?.methods && typeof serverConfig.methods === 'object'
+					? Object.keys(serverConfig.methods)
+					: [];
+			// Auto-selected method saves after fields render; avoid wiping model in session first.
+			if (methodKeys.length === 0) {
+				this.saveSelections();
+			}
+		}
 	}
 
 	renderMethodOptions(skipAutoSelect = false, { persist = true } = {}) {
@@ -1476,6 +1596,7 @@ class AppRouteCreate extends HTMLElement {
 
 		this._stashCrossMethodImageCarryover();
 		this._persistOutgoingPromptBeforeSwitch();
+		this._persistOutgoingAspectRatioBeforeSwitch();
 
 		this.selectedMethod = serverConfig.methods[methodKey];
 		this.fieldValues = {};
@@ -1522,6 +1643,8 @@ class AppRouteCreate extends HTMLElement {
 		}
 
 		this.applySharedPromptToFieldValues();
+		this.applySharedModelToFieldValues();
+		this.applySharedAspectRatioToFieldValues();
 
 		const fields = this.selectedMethod.fields;
 		const pendingSaved =
@@ -1580,6 +1703,15 @@ class AppRouteCreate extends HTMLElement {
 					const trimmed = saved.trim();
 					fieldsForRender[fieldKey] = { ...field, default: trimmed };
 					this.fieldValues.aspect_ratio = trimmed;
+					return;
+				}
+			}
+			if (pendingSaved && fieldKey === 'model') {
+				const saved = pendingSaved[fieldKey];
+				if (typeof saved === 'string' && saved.trim()) {
+					const trimmed = saved.trim();
+					fieldsForRender[fieldKey] = { ...field, default: trimmed };
+					this.fieldValues.model = trimmed;
 					return;
 				}
 			}
@@ -2282,7 +2414,7 @@ class AppRouteCreate extends HTMLElement {
 					: null;
 			let sharedAspect = '';
 			try {
-				sharedAspect = readSharedCreateSettings()?.aspectRatio?.trim() || '';
+				sharedAspect = getSharedAspectRatio() || '';
 			} catch {
 				sharedAspect = '';
 			}
@@ -2300,11 +2432,17 @@ class AppRouteCreate extends HTMLElement {
 		}
 
 		delete fieldsForRender.aspect_ratio;
-		const def = aspectField.default;
-		if (def !== undefined && def !== null && String(def).trim()) {
-			this.fieldValues.aspect_ratio = String(def);
-		} else {
-			delete this.fieldValues.aspect_ratio;
+		// Selector hidden for this server/method/model — keep stored preference for when it returns.
+		if (typeof this.fieldValues.aspect_ratio === 'string' && this.fieldValues.aspect_ratio.trim()) {
+			return;
+		}
+		try {
+			const sharedAspect = getSharedAspectRatio();
+			if (sharedAspect) {
+				this.fieldValues.aspect_ratio = sharedAspect;
+			}
+		} catch {
+			// ignore storage errors
 		}
 	}
 
@@ -2355,17 +2493,21 @@ class AppRouteCreate extends HTMLElement {
 						);
 						if (methodExists) {
 							methodSelect.value = selections.methodKey;
-							this.handleMethodChange(selections.methodKey);
+							this.handleMethodChange(selections.methodKey, { persist: false });
 
 							// Restore field values after fields are rendered
 							if (selections.fieldValues && Object.keys(selections.fieldValues).length > 0) {
 								Promise.resolve().then(() => {
 									this.restoreFieldValues(selections.fieldValues);
 									this.syncAdvancedImageFieldsFromMutateQueue();
+									this._pendingSavedFieldValues = null;
+									this.saveSelections();
 								});
 							} else {
 								Promise.resolve().then(() => {
 									this.syncAdvancedImageFieldsFromMutateQueue();
+									this._pendingSavedFieldValues = null;
+									this.saveSelections();
 								});
 							}
 						}
@@ -2955,7 +3097,10 @@ class AppRouteCreate extends HTMLElement {
 		const fields = this.selectedMethod?.fields || {};
 		let sharedOverrides = {};
 		try {
-			sharedOverrides = getSharedFieldValueOverrides(fields);
+			sharedOverrides = getSharedFieldValueOverrides(fields, {
+				serverId: this.selectedServer?.id,
+				methodKey: this.getMethodKey(),
+			});
 		} catch {
 			sharedOverrides = {};
 		}

@@ -3,7 +3,9 @@ import {
 	CREATE_PAGE_SELECTIONS_SESSION_KEY,
 	CREATE_SETTINGS_STORAGE_KEYS,
 	encodeSharedModelRoute,
+	getSharedAspectRatio,
 	getSharedFieldValueOverrides,
+	getSharedModelForContext,
 	mergeSharedSettingsIntoSessionSelections,
 	parseSharedModelRoute,
 	persistSharedAspectRatio,
@@ -47,14 +49,31 @@ describe('parseSharedModelRoute', () => {
 });
 
 describe('resolveSharedPrompt', () => {
+	/** @type {ReturnType<typeof makeStorage>} */
+	let localStorage;
+
+	beforeEach(() => {
+		localStorage = makeStorage();
+		global.window = { localStorage, sessionStorage: makeStorage() };
+	});
+
+	afterEach(() => {
+		delete global.window;
+	});
+
 	test('prefers unified prompt key', () => {
 		expect(
 			resolveSharedPrompt({
-				prompt: ' unified ',
+				prompt: 'unified',
 				promptText: 'text',
 				promptImageEdit: 'edit',
 			})
 		).toBe('unified');
+	});
+
+	test('preserves trailing newline for in-progress line breaks', () => {
+		persistSharedPrompt('hello\n', { notify: false });
+		expect(resolveSharedPrompt()).toBe('hello\n');
 	});
 });
 
@@ -125,6 +144,29 @@ describe('mergeSharedSettingsIntoSessionSelections', () => {
 	});
 });
 
+describe('getSharedAspectRatio', () => {
+	/** @type {ReturnType<typeof makeStorage>} */
+	let localStorage;
+
+	beforeEach(() => {
+		localStorage = makeStorage();
+		global.window = { localStorage, sessionStorage: makeStorage() };
+	});
+
+	afterEach(() => {
+		delete global.window;
+	});
+
+	test('returns stored aspect ratio', () => {
+		persistSharedAspectRatio('9:16', { notify: false });
+		expect(getSharedAspectRatio()).toBe('9:16');
+	});
+
+	test('returns empty when unset', () => {
+		expect(getSharedAspectRatio()).toBe('');
+	});
+});
+
 describe('getSharedFieldValueOverrides', () => {
 	/** @type {ReturnType<typeof makeStorage>} */
 	let localStorage;
@@ -148,6 +190,61 @@ describe('getSharedFieldValueOverrides', () => {
 		});
 		expect(overrides.aspect_ratio).toBe('9:16');
 		expect(overrides.user_prompt).toBe('hello world');
+	});
+
+	test('returns model override when route matches context', () => {
+		localStorage.setItem(
+			CREATE_SETTINGS_STORAGE_KEYS.model,
+			encodeSharedModelRoute(3, 'txt2img', 'flux-dev')
+		);
+		const overrides = getSharedFieldValueOverrides(
+			{ model: { type: 'select' } },
+			{ serverId: 3, methodKey: 'txt2img' }
+		);
+		expect(overrides.model).toBe('flux-dev');
+	});
+
+	test('omits model override when route does not match context', () => {
+		localStorage.setItem(
+			CREATE_SETTINGS_STORAGE_KEYS.model,
+			encodeSharedModelRoute(3, 'txt2img', 'flux-dev')
+		);
+		const overrides = getSharedFieldValueOverrides(
+			{ model: { type: 'select' } },
+			{ serverId: 3, methodKey: 'img2img' }
+		);
+		expect(overrides.model).toBeUndefined();
+	});
+});
+
+describe('getSharedModelForContext', () => {
+	/** @type {ReturnType<typeof makeStorage>} */
+	let localStorage;
+
+	beforeEach(() => {
+		localStorage = makeStorage();
+		global.window = { localStorage, sessionStorage: makeStorage() };
+	});
+
+	afterEach(() => {
+		delete global.window;
+	});
+
+	test('returns model when server and method match route', () => {
+		localStorage.setItem(
+			CREATE_SETTINGS_STORAGE_KEYS.model,
+			encodeSharedModelRoute(7, 'txt2img', 'sdxl')
+		);
+		expect(getSharedModelForContext(7, 'txt2img')).toBe('sdxl');
+	});
+
+	test('returns empty when context does not match route', () => {
+		localStorage.setItem(
+			CREATE_SETTINGS_STORAGE_KEYS.model,
+			encodeSharedModelRoute(7, 'txt2img', 'sdxl')
+		);
+		expect(getSharedModelForContext(7, 'img2img')).toBe('');
+		expect(getSharedModelForContext(8, 'txt2img')).toBe('');
 	});
 });
 
@@ -197,6 +294,17 @@ describe('syncCreatePageSelectionsToSharedStorage', () => {
 		});
 
 		expect(localStorage.getItem(CREATE_SETTINGS_STORAGE_KEYS.prompt)).toBe('keep me');
+	});
+
+	test('provider-form save preserves trailing newline at end of prompt', () => {
+		syncCreatePageSelectionsToSharedStorage({
+			fieldValues: { prompt: 'line one\n' },
+			methodFields: { prompt: { label: 'Prompt' } },
+			notify: false,
+		});
+
+		expect(localStorage.getItem(CREATE_SETTINGS_STORAGE_KEYS.prompt)).toBe('line one\n');
+		expect(resolveSharedPrompt()).toBe('line one\n');
 	});
 
 	test('persists server and method before model is chosen', () => {

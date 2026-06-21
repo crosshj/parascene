@@ -8,7 +8,9 @@ const DEFAULT_MAX_HEIGHT_PX = 1200;
 
 // Track per-element minimum heights computed from "empty" content.
 const minHeightCache = new WeakMap();
+const minHeightWidthCache = new WeakMap();
 const rafTokenCache = new WeakMap();
+const autogrowRefreshByTextarea = new WeakMap();
 
 function isVisible(el) {
 	if (!(el instanceof HTMLElement)) return false;
@@ -17,8 +19,16 @@ function isVisible(el) {
 }
 
 function getEmptyScrollHeight(textarea) {
+	const width = textarea.clientWidth;
+	const cachedWidth = minHeightWidthCache.get(textarea);
 	const cached = minHeightCache.get(textarea);
-	if (Number.isFinite(cached) && cached > 0) return cached;
+	if (
+		cachedWidth === width &&
+		Number.isFinite(cached) &&
+		cached > 0
+	) {
+		return cached;
+	}
 
 	const previousValue = textarea.value;
 	const previousHeight = textarea.style.height;
@@ -32,6 +42,7 @@ function getEmptyScrollHeight(textarea) {
 
 	if (Number.isFinite(h) && h > 0) {
 		minHeightCache.set(textarea, h);
+		minHeightWidthCache.set(textarea, width);
 		return h;
 	}
 	return 0;
@@ -51,7 +62,14 @@ export function resizeAutoGrowTextarea(textarea, { maxHeightPx = DEFAULT_MAX_HEI
 	if (!(textarea instanceof HTMLTextAreaElement)) return;
 	if (!isVisible(textarea)) return;
 
-	textarea.style.height = 'auto';
+	const isPromptEditor = textarea.classList.contains('prompt-editor');
+	// overflow-y:auto + fixed height makes scrollHeight stick at clientHeight when typing
+	// at end-of-string (wrapped lines scroll internally). Measure with overflow hidden
+	// and height collapsed so scrollHeight reflects full content.
+	if (isPromptEditor) {
+		textarea.style.overflowY = 'hidden';
+	}
+	textarea.style.height = '0px';
 
 	const emptyHeight = getEmptyScrollHeight(textarea);
 	const next = textarea.scrollHeight;
@@ -59,16 +77,28 @@ export function resizeAutoGrowTextarea(textarea, { maxHeightPx = DEFAULT_MAX_HEI
 	if (clamped > 0) {
 		textarea.style.height = `${clamped}px`;
 	}
+	if (isPromptEditor) {
+		const atMax = next > maxHeightPx;
+		textarea.style.overflowY = atMax ? 'auto' : 'hidden';
+		if (atMax && textarea.selectionStart === textarea.value.length) {
+			textarea.scrollTop = textarea.scrollHeight;
+		}
+	}
 }
 
 export function attachAutoGrowTextarea(textarea, { maxHeightPx = DEFAULT_MAX_HEIGHT_PX } = {}) {
 	if (!(textarea instanceof HTMLTextAreaElement)) return () => {};
 
+	const existingRefresh = autogrowRefreshByTextarea.get(textarea);
+	if (typeof existingRefresh === 'function') {
+		return existingRefresh;
+	}
+
 	textarea.dataset.autogrow = textarea.dataset.autogrow || 'true';
 	const isPromptEditor = textarea.classList.contains('prompt-editor');
-	// Prompt editors: cap height and scroll internally to avoid iOS Safari viewport jump.
+	// Prompt editors: cap height and scroll internally at max (see resizeAutoGrowTextarea).
 	if (isPromptEditor) {
-		textarea.style.overflowY = 'auto';
+		textarea.style.overflowY = 'hidden';
 		textarea.style.resize = 'none';
 	} else {
 		textarea.style.overflow = 'hidden';
@@ -76,7 +106,10 @@ export function attachAutoGrowTextarea(textarea, { maxHeightPx = DEFAULT_MAX_HEI
 	}
 
 	const getMaxPx = () => (isPromptEditor ? getPromptEditorMaxHeightPx() : maxHeightPx);
-	const refresh = () => schedule(textarea, () => resizeAutoGrowTextarea(textarea, { maxHeightPx: getMaxPx() }));
+	const refresh = () =>
+		schedule(textarea, () => resizeAutoGrowTextarea(textarea, { maxHeightPx: getMaxPx() }));
+
+	autogrowRefreshByTextarea.set(textarea, refresh);
 
 	textarea.addEventListener('input', refresh);
 	textarea.addEventListener('change', refresh);
@@ -90,7 +123,11 @@ export function attachAutoGrowTextarea(textarea, { maxHeightPx = DEFAULT_MAX_HEI
 
 	// ResizeObserver handles width changes (layout / orientation).
 	if (typeof ResizeObserver !== 'undefined') {
-		const ro = new ResizeObserver(() => refresh());
+		const ro = new ResizeObserver(() => {
+			minHeightCache.delete(textarea);
+			minHeightWidthCache.delete(textarea);
+			refresh();
+		});
 		ro.observe(textarea);
 		textarea.addEventListener('blur', () => {
 			// keep observer; no-op

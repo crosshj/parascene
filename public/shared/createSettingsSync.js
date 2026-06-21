@@ -91,9 +91,11 @@ export function readSharedCreateSettings() {
  * @returns {string}
  */
 export function resolveSharedPrompt(settings = readSharedCreateSettings()) {
-	if (settings.prompt?.trim()) return settings.prompt.trim();
-	if (settings.promptImageEdit?.trim()) return settings.promptImageEdit.trim();
-	if (settings.promptText?.trim()) return settings.promptText.trim();
+	if (typeof settings.prompt === 'string' && settings.prompt.trim()) return settings.prompt;
+	if (typeof settings.promptImageEdit === 'string' && settings.promptImageEdit.trim()) {
+		return settings.promptImageEdit;
+	}
+	if (typeof settings.promptText === 'string' && settings.promptText.trim()) return settings.promptText;
 	return '';
 }
 
@@ -398,10 +400,32 @@ export function mergeSharedSettingsIntoSessionSelections(
 }
 
 /**
+ * Shared model value when it matches the current server/method (or when context is omitted).
+ *
+ * @param {number | string | null | undefined} serverId
+ * @param {string | null | undefined} methodKey
+ * @param {ReturnType<typeof readSharedCreateSettings>} [settings]
+ * @returns {string}
+ */
+export function getSharedModelForContext(serverId, methodKey, settings = readSharedCreateSettings()) {
+	const parsed = parseSharedModelRoute(settings.modelRoute);
+	if (!parsed?.model) return '';
+
+	const hasContext = serverId != null && methodKey;
+	if (!hasContext) return parsed.model;
+
+	const numericServerId = Number(serverId);
+	if (!Number.isFinite(numericServerId) || numericServerId < 1) return '';
+	if (numericServerId !== parsed.serverId || methodKey !== parsed.methodKey) return '';
+	return parsed.model;
+}
+
+/**
  * @param {Record<string, unknown> | null | undefined} methodFields
+ * @param {{ serverId?: number | string | null, methodKey?: string | null }} [context]
  * @returns {Record<string, string>}
  */
-export function getSharedFieldValueOverrides(methodFields) {
+export function getSharedFieldValueOverrides(methodFields, context = {}) {
 	const settings = readSharedCreateSettings();
 	/** @type {Record<string, string>} */
 	const overrides = {};
@@ -419,9 +443,9 @@ export function getSharedFieldValueOverrides(methodFields) {
 		}
 	}
 
-	const parsed = parseSharedModelRoute(settings.modelRoute);
-	if (parsed?.model && methodFields?.model) {
-		overrides.model = parsed.model;
+	const model = getSharedModelForContext(context.serverId, context.methodKey, settings);
+	if (model && methodFields?.model) {
+		overrides.model = model;
 	}
 
 	return overrides;
@@ -432,6 +456,15 @@ export function getSharedFieldValueOverrides(methodFields) {
  */
 export function getSharedAdvancedPrompt() {
 	return resolveSharedPrompt();
+}
+
+/**
+ * @param {ReturnType<typeof readSharedCreateSettings>} [settings]
+ * @returns {string}
+ */
+export function getSharedAspectRatio(settings = readSharedCreateSettings()) {
+	const raw = settings.aspectRatio;
+	return typeof raw === 'string' && raw.trim() ? raw.trim() : '';
 }
 
 /**
@@ -451,7 +484,7 @@ export function syncCreatePageFieldValuesToSharedStorage(fieldValues, methodFiel
 			if (!isPromptLikeFieldKey(key, field)) continue;
 			const val = fieldValues[key];
 			if (typeof val === 'string' && val.trim()) {
-				persistSharedPrompt(val.trim(), { notify: false });
+				persistSharedPrompt(val, { notify: false });
 				break;
 			}
 		}
