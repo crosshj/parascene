@@ -487,17 +487,19 @@ body.prsn-creation-composer-drag-active .create-composer:not(.is-drop-target) .c
 }
 
 .create-composer-input-row {
-	display: flex;
-	flex-direction: row;
-	align-items: flex-end;
+	--create-composer-clear-inset: 2.5rem;
+	--create-composer-scrollbar-gutter: 0.625rem;
+	position: relative;
+	display: block;
 	flex: 1 1 auto;
 	min-width: 0;
 	padding: 0 var(--create-composer-pad-x) 2px;
 	box-sizing: border-box;
 }
 
-.create-composer-input {
-	flex: 1 1 auto;
+.create-composer-input-row .create-composer-input {
+	display: block;
+	flex: none;
 	min-width: 0;
 	width: 100%;
 	margin: 0;
@@ -513,6 +515,21 @@ body.prsn-creation-composer-drag-active .create-composer:not(.is-drop-target) .c
 	font-size: 0.9375rem;
 	font-family: inherit;
 	color: var(--text);
+	box-sizing: border-box;
+}
+
+.create-composer-input-row:has(.prompt-field-clear-icon:not([hidden])) .create-composer-input {
+	padding-right: var(--create-composer-clear-inset);
+}
+
+.create-composer-input-row .prompt-field-clear-icon {
+	position: absolute;
+	right: var(--create-composer-scrollbar-gutter);
+	bottom: 6px;
+	z-index: 1;
+	flex-shrink: unset;
+	align-self: unset;
+	margin: 0;
 }
 
 .create-composer-input:focus {
@@ -1799,13 +1816,26 @@ app-route-create .create-route .image-field-error {
 	max-width: 100%;
 }
 
+.create-prompt-wrap:has(.create-prompt-clear.is-visible) {
+	padding-bottom: 1.125rem;
+}
+
+.create-prompt-wrap .create-prompt-input,
+.create-prompt-wrap textarea,
+.create-prompt-wrap .form-input {
+	display: block;
+	width: 100%;
+	box-sizing: border-box;
+}
+
 .create-prompt-clear {
 	position: absolute;
-	right: 0.5rem;
-	bottom: -0.75rem;
+	right: 0;
+	bottom: 0;
 	z-index: 2;
 	font-size: 0.75rem;
 	color: var(--text-muted);
+	text-decoration: underline;
 	pointer-events: none;
 	visibility: hidden;
 }
@@ -3972,7 +4002,43 @@ body.view-nsfw .creation-detail-image-wrapper.nsfw::after {
 
 .creation-detail-description-wrap {
 	margin-top: 4px;
-	--ps-desc-max-height: calc(10 * 1.5em);
+	--ps-desc-max-height: calc(4 * 1.5em);
+}
+
+.prompt-field-clear-icon {
+	flex-shrink: 0;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	min-width: 32px;
+	align-self: flex-end;
+	margin: 0 0 3px;
+	padding: 0;
+	border: none;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--text-muted);
+	cursor: pointer;
+	-webkit-tap-highlight-color: transparent;
+	box-sizing: border-box;
+}
+
+.prompt-field-clear-icon:hover {
+	color: var(--text);
+	background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+.prompt-field-clear-icon:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 1px;
+}
+
+.prompt-field-clear-icon-svg {
+	display: block;
+	width: 16px;
+	height: 16px;
 }
 
 .creation-detail-description-wrap.is-collapsed .creation-detail-description {
@@ -3987,7 +4053,7 @@ body.view-nsfw .creation-detail-image-wrapper.nsfw::after {
 	left: 0;
 	right: 0;
 	bottom: 0;
-	height: 64px;
+	height: 40px;
 	z-index: 1;
 	pointer-events: none;
 	background: linear-gradient(180deg,

@@ -7,9 +7,11 @@ import {
 	mergeSharedSettingsIntoSessionSelections,
 	parseSharedModelRoute,
 	persistSharedAspectRatio,
+	clearSharedCreatePrompt,
 	persistSharedPrompt,
 	readSharedCreateSettings,
 	resolveSharedPrompt,
+	shouldComposerSnapshotIncludeModelRoute,
 	syncCreatePageSelectionsToSharedStorage,
 	writeSharedCreateSettingsFromComposerSnapshot,
 } from '../public/shared/createSettingsSync.js';
@@ -110,6 +112,17 @@ describe('mergeSharedSettingsIntoSessionSelections', () => {
 		expect(parsed.methodKey).toBe('img2img');
 		expect(parsed.fieldValues.model).toBe('sdxl');
 	});
+
+	test('merges server/method from dedicated keys when model route is absent', () => {
+		localStorage.setItem(CREATE_SETTINGS_STORAGE_KEYS.serverId, '6');
+		localStorage.setItem(CREATE_SETTINGS_STORAGE_KEYS.methodKey, 'image2video');
+
+		mergeSharedSettingsIntoSessionSelections();
+
+		const parsed = JSON.parse(sessionStorage.getItem(CREATE_PAGE_SELECTIONS_SESSION_KEY));
+		expect(parsed.serverId).toBe(6);
+		expect(parsed.methodKey).toBe('image2video');
+	});
 });
 
 describe('getSharedFieldValueOverrides', () => {
@@ -172,6 +185,136 @@ describe('syncCreatePageSelectionsToSharedStorage', () => {
 		});
 
 		expect(localStorage.getItem(CREATE_SETTINGS_STORAGE_KEYS.prompt)).toBe('');
+	});
+
+	test('provider-form save with empty prompt field does not clobber shared prompt', () => {
+		persistSharedPrompt('keep me', { notify: false });
+
+		syncCreatePageSelectionsToSharedStorage({
+			fieldValues: { prompt: '' },
+			methodFields: { prompt: { label: 'Prompt' } },
+			notify: false,
+		});
+
+		expect(localStorage.getItem(CREATE_SETTINGS_STORAGE_KEYS.prompt)).toBe('keep me');
+	});
+
+	test('persists server and method before model is chosen', () => {
+		syncCreatePageSelectionsToSharedStorage({
+			fieldValues: {},
+			serverId: 6,
+			methodKey: 'image2video',
+			notify: false,
+		});
+
+		expect(localStorage.getItem(CREATE_SETTINGS_STORAGE_KEYS.serverId)).toBe('6');
+		expect(localStorage.getItem(CREATE_SETTINGS_STORAGE_KEYS.methodKey)).toBe('image2video');
+		expect(localStorage.getItem(CREATE_SETTINGS_STORAGE_KEYS.model)).toBeNull();
+	});
+
+	test('composer-only model keys do not affect advanced session merge', () => {
+		const sessionStorage = makeStorage();
+		global.window = { localStorage, sessionStorage };
+		const advancedRoute = encodeSharedModelRoute(99, 'txt2img', 'flux-special');
+		persistSharedPrompt('advanced prompt', { notify: false });
+		writeSharedCreateSettingsFromComposerSnapshot({
+			modelRoute: advancedRoute,
+			outputMode: 'image',
+			notify: false,
+		});
+		localStorage.setItem(
+			CREATE_SETTINGS_STORAGE_KEYS.composerModel,
+			encodeSharedModelRoute(1, 'replicate', 'xai/grok-imagine-image')
+		);
+
+		mergeSharedSettingsIntoSessionSelections();
+
+		const parsed = JSON.parse(sessionStorage.getItem(CREATE_PAGE_SELECTIONS_SESSION_KEY));
+		expect(parsed.serverId).toBe(99);
+		expect(parsed.methodKey).toBe('txt2img');
+		expect(parsed.fieldValues.model).toBe('flux-special');
+	});
+});
+
+describe('shouldComposerSnapshotIncludeModelRoute', () => {
+	const grokRoute = encodeSharedModelRoute(1, 'replicate', 'xai/grok-imagine-image');
+	const fluxRoute = encodeSharedModelRoute(99, 'txt2img', 'flux-special');
+	const representable = [grokRoute];
+
+	test('includes model when shared route is absent', () => {
+		expect(
+			shouldComposerSnapshotIncludeModelRoute({
+				selectedModelRoute: grokRoute,
+				representableRouteKeys: representable,
+			})
+		).toBe(true);
+	});
+
+	test('includes model when shared route is also representable', () => {
+		expect(
+			shouldComposerSnapshotIncludeModelRoute({
+				selectedModelRoute: grokRoute,
+				sharedModelRoute: grokRoute,
+				representableRouteKeys: representable,
+			})
+		).toBe(true);
+	});
+
+	test('omits fallback model when shared advanced route is outside composer', () => {
+		expect(
+			shouldComposerSnapshotIncludeModelRoute({
+				selectedModelRoute: grokRoute,
+				sharedModelRoute: fluxRoute,
+				representableRouteKeys: representable,
+			})
+		).toBe(false);
+	});
+
+	test('includes model when user explicitly picked composer model over unrepresentable shared route', () => {
+		expect(
+			shouldComposerSnapshotIncludeModelRoute({
+				selectedModelRoute: grokRoute,
+				sharedModelRoute: fluxRoute,
+				composerSavedModelRoute: grokRoute,
+				representableRouteKeys: representable,
+			})
+		).toBe(true);
+	});
+});
+
+describe('clearSharedCreatePrompt', () => {
+	test('clears localStorage prompt keys and session prompt-like field values', () => {
+		const localStorage = makeStorage();
+		const sessionStorage = makeStorage();
+		global.window = { localStorage, sessionStorage };
+		const dispatched = [];
+		global.document = { dispatchEvent: (event) => dispatched.push(event) };
+
+		localStorage.setItem(CREATE_SETTINGS_STORAGE_KEYS.prompt, 'hello');
+		localStorage.setItem(CREATE_SETTINGS_STORAGE_KEYS.promptText, 'hello');
+		localStorage.setItem(CREATE_SETTINGS_STORAGE_KEYS.promptImageEdit, 'hello');
+		sessionStorage.setItem(
+			CREATE_PAGE_SELECTIONS_SESSION_KEY,
+			JSON.stringify({
+				fieldValues: { prompt: 'hello', negative_prompt: 'bad', model: 'flux' },
+				advancedOptions: { prompt: 'hello' },
+			})
+		);
+
+		clearSharedCreatePrompt({ notify: true });
+
+		expect(localStorage.getItem(CREATE_SETTINGS_STORAGE_KEYS.prompt)).toBe('');
+		expect(localStorage.getItem(CREATE_SETTINGS_STORAGE_KEYS.promptText)).toBe('');
+		expect(localStorage.getItem(CREATE_SETTINGS_STORAGE_KEYS.promptImageEdit)).toBe('');
+		const selections = JSON.parse(sessionStorage.getItem(CREATE_PAGE_SELECTIONS_SESSION_KEY));
+		expect(selections.fieldValues.prompt).toBe('');
+		expect(selections.fieldValues.negative_prompt).toBe('');
+		expect(selections.fieldValues.model).toBe('flux');
+		expect(selections.advancedOptions.prompt).toBe('');
+		expect(dispatched.length).toBe(1);
+
+		delete global.window;
+		delete global.document;
 	});
 });
 

@@ -9,12 +9,13 @@ const _qs = (() => {
 	const v = document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() || '';
 	return v ? `?v=${encodeURIComponent(v)}` : '';
 })();
-const [{ attachAutoGrowTextarea }, { loadMutateQueue, removeFromMutateQueueByImageUrl }, { createImagePickerModalDom, wireImagePickerModal }, { getMutateQueuePrefillForProviderFields }] =
+const [{ attachAutoGrowTextarea }, { loadMutateQueue, removeFromMutateQueueByImageUrl }, { createImagePickerModalDom, wireImagePickerModal }, { getMutateQueuePrefillForProviderFields }, { attachPromptFieldClear }] =
 	await Promise.all([
 		import(`./autogrow.js${_qs}`),
 		import(`./mutateQueue.js${_qs}`),
 		import(`./imagePickerModal.js${_qs}`),
-		import(`./mutateQueueSync.js${_qs}`)
+		import(`./mutateQueueSync.js${_qs}`),
+		import(`./promptFieldClear.js${_qs}`),
 	]);
 
 // --- Field type detection (used to choose handler) ---
@@ -82,6 +83,9 @@ function createTextareaField(fieldKey, field, context) {
 	input.placeholder = field.label || fieldKey;
 	input.rows = typeof field.rows === 'number' && field.rows > 0 ? field.rows : 3;
 	if (field.required) input.required = true;
+
+	const defaultValue = typeof field?.default === 'string' ? field.default : '';
+	if (defaultValue) input.value = defaultValue;
 
 	attachAutoGrowTextarea(input);
 
@@ -915,7 +919,24 @@ export function renderFields(container, fields, options = {}) {
 		});
 
 		fieldGroup.appendChild(label);
-		fieldGroup.appendChild(input);
+		if (
+			input instanceof HTMLTextAreaElement &&
+			isPromptLikeField(fieldKey, field)
+		) {
+			const wrap = document.createElement('div');
+			wrap.className = 'create-prompt-wrap';
+			wrap.appendChild(input);
+			attachPromptFieldClear(input, {
+				wrap,
+				afterClear: () => {
+					const refresh = attachAutoGrowTextarea(input);
+					if (typeof refresh === 'function') refresh();
+				},
+			});
+			fieldGroup.appendChild(wrap);
+		} else {
+			fieldGroup.appendChild(input);
+		}
 
 		// For select fields, show a muted hint below the field when options provide hints.
 		if (type === 'select' && Array.isArray(field?.options) && field.options.length > 0) {

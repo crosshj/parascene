@@ -1,28 +1,14 @@
+import { clearSharedCreatePrompt } from './createSettingsSync.js';
+
 export function generateCreationToken() {
 	const ts = Date.now().toString(36);
 	const rand = Math.random().toString(36).slice(2, 10);
 	return `crt_${ts}_${rand}`;
 }
 
-/** Clear composer prompt drafts (same keys as createComposer clearComposerState). */
+/** Clear composer prompt drafts (localStorage, session selections, synced surfaces). */
 export function clearComposerPromptDraftStorage() {
-	try {
-		localStorage.setItem('create_page_prompt', '');
-		localStorage.setItem('create_page_prompt_text', '');
-		localStorage.setItem('create_page_prompt_image_edit', '');
-	} catch (_) {}
-	try {
-		const sk = 'create-page-selections';
-		const stored = sessionStorage.getItem(sk);
-		if (!stored) return;
-		const selections = JSON.parse(stored);
-		if (!selections || typeof selections !== 'object') return;
-		const fv = selections.fieldValues && typeof selections.fieldValues === 'object' ? selections.fieldValues : {};
-		const adv = selections.advancedOptions && typeof selections.advancedOptions === 'object' ? selections.advancedOptions : {};
-		selections.fieldValues = { ...fv, prompt: '' };
-		selections.advancedOptions = { ...adv, prompt: '' };
-		sessionStorage.setItem(sk, JSON.stringify(selections));
-	} catch (_) {}
+	clearSharedCreatePrompt({ notify: true });
 }
 
 function invalidateRelatedDataCaches() {

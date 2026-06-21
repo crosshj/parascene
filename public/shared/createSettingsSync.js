@@ -11,10 +11,16 @@ export const CREATE_SETTINGS_STORAGE_KEYS = {
 	aspectRatio: 'create_page_aspect_ratio',
 	model: 'create_page_model',
 	modelLabel: 'create_page_model_label',
+	serverId: 'create_page_server_id',
+	methodKey: 'create_page_method_key',
 	styleIndex: 'create_page_style_index',
 	styleSelected: 'create_page_style_selected',
 	outputMode: 'create_page_output_mode',
 	videoModel: 'create_page_video_model',
+	/** Composer-only; does not overwrite /create basic+advanced model route. */
+	composerModel: 'create_page_composer_model',
+	composerVideoModel: 'create_page_composer_video_model',
+	composerModelLabel: 'create_page_composer_model_label',
 };
 
 export const CREATE_PAGE_SELECTIONS_SESSION_KEY = 'create-page-selections';
@@ -139,6 +145,44 @@ export function persistSharedPrompt(prompt, { notify = true } = {}) {
 }
 
 /**
+ * Clear remembered prompt across localStorage + session create-page-selections.
+ * @param {{ notify?: boolean }} [options]
+ */
+export function clearSharedCreatePrompt({ notify = true } = {}) {
+	persistSharedPrompt('', { notify: false });
+
+	const ss = getSessionStorage();
+	if (ss) {
+		try {
+			const stored = ss.getItem(CREATE_PAGE_SELECTIONS_SESSION_KEY);
+			if (stored) {
+				const selections = JSON.parse(stored);
+				if (selections && typeof selections === 'object') {
+					const fv =
+						selections.fieldValues && typeof selections.fieldValues === 'object'
+							? { ...selections.fieldValues }
+							: {};
+					for (const key of Object.keys(fv)) {
+						if (/prompt/i.test(key)) fv[key] = '';
+					}
+					selections.fieldValues = fv;
+					const adv =
+						selections.advancedOptions && typeof selections.advancedOptions === 'object'
+							? { ...selections.advancedOptions, prompt: '' }
+							: { prompt: '' };
+					selections.advancedOptions = adv;
+					ss.setItem(CREATE_PAGE_SELECTIONS_SESSION_KEY, JSON.stringify(selections));
+				}
+			}
+		} catch {
+			// ignore storage errors
+		}
+	}
+
+	if (notify) notifyCreateSettingsUpdated();
+}
+
+/**
  * @param {string} aspectRatio
  * @param {{ notify?: boolean }} [options]
  */
@@ -204,6 +248,51 @@ export function persistSharedOutputMode(outputMode, { notify = true } = {}) {
 }
 
 /**
+ * Whether the composer should push its model route into shared /create storage.
+ * When advanced/basic has a route the composer cannot represent, a composer UI fallback
+ * must not overwrite it — only an explicit composer model pick may update shared storage.
+ *
+ * @param {{
+ *   selectedModelRoute?: string,
+ *   sharedModelRoute?: string,
+ *   composerSavedModelRoute?: string,
+ *   representableRouteKeys?: string[],
+ * }} params
+ * @returns {boolean}
+ */
+export function shouldComposerSnapshotIncludeModelRoute({
+	selectedModelRoute = '',
+	sharedModelRoute = '',
+	composerSavedModelRoute = '',
+	representableRouteKeys = [],
+} = {}) {
+	const selected = String(selectedModelRoute || '').trim();
+	if (!selected) return false;
+	const representable = new Set(
+		representableRouteKeys.map((key) => String(key || '').trim()).filter(Boolean)
+	);
+	if (!representable.has(selected)) return false;
+
+	const shared = String(sharedModelRoute || '').trim();
+	if (!shared) return true;
+	if (representable.has(shared)) return true;
+
+	const composerSaved = String(composerSavedModelRoute || '').trim();
+	return Boolean(composerSaved && composerSaved === selected);
+}
+
+/**
+ * @param {string} routeKey
+ * @param {string[]} representableRouteKeys
+ * @returns {boolean}
+ */
+export function isSharedModelRouteComposerRepresentable(routeKey, representableRouteKeys = []) {
+	const key = String(routeKey || '').trim();
+	if (!key) return false;
+	return representableRouteKeys.some((candidate) => String(candidate || '').trim() === key);
+}
+
+/**
  * @param {{
  *   prompt?: string,
  *   aspectRatio?: string,
@@ -229,6 +318,16 @@ export function writeSharedCreateSettingsFromComposerSnapshot(snapshot = {}) {
 			outputMode: snapshot.outputMode === 'video' ? 'video' : 'image',
 			notify: false,
 		});
+		const parsed = parseSharedModelRoute(snapshot.modelRoute);
+		const ls = getLocalStorage();
+		if (parsed && ls) {
+			try {
+				ls.setItem(CREATE_SETTINGS_STORAGE_KEYS.serverId, String(parsed.serverId));
+				ls.setItem(CREATE_SETTINGS_STORAGE_KEYS.methodKey, parsed.methodKey);
+			} catch {
+				// ignore storage errors
+			}
+		}
 	}
 	if (typeof snapshot.styleSelected === 'string') {
 		persistSharedStyleSelected(snapshot.styleSelected, { notify: false });
@@ -280,6 +379,15 @@ export function mergeSharedSettingsIntoSessionSelections(
 		selections.serverId = parsed.serverId;
 		selections.methodKey = parsed.methodKey;
 		if (parsed.model) selections.fieldValues.model = parsed.model;
+	} else {
+		const sharedServerId = Number(readString(getLocalStorage(), CREATE_SETTINGS_STORAGE_KEYS.serverId));
+		const sharedMethodKey = readString(getLocalStorage(), CREATE_SETTINGS_STORAGE_KEYS.methodKey).trim();
+		if (Number.isFinite(sharedServerId) && sharedServerId >= 1) {
+			selections.serverId = sharedServerId;
+		}
+		if (sharedMethodKey) {
+			selections.methodKey = sharedMethodKey;
+		}
 	}
 
 	try {
@@ -342,8 +450,8 @@ export function syncCreatePageFieldValuesToSharedStorage(fieldValues, methodFiel
 		for (const [key, field] of Object.entries(methodFields)) {
 			if (!isPromptLikeFieldKey(key, field)) continue;
 			const val = fieldValues[key];
-			if (typeof val === 'string') {
-				persistSharedPrompt(val, { notify: false });
+			if (typeof val === 'string' && val.trim()) {
+				persistSharedPrompt(val.trim(), { notify: false });
 				break;
 			}
 		}
@@ -380,8 +488,20 @@ export function syncCreatePageSelectionsToSharedStorage(state = {}, { notify = t
 
 	const modelValue =
 		fieldValues && typeof fieldValues.model === 'string' ? fieldValues.model.trim() : '';
-	if (serverId && methodKey && modelValue) {
-		persistSharedModelRoute(encodeSharedModelRoute(Number(serverId), methodKey, modelValue), {
+	const numericServerId = Number(serverId);
+	if (Number.isFinite(numericServerId) && numericServerId >= 1 && methodKey) {
+		const ls = getLocalStorage();
+		if (ls) {
+			try {
+				ls.setItem(CREATE_SETTINGS_STORAGE_KEYS.serverId, String(numericServerId));
+				ls.setItem(CREATE_SETTINGS_STORAGE_KEYS.methodKey, String(methodKey));
+			} catch {
+				// ignore storage errors
+			}
+		}
+	}
+	if (numericServerId >= 1 && methodKey && modelValue) {
+		persistSharedModelRoute(encodeSharedModelRoute(numericServerId, methodKey, modelValue), {
 			outputMode: outputMode === 'video' ? 'video' : 'image',
 			notify: false,
 		});

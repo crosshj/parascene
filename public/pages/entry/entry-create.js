@@ -386,37 +386,17 @@ function runCreatePageInit(refreshAutoGrowTextareas, createSettingsSyncMod = {})
 	}).catch(() => {});
 
 	// Prompt clear link and is-empty state (restored from pre-4d5956d)
-	document.querySelectorAll('.create-content .create-prompt-wrap').forEach((wrap) => {
-		const field = wrap.querySelector('.create-prompt-input');
-		const clearLink = wrap.querySelector('.create-prompt-clear');
-		if (!field || !clearLink) return;
-		function updateClearVisibility() {
-			clearLink.classList.toggle('is-visible', (field.value || '').trim().length > 0);
-		}
-		function updateEmptyState() {
-			wrap.classList.toggle('is-empty', !(field.value || '').trim().length);
-		}
-		field.addEventListener('input', () => {
-			updateClearVisibility();
-			updateEmptyState();
-		});
-		field.addEventListener('change', () => {
-			updateClearVisibility();
-			updateEmptyState();
-		});
-		updateClearVisibility();
-		updateEmptyState();
-		clearLink.addEventListener('click', (e) => {
-			e.preventDefault();
-			field.value = '';
-			clearLink.classList.remove('is-visible');
-			wrap.classList.add('is-empty');
-			field.dispatchEvent(new Event('input', { bubbles: true }));
-			try {
-				refreshAutoGrowTextareas(document);
-			} catch (_) {}
-		});
-	});
+	import(`../../shared/promptFieldClear.js${createPromptQsParam}`)
+		.then(({ attachPromptFieldClearAll }) => {
+			attachPromptFieldClearAll(document.querySelector('.create-content'), {
+				afterClear: () => {
+					try {
+						refreshAutoGrowTextareas(document);
+					} catch (_) {}
+				},
+			});
+		})
+		.catch(() => {});
 
 	// Style thumbnails and data-style-value on columns (restored from pre-4d5956d entry-create.js)
 	const styleSection = document.querySelector('.create-content .create-style-section');

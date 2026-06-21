@@ -36,12 +36,15 @@ import {
 	syncMutateQueueFromComposerAttachments,
 } from '/shared/mutateQueueSync.js';
 import {
+	CREATE_SETTINGS_STORAGE_KEYS,
 	CREATE_SETTINGS_UPDATED_EVENT,
 	mergeSharedSettingsIntoSessionSelections,
 	readSharedCreateSettings,
 	resolveSharedPrompt,
+	shouldComposerSnapshotIncludeModelRoute,
 	writeSharedCreateSettingsFromComposerSnapshot,
 } from '/shared/createSettingsSync.js';
+import { attachPromptFieldClear } from '/shared/promptFieldClear.js';
 
 const BASIC_CREATE_DEFAULT_SERVER_ID = 1;
 const BASIC_CREATE_DEFAULT_METHOD_KEY = 'replicate';
@@ -105,14 +108,14 @@ const STORAGE_KEYS = {
 	promptText: 'create_page_prompt_text',
 	promptImageEdit: 'create_page_prompt_image_edit',
 	aspectRatio: 'create_page_aspect_ratio',
-	model: 'create_page_model',
-	modelLabel: 'create_page_model_label',
+	model: CREATE_SETTINGS_STORAGE_KEYS.composerModel,
+	modelLabel: CREATE_SETTINGS_STORAGE_KEYS.composerModelLabel,
 	styleIndex: 'create_page_style_index',
 	styleSelected: 'create_page_style_selected',
 	imageEditSelection: 'create_page_image_edit_selection',
 	imageEditCarryover: 'create_page_image_edit_carryover',
 	outputMode: 'create_page_output_mode',
-	videoModel: 'create_page_video_model',
+	videoModel: CREATE_SETTINGS_STORAGE_KEYS.composerVideoModel,
 	methodCredits: 'create_page_method_credits',
 };
 
@@ -245,8 +248,8 @@ function readStoredOutputMode() {
 
 function readStoredModelValue() {
 	try {
-		const v = localStorage.getItem(STORAGE_KEYS.model);
-		return typeof v === 'string' && v.trim() ? v.trim() : '';
+		const composer = localStorage.getItem(STORAGE_KEYS.model);
+		return typeof composer === 'string' && composer.trim() ? composer.trim() : '';
 	} catch {
 		return '';
 	}
@@ -254,11 +257,30 @@ function readStoredModelValue() {
 
 function readStoredModelLabel() {
 	try {
-		const v = localStorage.getItem(STORAGE_KEYS.modelLabel);
-		return typeof v === 'string' && v.trim() ? v.trim() : '';
+		const composer = localStorage.getItem(STORAGE_KEYS.modelLabel);
+		return typeof composer === 'string' && composer.trim() ? composer.trim() : '';
 	} catch {
 		return '';
 	}
+}
+
+/**
+ * Pick the first stored route key that exists in the composer's model list.
+ * Composer key wins over shared /create route so a fallback UI default never clobbers advanced.
+ *
+ * @param {ComposerModelRouteOption[]} routeOptions
+ * @param {string[]} storedKeys
+ * @returns {string}
+ */
+function resolveComposerRouteFromStorage(routeOptions, storedKeys) {
+	for (const saved of storedKeys) {
+		if (typeof saved !== 'string' || !saved.trim()) continue;
+		const key = saved.trim();
+		if (routeOptions.some((o) => o.selectValue === key)) return key;
+		const byValue = routeOptions.find((o) => o.value === key);
+		if (byValue?.selectValue) return byValue.selectValue;
+	}
+	return '';
 }
 
 /**
@@ -771,6 +793,14 @@ export function mountCreateComposer(host, opts = {}) {
 							placeholder="Describe what you want to create…"
 							rows="1" data-autogrow="true" data-create-composer-prompt
 							aria-label="Prompt"></textarea>
+						<button type="button" class="prompt-field-clear-icon" data-prompt-clear
+							data-create-composer-prompt-clear hidden aria-label="Clear prompt">
+							<svg class="prompt-field-clear-icon-svg" viewBox="0 0 24 24" fill="none"
+								stroke="currentColor" stroke-width="2" stroke-linecap="round"
+								stroke-linejoin="round" aria-hidden="true">
+								<path d="M18 6L6 18M6 6l12 12"/>
+							</svg>
+						</button>
 					</div>
 					<div class="create-composer-toolbar" role="toolbar" aria-label="Create options">
 						<div class="create-composer-toolbar-primary">
@@ -1052,6 +1082,42 @@ export function mountCreateComposer(host, opts = {}) {
 		return imageModelOptions.map((o) => ({ value: o.selectValue, label: o.label }));
 	}
 
+	function getActiveRouteOptions() {
+		return isVideoMode() ? videoModelOptions : imageModelOptions;
+	}
+
+	function readComposerSavedModelRoute() {
+		try {
+			const key = isVideoMode() ? STORAGE_KEYS.videoModel : STORAGE_KEYS.model;
+			const value = localStorage.getItem(key);
+			return typeof value === 'string' && value.trim() ? value.trim() : '';
+		} catch {
+			return '';
+		}
+	}
+
+	function readSharedAdvancedModelRoute() {
+		try {
+			const key = isVideoMode()
+				? CREATE_SETTINGS_STORAGE_KEYS.videoModel
+				: CREATE_SETTINGS_STORAGE_KEYS.model;
+			const value = localStorage.getItem(key);
+			return typeof value === 'string' && value.trim() ? value.trim() : '';
+		} catch {
+			return '';
+		}
+	}
+
+	function shouldPushComposerModelToShared() {
+		const routeOptions = getActiveRouteOptions();
+		return shouldComposerSnapshotIncludeModelRoute({
+			selectedModelRoute: selectedModel,
+			sharedModelRoute: readSharedAdvancedModelRoute(),
+			composerSavedModelRoute: readComposerSavedModelRoute(),
+			representableRouteKeys: routeOptions.map((option) => option.selectValue),
+		});
+	}
+
 	function saveModelSelection(value) {
 		try {
 			if (isVideoMode()) {
@@ -1144,12 +1210,13 @@ export function mountCreateComposer(host, opts = {}) {
 		let next;
 		if (isVideoMode()) {
 			try {
-				const saved = localStorage.getItem(STORAGE_KEYS.videoModel);
-				if (saved && videoModelOptions.some((o) => o.selectValue === saved)) {
-					next = saved;
-				} else if (list.some((o) => o.value === prev)) {
+				const composerSaved = localStorage.getItem(STORAGE_KEYS.videoModel);
+				const sharedSaved = localStorage.getItem(CREATE_SETTINGS_STORAGE_KEYS.videoModel);
+				next = resolveComposerRouteFromStorage(videoModelOptions, [composerSaved, sharedSaved]);
+				if (!next && list.some((o) => o.value === prev)) {
 					next = prev;
-				} else {
+				}
+				if (!next) {
 					next = getDefaultVideoSelectValue();
 				}
 			} catch {
@@ -1157,13 +1224,9 @@ export function mountCreateComposer(host, opts = {}) {
 			}
 		} else {
 			try {
-				const saved = localStorage.getItem(STORAGE_KEYS.model);
-				if (saved && imageModelOptions.some((o) => o.selectValue === saved)) {
-					next = saved;
-				} else if (saved) {
-					const legacy = imageModelOptions.find((o) => o.value === saved);
-					next = legacy?.selectValue;
-				}
+				const composerSaved = localStorage.getItem(STORAGE_KEYS.model);
+				const sharedSaved = localStorage.getItem(CREATE_SETTINGS_STORAGE_KEYS.model);
+				next = resolveComposerRouteFromStorage(imageModelOptions, [composerSaved, sharedSaved]);
 			} catch (_) {}
 			if (!next) {
 				const parsed = parseComposerRouteKey(prev);
@@ -1590,8 +1653,11 @@ export function mountCreateComposer(host, opts = {}) {
 			}
 			const modelRoute = settings.modelRoute?.trim();
 			if (modelRoute) {
-				const list = getActiveModelList();
-				if (list.some((o) => o.value === modelRoute) && modelRoute !== selectedModel) {
+				const routeOptions = getActiveRouteOptions();
+				if (
+					routeOptions.some((option) => option.selectValue === modelRoute) &&
+					modelRoute !== selectedModel
+				) {
 					applySelectedModel(modelRoute);
 				}
 			}
@@ -2418,6 +2484,20 @@ export function mountCreateComposer(host, opts = {}) {
 			promptInput.removeEventListener('paste', onPaste);
 			promptInput.removeEventListener('keydown', onPromptKeydown);
 		});
+		const promptInputRow = promptInput.closest('.create-composer-input-row');
+		attachPromptFieldClear(promptInput, {
+			variant: 'icon',
+			wrap: promptInputRow instanceof HTMLElement ? promptInputRow : null,
+			trackEmpty: false,
+			afterClear: () => {
+				syncStyleSelectionFromPrompt();
+				schedulePromptSave();
+				updateSubmitButtonState();
+				try {
+					refreshAutoGrow(host);
+				} catch (_) {}
+			},
+		});
 	}
 
 	if (composerRoot instanceof HTMLElement) {
@@ -2472,13 +2552,16 @@ export function mountCreateComposer(host, opts = {}) {
 			savePrompt();
 			saveAspectRatio(selectedAspect);
 			saveAttachmentsToStorage();
-			writeSharedCreateSettingsFromComposerSnapshot({
+			const snapshot = {
 				prompt: promptInput?.value || '',
 				aspectRatio: selectedAspect,
 				outputMode,
-				modelRoute: selectedModel,
 				styleSelected: getSelectedStyleKey(),
-			});
+			};
+			if (shouldPushComposerModelToShared()) {
+				snapshot.modelRoute = selectedModel;
+			}
+			writeSharedCreateSettingsFromComposerSnapshot(snapshot);
 			mergeSharedSettingsIntoSessionSelections();
 			document.cookie = 'create_editor=; path=/; max-age=0';
 			window.location.href = '/create';

@@ -28,6 +28,7 @@ let applyHeroAspectLayoutToElement;
 let aspectRatioFromCreation;
 let closestAspectRatioPreset;
 let parseAspectRatioString;
+let attachPromptFieldClear;
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -93,6 +94,9 @@ async function loadDeps() {
 		aspectRatioFromCreation = aspectRatioMod.aspectRatioFromCreation;
 		closestAspectRatioPreset = aspectRatioMod.closestAspectRatioPreset;
 		parseAspectRatioString = aspectRatioMod.parseAspectRatioString;
+
+		const promptFieldClearMod = await import(`/shared/promptFieldClear.js${qs}`);
+		attachPromptFieldClear = promptFieldClearMod.attachPromptFieldClear;
 
 		await import(`/components/elements/tabs.js${qs}`);
 	})();
@@ -849,42 +853,39 @@ async function loadEditPage() {
 		}
 		promptEls.forEach((promptEl) => {
 			if (!(promptEl instanceof HTMLTextAreaElement)) return;
+			const wrap = promptEl.closest('[data-prompt-wrap]');
+			if (typeof attachPromptFieldClear === 'function') {
+				attachPromptFieldClear(promptEl, {
+					wrap,
+					onClear: () => {
+						promptEls.forEach((p) => {
+							if (p !== promptEl && p instanceof HTMLTextAreaElement) {
+								p.value = '';
+								p.dispatchEvent(new Event('input', { bubbles: true }));
+							}
+						});
+						updateCostAndButtonState();
+						scheduleMutatePromptPersist();
+					},
+					afterClear: () => {
+						try {
+							refreshAutoGrowTextareas(editContent);
+						} catch (_) {}
+					},
+				});
+			}
 			promptEl.addEventListener('input', () => {
 				const value = promptEl.value || '';
 				promptEls.forEach((other) => {
 					if (other !== promptEl && other instanceof HTMLTextAreaElement) {
 						other.value = value;
+						other.dispatchEvent(new Event('input', { bubbles: true }));
 					}
 				});
 				updateCostAndButtonState();
 				scheduleMutatePromptPersist();
-				const wrap = promptEl.closest('[data-prompt-wrap]');
-				wrap?.classList.toggle('is-empty', value.trim().length === 0);
-				const clear = wrap?.querySelector('.create-prompt-clear');
-				clear?.classList.toggle('is-visible', value.trim().length > 0);
 			});
 			promptEl.addEventListener('change', scheduleMutatePromptPersist);
-			const wrap = promptEl.closest('[data-prompt-wrap]');
-			wrap?.classList.toggle('is-empty', (promptEl.value || '').trim().length === 0);
-			const clear = wrap?.querySelector('.create-prompt-clear');
-			clear?.classList.toggle('is-visible', (promptEl.value || '').trim().length > 0);
-		});
-
-		editContent.querySelectorAll('.create-prompt-clear').forEach((clearEl) => {
-			clearEl.addEventListener('click', (e) => {
-				e.preventDefault();
-				promptEls.forEach((p) => {
-					if (p instanceof HTMLTextAreaElement) {
-						p.value = '';
-						const wrap = p.closest('[data-prompt-wrap]');
-						wrap?.classList.add('is-empty');
-						const clear = wrap?.querySelector('.create-prompt-clear');
-						clear?.classList.remove('is-visible');
-					}
-				});
-				updateCostAndButtonState();
-				scheduleMutatePromptPersist();
-			});
 		});
 
 		if (queueBtns.length > 0) {
