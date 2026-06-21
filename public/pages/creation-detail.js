@@ -864,6 +864,82 @@ function renderLineageAncestorsPlaceholder(ancestorCount) {
 		</div>`;
 }
 
+function parseLineageDescendantsPayload(raw) {
+	if (raw == null) return [];
+	if (Array.isArray(raw)) return raw;
+	if (typeof raw === 'object') {
+		if (Array.isArray(raw.descendants)) return raw.descendants;
+		const merged = [...(Array.isArray(raw.direct) ? raw.direct : []), ...(Array.isArray(raw.descendants) ? raw.descendants : [])];
+		if (merged.length === 0) return [];
+		const byId = new Map();
+		for (const item of merged) {
+			const id = Number(item?.id);
+			if (!Number.isFinite(id) || id <= 0) continue;
+			if (!byId.has(id)) byId.set(id, item);
+		}
+		return [...byId.values()].sort((a, b) => {
+			const ta = Date.parse(a.created_at || '') || 0;
+			const tb = Date.parse(b.created_at || '') || 0;
+			return ta - tb || Number(a.id) - Number(b.id);
+		});
+	}
+	return [];
+}
+
+async function resolveLineageDescendants(creationId, creation) {
+	if (Array.isArray(creation?.lineage_descendants)) {
+		return creation.lineage_descendants;
+	}
+	try {
+		const res = await fetch(`/api/create/images/${creationId}/children`, { credentials: 'include' });
+		if (res.ok) return parseLineageDescendantsPayload(await res.json());
+	} catch {
+		// ignore
+	}
+	return [];
+}
+
+function renderLineageOffspringThumbLinks(items, ctx) {
+	const { enableNsfw, showUnobscured, escapeHtml } = ctx;
+	if (!Array.isArray(items) || items.length === 0) return '';
+	return items.map((child) => {
+		const cid = child.id;
+		const childNsfw = !!child.nsfw;
+		const thumbUrl = (child.thumbnail_url || child.url || '').trim();
+		const unpublished = child.unpublished === true;
+		const labelSuffix = unpublished ? ' (unpublished)' : '';
+		if (!enableNsfw && childNsfw) {
+			return `<span class="creation-detail-history-thumb-link creation-detail-history-nsfw-blank" data-child-id="${cid}" aria-label="${escapeHtml(`Creation #${cid}${labelSuffix} (hidden)`)}">#${cid}</span>`;
+		}
+		const nsfwClass = enableNsfw && childNsfw ? (showUnobscured ? ' nsfw nsfw-revealed' : ' nsfw') : '';
+		const dataCreationId = enableNsfw && childNsfw ? ` data-creation-id="${cid}"` : '';
+		return `
+			<a
+				class="creation-detail-history-thumb-link${nsfwClass}"
+				href="/creations/${cid}"
+				aria-label="${escapeHtml(`Go to creation #${cid}${labelSuffix}`)}"
+				data-child-id="${cid}"${dataCreationId}
+			>
+				<span class="creation-detail-history-fallback" data-child-fallback>#${cid}</span>
+				<img class="creation-detail-history-thumb" data-child-img alt="" loading="lazy" style="display: none;" data-bg-url="${escapeHtml(thumbUrl)}" />
+			</a>
+		`;
+	}).join('');
+}
+
+function renderLineageOffspringSection(label, items, ctx, dataRootAttr) {
+	const parts = renderLineageOffspringThumbLinks(items, ctx);
+	if (!parts) return '';
+	return html`
+		<div class="creation-detail-history-wrap">
+			<div class="creation-detail-history-label">${label}</div>
+			<div class="creation-detail-history" ${dataRootAttr}>
+				${parts}
+			</div>
+		</div>
+	`;
+}
+
 function buildLineageSectionHtmlFromPrefetch(lineagePrefetch, ctx) {
 	const {
 		creationId,
@@ -876,7 +952,7 @@ function buildLineageSectionHtmlFromPrefetch(lineagePrefetch, ctx) {
 	const historyIds = lineagePrefetch.historyIds;
 	const historyChainIds = lineagePrefetch.historyChainIds;
 	const nsfwById = lineagePrefetch.nsfwById;
-	const childrenList = lineagePrefetch.childrenList;
+	const descendantsList = lineagePrefetch.descendantsList;
 
 	let ancestorsHtml = '';
 	if (historyIds.length > 0 && historyChainIds.length >= 2) {
@@ -934,40 +1010,9 @@ function buildLineageSectionHtmlFromPrefetch(lineagePrefetch, ctx) {
 		`;
 	}
 
-	let childrenHtml = '';
-	if (Array.isArray(childrenList) && childrenList.length > 0) {
-		const childParts = childrenList.map((child) => {
-			const cid = child.id;
-			const childNsfw = !!child.nsfw;
-			const thumbUrl = (child.thumbnail_url || child.url || '').trim();
-			if (!enableNsfw && childNsfw) {
-				return `<span class="creation-detail-history-thumb-link creation-detail-history-nsfw-blank" data-child-id="${cid}" aria-label="${escapeHtml(`Creation #${cid} (hidden)`)}">#${cid}</span>`;
-			}
-			const nsfwClass = enableNsfw && childNsfw ? (showUnobscured ? ' nsfw nsfw-revealed' : ' nsfw') : '';
-			const dataCreationId = enableNsfw && childNsfw ? ` data-creation-id="${cid}"` : '';
-			return `
-				<a
-					class="creation-detail-history-thumb-link${nsfwClass}"
-					href="/creations/${cid}"
-					aria-label="${escapeHtml(`Go to creation #${cid}`)}"
-					data-child-id="${cid}"${dataCreationId}
-				>
-					<span class="creation-detail-history-fallback" data-child-fallback>#${cid}</span>
-					<img class="creation-detail-history-thumb" data-child-img alt="" loading="lazy" style="display: none;" data-bg-url="${escapeHtml(thumbUrl)}" />
-				</a>
-			`;
-		}).join('');
-		childrenHtml = html`
-			<div class="creation-detail-history-wrap">
-				<div class="creation-detail-history-label">Children</div>
-				<div class="creation-detail-history" data-creation-children>
-					${childParts}
-				</div>
-			</div>
-		`;
-	}
+	const descendantsHtml = renderLineageOffspringSection('Descendants', descendantsList, ctx, 'data-creation-descendants');
 
-	return { sectionHtml: ancestorsHtml + (childrenHtml || ''), historyIds, historyChainIds };
+	return { sectionHtml: ancestorsHtml + (descendantsHtml || ''), historyIds, historyChainIds };
 }
 
 /** Renders visible actions as pills in the action strip. Only actions with inKebabMenu === false are shown (items in the more menu are not duplicated as pills). */
@@ -1489,7 +1534,7 @@ function createCreationDetailPerfTracker({ creationId, loadToken, isCurrentLoad 
 		creationApi: 'Creation API',
 		likeMeta: 'Like metadata',
 		viewerProfile: 'Viewer profile',
-		lineage: 'Lineage (ancestors/children)',
+		lineage: 'Lineage (ancestors/descendants)',
 		creatorProfile: 'Creator profile',
 		detailPanel: 'Detail panel',
 		contentAboveComments: 'Content above comments',
@@ -2443,10 +2488,8 @@ async function loadCreation() {
 
 		perf.expectReady('viewerProfile', 'creatorProfile', 'lineage');
 
-		// Fetch direct children (published creations with mutate_of_id = this id), order by created_at
-		const childrenPromise = fetch(`/api/create/images/${creationId}/children`, { credentials: 'include' })
-			.then((r) => (r.ok ? r.json() : []))
-			.catch(() => []);
+		// Lineage descendants come from the creation payload; /children is a fallback for older APIs.
+		const descendantsPromise = resolveLineageDescendants(creationId, creation);
 
 		const lineageOfQuerySuffix = `?lineage_of=${encodeURIComponent(String(creationId))}`;
 
@@ -2537,7 +2580,7 @@ async function loadCreation() {
 				);
 			}
 
-			const childrenList = await perf.timeAsync('lineage', 'children', () => childrenPromise);
+			const descendantsList = await perf.timeAsync('lineage', 'descendants', () => descendantsPromise);
 			return {
 				historyIds: historyIdsPrefetch,
 				historyChainIds: historyChainIdsPrefetch,
@@ -2545,7 +2588,7 @@ async function loadCreation() {
 				ancestorSlots,
 				nonCurrentIds,
 				directParentIds,
-				childrenList,
+				descendantsList,
 			};
 		})();
 
@@ -2735,6 +2778,8 @@ async function loadCreation() {
 				.replace(/"/g, '&quot;')
 				.replace(/'/g, '&#39;');
 		}
+
+		const descendantsListResolved = await perf.timeAsync('lineage', 'descendants', () => descendantsPromise);
 
 		function isHydratedProviderPromptJson(argsPrompt) {
 			if (typeof argsPrompt !== 'string' || !argsPrompt.trim().startsWith('{')) return false;
@@ -3045,15 +3090,24 @@ async function loadCreation() {
 		const hasAncestorLineage = historyIdsPrefetch.length > 0 && historyChainIdsPrefetch.length >= 2;
 		const deferLineageSection = hasAncestorLineage;
 		let historyIds = historyIdsPrefetch;
-		const lineageSectionHtml = deferLineageSection
-			? renderLineageAncestorsPlaceholder(historyChainIdsPrefetch.length - 1)
-			: '';
+		const lineageOffspringCtx = { enableNsfw, showUnobscured, escapeHtml };
+		let lineageSectionHtml = '';
+		if (deferLineageSection) {
+			lineageSectionHtml = renderLineageAncestorsPlaceholder(historyChainIdsPrefetch.length - 1);
+		} else if (descendantsListResolved.length > 0) {
+			lineageSectionHtml = renderLineageOffspringSection(
+				'Descendants',
+				descendantsListResolved,
+				lineageOffspringCtx,
+				'data-creation-descendants'
+			);
+		}
 
 		// Full chain for lineage modal prev/next (ancestors then current), same order as history strip + current.
 		const lineageModalChainIdsOrdered =
 			historyIdsPrefetch.length > 0 && historyChainIdsPrefetch.length >= 2 ? [...historyChainIdsPrefetch] : [];
 
-		// Children are hydrated with ancestors when the deferred lineage prefetch completes.
+		// Descendants without ancestors render synchronously; with ancestors they hydrate when prefetch completes.
 		const args = meta?.args ?? null;
 		const isPlainObject = args && typeof args === 'object' && !Array.isArray(args);
 		const storedUserPrompt = typeof meta?.user_prompt === 'string' ? meta.user_prompt.trim() : '';
@@ -3087,7 +3141,7 @@ async function loadCreation() {
 		const styleModifiers = styleMeta && typeof styleMeta.modifiers === 'string' ? styleMeta.modifiers.trim() : '';
 		const hasStyle = styleLabel.length > 0;
 
-		// Show description block if we have user description, lineage (ancestors/children), prompt, style, or meta (server/method/duration).
+		// Show description block if we have user description, lineage (ancestors/descendants), prompt, style, or meta (server/method/duration).
 		let descriptionHtml = '';
 		const descriptionText = typeof creation.description === 'string' ? creation.description.trim() : '';
 		const hasDescription = descriptionText.length > 0;
@@ -4126,10 +4180,10 @@ async function loadCreation() {
 			}
 		}
 
-		function hydrateLineageChildrenThumbnails() {
-			const childrenRoot = detailContent.querySelector('[data-creation-children]');
-			if (!childrenRoot) return;
-			const imgs = childrenRoot.querySelectorAll('img[data-child-img][data-bg-url]');
+		function hydrateLineageDescendantsThumbnails() {
+			const descendantsRoot = detailContent.querySelector('[data-creation-descendants]');
+			if (!descendantsRoot) return;
+			const imgs = descendantsRoot.querySelectorAll('img[data-child-img][data-bg-url]');
 			for (const img of imgs) {
 				if (!(img instanceof HTMLImageElement)) continue;
 				const bgUrl = (img.getAttribute('data-bg-url') || '').trim();
@@ -4218,6 +4272,8 @@ async function loadCreation() {
 		}
 
 		void (async () => {
+			if (!hasAncestorLineage) return;
+
 			const lineagePrefetch = await perf.timeAsync('lineage', 'deferredHydrate', () => lineagePrefetchPromise);
 			if (!isCurrentLoad()) return;
 
@@ -4243,12 +4299,14 @@ async function loadCreation() {
 						metaLine.insertAdjacentHTML('beforebegin', sectionHtml);
 					} else if (publishedEl) {
 						publishedEl.insertAdjacentHTML('beforeend', sectionHtml);
+					} else {
+						detailContent.insertAdjacentHTML('beforeend', sectionHtml);
 					}
 				}
 				const publishedEl = detailContent.querySelector('.creation-detail-published');
 				if (publishedEl) publishedEl.classList.add('has-history');
 				await hydrateLineageThumbnailsInDetail();
-				hydrateLineageChildrenThumbnails();
+				hydrateLineageDescendantsThumbnails();
 				wireLineageVideoPlaylistBtn();
 			} else {
 				const mount = detailContent.querySelector('[data-lineage-deferred-mount]');
@@ -4257,10 +4315,21 @@ async function loadCreation() {
 
 			perf.markReady('lineage', {
 				ancestorCount: historyIds.length,
-				childCount: Array.isArray(lineagePrefetch.childrenList) ? lineagePrefetch.childrenList.length : 0,
+				descendantCount: Array.isArray(lineagePrefetch.descendantsList) ? lineagePrefetch.descendantsList.length : 0,
 				deferred: true
 			});
 		})();
+
+		if (!hasAncestorLineage) {
+			if (descendantsListResolved.length > 0) {
+				hydrateLineageDescendantsThumbnails();
+			}
+			perf.markReady('lineage', {
+				ancestorCount: historyIdsPrefetch.length,
+				descendantCount: descendantsListResolved.length,
+				deferred: false
+			});
+		}
 
 		const likeButtons = detailContent.querySelectorAll('button[data-like-button]');
 		if (!shareMountedPrivate) {

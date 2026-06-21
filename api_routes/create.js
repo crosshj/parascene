@@ -860,6 +860,67 @@ export default function createCreateRoutes({ queries, storage }) {
 		return s;
 	}
 
+	async function buildLineageDescendantsForParent(parentId, user) {
+		const parentRow = await queries.selectCreatedImageByIdAnyUser?.get(parentId);
+		const viewerId = Number(user.id);
+		const isAdmin = user.role === "admin";
+		const parentOwnerId = parentRow ? Number(parentRow.user_id) : NaN;
+
+		function canViewUnpublishedChild(childRow) {
+			if (childRow.published === true || childRow.published === 1) return true;
+			if (isAdmin) return true;
+			const childOwnerId = Number(childRow.user_id);
+			if (Number.isFinite(childOwnerId) && childOwnerId === viewerId) return true;
+			if (Number.isFinite(parentOwnerId) && parentOwnerId === viewerId) return true;
+			return false;
+		}
+
+		function mapLineageChildRow(row, { unpublished = false } = {}) {
+			const status = row.status || "completed";
+			const url =
+				status === "completed"
+					? (row.file_path || storage.getImageUrl(row.filename))
+					: null;
+			const rowMeta = parseMeta(row.meta);
+			const mediaType = typeof rowMeta?.media_type === "string" ? rowMeta.media_type : "image";
+			const videoMeta = rowMeta && typeof rowMeta === "object" ? rowMeta.video : null;
+			const videoUrl =
+				videoMeta && typeof videoMeta.file_path === "string" && videoMeta.file_path
+					? videoMeta.file_path
+					: null;
+			return {
+				id: row.id,
+				title: row.title ?? null,
+				created_at: row.created_at,
+				url: url || null,
+				thumbnail_url: url ? getThumbnailUrl(url) : null,
+				nsfw: !!(row.nsfw),
+				media_type: mediaType,
+				video_url: videoUrl,
+				...(unpublished ? { unpublished: true } : {}),
+			};
+		}
+
+		const childRows = await queries.selectCreatedImageChildrenByParentId?.all(parentId) ?? [];
+		const direct = childRows
+			.filter((row) => canViewUnpublishedChild(row))
+			.map((row) => mapLineageChildRow(row, {
+				unpublished: !(row.published === true || row.published === 1),
+			}));
+
+		const descendantRows = await queries.selectCreatedImagePublishedDescendantsByAncestorId?.all(parentId) ?? [];
+		const directIds = new Set(direct.map((row) => Number(row.id)));
+		const indirect = descendantRows
+			.filter((row) => !directIds.has(Number(row.id)))
+			.map((row) => mapLineageChildRow(row));
+
+		return [...direct, ...indirect].sort((a, b) => {
+			const ta = Date.parse(a.created_at || "") || 0;
+			const tb = Date.parse(b.created_at || "") || 0;
+			return ta - tb || Number(a.id) - Number(b.id);
+		});
+	}
+
 	/**
 	 * Unpublished ancestor is readable when a viewable parent lists it in lineage meta.
 	 * Parent must be published (or viewer owns parent, or admin).
@@ -3261,6 +3322,12 @@ export default function createCreateRoutes({ queries, storage }) {
 			}
 			await appendChallengeSubmitEligibility(req, user, image, meta, response);
 
+			try {
+				response.lineage_descendants = await buildLineageDescendantsForParent(image.id, user);
+			} catch {
+				response.lineage_descendants = [];
+			}
+
 			if (queries.acknowledgeNotificationsForUserAndCreation?.run) {
 				const cid = Number(image.id);
 				if (Number.isFinite(cid) && cid > 0) {
@@ -3516,7 +3583,7 @@ export default function createCreateRoutes({ queries, storage }) {
 		}
 	});
 
-	// GET /api/create/images/:id/children - Direct children (mutate_of_id = id), published only, order by created_at asc
+	// GET /api/create/images/:id/children - Lineage descendants (direct + indirect), ordered by created_at
 	router.get("/api/create/images/:id/children", async (req, res) => {
 		const user = await requireUser(req, res);
 		if (!user) return;
@@ -3526,32 +3593,9 @@ export default function createCreateRoutes({ queries, storage }) {
 			if (!Number.isFinite(parentId) || parentId <= 0) {
 				return res.status(400).json({ error: "Invalid creation id" });
 			}
-			const rows = await queries.selectCreatedImageChildrenByParentId?.all(parentId) ?? [];
-			const children = rows.map((row) => {
-				const status = row.status || "completed";
-				const url =
-					status === "completed"
-						? (row.file_path || storage.getImageUrl(row.filename))
-						: null;
-				const meta = parseMeta(row.meta);
-				const mediaType = typeof meta?.media_type === "string" ? meta.media_type : "image";
-				const videoMeta = meta && typeof meta === "object" ? meta.video : null;
-				const videoUrl =
-					videoMeta && typeof videoMeta.file_path === "string" && videoMeta.file_path
-						? videoMeta.file_path
-						: null;
-				return {
-					id: row.id,
-					title: row.title ?? null,
-					created_at: row.created_at,
-					url: url || null,
-					thumbnail_url: url ? getThumbnailUrl(url) : null,
-					nsfw: !!(row.nsfw),
-					media_type: mediaType,
-					video_url: videoUrl
-				};
-			});
-			return res.json(children);
+
+			const descendants = await buildLineageDescendantsForParent(parentId, user);
+			return res.json({ descendants });
 		} catch (error) {
 			return res.status(500).json({ error: "Failed to fetch children" });
 		}

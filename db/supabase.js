@@ -5272,17 +5272,38 @@ export function openDb() {
 				return data ?? undefined;
 			}
 		},
-		/** Direct children: published creations with meta.mutate_of_id = parentId, ordered by created_at asc. */
+		/** Direct children: creations with meta.mutate_of_id = parentId, ordered by created_at asc. */
 		selectCreatedImageChildrenByParentId: {
 			all: async (parentId) => {
 				const id = Number(parentId);
 				if (!Number.isFinite(id) || id <= 0) return [];
 				const { data, error } = await serviceClient
 					.from(prefixedTable("created_images"))
+					.select("id, filename, file_path, title, created_at, status, meta, published, user_id")
+					.is("unavailable_at", null)
+					.contains("meta", { mutate_of_id: id })
+					.order("created_at", { ascending: true });
+				if (error) throw error;
+				return (data ?? []).map((row) => {
+					const meta = row?.meta;
+					const nsfw = !!(meta && typeof meta === "object" && meta.nsfw);
+					const { meta: _m, ...rest } = row;
+					return { ...rest, nsfw };
+				});
+			}
+		},
+		/** Published descendants that list ancestorId in meta.history but are not direct children. */
+		selectCreatedImagePublishedDescendantsByAncestorId: {
+			all: async (ancestorId) => {
+				const id = Number(ancestorId);
+				if (!Number.isFinite(id) || id <= 0) return [];
+				const { data, error } = await serviceClient
+					.from(prefixedTable("created_images"))
 					.select("id, filename, file_path, title, created_at, status, meta")
 					.eq("published", true)
 					.is("unavailable_at", null)
-					.contains("meta", { mutate_of_id: id })
+					.filter("meta->history", "cs", JSON.stringify([id]))
+					.neq("meta->>mutate_of_id", String(id))
 					.order("created_at", { ascending: true });
 				if (error) throw error;
 				return (data ?? []).map((row) => {
