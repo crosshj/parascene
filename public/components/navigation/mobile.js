@@ -30,10 +30,10 @@ async function loadDeps() {
 
 const html = String.raw;
 const CHAT_FIRST_ROUTE_PATHS = {
-	feed: '/chat/c/feed',
-	explore: '/chat/c/explore',
-	creations: '/chat/c/creations',
-	challenges: '/chat/c/challenges',
+	feed: '/feed',
+	explore: '/explore',
+	creations: '/creations',
+	challenges: '/challenges',
 	connect: '/chat#channels'
 };
 
@@ -101,6 +101,7 @@ class AppNavigationMobile extends HTMLElement {
 		}
 		this.render();
 		this.setupEventListeners();
+		this.handleRouteChange();
 	}
 
 	handleOverlayDismissed() {
@@ -248,6 +249,13 @@ class AppNavigationMobile extends HTMLElement {
 			if (slug === 'feed' || slug === 'explore' || slug === 'creations') {
 				currentRoute = slug;
 			}
+		}
+		if (
+			pathname === '/chat' &&
+			window.location.hash !== '#channels' &&
+			!document.body?.classList?.contains('chat-page--mobile-sidebar-open')
+		) {
+			currentRoute = 'feed';
 		}
 		if ((pathname === '/chat' || pathname.startsWith('/chat/')) && window.location.hash === '#channels') {
 			currentRoute = 'connect';

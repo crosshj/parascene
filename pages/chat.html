@@ -72,6 +72,25 @@
 					root.style.setProperty('--chat-canvas-panel-width', canvas + 'px');
 				}
 			} catch (e) { }
+			try {
+				var lanePath = String(window.location.pathname || '').replace(/\/+$/, '') || '/';
+				var laneSlug = null;
+				if (lanePath === '/chat' || lanePath === '/' || lanePath === '/index.html') {
+					laneSlug = 'feed';
+				} else {
+					var laneMatch = lanePath.match(/^\/chat\/c\/(feed|explore|creations|challenges)$/);
+					if (laneMatch) laneSlug = laneMatch[1];
+				}
+				if (laneSlug) {
+					var laneTarget = ({ feed: '/feed', explore: '/explore', creations: '/creations', challenges: '/challenges' })[laneSlug];
+					if (laneTarget && lanePath !== laneTarget) {
+						var laneState = window.history && window.history.state;
+						var laneBase = laneState && typeof laneState === 'object' ? Object.assign({}, laneState) : { prsnChat: true };
+						if (!laneBase.prsnChat) laneBase.prsnChat = true;
+						window.history.replaceState(laneBase, '', laneTarget);
+					}
+				}
+			} catch (e) { }
 		})();
 	</script>
 </head>

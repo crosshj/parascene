@@ -1033,6 +1033,20 @@ class AppNavigation extends HTMLElement {
 
 		// Get route from pathname (e.g., /feed -> feed, / -> defaultRoute)
 		let currentRoute = pathname === '/' || pathname === '' ? this.defaultRoute : pathname.slice(1).split('/')[0];
+		if (pathname.startsWith('/chat/c/')) {
+			const slug = pathname.slice('/chat/c/'.length).split('/')[0].trim().toLowerCase();
+			if (slug === 'feed' || slug === 'explore' || slug === 'creations') {
+				currentRoute = slug;
+			}
+		}
+		if (
+			pathname === '/chat' &&
+			document.body?.dataset?.entry === 'chat' &&
+			window.location.hash !== '#channels' &&
+			!document.body?.classList?.contains('chat-page--mobile-sidebar-open')
+		) {
+			currentRoute = 'feed';
+		}
 		if (pathname.startsWith('/connect')) {
 			currentRoute = 'connect';
 		}

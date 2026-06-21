@@ -357,6 +357,46 @@ function shouldShowAppMobileChromeForCurrentChatView(activePseudoSlug) {
 	return shouldUseAppMobileHeaderForChatPath(window.location.pathname);
 }
 
+/** Align `/chat` (default feed pane) with canonical `/feed` so overlay routing + nav highlight match. */
+function canonicalizePrimaryPseudoChannelUrl(slug) {
+	const key = String(slug || '').trim().toLowerCase();
+	const primaryLanes = {
+		feed: '/feed',
+		explore: '/explore',
+		creations: '/creations',
+		challenges: '/challenges',
+	};
+	const target = primaryLanes[key];
+	if (!target) return;
+	const p = String(window.location.pathname || '').replace(/\/+$/, '') || '/';
+	if (p === target) return;
+	const chatLane = `/chat/c/${key}`;
+	const shouldCanonicalize =
+		p === '/chat' ||
+		p === chatLane ||
+		(key === 'feed' && (p === '/' || p === '/index.html'));
+	if (!shouldCanonicalize) return;
+	try {
+		const curState = window.history?.state;
+		const baseState =
+			curState && typeof curState === 'object' ? { ...curState } : { prsnChat: true };
+		if (!baseState.prsnChat) baseState.prsnChat = true;
+		window.history.replaceState(baseState, '', target);
+	} catch {
+		return;
+	}
+	try {
+		document.querySelector('app-navigation')?.handleRouteChange?.();
+	} catch {
+		// ignore
+	}
+	try {
+		document.querySelector('app-navigation-mobile')?.handleRouteChange?.();
+	} catch {
+		// ignore
+	}
+}
+
 /** `?chatSimulateSendFail=1` — next POST /messages returns failure so you can preview resend UI. */
 function chatSimulateSendFail() {
 	try {
@@ -852,6 +892,18 @@ function parseChatPathname(pathname) {
 	}
 	return { kind: 'invalid' };
 }
+
+/** Normalize `/chat` and `/chat/c/*` pseudo-lane URLs to `/feed`, `/explore`, etc. before routing. */
+function bootstrapPrimaryChatLaneUrlFromLocation() {
+	const parsed = parseChatPathname(window.location.pathname);
+	if (parsed.kind !== 'channel') return;
+	const slug = String(parsed.slug || '').trim().toLowerCase();
+	if (slug === 'feed' || slug === 'explore' || slug === 'creations' || slug === 'challenges') {
+		canonicalizePrimaryPseudoChannelUrl(slug);
+	}
+}
+
+bootstrapPrimaryChatLaneUrlFromLocation();
 
 /**
  * Build a stable URL-safe display segment for optional chat thread name paths.
@@ -11495,6 +11547,8 @@ export async function initChatPage(root, options = {}) {
 		if (activePseudoChannelSlug === 'explore') {
 			exploreQueryRef.q = getExploreChannelSearchFromUrl();
 		}
+		canonicalizePrimaryPseudoChannelUrl(activePseudoChannelSlug);
+		syncChatSidebarPseudoStripActiveNow(window.location.pathname);
 		syncChatBrowseViewBodyClass();
 		applyComposerState();
 		teardownCommentsChannelLoadMore();

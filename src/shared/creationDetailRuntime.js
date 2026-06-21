@@ -127,6 +127,18 @@ function shouldInterceptEmbedLink(link, e) {
 	if (e.defaultPrevented) return false;
 	if (typeof e.button === 'number' && e.button !== 0) return false;
 	if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return false;
+	if (link.classList.contains('user-text-inline-image-link')) return false;
+	if (link.closest('.user-text-inline-image-link')) return false;
+	if (link.closest('.connect-chat-creation-embed-inner--video')) return false;
+	if (link.closest('.connect-chat-creation-embed-inner--group-carousel')) return false;
+	if (link.closest('.connect-chat-creation-embed-inner--group-video-carousel')) return false;
+	if (
+		link.closest('.connect-chat-creation-embed-inner') &&
+		!link.classList.contains('connect-chat-creation-embed-detail-link') &&
+		!link.closest('.connect-chat-creation-embed-media-hover-bar')
+	) {
+		return false;
+	}
 	const href = (link.getAttribute('href') || '').trim();
 	if (!href || href.startsWith('#')) return false;
 	if (link.hasAttribute('download')) return false;

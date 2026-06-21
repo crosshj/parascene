@@ -1527,10 +1527,11 @@ export function bindChatInlineImageLightboxClickDelegation(rootEl, options = {})
 		});
 	};
 
-	rootEl.addEventListener('click', handler);
-	rootEl.addEventListener('keydown', keyHandler);
+	const useCapture = isCreationDetailEmbedFrame();
+	rootEl.addEventListener('click', handler, useCapture);
+	rootEl.addEventListener('keydown', keyHandler, useCapture);
 	return () => {
-		rootEl.removeEventListener('click', handler);
-		rootEl.removeEventListener('keydown', keyHandler);
+		rootEl.removeEventListener('click', handler, useCapture);
+		rootEl.removeEventListener('keydown', keyHandler, useCapture);
 	};
 }

@@ -65,7 +65,16 @@ function isOverlayLanePath(pathname) {
 	}
 	if (document.body?.classList?.contains('chat-page--doom-scroll')) return false;
 	if (isChatDoomScrollPath(p)) return false;
-	if (p === '/feed' || p === '/explore' || p === '/creations' || p === '/challenges') return true;
+	if (
+		p === '/' ||
+		p === '/index.html' ||
+		p === '/feed' ||
+		p === '/explore' ||
+		p === '/creations' ||
+		p === '/challenges'
+	) {
+		return true;
+	}
 	if (/^\/chat\/c\/(feed|explore|creations|comments)(\/|$)/.test(p)) return true;
 	if (isChatPageShell() && (p === '/chat' || p.startsWith('/chat/'))) {
 		return true;
