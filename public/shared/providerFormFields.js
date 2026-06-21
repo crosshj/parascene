@@ -9,13 +9,14 @@ const _qs = (() => {
 	const v = document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() || '';
 	return v ? `?v=${encodeURIComponent(v)}` : '';
 })();
-const [{ attachAutoGrowTextarea }, { loadMutateQueue, removeFromMutateQueueByImageUrl }, { createImagePickerModalDom, wireImagePickerModal }, { getMutateQueuePrefillForProviderFields }, { attachPromptFieldClear }] =
+const [{ attachAutoGrowTextarea }, { loadMutateQueue, removeFromMutateQueueByImageUrl }, { createImagePickerModalDom, wireImagePickerModal }, { getMutateQueuePrefillForProviderFields }, { attachPromptFieldClear }, { createAudioClipPickerField, isAudioClipUrlField }] =
 	await Promise.all([
 		import(`./autogrow.js${_qs}`),
 		import(`./mutateQueue.js${_qs}`),
 		import(`./imagePickerModal.js${_qs}`),
 		import(`./mutateQueueSync.js${_qs}`),
 		import(`./promptFieldClear.js${_qs}`),
+		import(`./audioClipPickerField.js${_qs}`),
 	]);
 
 // --- Field type detection (used to choose handler) ---
@@ -786,7 +787,8 @@ const FIELD_HANDLERS = {
 	aspect_ratio_selector: createAspectRatioSelectorField,
 	boolean: createBooleanField,
 	image: createImageField,
-	image_array: createImageArrayField
+	image_array: createImageArrayField,
+	audio_clip: createAudioClipPickerField
 };
 
 /**
@@ -804,6 +806,8 @@ export function isImageUrlArrayField(field) {
 	return field?.type === 'image_url_array';
 }
 
+export { isAudioClipUrlField };
+
 export function getFieldType(fieldKey, field, context) {
 	if (
 		fieldKey === 'aspect_ratio' &&
@@ -817,6 +821,7 @@ export function getFieldType(fieldKey, field, context) {
 	if (field?.type === 'boolean') return 'boolean';
 	if (isImageUrlField(field)) return 'image';
 	if (isImageUrlArrayField(field)) return 'image_array';
+	if (isAudioClipUrlField(fieldKey, field)) return 'audio_clip';
 	if (isMultilineField(fieldKey, field)) return 'textarea';
 	return 'text';
 }
@@ -851,14 +856,16 @@ const DEFAULTS = {
 function sortedProviderFieldKeys(fields, context) {
 	const keys = Object.keys(fields);
 	const imageKeys = [];
+	const audioKeys = [];
 	const restKeys = [];
 	for (const fieldKey of keys) {
 		const field = fields[fieldKey];
 		const t = getFieldType(fieldKey, field, context);
 		if (t === 'image' || t === 'image_array') imageKeys.push(fieldKey);
+		else if (t === 'audio_clip') audioKeys.push(fieldKey);
 		else restKeys.push(fieldKey);
 	}
-	return [...restKeys, ...imageKeys];
+	return [...restKeys, ...audioKeys, ...imageKeys];
 }
 
 /**
@@ -902,7 +909,7 @@ export function renderFields(container, fields, options = {}) {
 			fieldGroup.setAttribute('data-field-hidden', 'true');
 		}
 
-		const label = createLabel(fieldKey, type === 'image' ? { ...field, label: 'Image' } : type === 'image_array' ? { ...field, label: field?.label || 'Images' } : field, {
+		const label = createLabel(fieldKey, type === 'image' ? { ...field, label: 'Image' } : type === 'image_array' ? { ...field, label: field?.label || 'Images' } : type === 'audio_clip' ? { ...field, label: field?.label || 'Audio clip' } : field, {
 			labelClassName: opts.labelClassName,
 			requiredClassName: opts.requiredClassName,
 			fieldIdPrefix: opts.fieldIdPrefix

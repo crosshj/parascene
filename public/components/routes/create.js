@@ -208,6 +208,8 @@ class AppRouteCreate extends HTMLElement {
 		this.handleServersConfigUpdated = this.handleServersConfigUpdated.bind(this);
 		this.storageKey = 'create-page-selections';
 		this._advancedConfirm = null; // { serverId, args, cost } when cost dialog is open
+		this._selectedAudioClipId = null;
+		this._audioClipPickerOffset = 0;
 		this._promptFromUrl = null; // prompt from ?prompt= (landing page); applied when Basic tab has a prompt field
 		this._confirmPrimaryAction = null;
 		this.showHiddenFields = false;
@@ -343,6 +345,16 @@ class AppRouteCreate extends HTMLElement {
                   <textarea class="form-input prompt-editor" id="advanced-prompt" data-advanced-prompt data-autogrow="true" rows="3" placeholder="Enter a prompt..."></textarea>
                   <a href="#" class="create-prompt-clear" tabindex="-1" aria-label="Clear field" data-prompt-clear>clear</a>
                 </div>
+              </div>
+              <div class="form-group create-route-audio-clip-picker" data-audio-clip-picker>
+                <label class="form-label">Audio clip <span class="form-label-optional">(optional, for audio-to-video)</span></label>
+                <div class="create-route-audio-clip-picker-list" data-audio-clip-picker-list role="list"></div>
+                <div class="create-route-audio-clip-picker-actions">
+                  <button type="button" class="btn-secondary" data-audio-clip-picker-prev disabled>Previous</button>
+                  <button type="button" class="btn-secondary" data-audio-clip-picker-next disabled>Next</button>
+                  <button type="button" class="btn-secondary" data-audio-clip-picker-clear hidden>Clear selection</button>
+                </div>
+                <p class="create-cost" data-audio-clip-picker-status>Select a clip to pass audio to the provider.</p>
               </div>
               <div class="form-group create-route-advanced-data">
                 <label class="form-label">Data Builder</label>
@@ -554,6 +566,7 @@ class AppRouteCreate extends HTMLElement {
 		if (advancedCreateButton) {
 			advancedCreateButton.addEventListener("click", () => this.handleAdvancedCreate());
 		}
+		this.setupAudioClipPicker();
 		const previewPayloadBtn = this.querySelector("[data-advanced-preview-payload]");
 		if (previewPayloadBtn) {
 			previewPayloadBtn.addEventListener("click", () => this.handlePreviewPayload());
@@ -951,10 +964,124 @@ class AppRouteCreate extends HTMLElement {
 		const hasAtLeastOneSwitch = Array.from(this.querySelectorAll("[data-advanced-option]")).some(
 			(btn) => btn.getAttribute("aria-checked") === "true"
 		);
-		advancedCreateButton.disabled = !hasServer || !hasAtLeastOneSwitch;
+		const hasClip = Number(this._selectedAudioClipId) > 0;
+		const canQuery = hasAtLeastOneSwitch || hasClip;
+		advancedCreateButton.disabled = !hasServer || !canQuery;
 		advancedCreateButton.textContent = 'Query';
-		if (costEl) costEl.hidden = hasAtLeastOneSwitch;
-		if (costQueryEl) costQueryEl.hidden = !hasAtLeastOneSwitch;
+		if (costEl) costEl.hidden = canQuery;
+		if (costQueryEl) costQueryEl.hidden = !canQuery;
+	}
+
+	formatAudioClipPickerDuration(sec) {
+		const n = Number(sec);
+		if (!Number.isFinite(n) || n <= 0) return '';
+		const total = Math.round(n);
+		const m = Math.floor(total / 60);
+		const s = total % 60;
+		return `${m}:${String(s).padStart(2, '0')}`;
+	}
+
+	appendAdvancedAudioClipArgs(args) {
+		const clipId = Number(this._selectedAudioClipId);
+		if (!Number.isFinite(clipId) || clipId <= 0) return args;
+		return { ...args, audio_clip_id: clipId };
+	}
+
+	async loadAudioClipPickerPage({ reset = false } = {}) {
+		const listEl = this.querySelector('[data-audio-clip-picker-list]');
+		const prevBtn = this.querySelector('[data-audio-clip-picker-prev]');
+		const nextBtn = this.querySelector('[data-audio-clip-picker-next]');
+		const clearBtn = this.querySelector('[data-audio-clip-picker-clear]');
+		const statusEl = this.querySelector('[data-audio-clip-picker-status]');
+		if (!listEl) return;
+		if (reset) this._audioClipPickerOffset = 0;
+		const limit = 8;
+		listEl.innerHTML = '<p class="create-route-audio-clip-picker-loading">Loading clips…</p>';
+		try {
+			const params = new URLSearchParams({
+				limit: String(limit),
+				offset: String(this._audioClipPickerOffset),
+				sort: 'last_used_at'
+			});
+			const res = await fetch(`/api/audio-clips?${params}`, { credentials: 'include' });
+			const data = await res.json().catch(() => ({}));
+			if (!res.ok) {
+				listEl.innerHTML = `<p class="create-route-audio-clip-picker-empty">${data?.error || 'Could not load clips.'}</p>`;
+				return;
+			}
+			const items = Array.isArray(data.items) ? data.items : [];
+			const total = Number(data.total) || items.length;
+			if (!items.length) {
+				listEl.innerHTML = '<p class="create-route-audio-clip-picker-empty">No clips yet. Add clips from Prompt Library → Audio clips.</p>';
+			} else {
+				listEl.innerHTML = items.map((row) => {
+					const id = Number(row.id);
+					const selected = id === Number(this._selectedAudioClipId);
+					const title = String(row.title || '').trim() || `Clip #${id}`;
+					const dur = this.formatAudioClipPickerDuration(row.duration_sec);
+					const src = String(row.source_type || '').replace(/_/g, ' ');
+					return `<button type="button" class="create-route-audio-clip-item${selected ? ' is-selected' : ''}" data-audio-clip-pick="${id}" aria-pressed="${selected ? 'true' : 'false'}">
+						<span class="create-route-audio-clip-item-title">${title}</span>
+						<span class="create-route-audio-clip-item-meta">${dur ? `${dur} · ` : ''}${src}</span>
+					</button>`;
+				}).join('');
+				for (const btn of listEl.querySelectorAll('[data-audio-clip-pick]')) {
+					btn.addEventListener('click', () => {
+						const id = Number(btn.getAttribute('data-audio-clip-pick'));
+						this._selectedAudioClipId = Number.isFinite(id) && id > 0 ? id : null;
+						void this.loadAudioClipPickerPage();
+						this.updateAdvancedCreateButton();
+						if (clearBtn instanceof HTMLElement) clearBtn.hidden = !(Number(this._selectedAudioClipId) > 0);
+						if (statusEl) {
+							statusEl.textContent = Number(this._selectedAudioClipId) > 0
+								? 'Clip selected — it will be sent to the provider on create.'
+								: 'Select a clip to pass audio to the provider.';
+						}
+					});
+				}
+			}
+			if (prevBtn instanceof HTMLButtonElement) {
+				prevBtn.disabled = this._audioClipPickerOffset <= 0;
+			}
+			if (nextBtn instanceof HTMLButtonElement) {
+				nextBtn.disabled = this._audioClipPickerOffset + limit >= total;
+			}
+			if (clearBtn instanceof HTMLElement) {
+				clearBtn.hidden = !(Number(this._selectedAudioClipId) > 0);
+			}
+		} catch {
+			listEl.innerHTML = '<p class="create-route-audio-clip-picker-empty">Could not load clips.</p>';
+		}
+	}
+
+	setupAudioClipPicker() {
+		const root = this.querySelector('[data-audio-clip-picker]');
+		if (!root || root.dataset.bound === '1') return;
+		root.dataset.bound = '1';
+		const prevBtn = this.querySelector('[data-audio-clip-picker-prev]');
+		const nextBtn = this.querySelector('[data-audio-clip-picker-next]');
+		const clearBtn = this.querySelector('[data-audio-clip-picker-clear]');
+		if (prevBtn) {
+			prevBtn.addEventListener('click', () => {
+				this._audioClipPickerOffset = Math.max(0, this._audioClipPickerOffset - 8);
+				void this.loadAudioClipPickerPage();
+			});
+		}
+		if (nextBtn) {
+			nextBtn.addEventListener('click', () => {
+				this._audioClipPickerOffset += 8;
+				void this.loadAudioClipPickerPage();
+			});
+		}
+		if (clearBtn) {
+			clearBtn.addEventListener('click', () => {
+				this._selectedAudioClipId = null;
+				void this.loadAudioClipPickerPage();
+				this.updateAdvancedCreateButton();
+				clearBtn.hidden = true;
+			});
+		}
+		void this.loadAudioClipPickerPage({ reset: true });
 	}
 
 	flushSharedCreateSettingsToStorage() {
@@ -1265,6 +1392,7 @@ class AppRouteCreate extends HTMLElement {
 			const key = btn.getAttribute("data-advanced-option");
 			if (key) args[key] = btn.getAttribute("aria-checked") === "true";
 		});
+		Object.assign(args, this.appendAdvancedAudioClipArgs({}));
 
 		if (queryBtn) {
 			queryBtn.disabled = true;
@@ -1388,7 +1516,8 @@ class AppRouteCreate extends HTMLElement {
 			const key = btn.getAttribute("data-advanced-option");
 			if (key) args[key] = btn.getAttribute("aria-checked") === "true";
 		});
-		const hasAtLeastOne = Object.keys(args).some((k) => k === 'prompt' || args[k] === true);
+		Object.assign(args, this.appendAdvancedAudioClipArgs({}));
+		const hasAtLeastOne = Object.keys(args).some((k) => k === 'prompt' || k === 'audio_clip_id' || args[k] === true);
 		if (!hasAtLeastOne) {
 			const pre = this.querySelector("[data-advanced-preview-json]");
 			if (pre) pre.textContent = 'Turn on at least one Data Builder option or enter a prompt to preview the payload.';
@@ -2155,6 +2284,13 @@ class AppRouteCreate extends HTMLElement {
 				collectedArgs[fieldKey] = this.fieldValues[fieldKey] ?? (field?.type === 'boolean' ? false : '');
 			}
 		});
+
+		const clipIdInput = this.querySelector('#field-audio_clip_id');
+		const clipIdRaw = clipIdInput?.value ?? this.fieldValues?.audio_clip_id ?? '';
+		const clipId = Number(clipIdRaw);
+		if (Number.isFinite(clipId) && clipId > 0) {
+			collectedArgs.audio_clip_id = clipId;
+		}
 
 		const formContext = this.getFormFieldContext();
 		if (typeof shouldUseAspectRatioSelector === 'function' && shouldUseAspectRatioSelector(formContext)) {

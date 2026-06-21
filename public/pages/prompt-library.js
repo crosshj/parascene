@@ -1,6 +1,6 @@
 /**
  * Prompt library — one GET /api/prompt-injections payload; tabs filter by tag_type (client-side).
- * URL hash: #styles | #personas switches tabs (e.g. /prompt-library#styles).
+ * URL hash: #styles | #personas | #audio-clips switches tabs (e.g. /prompt-library#styles).
  * Seeds <app-tabs active> from the hash before the element upgrades (race with entry.js); then
  * applies again after customElements.whenDefined so the correct tab always wins over the HTML default.
  *
@@ -12,22 +12,29 @@
 const STYLE_TAG_RE = /^(?=.*[a-z])[a-z0-9][a-z0-9_-]{0,63}$/;
 const PERSONA_TAG_RE = /^[a-z0-9][a-z0-9_-]{2,23}$/;
 
+const PROMPT_LIBRARY_TAB_IDS = new Set(["styles", "personas", "audio-clips"]);
+
 function hashTabIdFromLocation() {
 	return (window.location.hash || "").replace(/^#/, "").trim().toLowerCase();
 }
 
+function isPromptLibraryTabId(raw) {
+	return PROMPT_LIBRARY_TAB_IDS.has(raw);
+}
+
 function applyPromptLibraryTabFromHash() {
 	const raw = hashTabIdFromLocation();
-	if (raw !== "styles" && raw !== "personas") return;
+	if (!isPromptLibraryTabId(raw)) return;
 	const tabsEl = document.querySelector("app-tabs");
 	if (!tabsEl || typeof tabsEl.setActiveTab !== "function") return;
 	tabsEl.setActiveTab(raw, { focus: false });
+	syncPromptLibraryHeaderActions(raw);
 }
 
 /** Before app-tabs is defined, hydrate() reads `active`; set it from the hash so #personas wins over markup. */
 function seedPromptLibraryTabsActiveFromHash() {
 	const raw = hashTabIdFromLocation();
-	if (raw !== "styles" && raw !== "personas") return;
+	if (!isPromptLibraryTabId(raw)) return;
 	if (customElements.get("app-tabs")) return;
 	const el = document.querySelector("app-tabs");
 	if (el) el.setAttribute("active", raw);
@@ -47,10 +54,204 @@ function setupPromptLibraryTabsHashSync() {
 	tabsEl.dataset.promptLibraryHashSync = "1";
 	tabsEl.addEventListener("tab-change", (e) => {
 		const id = String(e.detail?.id ?? "").trim().toLowerCase();
-		if (id !== "styles" && id !== "personas") return;
-		if (hashTabIdFromLocation() === id) return;
+		if (!isPromptLibraryTabId(id)) return;
+		if (hashTabIdFromLocation() === id) {
+			syncPromptLibraryHeaderActions(id);
+			return;
+		}
 		window.location.hash = id;
+		syncPromptLibraryHeaderActions(id);
 	});
+}
+
+function syncPromptLibraryHeaderActions(activeTab) {
+	const addStyle = document.querySelector(".prompt-library-add-style");
+	const recordBtn = document.querySelector("[data-prompt-library-record]");
+	const uploadBtn = document.querySelector("[data-prompt-library-upload]");
+	const onAudio = activeTab === "audio-clips";
+	if (addStyle) addStyle.classList.toggle("is-tab-hidden", onAudio);
+	if (recordBtn instanceof HTMLElement) recordBtn.hidden = !onAudio;
+	if (uploadBtn instanceof HTMLElement) uploadBtn.hidden = !onAudio;
+}
+
+function formatClipDuration(sec) {
+	const n = Number(sec);
+	if (!Number.isFinite(n) || n <= 0) return "—";
+	const total = Math.round(n);
+	const m = Math.floor(total / 60);
+	const s = total % 60;
+	return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+function formatClipSourceType(sourceType) {
+	const t = String(sourceType ?? "").trim().toLowerCase();
+	if (t === "video_extract") return "Extracted";
+	if (t === "recorded") return "Recorded";
+	if (t === "upload") return "Upload";
+	return t || "—";
+}
+
+function formatRelativeTime(iso) {
+	if (!iso) return "—";
+	const ms = Date.parse(iso);
+	if (!Number.isFinite(ms)) return "—";
+	const diff = Date.now() - ms;
+	if (diff < 60_000) return "just now";
+	if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+	if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+	return `${Math.floor(diff / 86_400_000)}d ago`;
+}
+
+function renderAudioClipRows(tbody, rows, eyeSvg) {
+	if (!tbody) return;
+	const eye = typeof eyeSvg === "string" ? eyeSvg : "";
+	if (!rows.length) {
+		tbody.innerHTML = `<tr><td colspan="7" class="prompt-library-table-empty">No audio clips yet. Record or upload one to get started.</td></tr>`;
+		return;
+	}
+	tbody.innerHTML = rows
+		.map((row) => {
+			const id = row.id != null ? String(row.id) : "";
+			const title = escapeHtml(String(row.title ?? "").trim() || `Clip #${id}`);
+			const audioUrl = typeof row.audio_url === "string" ? escapeHtml(row.audio_url) : "";
+			const hubHref = id ? `/audio-clips/${encodeURIComponent(id)}` : "";
+			const playCell = audioUrl
+				? `<audio controls preload="none" class="prompt-library-clip-audio" src="${audioUrl}" aria-label="Play ${title}"></audio>`
+				: "";
+			const openHub = hubHref
+				? `<a href="${escapeHtml(hubHref)}" class="prompt-library-view" aria-label="Open clip">${eye}</a>`
+				: "";
+			return `<tr class="prompt-library-row prompt-library-row--audio-clip" data-audio-clip-id="${escapeHtml(id)}">
+				<td class="prompt-library-cell-play">${playCell}</td>
+				<td>${title}</td>
+				<td>${escapeHtml(formatClipDuration(row.duration_sec))}</td>
+				<td>${escapeHtml(formatClipSourceType(row.source_type))}</td>
+				<td>${escapeHtml(String(Number(row.usage_count) || 0))}</td>
+				<td>${escapeHtml(formatRelativeTime(row.last_used_at))}</td>
+				<td class="prompt-library-cell-actions">${openHub}</td>
+			</tr>`;
+		})
+		.join("");
+}
+
+const audioClipsListState = {
+	offset: 0,
+	limit: 24,
+	total: 0,
+	sort: "last_used_at",
+	loading: false
+};
+
+async function loadAudioClipsTab({ reset = false } = {}) {
+	const tbody = document.querySelector("[data-prompt-library-audio-clips-tbody]");
+	const pagination = document.querySelector("[data-prompt-library-audio-clips-pagination]");
+	const pageLabel = document.querySelector("[data-prompt-library-audio-clips-page]");
+	const prevBtn = document.querySelector("[data-prompt-library-audio-clips-prev]");
+	const nextBtn = document.querySelector("[data-prompt-library-audio-clips-next]");
+	if (!tbody || audioClipsListState.loading) return;
+	if (reset) audioClipsListState.offset = 0;
+	audioClipsListState.loading = true;
+	if (reset) {
+		tbody.innerHTML = `<tr><td colspan="7" class="prompt-library-table-empty">Loading audio clips…</td></tr>`;
+	}
+	const v = document.querySelector('meta[name="asset-version"]')?.getAttribute("content")?.trim() || "";
+	const qs = v ? `?v=${encodeURIComponent(v)}` : "";
+	const { eyeIcon } = await import(`../icons/svg-strings.js${qs}`);
+	const viewDetailSvg = typeof eyeIcon === "function" ? eyeIcon("prompt-library-copy-icon") : "";
+	try {
+		const params = new URLSearchParams({
+			limit: String(audioClipsListState.limit),
+			offset: String(audioClipsListState.offset),
+			sort: audioClipsListState.sort
+		});
+		const res = await fetch(`/api/audio-clips?${params}`, { credentials: "include" });
+		const data = await res.json().catch(() => ({}));
+		if (!res.ok) {
+			const msg = typeof data?.error === "string" ? data.error : "Could not load audio clips.";
+			tbody.innerHTML = `<tr><td colspan="7" class="prompt-library-table-empty">${escapeHtml(msg)}</td></tr>`;
+			if (pagination) pagination.hidden = true;
+			return;
+		}
+		const items = Array.isArray(data.items) ? data.items : [];
+		audioClipsListState.total = Number(data.total) || items.length;
+		renderAudioClipRows(tbody, items, viewDetailSvg);
+		const page = Math.floor(audioClipsListState.offset / audioClipsListState.limit) + 1;
+		const totalPages = Math.max(1, Math.ceil(audioClipsListState.total / audioClipsListState.limit));
+		if (pagination) pagination.hidden = audioClipsListState.total <= audioClipsListState.limit;
+		if (pageLabel) pageLabel.textContent = `Page ${page} of ${totalPages}`;
+		if (prevBtn instanceof HTMLButtonElement) {
+			prevBtn.disabled = audioClipsListState.offset <= 0;
+		}
+		if (nextBtn instanceof HTMLButtonElement) {
+			nextBtn.disabled = audioClipsListState.offset + audioClipsListState.limit >= audioClipsListState.total;
+		}
+	} catch {
+		tbody.innerHTML = `<tr><td colspan="7" class="prompt-library-table-empty">Could not load audio clips.</td></tr>`;
+		if (pagination) pagination.hidden = true;
+	} finally {
+		audioClipsListState.loading = false;
+	}
+}
+
+function setupAudioClipsTabControls() {
+	const tabsEl = document.querySelector("app-tabs");
+	if (!tabsEl || tabsEl.dataset.promptLibraryAudioClipsBound === "1") return;
+	tabsEl.dataset.promptLibraryAudioClipsBound = "1";
+	tabsEl.addEventListener("tab-change", (e) => {
+		if (String(e.detail?.id ?? "").trim().toLowerCase() === "audio-clips") {
+			void loadAudioClipsTab({ reset: true });
+		}
+	});
+	const prevBtn = document.querySelector("[data-prompt-library-audio-clips-prev]");
+	const nextBtn = document.querySelector("[data-prompt-library-audio-clips-next]");
+	if (prevBtn && !prevBtn.dataset.bound) {
+		prevBtn.dataset.bound = "1";
+		prevBtn.addEventListener("click", () => {
+			audioClipsListState.offset = Math.max(0, audioClipsListState.offset - audioClipsListState.limit);
+			void loadAudioClipsTab();
+		});
+	}
+	if (nextBtn && !nextBtn.dataset.bound) {
+		nextBtn.dataset.bound = "1";
+		nextBtn.addEventListener("click", () => {
+			if (audioClipsListState.offset + audioClipsListState.limit < audioClipsListState.total) {
+				audioClipsListState.offset += audioClipsListState.limit;
+				void loadAudioClipsTab();
+			}
+		});
+	}
+}
+
+async function setupAudioClipIngestButtons() {
+	const recordBtn = document.querySelector("[data-prompt-library-record]");
+	const uploadBtn = document.querySelector("[data-prompt-library-upload]");
+	const fileInput = document.querySelector("[data-prompt-library-upload-input]");
+	if (!recordBtn && !uploadBtn) return;
+	const v = document.querySelector('meta[name="asset-version"]')?.getAttribute("content")?.trim() || "";
+	const qs = v ? `?v=${encodeURIComponent(v)}` : "";
+	const { openAudioClipIngestModal } = await import(`../shared/audioClipIngestModal.js${qs}`);
+	const onSaved = () => {
+		const tabsEl = document.querySelector("app-tabs");
+		if (tabsEl?.getAttribute("active") === "audio-clips") {
+			void loadAudioClipsTab({ reset: true });
+		}
+	};
+	if (recordBtn && !recordBtn.dataset.bound) {
+		recordBtn.dataset.bound = "1";
+		recordBtn.addEventListener("click", () => {
+			openAudioClipIngestModal({ mode: "record", onSaved });
+		});
+	}
+	if (uploadBtn && fileInput && !uploadBtn.dataset.bound) {
+		uploadBtn.dataset.bound = "1";
+		uploadBtn.addEventListener("click", () => fileInput.click());
+		fileInput.addEventListener("change", () => {
+			const file = fileInput.files?.[0];
+			fileInput.value = "";
+			if (!file) return;
+			openAudioClipIngestModal({ mode: "upload", file, onSaved });
+		});
+	}
 }
 
 function escapeHtml(text) {
@@ -317,8 +518,19 @@ window.addEventListener("hashchange", () => queueApplyPromptLibraryTabFromHash()
 function bootPromptLibraryPage() {
 	seedPromptLibraryTabsActiveFromHash();
 	setupPromptLibraryTabsHashSync();
+	setupAudioClipsTabControls();
+	void setupAudioClipIngestButtons();
+	const initialTab = hashTabIdFromLocation();
+	if (isPromptLibraryTabId(initialTab)) {
+		syncPromptLibraryHeaderActions(initialTab);
+	}
 	queueApplyPromptLibraryTabFromHash();
-	void loadPromptLibrary();
+	void loadPromptLibrary().then(() => {
+		const tab = hashTabIdFromLocation();
+		if (tab === "audio-clips" || document.querySelector('app-tabs[active="audio-clips"]')) {
+			void loadAudioClipsTab({ reset: true });
+		}
+	});
 }
 
 if (document.readyState === "loading") {

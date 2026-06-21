@@ -4761,6 +4761,343 @@ export function openDb() {
 				return { changes: n };
 			}
 		},
+		/** Audio clips owned by user (meta.owners.creator or meta.owners.source). Paginated list for picker/library. */
+		selectAudioClipsForOwner: {
+			page: async (userId, options = {}) => {
+				const uid = Number(userId);
+				if (!Number.isFinite(uid) || uid <= 0) return { items: [], total: 0 };
+				const lim = Math.min(Math.max(1, Number(options.limit) || 24), 100);
+				const off = Math.max(0, Number(options.offset) || 0);
+				const sort = String(options.sort || "last_used_at").trim().toLowerCase();
+				const listSelect =
+					"id, title, duration_sec, source_type, usage_count, last_used_at, storage_key, content_type, meta, created_at, source_created_image_id";
+				const baseFilter = () =>
+					serviceClient
+						.from(prefixedTable("audio_clips"))
+						.select(listSelect, { count: "exact" })
+						.is("deleted_at", null)
+						.eq("is_active", true)
+						.or(`meta->owners->>creator.eq.${uid},meta->owners->>source.eq.${uid}`);
+				let query = baseFilter();
+				if (sort === "usage_count") {
+					query = query.order("usage_count", { ascending: false }).order("id", { ascending: false });
+				} else if (sort === "created_at") {
+					query = query.order("created_at", { ascending: false }).order("id", { ascending: false });
+				} else {
+					query = query
+						.order("last_used_at", { ascending: false, nullsFirst: false })
+						.order("id", { ascending: false });
+				}
+				const { data, error, count } = await query.range(off, off + lim - 1);
+				if (error) throw error;
+				return { items: data ?? [], total: typeof count === "number" ? count : (data ?? []).length };
+			}
+		},
+		selectAudioClipById: {
+			get: async (id) => {
+				const clipId = Number(id);
+				if (!Number.isFinite(clipId) || clipId <= 0) return null;
+				const { data, error } = await serviceClient
+					.from(prefixedTable("audio_clips"))
+					.select("*")
+					.eq("id", clipId)
+					.is("deleted_at", null)
+					.maybeSingle();
+				if (error) throw error;
+				return data ?? null;
+			}
+		},
+		selectAudioClipByStorageKey: {
+			get: async (storageKey) => {
+				const key = typeof storageKey === "string" ? storageKey.trim() : "";
+				if (!key) return null;
+				const { data, error } = await serviceClient
+					.from(prefixedTable("audio_clips"))
+					.select("*")
+					.eq("storage_key", key)
+					.is("deleted_at", null)
+					.maybeSingle();
+				if (error) throw error;
+				return data ?? null;
+			}
+		},
+		selectAudioClipBySourceCreatedImageId: {
+			get: async (sourceCreatedImageId) => {
+				const sourceId = Number(sourceCreatedImageId);
+				if (!Number.isFinite(sourceId) || sourceId <= 0) return null;
+				const { data, error } = await serviceClient
+					.from(prefixedTable("audio_clips"))
+					.select("*")
+					.eq("source_created_image_id", sourceId)
+					.is("deleted_at", null)
+					.order("id", { ascending: false })
+					.limit(1)
+					.maybeSingle();
+				if (error) throw error;
+				return data ?? null;
+			}
+		},
+		insertAudioClip: {
+			run: async (row) => {
+				const now = new Date().toISOString();
+				const { data, error } = await serviceClient
+					.from(prefixedTable("audio_clips"))
+					.insert({
+						...row,
+						updated_at: now
+					})
+					.select("*")
+					.single();
+				if (error) throw error;
+				return data;
+			}
+		},
+		updateAudioClip: {
+			run: async (id, patch) => {
+				const clipId = Number(id);
+				if (!Number.isFinite(clipId) || clipId <= 0) return null;
+				const { data, error } = await serviceClient
+					.from(prefixedTable("audio_clips"))
+					.update({
+						...patch,
+						updated_at: new Date().toISOString()
+					})
+					.eq("id", clipId)
+					.is("deleted_at", null)
+					.select("*")
+					.maybeSingle();
+				if (error) throw error;
+				return data ?? null;
+			}
+		},
+		softDeleteAudioClip: {
+			run: async (id) => {
+				const clipId = Number(id);
+				if (!Number.isFinite(clipId) || clipId <= 0) return { changes: 0 };
+				const { data, error } = await serviceClient
+					.from(prefixedTable("audio_clips"))
+					.update({
+						deleted_at: new Date().toISOString(),
+						is_active: false,
+						updated_at: new Date().toISOString()
+					})
+					.eq("id", clipId)
+					.is("deleted_at", null)
+					.select("id");
+				if (error) throw error;
+				return { changes: Array.isArray(data) ? data.length : 0 };
+			}
+		},
+		insertAudioClipUsage: {
+			run: async ({ audioClipId, createdImageId, meta = {}, usedAt = null }) => {
+				const clipId = Number(audioClipId);
+				const creationId = Number(createdImageId);
+				if (!Number.isFinite(clipId) || clipId <= 0 || !Number.isFinite(creationId) || creationId <= 0) {
+					return null;
+				}
+				const row = {
+					audio_clip_id: clipId,
+					created_image_id: creationId,
+					meta: meta && typeof meta === "object" ? meta : {}
+				};
+				if (typeof usedAt === "string" && usedAt.trim()) {
+					row.used_at = usedAt.trim();
+				}
+				const { data, error } = await serviceClient
+					.from(prefixedTable("audio_clip_usages"))
+					.insert(row)
+					.select("*")
+					.single();
+				if (error) throw error;
+				return data;
+			}
+		},
+		incrementAudioClipUsage: {
+			run: async (clipId) => {
+				const id = Number(clipId);
+				if (!Number.isFinite(id) || id <= 0) return { changes: 0 };
+				const row = await serviceClient
+					.from(prefixedTable("audio_clips"))
+					.select("usage_count")
+					.eq("id", id)
+					.maybeSingle();
+				if (row.error) throw row.error;
+				const current = Number(row.data?.usage_count) || 0;
+				const now = new Date().toISOString();
+				const { data, error } = await serviceClient
+					.from(prefixedTable("audio_clips"))
+					.update({
+						usage_count: current + 1,
+						last_used_at: now,
+						updated_at: now
+					})
+					.eq("id", id)
+					.select("id");
+				if (error) throw error;
+				return { changes: Array.isArray(data) ? data.length : 0 };
+			}
+		},
+		selectAudioClipUsagesForClip: {
+			page: async (clipId, options = {}) => {
+				const id = Number(clipId);
+				if (!Number.isFinite(id) || id <= 0) return { items: [], total: 0 };
+				const lim = Math.min(Math.max(1, Number(options.limit) || 24), 100);
+				const off = Math.max(0, Number(options.offset) || 0);
+				const { data, error, count } = await serviceClient
+					.from(prefixedTable("audio_clip_usages"))
+					.select(
+						"id, audio_clip_id, created_image_id, used_at, meta, prsn_created_images!inner(id, user_id, filename, file_path, title, published, status, meta, created_at)",
+						{ count: "exact" }
+					)
+					.eq("audio_clip_id", id)
+					.order("used_at", { ascending: false })
+					.range(off, off + lim - 1);
+				if (error) throw error;
+				return { items: data ?? [], total: typeof count === "number" ? count : (data ?? []).length };
+			}
+		},
+		/** Creations with meta.share_audio.key — for backfill script only. */
+		selectCreatedImagesWithShareAudioForBackfill: {
+			page: async (options = {}) => {
+				const lim = Math.min(Math.max(1, Number(options.limit) || 100), 500);
+				const off = Math.max(0, Number(options.offset) || 0);
+				const { data, error } = await serviceClient
+					.from(prefixedTable("created_images"))
+					.select("id, user_id, title, meta")
+					.not("meta->share_audio->>key", "is", null)
+					.order("id", { ascending: true })
+					.range(off, off + lim - 1);
+				if (error) throw error;
+				return { items: data ?? [] };
+			}
+		},
+		/** Completed outputs that may reference an audio clip in meta.args or meta.audio_clip. */
+		selectCompletedCreationsForAudioClipUsageBackfill: {
+			page: async (options = {}) => {
+				const lim = Math.min(Math.max(1, Number(options.limit) || 100), 500);
+				const off = Math.max(0, Number(options.offset) || 0);
+				const { data, error } = await serviceClient
+					.from(prefixedTable("created_images"))
+					.select("id, user_id, meta, created_at")
+					.eq("status", "completed")
+					.or(
+						"meta->args->>audio_clip_id.not.is.null,meta->args->>audio_url.not.is.null,meta->args->>input_audio_urls.not.is.null,meta->args->>input_audio_url.not.is.null,meta->audio_clip->>id.not.is.null"
+					)
+					.order("id", { ascending: true })
+					.range(off, off + lim - 1);
+				if (error) throw error;
+				return { items: data ?? [] };
+			}
+		},
+		selectAudioClipUsageByCreatedImageId: {
+			get: async (createdImageId) => {
+				const creationId = Number(createdImageId);
+				if (!Number.isFinite(creationId) || creationId <= 0) return null;
+				const { data, error } = await serviceClient
+					.from(prefixedTable("audio_clip_usages"))
+					.select("*")
+					.eq("created_image_id", creationId)
+					.maybeSingle();
+				if (error) throw error;
+				return data ?? null;
+			}
+		},
+		reconcileAudioClipUsageCounters: {
+			run: async (clipId) => {
+				const id = Number(clipId);
+				if (!Number.isFinite(id) || id <= 0) return { changes: 0 };
+				const { count, error: countError } = await serviceClient
+					.from(prefixedTable("audio_clip_usages"))
+					.select("id", { count: "exact", head: true })
+					.eq("audio_clip_id", id);
+				if (countError) throw countError;
+				const { data: latestRow, error: latestError } = await serviceClient
+					.from(prefixedTable("audio_clip_usages"))
+					.select("used_at")
+					.eq("audio_clip_id", id)
+					.order("used_at", { ascending: false })
+					.limit(1)
+					.maybeSingle();
+				if (latestError) throw latestError;
+				const now = new Date().toISOString();
+				const { data, error } = await serviceClient
+					.from(prefixedTable("audio_clips"))
+					.update({
+						usage_count: typeof count === "number" ? count : 0,
+						last_used_at: latestRow?.used_at ?? null,
+						updated_at: now
+					})
+					.eq("id", id)
+					.select("id");
+				if (error) throw error;
+				return { changes: Array.isArray(data) ? data.length : 0 };
+			}
+		},
+		setAllAudioClipsDurationSec: {
+			run: async (durationSec) => {
+				const sec = Number(durationSec);
+				if (!Number.isFinite(sec) || sec <= 0) return { changes: 0 };
+				const { data, error } = await serviceClient
+					.from(prefixedTable("audio_clips"))
+					.update({
+						duration_sec: sec,
+						updated_at: new Date().toISOString()
+					})
+					.is("deleted_at", null)
+					.select("id");
+				if (error) throw error;
+				return { changes: Array.isArray(data) ? data.length : 0 };
+			}
+		},
+		reconcileAllAudioClipUsageCounters: {
+			run: async () => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("audio_clips"))
+					.select("id")
+					.is("deleted_at", null);
+				if (error) throw error;
+				let changes = 0;
+				for (const row of data ?? []) {
+					const res = await serviceClient
+						.from(prefixedTable("audio_clip_usages"))
+						.select("id", { count: "exact", head: true })
+						.eq("audio_clip_id", row.id);
+					if (res.error) throw res.error;
+					const latest = await serviceClient
+						.from(prefixedTable("audio_clip_usages"))
+						.select("used_at")
+						.eq("audio_clip_id", row.id)
+						.order("used_at", { ascending: false })
+						.limit(1)
+						.maybeSingle();
+					if (latest.error) throw latest.error;
+					const upd = await serviceClient
+						.from(prefixedTable("audio_clips"))
+						.update({
+							usage_count: typeof res.count === "number" ? res.count : 0,
+							last_used_at: latest.data?.used_at ?? null,
+							updated_at: new Date().toISOString()
+						})
+						.eq("id", row.id);
+					if (upd.error) throw upd.error;
+					changes += 1;
+				}
+				return { changes };
+			}
+		},
+		updateCreatedImageMetaAnyUser: {
+			run: async (id, meta) => {
+				const imageId = Number(id);
+				if (!Number.isFinite(imageId) || imageId <= 0) return { changes: 0 };
+				const { data, error } = await serviceClient
+					.from(prefixedTable("created_images"))
+					.update({ meta })
+					.eq("id", imageId)
+					.select("id");
+				if (error) throw error;
+				return { changes: data?.length ?? 0 };
+			}
+		},
 		insertCreatedImage: {
 			run: async (userId, filename, filePath, width, height, color, status = "creating", meta = null) => {
 				// Use serviceClient to bypass RLS for backend operations
@@ -7410,6 +7747,7 @@ export function openDb() {
 		const key = String(objectKey || "");
 		if (/^profile\/\d+\/misc_[^/]+$/i.test(key)) return MISC_BUCKET;
 		if (key.startsWith("share-audio/")) return MISC_BUCKET;
+		if (key.startsWith("prompt-audio/")) return MISC_BUCKET;
 		return GENERIC_BUCKET;
 	}
 

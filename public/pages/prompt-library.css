@@ -13,6 +13,20 @@
 	display: inline-flex;
 }
 
+.prompt-library-add-style.is-tab-hidden {
+	display: none !important;
+}
+
+.prompt-library-record-clip,
+.prompt-library-upload-clip {
+	display: none;
+}
+
+.prompt-library-record-clip:not([hidden]),
+.prompt-library-upload-clip:not([hidden]) {
+	display: inline-flex;
+}
+
 .prompt-library-route:has(app-tabs[active="personas"]) .prompt-library-add-style.is-allowed {
 	display: none !important;
 }
@@ -188,6 +202,137 @@ tbody tr.prompt-library-row:nth-child(even) {
 .prompt-library-copy-icon {
 	width: 18px;
 	height: 18px;
+}
+
+.prompt-library-table--audio-clips .prompt-library-col-play {
+	width: 160px;
+}
+
+.prompt-library-clip-audio {
+	width: 140px;
+	height: 32px;
+	vertical-align: middle;
+}
+
+.prompt-library-audio-clips-pagination {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 12px;
+	margin-top: 16px;
+}
+
+.prompt-library-audio-clips-page {
+	font-size: 0.875rem;
+	color: var(--text-muted);
+}
+
+.audio-clip-ingest-modal {
+	border: none;
+	border-radius: 14px;
+	padding: 0;
+	max-width: min(480px, calc(100vw - 32px));
+	background: var(--surface);
+	color: var(--text);
+	box-shadow: var(--shadow);
+}
+
+.audio-clip-ingest-modal::backdrop {
+	background: color-mix(in srgb, var(--text) 40%, transparent);
+}
+
+.audio-clip-ingest-panel {
+	padding: 20px;
+}
+
+.audio-clip-ingest-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	margin-bottom: 16px;
+}
+
+.audio-clip-ingest-title {
+	margin: 0;
+	font-size: 1.125rem;
+	font-weight: 700;
+}
+
+.audio-clip-ingest-hint {
+	margin: 0 0 12px;
+	font-size: 0.875rem;
+	color: var(--text-muted);
+}
+
+.audio-clip-ingest-duration-field {
+	margin-bottom: 12px;
+}
+
+.audio-clip-ingest-duration-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.audio-clip-ingest-duration-row .form-input {
+	max-width: 120px;
+}
+
+.audio-clip-ingest-duration-suffix {
+	font-size: 0.875rem;
+	color: var(--text-muted);
+}
+
+.audio-clip-ingest-record-timer {
+	margin-bottom: 10px;
+}
+
+.audio-clip-ingest-timer-text {
+	margin: 0 0 6px;
+	font-size: 1.125rem;
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+}
+
+.audio-clip-ingest-timer-bar {
+	height: 6px;
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--text) 10%, transparent);
+	overflow: hidden;
+}
+
+.audio-clip-ingest-timer-fill {
+	height: 100%;
+	width: 0%;
+	border-radius: 999px;
+	background: var(--accent);
+	transition: width 0.15s linear;
+}
+
+.audio-clip-ingest-preview {
+	display: block;
+	width: 100%;
+	margin-bottom: 12px;
+}
+
+.audio-clip-ingest-actions {
+	display: flex;
+	gap: 8px;
+	margin-bottom: 12px;
+}
+
+.audio-clip-ingest-error {
+	margin: 0 0 12px;
+	font-size: 0.875rem;
+	color: var(--color-amber-fg, #b45309);
+}
+
+.audio-clip-ingest-footer {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+	margin-top: 16px;
 }
 
 /* Route intro (.route-header p) stays hidden on mobile — see global.css */

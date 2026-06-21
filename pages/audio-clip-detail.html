@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+	<title>parascene - audio clip</title>
+	<link rel="stylesheet" href="/pages/audio-clip-detail.css{{V}}" />
+</head>
+
+<body data-entry="audio-clip-detail" class="audio-clip-detail-page">
+	<!--APP_HEADER-->
+
+	<app-modal-profile></app-modal-profile>
+	<app-modal-credits></app-modal-credits>
+	<app-modal-notifications></app-modal-notifications>
+
+	<!--APP_MOBILE_BOTTOM_NAV-->
+
+	<main>
+		<section class="audio-clip-detail-route">
+			<div class="audio-clip-detail-loading route-loading" data-audio-clip-detail-loading>
+				<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
+			</div>
+			<div class="audio-clip-detail-panel" data-audio-clip-detail-root hidden></div>
+			<div class="audio-clip-detail-error route-empty" data-audio-clip-detail-error hidden></div>
+		</section>
+	</main>
+
+	<script type="module" src="/pages/audio-clip-detail.js{{V}}"></script>
+</body>
+
+</html>

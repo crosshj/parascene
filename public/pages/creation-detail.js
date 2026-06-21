@@ -3141,6 +3141,17 @@ async function loadCreation() {
 		const styleModifiers = styleMeta && typeof styleMeta.modifiers === 'string' ? styleMeta.modifiers.trim() : '';
 		const hasStyle = styleLabel.length > 0;
 
+		const audioClipMeta = meta?.audio_clip && typeof meta.audio_clip === 'object' ? meta.audio_clip : null;
+		const audioClipId = audioClipMeta && Number(audioClipMeta.id) > 0 ? Number(audioClipMeta.id) : 0;
+		const audioClipTitle = audioClipMeta && typeof audioClipMeta.title === 'string'
+			? audioClipMeta.title.trim()
+			: (audioClipId ? `Clip #${audioClipId}` : '');
+		const hasAudioClip = audioClipId > 0 && audioClipTitle.length > 0;
+		const audioClipDuration = audioClipMeta?.duration_sec != null ? Number(audioClipMeta.duration_sec) : null;
+		const audioClipThumb = audioClipMeta && typeof audioClipMeta.thumb_url === 'string'
+			? audioClipMeta.thumb_url.trim()
+			: '';
+
 		// Show description block if we have user description, lineage (ancestors/descendants), prompt, style, or meta (server/method/duration).
 		let descriptionHtml = '';
 		const descriptionText = typeof creation.description === 'string' ? creation.description.trim() : '';
@@ -3156,7 +3167,7 @@ async function loadCreation() {
 		const hasPublishedMeta = isPublished ? hasPublishedDate : true;
 		const hasMetaInDescription = !!(serverName || methodName || displayModel || durationStr || hasPublishedMeta);
 		const showDescriptionBlock =
-			descriptionText || hasPromptSection || hasStyle || lineageSectionHtml || hasMetaInDescription;
+			descriptionText || hasPromptSection || hasStyle || hasAudioClip || lineageSectionHtml || hasMetaInDescription;
 
 		if (showDescriptionBlock) {
 			const descriptionParts = [];
@@ -3202,6 +3213,25 @@ async function loadCreation() {
 				if (styleModifiers) {
 					descriptionParts.push(html`<div class="creation-detail-style-modifiers">${escapeHtml(styleModifiers)}</div>`);
 				}
+			}
+
+			if (hasAudioClip) {
+				if (descriptionParts.length) descriptionParts.push('<br><br>');
+				const clipHref = `/audio-clips/${encodeURIComponent(audioClipId)}`;
+				const durationLabel = Number.isFinite(audioClipDuration) && audioClipDuration > 0
+					? `${Math.floor(audioClipDuration / 60)}:${String(Math.round(audioClipDuration % 60)).padStart(2, '0')}`
+					: '';
+				const thumbHtml = audioClipThumb
+					? `<img class="creation-detail-audio-clip-thumb" src="${escapeHtml(audioClipThumb)}" alt="" loading="lazy" decoding="async" />`
+					: '';
+				descriptionParts.push(html`<div class="creation-detail-prompt-label">Audio clip</div>`);
+				descriptionParts.push(html`<a href="${escapeHtml(clipHref)}" class="creation-detail-audio-clip-card">
+					${thumbHtml}
+					<span class="creation-detail-audio-clip-text">
+						<span class="creation-detail-audio-clip-title">${escapeHtml(audioClipTitle)}</span>
+						${durationLabel ? `<span class="creation-detail-audio-clip-duration">${escapeHtml(durationLabel)}</span>` : ''}
+					</span>
+				</a>`);
 			}
 
 			const descriptionInnerHtml = descriptionParts.length ? descriptionParts.join('') : '';

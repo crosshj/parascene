@@ -1438,6 +1438,58 @@ app-route-create .create-route .create-route-advanced-actions {
 	margin-top: 0.25rem;
 }
 
+app-route-create .create-route-audio-clip-picker-list {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin-bottom: 8px;
+}
+
+app-route-create .create-route-audio-clip-item {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 2px;
+	width: 100%;
+	padding: 8px 10px;
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	background: var(--surface);
+	color: var(--text);
+	cursor: pointer;
+	text-align: left;
+	font-family: inherit;
+}
+
+app-route-create .create-route-audio-clip-item.is-selected {
+	border-color: var(--accent);
+	background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+
+app-route-create .create-route-audio-clip-item-title {
+	font-size: 0.9rem;
+	font-weight: 600;
+}
+
+app-route-create .create-route-audio-clip-item-meta {
+	font-size: 0.8rem;
+	color: var(--text-muted);
+}
+
+app-route-create .create-route-audio-clip-picker-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-bottom: 4px;
+}
+
+app-route-create .create-route-audio-clip-picker-empty,
+app-route-create .create-route-audio-clip-picker-loading {
+	margin: 0;
+	font-size: 0.85rem;
+	color: var(--text-muted);
+}
+
 app-route-create .create-route .create-route-advanced-preview-hint {
 	margin: 0.5rem 0 0 0;
 	font-size: 0.85rem;
@@ -4020,6 +4072,49 @@ body.view-nsfw .creation-detail-image-wrapper.nsfw::after {
 	font-size: 0.9rem;
 	color: var(--text-muted);
 	line-height: 1.4;
+}
+
+.creation-detail-audio-clip-card {
+	display: inline-flex;
+	align-items: center;
+	gap: 10px;
+	margin-top: 6px;
+	padding: 8px 10px;
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	background: var(--surface-muted);
+	text-decoration: none;
+	color: var(--text);
+	max-width: 100%;
+}
+
+.creation-detail-audio-clip-card:hover {
+	border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+
+.creation-detail-audio-clip-thumb {
+	width: 40px;
+	height: 40px;
+	border-radius: 8px;
+	object-fit: cover;
+	flex-shrink: 0;
+}
+
+.creation-detail-audio-clip-text {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+
+.creation-detail-audio-clip-title {
+	font-size: 0.9rem;
+	font-weight: 600;
+}
+
+.creation-detail-audio-clip-duration {
+	font-size: 0.8rem;
+	color: var(--text-muted);
 }
 
 .creation-detail-prompt-legacy {

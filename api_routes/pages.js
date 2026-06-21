@@ -1069,6 +1069,53 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 		}
 	});
 
+	async function sendAudioClipDetailPageHtml(req, res, user) {
+		const fs = await import("fs/promises");
+		const rolePageName = getPageForUser(user);
+		const rolePagePath = path.join(pagesDir, rolePageName);
+		const htmlPath = path.join(pagesDir, "audio-clip-detail.html");
+		let pageHtml = await fs.readFile(htmlPath, "utf-8");
+
+		let headerHtml = "";
+		let includeMobileBottomNav = false;
+		try {
+			const roleHtml = await fs.readFile(rolePagePath, "utf-8");
+			const headerMatch = roleHtml.match(/<app-navigation[\s\S]*?<\/app-navigation>/i);
+			if (headerMatch) {
+				headerHtml = headerMatch[0];
+			}
+			includeMobileBottomNav = /<app-navigation-mobile\b/i.test(roleHtml);
+		} catch (error) {
+			// ignore
+		}
+
+		if (headerHtml) {
+			pageHtml = pageHtml.replace("<!--APP_HEADER-->", headerHtml);
+		}
+		pageHtml = pageHtml.replace(
+			"<!--APP_MOBILE_BOTTOM_NAV-->",
+			includeMobileBottomNav ? "<app-navigation-mobile></app-navigation-mobile>" : ""
+		);
+
+		pageHtml = injectCommonHead(pageHtml, getPageTokens(req));
+
+		res.setHeader("Content-Type", "text/html");
+		res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+		return res.send(pageHtml);
+	}
+
+	router.get("/audio-clips/:id", async (req, res) => {
+		const user = await requireLoggedInUser(req, res);
+		if (!user) return;
+		const id = parseInt(req.params.id, 10);
+		if (!id) return res.status(404).send("Not found");
+		try {
+			return await sendAudioClipDetailPageHtml(req, res, user);
+		} catch (error) {
+			return res.status(500).send("Internal server error");
+		}
+	});
+
 	router.get("/create/blog/:id", async (req, res) => {
 		const user = await requireLoggedInUser(req, res);
 		if (!user) return;
@@ -1465,6 +1512,7 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 			req.path === "/welcome" ||
 			req.path === "/party" ||
 			req.path === "/prompt-library" ||
+			req.path.startsWith("/audio-clips/") ||
 			req.path === "/user" ||
 			req.path.startsWith("/user/") ||
 			req.path === "/me" ||

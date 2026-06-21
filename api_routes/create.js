@@ -22,6 +22,7 @@ import { runLandscapeJob } from "./utils/landscapeJob.js";
 import { scheduleCreationJob, scheduleLandscapeJob } from "./utils/scheduleCreationJob.js";
 import { scheduleEmbeddingJob } from "./utils/embeddingJob.js";
 import { deleteCreationEmbedding } from "./utils/embeddings.js";
+import { buildClipOwnersMeta, resolveAudioClipProviderArgs } from "./utils/audioClips.js";
 import { getSupabaseServiceClient } from "./utils/supabaseService.js";
 import { verifyQStashRequest } from "./utils/qstashVerification.js";
 import {
@@ -108,6 +109,58 @@ function shareAudioExtFromContentType(contentType) {
 	if (ct === "audio/ogg") return "ogg";
 	if (ct === "audio/mp4") return "m4a";
 	return "webm";
+}
+
+async function ensureAudioClipLibraryRowFromShareAudio({
+	queries,
+	storageKey,
+	mimeType,
+	byteSize,
+	extractorUserId,
+	sourceCreation,
+	durationSec = null,
+}) {
+	const insertFn = queries.insertAudioClip?.run;
+	const getByKey = queries.selectAudioClipByStorageKey?.get;
+	if (typeof insertFn !== "function" || typeof getByKey !== "function") return null;
+	const key = typeof storageKey === "string" ? storageKey.trim() : "";
+	if (!key) return null;
+	const existing = await getByKey(key);
+	if (existing) return existing;
+	const creatorId = Number(extractorUserId);
+	if (!Number.isFinite(creatorId) || creatorId <= 0) return null;
+	const videoOwnerId = Number(sourceCreation?.user_id);
+	const meta = buildClipOwnersMeta({
+		creatorUserId: creatorId,
+		sourceUserId: Number.isFinite(videoOwnerId) && videoOwnerId > 0 ? videoOwnerId : null,
+	});
+	const titleBase =
+		typeof sourceCreation?.title === "string" && sourceCreation.title.trim()
+			? sourceCreation.title.trim()
+			: `Creation #${sourceCreation?.id ?? ""}`;
+	const durationNum = durationSec != null ? Number(durationSec) : null;
+	const duration_sec =
+		Number.isFinite(durationNum) && durationNum > 0 ? durationNum : null;
+	try {
+		return await insertFn({
+			title: `Audio from ${titleBase}`,
+			description: null,
+			storage_key: key,
+			content_type: mimeType || "audio/webm",
+			byte_size: Number(byteSize) > 0 ? Number(byteSize) : 0,
+			duration_sec,
+			source_type: "video_extract",
+			source_created_image_id: sourceCreation?.id ?? null,
+			meta,
+		});
+	} catch (err) {
+		const msg = String(err?.message || "");
+		if (err?.code === "23505" || msg.includes("duplicate key") || msg.includes("UNIQUE constraint")) {
+			return getByKey(key);
+		}
+		console.error("[share-audio audio-clip dual-write]", err);
+		return null;
+	}
 }
 
 /** Matches Supabase `prsn_misc` bucket file size limit for share-audio uploads. */
@@ -1701,7 +1754,16 @@ export default function createCreateRoutes({ queries, storage }) {
 				}
 				extraArgs.prompt = expanded.providerPrompt;
 			}
-			const providerArgs = { items, ...extraArgs };
+			const clipResolved = await resolveAudioClipProviderArgs(
+				queries,
+				user.id,
+				extraArgs,
+				getShareBaseUrl()
+			);
+			if (!clipResolved.ok) {
+				return res.status(clipResolved.status).json({ error: clipResolved.error });
+			}
+			const providerArgs = { items, ...clipResolved.args };
 			const payload = { method: "advanced_query", args: providerArgs };
 			return res.json({ payload });
 		} catch (err) {
@@ -1742,7 +1804,16 @@ export default function createCreateRoutes({ queries, storage }) {
 				}
 				extraArgs.prompt = expanded.providerPrompt;
 			}
-			const providerArgs = { items, ...extraArgs };
+			const clipResolved = await resolveAudioClipProviderArgs(
+				queries,
+				user.id,
+				extraArgs,
+				getShareBaseUrl()
+			);
+			if (!clipResolved.ok) {
+				return res.status(clipResolved.status).json({ error: clipResolved.error });
+			}
+			const providerArgs = { items, ...clipResolved.args };
 
 			const providerResponse = await fetch(server.server_url, {
 				method: "POST",
@@ -2204,6 +2275,20 @@ export default function createCreateRoutes({ queries, storage }) {
 
 			// argsForProvider is copied into meta.args below; after hydrate / job args, meta.args is synced to argsForJob so DB matches the provider payload.
 			argsForProvider = argsForProvider && typeof argsForProvider === "object" ? { ...argsForProvider } : {};
+
+			const clipResolved = await resolveAudioClipProviderArgs(
+				queries,
+				user.id,
+				argsForProvider,
+				getShareBaseUrl()
+			);
+			if (!clipResolved.ok) {
+				return res.status(clipResolved.status).json({
+					error: clipResolved.error,
+					message: clipResolved.error
+				});
+			}
+			argsForProvider = clipResolved.args;
 
 			// Exact text the user entered (before $style expansion, hydrate JSON, create.html style wrapper, etc.).
 			// Shown on creation detail; meta.args.prompt is the provider payload (see More Info).
@@ -5251,6 +5336,15 @@ export default function createCreateRoutes({ queries, storage }) {
 		const existingPath =
 			typeof existingShareAudio?.file_path === "string" ? existingShareAudio.file_path.trim() : "";
 		if (existingKey || existingPath) {
+			void ensureAudioClipLibraryRowFromShareAudio({
+				queries,
+				storageKey: existingKey,
+				mimeType: existingShareAudio?.content_type,
+				byteSize: 0,
+				extractorUserId: user.id,
+				sourceCreation: image,
+				durationSec: existingShareAudio?.duration_sec,
+			});
 			return res.json({
 				ok: true,
 				audio_url: existingPath || buildGenericUrl(existingKey),
@@ -5277,6 +5371,10 @@ export default function createCreateRoutes({ queries, storage }) {
 			}
 
 			const mimeType = normalizeShareAudioContentType(req.headers["content-type"]);
+			const durationHeader = req.headers["x-share-audio-duration-sec"];
+			const durationNum = durationHeader != null ? Number(durationHeader) : null;
+			const durationSec =
+				Number.isFinite(durationNum) && durationNum > 0 ? durationNum : null;
 			const safeExt = shareAudioExtFromContentType(mimeType);
 			const timestamp = Date.now();
 			const random = Math.random().toString(36).substring(2, 9);
@@ -5292,6 +5390,7 @@ export default function createCreateRoutes({ queries, storage }) {
 				file_path: audioUrl,
 				content_type: mimeType,
 				extracted_at: new Date().toISOString(),
+				...(durationSec != null ? { duration_sec: durationSec } : {}),
 			};
 			const mergedMeta = {
 				...existingMeta,
@@ -5302,6 +5401,16 @@ export default function createCreateRoutes({ queries, storage }) {
 			if (updateResult.changes === 0) {
 				return res.status(500).json({ error: "Failed to save audio reference on creation" });
 			}
+
+			void ensureAudioClipLibraryRowFromShareAudio({
+				queries,
+				storageKey,
+				mimeType,
+				byteSize: audioBuffer.length,
+				extractorUserId: user.id,
+				sourceCreation: image,
+				durationSec,
+			});
 
 			return res.json({
 				ok: true,

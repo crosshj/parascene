@@ -8,6 +8,7 @@ import { letterboxImageBuffer } from "./editedImageUpload.js";
 import { UPLOAD_IMAGE_METHOD_KEY } from "../../public/shared/generationDefaults.js";
 import { normalizeProviderArgsForAspectRatio } from "./normalizeProviderInputImages.js";
 import sharp from "sharp";
+import { buildAudioClipCreationSnapshot, resolveClipIdFromOutputMeta } from "./audioClips.js";
 
 const PROVIDER_TIMEOUT_MS = 50_000;
 /** When the provider returns finished video bytes (sync or async poll), allow long downloads. Override with CREATION_PROVIDER_VIDEO_FETCH_TIMEOUT_MS (ms, min 10000). */
@@ -280,6 +281,37 @@ async function createPlaceholderImageBufferInternal(width = DEFAULT_WIDTH, heigh
 	}
 }
 
+async function applyAudioClipUsageOnFinalize({ queries, imageId, existingMeta, completedMeta }) {
+	const clipId = await resolveClipIdFromOutputMeta(queries, existingMeta);
+	if (!Number.isFinite(clipId) || clipId <= 0) return completedMeta;
+	const clip = await queries.selectAudioClipById?.get(clipId);
+	if (!clip) return completedMeta;
+	const args = existingMeta?.args;
+	const snapshot = buildAudioClipCreationSnapshot(clip);
+	const nextMeta = mergeMeta(completedMeta, { audio_clip: snapshot });
+	try {
+		await queries.insertAudioClipUsage?.run({
+			audioClipId: clipId,
+			createdImageId: imageId,
+			meta: {
+				audio_url:
+					typeof args?.audio_url === "string"
+						? args.audio_url
+						: typeof args?.input_audio_urls === "string"
+							? args.input_audio_urls
+							: null
+			}
+		});
+		await queries.incrementAudioClipUsage?.run(clipId);
+	} catch (err) {
+		const msg = String(err?.message || "");
+		if (err?.code !== "23505" && !msg.includes("duplicate key") && !msg.includes("UNIQUE constraint")) {
+			logCreationWarn("Failed to record audio clip usage", safeErrorMessage(err));
+		}
+	}
+	return nextMeta;
+}
+
 async function finalizeCreationJob({
 	queries,
 	storage,
@@ -368,6 +400,13 @@ async function finalizeCreationJob({
 			: {}),
 	});
 
+	const completedMetaWithClip = await applyAudioClipUsageOnFinalize({
+		queries,
+		imageId,
+		existingMeta,
+		completedMeta,
+	});
+
 	logCreation(`Updating database - marking job as completed`, {
 		imageId,
 		filename,
@@ -380,7 +419,7 @@ async function finalizeCreationJob({
 		width,
 		height,
 		color,
-		meta: completedMeta,
+		meta: completedMetaWithClip,
 	});
 
 	// Credit server owner (30% of what user was charged), best-effort.

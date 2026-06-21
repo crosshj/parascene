@@ -23,6 +23,9 @@
 					<div class="route-header-title-row">
 						<h3>Prompt Library</h3>
 						<a href="/styles/new" class="btn-primary prompt-library-add-style">Add style</a>
+						<button type="button" class="btn-secondary prompt-library-record-clip" data-prompt-library-record hidden>Record clip</button>
+						<button type="button" class="btn-secondary prompt-library-upload-clip" data-prompt-library-upload hidden>Upload clip</button>
+						<input type="file" accept="audio/*" class="prompt-library-upload-input" data-prompt-library-upload-input hidden />
 					</div>
 					<p class="prompt-library-intro" data-prompt-library-intro>Saved styles and personas you can use in prompts. Loading…</p>
 				</div>
@@ -54,6 +57,29 @@
 								</thead>
 								<tbody data-prompt-library-styles-tbody></tbody>
 							</table>
+						</div>
+					</tab>
+					<tab data-id="audio-clips" label="Audio clips">
+						<div class="prompt-library-table-wrap">
+							<table class="prompt-library-table prompt-library-table--audio-clips" aria-label="Audio clips">
+								<thead>
+									<tr>
+										<th scope="col" class="prompt-library-col-play" aria-label="Play"></th>
+										<th scope="col">Title</th>
+										<th scope="col">Duration</th>
+										<th scope="col">Source</th>
+										<th scope="col">Used</th>
+										<th scope="col">Last used</th>
+										<th scope="col" class="prompt-library-col-actions" aria-hidden="true"></th>
+									</tr>
+								</thead>
+								<tbody data-prompt-library-audio-clips-tbody></tbody>
+							</table>
+						</div>
+						<div class="prompt-library-audio-clips-pagination" data-prompt-library-audio-clips-pagination hidden>
+							<button type="button" class="btn-secondary" data-prompt-library-audio-clips-prev disabled>Previous</button>
+							<span class="prompt-library-audio-clips-page" data-prompt-library-audio-clips-page></span>
+							<button type="button" class="btn-secondary" data-prompt-library-audio-clips-next disabled>Next</button>
 						</div>
 					</tab>
 				</app-tabs>

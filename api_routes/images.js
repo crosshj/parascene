@@ -8,6 +8,7 @@ import {
 	normalizeEditedUploadBuffer,
 	readUploadAspectRatioHeader,
 } from "./utils/editedImageUpload.js";
+import { canEditClip } from "./utils/audioClips.js";
 
 function parseMeta(raw) {
 	if (raw == null) return null;
@@ -294,6 +295,43 @@ export default function createImagesRoutes({ storage, queries }) {
 				return sendBufferWithRangeSupport(res, buffer, {
 					contentType,
 					cacheControl: "public, max-age=3600",
+					rangeHeader: typeof req.headers.range === "string" ? req.headers.range : "",
+				});
+			} catch (error) {
+				const message = String(error?.message || "");
+				if (message.toLowerCase().includes("not found")) {
+					return res.status(404).json({ error: "Audio not found" });
+				}
+				return res.status(500).json({ error: "Failed to serve audio" });
+			}
+		}
+
+		if (key.startsWith("prompt-audio/")) {
+			try {
+				if (!storage?.getGenericImageBuffer) {
+					return res.status(500).json({ error: "Generic images storage not available" });
+				}
+				const clip = await queries.selectAudioClipByStorageKey?.get(key);
+				if (!clip || clip.storage_key !== key) {
+					return res.status(404).json({ error: "Audio not found" });
+				}
+				const userId = req.auth?.userId;
+				if (!userId) {
+					return res.status(401).json({ error: "Unauthorized" });
+				}
+				const user = await queries.selectUserById.get(userId);
+				if (!canEditClip(user, clip)) {
+					return res.status(403).json({ error: "Access denied" });
+				}
+				const buffer = await storage.getGenericImageBuffer(key);
+				const meta = parseMeta(clip.meta) || {};
+				const contentType =
+					typeof clip.content_type === "string" && clip.content_type
+						? clip.content_type
+						: guessContentType(key, hintedName);
+				return sendBufferWithRangeSupport(res, buffer, {
+					contentType,
+					cacheControl: "private, max-age=3600",
 					rangeHeader: typeof req.headers.range === "string" ? req.headers.range : "",
 				});
 			} catch (error) {

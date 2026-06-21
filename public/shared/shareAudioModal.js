@@ -156,11 +156,19 @@ async function copyLink(els, showToast) {
 	}
 }
 
-async function uploadExtractedAudio(creationId, blob, mimeType) {
+async function uploadExtractedAudio(creationId, blob, mimeType, durationSec = null) {
 	const normalizedMime = String(mimeType || 'audio/webm').split(';')[0].trim() || 'audio/webm';
 	const maxBytes = 20 * 1024 * 1024;
 	if (blob.size > maxBytes) {
 		throw new Error('Extracted audio is too large (max 20 MB). Try a shorter video.');
+	}
+
+	const durationNum = durationSec != null ? Number(durationSec) : null;
+	const headers = {
+		'Content-Type': normalizedMime,
+	};
+	if (Number.isFinite(durationNum) && durationNum > 0) {
+		headers['x-share-audio-duration-sec'] = String(durationNum);
 	}
 
 	let res;
@@ -168,9 +176,7 @@ async function uploadExtractedAudio(creationId, blob, mimeType) {
 		res = await fetch(`/api/create/images/${creationId}/share-audio`, {
 			method: 'POST',
 			credentials: 'include',
-			headers: {
-				'Content-Type': normalizedMime,
-			},
+			headers,
 			body: blob,
 		});
 	} catch (err) {
@@ -263,11 +269,11 @@ export function openShareAudioModal(options = {}) {
 			if (els.extractBtnText) els.extractBtnText.textContent = 'Extracting…';
 
 			try {
-				const { blob, mimeType } = await extractAudioFromVideoUrl(videoUrl, {
+				const { blob, mimeType, durationSec } = await extractAudioFromVideoUrl(videoUrl, {
 					signal: activeAbort.signal,
 					onProgress: (ratio) => setExtractingUi(els, true, ratio),
 				});
-				const audioUrl = await uploadExtractedAudio(creationId, blob, mimeType);
+				const audioUrl = await uploadExtractedAudio(creationId, blob, mimeType, durationSec);
 				showReadyState(els, audioUrl);
 				if (showToast) showToast('Audio ready to share');
 				if (onSaved) onSaved(audioUrl);

@@ -258,6 +258,69 @@ export default function createShareRoutes({ queries, storage }) {
 		}
 	});
 
+	// GET /api/share/:version/:token/clip-audio — provider-fetchable audio for library clips (token imageId = clip id).
+	router.get("/api/share/:version/:token/clip-audio", async (req, res) => {
+		const version = String(req.params.version || "");
+		const token = String(req.params.token || "");
+
+		const verified = verifyShareToken({ version, token });
+		if (!verified.ok) {
+			return res.status(404).json({ error: "Not found" });
+		}
+
+		if (typeof storage?.getGenericImageBuffer !== "function") {
+			return res.status(503).json({ error: "Audio not available" });
+		}
+
+		try {
+			const clip = await queries.selectAudioClipById?.get(verified.imageId);
+			if (!clip) {
+				return res.status(404).json({ error: "Not found" });
+			}
+			const storageKey = typeof clip.storage_key === "string" ? clip.storage_key.trim() : "";
+			if (!storageKey) {
+				return res.status(404).json({ error: "Not found" });
+			}
+
+			let contentType = "audio/webm";
+			if (typeof clip.content_type === "string" && clip.content_type) {
+				contentType = clip.content_type;
+			}
+
+			const audioBuffer = await storage.getGenericImageBuffer(storageKey);
+			const size = audioBuffer.length;
+			const rangeRaw = typeof req.headers.range === "string" ? req.headers.range.trim() : "";
+			const rangeMatch = /^bytes=(\d+)-(\d*)$/.exec(rangeRaw);
+			if (rangeMatch && size > 0) {
+				const start = parseInt(rangeMatch[1], 10);
+				let end = rangeMatch[2] ? parseInt(rangeMatch[2], 10) : size - 1;
+				if (!Number.isFinite(start) || start < 0 || start >= size) {
+					return res.status(416).setHeader("Content-Range", `bytes */${size}`).end();
+				}
+				if (!Number.isFinite(end) || end >= size) end = size - 1;
+				if (start > end) {
+					return res.status(416).setHeader("Content-Range", `bytes */${size}`).end();
+				}
+				const chunk = audioBuffer.subarray(start, end + 1);
+				res.status(206);
+				res.setHeader("Content-Range", `bytes ${start}-${end}/${size}`);
+				res.setHeader("Content-Length", String(chunk.length));
+				res.setHeader("Content-Type", contentType);
+				res.setHeader("Cache-Control", "public, max-age=3600");
+				res.setHeader("Accept-Ranges", "bytes");
+				return res.send(chunk);
+			}
+
+			res.setHeader("Content-Type", contentType);
+			res.setHeader("Content-Length", String(size));
+			res.setHeader("Cache-Control", "public, max-age=3600");
+			res.setHeader("Accept-Ranges", "bytes");
+			return res.send(audioBuffer);
+		} catch {
+			return res.status(500).json({ error: "Failed to serve audio" });
+		}
+	});
+
 	return router;
 }
 
