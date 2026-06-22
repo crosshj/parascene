@@ -84,6 +84,14 @@ export default function createAudioClipsRoutes({ queries, storage }) {
 			}
 			const meta = parseClipMeta(clip.meta);
 			const ownerIds = getClipOwners(meta);
+			const listRow = formatAudioClipListRow(clip, { includeAudioUrl: true });
+			const enrichedRows = await enrichAudioClipRowsWithThumbnails(
+				listRow ? [listRow] : [],
+				[clip],
+				queries,
+				storage
+			);
+			const thumbUrl = enrichedRows[0]?.thumb_url ?? "";
 			const ownerUserIds = [ownerIds.creator, ownerIds.source].filter(Boolean);
 			let ownerProfiles = [];
 			if (ownerUserIds.length) {
@@ -111,6 +119,7 @@ export default function createAudioClipsRoutes({ queries, storage }) {
 					last_used_at: clip.last_used_at,
 					content_type: clip.content_type,
 					audio_url: buildGenericAudioUrl(clip.storage_key),
+					thumb_url: thumbUrl,
 					meta,
 					owners: ownerIds,
 					owner_profiles: ownerProfiles,

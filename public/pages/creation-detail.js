@@ -33,6 +33,7 @@ let eyeHiddenIcon;
 let shareIcon;
 let sparkleIcon;
 let audioClipMusicIcon;
+let pictureIcon;
 let sendIcon;
 let plusIcon;
 let REACTION_ORDER;
@@ -194,6 +195,50 @@ let creationDetailInlineLightboxMod = null;
 /** @type {typeof import('/shared/safeMediaPlay.js').safeMediaPlay | null} */
 let safeMediaPlay = null;
 
+async function hydrateCreationDetailAudioClips(root) {
+	if (!root) return;
+	const wraps = root.querySelectorAll('[data-creation-detail-audio-clip]');
+	await Promise.all(
+		[...wraps].map(async (wrap) => {
+			const clipId = Number(wrap.getAttribute('data-clip-id'));
+			if (!Number.isFinite(clipId) || clipId <= 0) return;
+			const thumbEl = wrap.querySelector('[data-audio-clip-thumb]');
+			const sourceLink = wrap.querySelector('[data-audio-clip-source-link]');
+			const needThumb = !thumbEl?.querySelector('img');
+			const needSource = sourceLink instanceof HTMLAnchorElement && sourceLink.hidden;
+			if (!needThumb && !needSource) return;
+			try {
+				const res = await fetch(`/api/audio-clips/${encodeURIComponent(clipId)}`, {
+					credentials: 'include'
+				});
+				if (!res.ok) return;
+				const data = await res.json().catch(() => ({}));
+				const clip = data?.clip;
+				if (!clip) return;
+				if (needThumb && thumbEl) {
+					const thumbUrl = typeof clip.thumb_url === 'string' ? clip.thumb_url.trim() : '';
+					if (thumbUrl) {
+						const safeUrl = thumbUrl
+							.replace(/&/g, '&amp;')
+							.replace(/"/g, '&quot;')
+							.replace(/</g, '&lt;');
+						thumbEl.innerHTML = `<img class="audio-clip-field-chip-thumb-img" src="${safeUrl}" alt="" loading="lazy" decoding="async" />`;
+					}
+				}
+				if (needSource && sourceLink instanceof HTMLAnchorElement) {
+					const sourceId = Number(clip.source_created_image_id);
+					if (Number.isFinite(sourceId) && sourceId > 0) {
+						sourceLink.href = `/creations/${encodeURIComponent(sourceId)}`;
+						sourceLink.hidden = false;
+					}
+				}
+			} catch {
+				// ignore hydration errors
+			}
+		})
+	);
+}
+
 let _depsPromise;
 async function loadDeps() {
 	if (_depsPromise) return _depsPromise;
@@ -272,6 +317,7 @@ async function loadDeps() {
 		shareIcon = iconsMod.shareIcon;
 		sparkleIcon = iconsMod.sparkleIcon;
 		audioClipMusicIcon = iconsMod.audioClipMusicIcon;
+		pictureIcon = iconsMod.pictureIcon;
 		sendIcon = iconsMod.sendIcon;
 		plusIcon = iconsMod.plusIcon;
 		REACTION_ORDER = iconsMod.REACTION_ORDER;
@@ -3155,25 +3201,42 @@ async function loadCreation() {
 				? audioClipMeta.source_type.trim().replace(/_/g, ' ')
 				: '';
 
+		const audioClipSourceId =
+			audioClipMeta && Number(audioClipMeta.source_created_image_id) > 0
+				? Number(audioClipMeta.source_created_image_id)
+				: 0;
+		const audioClipThumbUrl =
+			audioClipMeta && typeof audioClipMeta.thumb_url === 'string' ? audioClipMeta.thumb_url.trim() : '';
+
 		let audioClipHtml = '';
 		if (hasAudioClip) {
 			const clipHref = `/audio-clips/${encodeURIComponent(audioClipId)}`;
+			const sourceHref = audioClipSourceId ? `/creations/${encodeURIComponent(audioClipSourceId)}` : '';
 			const durationLabel = Number.isFinite(audioClipDuration) && audioClipDuration > 0
 				? `${Math.floor(audioClipDuration / 60)}:${String(Math.round(audioClipDuration % 60)).padStart(2, '0')}`
 				: '';
 			const chipMeta = [durationLabel, audioClipSource].filter(Boolean).join(' · ');
-			const iconHtml =
-				typeof audioClipMusicIcon === 'function' ? audioClipMusicIcon('audio-clip-field-icon') : '';
+			const musicIconHtml =
+				typeof audioClipMusicIcon === 'function' ? audioClipMusicIcon('creation-detail-audio-clip-action-icon') : '';
+			const pictureIconHtml =
+				typeof pictureIcon === 'function' ? pictureIcon('creation-detail-audio-clip-action-icon') : '';
+			const thumbInner = audioClipThumbUrl
+				? `<img class="audio-clip-field-chip-thumb-img" src="${escapeHtml(audioClipThumbUrl)}" alt="" loading="lazy" decoding="async" />`
+				: `<span class="audio-clip-field-chip-thumb-fallback">${typeof audioClipMusicIcon === 'function' ? audioClipMusicIcon('audio-clip-field-icon') : ''}</span>`;
 			audioClipHtml = html`
-				<div class="creation-detail-audio-clip-wrap">
+				<div class="creation-detail-audio-clip-wrap" data-creation-detail-audio-clip data-clip-id="${audioClipId}">
 					<div class="creation-detail-prompt-label">Audio clip</div>
-					<a href="${escapeHtml(clipHref)}" class="audio-clip-field-chip creation-detail-audio-clip-link">
-						<span class="audio-clip-field-chip-icon">${iconHtml}</span>
+					<div class="creation-detail-audio-clip-card">
+						<span class="audio-clip-field-chip-thumb" data-audio-clip-thumb>${thumbInner}</span>
 						<span class="audio-clip-field-chip-text">
 							<span class="audio-clip-field-chip-title">${escapeHtml(audioClipTitle)}</span>
 							${chipMeta ? `<span class="audio-clip-field-chip-meta">${escapeHtml(chipMeta)}</span>` : ''}
 						</span>
-					</a>
+						<div class="creation-detail-audio-clip-actions">
+							<a href="${escapeHtml(clipHref)}" class="creation-detail-audio-clip-action" aria-label="Open audio clip in library">${musicIconHtml}</a>
+							<a href="${sourceHref ? escapeHtml(sourceHref) : '#'}" class="creation-detail-audio-clip-action" data-audio-clip-source-link${audioClipSourceId ? '' : ' hidden'} aria-label="Open source creation">${pictureIconHtml}</a>
+						</div>
+					</div>
 				</div>
 			`;
 		}
@@ -3681,6 +3744,7 @@ async function loadCreation() {
 		}
 		perf.recordStep('contentAboveComments', 'hydrateEmbeds', performance.now() - detailHydrateStart);
 		setupCollapsibleDescription(detailContent);
+		void hydrateCreationDetailAudioClips(detailContent);
 		perf.markReady('contentAboveComments');
 
 		const copyPromptBtn = detailContent.querySelector('[data-copy-prompt-btn]');

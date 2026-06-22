@@ -187,7 +187,9 @@ export function buildAudioClipCreationSnapshot(clip) {
 		duration_sec: clip.duration_sec != null ? Number(clip.duration_sec) : null,
 		content_type: clip.content_type ?? "",
 		thumb_url: typeof meta.thumb_url === "string" ? meta.thumb_url.trim() : "",
-		source_type: clip.source_type ?? ""
+		source_type: clip.source_type ?? "",
+		source_created_image_id:
+			Number(clip.source_created_image_id) > 0 ? Number(clip.source_created_image_id) : null
 	};
 }
 
