@@ -879,7 +879,6 @@ async function loadEditPage() {
 						promptEls.forEach((p) => {
 							if (p !== promptEl && p instanceof HTMLTextAreaElement) {
 								p.value = '';
-								p.dispatchEvent(new Event('input', { bubbles: true }));
 							}
 						});
 						updateCostAndButtonState();
@@ -894,12 +893,18 @@ async function loadEditPage() {
 			}
 			promptEl.addEventListener('input', () => {
 				const value = promptEl.value || '';
+				let synced = false;
 				promptEls.forEach((other) => {
-					if (other !== promptEl && other instanceof HTMLTextAreaElement) {
+					if (other !== promptEl && other instanceof HTMLTextAreaElement && other.value !== value) {
 						other.value = value;
-						other.dispatchEvent(new Event('input', { bubbles: true }));
+						synced = true;
 					}
 				});
+				if (synced) {
+					try {
+						refreshAutoGrowTextareas(editContent);
+					} catch (_) {}
+				}
 				updateCostAndButtonState();
 				scheduleMutatePromptPersist();
 			});
