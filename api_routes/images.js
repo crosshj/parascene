@@ -306,6 +306,25 @@ export default function createImagesRoutes({ storage, queries }) {
 			}
 		}
 
+		if (key.startsWith("prompt-audio/thumbs/")) {
+			try {
+				if (!storage?.getGenericImageBuffer) {
+					return res.status(500).json({ error: "Generic images storage not available" });
+				}
+				const buffer = await storage.getGenericImageBuffer(key);
+				const contentType = guessContentType(key, hintedName);
+				res.setHeader("Content-Type", contentType);
+				res.setHeader("Cache-Control", "public, max-age=3600");
+				return res.send(buffer);
+			} catch (error) {
+				const message = String(error?.message || "");
+				if (message.toLowerCase().includes("not found")) {
+					return res.status(404).json({ error: "Image not found" });
+				}
+				return res.status(500).json({ error: "Failed to serve image" });
+			}
+		}
+
 		if (key.startsWith("prompt-audio/")) {
 			try {
 				if (!storage?.getGenericImageBuffer) {

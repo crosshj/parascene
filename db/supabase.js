@@ -4770,7 +4770,7 @@ export function openDb() {
 				const off = Math.max(0, Number(options.offset) || 0);
 				const sort = String(options.sort || "last_used_at").trim().toLowerCase();
 				const listSelect =
-					"id, title, duration_sec, source_type, usage_count, last_used_at, storage_key, content_type, meta, created_at, source_created_image_id";
+					"id, title, description, duration_sec, source_type, usage_count, last_used_at, storage_key, content_type, meta, created_at, source_created_image_id";
 				const baseFilter = () =>
 					serviceClient
 						.from(prefixedTable("audio_clips"))

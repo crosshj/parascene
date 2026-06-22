@@ -1,5 +1,6 @@
 /** Shared helpers for prsn_audio_clips (owners in meta, storage URLs). */
 
+import { mapCreatedImageRowMediaFields } from "./resolveCreationDisplayMedia.js";
 import { ACTIVE_SHARE_VERSION, mintShareToken, verifyShareToken } from "./shareLink.js";
 import { getShareBaseUrl } from "./url.js";
 
@@ -100,11 +101,16 @@ export function formatAudioClipListRow(row, { includeAudioUrl = true } = {}) {
 	const item = {
 		id: row.id,
 		title: row.title ?? "",
+		description: typeof row.description === "string" ? row.description : "",
 		duration_sec: row.duration_sec != null ? Number(row.duration_sec) : null,
 		source_type: row.source_type ?? "",
 		usage_count: Number(row.usage_count) || 0,
 		last_used_at: row.last_used_at ?? null,
 		thumb_url: typeof meta.thumb_url === "string" ? meta.thumb_url.trim() : "",
+		thumb_creation_id:
+			Number(meta.thumb_creation_id) > 0 ? Number(meta.thumb_creation_id) : null,
+		source_created_image_id:
+			Number(row.source_created_image_id) > 0 ? Number(row.source_created_image_id) : null,
 		owners: getClipOwners(meta),
 		created_at: row.created_at ?? null
 	};
@@ -112,6 +118,58 @@ export function formatAudioClipListRow(row, { includeAudioUrl = true } = {}) {
 		item.audio_url = buildGenericAudioUrl(row.storage_key);
 	}
 	return item;
+}
+
+/**
+ * Resolve thumb_url for list rows: use meta.thumb_url, else source video creation thumbnail.
+ * @param {object[]} formattedRows — output of formatAudioClipListRow
+ * @param {object[]} rawRows — matching DB rows (same order)
+ */
+export async function enrichAudioClipRowsWithThumbnails(formattedRows, rawRows, queries, storage) {
+	if (!Array.isArray(formattedRows) || !formattedRows.length) return formattedRows ?? [];
+	const getCreation =
+		queries.selectCreatedImageByIdAnyUser?.get ?? queries.selectCreatedImageById?.get ?? null;
+	if (typeof getCreation !== "function") return formattedRows;
+
+	const sourceIds = [
+		...new Set(
+			(Array.isArray(rawRows) ? rawRows : [])
+				.map((row) => Number(row?.source_created_image_id))
+				.filter((id) => Number.isFinite(id) && id > 0)
+		)
+	];
+	const thumbBySourceId = new Map();
+	await Promise.all(
+		sourceIds.map(async (sourceId) => {
+			try {
+				const creation = await getCreation(sourceId);
+				if (!creation) return;
+				const media = mapCreatedImageRowMediaFields(creation, { storage, includeMeta: false });
+				const thumb = typeof media.thumbnail_url === "string" ? media.thumbnail_url.trim() : "";
+				const url = typeof media.url === "string" ? media.url.trim() : "";
+				if (thumb || url) thumbBySourceId.set(sourceId, thumb || url);
+			} catch {
+				// ignore per-row lookup failures
+			}
+		})
+	);
+
+	return formattedRows.map((item, index) => {
+		const raw = Array.isArray(rawRows) ? rawRows[index] : null;
+		let thumb_url = typeof item?.thumb_url === "string" ? item.thumb_url.trim() : "";
+		if (!thumb_url && raw) {
+			const sourceId = Number(raw.source_created_image_id);
+			if (Number.isFinite(sourceId) && sourceId > 0) {
+				thumb_url = thumbBySourceId.get(sourceId) || "";
+			}
+		}
+		const hasCustomThumb = Boolean(
+			raw && typeof parseClipMeta(raw.meta).thumb_url === "string" && parseClipMeta(raw.meta).thumb_url.trim()
+		);
+		return thumb_url && thumb_url !== item.thumb_url
+			? { ...item, thumb_url, has_custom_thumb: hasCustomThumb }
+			: { ...item, has_custom_thumb: hasCustomThumb };
+	});
 }
 
 export function buildAudioClipCreationSnapshot(clip) {
@@ -216,6 +274,33 @@ export async function resolveAudioClipProviderArgs(queries, userId, args, provid
 		next.input_audio_urls = audioUrl;
 	}
 	return { ok: true, args: next, clip };
+}
+
+/** Parse numeric creation id from pasted link, path, or plain digits. */
+export function parseCreationIdFromLink(raw) {
+	const s = String(raw ?? "").trim();
+	if (!s) return null;
+	const onlyDigits = /^\d+$/.exec(s);
+	if (onlyDigits) {
+		const n = parseInt(onlyDigits[0], 10);
+		return Number.isFinite(n) && n > 0 ? n : null;
+	}
+	try {
+		const u = new URL(s, "https://www.parascene.com");
+		const m = u.pathname.match(/\/creations\/(\d+)/);
+		if (m) {
+			const n = parseInt(m[1], 10);
+			return Number.isFinite(n) && n > 0 ? n : null;
+		}
+	} catch {
+		// ignore
+	}
+	const m2 = s.match(/\/creations\/(\d+)/);
+	if (m2) {
+		const n = parseInt(m2[1], 10);
+		return Number.isFinite(n) && n > 0 ? n : null;
+	}
+	return null;
 }
 
 /** Parse /api/images/generic/… into a storage key (share-audio/… or prompt-audio/…). */

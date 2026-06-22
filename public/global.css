@@ -16844,6 +16844,7 @@ body:has(.command-palette-overlay.open),
 body:has([data-anon-detail-modal].open),
 body:has(.image-picker-modal-overlay.open),
 body:has(.audio-clip-picker-modal-overlay.open),
+body:has(.audio-clip-edit-modal-overlay.open),
 body:has(.chat-inline-image-lightbox),
 body.modal-open {
 	overflow: hidden;
@@ -16855,6 +16856,7 @@ body.modal-open {
 .publish-modal-overlay,
 .image-picker-modal-overlay,
 .audio-clip-picker-modal-overlay,
+.audio-clip-edit-modal-overlay,
 [data-publish-modal],
 [data-todo-modal],
 [data-todo-readonly],
@@ -16863,6 +16865,7 @@ body.modal-open {
 [data-anon-detail-modal],
 [data-image-picker-modal],
 [data-audio-clip-picker-modal],
+[data-audio-clip-edit-modal],
 [data-tip-creator-modal],
 #todo-modal,
 #todo-readonly-modal,
@@ -16887,6 +16890,7 @@ body.modal-open {
 .publish-modal-overlay.open,
 .image-picker-modal-overlay.open,
 .audio-clip-picker-modal-overlay.open,
+.audio-clip-edit-modal-overlay.open,
 [data-publish-modal].open,
 [data-todo-modal].open,
 [data-todo-readonly].open,
@@ -16895,6 +16899,7 @@ body.modal-open {
 [data-anon-detail-modal].open,
 [data-image-picker-modal].open,
 [data-audio-clip-picker-modal].open,
+[data-audio-clip-edit-modal].open,
 [data-tip-creator-modal].open,
 #todo-modal.open,
 #todo-readonly-modal.open,
@@ -16909,6 +16914,7 @@ body.modal-open {
 	.publish-modal-overlay,
 	.image-picker-modal-overlay,
 	.audio-clip-picker-modal-overlay,
+	.audio-clip-edit-modal-overlay,
 	[data-publish-modal],
 	[data-todo-modal],
 	[data-todo-readonly],
@@ -16917,6 +16923,7 @@ body.modal-open {
 	[data-anon-detail-modal],
 	[data-image-picker-modal],
 	[data-audio-clip-picker-modal],
+	[data-audio-clip-edit-modal],
 	[data-tip-creator-modal],
 	#todo-modal,
 	#todo-readonly-modal,
@@ -16932,7 +16939,8 @@ body.modal-open {
 .modal,
 .publish-modal,
 .image-picker-modal,
-.audio-clip-picker-modal {
+.audio-clip-picker-modal,
+.audio-clip-edit-modal {
 	background: var(--surface);
 	border: 1px solid var(--border);
 	border-radius: 14px;
@@ -17321,6 +17329,7 @@ app-modal-publish .publish-checkbox-label input[type="checkbox"] {
 .publish-modal-overlay.open .publish-modal,
 .image-picker-modal-overlay.open .image-picker-modal,
 .audio-clip-picker-modal-overlay.open .audio-clip-picker-modal,
+.audio-clip-edit-modal-overlay.open .audio-clip-edit-modal,
 [data-publish-modal].open .publish-modal,
 [data-todo-modal].open .publish-modal,
 [data-todo-readonly].open .publish-modal,
@@ -17328,6 +17337,7 @@ app-modal-publish .publish-checkbox-label input[type="checkbox"] {
 [data-anon-detail-modal].open .publish-modal,
 [data-image-picker-modal].open .image-picker-modal,
 [data-audio-clip-picker-modal].open .audio-clip-picker-modal,
+[data-audio-clip-edit-modal].open .audio-clip-edit-modal,
 [data-tip-creator-modal].open .publish-modal,
 #todo-modal.open .publish-modal,
 #todo-readonly-modal.open .publish-modal,
@@ -18008,6 +18018,194 @@ a.audio-clip-field-chip {
 .audio-clip-picker-modal-error {
 	margin: 0;
 	font-size: 0.85rem;
+	color: var(--color-red-fg, #e55);
+}
+
+/* Audio clip edit modal */
+.audio-clip-edit-modal {
+	max-width: 340px;
+	width: calc(100% - 24px);
+}
+
+.audio-clip-edit-modal .modal-header {
+	padding: 11px 14px;
+}
+
+.audio-clip-edit-modal .modal-header h3 {
+	font-size: 0.9375rem;
+	font-weight: 600;
+	line-height: 1.25;
+}
+
+.audio-clip-edit-modal-body {
+	padding: 12px 14px 10px;
+}
+
+.audio-clip-edit-form {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.audio-clip-edit-form .form-group {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	margin: 0;
+}
+
+.audio-clip-edit-form .form-label {
+	margin: 0;
+	font-size: 0.75rem;
+	font-weight: 600;
+	color: var(--text);
+	line-height: 1.2;
+}
+
+.audio-clip-edit-form .form-label-line {
+	display: inline-block;
+	white-space: nowrap;
+}
+
+.audio-clip-edit-form .form-label-optional {
+	font-weight: 500;
+	color: var(--text-muted);
+}
+
+.audio-clip-edit-form .form-input {
+	padding: 0.5rem 0.625rem;
+	border-radius: 6px;
+	font-size: 0.875rem;
+	line-height: 1.35;
+}
+
+.audio-clip-edit-form .form-input:focus-visible {
+	outline: none;
+	border-color: var(--accent);
+	box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.audio-clip-edit-form textarea.form-input {
+	min-height: 3.25rem;
+	max-height: 7rem;
+	resize: vertical;
+}
+
+.audio-clip-edit-modal .modal-close {
+	background: none;
+	border: none;
+	font-size: 1.25rem;
+	line-height: 1;
+	color: var(--text-muted);
+	cursor: pointer;
+	padding: 0;
+	width: 28px;
+	height: 28px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 6px;
+}
+
+.audio-clip-edit-modal .modal-close:hover {
+	background: var(--surface-muted);
+	color: var(--text);
+}
+
+.audio-clip-edit-modal-footer {
+	justify-content: flex-end;
+	padding: 9px 14px 11px;
+	gap: 6px;
+}
+
+.audio-clip-edit-modal-footer .btn-secondary,
+.audio-clip-edit-modal-footer .btn-primary {
+	padding: 0.4375rem 0.75rem;
+	font-size: 0.8125rem;
+	box-shadow: none;
+}
+
+.audio-clip-edit-thumb-group {
+	gap: 4px;
+}
+
+.audio-clip-edit-thumb-row {
+	display: flex;
+	align-items: stretch;
+	gap: 10px;
+	margin-top: 2px;
+}
+
+.audio-clip-edit-thumb-preview-wrap {
+	position: relative;
+	flex-shrink: 0;
+	width: 76px;
+	height: 86px;
+	border-radius: 6px;
+	overflow: hidden;
+	background: color-mix(in srgb, var(--text) 4%, var(--surface));
+	border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.audio-clip-edit-thumb-preview {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.audio-clip-edit-thumb-placeholder {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 100%;
+	height: 100%;
+	color: color-mix(in srgb, var(--text-muted) 80%, transparent);
+}
+
+.audio-clip-edit-thumb-placeholder[hidden],
+.audio-clip-edit-thumb-preview[hidden] {
+	display: none;
+}
+
+.audio-clip-edit-thumb-actions {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	gap: 4px;
+	flex: 1;
+	min-width: 0;
+	max-width: 7.75rem;
+}
+
+.audio-clip-edit-btn {
+	padding: 0.3125rem 0.5rem;
+	font-size: 0.75rem;
+	line-height: 1.2;
+	box-shadow: none;
+	justify-content: center;
+	width: 100%;
+}
+
+.audio-clip-edit-thumb-link {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	margin-top: 8px;
+	padding-top: 8px;
+	border-top: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+}
+
+.audio-clip-edit-field-hint {
+	margin: 0;
+	font-size: 0.6875rem;
+	color: var(--text-muted);
+	line-height: 1.35;
+}
+
+.audio-clip-edit-error {
+	margin: 0;
+	font-size: 0.75rem;
 	color: var(--color-red-fg, #e55);
 }
 

@@ -7,6 +7,7 @@ import {
 	buildGenericAudioUrl,
 	canEditClip,
 	clipExtFromContentType,
+	enrichAudioClipRowsWithThumbnails,
 	formatAudioClipListRow,
 	getClipOwners,
 	isClipOwner,
@@ -16,6 +17,11 @@ import {
 	parseClipMeta
 } from "./utils/audioClips.js";
 import { mapCreatedImageRowMediaFields } from "./utils/resolveCreationDisplayMedia.js";
+import {
+	buildClipThumbFromUploadBuffer,
+	deleteStoredClipThumb,
+	resolveClipThumbMetaPatch
+} from "./utils/audioClipThumb.js";
 
 function parsePositiveInt(raw, fallback) {
 	const n = Number(raw);
@@ -42,11 +48,18 @@ export default function createAudioClipsRoutes({ queries, storage }) {
 				? sortRaw
 				: "last_used_at";
 			const { items, total } = await fn(req.auth.userId, { limit, offset, sort });
-			const rows = (Array.isArray(items) ? items : [])
+			const rawItems = Array.isArray(items) ? items : [];
+			const user = await queries.selectUserById.get(req.auth.userId);
+			const rows = rawItems
 				.map((row) => formatAudioClipListRow(row, { includeAudioUrl: true }))
 				.filter(Boolean);
+			const enriched = await enrichAudioClipRowsWithThumbnails(rows, rawItems, queries, storage);
+			const itemsOut = enriched.map((item, index) => ({
+				...item,
+				can_edit: canEditClip(user, rawItems[index])
+			}));
 			res.set("Cache-Control", "private, max-age=15");
-			return res.json({ items: rows, total, limit, offset, sort });
+			return res.json({ items: itemsOut, total, limit, offset, sort });
 		} catch (err) {
 			console.error("[audio-clips list]", err);
 			return res.status(500).json({ error: "Failed to load audio clips" });
@@ -275,6 +288,20 @@ export default function createAudioClipsRoutes({ queries, storage }) {
 			if (body.description != null) {
 				patch.description = String(body.description).trim() || null;
 			}
+			const thumbResolved = await resolveClipThumbMetaPatch({
+				clip,
+				body,
+				queries,
+				storage,
+				userId: Number(user.id),
+				user
+			});
+			if (!thumbResolved.ok) {
+				return res.status(thumbResolved.status).json({
+					error: thumbResolved.error,
+					message: thumbResolved.message || thumbResolved.error
+				});
+			}
 			if (body.meta != null && typeof body.meta === "object" && !Array.isArray(body.meta)) {
 				const existing = parseClipMeta(clip.meta);
 				const incoming = { ...body.meta };
@@ -283,6 +310,13 @@ export default function createAudioClipsRoutes({ queries, storage }) {
 				if (patch.meta.owners && typeof patch.meta.owners === "object") {
 					patch.meta = mergeClipOwnersMeta(clip.meta, { owners: patch.meta.owners });
 				}
+			} else if (thumbResolved.meta) {
+				const existing = parseClipMeta(clip.meta);
+				patch.meta = {
+					...existing,
+					...thumbResolved.meta,
+					owners: existing.owners ?? getClipOwners(existing)
+				};
 			}
 			if (!Object.keys(patch).length) {
 				return res.status(400).json({ error: "No changes provided" });
@@ -301,6 +335,66 @@ export default function createAudioClipsRoutes({ queries, storage }) {
 			return res.status(500).json({ error: "Failed to update audio clip" });
 		}
 	});
+
+	router.post(
+		"/api/audio-clips/:id/thumb",
+		express.raw({ type: () => true, limit: `${10 * 1024 * 1024}b` }),
+		async (req, res) => {
+			try {
+				if (!req.auth?.userId) {
+					return res.status(401).json({ error: "Unauthorized" });
+				}
+				const clipId = Number(req.params.id);
+				if (!Number.isFinite(clipId) || clipId <= 0) {
+					return res.status(400).json({ error: "Invalid clip id" });
+				}
+				const clip = await queries.selectAudioClipById?.get(clipId);
+				if (!clip) {
+					return res.status(404).json({ error: "Clip not found" });
+				}
+				const user = await queries.selectUserById.get(req.auth.userId);
+				if (!canEditClip(user, clip)) {
+					return res.status(403).json({ error: "Forbidden" });
+				}
+				const imageBuffer = req.body;
+				if (!imageBuffer || !Buffer.isBuffer(imageBuffer) || imageBuffer.length === 0) {
+					return res.status(400).json({ error: "Empty image upload" });
+				}
+				const built = await buildClipThumbFromUploadBuffer({
+					buffer: imageBuffer,
+					storage,
+					userId: Number(user.id),
+					clipId
+				});
+				if (!built.ok) {
+					return res.status(built.status).json({ error: built.error });
+				}
+				const existing = parseClipMeta(clip.meta);
+				const oldThumbUrl = typeof existing.thumb_url === "string" ? existing.thumb_url.trim() : "";
+				if (oldThumbUrl && oldThumbUrl !== built.thumb_url) {
+					await deleteStoredClipThumb(storage, oldThumbUrl);
+				}
+				const nextMeta = {
+					...existing,
+					thumb_url: built.thumb_url,
+					thumb_creation_id: null,
+					owners: existing.owners ?? getClipOwners(existing)
+				};
+				const updated = await queries.updateAudioClip?.run(clipId, { meta: nextMeta });
+				if (!updated) {
+					return res.status(500).json({ error: "Failed to update clip image" });
+				}
+				res.set("Cache-Control", "private, no-store");
+				return res.json({
+					ok: true,
+					item: formatAudioClipListRow(updated, { includeAudioUrl: true })
+				});
+			} catch (err) {
+				console.error("[audio-clips thumb]", err);
+				return res.status(500).json({ error: "Failed to update clip image" });
+			}
+		}
+	);
 
 	router.delete("/api/audio-clips/:id", async (req, res) => {
 		try {
