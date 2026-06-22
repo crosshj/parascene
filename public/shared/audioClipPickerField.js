@@ -3,8 +3,9 @@
  */
 
 import { createAudioClipPickerModalDom, wireAudioClipPickerModal } from './audioClipPickerModal.js';
+import { audioClipMusicIcon } from '../icons/svg-strings.js';
 
-const AUDIO_ICON_SVG = `<svg class="audio-clip-field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`;
+const AUDIO_ICON_SVG = audioClipMusicIcon('audio-clip-field-icon');
 
 function formatClipDuration(sec) {
 	const n = Number(sec);

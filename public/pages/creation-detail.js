@@ -32,6 +32,7 @@ let creditIcon;
 let eyeHiddenIcon;
 let shareIcon;
 let sparkleIcon;
+let audioClipMusicIcon;
 let sendIcon;
 let plusIcon;
 let REACTION_ORDER;
@@ -270,6 +271,7 @@ async function loadDeps() {
 		eyeHiddenIcon = iconsMod.eyeHiddenIcon;
 		shareIcon = iconsMod.shareIcon;
 		sparkleIcon = iconsMod.sparkleIcon;
+		audioClipMusicIcon = iconsMod.audioClipMusicIcon;
 		sendIcon = iconsMod.sendIcon;
 		plusIcon = iconsMod.plusIcon;
 		REACTION_ORDER = iconsMod.REACTION_ORDER;
@@ -3148,9 +3150,33 @@ async function loadCreation() {
 			: (audioClipId ? `Clip #${audioClipId}` : '');
 		const hasAudioClip = audioClipId > 0 && audioClipTitle.length > 0;
 		const audioClipDuration = audioClipMeta?.duration_sec != null ? Number(audioClipMeta.duration_sec) : null;
-		const audioClipThumb = audioClipMeta && typeof audioClipMeta.thumb_url === 'string'
-			? audioClipMeta.thumb_url.trim()
-			: '';
+		const audioClipSource =
+			audioClipMeta && typeof audioClipMeta.source_type === 'string'
+				? audioClipMeta.source_type.trim().replace(/_/g, ' ')
+				: '';
+
+		let audioClipHtml = '';
+		if (hasAudioClip) {
+			const clipHref = `/audio-clips/${encodeURIComponent(audioClipId)}`;
+			const durationLabel = Number.isFinite(audioClipDuration) && audioClipDuration > 0
+				? `${Math.floor(audioClipDuration / 60)}:${String(Math.round(audioClipDuration % 60)).padStart(2, '0')}`
+				: '';
+			const chipMeta = [durationLabel, audioClipSource].filter(Boolean).join(' · ');
+			const iconHtml =
+				typeof audioClipMusicIcon === 'function' ? audioClipMusicIcon('audio-clip-field-icon') : '';
+			audioClipHtml = html`
+				<div class="creation-detail-audio-clip-wrap">
+					<div class="creation-detail-prompt-label">Audio clip</div>
+					<a href="${escapeHtml(clipHref)}" class="audio-clip-field-chip creation-detail-audio-clip-link">
+						<span class="audio-clip-field-chip-icon">${iconHtml}</span>
+						<span class="audio-clip-field-chip-text">
+							<span class="audio-clip-field-chip-title">${escapeHtml(audioClipTitle)}</span>
+							${chipMeta ? `<span class="audio-clip-field-chip-meta">${escapeHtml(chipMeta)}</span>` : ''}
+						</span>
+					</a>
+				</div>
+			`;
+		}
 
 		// Show description block if we have user description, lineage (ancestors/descendants), prompt, style, or meta (server/method/duration).
 		let descriptionHtml = '';
@@ -3215,25 +3241,6 @@ async function loadCreation() {
 				}
 			}
 
-			if (hasAudioClip) {
-				if (descriptionParts.length) descriptionParts.push('<br><br>');
-				const clipHref = `/audio-clips/${encodeURIComponent(audioClipId)}`;
-				const durationLabel = Number.isFinite(audioClipDuration) && audioClipDuration > 0
-					? `${Math.floor(audioClipDuration / 60)}:${String(Math.round(audioClipDuration % 60)).padStart(2, '0')}`
-					: '';
-				const thumbHtml = audioClipThumb
-					? `<img class="creation-detail-audio-clip-thumb" src="${escapeHtml(audioClipThumb)}" alt="" loading="lazy" decoding="async" />`
-					: '';
-				descriptionParts.push(html`<div class="creation-detail-prompt-label">Audio clip</div>`);
-				descriptionParts.push(html`<a href="${escapeHtml(clipHref)}" class="creation-detail-audio-clip-card">
-					${thumbHtml}
-					<span class="creation-detail-audio-clip-text">
-						<span class="creation-detail-audio-clip-title">${escapeHtml(audioClipTitle)}</span>
-						${durationLabel ? `<span class="creation-detail-audio-clip-duration">${escapeHtml(durationLabel)}</span>` : ''}
-					</span>
-				</a>`);
-			}
-
 			const descriptionInnerHtml = descriptionParts.length ? descriptionParts.join('') : '';
 
 			const metaLineHtml = buildDescriptionMetaLineHtml({
@@ -3258,6 +3265,7 @@ async function loadCreation() {
 						</div>
 					</div>
 					` : ''}
+					${audioClipHtml}
 					${lineageSectionHtml}
 					${metaLineHtml}
 				</div>

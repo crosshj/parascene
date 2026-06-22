@@ -4074,47 +4074,18 @@ body.view-nsfw .creation-detail-image-wrapper.nsfw::after {
 	line-height: 1.4;
 }
 
-.creation-detail-audio-clip-card {
-	display: inline-flex;
-	align-items: center;
-	gap: 10px;
-	margin-top: 6px;
-	padding: 8px 10px;
-	border: 1px solid var(--border);
-	border-radius: 10px;
-	background: var(--surface-muted);
-	text-decoration: none;
-	color: var(--text);
-	max-width: 100%;
+.creation-detail-audio-clip-wrap {
+	margin-top: 8px;
+	margin-bottom: 8px;
 }
 
-.creation-detail-audio-clip-card:hover {
-	border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+.creation-detail-audio-clip-wrap .creation-detail-prompt-label {
+	margin-bottom: 6px;
 }
 
-.creation-detail-audio-clip-thumb {
-	width: 40px;
-	height: 40px;
-	border-radius: 8px;
-	object-fit: cover;
-	flex-shrink: 0;
-}
-
-.creation-detail-audio-clip-text {
-	display: flex;
-	flex-direction: column;
-	gap: 2px;
-	min-width: 0;
-}
-
-.creation-detail-audio-clip-title {
-	font-size: 0.9rem;
-	font-weight: 600;
-}
-
-.creation-detail-audio-clip-duration {
-	font-size: 0.8rem;
-	color: var(--text-muted);
+.creation-detail-audio-clip-link {
+	width: 100%;
+	box-sizing: border-box;
 }
 
 .creation-detail-prompt-legacy {

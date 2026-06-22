@@ -17798,6 +17798,11 @@ app-modal-publish .publish-checkbox-label input[type="checkbox"] {
 	background: color-mix(in srgb, var(--accent) 5%, var(--surface));
 }
 
+a.audio-clip-field-chip {
+	text-decoration: none;
+	color: inherit;
+}
+
 .audio-clip-field-chip-text {
 	display: flex;
 	flex-direction: column;

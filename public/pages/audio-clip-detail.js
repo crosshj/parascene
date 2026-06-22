@@ -2,6 +2,8 @@
  * /audio-clips/:id — clip hub: player, owners, source, used-in grid.
  */
 
+const PROMPT_LIBRARY_AUDIO_CLIPS_HREF = "/prompt-library#audio-clips";
+
 function escapeHtml(text) {
 	return String(text ?? "")
 		.replace(/&/g, "&amp;")
@@ -114,6 +116,9 @@ async function loadClipHub() {
 		if (root) {
 			root.hidden = false;
 			root.innerHTML = `
+				<nav class="audio-clip-detail-nav" aria-label="Audio clips">
+					<a href="${PROMPT_LIBRARY_AUDIO_CLIPS_HREF}" class="btn-outlined">All audio clips</a>
+				</nav>
 				<div class="audio-clip-detail-hero">
 					<div class="audio-clip-detail-player-wrap">
 						<audio controls class="audio-clip-detail-player" src="${escapeHtml(clip.audio_url || "")}" preload="metadata"></audio>
@@ -142,7 +147,7 @@ async function loadClipHub() {
 			errRoot.innerHTML = `
 				<div class="route-empty-state">
 					<h2 class="route-empty-title">${escapeHtml(err?.message || "Could not load clip")}</h2>
-					<p class="route-empty-message"><a href="/prompt-library#audio-clips" class="route-empty-button">Back to library</a></p>
+					<p class="route-empty-message"><a href="${PROMPT_LIBRARY_AUDIO_CLIPS_HREF}" class="route-empty-button">All audio clips</a></p>
 				</div>
 			`;
 		}

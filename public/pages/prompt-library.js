@@ -71,7 +71,7 @@ function syncPromptLibraryHeaderActions(activeTab) {
 	const onAudio = activeTab === "audio-clips";
 	if (addStyle) addStyle.classList.toggle("is-tab-hidden", onAudio);
 	if (recordBtn instanceof HTMLElement) recordBtn.hidden = !onAudio;
-	if (uploadBtn instanceof HTMLElement) uploadBtn.hidden = !onAudio;
+	if (uploadBtn instanceof HTMLElement) uploadBtn.hidden = true;
 }
 
 function formatClipDuration(sec) {
