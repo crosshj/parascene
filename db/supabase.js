@@ -4761,24 +4761,19 @@ export function openDb() {
 				return { changes: n };
 			}
 		},
-		/** Audio clips owned by user (meta.owners.creator or meta.owners.source). Paginated list for picker/library. */
+		/** All active audio clips (site-wide catalog). Paginated list for library + picker. */
 		selectAudioClipsForOwner: {
-			page: async (userId, options = {}) => {
-				const uid = Number(userId);
-				if (!Number.isFinite(uid) || uid <= 0) return { items: [], total: 0 };
+			page: async (_userId, options = {}) => {
 				const lim = Math.min(Math.max(1, Number(options.limit) || 24), 100);
 				const off = Math.max(0, Number(options.offset) || 0);
 				const sort = String(options.sort || "last_used_at").trim().toLowerCase();
 				const listSelect =
 					"id, title, description, duration_sec, source_type, usage_count, last_used_at, storage_key, content_type, meta, created_at, source_created_image_id";
-				const baseFilter = () =>
-					serviceClient
-						.from(prefixedTable("audio_clips"))
-						.select(listSelect, { count: "exact" })
-						.is("deleted_at", null)
-						.eq("is_active", true)
-						.or(`meta->owners->>creator.eq.${uid},meta->owners->>source.eq.${uid}`);
-				let query = baseFilter();
+				let query = serviceClient
+					.from(prefixedTable("audio_clips"))
+					.select(listSelect, { count: "exact" })
+					.is("deleted_at", null)
+					.eq("is_active", true);
 				if (sort === "usage_count") {
 					query = query.order("usage_count", { ascending: false }).order("id", { ascending: false });
 				} else if (sort === "created_at") {

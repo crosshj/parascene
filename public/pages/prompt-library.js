@@ -105,44 +105,48 @@ function formatRelativeTime(iso) {
 /** Clip row payload for edit modal (keyed by id). */
 const audioClipEditCache = new Map();
 
-function renderAudioClipRows(tbody, rows, eyeSvg, musicIconSvg = "", editSvg = "") {
-	if (!tbody) return;
+function renderAudioClipCards(listEl, rows, eyeSvg, musicIconSvg = "", editSvg = "") {
+	if (!listEl) return;
 	audioClipEditCache.clear();
 	const eye = typeof eyeSvg === "string" ? eyeSvg : "";
 	const musicIcon = typeof musicIconSvg === "string" ? musicIconSvg : "";
 	const editIcon = typeof editSvg === "string" ? editSvg : "";
 	if (!rows.length) {
-		tbody.innerHTML = `<tr><td colspan="7" class="prompt-library-table-empty">No audio clips yet. Record or upload one to get started.</td></tr>`;
+		listEl.innerHTML = `<li class="prompt-library-audio-clips-empty">No audio clips yet. Record or upload one to get started.</li>`;
 		return;
 	}
-	tbody.innerHTML = rows
+	listEl.innerHTML = rows
 		.map((row) => {
 			const id = row.id != null ? String(row.id) : "";
-			const title = escapeHtml(String(row.title ?? "").trim() || `Clip #${id}`);
+			const titleRaw = String(row.title ?? "").trim() || `Clip #${id}`;
+			const title = escapeHtml(titleRaw);
 			const audioUrl = typeof row.audio_url === "string" ? escapeHtml(row.audio_url) : "";
 			const thumbUrl = typeof row.thumb_url === "string" ? escapeHtml(row.thumb_url.trim()) : "";
 			const hubHref = id ? `/audio-clips/${encodeURIComponent(id)}` : "";
-			const thumbHtml = thumbUrl
-				? `<img class="prompt-library-clip-thumb" src="${thumbUrl}" alt="" loading="lazy" decoding="async" />`
+			const duration = escapeHtml(formatClipDuration(row.duration_sec));
+			const source = escapeHtml(formatClipSourceType(row.source_type));
+			const used = escapeHtml(String(Number(row.usage_count) || 0));
+			const lastUsed = escapeHtml(formatRelativeTime(row.last_used_at));
+			const thumbInner = thumbUrl
+				? `<img class="prompt-library-clip-card-thumb-img" src="${thumbUrl}" alt="" loading="lazy" decoding="async" />`
 				: musicIcon
-					? `<span class="prompt-library-clip-thumb prompt-library-clip-thumb--icon">${musicIcon}</span>`
-					: "";
-			const playerHtml = audioUrl
-				? `<audio controls preload="none" class="prompt-library-clip-audio" src="${audioUrl}" aria-label="Play ${title}"></audio>`
-				: "";
-			const playCell = thumbHtml || playerHtml
-				? `<div class="prompt-library-clip-play-cell">${thumbHtml}${playerHtml}</div>`
-				: "";
+					? `<span class="prompt-library-clip-card-thumb-fallback">${musicIcon}</span>`
+					: `<span class="prompt-library-clip-card-thumb-fallback" aria-hidden="true"></span>`;
+			const playBtn = audioUrl
+				? `<button type="button" class="prompt-library-clip-card-play" data-audio-clip-play aria-label="Play ${title}">
+					<span class="prompt-library-clip-card-thumb">${thumbInner}</span>
+				</button>`
+				: `<span class="prompt-library-clip-card-thumb prompt-library-clip-card-thumb--static">${thumbInner}</span>`;
 			const openHub = hubHref
-				? `<a href="${escapeHtml(hubHref)}" class="prompt-library-view" aria-label="Open clip">${eye}</a>`
+				? `<a href="${escapeHtml(hubHref)}" class="prompt-library-clip-card-open" aria-label="Open clip">${eye}</a>`
 				: "";
 			const editBtn =
 				row.can_edit === true
-					? `<button type="button" class="prompt-library-edit" data-audio-clip-edit="${escapeHtml(id)}" aria-label="Edit clip">${editIcon}</button>`
+					? `<button type="button" class="prompt-library-clip-card-edit" data-audio-clip-edit="${escapeHtml(id)}" aria-label="Edit clip">${editIcon}</button>`
 					: "";
 			if (id) {
 				audioClipEditCache.set(id, {
-					title: String(row.title ?? "").trim(),
+					title: titleRaw,
 					description: String(row.description ?? "").trim(),
 					thumb_url: String(row.thumb_url ?? "").trim(),
 					thumb_creation_id:
@@ -150,17 +154,84 @@ function renderAudioClipRows(tbody, rows, eyeSvg, musicIconSvg = "", editSvg = "
 					has_custom_thumb: row.has_custom_thumb === true
 				});
 			}
-			return `<tr class="prompt-library-row prompt-library-row--audio-clip" data-audio-clip-id="${escapeHtml(id)}">
-				<td class="prompt-library-cell-play">${playCell}</td>
-				<td class="prompt-library-cell-clip-title">${title}</td>
-				<td>${escapeHtml(formatClipDuration(row.duration_sec))}</td>
-				<td>${escapeHtml(formatClipSourceType(row.source_type))}</td>
-				<td>${escapeHtml(String(Number(row.usage_count) || 0))}</td>
-				<td>${escapeHtml(formatRelativeTime(row.last_used_at))}</td>
-				<td class="prompt-library-cell-actions">${editBtn}${openHub}</td>
-			</tr>`;
+			const audioEl = audioUrl
+				? `<audio class="prompt-library-clip-card-audio" data-audio-clip-audio preload="none" src="${audioUrl}"></audio>`
+				: "";
+			const mainHref = hubHref ? escapeHtml(hubHref) : "#";
+			return `<li class="prompt-library-clip-card" data-audio-clip-id="${escapeHtml(id)}">
+				${playBtn}
+				<a href="${mainHref}" class="prompt-library-clip-card-main">
+					<span class="prompt-library-clip-card-title">${title}</span>
+					<span class="prompt-library-clip-card-meta">${source} · Used ${used}×</span>
+					<span class="prompt-library-clip-card-submeta">${duration}${lastUsed !== "—" ? ` · ${lastUsed}` : ""}</span>
+				</a>
+				<div class="prompt-library-clip-card-actions">${editBtn}${openHub}</div>
+				${audioEl}
+			</li>`;
 		})
 		.join("");
+}
+
+function setupAudioClipCardPlayback(root) {
+	if (!root || root.dataset.promptLibraryAudioClipPlay === "1") return;
+	root.dataset.promptLibraryAudioClipPlay = "1";
+	let activeCard = null;
+	let activeAudio = null;
+
+	function setPlaying(card, audio, playing) {
+		if (!card) return;
+		card.classList.toggle("is-playing", playing);
+		const playBtn = card.querySelector("[data-audio-clip-play]");
+		if (playBtn instanceof HTMLButtonElement) {
+			const title = card.querySelector(".prompt-library-clip-card-title")?.textContent?.trim() || "clip";
+			playBtn.setAttribute("aria-label", playing ? `Stop ${title}` : `Play ${title}`);
+		}
+		if (audio instanceof HTMLAudioElement) {
+			audio.loop = playing;
+		}
+	}
+
+	function stopActive() {
+		if (activeAudio) {
+			activeAudio.loop = false;
+			activeAudio.pause();
+			activeAudio.currentTime = 0;
+		}
+		if (activeCard) setPlaying(activeCard, activeAudio, false);
+		activeCard = null;
+		activeAudio = null;
+	}
+
+	root.addEventListener("click", (e) => {
+		const playBtn = e.target.closest("[data-audio-clip-play]");
+		if (!playBtn || !root.contains(playBtn)) return;
+		e.preventDefault();
+		e.stopPropagation();
+		const card = playBtn.closest("[data-audio-clip-id]");
+		const audio = card?.querySelector("[data-audio-clip-audio]");
+		if (!(audio instanceof HTMLAudioElement)) return;
+		if (activeCard === card && !audio.paused) {
+			audio.loop = false;
+			audio.pause();
+			audio.currentTime = 0;
+			setPlaying(card, audio, false);
+			activeCard = null;
+			activeAudio = null;
+			return;
+		}
+		if (activeAudio && activeAudio !== audio) stopActive();
+		audio.loop = true;
+		void audio
+			.play()
+			.then(() => {
+				activeCard = card;
+				activeAudio = audio;
+				setPlaying(card, audio, true);
+			})
+			.catch(() => {
+				audio.loop = false;
+			});
+	});
 }
 
 const audioClipsListState = {
@@ -172,16 +243,16 @@ const audioClipsListState = {
 };
 
 async function loadAudioClipsTab({ reset = false } = {}) {
-	const tbody = document.querySelector("[data-prompt-library-audio-clips-tbody]");
+	const listEl = document.querySelector("[data-prompt-library-audio-clips-list]");
 	const pagination = document.querySelector("[data-prompt-library-audio-clips-pagination]");
 	const pageLabel = document.querySelector("[data-prompt-library-audio-clips-page]");
 	const prevBtn = document.querySelector("[data-prompt-library-audio-clips-prev]");
 	const nextBtn = document.querySelector("[data-prompt-library-audio-clips-next]");
-	if (!tbody || audioClipsListState.loading) return;
+	if (!listEl || audioClipsListState.loading) return;
 	if (reset) audioClipsListState.offset = 0;
 	audioClipsListState.loading = true;
 	if (reset) {
-		tbody.innerHTML = `<tr><td colspan="7" class="prompt-library-table-empty">Loading audio clips…</td></tr>`;
+		listEl.innerHTML = `<li class="prompt-library-audio-clips-empty">Loading audio clips…</li>`;
 	}
 	const v = document.querySelector('meta[name="asset-version"]')?.getAttribute("content")?.trim() || "";
 	const qs = v ? `?v=${encodeURIComponent(v)}` : "";
@@ -200,13 +271,13 @@ async function loadAudioClipsTab({ reset = false } = {}) {
 		const data = await res.json().catch(() => ({}));
 		if (!res.ok) {
 			const msg = typeof data?.error === "string" ? data.error : "Could not load audio clips.";
-			tbody.innerHTML = `<tr><td colspan="7" class="prompt-library-table-empty">${escapeHtml(msg)}</td></tr>`;
+			listEl.innerHTML = `<li class="prompt-library-audio-clips-empty">${escapeHtml(msg)}</li>`;
 			if (pagination) pagination.hidden = true;
 			return;
 		}
 		const items = Array.isArray(data.items) ? data.items : [];
 		audioClipsListState.total = Number(data.total) || items.length;
-		renderAudioClipRows(tbody, items, viewDetailSvg, musicIconSvg, editSvg);
+		renderAudioClipCards(listEl, items, viewDetailSvg, musicIconSvg, editSvg);
 		const page = Math.floor(audioClipsListState.offset / audioClipsListState.limit) + 1;
 		const totalPages = Math.max(1, Math.ceil(audioClipsListState.total / audioClipsListState.limit));
 		if (pagination) pagination.hidden = audioClipsListState.total <= audioClipsListState.limit;
@@ -218,7 +289,7 @@ async function loadAudioClipsTab({ reset = false } = {}) {
 			nextBtn.disabled = audioClipsListState.offset + audioClipsListState.limit >= audioClipsListState.total;
 		}
 	} catch {
-		tbody.innerHTML = `<tr><td colspan="7" class="prompt-library-table-empty">Could not load audio clips.</td></tr>`;
+		listEl.innerHTML = `<li class="prompt-library-audio-clips-empty">Could not load audio clips.</li>`;
 		if (pagination) pagination.hidden = true;
 	} finally {
 		audioClipsListState.loading = false;
@@ -235,8 +306,8 @@ function setupAudioClipEditButtons(root) {
 		if (!btn || !root.contains(btn)) return;
 		e.preventDefault();
 		e.stopPropagation();
-		const tr = btn.closest("tr[data-audio-clip-id]");
-		const clipId = Number(btn.getAttribute("data-audio-clip-edit") || tr?.getAttribute("data-audio-clip-id"));
+		const card = btn.closest("[data-audio-clip-id]");
+		const clipId = Number(btn.getAttribute("data-audio-clip-edit") || card?.getAttribute("data-audio-clip-id"));
 		if (!Number.isFinite(clipId) || clipId <= 0) return;
 		const cached = audioClipEditCache.get(String(clipId)) || {};
 		const title = typeof cached.title === "string" ? cached.title : "";
@@ -590,6 +661,7 @@ function bootPromptLibraryPage() {
 	setupAudioClipsTabControls();
 	const libraryRoot = document.querySelector("[data-prompt-library-root]");
 	setupAudioClipEditButtons(libraryRoot);
+	setupAudioClipCardPlayback(libraryRoot);
 	void setupAudioClipIngestButtons();
 	const initialTab = hashTabIdFromLocation();
 	if (isPromptLibraryTabId(initialTab)) {

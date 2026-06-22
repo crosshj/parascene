@@ -1447,9 +1447,9 @@ app-route-create .create-route-audio-clip-picker-list {
 
 app-route-create .create-route-audio-clip-item {
 	display: flex;
-	flex-direction: column;
-	align-items: flex-start;
-	gap: 2px;
+	flex-direction: row;
+	align-items: center;
+	gap: 12px;
 	width: 100%;
 	padding: 8px 10px;
 	border: 1px solid var(--border);
@@ -1459,6 +1459,20 @@ app-route-create .create-route-audio-clip-item {
 	cursor: pointer;
 	text-align: left;
 	font-family: inherit;
+}
+
+app-route-create .create-route-audio-clip-item .audio-clip-picker-item-thumb {
+	width: 48px;
+	height: 48px;
+}
+
+app-route-create .create-route-audio-clip-item-body {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 2px;
+	min-width: 0;
+	flex: 1;
 }
 
 app-route-create .create-route-audio-clip-item.is-selected {

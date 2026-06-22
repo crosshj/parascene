@@ -17781,8 +17781,9 @@ app-modal-publish .publish-checkbox-label input[type="checkbox"] {
 
 .audio-clip-field-selected {
 	display: flex;
-	align-items: center;
-	gap: 10px;
+	flex-direction: column;
+	align-items: stretch;
+	gap: 6px;
 	width: 100%;
 }
 
@@ -17790,7 +17791,7 @@ app-modal-publish .publish-checkbox-label input[type="checkbox"] {
 	display: flex;
 	align-items: center;
 	gap: 12px;
-	flex: 1;
+	width: 100%;
 	min-width: 0;
 	padding: 10px 12px;
 	border: 1px solid var(--border);
@@ -17801,6 +17802,32 @@ app-modal-publish .publish-checkbox-label input[type="checkbox"] {
 	text-align: left;
 	cursor: pointer;
 	transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.audio-clip-field-chip-thumb {
+	display: block;
+	width: 48px;
+	height: 48px;
+	border-radius: 8px;
+	overflow: hidden;
+	flex-shrink: 0;
+	background: color-mix(in srgb, var(--text) 5%, var(--surface-muted));
+}
+
+.audio-clip-field-chip-thumb-img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.audio-clip-field-chip-thumb-fallback {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 100%;
+	height: 100%;
+	color: var(--accent);
 }
 
 .audio-clip-field-chip:hover {
@@ -17837,8 +17864,8 @@ a.audio-clip-field-chip {
 }
 
 .audio-clip-field-remove {
-	flex-shrink: 0;
-	padding: 8px 10px;
+	align-self: flex-start;
+	padding: 2px 0;
 	border: none;
 	border-radius: 6px;
 	background: transparent;
@@ -17857,6 +17884,10 @@ a.audio-clip-field-chip {
 /* Audio clip picker modal */
 .audio-clip-picker-modal {
 	max-width: 520px;
+	height: 85vh;
+	height: 85dvh;
+	max-height: 85vh;
+	max-height: 85dvh;
 }
 
 .audio-clip-picker-modal-body {
@@ -17864,14 +17895,77 @@ a.audio-clip-field-chip {
 	flex-direction: column;
 	gap: 12px;
 	padding: 16px 20px 20px;
-	overflow-y: auto;
-	max-height: min(70vh, 560px);
+	flex: 1;
+	min-height: 0;
+	overflow: hidden;
 }
 
 .audio-clip-picker-list {
 	display: flex;
 	flex-direction: column;
 	gap: 6px;
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+	-webkit-overflow-scrolling: touch;
+	overscroll-behavior: contain;
+}
+
+.audio-clip-picker-pager,
+.audio-clip-picker-url-section,
+.audio-clip-picker-search {
+	flex-shrink: 0;
+}
+
+.audio-clip-picker-search-wrap {
+	position: relative;
+}
+
+.audio-clip-picker-search-input {
+	width: 100%;
+	padding-right: 36px;
+}
+
+.audio-clip-picker-search-input::-webkit-search-cancel-button {
+	display: none;
+	-webkit-appearance: none;
+}
+
+.audio-clip-picker-search-clear {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	position: absolute;
+	right: 4px;
+	top: 50%;
+	transform: translateY(-50%);
+	width: 28px;
+	height: 28px;
+	padding: 0;
+	border: none;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--text-muted);
+	cursor: pointer;
+}
+
+.audio-clip-picker-search-clear[hidden] {
+	display: none;
+}
+
+.audio-clip-picker-search-clear:hover {
+	background: color-mix(in srgb, var(--text) 8%, transparent);
+	color: var(--text);
+}
+
+.audio-clip-picker-search-clear:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+.audio-clip-picker-search-clear-icon {
+	width: 16px;
+	height: 16px;
 }
 
 .audio-clip-picker-item {
@@ -17899,16 +17993,38 @@ a.audio-clip-field-chip {
 	transform: scale(0.995);
 }
 
-.audio-clip-picker-item-icon {
+.audio-clip-picker-item.is-highlighted {
+	border-color: var(--color-green);
+}
+
+.audio-clip-picker-item-thumb {
+	position: relative;
+	display: block;
+	width: 56px;
+	height: 56px;
+	border-radius: 8px;
+	overflow: hidden;
+	flex-shrink: 0;
+	background: color-mix(in srgb, var(--text) 5%, var(--surface-muted));
+}
+
+.audio-clip-picker-item-thumb-img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.audio-clip-picker-item-thumb--fallback {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	width: 36px;
-	height: 36px;
-	border-radius: 50%;
-	background: color-mix(in srgb, var(--accent) 12%, var(--surface));
 	color: var(--accent);
-	flex-shrink: 0;
+}
+
+.audio-clip-picker-item-thumb--fallback .audio-clip-picker-icon {
+	width: 24px;
+	height: 24px;
 }
 
 .audio-clip-picker-item-body {

@@ -1,5 +1,6 @@
 import { isSystemReservedBlogCampaignId } from '../../shared/blogCampaignPath.js';
 import { isPublicGenerationServerId } from '../../shared/generationDefaults.js';
+import { renderAudioClipThumbHtml } from '../../shared/audioClipPickerModal.js';
 
 let fetchJsonWithStatusDeduped;
 let submitCreationWithPending;
@@ -1021,8 +1022,11 @@ class AppRouteCreate extends HTMLElement {
 					const dur = this.formatAudioClipPickerDuration(row.duration_sec);
 					const src = String(row.source_type || '').replace(/_/g, ' ');
 					return `<button type="button" class="create-route-audio-clip-item${selected ? ' is-selected' : ''}" data-audio-clip-pick="${id}" aria-pressed="${selected ? 'true' : 'false'}">
-						<span class="create-route-audio-clip-item-title">${title}</span>
-						<span class="create-route-audio-clip-item-meta">${dur ? `${dur} · ` : ''}${src}</span>
+						${renderAudioClipThumbHtml(row)}
+						<span class="create-route-audio-clip-item-body">
+							<span class="create-route-audio-clip-item-title">${title}</span>
+							<span class="create-route-audio-clip-item-meta">${dur ? `${dur} · ` : ''}${src}</span>
+						</span>
 					</button>`;
 				}).join('');
 				for (const btn of listEl.querySelectorAll('[data-audio-clip-pick]')) {

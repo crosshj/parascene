@@ -8,7 +8,7 @@ import {
 	normalizeEditedUploadBuffer,
 	readUploadAspectRatioHeader,
 } from "./utils/editedImageUpload.js";
-import { canEditClip } from "./utils/audioClips.js";
+import { canViewClipInLibrary } from "./utils/audioClips.js";
 
 function parseMeta(raw) {
 	if (raw == null) return null;
@@ -339,7 +339,7 @@ export default function createImagesRoutes({ storage, queries }) {
 					return res.status(401).json({ error: "Unauthorized" });
 				}
 				const user = await queries.selectUserById.get(userId);
-				if (!canEditClip(user, clip)) {
+				if (!canViewClipInLibrary(user, clip)) {
 					return res.status(403).json({ error: "Access denied" });
 				}
 				const buffer = await storage.getGenericImageBuffer(key);

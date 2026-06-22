@@ -45,6 +45,29 @@ function audioClipsListErrorMessage(res, data) {
 	return 'Could not load clips.';
 }
 
+/** Thumbnail or music-note fallback (matches prompt-library clip cards). */
+export function renderAudioClipThumbHtml(row) {
+	const thumbUrl = typeof row?.thumb_url === 'string' ? row.thumb_url.trim() : '';
+	if (thumbUrl) {
+		return `<span class="audio-clip-picker-item-thumb"><img class="audio-clip-picker-item-thumb-img" src="${escapeHtml(thumbUrl)}" alt="" loading="lazy" decoding="async" /></span>`;
+	}
+	return `<span class="audio-clip-picker-item-thumb audio-clip-picker-item-thumb--fallback">${AUDIO_ICON_SVG}</span>`;
+}
+
+function clipMatchesSearchQuery(row, query) {
+	const q = String(query || '').trim().toLowerCase();
+	if (!q) return true;
+	const id = Number(row?.id);
+	const title = String(row?.title ?? '').trim();
+	const description = String(row?.description ?? '').trim();
+	const source = String(row?.source_type ?? '').replace(/_/g, ' ');
+	const haystack = [title, description, source, Number.isFinite(id) && id > 0 ? `clip #${id}` : '', String(id)]
+		.filter(Boolean)
+		.join(' ')
+		.toLowerCase();
+	return haystack.includes(q);
+}
+
 export function createAudioClipPickerModalDom(inputClassName = 'form-input') {
 	const modalOverlay = document.createElement('div');
 	modalOverlay.className = 'audio-clip-picker-modal-overlay';
@@ -67,6 +90,30 @@ export function createAudioClipPickerModalDom(inputClassName = 'form-input') {
 
 	const modalBody = document.createElement('div');
 	modalBody.className = 'audio-clip-picker-modal-body';
+
+	const searchSection = document.createElement('div');
+	searchSection.className = 'audio-clip-picker-search';
+
+	const searchWrap = document.createElement('div');
+	searchWrap.className = 'audio-clip-picker-search-wrap';
+
+	const searchInput = document.createElement('input');
+	searchInput.type = 'search';
+	searchInput.className = `${inputClassName} audio-clip-picker-search-input`.trim();
+	searchInput.placeholder = 'Search clips…';
+	searchInput.autocomplete = 'off';
+	searchInput.setAttribute('aria-label', 'Search audio clips');
+
+	const searchClearBtn = document.createElement('button');
+	searchClearBtn.type = 'button';
+	searchClearBtn.className = 'audio-clip-picker-search-clear';
+	searchClearBtn.setAttribute('aria-label', 'Clear search');
+	searchClearBtn.hidden = true;
+	searchClearBtn.innerHTML =
+		'<svg class="audio-clip-picker-search-clear-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+
+	searchWrap.append(searchInput, searchClearBtn);
+	searchSection.append(searchWrap);
 
 	const listEl = document.createElement('div');
 	listEl.className = 'audio-clip-picker-list';
@@ -130,7 +177,7 @@ export function createAudioClipPickerModalDom(inputClassName = 'form-input') {
 	modalError.setAttribute('role', 'alert');
 	modalError.hidden = true;
 
-	modalBody.append(listEl, pagerEl, urlSection, modalError);
+	modalBody.append(searchSection, listEl, pagerEl, urlSection, modalError);
 	modal.append(modalHeader, modalBody);
 	modalOverlay.append(modal);
 
@@ -138,6 +185,8 @@ export function createAudioClipPickerModalDom(inputClassName = 'form-input') {
 		modalOverlay,
 		modal,
 		modalClose,
+		searchInput,
+		searchClearBtn,
 		listEl,
 		prevBtn,
 		nextBtn,
@@ -159,6 +208,8 @@ export function wireAudioClipPickerModal(refs, options) {
 	const {
 		modalOverlay,
 		modalClose,
+		searchInput,
+		searchClearBtn,
 		listEl,
 		prevBtn,
 		nextBtn,
@@ -176,9 +227,21 @@ export function wireAudioClipPickerModal(refs, options) {
 
 	let offset = 0;
 	const limit = 10;
+	const fetchLimit = 100;
 	let total = 0;
+	let allItems = [];
 	let loading = false;
 	let highlightedId = null;
+
+	function getSearchQuery() {
+		return String(searchInput?.value ?? '').trim();
+	}
+
+	function updateSearchClearVisibility() {
+		if (searchClearBtn instanceof HTMLButtonElement) {
+			searchClearBtn.hidden = !getSearchQuery();
+		}
+	}
 
 	function setError(msg) {
 		modalError.textContent = msg || '';
@@ -202,9 +265,13 @@ export function wireAudioClipPickerModal(refs, options) {
 		urlPanel.hidden = true;
 		urlToggle.textContent = 'Paste URL instead';
 		urlInput.value = '';
+		searchInput.value = '';
+		updateSearchClearVisibility();
 		updateUrlUseState();
 		setError('');
 		highlightedId = null;
+		allItems = [];
+		offset = 0;
 		if (detachOnClose) {
 			document.removeEventListener('keydown', handleEscape);
 			modalOverlay.remove();
@@ -227,7 +294,7 @@ export function wireAudioClipPickerModal(refs, options) {
 		const retryBtn = listEl.querySelector('.audio-clip-picker-retry');
 		if (retryBtn) {
 			retryBtn.addEventListener('click', () => {
-				void loadPage({ reset: true });
+				void loadAllClips();
 			});
 		}
 		resetPager();
@@ -249,8 +316,13 @@ export function wireAudioClipPickerModal(refs, options) {
 		closeModal();
 	}
 
-	function renderRows(items) {
+	function renderRows(items, { emptyKind = 'none' } = {}) {
 		if (!items.length) {
+			if (emptyKind === 'search') {
+				listEl.innerHTML =
+					'<div class="audio-clip-picker-empty"><p>No clips match your search.</p></div>';
+				return;
+			}
 			listEl.innerHTML =
 				'<div class="audio-clip-picker-empty"><p>No clips yet.</p><p class="audio-clip-picker-empty-hint">Record or upload clips under Prompt Library → Audio clips.</p></div>';
 			return;
@@ -264,7 +336,7 @@ export function wireAudioClipPickerModal(refs, options) {
 				const meta = [dur, src].filter(Boolean).join(' · ');
 				const selected = id === highlightedId;
 				return `<button type="button" class="audio-clip-picker-item${selected ? ' is-highlighted' : ''}" data-audio-clip-pick="${id}" role="option" aria-selected="${selected ? 'true' : 'false'}">
-					<span class="audio-clip-picker-item-icon">${AUDIO_ICON_SVG}</span>
+					${renderAudioClipThumbHtml(row)}
 					<span class="audio-clip-picker-item-body">
 						<span class="audio-clip-picker-item-title">${escapeHtml(title)}</span>
 						${meta ? `<span class="audio-clip-picker-item-meta">${escapeHtml(meta)}</span>` : ''}
@@ -281,37 +353,68 @@ export function wireAudioClipPickerModal(refs, options) {
 		}
 	}
 
-	async function loadPage({ reset = false } = {}) {
+	function applyView() {
+		const query = getSearchQuery();
+		updateSearchClearVisibility();
+		const filtered = query
+			? allItems.filter((row) => clipMatchesSearchQuery(row, query))
+			: allItems;
+
+		if (query) {
+			pagerEl.hidden = true;
+			renderRows(filtered, { emptyKind: filtered.length ? 'none' : 'search' });
+			return;
+		}
+
+		if (!filtered.length) {
+			renderRows([], { emptyKind: 'none' });
+			resetPager();
+			return;
+		}
+
+		const pageCount = Math.max(1, Math.ceil(filtered.length / limit));
+		if (offset >= filtered.length) {
+			offset = Math.max(0, (pageCount - 1) * limit);
+		}
+		const page = Math.floor(offset / limit) + 1;
+		const pageItems = filtered.slice(offset, offset + limit);
+		renderRows(pageItems);
+		pageLabel.textContent = `Page ${page} of ${pageCount}`;
+		prevBtn.disabled = offset <= 0;
+		nextBtn.disabled = offset + limit >= filtered.length;
+		pagerEl.hidden = filtered.length <= limit;
+	}
+
+	async function loadAllClips() {
 		if (loading) return;
-		if (reset) offset = 0;
 		loading = true;
 		listEl.innerHTML = '<p class="audio-clip-picker-loading">Loading clips…</p>';
 		setError('');
+		allItems = [];
+		offset = 0;
 		try {
-			const params = new URLSearchParams({
-				limit: String(limit),
-				offset: String(offset),
-				sort: 'last_used_at'
-			});
-			const res = await fetch(`/api/audio-clips?${params}`, { credentials: 'include' });
-			const data = await res.json().catch(() => ({}));
-			if (!res.ok) {
-				showListError(audioClipsListErrorMessage(res, data));
-				return;
+			let nextOffset = 0;
+			let totalCount = 0;
+			while (true) {
+				const params = new URLSearchParams({
+					limit: String(fetchLimit),
+					offset: String(nextOffset),
+					sort: 'last_used_at'
+				});
+				const res = await fetch(`/api/audio-clips?${params}`, { credentials: 'include' });
+				const data = await res.json().catch(() => ({}));
+				if (!res.ok) {
+					showListError(audioClipsListErrorMessage(res, data));
+					return;
+				}
+				const batch = Array.isArray(data.items) ? data.items : [];
+				totalCount = Number(data.total) || batch.length;
+				allItems = allItems.concat(batch);
+				if (allItems.length >= totalCount || batch.length < fetchLimit) break;
+				nextOffset += fetchLimit;
 			}
-			const items = Array.isArray(data.items) ? data.items : [];
-			total = Number(data.total) || items.length;
-			renderRows(items);
-			if (!items.length) {
-				resetPager();
-			} else {
-				const page = Math.floor(offset / limit) + 1;
-				const pageCount = Math.max(1, Math.ceil(total / limit));
-				pageLabel.textContent = `Page ${page} of ${pageCount}`;
-				prevBtn.disabled = offset <= 0;
-				nextBtn.disabled = offset + limit >= total;
-				pagerEl.hidden = total <= limit;
-			}
+			total = totalCount;
+			applyView();
 		} catch {
 			showListError('Network error while loading clips.');
 		} finally {
@@ -320,14 +423,28 @@ export function wireAudioClipPickerModal(refs, options) {
 	}
 
 	prevBtn.addEventListener('click', () => {
+		if (getSearchQuery()) return;
 		offset = Math.max(0, offset - limit);
-		void loadPage();
+		applyView();
 	});
 	nextBtn.addEventListener('click', () => {
-		if (offset + limit < total) {
+		if (getSearchQuery()) return;
+		if (offset + limit < allItems.length) {
 			offset += limit;
-			void loadPage();
+			applyView();
 		}
+	});
+	searchInput.addEventListener('input', () => {
+		offset = 0;
+		if (allItems.length) applyView();
+		else updateSearchClearVisibility();
+	});
+	searchClearBtn.addEventListener('click', () => {
+		searchInput.value = '';
+		offset = 0;
+		updateSearchClearVisibility();
+		searchInput.focus();
+		if (allItems.length) applyView();
 	});
 	urlToggle.addEventListener('click', () => {
 		const show = urlPanel.hidden;
@@ -358,11 +475,14 @@ export function wireAudioClipPickerModal(refs, options) {
 		urlPanel.hidden = true;
 		urlToggle.textContent = 'Paste URL instead';
 		urlInput.value = '';
+		searchInput.value = '';
+		updateSearchClearVisibility();
 		updateUrlUseState();
 		setError('');
+		offset = 0;
 		document.addEventListener('keydown', handleEscape);
-		void loadPage({ reset: true });
+		void loadAllClips();
 	}
 
-	return { openModal, closeModal, loadPage };
+	return { openModal, closeModal, loadPage: loadAllClips };
 }

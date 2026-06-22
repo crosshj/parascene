@@ -7,6 +7,22 @@ import { audioClipMusicIcon } from '../icons/svg-strings.js';
 
 const AUDIO_ICON_SVG = audioClipMusicIcon('audio-clip-field-icon');
 
+function escapeHtml(text) {
+	return String(text ?? '')
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;');
+}
+
+function renderFieldThumbHtml(thumbUrl) {
+	const url = typeof thumbUrl === 'string' ? thumbUrl.trim() : '';
+	if (url) {
+		return `<img class="audio-clip-field-chip-thumb-img" src="${escapeHtml(url)}" alt="" loading="lazy" decoding="async" />`;
+	}
+	return `<span class="audio-clip-field-chip-thumb-fallback">${AUDIO_ICON_SVG}</span>`;
+}
+
 function formatClipDuration(sec) {
 	const n = Number(sec);
 	if (!Number.isFinite(n) || n <= 0) return '';
@@ -69,9 +85,9 @@ export function createAudioClipPickerField(fieldKey, field, context) {
 	chipEl.className = 'audio-clip-field-chip';
 	chipEl.setAttribute('aria-label', 'Change audio clip');
 
-	const chipIcon = document.createElement('span');
-	chipIcon.className = 'audio-clip-field-chip-icon';
-	chipIcon.innerHTML = AUDIO_ICON_SVG;
+	const chipThumb = document.createElement('span');
+	chipThumb.className = 'audio-clip-field-chip-thumb';
+	chipThumb.innerHTML = AUDIO_ICON_SVG;
 
 	const chipText = document.createElement('span');
 	chipText.className = 'audio-clip-field-chip-text';
@@ -83,7 +99,7 @@ export function createAudioClipPickerField(fieldKey, field, context) {
 	chipMeta.className = 'audio-clip-field-chip-meta';
 
 	chipText.append(chipTitle, chipMeta);
-	chipEl.append(chipIcon, chipText);
+	chipEl.append(chipThumb, chipText);
 
 	const removeBtn = document.createElement('button');
 	removeBtn.type = 'button';
@@ -99,6 +115,7 @@ export function createAudioClipPickerField(fieldKey, field, context) {
 	let selectedClipId = null;
 	let selectedTitle = '';
 	let selectedMeta = '';
+	let selectedThumbUrl = '';
 	let selectedFromUrl = false;
 
 	function notifyUrl(url) {
@@ -122,6 +139,7 @@ export function createAudioClipPickerField(fieldKey, field, context) {
 			chipTitle.textContent = selectedTitle || (selectedFromUrl ? 'Custom URL' : 'Audio selected');
 			chipMeta.textContent = selectedMeta || (selectedFromUrl ? 'Pasted link' : '');
 			chipMeta.hidden = !chipMeta.textContent;
+			chipThumb.innerHTML = renderFieldThumbHtml(selectedThumbUrl);
 		}
 	}
 
@@ -129,6 +147,7 @@ export function createAudioClipPickerField(fieldKey, field, context) {
 		selectedClipId = null;
 		selectedTitle = '';
 		selectedMeta = '';
+		selectedThumbUrl = '';
 		selectedFromUrl = false;
 		notifyClipId(null);
 		notifyUrl('');
@@ -144,6 +163,7 @@ export function createAudioClipPickerField(fieldKey, field, context) {
 		const dur = formatClipDuration(clip.duration_sec);
 		const src = String(clip.source_type || '').replace(/_/g, ' ');
 		selectedMeta = [dur, src].filter(Boolean).join(' · ');
+		selectedThumbUrl = typeof clip.thumb_url === 'string' ? clip.thumb_url.trim() : '';
 		notifyClipId(id);
 		notifyUrl(toAbsoluteUrl(clip.audio_url));
 		updateSelectedUi();
@@ -156,6 +176,7 @@ export function createAudioClipPickerField(fieldKey, field, context) {
 		selectedFromUrl = true;
 		selectedTitle = 'Custom URL';
 		selectedMeta = 'Pasted link';
+		selectedThumbUrl = '';
 		notifyClipId(null);
 		notifyUrl(toAbsoluteUrl(raw));
 		updateSelectedUi();

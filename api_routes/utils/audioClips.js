@@ -54,6 +54,12 @@ export function canEditClip(user, clip) {
 	return isClipOwner(clip, user.id);
 }
 
+/** Any signed-in user can browse and play clips; edit is gated separately. */
+export function canViewClipInLibrary(user, clip) {
+	const uid = Number(user?.id);
+	return Number.isFinite(uid) && uid > 0 && Boolean(clip);
+}
+
 export function buildClipOwnersMeta({ creatorUserId, sourceUserId = null }) {
 	const creator = Number(creatorUserId);
 	if (!Number.isFinite(creator) || creator <= 0) return { owners: {} };
@@ -226,8 +232,8 @@ export function shareUrlForCreationExtractedAudio(creationId, sharedByUserId, ba
 }
 
 /**
- * Validate clip ownership and attach provider-fetchable audio_url (+ audio_clip_id).
- * @returns {{ ok: true, args: object } | { ok: false, status: number, error: string }}
+ * Validate clip exists and attach provider-fetchable audio_url (+ audio_clip_id).
+ * Any authenticated user may use any clip in create flows.
  */
 export async function resolveAudioClipProviderArgs(queries, userId, args, providerBase = null) {
 	const next = args && typeof args === "object" ? { ...args } : {};
@@ -238,12 +244,13 @@ export async function resolveAudioClipProviderArgs(queries, userId, args, provid
 		}
 		return { ok: true, args: next };
 	}
+	const uid = Number(userId);
+	if (!Number.isFinite(uid) || uid <= 0) {
+		return { ok: false, status: 401, error: "Unauthorized" };
+	}
 	const clip = await queries.selectAudioClipById?.get(clipId);
 	if (!clip) {
 		return { ok: false, status: 404, error: "Audio clip not found" };
-	}
-	if (!isClipOwner(clip, userId)) {
-		return { ok: false, status: 403, error: "Forbidden" };
 	}
 	const base = providerBase || getShareBaseUrl();
 	let audioUrl = null;
@@ -252,10 +259,10 @@ export async function resolveAudioClipProviderArgs(queries, userId, args, provid
 		clip.source_created_image_id != null &&
 		Number(clip.source_created_image_id) > 0
 	) {
-		audioUrl = shareUrlForCreationExtractedAudio(clip.source_created_image_id, userId, base);
+		audioUrl = shareUrlForCreationExtractedAudio(clip.source_created_image_id, uid, base);
 	}
 	if (!audioUrl) {
-		audioUrl = shareUrlForAudioClip(clip.id, userId, base);
+		audioUrl = shareUrlForAudioClip(clip.id, uid, base);
 	}
 	if (!audioUrl) {
 		return { ok: false, status: 500, error: "Failed to build audio URL for provider" };

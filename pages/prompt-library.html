@@ -60,21 +60,8 @@
 						</div>
 					</tab>
 					<tab data-id="audio-clips" label="Audio clips">
-						<div class="prompt-library-table-wrap">
-							<table class="prompt-library-table prompt-library-table--audio-clips" aria-label="Audio clips">
-								<thead>
-									<tr>
-										<th scope="col" class="prompt-library-col-play" aria-label="Play"></th>
-										<th scope="col">Title</th>
-										<th scope="col">Duration</th>
-										<th scope="col">Source</th>
-										<th scope="col">Used</th>
-										<th scope="col">Last used</th>
-										<th scope="col" class="prompt-library-col-actions" aria-hidden="true"></th>
-									</tr>
-								</thead>
-								<tbody data-prompt-library-audio-clips-tbody></tbody>
-							</table>
+						<div class="prompt-library-audio-clips-list-wrap">
+							<ul class="prompt-library-audio-clips-list" data-prompt-library-audio-clips-list role="list" aria-label="Audio clips"></ul>
 						</div>
 						<div class="prompt-library-audio-clips-pagination" data-prompt-library-audio-clips-pagination hidden>
 							<button type="button" class="btn-secondary" data-prompt-library-audio-clips-prev disabled>Previous</button>

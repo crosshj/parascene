@@ -6,12 +6,11 @@ import {
 	buildClipOwnersMeta,
 	buildGenericAudioUrl,
 	canEditClip,
+	canViewClipInLibrary,
 	clipExtFromContentType,
 	enrichAudioClipRowsWithThumbnails,
 	formatAudioClipListRow,
 	getClipOwners,
-	isClipOwner,
-	isFounderOrAdmin,
 	mergeClipOwnersMeta,
 	normalizeClipContentType,
 	parseClipMeta
@@ -80,8 +79,7 @@ export default function createAudioClipsRoutes({ queries, storage }) {
 				return res.status(404).json({ error: "Clip not found" });
 			}
 			const user = await queries.selectUserById.get(req.auth.userId);
-			const owner = isClipOwner(clip, user?.id) || isFounderOrAdmin(user);
-			if (!owner) {
+			if (!canViewClipInLibrary(user, clip)) {
 				return res.status(403).json({ error: "Forbidden" });
 			}
 			const meta = parseClipMeta(clip.meta);
@@ -141,8 +139,7 @@ export default function createAudioClipsRoutes({ queries, storage }) {
 				return res.status(404).json({ error: "Clip not found" });
 			}
 			const user = await queries.selectUserById.get(req.auth.userId);
-			const owner = isClipOwner(clip, user?.id) || isFounderOrAdmin(user);
-			if (!owner) {
+			if (!canViewClipInLibrary(user, clip)) {
 				return res.status(403).json({ error: "Forbidden" });
 			}
 			const limit = parsePositiveInt(req.query?.limit, 24);

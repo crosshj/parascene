@@ -206,56 +206,174 @@ tbody tr.prompt-library-row:nth-child(even) {
 	height: 18px;
 }
 
-.prompt-library-table--audio-clips .prompt-library-col-play {
-	width: 220px;
+/* Audio clips — card list (TikTok-style) */
+.prompt-library-audio-clips-list-wrap {
+	margin-top: 0;
+	border-radius: 10px;
+	border: 1px solid var(--border);
+	background: var(--surface);
+	overflow: hidden;
 }
 
-.prompt-library-table--audio-clips .prompt-library-cell-play {
+.prompt-library-audio-clips-list {
+	list-style: none;
+	margin: 0;
 	padding: 0;
-	vertical-align: middle;
 }
 
-.prompt-library-clip-play-cell {
+.prompt-library-audio-clips-empty {
+	padding: 20px 14px;
+	text-align: center;
+	color: var(--text-muted);
+	font-size: 0.875rem;
+}
+
+.prompt-library-clip-card {
 	display: grid;
-	grid-template-columns: 56px 1fr;
-	align-items: stretch;
-	min-height: 48px;
+	grid-template-columns: auto minmax(0, 1fr) auto;
+	align-items: center;
+	gap: 12px;
+	padding: 10px 12px;
+	border-bottom: 1px solid var(--border);
+	transition: background 0.15s ease;
 }
 
-.prompt-library-clip-thumb {
+.prompt-library-clip-card:hover {
+	background: color-mix(in srgb, var(--text) 5%, var(--surface));
+}
+
+.prompt-library-clip-card:last-child {
+	border-bottom: none;
+}
+
+.prompt-library-clip-card-play {
+	display: block;
+	padding: 0;
+	margin: 0;
+	border: none;
+	background: none;
+	cursor: pointer;
+	font: inherit;
+	flex-shrink: 0;
+}
+
+.prompt-library-clip-card-play:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+	border-radius: 8px;
+}
+
+.prompt-library-clip-card-thumb {
+	position: relative;
+	display: block;
+	width: 72px;
+	height: 72px;
+	border-radius: 8px;
+	overflow: hidden;
+	background: color-mix(in srgb, var(--text) 5%, var(--surface-muted));
+}
+
+.prompt-library-clip-card-thumb--static {
+	flex-shrink: 0;
+}
+
+.prompt-library-clip-card-thumb-img {
 	display: block;
 	width: 100%;
 	height: 100%;
-	min-height: 48px;
-	border-radius: 0;
 	object-fit: cover;
-	border: none;
-	border-right: 1px solid var(--border);
-	background: var(--surface-muted);
 }
 
-.prompt-library-clip-thumb--icon {
+.prompt-library-clip-card-thumb-fallback {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	color: var(--accent);
-	background: color-mix(in srgb, var(--accent) 10%, var(--surface-muted));
-}
-
-.prompt-library-clip-thumb-icon {
-	width: 20px;
-	height: 20px;
-}
-
-.prompt-library-clip-audio {
 	width: 100%;
+	height: 100%;
+	color: var(--accent);
+}
+
+.prompt-library-clip-card-thumb-fallback .prompt-library-clip-thumb-icon {
+	width: 28px;
+	height: 28px;
+}
+
+.prompt-library-clip-card.is-playing .prompt-library-clip-card-thumb {
+	box-shadow: 0 0 0 2px var(--color-green);
+}
+
+.prompt-library-clip-card-main {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
 	min-width: 0;
-	max-width: none;
+	text-decoration: none;
+	color: inherit;
+}
+
+.prompt-library-clip-card.is-playing .prompt-library-clip-card-title {
+	color: var(--color-green-fg);
+}
+
+.prompt-library-clip-card-title {
+	font-size: 0.9375rem;
+	font-weight: 600;
+	line-height: 1.3;
+	color: var(--text);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.prompt-library-clip-card-meta {
+	font-size: 0.8125rem;
+	line-height: 1.35;
+	color: var(--text-muted);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.prompt-library-clip-card-submeta {
+	font-size: 0.75rem;
+	line-height: 1.35;
+	color: color-mix(in srgb, var(--text-muted) 90%, transparent);
+}
+
+.prompt-library-clip-card-actions {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
+	flex-shrink: 0;
+}
+
+.prompt-library-clip-card-edit,
+.prompt-library-clip-card-open {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
 	height: 32px;
-	margin: 0;
-	padding: 8px 10px 8px 8px;
-	box-sizing: border-box;
-	align-self: center;
+	padding: 0;
+	border: none;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--text-muted);
+	cursor: pointer;
+	text-decoration: none;
+	transition: background 0.15s ease, color 0.15s ease;
+}
+
+.prompt-library-clip-card-edit:hover,
+.prompt-library-clip-card-open:hover {
+	background: color-mix(in srgb, var(--text) 8%, transparent);
+	color: var(--text);
+}
+
+.prompt-library-clip-card-audio {
+	display: none;
 }
 
 .prompt-library-audio-clips-pagination {
