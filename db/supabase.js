@@ -1389,7 +1389,7 @@ export function openDb() {
 					.from(usersTable)
 					.select(selectCols)
 					.eq("role", "consumer")
-					.gte("meta->presence_last_seen_at", sinceIso)
+					.gte("meta->>presence_last_seen_at", sinceIso)
 					.limit(cap * 3);
 				if (primary.error) {
 					const fallback = await serviceClient
