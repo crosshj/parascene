@@ -325,6 +325,21 @@ function isOnChatCreationsPath() {
 	return parts.length >= 3 && parts[0] === 'chat' && parts[1] === 'c' && parts[2] === 'creations';
 }
 
+/** True when the shell is already showing the My Creations lane. */
+export function isOnMyCreationsLane() {
+	return isOnCreationsPath() || isOnChatCreationsPath();
+}
+
+function stripWorkflowOverlayHistoryState(state) {
+	const baseState = state && typeof state === 'object' ? { ...state } : {};
+	delete baseState.prsnCreationDetailOverlay;
+	delete baseState.prsnCreationDetailId;
+	delete baseState.prsnOverlayPage;
+	delete baseState.prsnOverlayHref;
+	delete baseState.prsnOverlayReturnPath;
+	return baseState;
+}
+
 function refreshCreationsRoute() {
 	try {
 		const creationsRoute = document.querySelector('app-route-creations');
@@ -342,29 +357,43 @@ function refreshCreationsRoute() {
 	document.dispatchEvent(new CustomEvent('creations-pending-updated'));
 }
 
-function navigateToCreations({ mode, creationId, forceFreshFirstPage = true }) {
+/**
+ * Navigate to My Creations when the shell is on another lane.
+ * @param {{ creationId?: number, forceFreshFirstPage?: boolean, replace?: boolean, stripOverlayHistory?: boolean }} [options]
+ */
+export function navigateToMyCreationsIfNeeded({
+	creationId = 0,
+	forceFreshFirstPage = true,
+	replace = false,
+	stripOverlayHistory = false,
+} = {}) {
 	const detail = {
 		forceFreshFirstPage: Boolean(forceFreshFirstPage),
 		creationId: Number.isFinite(Number(creationId)) ? Number(creationId) : 0,
 	};
 
-	if (mode === 'full') {
-		window.location.href = '/creations';
+	if (isOnMyCreationsLane()) {
+		refreshCreationsRoute();
+		document.dispatchEvent(new CustomEvent('creations-pending-updated'));
 		return;
 	}
-	if (mode === 'none') return;
 
 	const onChatPage =
 		typeof document !== 'undefined' &&
 		document.body?.classList.contains('chat-page') &&
 		document.querySelector('[data-chat-page]');
+	const path = '/creations';
+	const writeHistory = replace ? 'replaceState' : 'pushState';
+
 	if (onChatPage) {
-		if (isOnChatCreationsPath()) {
-			document.dispatchEvent(new CustomEvent('creations-pending-updated'));
-			return;
-		}
-		const path = '/creations';
-		window.history.pushState({ prsnChat: true }, '', path);
+		const curState = window.history?.state;
+		const baseState =
+			stripOverlayHistory && curState
+				? stripWorkflowOverlayHistoryState(curState)
+				: curState && typeof curState === 'object'
+					? { ...curState }
+					: {};
+		window.history[writeHistory]({ ...baseState, prsnChat: true }, '', path);
 		document.dispatchEvent(
 			new CustomEvent('prsn-chat-open-path', {
 				bubbles: true,
@@ -374,22 +403,40 @@ function navigateToCreations({ mode, creationId, forceFreshFirstPage = true }) {
 		return;
 	}
 
-	if (isOnCreationsPath()) {
-		refreshCreationsRoute();
-		document.dispatchEvent(new CustomEvent('creations-pending-updated'));
-		return;
-	}
-
-	// SPA navigation (used by /create route).
 	const header = document.querySelector('app-navigation');
 	if (header && typeof header.handleRouteChange === 'function') {
-		window.history.pushState({ route: 'creations' }, '', '/creations');
+		const curState = window.history?.state;
+		const baseState =
+			stripOverlayHistory && curState
+				? stripWorkflowOverlayHistoryState(curState)
+				: curState && typeof curState === 'object'
+					? { ...curState }
+					: {};
+		window.history[writeHistory]({ ...baseState, route: 'creations' }, '', path);
 		header.handleRouteChange();
 		return;
 	}
 
-	// Fallback: hash-based routing
+	if (replace) {
+		window.history.replaceState({}, '', path);
+		return;
+	}
+
 	window.location.hash = 'creations';
+}
+
+function navigateToCreations({ mode, creationId, forceFreshFirstPage = true }) {
+	if (mode === 'full') {
+		window.location.href = '/creations';
+		return;
+	}
+	if (mode === 'none') return;
+
+	navigateToMyCreationsIfNeeded({
+		creationId,
+		forceFreshFirstPage,
+		replace: false,
+	});
 }
 
 /** Backend accepted the job — row exists with status `creating`. */

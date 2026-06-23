@@ -22,7 +22,7 @@ import { runLandscapeJob } from "./utils/landscapeJob.js";
 import { scheduleCreationJob, scheduleLandscapeJob } from "./utils/scheduleCreationJob.js";
 import { scheduleEmbeddingJob } from "./utils/embeddingJob.js";
 import { deleteCreationEmbedding } from "./utils/embeddings.js";
-import { buildClipOwnersMeta, resolveAudioClipProviderArgs } from "./utils/audioClips.js";
+import { buildClipOwnersMeta, resolveAudioClipProviderArgs, resolveClipIdFromOutputMeta } from "./utils/audioClips.js";
 import { getSupabaseServiceClient } from "./utils/supabaseService.js";
 import { verifyQStashRequest } from "./utils/qstashVerification.js";
 import {
@@ -5325,6 +5325,11 @@ export default function createCreateRoutes({ queries, storage }) {
 		}
 		if (existingMeta.media_type !== "video" || !existingMeta?.video?.file_path) {
 			return res.status(400).json({ error: "Share audio is only available for video creations" });
+		}
+
+		const libraryAudioClipId = await resolveClipIdFromOutputMeta(queries, existingMeta);
+		if (libraryAudioClipId) {
+			return res.status(400).json({ error: "Share audio is not available for creations that use a library audio clip" });
 		}
 
 		const existingShareAudio =

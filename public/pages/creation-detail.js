@@ -1713,7 +1713,115 @@ function createCreationDetailPerfTracker({ creationId, loadToken, isCurrentLoad 
 	};
 }
 
+/** Survives across loadCreation() calls so refresh/edit can tear down the prior hero player. */
+let creationDetailHeroVideoPlayer = null;
+let creationDetailHeroVideoStackEl = null;
+let creationDetailGroupHeroStackEl = null;
+
+function resetCreationDetailHeroVideoElement() {
+	const videoEl = document.querySelector('[data-video]');
+	const imageEl = document.querySelector('[data-image]');
+	const imageWrapper = imageEl?.closest?.('.creation-detail-image-wrapper');
+	const videoMutedBadgeEl = imageWrapper?.querySelector?.('[data-video-muted-badge]');
+	if (videoEl instanceof HTMLVideoElement) {
+		imageWrapper?.classList.remove(
+			'hero-video-revealed',
+			'hero-video-volume-controls',
+			'hero-video-muted',
+			'hero-video-paused',
+			'hero-video-hover'
+		);
+		videoEl.style.display = 'none';
+		videoEl.style.removeProperty('opacity');
+		try {
+			videoEl.pause();
+		} catch {
+			// ignore
+		}
+		videoEl.controls = false;
+		videoEl.removeAttribute('controls');
+		videoEl.removeAttribute('poster');
+		videoEl.removeAttribute('src');
+		try {
+			videoEl.load();
+		} catch {
+			// ignore
+		}
+	}
+	if (videoMutedBadgeEl instanceof HTMLElement) videoMutedBadgeEl.hidden = true;
+}
+
+function stopCreationDetailHeroPlayback() {
+	if (creationDetailHeroVideoPlayer && typeof creationDetailHeroVideoPlayer.teardown === 'function') {
+		try {
+			creationDetailHeroVideoPlayer.teardown();
+		} catch {
+			// ignore
+		}
+	}
+	creationDetailHeroVideoPlayer = null;
+
+	if (creationDetailHeroVideoStackEl?.parentNode) {
+		creationDetailHeroVideoStackEl.parentNode.removeChild(creationDetailHeroVideoStackEl);
+	}
+	creationDetailHeroVideoStackEl = null;
+
+	document.querySelectorAll('.creation-detail-group-hero-video-stack').forEach((stack) => {
+		stack.querySelectorAll('video').forEach((video) => {
+			if (!(video instanceof HTMLVideoElement)) return;
+			try {
+				video.pause();
+			} catch {
+				// ignore
+			}
+			video.removeAttribute('src');
+			try {
+				video.load();
+			} catch {
+				// ignore
+			}
+		});
+		stack.remove();
+	});
+
+	if (creationDetailGroupHeroStackEl?.parentNode) {
+		creationDetailGroupHeroStackEl.parentNode.removeChild(creationDetailGroupHeroStackEl);
+	}
+	creationDetailGroupHeroStackEl = null;
+
+	document.querySelectorAll('.creation-detail-group-hero-stack').forEach((stack) => {
+		stack.remove();
+	});
+
+	const imageEl = document.querySelector('[data-image]');
+	const imageWrapper = imageEl?.closest?.('.creation-detail-image-wrapper');
+	imageWrapper?.classList.remove(
+		'group-video-playlist-active',
+		'group-carousel-active',
+		'hero-video-revealed',
+		'hero-video-pending',
+		'hero-video-volume-controls',
+		'hero-video-muted',
+		'hero-video-paused',
+		'hero-video-hover'
+	);
+	if (imageEl instanceof HTMLImageElement) {
+		imageEl.style.removeProperty('display');
+	}
+	resetCreationDetailHeroVideoElement();
+}
+
+function bindCreationDetailHeroPlaybackPagehide() {
+	if (document.documentElement.dataset.prsnCreationDetailHeroStopBound === '1') return;
+	document.documentElement.dataset.prsnCreationDetailHeroStopBound = '1';
+	window.addEventListener('pagehide', () => {
+		stopCreationDetailHeroPlayback();
+	});
+}
+
 async function loadCreation() {
+	stopCreationDetailHeroPlayback();
+
 	const detailContent = document.querySelector('[data-detail-content]');
 	const imageEl = document.querySelector('[data-image]');
 	const backgroundEl = document.querySelector('[data-background]');
@@ -1724,9 +1832,6 @@ async function loadCreation() {
 	const groupHeroNextBtn = imageWrapper?.querySelector?.('[data-group-hero-next]') || null;
 	const heroImagePreloadPromises = new Map();
 	const heroImageWarmUrls = new Set();
-	let groupHeroStackEl = null;
-	let groupHeroVideoStackEl = null;
-	let groupHeroVideoPlayer = null;
 	const groupHeroImageBySourceId = new Map();
 
 	if (!detailContent || !imageEl || !backgroundEl) return;
@@ -1902,8 +2007,8 @@ async function loadCreation() {
 		const activeVideo = getActiveHeroPlaybackVideo();
 		if (!activeVideo) return;
 		const nextMuted = !activeVideo.muted;
-		if (groupHeroVideoPlayer && typeof groupHeroVideoPlayer.setMuted === 'function') {
-			groupHeroVideoPlayer.setMuted(nextMuted);
+		if (creationDetailHeroVideoPlayer && typeof creationDetailHeroVideoPlayer.setMuted === 'function') {
+			creationDetailHeroVideoPlayer.setMuted(nextMuted);
 		}
 		for (const video of getAllHeroPlaybackVideos()) {
 			video.muted = nextMuted;
@@ -1917,18 +2022,18 @@ async function loadCreation() {
 	}
 
 	function getActiveHeroPlaybackVideo() {
-		if (imageWrapper?.classList.contains('group-video-playlist-active') && groupHeroVideoStackEl) {
-			const fromDom = groupHeroVideoStackEl.querySelector('video.creation-detail-group-hero-video.is-active');
+		if (imageWrapper?.classList.contains('group-video-playlist-active') && creationDetailHeroVideoStackEl) {
+			const fromDom = creationDetailHeroVideoStackEl.querySelector('video.creation-detail-group-hero-video.is-active');
 			if (fromDom instanceof HTMLVideoElement && heroPlaybackVideoHasSource(fromDom)) {
 				return fromDom;
 			}
-			if (groupHeroVideoPlayer && typeof groupHeroVideoPlayer.getActiveVideo === 'function') {
-				const fromPlayer = groupHeroVideoPlayer.getActiveVideo();
+			if (creationDetailHeroVideoPlayer && typeof creationDetailHeroVideoPlayer.getActiveVideo === 'function') {
+				const fromPlayer = creationDetailHeroVideoPlayer.getActiveVideo();
 				if (fromPlayer instanceof HTMLVideoElement && heroPlaybackVideoHasSource(fromPlayer)) {
 					return fromPlayer;
 				}
 			}
-			const fromAny = groupHeroVideoStackEl.querySelector('video.creation-detail-group-hero-video');
+			const fromAny = creationDetailHeroVideoStackEl.querySelector('video.creation-detail-group-hero-video');
 			if (fromAny instanceof HTMLVideoElement && heroPlaybackVideoHasSource(fromAny)) {
 				return fromAny;
 			}
@@ -1937,11 +2042,11 @@ async function loadCreation() {
 	}
 
 	function getAllHeroPlaybackVideos() {
-		if (imageWrapper?.classList.contains('group-video-playlist-active') && groupHeroVideoPlayer) {
-			if (typeof groupHeroVideoPlayer.getVideos === 'function') {
-				return groupHeroVideoPlayer.getVideos().filter((video) => video instanceof HTMLVideoElement);
+		if (imageWrapper?.classList.contains('group-video-playlist-active') && creationDetailHeroVideoPlayer) {
+			if (typeof creationDetailHeroVideoPlayer.getVideos === 'function') {
+				return creationDetailHeroVideoPlayer.getVideos().filter((video) => video instanceof HTMLVideoElement);
 			}
-			return Array.from(groupHeroVideoStackEl?.querySelectorAll?.('video.creation-detail-group-hero-video') || [])
+			return Array.from(creationDetailHeroVideoStackEl?.querySelectorAll?.('video.creation-detail-group-hero-video') || [])
 				.filter((video) => video instanceof HTMLVideoElement);
 		}
 		return [];
@@ -2129,14 +2234,14 @@ async function loadCreation() {
 	}
 
 	function teardownGroupHeroVideoPlayer() {
-		if (groupHeroVideoPlayer && typeof groupHeroVideoPlayer.teardown === 'function') {
-			groupHeroVideoPlayer.teardown();
+		if (creationDetailHeroVideoPlayer && typeof creationDetailHeroVideoPlayer.teardown === 'function') {
+			creationDetailHeroVideoPlayer.teardown();
 		}
-		groupHeroVideoPlayer = null;
-		if (groupHeroVideoStackEl && groupHeroVideoStackEl.parentNode) {
-			groupHeroVideoStackEl.parentNode.removeChild(groupHeroVideoStackEl);
+		creationDetailHeroVideoPlayer = null;
+		if (creationDetailHeroVideoStackEl && creationDetailHeroVideoStackEl.parentNode) {
+			creationDetailHeroVideoStackEl.parentNode.removeChild(creationDetailHeroVideoStackEl);
 		}
-		groupHeroVideoStackEl = null;
+		creationDetailHeroVideoStackEl = null;
 		imageWrapper?.classList.remove(
 			'group-video-playlist-active',
 			'hero-video-revealed',
@@ -2150,10 +2255,10 @@ async function loadCreation() {
 
 	function teardownGroupHeroCarousel() {
 		teardownGroupHeroVideoPlayer();
-		if (groupHeroStackEl && groupHeroStackEl.parentNode) {
-			groupHeroStackEl.parentNode.removeChild(groupHeroStackEl);
+		if (creationDetailGroupHeroStackEl && creationDetailGroupHeroStackEl.parentNode) {
+			creationDetailGroupHeroStackEl.parentNode.removeChild(creationDetailGroupHeroStackEl);
 		}
-		groupHeroStackEl = null;
+		creationDetailGroupHeroStackEl = null;
 		groupHeroImageBySourceId.clear();
 		imageWrapper?.classList.remove('group-carousel-active');
 		imageEl.style.removeProperty('display');
@@ -2199,7 +2304,7 @@ async function loadCreation() {
 			groupHeroImageBySourceId.set(source.id, img);
 			stack.appendChild(img);
 		}
-		groupHeroStackEl = stack;
+		creationDetailGroupHeroStackEl = stack;
 		imageWrapper.appendChild(stack);
 
 		let activeId = initialId;
@@ -2288,7 +2393,7 @@ async function loadCreation() {
 		const stack = document.createElement('div');
 		stack.className = 'creation-detail-group-hero-video-stack';
 		imageWrapper.appendChild(stack);
-		groupHeroVideoStackEl = stack;
+		creationDetailHeroVideoStackEl = stack;
 
 		const slides = playable.map((source) => ({
 			url: source.url,
@@ -2307,7 +2412,7 @@ async function loadCreation() {
 			return false;
 		}
 
-		groupHeroVideoPlayer = mod.mountSequentialVideoPlayer(stack, slides, {
+		creationDetailHeroVideoPlayer = mod.mountSequentialVideoPlayer(stack, slides, {
 			startIndex,
 			loopPlaylist: true,
 			autoAdvanceOnEnded: true,
@@ -2331,7 +2436,7 @@ async function loadCreation() {
 				syncHeroVideoMutedBadge();
 			},
 		});
-		if (!groupHeroVideoPlayer) {
+		if (!creationDetailHeroVideoPlayer) {
 			teardownGroupHeroVideoPlayer();
 			return false;
 		}
@@ -3451,13 +3556,20 @@ async function loadCreation() {
 			status === 'completed' &&
 			!isFailed &&
 			landscapeEligibility.eligible;
+		const argsForLibraryClip =
+			meta?.args && typeof meta.args === 'object' && !Array.isArray(meta.args) ? meta.args : null;
+		const libraryAudioClipId =
+			audioClipId > 0
+				? audioClipId
+				: (Number(argsForLibraryClip?.audio_clip_id) > 0 ? Number(argsForLibraryClip.audio_clip_id) : 0);
 		const showShareAudio =
 			!isGroupCreation &&
 			!isAdmin &&
 			status === 'completed' &&
 			!isFailed &&
 			mediaType === 'video' &&
-			Boolean(creation.video_url);
+			Boolean(creation.video_url) &&
+			!(libraryAudioClipId > 0);
 
 		const stripData = {
 			creatorProfileHref,
@@ -5362,8 +5474,8 @@ async function loadCreation() {
 				if (shouldUpdateMedia) {
 					if (groupVideoPlaylistEnabled && source.videoUrl) {
 						const idx = orderedSourceIds.indexOf(Number(source.id));
-						if (idx >= 0 && groupHeroVideoPlayer) {
-							void groupHeroVideoPlayer.goToIndex(idx, { autoplay: true });
+						if (idx >= 0 && creationDetailHeroVideoPlayer) {
+							void creationDetailHeroVideoPlayer.goToIndex(idx, { autoplay: true });
 						}
 					} else if (source.filePath) {
 						if (!groupCarouselEnabled || !setGroupHeroCarouselActive(source.id)) {
@@ -5701,6 +5813,7 @@ async function checkAndLoadCreation() {
 }
 
 async function bootCreationDetailPage() {
+	bindCreationDetailHeroPlaybackPagehide();
 	await ensureCreationDetailRuntime();
 	await checkAndLoadCreation();
 }

@@ -6,6 +6,8 @@
 const DEFAULT_LONG_MS = 420;
 const DEFAULT_MOVE_THRESHOLD_PX = 18;
 const GHOST_CLICK_MS = 520;
+/** Set on the card while a bulk long-press is armed (before pointerup). */
+export const CREATIONS_BULK_LONG_PRESS_ARMED_ATTR = 'data-creations-bulk-long-press';
 
 /**
  * @param {object} opts
@@ -74,10 +76,17 @@ export function bindMobileCreationsBulkLongPress({
 		}
 	};
 
+	const clearBulkLongPressArmed = (el) => {
+		if (el instanceof HTMLElement) {
+			el.removeAttribute(CREATIONS_BULK_LONG_PRESS_ARMED_ATTR);
+		}
+	};
+
 	const clearState = () => {
 		clearTimer();
 		const capCard = card;
 		const capPointerId = pointerId;
+		clearBulkLongPressArmed(capCard);
 		pointerId = null;
 		card = null;
 		armedCard = null;
@@ -118,6 +127,7 @@ export function bindMobileCreationsBulkLongPress({
 		} catch {
 			// ignore
 		}
+		card.setAttribute(CREATIONS_BULK_LONG_PRESS_ARMED_ATTR, 'armed');
 		armedCard = card;
 	};
 

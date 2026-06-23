@@ -1,5 +1,5 @@
 import { copyIcon, linkIcon2 } from '/icons/svg-strings.js';
-import { DEFAULT_APP_ORIGIN } from './userText.js';
+import { DEFAULT_APP_ORIGIN, collectInlineMediaGroupGallery } from './userText.js';
 import { createModalDismissButton } from './modalDismiss.js';
 import {
 	isCreationDetailEmbedFrame,
@@ -373,6 +373,18 @@ export function chatAttachmentPreviewKindFromHref(href) {
 	}
 }
 
+function makeGalleryNavButton(direction) {
+	const btn = document.createElement('button');
+	btn.type = 'button';
+	btn.className = `chat-inline-image-lightbox-gallery-nav chat-inline-image-lightbox-gallery-nav--${direction}`;
+	btn.setAttribute('aria-label', direction === 'prev' ? 'Previous' : 'Next');
+	btn.innerHTML =
+		direction === 'prev'
+			? '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M14.5 6.5L9 12l5.5 5.5" /></svg>'
+			: '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9.5 6.5L15 12l-5.5 5.5" /></svg>';
+	return btn;
+}
+
 /**
  * @param {string} src
  * @param {object} [creationMeta]
@@ -465,17 +477,7 @@ export function openChatInlineImageLightbox(src, creationMeta, hooks) {
 
 	let prevGalleryBtn = null;
 	let nextGalleryBtn = null;
-	const makeGalleryNav = (direction) => {
-		const btn = document.createElement('button');
-		btn.type = 'button';
-		btn.className = `chat-inline-image-lightbox-gallery-nav chat-inline-image-lightbox-gallery-nav--${direction}`;
-		btn.setAttribute('aria-label', direction === 'prev' ? 'Previous image' : 'Next image');
-		btn.innerHTML =
-			direction === 'prev'
-				? '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M14.5 6.5L9 12l5.5 5.5" /></svg>'
-				: '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9.5 6.5L15 12l-5.5 5.5" /></svg>';
-		return btn;
-	};
+	const makeGalleryNav = makeGalleryNavButton;
 
 	const mountIntoFrame = (node) => {
 		if (useGallery && prevGalleryBtn) frame.insertBefore(node, prevGalleryBtn);
@@ -514,6 +516,17 @@ export function openChatInlineImageLightbox(src, creationMeta, hooks) {
 		useGallery && typeof creationMeta?.onGalleryLightboxSlideChange === 'function'
 			? creationMeta.onGalleryLightboxSlideChange
 			: null;
+	/** @type {HTMLElement | null} */
+	let galleryCounterEl = null;
+	if (useGallery) {
+		galleryCounterEl = document.createElement('div');
+		galleryCounterEl.className = 'chat-inline-image-lightbox-gallery-counter';
+		galleryCounterEl.setAttribute('aria-live', 'polite');
+	}
+	const updateGalleryCounter = () => {
+		if (!(galleryCounterEl instanceof HTMLElement) || rawGallery.length <= 1) return;
+		galleryCounterEl.textContent = `${activeGalleryIndex + 1} / ${rawGallery.length}`;
+	};
 	const notifyCarouselBehindLightbox = () => {
 		if (!slideChangeCb) return;
 		try {
@@ -527,6 +540,7 @@ export function openChatInlineImageLightbox(src, creationMeta, hooks) {
 		activeGalleryIndex =
 			((nextIdx % rawGallery.length) + rawGallery.length) % rawGallery.length;
 		mountGallerySlide(activeGalleryIndex);
+		updateGalleryCounter();
 		notifyCarouselBehindLightbox();
 	};
 
@@ -549,10 +563,14 @@ export function openChatInlineImageLightbox(src, creationMeta, hooks) {
 
 	if (useGallery) mountGallerySlide(activeGalleryIndex);
 	else mountSingleSlide();
-	if (useGallery) notifyCarouselBehindLightbox();
+	if (useGallery) {
+		updateGalleryCounter();
+		notifyCarouselBehindLightbox();
+	}
 
 	overlay.appendChild(closeBtn);
 	overlay.appendChild(frame);
+	if (galleryCounterEl) overlay.appendChild(galleryCounterEl);
 
 	const cidRaw =
 		creationMeta && typeof creationMeta.creationId !== 'undefined'
@@ -599,6 +617,7 @@ export function openChatInlineImageLightbox(src, creationMeta, hooks) {
  *   startIndex?: number,
  *   loopGallery?: boolean,
  *   autoAdvanceOnEnded?: boolean,
+ *   loopPerSlide?: boolean,
  *   creationId?: string | number,
  *   onClose?: () => void,
  * }} [hooks]
@@ -642,11 +661,13 @@ export function openChatVideoGalleryLightbox(slides, hooks) {
 
 	const loopGallery = hooks?.loopGallery !== false;
 	const autoAdvanceOnEnded = hooks?.autoAdvanceOnEnded !== false;
+	const loopPerSlide = hooks?.loopPerSlide === true;
 	const galleryLabel =
 		typeof hooks?.galleryLabel === 'string' && hooks.galleryLabel.trim()
 			? hooks.galleryLabel.trim()
 			: 'Video gallery';
 	const len = normalized.length;
+	const showManualNav = len > 1 && !autoAdvanceOnEnded;
 	let startIndex = Number(hooks?.startIndex);
 	if (!Number.isFinite(startIndex)) startIndex = 0;
 	startIndex = Math.max(0, Math.min(len - 1, startIndex));
@@ -735,8 +756,38 @@ export function openChatVideoGalleryLightbox(slides, hooks) {
 
 	frame.appendChild(videoSlot);
 
+	if (showManualNav) {
+		const prevBtn = makeGalleryNavButton('prev');
+		const nextBtn = makeGalleryNavButton('next');
+		frame.appendChild(prevBtn);
+		frame.appendChild(nextBtn);
+		prevBtn.addEventListener('click', (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			void applyGalleryIndex(activeIndex - 1, { autoplay: true, force: true });
+		});
+		nextBtn.addEventListener('click', (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			void applyGalleryIndex(activeIndex + 1, { autoplay: true, force: true });
+		});
+	}
+
 	overlay.appendChild(closeBtn);
 	overlay.appendChild(frame);
+
+	/** @type {HTMLElement | null} */
+	let galleryCounterEl = null;
+	if (showManualNav) {
+		galleryCounterEl = document.createElement('div');
+		galleryCounterEl.className = 'chat-inline-image-lightbox-gallery-counter';
+		galleryCounterEl.setAttribute('aria-live', 'polite');
+		overlay.appendChild(galleryCounterEl);
+	}
+	const updateGalleryCounter = () => {
+		if (!(galleryCounterEl instanceof HTMLElement)) return;
+		galleryCounterEl.textContent = `${activeIndex + 1} / ${len}`;
+	};
 
 	const creationIdRaw =
 		typeof hooks?.creationId === 'string' || typeof hooks?.creationId === 'number'
@@ -868,8 +919,9 @@ export function openChatVideoGalleryLightbox(slides, hooks) {
 			video.addEventListener('loadedmetadata', onMeta, { once: true });
 			video.addEventListener('error', done, { once: true });
 			video.pause();
-			video.loop = false;
-			video.removeAttribute('loop');
+			video.loop = loopPerSlide;
+			if (loopPerSlide) video.setAttribute('loop', '');
+			else video.removeAttribute('loop');
 			video.controls = false;
 			video.removeAttribute('controls');
 			video.src = url;
@@ -1026,6 +1078,8 @@ export function openChatVideoGalleryLightbox(slides, hooks) {
 			const incomingVideo = videos[incomingPlayer];
 			const outgoingVideo = videos[outgoingPlayer];
 
+			updateGalleryCounter();
+
 			if (!autoplay) {
 				setActivePlayerVisible(incomingPlayer);
 				activePlayer = incomingPlayer;
@@ -1103,6 +1157,15 @@ export function openChatVideoGalleryLightbox(slides, hooks) {
 		if (e.key === 'Escape') {
 			e.preventDefault();
 			closeChatInlineImageLightbox();
+			return;
+		}
+		if (showManualNav && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+			e.preventDefault();
+			if (e.key === 'ArrowLeft') {
+				void applyGalleryIndex(activeIndex - 1, { autoplay: true, force: true });
+			} else {
+				void applyGalleryIndex(activeIndex + 1, { autoplay: true, force: true });
+			}
 		}
 	};
 	document.addEventListener('keydown', chatInlineImageLightboxKeydown);
@@ -1118,10 +1181,529 @@ export function openChatVideoGalleryLightbox(slides, hooks) {
 	applyGallerySlideAspectToSlot(normalized[startIndex]);
 	videoSlot.classList.add('chat-inline-image-lightbox-video-slot--sized');
 	setGalleryPlaceholderVisible(true);
+	updateGalleryCounter();
 
 	void (async () => {
 		await applyGalleryIndex(startIndex, { autoplay: true, force: true });
 	})();
+}
+
+/**
+ * @param {Array<{
+ *   kind?: string,
+ *   url?: string,
+ *   creationId?: string,
+ *   sourceImg?: HTMLImageElement,
+ *   sourceVideo?: HTMLVideoElement,
+ *   posterUrl?: string,
+ *   width?: number,
+ *   height?: number,
+ * }>} slides
+ * @returns {Array<{
+ *   kind: 'image' | 'video',
+ *   url: string,
+ *   creationId: string,
+ *   sourceImg?: HTMLImageElement,
+ *   sourceVideo?: HTMLVideoElement,
+ *   posterUrl?: string,
+ *   width: number,
+ *   height: number,
+ * }>}
+ */
+function normalizeInlineMediaGroupSlides(slides) {
+	return (Array.isArray(slides) ? slides : [])
+		.map((slide) => {
+			const w = Number(slide?.width);
+			const h = Number(slide?.height);
+			const kind = slide?.kind === 'video' ? 'video' : 'image';
+			return {
+				kind,
+				url: String(slide?.url || '').trim(),
+				creationId:
+					slide?.creationId != null && String(slide.creationId).trim() !== ''
+						? String(slide.creationId).trim()
+						: '',
+				...(slide?.sourceImg instanceof HTMLImageElement ? { sourceImg: slide.sourceImg } : {}),
+				...(slide?.sourceVideo instanceof HTMLVideoElement
+					? { sourceVideo: slide.sourceVideo }
+					: {}),
+				...(slide?.posterUrl ? { posterUrl: String(slide.posterUrl).trim() } : {}),
+				width: Number.isFinite(w) && w > 0 ? w : 0,
+				height: Number.isFinite(h) && h > 0 ? h : 0,
+			};
+		})
+		.filter((slide) => slide.url);
+}
+
+/**
+ * Open the correct lightbox for a grouped inline-media run (images, videos, or both).
+ *
+ * @param {Array<{ kind?: string, url?: string, creationId?: string, sourceImg?: HTMLImageElement, sourceVideo?: HTMLVideoElement, posterUrl?: string, width?: number, height?: number }>} slides
+ * @param {{
+ *   beforeOpen?: () => void,
+ *   galleryLabel?: string,
+ *   startIndex?: number,
+ *   loopGallery?: boolean,
+ *   autoAdvanceOnEnded?: boolean,
+ *   loopPerSlide?: boolean,
+ *   creationId?: string | number,
+ *   onClose?: () => void,
+ * }} [hooks]
+ */
+export function openChatInlineMediaGroupLightbox(slides, hooks) {
+	const normalized = normalizeInlineMediaGroupSlides(slides);
+	if (normalized.length === 0) return;
+
+	let startIndex = Number(hooks?.startIndex);
+	if (!Number.isFinite(startIndex)) startIndex = 0;
+	startIndex = Math.max(0, Math.min(normalized.length - 1, startIndex));
+
+	const openHooks = {
+		...(hooks && typeof hooks.beforeOpen === 'function' ? { beforeOpen: hooks.beforeOpen } : {}),
+	};
+
+	if (normalized.length === 1) {
+		const slide = normalized[0];
+		if (slide.kind === 'video') {
+			openChatAttachmentPreviewLightbox(slide.url, 'video', {
+				...openHooks,
+				...(slide.creationId ? { creationId: slide.creationId } : {}),
+				...(slide.sourceVideo instanceof HTMLVideoElement
+					? { sourceVideo: slide.sourceVideo }
+					: {}),
+			});
+			return;
+		}
+		openChatInlineImageLightbox(
+			slide.url,
+			{
+				...(slide.creationId ? { creationId: slide.creationId } : {}),
+				...(slide.sourceImg instanceof HTMLImageElement ? { sourceImg: slide.sourceImg } : {}),
+			},
+			openHooks
+		);
+		return;
+	}
+
+	const hasImage = normalized.some((slide) => slide.kind === 'image');
+	const hasVideo = normalized.some((slide) => slide.kind === 'video');
+
+	if (hasImage && hasVideo) {
+		openChatMixedMediaGalleryLightbox(normalized, { ...hooks, startIndex });
+		return;
+	}
+
+	if (hasVideo) {
+		openChatVideoGalleryLightbox(
+			normalized.map((slide) => ({
+				url: slide.url,
+				creationId: slide.creationId,
+				width: slide.width,
+				height: slide.height,
+			})),
+			{
+				...hooks,
+				startIndex,
+				galleryLabel: hooks?.galleryLabel || 'Videos',
+				autoAdvanceOnEnded: hooks?.autoAdvanceOnEnded === true,
+				loopPerSlide: hooks?.loopPerSlide !== false,
+				loopGallery: hooks?.loopGallery !== false,
+			}
+		);
+		return;
+	}
+
+	const galleryImgs = normalized
+		.map((slide) => slide.sourceImg)
+		.filter((img) => img instanceof HTMLImageElement);
+	openChatInlineImageLightbox(
+		normalized[startIndex].url,
+		{
+			...(hooks?.creationId != null && String(hooks.creationId).trim()
+				? { creationId: String(hooks.creationId).trim() }
+				: normalized[startIndex].creationId
+					? { creationId: normalized[startIndex].creationId }
+					: {}),
+			galleryUrls: normalized.map((slide) => slide.url),
+			galleryImgs,
+			galleryIndex: startIndex,
+		},
+		openHooks
+	);
+}
+
+/**
+ * Manual prev/next lightbox for grouped inline media that mixes images and videos.
+ *
+ * @param {ReturnType<typeof normalizeInlineMediaGroupSlides>} slides
+ * @param {{
+ *   beforeOpen?: () => void,
+ *   galleryLabel?: string,
+ *   startIndex?: number,
+ *   loopGallery?: boolean,
+ *   loopPerSlide?: boolean,
+ *   creationId?: string | number,
+ *   onClose?: () => void,
+ * }} [hooks]
+ */
+function openChatMixedMediaGalleryLightbox(slides, hooks) {
+	const onCloseHook = hooks && typeof hooks.onClose === 'function' ? hooks.onClose : null;
+	const normalized = normalizeInlineMediaGroupSlides(slides);
+	if (normalized.length < 2) return;
+
+	if (hooks && typeof hooks.beforeOpen === 'function') hooks.beforeOpen();
+	closeChatInlineImageLightbox();
+
+	const loopGallery = hooks?.loopGallery !== false;
+	const loopPerSlide = hooks?.loopPerSlide !== false;
+	const galleryLabel =
+		typeof hooks?.galleryLabel === 'string' && hooks.galleryLabel.trim()
+			? hooks.galleryLabel.trim()
+			: 'Media gallery';
+	const len = normalized.length;
+	let startIndex = Number(hooks?.startIndex);
+	if (!Number.isFinite(startIndex)) startIndex = 0;
+	startIndex = Math.max(0, Math.min(len - 1, startIndex));
+
+	const overlay = document.createElement('div');
+	overlay.className =
+		'chat-inline-image-lightbox chat-inline-image-lightbox--video-gallery chat-inline-image-lightbox--mixed-media';
+	overlay.setAttribute('role', 'dialog');
+	overlay.setAttribute('aria-modal', 'true');
+	overlay.setAttribute('aria-label', galleryLabel);
+
+	const closeBtn = createModalDismissButton({ extraClass: 'chat-inline-image-lightbox-close' });
+
+	const frame = document.createElement('div');
+	frame.className =
+		'chat-inline-image-lightbox-frame chat-inline-image-lightbox-frame--video-gallery chat-inline-image-lightbox-frame--mixed-gallery';
+
+	const imageEl = document.createElement('img');
+	imageEl.className = 'chat-inline-image-lightbox-img chat-inline-image-lightbox-img--mixed-gallery';
+	imageEl.alt = '';
+	imageEl.hidden = true;
+
+	const videoSlot = document.createElement('div');
+	videoSlot.className =
+		'chat-inline-image-lightbox-video-slot chat-inline-image-lightbox-video-slot--gallery';
+	videoSlot.style.setProperty('--chat-lightbox-video-ar', '16 / 9');
+	videoSlot.hidden = true;
+
+	const galleryPlaceholder = document.createElement('div');
+	galleryPlaceholder.className = 'chat-inline-image-lightbox-video-placeholder skeleton';
+	galleryPlaceholder.setAttribute('role', 'status');
+	galleryPlaceholder.setAttribute('aria-live', 'polite');
+	galleryPlaceholder.setAttribute('aria-label', 'Loading media');
+	galleryPlaceholder.hidden = true;
+
+	const video = document.createElement('video');
+	video.className = 'chat-inline-image-lightbox-video chat-inline-image-lightbox-video--gallery is-active';
+	video.controls = false;
+	video.removeAttribute('controls');
+	video.setAttribute('controlsList', 'nodownload nofullscreen noremoteplayback');
+	video.disablePictureInPicture = true;
+	video.playsInline = true;
+	video.preload = 'auto';
+	video.muted = false;
+	video.defaultMuted = false;
+	primeMediaElementForAudioLeveling(video);
+	attachMediaAudioLeveling(video);
+	videoSlot.appendChild(video);
+	videoSlot.appendChild(galleryPlaceholder);
+
+	const playOverlay = document.createElement('div');
+	playOverlay.className = 'chat-doom-play-overlay chat-inline-image-lightbox-gallery-play-overlay';
+	playOverlay.setAttribute('data-chat-lightbox-video-play-overlay', '1');
+	playOverlay.hidden = true;
+	playOverlay.setAttribute('aria-hidden', 'true');
+	playOverlay.innerHTML =
+		`<div class="chat-doom-play-overlay-inner" data-chat-lightbox-play-icon>` +
+		`<svg class="chat-doom-play-glyph" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"></path></svg>` +
+		`</div>` +
+		`<div class="chat-doom-play-overlay-inner chat-doom-play-overlay-inner--pausehint" hidden data-chat-lightbox-pause-hint>` +
+		`<svg class="chat-doom-pause-glyph" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 5h4v14H6V5zm8 0h4v14h-4V5z"></path></svg>` +
+		`</div>`;
+	videoSlot.appendChild(playOverlay);
+
+	const playOverlayPlayIcon = playOverlay.querySelector('[data-chat-lightbox-play-icon]');
+	const playOverlayPauseHint = playOverlay.querySelector('[data-chat-lightbox-pause-hint]');
+
+	frame.appendChild(imageEl);
+	frame.appendChild(videoSlot);
+
+	const prevBtn = makeGalleryNavButton('prev');
+	const nextBtn = makeGalleryNavButton('next');
+	frame.appendChild(prevBtn);
+	frame.appendChild(nextBtn);
+
+	overlay.appendChild(closeBtn);
+	overlay.appendChild(frame);
+
+	const galleryCounterEl = document.createElement('div');
+	galleryCounterEl.className = 'chat-inline-image-lightbox-gallery-counter';
+	galleryCounterEl.setAttribute('aria-live', 'polite');
+	overlay.appendChild(galleryCounterEl);
+
+	const creationIdRaw =
+		typeof hooks?.creationId === 'string' || typeof hooks?.creationId === 'number'
+			? String(hooks.creationId).trim()
+			: normalized.map((slide) => String(slide.creationId || '').trim()).find(Boolean) || '';
+	mountInlineImageLightboxCreationFooter(overlay, creationIdRaw);
+
+	let activeIndex = startIndex;
+	let advanceLock = false;
+	let userPaused = false;
+	let gallerySlotHovered = false;
+	let showingVideo = false;
+
+	const slideIndexWrapped = (idx) => ((idx % len) + len) % len;
+
+	const updateGalleryCounter = () => {
+		galleryCounterEl.textContent = `${activeIndex + 1} / ${len}`;
+	};
+
+	const syncPlayPauseOverlay = () => {
+		if (!showingVideo || galleryPlaceholder.hidden === false || advanceLock) {
+			playOverlay.hidden = true;
+			playOverlay.setAttribute('aria-hidden', 'true');
+			return;
+		}
+		if (video.paused) {
+			if (!userPaused) {
+				playOverlay.hidden = true;
+				playOverlay.setAttribute('aria-hidden', 'true');
+				return;
+			}
+			playOverlay.hidden = false;
+			playOverlay.setAttribute('aria-hidden', 'false');
+			if (playOverlayPlayIcon instanceof HTMLElement) playOverlayPlayIcon.hidden = false;
+			if (playOverlayPauseHint instanceof HTMLElement) playOverlayPauseHint.hidden = true;
+			return;
+		}
+		if (gallerySlotHovered) {
+			playOverlay.hidden = false;
+			playOverlay.setAttribute('aria-hidden', 'false');
+			if (playOverlayPlayIcon instanceof HTMLElement) playOverlayPlayIcon.hidden = true;
+			if (playOverlayPauseHint instanceof HTMLElement) playOverlayPauseHint.hidden = false;
+			return;
+		}
+		playOverlay.hidden = true;
+		playOverlay.setAttribute('aria-hidden', 'true');
+	};
+
+	const mountImageSlide = (slide) => {
+		try {
+			video.pause();
+		} catch {
+			// ignore
+		}
+		video.removeAttribute('src');
+		try {
+			video.load();
+		} catch {
+			// ignore
+		}
+		videoSlot.hidden = true;
+		showingVideo = false;
+		imageEl.hidden = false;
+		if (
+			slide.sourceImg instanceof HTMLImageElement &&
+			slide.sourceImg.complete &&
+			slide.sourceImg.naturalWidth > 0
+		) {
+			imageEl.src = slide.sourceImg.currentSrc || slide.sourceImg.src || slide.url;
+		} else {
+			imageEl.src = slide.url;
+		}
+		syncPlayPauseOverlay();
+	};
+
+	const tryPlayVideo = async () => {
+		try {
+			await video.play();
+			return true;
+		} catch {
+			video.muted = true;
+			try {
+				await video.play();
+				return true;
+			} catch {
+				return false;
+			}
+		}
+	};
+
+	const loadVideoSlide = (slide, opts = {}) =>
+		new Promise((resolve) => {
+			const onMeta = () => {
+				const { width, height } = inlineVideoIntrinsicSize(video);
+				if (width > 0 && height > 0) {
+					applyLightboxVideoSlotAspect(videoSlot, width, height);
+				}
+			};
+			const done = () => {
+				video.removeEventListener('canplay', done);
+				video.removeEventListener('loadeddata', done);
+				video.removeEventListener('loadedmetadata', onMeta);
+				video.removeEventListener('error', done);
+				resolve();
+			};
+			imageEl.hidden = true;
+			videoSlot.hidden = false;
+			showingVideo = true;
+			galleryPlaceholder.hidden = false;
+			video.classList.add('chat-inline-image-lightbox-video--pending');
+			video.addEventListener('canplay', done, { once: true });
+			video.addEventListener('loadeddata', done, { once: true });
+			video.addEventListener('loadedmetadata', onMeta, { once: true });
+			video.addEventListener('error', done, { once: true });
+			video.pause();
+			video.loop = loopPerSlide;
+			if (loopPerSlide) video.setAttribute('loop', '');
+			else video.removeAttribute('loop');
+			if (slide.posterUrl) video.setAttribute('poster', slide.posterUrl);
+			else video.removeAttribute('poster');
+			video.src = slide.url;
+			try {
+				video.load();
+			} catch {
+				done();
+				return;
+			}
+			if (video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
+				done();
+				return;
+			}
+			window.setTimeout(done, 8000);
+		});
+
+	const mountVideoSlide = async (slide, opts = {}) => {
+		const autoplay = opts.autoplay !== false;
+		await loadVideoSlide(slide, opts);
+		galleryPlaceholder.hidden = true;
+		video.classList.remove('chat-inline-image-lightbox-video--pending');
+		videoSlot.classList.add('chat-inline-image-lightbox-video-slot--playing');
+		userPaused = false;
+		if (autoplay) {
+			await tryPlayVideo();
+		}
+		syncPlayPauseOverlay();
+	};
+
+	const applyGalleryIndex = async (nextIdx, opts = {}) => {
+		if (advanceLock) return;
+		advanceLock = true;
+		try {
+			const idx = loopGallery
+				? slideIndexWrapped(nextIdx)
+				: Math.max(0, Math.min(len - 1, nextIdx));
+			if (!loopGallery && idx === activeIndex && opts.force !== true) return;
+			activeIndex = idx;
+			updateGalleryCounter();
+			const slide = normalized[idx];
+			if (slide.kind === 'image') {
+				mountImageSlide(slide);
+			} else {
+				await mountVideoSlide(slide, opts);
+			}
+		} finally {
+			advanceLock = false;
+			syncPlayPauseOverlay();
+		}
+	};
+
+	const onGalleryVideoSlotClick = (e) => {
+		if (!(e.target instanceof Element)) return;
+		if (!showingVideo || galleryPlaceholder.hidden === false || advanceLock) return;
+		e.preventDefault();
+		e.stopPropagation();
+		if (video.paused) {
+			userPaused = false;
+			void tryPlayVideo().then(() => syncPlayPauseOverlay());
+		} else {
+			userPaused = true;
+			video.pause();
+			syncPlayPauseOverlay();
+		}
+	};
+
+	videoSlot.addEventListener('click', onGalleryVideoSlotClick);
+	videoSlot.addEventListener('mouseenter', () => {
+		gallerySlotHovered = true;
+		syncPlayPauseOverlay();
+	});
+	videoSlot.addEventListener('mouseleave', () => {
+		gallerySlotHovered = false;
+		syncPlayPauseOverlay();
+	});
+	video.addEventListener('play', () => {
+		userPaused = false;
+		syncPlayPauseOverlay();
+	});
+	video.addEventListener('pause', () => {
+		syncPlayPauseOverlay();
+	});
+
+	prevBtn.addEventListener('click', (e) => {
+		e.preventDefault();
+		e.stopPropagation();
+		void applyGalleryIndex(activeIndex - 1, { autoplay: true, force: true });
+	});
+	nextBtn.addEventListener('click', (e) => {
+		e.preventDefault();
+		e.stopPropagation();
+		void applyGalleryIndex(activeIndex + 1, { autoplay: true, force: true });
+	});
+
+	chatVideoGalleryLightboxTeardown = () => {
+		videoSlot.removeEventListener('click', onGalleryVideoSlotClick);
+		try {
+			video.pause();
+		} catch {
+			// ignore
+		}
+		video.removeAttribute('src');
+		try {
+			video.load();
+		} catch {
+			// ignore
+		}
+		overlay.querySelector('.chat-inline-image-lightbox-footer')?.remove();
+		if (onCloseHook) {
+			try {
+				onCloseHook();
+			} catch {
+				// ignore
+			}
+		}
+	};
+
+	chatInlineImageLightboxKeydown = (e) => {
+		if (e.key === 'Escape') {
+			e.preventDefault();
+			closeChatInlineImageLightbox();
+			return;
+		}
+		if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+			e.preventDefault();
+			if (e.key === 'ArrowLeft') {
+				void applyGalleryIndex(activeIndex - 1, { autoplay: true, force: true });
+			} else {
+				void applyGalleryIndex(activeIndex + 1, { autoplay: true, force: true });
+			}
+		}
+	};
+	document.addEventListener('keydown', chatInlineImageLightboxKeydown);
+
+	attachChatInlineImageLightboxBackdropClose(overlay);
+	closeBtn.addEventListener('click', () => closeChatInlineImageLightbox());
+
+	document.body.appendChild(overlay);
+	chatInlineImageLightboxEl = overlay;
+	pushChatInlineImageLightboxHistoryEntry();
+	updateGalleryCounter();
+
+	void applyGalleryIndex(startIndex, { autoplay: true, force: true });
 }
 
 /**
@@ -1444,6 +2026,28 @@ export function bindChatInlineImageLightboxClickDelegation(rootEl, options = {})
 				wrap instanceof HTMLElement
 					? String(wrap.getAttribute('data-creation-id') || '').trim()
 					: '';
+			const inlineMediaGroup = wrap?.closest?.('.user-text-inline-media-group');
+			if (inlineMediaGroup instanceof HTMLElement) {
+				const gallery = collectInlineMediaGroupGallery(
+					inlineMediaGroup,
+					null,
+					wrap instanceof HTMLElement ? wrap : null
+				);
+				if (gallery.slides.length > 1) {
+					e.preventDefault();
+					e.stopPropagation();
+					openChatInlineMediaGroupLightbox(gallery.slides, {
+						...openHooks,
+						galleryLabel: 'Media',
+						startIndex: gallery.galleryIndex,
+						autoAdvanceOnEnded: false,
+						loopPerSlide: true,
+						loopGallery: true,
+						creationId: gallery.creationId || creationId,
+					});
+					return;
+				}
+			}
 			e.preventDefault();
 			e.stopPropagation();
 			openChatAttachmentPreviewLightbox(src, 'video', {
@@ -1473,10 +2077,41 @@ export function bindChatInlineImageLightboxClickDelegation(rootEl, options = {})
 			embedWrap instanceof HTMLElement
 				? String(embedWrap.getAttribute('data-creation-id') || '').trim()
 				: '';
+		const inlineMediaGroup = a.closest('.user-text-inline-media-group');
+		let galleryUrls = [];
+		let galleryImgs = [];
+		let galleryIndex = 0;
+		let groupCreationId = creationId;
+		if (inlineMediaGroup instanceof HTMLElement) {
+			const gallery = collectInlineMediaGroupGallery(inlineMediaGroup, a);
+			if (gallery.slides.length > 1) {
+				openChatInlineMediaGroupLightbox(gallery.slides, {
+					...openHooks,
+					galleryLabel: 'Media',
+					startIndex: gallery.galleryIndex,
+					autoAdvanceOnEnded: false,
+					loopPerSlide: true,
+					loopGallery: true,
+					creationId: gallery.creationId || creationId,
+				});
+				return;
+			}
+			galleryUrls = gallery.galleryUrls;
+			galleryImgs = gallery.galleryImgs;
+			galleryIndex = gallery.galleryIndex;
+			if (gallery.creationId) groupCreationId = gallery.creationId;
+		}
 		openChatInlineImageLightbox(
 			src,
 			{
-				...(creationId ? { creationId } : {}),
+				...(groupCreationId ? { creationId: groupCreationId } : {}),
+				...(galleryUrls.length > 1
+					? {
+							galleryUrls,
+							galleryImgs,
+							galleryIndex,
+						}
+					: {}),
 				...(thumb instanceof HTMLImageElement ? { sourceImg: thumb } : {}),
 			},
 			openHooks

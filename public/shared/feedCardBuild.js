@@ -1147,6 +1147,7 @@ function bindMobileFeedCardCreationTapFallback(card, creationsBulkChrome, naviga
 		(e) => {
 			if (e.pointerType === 'mouse') return;
 			if (clickHandled) return;
+			if (card.hasAttribute('data-creations-bulk-long-press')) return;
 			if (shouldIgnoreFeedCardCreationNavTarget(card, creationsBulkChrome, e.target)) return;
 			window.requestAnimationFrame(() => {
 				if (clickHandled) return;
@@ -1251,6 +1252,7 @@ function finishFeedCreationCardMediaAndClick(
 		card.style.cursor = 'pointer';
 
 		const navigateFeedCardToCreation = (e) => {
+			if (creationsBulkChrome && card.closest('.is-bulk-mode')) return;
 			if (creationsBulkChrome && e.target?.closest?.('[data-creations-bulk-overlay]')) {
 				return;
 			}

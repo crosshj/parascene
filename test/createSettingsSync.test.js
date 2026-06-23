@@ -142,6 +142,30 @@ describe('mergeSharedSettingsIntoSessionSelections', () => {
 		expect(parsed.serverId).toBe(6);
 		expect(parsed.methodKey).toBe('image2video');
 	});
+
+	test('composer advanced handoff merges LTX video route over stale image shared route', () => {
+		const staleImageRoute = encodeSharedModelRoute(1, 'replicate', 'xai/grok-imagine-image');
+		const ltxVideoRoute = encodeSharedModelRoute(6, 'image2video', 'ltx_i2v');
+		localStorage.setItem(CREATE_SETTINGS_STORAGE_KEYS.model, staleImageRoute);
+		localStorage.setItem(CREATE_SETTINGS_STORAGE_KEYS.outputMode, 'image');
+
+		writeSharedCreateSettingsFromComposerSnapshot({
+			prompt: 'camera pans left',
+			aspectRatio: '16:9',
+			outputMode: 'video',
+			modelRoute: ltxVideoRoute,
+			notify: false,
+		});
+		mergeSharedSettingsIntoSessionSelections();
+
+		const parsed = JSON.parse(sessionStorage.getItem(CREATE_PAGE_SELECTIONS_SESSION_KEY));
+		expect(parsed.serverId).toBe(6);
+		expect(parsed.methodKey).toBe('image2video');
+		expect(parsed.fieldValues.model).toBe('ltx_i2v');
+		expect(parsed.fieldValues.aspect_ratio).toBe('16:9');
+		expect(parsed.fieldValues.prompt).toBe('camera pans left');
+		expect(localStorage.getItem(CREATE_SETTINGS_STORAGE_KEYS.videoModel)).toBe(ltxVideoRoute);
+	});
 });
 
 describe('getSharedAspectRatio', () => {

@@ -4,9 +4,12 @@
  *
  * Usage:
  *   node scripts/analytics/engagement-monthly-report.js
+ *   node scripts/analytics/engagement-monthly-report.js --month 2026-06
  *   node scripts/analytics/engagement-monthly-report.js --days 30
  *   node scripts/analytics/engagement-monthly-report.js --from 2026-05-20 --to 2026-05-28
  *
+ * Default: current US East calendar month through yesterday (incomplete today excluded).
+ * `--to` today is clamped to yesterday. `--days` = trailing N days instead of calendar month.
  * HTML: engagement-monthly-report.html · CSS: report.css
  */
 
@@ -89,15 +92,61 @@ function dayCountInclusive(fromDay, toDay) {
 	return n;
 }
 
+/** @param {string} dayKey YYYY-MM-DD */
+function usEastMonthStartKey(dayKey) {
+	const [y, m] = String(dayKey || "")
+		.trim()
+		.split("-")
+		.map((x) => Number(x));
+	if (!y || !m) throw new Error(`usEastMonthStartKey: invalid dayKey ${dayKey}`);
+	return `${y}-${String(m).padStart(2, "0")}-01`;
+}
+
+/** @param {string} dayKey YYYY-MM-DD */
+function usEastMonthEndKey(dayKey) {
+	const start = usEastMonthStartKey(dayKey);
+	const [y, m] = start.split("-").map((x) => Number(x));
+	const nextMonthStart =
+		m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`;
+	return shiftDayKey(nextMonthStart, -1);
+}
+
 function resolveWindow() {
 	const fromArg = getArg("from");
 	const toArg = getArg("to");
 	if (/^\d{4}-\d{2}-\d{2}$/.test(fromArg) && /^\d{4}-\d{2}-\d{2}$/.test(toArg)) {
-		return { fromDay: fromArg, toDay: toArg };
+		const today = usEastDayKey();
+		let toDay = toArg;
+		if (toArg >= today) {
+			toDay = yesterdayUsEastDayKey();
+			if (toArg === today) {
+				console.warn(
+					`[engagement-monthly] --to ${toArg} is today (incomplete); using yesterday ${toDay}`
+				);
+			}
+		}
+		return { fromDay: fromArg, toDay: fromArg <= toDay ? toDay : fromArg };
 	}
-	const days = Math.max(1, Number(getArg("days") || DEFAULT_DAYS) || DEFAULT_DAYS);
+
+	const monthArg = getArg("month");
+	if (/^\d{4}-\d{2}$/.test(monthArg)) {
+		const fromDay = `${monthArg}-01`;
+		const monthEnd = usEastMonthEndKey(fromDay);
+		const yesterday = yesterdayUsEastDayKey();
+		const toDay = monthEnd <= yesterday ? monthEnd : yesterday;
+		return { fromDay, toDay };
+	}
+
+	const daysArg = getArg("days");
+	if (daysArg) {
+		const days = Math.max(1, Number(daysArg) || DEFAULT_DAYS);
+		const toDay = yesterdayUsEastDayKey();
+		const fromDay = shiftDayKey(toDay, -(days - 1));
+		return { fromDay, toDay };
+	}
+
 	const toDay = yesterdayUsEastDayKey();
-	const fromDay = shiftDayKey(toDay, -(days - 1));
+	const fromDay = usEastMonthStartKey(toDay);
 	return { fromDay, toDay };
 }
 
@@ -1607,10 +1656,12 @@ async function main() {
 	const report = await loadEngagementReportForWindow(fromDay, toDay);
 	report.leaders = await enrichLeaders(report.leaders);
 	const html = await renderHtml(report);
+	const outLabel =
+		fromDay === usEastMonthStartKey(fromDay) ? fromDay.slice(0, 7) : toDay;
 	const out =
 		getArg("out") ||
 		process.env.OUT ||
-		path.join(REPO_ROOT, ".output", "engagement-monthly", `engagement-monthly-${toDay}.html`);
+		path.join(REPO_ROOT, ".output", "engagement-monthly", `engagement-monthly-${outLabel}.html`);
 	await fs.mkdir(path.dirname(out), { recursive: true });
 	await fs.writeFile(out, html, "utf8");
 	console.log(out);

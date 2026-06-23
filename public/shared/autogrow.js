@@ -11,6 +11,21 @@ const minHeightCache = new WeakMap();
 const minHeightWidthCache = new WeakMap();
 const rafTokenCache = new WeakMap();
 const autogrowRefreshByTextarea = new WeakMap();
+const programmaticResizeTextareas = new WeakSet();
+
+function preserveTextareaCaret(textarea, mutate) {
+	const hadFocus = document.activeElement === textarea;
+	const selStart = textarea.selectionStart;
+	const selEnd = textarea.selectionEnd;
+	const scrollTop = textarea.scrollTop;
+	mutate();
+	if (!hadFocus) return;
+	const len = textarea.value.length;
+	try {
+		textarea.setSelectionRange(Math.min(selStart, len), Math.min(selEnd, len));
+	} catch (_) {}
+	textarea.scrollTop = scrollTop;
+}
 
 function isVisible(el) {
 	if (!(el instanceof HTMLElement)) return false;
@@ -32,13 +47,15 @@ function getEmptyScrollHeight(textarea) {
 
 	const previousValue = textarea.value;
 	const previousHeight = textarea.style.height;
+	let h = 0;
 
-	textarea.value = '';
-	textarea.style.height = 'auto';
-	const h = textarea.scrollHeight;
-
-	textarea.value = previousValue;
-	textarea.style.height = previousHeight;
+	preserveTextareaCaret(textarea, () => {
+		textarea.value = '';
+		textarea.style.height = 'auto';
+		h = textarea.scrollHeight;
+		textarea.value = previousValue;
+		textarea.style.height = previousHeight;
+	});
 
 	if (Number.isFinite(h) && h > 0) {
 		minHeightCache.set(textarea, h);
@@ -62,27 +79,32 @@ export function resizeAutoGrowTextarea(textarea, { maxHeightPx = DEFAULT_MAX_HEI
 	if (!(textarea instanceof HTMLTextAreaElement)) return;
 	if (!isVisible(textarea)) return;
 
-	const isPromptEditor = textarea.classList.contains('prompt-editor');
-	// overflow-y:auto + fixed height makes scrollHeight stick at clientHeight when typing
-	// at end-of-string (wrapped lines scroll internally). Measure with overflow hidden
-	// and height collapsed so scrollHeight reflects full content.
-	if (isPromptEditor) {
-		textarea.style.overflowY = 'hidden';
-	}
-	textarea.style.height = '0px';
-
-	const emptyHeight = getEmptyScrollHeight(textarea);
-	const next = textarea.scrollHeight;
-	const clamped = Math.min(maxHeightPx, Math.max(emptyHeight || 0, next || 0));
-	if (clamped > 0) {
-		textarea.style.height = `${clamped}px`;
-	}
-	if (isPromptEditor) {
-		const atMax = next > maxHeightPx;
-		textarea.style.overflowY = atMax ? 'auto' : 'hidden';
-		if (atMax && textarea.selectionStart === textarea.value.length) {
-			textarea.scrollTop = textarea.scrollHeight;
+	programmaticResizeTextareas.add(textarea);
+	try {
+		const isPromptEditor = textarea.classList.contains('prompt-editor');
+		// overflow-y:auto + fixed height makes scrollHeight stick at clientHeight when typing
+		// at end-of-string (wrapped lines scroll internally). Measure with overflow hidden
+		// and height collapsed so scrollHeight reflects full content.
+		if (isPromptEditor) {
+			textarea.style.overflowY = 'hidden';
 		}
+		textarea.style.height = '0px';
+
+		const emptyHeight = getEmptyScrollHeight(textarea);
+		const next = textarea.scrollHeight;
+		const clamped = Math.min(maxHeightPx, Math.max(emptyHeight || 0, next || 0));
+		if (clamped > 0) {
+			textarea.style.height = `${clamped}px`;
+		}
+		if (isPromptEditor) {
+			const atMax = next > maxHeightPx;
+			textarea.style.overflowY = atMax ? 'auto' : 'hidden';
+			if (atMax && textarea.selectionStart === textarea.value.length) {
+				textarea.scrollTop = textarea.scrollHeight;
+			}
+		}
+	} finally {
+		programmaticResizeTextareas.delete(textarea);
 	}
 }
 
@@ -124,6 +146,7 @@ export function attachAutoGrowTextarea(textarea, { maxHeightPx = DEFAULT_MAX_HEI
 	// ResizeObserver handles width changes (layout / orientation).
 	if (typeof ResizeObserver !== 'undefined') {
 		const ro = new ResizeObserver(() => {
+			if (programmaticResizeTextareas.has(textarea)) return;
 			minHeightCache.delete(textarea);
 			minHeightWidthCache.delete(textarea);
 			refresh();

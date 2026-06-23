@@ -41,7 +41,6 @@ import {
 	mergeSharedSettingsIntoSessionSelections,
 	readSharedCreateSettings,
 	resolveSharedPrompt,
-	shouldComposerSnapshotIncludeModelRoute,
 	writeSharedCreateSettingsFromComposerSnapshot,
 } from '/shared/createSettingsSync.js';
 import { attachPromptFieldClear } from '/shared/promptFieldClear.js';
@@ -1119,38 +1118,6 @@ export function mountCreateComposer(host, opts = {}) {
 
 	function getActiveRouteOptions() {
 		return isVideoMode() ? videoModelOptions : imageModelOptions;
-	}
-
-	function readComposerSavedModelRoute() {
-		try {
-			const key = isVideoMode() ? STORAGE_KEYS.videoModel : STORAGE_KEYS.model;
-			const value = localStorage.getItem(key);
-			return typeof value === 'string' && value.trim() ? value.trim() : '';
-		} catch {
-			return '';
-		}
-	}
-
-	function readSharedAdvancedModelRoute() {
-		try {
-			const key = isVideoMode()
-				? CREATE_SETTINGS_STORAGE_KEYS.videoModel
-				: CREATE_SETTINGS_STORAGE_KEYS.model;
-			const value = localStorage.getItem(key);
-			return typeof value === 'string' && value.trim() ? value.trim() : '';
-		} catch {
-			return '';
-		}
-	}
-
-	function shouldPushComposerModelToShared() {
-		const routeOptions = getActiveRouteOptions();
-		return shouldComposerSnapshotIncludeModelRoute({
-			selectedModelRoute: selectedModel,
-			sharedModelRoute: readSharedAdvancedModelRoute(),
-			composerSavedModelRoute: readComposerSavedModelRoute(),
-			representableRouteKeys: routeOptions.map((option) => option.selectValue),
-		});
 	}
 
 	function saveModelSelection(value) {
@@ -2589,16 +2556,16 @@ export function mountCreateComposer(host, opts = {}) {
 			savePrompt();
 			saveAspectRatio(selectedAspect);
 			saveAttachmentsToStorage();
-			const snapshot = {
+			// Explicit Advanced navigation always carries the visible model route (pre-a472186
+			// behavior). shouldComposerSnapshotIncludeModelRoute is for passive sync only.
+			saveModelSelection(selectedModel);
+			writeSharedCreateSettingsFromComposerSnapshot({
 				prompt: promptInput?.value || '',
 				aspectRatio: selectedAspect,
 				outputMode,
+				modelRoute: selectedModel,
 				styleSelected: getSelectedStyleKey(),
-			};
-			if (shouldPushComposerModelToShared()) {
-				snapshot.modelRoute = selectedModel;
-			}
-			writeSharedCreateSettingsFromComposerSnapshot(snapshot);
+			});
 			mergeSharedSettingsIntoSessionSelections();
 			try {
 				const v =

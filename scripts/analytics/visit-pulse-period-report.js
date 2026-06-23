@@ -7,6 +7,7 @@
  *   node scripts/analytics/visit-pulse-period-report.js --days 30
  *   node scripts/analytics/visit-pulse-period-report.js --from 2026-05-20 --to 2026-06-14
  *
+ * `--to` today is clamped to yesterday (incomplete partition). Default window already ends yesterday.
  * HTML: visit-pulse-period-report.html · CSS: report.css
  */
 
@@ -75,6 +76,16 @@ function resolveWindow() {
 	const fromArg = getArg("from");
 	const toArg = getArg("to");
 	if (/^\d{4}-\d{2}-\d{2}$/.test(fromArg) && /^\d{4}-\d{2}-\d{2}$/.test(toArg)) {
+		const today = usEastDayKey();
+		if (toArg >= today) {
+			const toDay = yesterdayUsEastDayKey();
+			if (toArg === today) {
+				console.warn(
+					`[visit-pulse-period] --to ${toArg} is today (incomplete); using yesterday ${toDay}`
+				);
+			}
+			return { fromDay: fromArg, toDay: fromArg <= toDay ? toDay : fromArg };
+		}
 		return { fromDay: fromArg, toDay: toArg };
 	}
 	const days = Math.max(1, Number(getArg("days") || DEFAULT_DAYS) || DEFAULT_DAYS);

@@ -1314,7 +1314,7 @@ class AppRouteCreate extends HTMLElement {
 				if (el?.classList?.contains('form-switch')) {
 					el = el.querySelector('.form-switch-input');
 				}
-				if (el && el.type !== 'checkbox') {
+				if (el && el.type !== 'checkbox' && el.value !== prompt) {
 					el.value = prompt;
 				}
 			}

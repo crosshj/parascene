@@ -2094,6 +2094,8 @@ export function hydrateChatCreationEmbeds(rootEl) {
 			trimWhitespaceOnlyTextNodes(wrap);
 			attachChatCreationEmbedDetailLinkReveal(wrap);
 			wrap.setAttribute('role', 'status');
+		}).finally(() => {
+			if (wrap.parentNode) scheduleConsecutiveInlineMediaGroupHydrate(wrap);
 		});
 	}
 }
@@ -2382,6 +2384,370 @@ export function bindInlineVideoClickControls(rootEl) {
 	}
 }
 
+function isWhitespaceOnlyInlineMediaGap(node) {
+	return node.nodeType === Node.TEXT_NODE && /^\s*$/.test(node.textContent || '');
+}
+
+const INLINE_MEDIA_GROUP_MIN_ITEMS = 4;
+
+function isUngroupedInlineMediaGroupMember(el) {
+	return el instanceof HTMLElement && !el.closest('.user-text-inline-media-group');
+}
+
+function isGroupableInlineImageWrap(el) {
+	return (
+		isUngroupedInlineMediaGroupMember(el) && el.classList.contains('user-text-inline-image-wrap')
+	);
+}
+
+function isGroupableChatCreationEmbed(el) {
+	if (!isUngroupedInlineMediaGroupMember(el)) return false;
+	if (!el.classList.contains('connect-chat-creation-embed')) return false;
+	if (el.classList.contains('connect-chat-creation-embed--error')) return false;
+	if (el.querySelector('.connect-chat-creation-embed-inner--group-carousel')) return false;
+	if (el.querySelector('[data-generic-video-embed]')) return false;
+	return true;
+}
+
+function isInlineMediaGroupUnit(el) {
+	return isGroupableInlineImageWrap(el) || isGroupableChatCreationEmbed(el);
+}
+
+/** @param {HTMLElement} unit */
+function domNodesForInlineMediaGroupUnit(unit) {
+	if (isGroupableChatCreationEmbed(unit)) {
+		const nodes = [];
+		let prev = unit.previousSibling;
+		while (prev && isWhitespaceOnlyInlineMediaGap(prev)) prev = prev.previousSibling;
+		if (
+			prev instanceof HTMLAnchorElement &&
+			prev.classList.contains('connect-chat-creation-embed-paired-link')
+		) {
+			nodes.push(prev);
+		}
+		nodes.push(unit);
+		return nodes;
+	}
+	return [unit];
+}
+
+/**
+ * @param {Node[]} nodes
+ * @param {number} startIdx
+ * @returns {{ nextIdx: number, paragraphBreak: boolean }}
+ */
+function skipInlineMediaGroupGaps(nodes, startIdx) {
+	let i = startIdx;
+	let brCount = 0;
+	while (i < nodes.length) {
+		const node = nodes[i];
+		if (isWhitespaceOnlyInlineMediaGap(node)) {
+			i += 1;
+			continue;
+		}
+		if (node instanceof HTMLBRElement) {
+			brCount += 1;
+			if (brCount >= 2) return { nextIdx: i, paragraphBreak: true };
+			i += 1;
+			continue;
+		}
+		break;
+	}
+	return { nextIdx: i, paragraphBreak: false };
+}
+
+function stripBridgesBetweenUnits(container, units) {
+	for (let u = 0; u < units.length - 1; u += 1) {
+		const lastNodes = domNodesForInlineMediaGroupUnit(units[u]);
+		const firstNodes = domNodesForInlineMediaGroupUnit(units[u + 1]);
+		const endNode = lastNodes[lastNodes.length - 1];
+		const startNode = firstNodes[0];
+		if (!endNode?.parentNode || !startNode) continue;
+		let n = endNode.nextSibling;
+		while (n && n !== startNode) {
+			const next = n.nextSibling;
+			if (n instanceof HTMLBRElement || isWhitespaceOnlyInlineMediaGap(n)) {
+				container.removeChild(n);
+			}
+			n = next;
+		}
+	}
+}
+
+function mountInlineMediaGroup(container, units) {
+	if (units.length < INLINE_MEDIA_GROUP_MIN_ITEMS) return;
+	stripBridgesBetweenUnits(container, units);
+	const firstDomNodes = domNodesForInlineMediaGroupUnit(units[0]);
+	const anchor = firstDomNodes[0];
+	if (!(anchor instanceof Node) || !anchor.parentNode) return;
+
+	const group = document.createElement('div');
+	group.className = 'user-text-inline-media-group';
+	group.dataset.inlineImageGroup = '1';
+	container.insertBefore(group, anchor);
+	for (const unit of units) {
+		for (const node of domNodesForInlineMediaGroupUnit(unit)) {
+			group.appendChild(node);
+		}
+	}
+
+	const countEl = document.createElement('span');
+	countEl.className = 'user-text-inline-media-group-count';
+	countEl.setAttribute('aria-hidden', 'true');
+	countEl.textContent = String(units.length);
+	group.appendChild(countEl);
+
+	const firstLink = group.querySelector('a.user-text-inline-image-link');
+	if (firstLink instanceof HTMLAnchorElement) {
+		firstLink.setAttribute('aria-label', `View media (${units.length})`);
+	}
+	const firstVideoInner = group.querySelector('.connect-chat-creation-embed-inner--video');
+	if (firstVideoInner instanceof HTMLElement) {
+		firstVideoInner.setAttribute('aria-label', `View videos (${units.length})`);
+		firstVideoInner.setAttribute('title', `View videos (${units.length})`);
+	}
+}
+
+/**
+ * Gallery metadata for a grouped inline-media bubble slot.
+ *
+ * @param {HTMLElement} groupEl
+ * @param {HTMLAnchorElement | null} [clickedLink]
+ * @param {HTMLElement | null} [clickedEmbed]
+ * @returns {{
+ *   slides: Array<{
+ *     kind: 'image' | 'video',
+ *     url: string,
+ *     creationId: string,
+ *     sourceImg?: HTMLImageElement,
+ *     sourceVideo?: HTMLVideoElement,
+ *     posterUrl?: string,
+ *   }>,
+ *   galleryUrls: string[],
+ *   galleryImgs: HTMLImageElement[],
+ *   galleryIndex: number,
+ *   creationId: string,
+ *   videoSlides: Array<{ url: string, creationId: string }>,
+ * }}
+ */
+export function collectInlineMediaGroupGallery(groupEl, clickedLink = null, clickedEmbed = null) {
+	const out = {
+		slides: [],
+		galleryUrls: [],
+		galleryImgs: [],
+		galleryIndex: 0,
+		creationId: '',
+		videoSlides: [],
+	};
+	if (!(groupEl instanceof HTMLElement)) return out;
+
+	const pushImageSlide = (url, creationId, sourceImg) => {
+		const src = String(url || '').trim();
+		if (!src) return;
+		const cid = String(creationId || '').trim();
+		out.slides.push({
+			kind: 'image',
+			url: src,
+			creationId: cid,
+			...(sourceImg instanceof HTMLImageElement ? { sourceImg } : {}),
+		});
+		out.galleryImgs.push(sourceImg instanceof HTMLImageElement ? sourceImg : null);
+		out.galleryUrls.push(src);
+	};
+
+	const pushVideoSlide = (url, creationId, sourceVideo, posterUrl) => {
+		const src = String(url || '').trim();
+		if (!src) return;
+		const cid = String(creationId || '').trim();
+		out.slides.push({
+			kind: 'video',
+			url: src,
+			creationId: cid,
+			...(sourceVideo instanceof HTMLVideoElement ? { sourceVideo } : {}),
+			...(posterUrl ? { posterUrl: String(posterUrl).trim() } : {}),
+		});
+		out.videoSlides.push({ url: src, creationId: cid });
+	};
+
+	for (const child of groupEl.children) {
+		if (!(child instanceof HTMLElement)) continue;
+		if (child.classList.contains('user-text-inline-media-group-count')) continue;
+		if (child.classList.contains('connect-chat-creation-embed-paired-link')) continue;
+
+		if (child.classList.contains('user-text-inline-image-wrap')) {
+			const img = child.querySelector('img.user-text-inline-image');
+			if (!(img instanceof HTMLImageElement)) continue;
+			pushImageSlide(
+				img.currentSrc || img.getAttribute('src') || '',
+				'',
+				img
+			);
+			continue;
+		}
+
+		if (!child.classList.contains('connect-chat-creation-embed')) continue;
+
+		const creationId = String(child.getAttribute('data-creation-id') || '').trim();
+		const vid = child.querySelector('video.connect-chat-creation-embed-video');
+		if (vid instanceof HTMLVideoElement) {
+			pushVideoSlide(
+				vid.currentSrc || vid.getAttribute('src') || '',
+				creationId,
+				vid,
+				vid.getAttribute('poster') || ''
+			);
+			continue;
+		}
+		const img = child.querySelector('img.connect-chat-creation-embed-img');
+		if (img instanceof HTMLImageElement) {
+			pushImageSlide(img.currentSrc || img.getAttribute('src') || '', creationId, img);
+		}
+	}
+
+	out.galleryUrls = out.galleryUrls.filter(Boolean);
+	out.galleryImgs = out.galleryImgs.filter((img) => img instanceof HTMLImageElement);
+
+	const slideIndexForEmbed = (embed) => {
+		if (!(embed instanceof HTMLElement)) return -1;
+		const cid = String(embed.getAttribute('data-creation-id') || '').trim();
+		const video = embed.querySelector('video.connect-chat-creation-embed-video');
+		if (video instanceof HTMLVideoElement) {
+			const url = String(video.currentSrc || video.getAttribute('src') || '').trim();
+			return out.slides.findIndex(
+				(slide) =>
+					slide.kind === 'video' &&
+					slide.url === url &&
+					(!cid || slide.creationId === cid)
+			);
+		}
+		const image = embed.querySelector('img.connect-chat-creation-embed-img');
+		if (image instanceof HTMLImageElement) {
+			const url = String(image.currentSrc || image.getAttribute('src') || '').trim();
+			return out.slides.findIndex(
+				(slide) =>
+					slide.kind === 'image' &&
+					slide.url === url &&
+					(!cid || slide.creationId === cid)
+			);
+		}
+		return -1;
+	};
+
+	if (clickedEmbed instanceof HTMLElement) {
+		const idx = slideIndexForEmbed(clickedEmbed);
+		if (idx >= 0) out.galleryIndex = idx;
+		out.creationId = String(clickedEmbed.getAttribute('data-creation-id') || '').trim();
+	} else if (clickedLink instanceof HTMLAnchorElement) {
+		const embedWrap = clickedLink.closest('.connect-chat-creation-embed');
+		if (embedWrap instanceof HTMLElement) {
+			const idx = slideIndexForEmbed(embedWrap);
+			if (idx >= 0) out.galleryIndex = idx;
+			out.creationId = String(embedWrap.getAttribute('data-creation-id') || '').trim();
+		} else {
+			const thumb = clickedLink.querySelector('img.user-text-inline-image');
+			if (thumb instanceof HTMLImageElement) {
+				const url = String(thumb.currentSrc || thumb.getAttribute('src') || '').trim();
+				const idx = out.slides.findIndex((slide) => slide.kind === 'image' && slide.url === url);
+				if (idx >= 0) out.galleryIndex = idx;
+			}
+		}
+	}
+
+	return out;
+}
+
+function resolveInlineMediaGroupUnitAt(nodes, i) {
+	const node = nodes[i];
+	if (node instanceof HTMLElement && isInlineMediaGroupUnit(node)) {
+		return { unit: node, nextIdx: i + 1 };
+	}
+	if (
+		node instanceof HTMLAnchorElement &&
+		node.classList.contains('connect-chat-creation-embed-paired-link')
+	) {
+		let j = i + 1;
+		while (j < nodes.length && isWhitespaceOnlyInlineMediaGap(nodes[j])) j += 1;
+		const maybe = nodes[j];
+		if (maybe instanceof HTMLElement && isGroupableChatCreationEmbed(maybe)) {
+			return { unit: maybe, nextIdx: j + 1 };
+		}
+	}
+	return null;
+}
+
+function scheduleConsecutiveInlineMediaGroupHydrate(wrap) {
+	const host =
+		wrap?.closest?.('.connect-chat-msg-bubble') ||
+		wrap?.closest?.('.comment-text') ||
+		wrap?.closest?.('.chat-page-canvas-body-view');
+	if (host instanceof HTMLElement) hydrateConsecutiveInlineImageGroups(host);
+}
+
+/**
+ * Collapse consecutive inline media (uploaded images, share links, /creations URLs) into one slot.
+ * Lightbox prev/next is wired via `bindChatInlineImageLightboxClickDelegation`.
+ *
+ * @param {Element|Document} rootEl
+ */
+export function hydrateConsecutiveInlineImageGroups(rootEl) {
+	const root =
+		rootEl instanceof Element || rootEl instanceof Document ? rootEl : document;
+	if (!root || typeof root.querySelectorAll !== 'function') return;
+
+	const containers = new Set();
+	for (const el of root.querySelectorAll(
+		'.user-text-inline-image-wrap, .connect-chat-creation-embed'
+	)) {
+		if (el.closest('.user-text-inline-media-group')) continue;
+		const parent = el.parentElement;
+		if (parent) containers.add(parent);
+	}
+
+	for (const container of containers) {
+		const nodes = Array.from(container.childNodes);
+		const runs = [];
+		let run = [];
+		let i = 0;
+		while (i < nodes.length) {
+			const gap = skipInlineMediaGroupGaps(nodes, i);
+			if (gap.paragraphBreak && run.length > 0) {
+				if (run.length >= INLINE_MEDIA_GROUP_MIN_ITEMS) runs.push(run);
+				run = [];
+			}
+			i = gap.nextIdx;
+			if (i >= nodes.length) break;
+
+			const resolved = resolveInlineMediaGroupUnitAt(nodes, i);
+			if (resolved) {
+				run.push(resolved.unit);
+				i = resolved.nextIdx;
+				continue;
+			}
+			if (run.length >= INLINE_MEDIA_GROUP_MIN_ITEMS) runs.push(run);
+			run = [];
+			i += 1;
+		}
+		if (run.length >= INLINE_MEDIA_GROUP_MIN_ITEMS) runs.push(run);
+
+		for (const units of runs) {
+			mountInlineMediaGroup(container, units);
+		}
+		trimBridgesTrailingMediaGroup(container);
+	}
+}
+
+function trimBridgesTrailingMediaGroup(container) {
+	if (!(container instanceof HTMLElement)) return;
+	for (const group of container.querySelectorAll('.user-text-inline-media-group')) {
+		let n = group.nextSibling;
+		while (n instanceof HTMLBRElement) {
+			const rm = n;
+			n = n.nextSibling;
+			container.removeChild(rm);
+		}
+	}
+}
+
 /**
  * Full hydration pass for any container that renders user text via `processUserText`:
  * link titles + inline image loading + YouTube iframes + creation/share-link card embeds +
@@ -2398,4 +2764,5 @@ export function hydrateRichUserTextEmbeds(rootEl) {
 	hydrateInlineGenericVideoEmbeds(rootEl);
 	hydrateInlineChatCreationVideoEmbeds(rootEl);
 	bindInlineVideoClickControls(rootEl);
+	hydrateConsecutiveInlineImageGroups(rootEl);
 }

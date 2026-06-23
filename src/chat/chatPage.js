@@ -45,6 +45,7 @@ import { isVisualViewportPinchZoomed } from './chatVisualViewportPinchZoom.js';
 import { CHAT_UPLOAD_MAX_BYTES, chatUploadMaxSizeLabel } from '../shared/chatUploadMaxBytes.js';
 import { safeMediaPlay } from '../shared/safeMediaPlay.js';
 import { bindMobileCreationsBulkLongPress } from '../shared/creationsBulkLongPress.js';
+import { showToast } from '/shared/toast.js';
 import {
 	notificationChatHref,
 	notificationCreationHref,
@@ -9073,6 +9074,38 @@ export async function initChatPage(root, options = {}) {
 		};
 	}
 
+	function getCreationPublicUrl(creationId) {
+		const id = Number(creationId);
+		if (!Number.isFinite(id) || id <= 0) return '';
+		const origin = String(_cdUserText.DEFAULT_APP_ORIGIN || 'https://www.parascene.com').replace(/\/+$/, '');
+		return `${origin}/creations/${id}`;
+	}
+
+	async function copyTextToClipboard(text) {
+		try {
+			if (navigator.clipboard?.writeText) {
+				await navigator.clipboard.writeText(text);
+				return true;
+			}
+		} catch {
+			// ignore
+		}
+		try {
+			const ta = document.createElement('textarea');
+			ta.value = text;
+			ta.style.position = 'fixed';
+			ta.style.left = '-9999px';
+			document.body.appendChild(ta);
+			ta.focus();
+			ta.select();
+			const ok = document.execCommand('copy');
+			document.body.removeChild(ta);
+			return ok;
+		} catch {
+			return false;
+		}
+	}
+
 	function insertChatCreationsPseudoBulkChrome(routeWrap, cardsEl) {
 		if (!(routeWrap instanceof HTMLElement) || !(cardsEl instanceof HTMLElement)) return;
 		const shell = document.createElement('div');
@@ -9081,6 +9114,7 @@ export async function initChatPage(root, options = {}) {
 			<div class="creations-bulk-bar-inner">
 				<span class="creations-bulk-bar-label">Bulk</span>
 				<div class="creations-bulk-actions">
+					<button type="button" class="btn-secondary creations-bulk-copy-links-btn" data-creations-bulk-copy-links disabled>Copy links</button>
 					<button type="button" class="btn-secondary creations-bulk-queue-btn" data-creations-bulk-queue disabled>Queue</button>
 					<button type="button" class="btn-secondary creations-bulk-group-btn" data-creations-bulk-group disabled>Group</button>
 					<button type="button" class="btn-secondary creations-bulk-delete-btn" data-creations-bulk-delete disabled>Delete</button>
@@ -9145,6 +9179,7 @@ export async function initChatPage(root, options = {}) {
 		const bulkDelete = routeWrap.querySelector('[data-creations-bulk-delete]');
 		const bulkQueue = routeWrap.querySelector('[data-creations-bulk-queue]');
 		const bulkGroup = routeWrap.querySelector('[data-creations-bulk-group]');
+		const bulkCopyLinks = routeWrap.querySelector('[data-creations-bulk-copy-links]');
 		const modalOverlay = routeWrap.querySelector('[data-creations-bulk-delete-modal]');
 		const modalCancel = routeWrap.querySelector('[data-creations-bulk-delete-cancel]');
 		const modalConfirm = routeWrap.querySelector('[data-creations-bulk-delete-confirm]');
@@ -9157,6 +9192,7 @@ export async function initChatPage(root, options = {}) {
 			const deleteBtn = routeWrap.querySelector('[data-creations-bulk-delete]');
 			const queueBtn = routeWrap.querySelector('[data-creations-bulk-queue]');
 			const groupBtn = routeWrap.querySelector('[data-creations-bulk-group]');
+			const copyLinksBtn = routeWrap.querySelector('[data-creations-bulk-copy-links]');
 			if (!bar || !deleteBtn) return;
 			const selectedCards = queryBulkCards().filter((card) =>
 				card.querySelector('[data-creations-bulk-checkbox]:checked')
@@ -9192,6 +9228,7 @@ export async function initChatPage(root, options = {}) {
 			deleteBtn.disabled = !hasSelection;
 			if (queueBtn) queueBtn.disabled = queueableCards.length === 0;
 			if (groupBtn) groupBtn.disabled = !canGroup;
+			if (copyLinksBtn) copyLinksBtn.disabled = !hasSelection;
 		}
 
 		function exitBulkMode() {
@@ -9316,6 +9353,41 @@ export async function initChatPage(root, options = {}) {
 				},
 				{ signal: capAc.signal }
 			);
+		}
+		if (bulkCopyLinks) {
+			bulkCopyLinks.addEventListener(
+				'click',
+				(e) => {
+					e.preventDefault();
+					void bulkCopySelectedLinks();
+				},
+				{ signal: capAc.signal }
+			);
+		}
+
+		function getBulkSelectedCreationIds() {
+			const ids = [];
+			for (const card of queryBulkCards()) {
+				const cb = card.querySelector('[data-creations-bulk-checkbox]:checked');
+				if (!cb) continue;
+				const id = Number(card.dataset.imageId);
+				if (!Number.isFinite(id) || id <= 0) continue;
+				ids.push(id);
+			}
+			return ids;
+		}
+
+		async function bulkCopySelectedLinks() {
+			const ids = getBulkSelectedCreationIds();
+			if (ids.length === 0) return;
+			const links = ids.map((id) => getCreationPublicUrl(id)).filter(Boolean);
+			if (links.length === 0) return;
+			const ok = await copyTextToClipboard(links.join('\n'));
+			if (ok) {
+				showToast(links.length === 1 ? 'Link copied' : `${links.length} links copied`);
+			} else {
+				showToast('Copy failed');
+			}
 		}
 
 		function getBulkDeleteCounts() {
@@ -11617,7 +11689,7 @@ export async function initChatPage(root, options = {}) {
 				retryBtn.addEventListener('click', () => {
 					messagesEl.innerHTML =
 						typeof renderChatThreadSkeleton === 'function'
-							? `<div class="chat-thread-channel-loading" aria-busy="true" aria-label="Loading">${renderChatThreadSkeleton(12)}</div>`
+							? `<div class="chat-thread-channel-loading" aria-busy="true" aria-label="Loading">${renderChatThreadSkeleton()}</div>`
 							: renderEmptyState({
 									loading: true,
 									loadingVariant: 'chat-thread',
@@ -11785,7 +11857,7 @@ export async function initChatPage(root, options = {}) {
 			} else {
 				messagesEl.innerHTML =
 					typeof renderChatThreadSkeleton === 'function'
-						? `<div class="chat-thread-channel-loading" aria-busy="true" aria-label="Loading">${renderChatThreadSkeleton(12)}</div>`
+						? `<div class="chat-thread-channel-loading" aria-busy="true" aria-label="Loading">${renderChatThreadSkeleton()}</div>`
 						: renderEmptyState({
 								loading: true,
 								loadingVariant: 'chat-thread',

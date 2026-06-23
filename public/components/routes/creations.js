@@ -24,6 +24,8 @@ let creationMetaHasChallengeSubmission;
 let eyeHiddenIcon;
 let addToMutateQueue;
 let bindMobileCreationsBulkLongPress;
+let showToast;
+let DEFAULT_APP_ORIGIN;
 /** @type {typeof import('../../shared/creationDetailOverlay.js').navigateToCreationDetailFromSpa} */
 let navigateToCreationDetailFromSpa;
 /** @type {typeof import('../../shared/creationDetailOverlay.js').navigateToCreateFromSpa} */
@@ -90,6 +92,12 @@ async function loadDeps() {
 		const overlayMod = await import(`../../shared/creationDetailOverlay.js${qs}`);
 		navigateToCreationDetailFromSpa = overlayMod.navigateToCreationDetailFromSpa;
 		navigateToCreateFromSpa = overlayMod.navigateToCreateFromSpa;
+
+		const toastMod = await import(`../../shared/toast.js${qs}`);
+		showToast = toastMod.showToast;
+
+		const userTextMod = await import(`../../shared/userText.js${qs}`);
+		DEFAULT_APP_ORIGIN = userTextMod.DEFAULT_APP_ORIGIN;
 	})();
 	return _depsPromise;
 }
@@ -110,6 +118,38 @@ function navigateToCreate(href, ev) {
 	}
 	if (ev && typeof ev.preventDefault === 'function') ev.preventDefault();
 	window.location.href = href;
+}
+
+function getCreationPublicUrl(creationId) {
+	const id = Number(creationId);
+	if (!Number.isFinite(id) || id <= 0) return '';
+	const origin = String(DEFAULT_APP_ORIGIN || 'https://www.parascene.com').replace(/\/+$/, '');
+	return `${origin}/creations/${id}`;
+}
+
+async function copyTextToClipboard(text) {
+	try {
+		if (navigator.clipboard?.writeText) {
+			await navigator.clipboard.writeText(text);
+			return true;
+		}
+	} catch {
+		// ignore
+	}
+	try {
+		const ta = document.createElement('textarea');
+		ta.value = text;
+		ta.style.position = 'fixed';
+		ta.style.left = '-9999px';
+		document.body.appendChild(ta);
+		ta.focus();
+		ta.select();
+		const ok = document.execCommand('copy');
+		document.body.removeChild(ta);
+		return ok;
+	} catch {
+		return false;
+	}
 }
 
 const html = String.raw;
@@ -188,6 +228,7 @@ class AppRouteCreations extends HTMLElement {
           <div class="creations-bulk-bar-inner">
             <span class="creations-bulk-bar-label">Bulk</span>
             <div class="creations-bulk-actions">
+              <button type="button" class="btn-secondary creations-bulk-copy-links-btn" data-creations-bulk-copy-links disabled>Copy links</button>
               <button type="button" class="btn-secondary creations-bulk-queue-btn" data-creations-bulk-queue disabled>Queue</button>
               <button type="button" class="btn-secondary creations-bulk-delete-btn" data-creations-bulk-delete disabled>Delete</button>
             </div>
@@ -329,6 +370,7 @@ class AppRouteCreations extends HTMLElement {
 		const bar = this.querySelector('[data-creations-bulk-bar]');
 		const deleteBtn = this.querySelector('[data-creations-bulk-delete]');
 		const queueBtn = this.querySelector('[data-creations-bulk-queue]');
+		const copyLinksBtn = this.querySelector('[data-creations-bulk-copy-links]');
 		if (!bar || !deleteBtn) return;
 		const checked = this.querySelectorAll('[data-creations-bulk-checkbox]:checked').length;
 		const hasSelection = checked > 0;
@@ -342,6 +384,7 @@ class AppRouteCreations extends HTMLElement {
 		bar.classList.toggle('has-selection', hasSelection);
 		deleteBtn.disabled = !hasSelection;
 		if (queueBtn) queueBtn.disabled = queueableCards.length === 0;
+		if (copyLinksBtn) copyLinksBtn.disabled = !hasSelection;
 	}
 
 	setupBulkActions() {
@@ -420,6 +463,14 @@ class AppRouteCreations extends HTMLElement {
 			});
 		}
 
+		const bulkCopyLinks = this.querySelector('[data-creations-bulk-copy-links]');
+		if (bulkCopyLinks) {
+			bulkCopyLinks.addEventListener('click', (e) => {
+				e.preventDefault();
+				void this.bulkCopySelectedLinks();
+			});
+		}
+
 		if (modalOverlay) {
 			modalOverlay.addEventListener('click', (e) => {
 				if (e.target === modalOverlay) this.closeBulkDeleteModal();
@@ -457,6 +508,34 @@ class AppRouteCreations extends HTMLElement {
 			}
 		});
 		this.exitBulkMode();
+	}
+
+	getBulkSelectedCreationIds() {
+		const cards = Array.from(this.querySelectorAll('.route-card.route-card-image[data-image-id]'));
+		const ids = [];
+		for (const card of cards) {
+			const cb = card.querySelector('[data-creations-bulk-checkbox]:checked');
+			if (!cb) continue;
+			const id = Number(card.dataset.imageId);
+			if (!Number.isFinite(id) || id <= 0) continue;
+			ids.push(id);
+		}
+		return ids;
+	}
+
+	async bulkCopySelectedLinks() {
+		const ids = this.getBulkSelectedCreationIds();
+		if (ids.length === 0) return;
+		const links = ids.map((id) => getCreationPublicUrl(id)).filter(Boolean);
+		if (links.length === 0) return;
+		const ok = await copyTextToClipboard(links.join('\n'));
+		if (typeof showToast === 'function') {
+			if (ok) {
+				showToast(links.length === 1 ? 'Link copied' : `${links.length} links copied`);
+			} else {
+				showToast('Copy failed');
+			}
+		}
 	}
 
 	getBulkDeleteCounts() {
@@ -1188,7 +1267,10 @@ class AppRouteCreations extends HTMLElement {
 			const isModerated = item.is_moderated_error === true;
 			card.style.cursor = 'pointer';
 			card.dataset.imageId = String(item.id);
-			card.addEventListener('click', () => { navigateToCreation(`/creations/${item.id}`); });
+			card.addEventListener('click', (e) => {
+				if (this.querySelector('.creations-route')?.classList.contains('is-bulk-mode')) return;
+				navigateToCreation(`/creations/${item.id}`, e);
+			});
 			card.innerHTML = html`
 					<div class="route-media route-media-error${isModerated ? ' route-media-error-moderated' : ''}" data-image-id="${item.id}" data-status="failed" aria-hidden="true">${isModerated ? html`<span class="route-media-error-moderated-icon" role="img" aria-label="Content moderated">${eyeHiddenIcon()}</span>` : ''}</div>
 					<div class="route-details">
@@ -1202,7 +1284,10 @@ class AppRouteCreations extends HTMLElement {
 				`;
 		} else {
 			card.style.cursor = 'pointer';
-			card.addEventListener('click', () => { navigateToCreation(`/creations/${item.id}`); });
+			card.addEventListener('click', (e) => {
+				if (this.querySelector('.creations-route')?.classList.contains('is-bulk-mode')) return;
+				navigateToCreation(`/creations/${item.id}`, e);
+			});
 			const isPublished = item.published === true || item.published === 1;
 			card.dataset.imageId = String(item.id);
 			card.dataset.published = isPublished ? '1' : '0';

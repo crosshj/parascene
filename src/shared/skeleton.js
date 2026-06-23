@@ -228,10 +228,30 @@ export function renderChatThreadMessageSkeleton(lineWidths = ['72%', '48%']) {
 }
 
 /**
+ * Row count for chat thread loading skeleton (taller desktop panes need more rows).
+ * @returns {number}
+ */
+export function chatThreadSkeletonRowCount() {
+	if (typeof window === 'undefined') return 12;
+	const isDesktop = window.matchMedia(
+		'(min-width: 1024px) and (hover: hover) and (pointer: fine)'
+	).matches;
+	if (!isDesktop) return 12;
+	const host =
+		document.querySelector('[data-chat-messages]') ||
+		document.querySelector('.chat-page-messages');
+	const h = host instanceof HTMLElement ? host.clientHeight : 0;
+	const paneH = h > 0 ? h : window.innerHeight;
+	// Meta row + 1–2 bubble lines + padding/gap (see `.skeleton-chat-msg-row`).
+	const estimatedRowPx = 54;
+	return Math.max(18, Math.min(32, Math.ceil(paneH / estimatedRowPx)));
+}
+
+/**
  * @param {number} [count]
  * @returns {string}
  */
-export function renderChatThreadSkeleton(count = 12) {
+export function renderChatThreadSkeleton(count) {
 	const lineSets = [
 		['78%', '52%'],
 		['64%'],
@@ -240,7 +260,7 @@ export function renderChatThreadSkeleton(count = 12) {
 		['70%', '45%'],
 		['50%'],
 	];
-	const n = Math.max(1, Math.min(14, Number(count) || 12));
+	const n = Math.max(1, Math.min(32, Number(count) || chatThreadSkeletonRowCount()));
 	return `<div class="skeleton-chat-thread" aria-hidden="true">${Array.from({ length: n }, (_, i) =>
 		renderChatThreadMessageSkeleton(lineSets[i % lineSets.length])
 	).join('')}</div>`;

@@ -8,6 +8,21 @@ const DEFAULT_MAX_HEIGHT_PX = 1200;
 
 const minHeightCache = new WeakMap();
 const rafTokenCache = new WeakMap();
+const programmaticResizeTextareas = new WeakSet();
+
+function preserveTextareaCaret(textarea, mutate) {
+	const hadFocus = document.activeElement === textarea;
+	const selStart = textarea.selectionStart;
+	const selEnd = textarea.selectionEnd;
+	const scrollTop = textarea.scrollTop;
+	mutate();
+	if (!hadFocus) return;
+	const len = textarea.value.length;
+	try {
+		textarea.setSelectionRange(Math.min(selStart, len), Math.min(selEnd, len));
+	} catch (_) {}
+	textarea.scrollTop = scrollTop;
+}
 
 function isVisible(el) {
 	if (!(el instanceof HTMLElement)) return false;
@@ -20,13 +35,15 @@ function getEmptyScrollHeight(textarea) {
 
 	const previousValue = textarea.value;
 	const previousHeight = textarea.style.height;
+	let h = 0;
 
-	textarea.value = '';
-	textarea.style.height = 'auto';
-	const h = textarea.scrollHeight;
-
-	textarea.value = previousValue;
-	textarea.style.height = previousHeight;
+	preserveTextareaCaret(textarea, () => {
+		textarea.value = '';
+		textarea.style.height = 'auto';
+		h = textarea.scrollHeight;
+		textarea.value = previousValue;
+		textarea.style.height = previousHeight;
+	});
 
 	if (Number.isFinite(h) && h > 0) {
 		minHeightCache.set(textarea, h);
@@ -49,13 +66,18 @@ export function resizeAutoGrowTextarea(textarea, { maxHeightPx = DEFAULT_MAX_HEI
 	if (!(textarea instanceof HTMLTextAreaElement)) return;
 	if (!isVisible(textarea)) return;
 
-	textarea.style.height = 'auto';
+	programmaticResizeTextareas.add(textarea);
+	try {
+		textarea.style.height = 'auto';
 
-	const emptyHeight = getEmptyScrollHeight(textarea);
-	const next = textarea.scrollHeight;
-	const clamped = Math.min(maxHeightPx, Math.max(emptyHeight || 0, next || 0));
-	if (clamped > 0) {
-		textarea.style.height = `${clamped}px`;
+		const emptyHeight = getEmptyScrollHeight(textarea);
+		const next = textarea.scrollHeight;
+		const clamped = Math.min(maxHeightPx, Math.max(emptyHeight || 0, next || 0));
+		if (clamped > 0) {
+			textarea.style.height = `${clamped}px`;
+		}
+	} finally {
+		programmaticResizeTextareas.delete(textarea);
 	}
 }
 
@@ -85,7 +107,11 @@ export function attachAutoGrowTextarea(textarea, { maxHeightPx = DEFAULT_MAX_HEI
 	setTimeout(refresh, 250);
 
 	if (typeof ResizeObserver !== 'undefined') {
-		const ro = new ResizeObserver(() => refresh());
+		const ro = new ResizeObserver(() => {
+			if (programmaticResizeTextareas.has(textarea)) return;
+			minHeightCache.delete(textarea);
+			refresh();
+		});
 		ro.observe(textarea);
 		textarea.addEventListener('blur', () => {});
 	}

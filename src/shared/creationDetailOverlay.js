@@ -4,6 +4,7 @@
  */
 
 import { MODAL_DISMISS_ICON_SVG } from './modalDismiss.js';
+import { navigateToMyCreationsIfNeeded } from '/shared/createSubmit.js';
 import {
 	applyCreationDetailEmbedShellSync,
 	CREATION_DETAIL_SHELL_SYNC_MESSAGE,
@@ -593,11 +594,28 @@ function overlayReturnPathFromStore() {
 	return null;
 }
 
-function fallbackDismissEntireCreationDetailOverlay() {
+function shouldNavigateToMyCreationsOnWorkflowDismiss() {
 	const store = getOverlayStore();
+	const page = store.overlayPage;
+	return page === 'create' || page === 'mutate';
+}
+
+function fallbackDismissEntireCreationDetailOverlay(options = {}) {
+	const store = getOverlayStore();
+	const preferMyCreations =
+		options.preferMyCreations === true || shouldNavigateToMyCreationsOnWorkflowDismiss();
 	const returnPath = overlayReturnPathFromStore();
 	store.overlayDismissEntirePending = false;
 	store.overlayPushCount = 0;
+	if (preferMyCreations) {
+		navigateToMyCreationsIfNeeded({
+			replace: true,
+			forceFreshFirstPage: false,
+			stripOverlayHistory: true,
+		});
+		closeCreationDetailOverlay();
+		return;
+	}
 	try {
 		if (returnPath) {
 			const curState = window.history?.state;
@@ -758,7 +776,7 @@ function ensureOverlayMessageListener() {
 			} catch {
 				// ignore
 			}
-			dismissEntireCreationDetailOverlay();
+			fallbackDismissEntireCreationDetailOverlay({ preferMyCreations: true });
 			return;
 		}
 		if (data.type === CREATION_DETAIL_SHELL_SYNC_MESSAGE) {

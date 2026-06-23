@@ -44,7 +44,7 @@ function renderLoadingSkeletonContent(variant) {
 		case 'feed':
 			return renderFeedCardsSkeleton(4);
 		case 'chat-thread':
-			return renderChatThreadSkeleton(12);
+			return renderChatThreadSkeleton();
 		case 'challenge':
 			return renderChallengePaneSkeleton();
 		default:
