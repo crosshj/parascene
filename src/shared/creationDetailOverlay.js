@@ -14,6 +14,7 @@ const OVERLAY_ID = 'prsn-creation-detail-overlay';
 const SHELL_OUT_VEIL_ID = 'prsn-creation-detail-shell-out-veil';
 const HISTORY_FLAG = 'prsnCreationDetailOverlay';
 const WORKFLOW_DISMISS_MESSAGE = 'prsn-workflow-overlay-dismiss';
+const STOP_PLAYBACK_MESSAGE = 'prsn-creation-detail-stop-playback';
 const OVERLAY_STORE_KEY = '__prsnCreationDetailOverlay';
 
 /** @typedef {'detail'|'mutate'|'create'} OverlayPageKind */
@@ -273,6 +274,15 @@ function embedFrameUrl(creationId) {
 	return `${creationDetailUrl(creationId)}?embed=1`;
 }
 
+function requestEmbedFrameStopPlayback(frame) {
+	if (!(frame instanceof HTMLIFrameElement)) return;
+	try {
+		frame.contentWindow?.postMessage?.({ type: STOP_PLAYBACK_MESSAGE }, window.location.origin);
+	} catch {
+		// ignore
+	}
+}
+
 function assignOverlayFrameUrl(frame, url, target) {
 	const kind = target?.kind || 'detail';
 	const id = Number(target?.creationId);
@@ -283,17 +293,27 @@ function assignOverlayFrameUrl(frame, url, target) {
 	} else if (Number.isFinite(id) && id > 0) {
 		frame.title = `Creation #${id}`;
 	}
-	// Replace (don't push) so browser back only walks the parent overlay stack, not iframe history.
+	// Stop hero playback and blank before navigating so unload races cannot leave audio running.
+	requestEmbedFrameStopPlayback(frame);
 	try {
-		const win = frame.contentWindow;
-		if (win) {
-			win.location.replace(url);
-			return;
-		}
+		frame.src = 'about:blank';
 	} catch {
 		// ignore
 	}
-	frame.src = url;
+	const navigateFrame = () => {
+		// Replace (don't push) so browser back only walks the parent overlay stack, not iframe history.
+		try {
+			const win = frame.contentWindow;
+			if (win) {
+				win.location.replace(url);
+				return;
+			}
+		} catch {
+			// ignore
+		}
+		frame.src = url;
+	};
+	requestAnimationFrame(navigateFrame);
 }
 
 /**
@@ -561,6 +581,7 @@ export function closeCreationDetailOverlay(options = {}) {
 			? window.history.state.prsnOverlayReturnPath
 			: null);
 	if (store.overlayFrame) {
+		requestEmbedFrameStopPlayback(store.overlayFrame);
 		store.overlayFrame.src = 'about:blank';
 	}
 	store.overlayFrame = null;
@@ -902,7 +923,11 @@ export function openWorkflowOverlayFromHref(href, options = {}) {
 
 	if (isCreationDetailOverlayOpen() && store.overlayFrame) {
 		if (store.overlayFramePath === target.canonicalUrl) {
-			reloadWorkflowOverlayFrame(target);
+			// Same URL: iframe refreshAfterMutation already reloads content in place.
+			// Full iframe reload here stacked a second document and left the prior player audible.
+			if (options.forceReload) {
+				reloadWorkflowOverlayFrame(target);
+			}
 		} else {
 			syncOverlayFrameToTarget(target);
 			pushOverlayHistoryForTarget(target, { stackPush: true });
@@ -912,6 +937,11 @@ export function openWorkflowOverlayFromHref(href, options = {}) {
 
 	if (isCreationDetailOverlayOpen()) {
 		closeCreationDetailOverlay();
+	}
+
+	const orphanedOverlay = document.getElementById(OVERLAY_ID);
+	if (orphanedOverlay instanceof HTMLElement) {
+		orphanedOverlay.remove();
 	}
 
 	store.overlayCreationId = target.creationId;

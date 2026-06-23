@@ -1751,6 +1751,22 @@ function resetCreationDetailHeroVideoElement() {
 	if (videoMutedBadgeEl instanceof HTMLElement) videoMutedBadgeEl.hidden = true;
 }
 
+function pauseHeroVideoElement(video) {
+	if (!(video instanceof HTMLVideoElement)) return;
+	try {
+		video.pause();
+	} catch {
+		// ignore
+	}
+	video.muted = true;
+	video.removeAttribute('src');
+	try {
+		video.load();
+	} catch {
+		// ignore
+	}
+}
+
 function stopCreationDetailHeroPlayback() {
 	if (creationDetailHeroVideoPlayer && typeof creationDetailHeroVideoPlayer.teardown === 'function') {
 		try {
@@ -1768,21 +1784,16 @@ function stopCreationDetailHeroPlayback() {
 
 	document.querySelectorAll('.creation-detail-group-hero-video-stack').forEach((stack) => {
 		stack.querySelectorAll('video').forEach((video) => {
-			if (!(video instanceof HTMLVideoElement)) return;
-			try {
-				video.pause();
-			} catch {
-				// ignore
-			}
-			video.removeAttribute('src');
-			try {
-				video.load();
-			} catch {
-				// ignore
-			}
+			pauseHeroVideoElement(video);
 		});
 		stack.remove();
 	});
+
+	document
+		.querySelectorAll('.creation-detail-hero video, .creation-detail-image-wrapper video')
+		.forEach((video) => {
+			pauseHeroVideoElement(video);
+		});
 
 	if (creationDetailGroupHeroStackEl?.parentNode) {
 		creationDetailGroupHeroStackEl.parentNode.removeChild(creationDetailGroupHeroStackEl);
@@ -1815,6 +1826,17 @@ function bindCreationDetailHeroPlaybackPagehide() {
 	if (document.documentElement.dataset.prsnCreationDetailHeroStopBound === '1') return;
 	document.documentElement.dataset.prsnCreationDetailHeroStopBound = '1';
 	window.addEventListener('pagehide', () => {
+		stopCreationDetailHeroPlayback();
+	});
+}
+
+function bindCreationDetailEmbedStopPlaybackFromParent() {
+	if (!isCreationDetailEmbed()) return;
+	if (document.documentElement.dataset.prsnCreationDetailEmbedStopBound === '1') return;
+	document.documentElement.dataset.prsnCreationDetailEmbedStopBound = '1';
+	window.addEventListener('message', (event) => {
+		if (event.origin !== window.location.origin) return;
+		if (event.data?.type !== 'prsn-creation-detail-stop-playback') return;
 		stopCreationDetailHeroPlayback();
 	});
 }
@@ -5814,6 +5836,7 @@ async function checkAndLoadCreation() {
 
 async function bootCreationDetailPage() {
 	bindCreationDetailHeroPlaybackPagehide();
+	bindCreationDetailEmbedStopPlaybackFromParent();
 	await ensureCreationDetailRuntime();
 	await checkAndLoadCreation();
 }
