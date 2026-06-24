@@ -109,7 +109,21 @@ import {
 	createChatFeedChallengePlaceholderElement,
 	loadDeferredChatFeedChallenge
 } from './feed/feedChannelChallenge.js';
-import { mountChatDoomScroll, teardownChatDoomScroll } from './feed/doomScrollMount.js';
+import {
+	clearStashedChatDoomScrollPlaybackForDetailOverlay,
+	pauseActiveChatDoomScrollPlayback,
+	restoreStashedChatDoomScrollPlaybackAfterDetailOverlay,
+	teardownChatDoomScroll,
+} from './feed/doomScrollMount.js';
+import {
+	chatMessagesHasUnderlyingLane,
+	handleChatDoomScrollPopstate,
+	isChatDoomScrollMountedForCreation,
+	isChatDoomScrollOverlayOpen,
+	openChatDoomScrollOverlay,
+	primeChatDoomScrollColdLoadShell,
+	registerChatDoomScrollDeferredLaneLoader,
+} from './feed/chatDoomScrollOverlay.js';
 import { openDoomCommentsPopover, tryConsumeDoomCommentsHistoryForCapture } from './doom/doomCommentsPopover.js';
 import { addToMutateQueue } from '/shared/mutateQueue.js';
 import { captureChallengeSubmitThread } from '/shared/challengeSubmitContext.js';
@@ -138,10 +152,23 @@ import * as challengesChannelModule from './challengesChannel.js';
 	}
 	document.addEventListener('click', onDoomCommentsRailClickCapture, true);
 
+	function onDoomCreationDetailClickCapture(ev) {
+		if (!document.body?.classList?.contains('chat-page--doom-scroll')) return;
+		const a = ev.target?.closest?.('[data-chat-doom-creation-detail]');
+		if (!(a instanceof HTMLAnchorElement)) return;
+		const href = (a.getAttribute('href') || '').trim();
+		if (!href) return;
+		ev.preventDefault();
+		ev.stopImmediatePropagation();
+		pauseActiveChatDoomScrollPlayback();
+		navigateToCreationDetailFromSpa(href, ev);
+	}
+	document.addEventListener('click', onDoomCreationDetailClickCapture, true);
+
 	/**
 	 * Doom slide bottom bar (`.chat-doom-bottom`: avatar + @handle + follow + caption) is a click
 	 * surface for the creation detail. Inner anchors/buttons (username link, follow) still own
-	 * their own clicks; everything else navigates to `/creations/:id`.
+	 * their own clicks; everything else opens creation detail overlay.
 	 */
 	function onDoomDetailBarClickCapture(ev) {
 		if (!document.body?.classList?.contains('chat-page--doom-scroll')) return;
@@ -153,9 +180,34 @@ import * as challengesChannelModule from './challengesChannel.js';
 		if (!href) return;
 		ev.preventDefault();
 		ev.stopImmediatePropagation();
-		window.location.href = href;
+		pauseActiveChatDoomScrollPlayback();
+		navigateToCreationDetailFromSpa(href, ev);
 	}
 	document.addEventListener('click', onDoomDetailBarClickCapture, true);
+
+	function onCreationDetailOverlayDismissedForDoom(ev) {
+		if (!isChatDoomScrollOverlayOpen()) return;
+		const detail = ev && typeof ev === 'object' ? ev.detail : null;
+		const returnPath =
+			detail && typeof detail.returnPath === 'string' ? detail.returnPath.trim() : '';
+		if (returnPath) {
+			let pathOnly = returnPath;
+			try {
+				pathOnly = new URL(returnPath, window.location.origin).pathname;
+			} catch {
+				// keep raw
+			}
+			if (!/^\/chat\/c\/feed\/doom\/\d+/.test(String(pathOnly).replace(/\/+$/, ''))) {
+				clearStashedChatDoomScrollPlaybackForDetailOverlay();
+				return;
+			}
+		}
+		restoreStashedChatDoomScrollPlaybackAfterDetailOverlay();
+	}
+	document.addEventListener(
+		'prsn-creation-detail-overlay-dismissed',
+		onCreationDetailOverlayDismissedForDoom
+	);
 })();
 
 (function installChatCreationDetailOverlayClickCapture() {
@@ -178,6 +230,7 @@ import * as challengesChannelModule from './challengesChannel.js';
 
 	function onChatCreationDetailClickCapture(ev) {
 		if (!isChatPageShellActive()) return;
+		if (ev.target?.closest?.('[data-chat-doom-creation-detail], [data-chat-doom-detail]')) return;
 		if (isChatDoomScrollNavigationContext()) return;
 		if (ev.defaultPrevented) return;
 		if (typeof ev.button === 'number' && ev.button !== 0) return;
@@ -1019,6 +1072,7 @@ function getChatCanvasMetaFromMessage(m) {
  */
 export async function initChatPage(root, options = {}) {
 	if (!(root instanceof HTMLElement)) return;
+	primeChatDoomScrollColdLoadShell();
 	if (options.feedLaneScrollMode != null) {
 		setChatFeedLaneScrollMode(options.feedLaneScrollMode);
 	} else {
@@ -2031,7 +2085,7 @@ export async function initChatPage(root, options = {}) {
 		if (messagesEl.dataset.chatMessagesScrollLock === '1') return;
 		if (
 			activePseudoChannelSlug === 'feed' ||
-			activePseudoChannelSlug === 'feed_doom' ||
+			isChatDoomScrollOverlayOpen() ||
 			activePseudoChannelSlug === 'explore' ||
 			activePseudoChannelSlug === 'creations' ||
 			activePseudoChannelSlug === 'comments' ||
@@ -3038,7 +3092,7 @@ export async function initChatPage(root, options = {}) {
 
 	/** Doom scroll lane: full-screen video — no bottom composer. */
 	function isFeedDoomLaneHideBottomComposers() {
-		return activePseudoChannelSlug === 'feed_doom';
+		return isChatDoomScrollOverlayOpen();
 	}
 
 	/** Pseudo lanes on mobile: no overlay create composer (use /create from nav). */
@@ -3140,7 +3194,7 @@ export async function initChatPage(root, options = {}) {
 		}
 		if (mobileChrome instanceof HTMLElement) {
 			mobileChrome.hidden =
-				shouldShowAppMobileHeader || activePseudoChannelSlug === 'feed_doom';
+				shouldShowAppMobileHeader || isChatDoomScrollOverlayOpen();
 		}
 		const isMobileCanvasOpen =
 			isChatPageMobileLayout() &&
@@ -3303,7 +3357,7 @@ export async function initChatPage(root, options = {}) {
 
 	function shouldAutoFocusChatRoutePrimaryInput() {
 		if (chatThreadLoadFailed) return false;
-		if (activePseudoChannelSlug === 'feed_doom') return false;
+		if (isChatDoomScrollOverlayOpen()) return false;
 		if (shouldShowMobileSidebarFromLocation()) return false;
 		if (shouldShowChatCreateComposerOverlay()) return true;
 		if (activePseudoChannelSlug === 'explore') return !isChatPageMobileLayout();
@@ -3314,7 +3368,7 @@ export async function initChatPage(root, options = {}) {
 	/** Focus the primary typing target for the active chat route (composer, explore search, or create overlay). */
 	function focusChatRoutePrimaryInput() {
 		if (chatThreadLoadFailed) return;
-		if (activePseudoChannelSlug === 'feed_doom') return;
+		if (isChatDoomScrollOverlayOpen()) return;
 		if (shouldShowMobileSidebarFromLocation()) return;
 
 		if (activePseudoChannelSlug === 'explore') {
@@ -3400,7 +3454,7 @@ export async function initChatPage(root, options = {}) {
 		document.body.classList.toggle('chat-page--pseudo-browse-view', on);
 		const viewportScrollMode =
 			activePseudoChannelSlug === 'feed' ||
-			activePseudoChannelSlug === 'feed_doom' ||
+			isChatDoomScrollOverlayOpen() ||
 			activePseudoChannelSlug === 'explore' ||
 			activePseudoChannelSlug === 'creations' ||
 			activePseudoChannelSlug === 'challenges';
@@ -3423,7 +3477,7 @@ export async function initChatPage(root, options = {}) {
 		const viewportScrollMode =
 			on ||
 			activePseudoChannelSlug === 'feed' ||
-			activePseudoChannelSlug === 'feed_doom' ||
+			isChatDoomScrollOverlayOpen() ||
 			activePseudoChannelSlug === 'explore' ||
 			activePseudoChannelSlug === 'creations' ||
 			activePseudoChannelSlug === 'challenges';
@@ -3452,7 +3506,7 @@ export async function initChatPage(root, options = {}) {
 		}
 		if (mobileChrome instanceof HTMLElement) {
 			mobileChrome.hidden =
-				shouldShowAppMobileChrome || activePseudoChannelSlug === 'feed_doom';
+				shouldShowAppMobileChrome || isChatDoomScrollOverlayOpen();
 		}
 	}
 
@@ -5937,7 +5991,6 @@ export async function initChatPage(root, options = {}) {
 						rowOpts.pseudoSlug.trim()
 						? ` data-chat-pseudo-slug="${escapeHtml(rowOpts.pseudoSlug.trim().toLowerCase())}"`
 						: '';
-				const dataHelpAttr = t?.type === 'sidebar_help' ? ' data-chat-sidebar-help="1"' : '';
 				const dmDomKey = dmDomKeyForSidebarRow(t);
 				const dataDmKeyAttr = dmDomKey ? ` data-chat-dm-key="${escapeHtml(dmDomKey)}"` : '';
 				const threadId = Number(t?.id);
@@ -5975,7 +6028,7 @@ export async function initChatPage(root, options = {}) {
 					<button type="button" class="chat-page-sidebar-server-settings chat-page-sidebar-dm-menu-btn" data-chat-dm-menu="${escapeHtml(pinKey)}" data-chat-dm-profile-href="${profileHrefAttr}" data-chat-dm-other-user-id="${escapeHtml(otherUserIdAttr)}"${threadIdAttr} data-chat-row-menu-kind="${rowKind}" aria-label="Direct message options" aria-haspopup="menu" aria-expanded="false">${chatSidebarServerGearSvg}</button>
 				</div>`;
 				}
-				return `<div class="chat-page-sidebar-row chat-page-sidebar-row--with-menu${activeClass}${pc}${extraRow}"${dataPseudoSlugAttr}${dataHelpAttr}${dataDmKeyAttr}>
+				return `<div class="chat-page-sidebar-row chat-page-sidebar-row--with-menu${activeClass}${pc}${extraRow}"${dataPseudoSlugAttr}${dataDmKeyAttr}>
 					<a class="chat-page-sidebar-row-link" href="${escapeHtml(href)}">
 						${avatarHtml}
 						<div class="chat-page-sidebar-row-body">
@@ -6564,6 +6617,10 @@ export async function initChatPage(root, options = {}) {
 				return;
 			}
 			if (handleCreationDetailOverlayPopstate(e)) {
+				return;
+			}
+			if (handleChatDoomScrollPopstate(e)) {
+				applyComposerState();
 				return;
 			}
 			if (closeChatInlineImageLightboxFromPopstateIfOpen()) {
@@ -8977,6 +9034,18 @@ export async function initChatPage(root, options = {}) {
 		}
 	}
 
+	function getChatDoomMountDeps() {
+		return {
+			fetchJsonWithStatusDeduped,
+			getHiddenFeedItems,
+			viewerUserId: chatViewerId,
+			applyComposerState,
+			syncChatBrowseViewBodyClass,
+		};
+	}
+
+	registerChatDoomScrollDeferredLaneLoader(() => openThreadForCurrentPath());
+
 	/** Same-origin URLs handled by chat: pushState then openThreadForCurrentPath; otherwise full navigation. */
 	function navigateWithinChatShell(href, ev) {
 		if (ev && typeof ev.preventDefault === 'function') ev.preventDefault();
@@ -9018,6 +9087,16 @@ export async function initChatPage(root, options = {}) {
 		}
 		if (parsed.kind === 'doom_scroll') {
 			primeChatDoomPlaybackFromNavigationGesture();
+			setMobileSidebarMode(false);
+			syncChatSidebarPseudoStripActiveNow(url.pathname);
+			void openChatDoomScrollOverlay({
+				startCreationId: parsed.startCreationId,
+				mountDeps: getChatDoomMountDeps(),
+			}).then(() => {
+				applyComposerState();
+				rebuildTopbarMenuDynamic();
+			});
+			return;
 		}
 		setMobileSidebarMode(false);
 		url.hash = '';
@@ -11741,6 +11820,40 @@ export async function initChatPage(root, options = {}) {
 			window.location.replace(`/creations/${encodeURIComponent(String(parsed.startCreationId))}`);
 			return;
 		}
+
+		if (parsed.kind === 'doom_scroll' && isChatPageMobileLayout()) {
+			primeChatDoomScrollColdLoadShell();
+			if (isChatDoomScrollMountedForCreation(parsed.startCreationId)) {
+				applyComposerState();
+				rebuildTopbarMenuDynamic();
+				return;
+			}
+			const deferBaseLaneLoad = !chatMessagesHasUnderlyingLane(messagesEl);
+			activeThreadId = null;
+			updateTitleFromMeta({
+				type: 'channel',
+				channel_slug: 'feed',
+			});
+			syncChatSidebarPseudoStripActiveNow(window.location.pathname);
+			applyComposerState();
+			if (messagesEl) {
+				messagesEl.removeAttribute('aria-busy');
+			}
+			try {
+				await openChatDoomScrollOverlay({
+					startCreationId: parsed.startCreationId,
+					deferBaseLaneLoad,
+					skipHistoryPush: deferBaseLaneLoad,
+					mountDeps: getChatDoomMountDeps(),
+				});
+			} catch (doomErr) {
+				teardownChatDoomScroll();
+				throw doomErr;
+			}
+			rebuildTopbarMenuDynamic();
+			return;
+		}
+
 		markThreadUiPending();
 
 		if (parsed.kind === 'empty' || parsed.kind === 'invalid') {
@@ -11782,9 +11895,6 @@ export async function initChatPage(root, options = {}) {
 				activePseudoChannelSlug = slug;
 			}
 		}
-		if (parsed.kind === 'doom_scroll') {
-			activePseudoChannelSlug = 'feed_doom';
-		}
 		if (activePseudoChannelSlug === 'explore') {
 			exploreQueryRef.q = getExploreChannelSearchFromUrl();
 		}
@@ -11802,11 +11912,7 @@ export async function initChatPage(root, options = {}) {
 			teardownChatCreationsPseudoBulkHostIfPresent(messagesEl);
 			const channelSlugForLoading =
 				parsed.kind === 'channel' ? String(parsed.slug || '').trim().toLowerCase() : '';
-			if (parsed.kind === 'doom_scroll') {
-				messagesEl.innerHTML =
-					'<div class="chat-doom-scroll-loading route-loading chat-page-thread-loading" aria-busy="true" aria-label="Loading"></div>';
-				resetAndLockChatMessagesScrollForSkeleton(messagesEl, 'feed');
-			} else if (channelSlugForLoading === 'feed' && typeof renderFeedCardsSkeleton === 'function') {
+			if (channelSlugForLoading === 'feed' && typeof renderFeedCardsSkeleton === 'function') {
 				const spotlightHtml = getChatFeedMobileSpotlightHtml();
 				messagesEl.innerHTML = `<div class="feed-route chat-feed-channel-route">
 					${spotlightHtml}
@@ -11872,7 +11978,7 @@ export async function initChatPage(root, options = {}) {
 		 * same issue as feed/explore/creations — otherwise the previous scroll position lingers under the skeleton. */
 		if (
 			activePseudoChannelSlug === 'feed' ||
-			activePseudoChannelSlug === 'feed_doom' ||
+			isChatDoomScrollOverlayOpen() ||
 			activePseudoChannelSlug === 'explore' ||
 			activePseudoChannelSlug === 'creations' ||
 			activePseudoChannelSlug === 'comments' ||
@@ -11913,37 +12019,6 @@ export async function initChatPage(root, options = {}) {
 			}
 
 			await refreshChatSidebar({ skipThreadsFetch: true });
-
-			if (parsed.kind === 'doom_scroll') {
-				activeThreadId = null;
-				updateTitleFromMeta({
-					type: 'channel',
-					channel_slug: 'feed',
-				});
-				if (messagesEl) {
-					messagesEl.removeAttribute('aria-busy');
-				}
-				try {
-					await mountChatDoomScroll({
-						messagesEl,
-						startCreationId: parsed.startCreationId,
-						fetchJsonWithStatusDeduped,
-						getHiddenFeedItems,
-						viewerUserId: chatViewerId,
-						applyComposerState,
-						syncChatBrowseViewBodyClass,
-						navigateToFeedChannel: () => {
-							history.pushState({ prsnChat: true }, '', '/chat/c/feed');
-							void openThreadForCurrentPath();
-						},
-					});
-				} catch (doomErr) {
-					teardownChatDoomScroll();
-					throw doomErr;
-				}
-				rebuildTopbarMenuDynamic();
-				return;
-			}
 
 			if (parsed.kind === 'channel') {
 				const slug = String(parsed.slug).toLowerCase().trim();
@@ -14568,6 +14643,10 @@ export async function initChatPage(root, options = {}) {
 			return;
 		}
 		if (handleCreationDetailOverlayPopstate(e)) {
+			return;
+		}
+		if (handleChatDoomScrollPopstate(e)) {
+			applyComposerState();
 			return;
 		}
 		if (closeChatInlineImageLightboxFromPopstateIfOpen()) {

@@ -126,3 +126,13 @@ export function attachMediaAudioLeveling(media) {
 		return false;
 	}
 }
+
+/** Resume shared leveling graph after a user gesture (e.g. doom unmute tap). */
+export function resumeMediaAudioLevelingContext() {
+	try {
+		const p = sharedContext?.resume?.();
+		if (p && typeof p.catch === 'function') p.catch(() => {});
+	} catch {
+		// ignore
+	}
+}

@@ -23,11 +23,10 @@ const avatarDeps = { renderCommentAvatarHtml, getAvatarColor };
 
 /**
  * @param {object} t
- * @returns {'thread' | 'pseudo' | 'notes' | 'help'}
+ * @returns {'thread' | 'pseudo' | 'notes'}
  */
 function itemKindForRow(t) {
 	if (t?.type === 'sidebar_notes') return 'notes';
-	if (t?.type === 'sidebar_help') return 'help';
 	if (t?.type === 'channel') {
 		const slug = String(t.channel_slug || '').trim().toLowerCase();
 		if (slug && SIDEBAR_TOP_STRIP_CHANNEL_SLUGS.has(slug)) return 'pseudo';
@@ -42,9 +41,6 @@ function itemKindForRow(t) {
 function labelsForRow(t) {
 	if (t?.type === 'sidebar_notes') {
 		return { title: 'My Notes', subtitle: 'Notes to self', searchText: 'notes my notes' };
-	}
-	if (t?.type === 'sidebar_help') {
-		return { title: 'Help', subtitle: 'Documentation', searchText: 'help docs' };
 	}
 	if (t?.type === 'dm') {
 		const ou = t.other_user && typeof t.other_user === 'object' ? t.other_user : null;
@@ -96,7 +92,6 @@ function labelsForRow(t) {
  */
 function stableItemId(t) {
 	if (t?.type === 'sidebar_notes') return 'notes';
-	if (t?.type === 'sidebar_help') return 'help';
 	if (t?.type === 'dm') {
 		const ou = t.other_user;
 		const un = typeof ou?.user_name === 'string' ? ou.user_name.trim().toLowerCase() : '';

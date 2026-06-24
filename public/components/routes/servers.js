@@ -904,11 +904,6 @@ class AppRouteServers extends HTMLElement {
 		const rowHtml = (t, rowOpts) => {
 			const href = buildChatThreadUrl(t);
 			const title = typeof t.title === 'string' && t.title.trim() ? t.title.trim() : 'Chat';
-			const dataHelpAttr = t?.type === 'sidebar_help' ? ' data-chat-sidebar-help="1"' : '';
-			const helpActive =
-				t?.type === 'sidebar_help' &&
-				typeof window !== 'undefined' &&
-				(window.location.pathname === '/help' || window.location.pathname.startsWith('/help/'));
 			const avatarHtml = buildChatThreadRowAvatarHtml(t, deps);
 			const selfDm =
 				typeof isSelfDmThread === 'function' && isSelfDmThread(t, this._chatViewerId);
@@ -966,8 +961,7 @@ class AppRouteServers extends HTMLElement {
 				<button type="button" class="chat-page-sidebar-server-settings chat-page-sidebar-dm-menu-btn" data-chat-dm-menu="${escapeHtml(pinKey)}" data-chat-dm-profile-href="${profileHrefAttr}" data-chat-dm-other-user-id="${escapeHtml(otherUserIdAttr)}" aria-label="Direct message options" aria-haspopup="menu" aria-expanded="false">${gearSvg}</button>
 			</div>`;
 			}
-			const helpActiveCls = helpActive ? ' is-active' : '';
-			return `<a class="chat-page-sidebar-row${pc}${extraRow}${helpActiveCls}" href="${escapeHtml(href)}"${dataHelpAttr}>
+			return `<a class="chat-page-sidebar-row${pc}${extraRow}" href="${escapeHtml(href)}">
 				${avatarHtml}
 				<div class="chat-page-sidebar-row-body">
 					<div class="chat-page-sidebar-row-title-line">

@@ -3480,15 +3480,15 @@ body.chat-page .chat-page-send-btn .chat-page-send-icon {
 }
 
 /*
- * Doom fullscreen host: no lane/browse padding. Browse-mode rules in global.css use
- * `!important` on horizontal padding — excluded via `:not(.chat-page-messages--doom-host)` there;
- * keep `!important` so nothing else reintroduces top inset (~48px+16px + safe-area feel).
+ * Doom fullscreen overlay on `document.body` (underlying lane stays mounted).
  */
-body.chat-page .chat-page-thread-body .chat-page-messages.chat-page-messages--doom-host {
+#chat-doom-scroll-overlay {
+	position: fixed;
+	inset: 0;
+	z-index: 25;
 	display: flex;
 	flex-direction: column;
 	flex: 1 1 auto;
-	/* Fixed `.chat-doom-scroll-root` is out of flow — reserve a viewport so parents don’t collapse. */
 	min-height: 100dvh;
 	min-width: 0;
 	width: 100%;
@@ -3496,7 +3496,9 @@ body.chat-page .chat-page-thread-body .chat-page-messages.chat-page-messages--do
 	padding: 0 !important;
 	overflow: hidden;
 	scrollbar-gutter: auto;
-	position: relative;
+	box-sizing: border-box;
+	pointer-events: auto;
+	background: #000;
 }
 
 /* Full-bleed doom: flex column must absorb height below mobile chrome + composer. */
@@ -3534,7 +3536,7 @@ body.chat-page.chat-page--doom-scroll .chat-route {
  * (`:not(.chat-doom-video)` / `:not(.chat-doom-poster)`) or intrinsic height breaks absolute-fill slides.
  * Slides are sized with `100dvh` (fixed fullscreen shell); fill media with `height:100%` inside each slide.
  */
-body.chat-page .chat-page-messages.chat-page-messages--doom-host video.chat-doom-video {
+#chat-doom-scroll-overlay video.chat-doom-video {
 	max-width: none;
 	width: 100%;
 	height: 100%;
@@ -3543,7 +3545,7 @@ body.chat-page .chat-page-messages.chat-page-messages--doom-host video.chat-doom
 	object-position: center;
 }
 
-body.chat-page .chat-page-messages.chat-page-messages--doom-host video.chat-doom-video.chat-doom-video--fit-contain {
+#chat-doom-scroll-overlay video.chat-doom-video.chat-doom-video--fit-contain {
 	object-fit: contain;
 }
 
@@ -3551,7 +3553,7 @@ body.chat-page .chat-page-messages.chat-page-messages--doom-host video.chat-doom
  * Doom poster img: same box + object-fit as video (global `body.chat-page .chat-page-messages img`
  * uses height:auto — override here). Native video poster ignores object-fit consistently.
  */
-body.chat-page .chat-page-messages.chat-page-messages--doom-host img.chat-doom-poster {
+#chat-doom-scroll-overlay img.chat-doom-poster {
 	max-width: none;
 	width: 100%;
 	height: 100%;
@@ -3560,11 +3562,11 @@ body.chat-page .chat-page-messages.chat-page-messages--doom-host img.chat-doom-p
 	object-position: center;
 }
 
-body.chat-page .chat-page-messages.chat-page-messages--doom-host img.chat-doom-poster.chat-doom-video--fit-contain {
+#chat-doom-scroll-overlay img.chat-doom-poster.chat-doom-video--fit-contain {
 	object-fit: contain;
 }
 
-body.chat-page .chat-page-messages.chat-page-messages--doom-host img.chat-doom-avatar {
+#chat-doom-scroll-overlay img.chat-doom-avatar {
 	max-width: none;
 	width: 100%;
 	height: 100%;
@@ -3654,8 +3656,8 @@ body.chat-page .chat-page-messages.chat-page-messages--doom-host img.chat-doom-a
 /*
  * Beat global `button { background:var(--accent) }` — higher specificity + fallbacks.
  */
-body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topbar a.chat-page-back,
-body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topbar button.chat-page-back {
+#chat-doom-scroll-overlay .chat-doom-topbar a.chat-page-back,
+#chat-doom-scroll-overlay .chat-doom-topbar button.chat-page-back {
 	background: transparent !important;
 	border: none !important;
 	box-shadow: none !important;
@@ -3665,19 +3667,19 @@ body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topb
 	filter: none !important;
 }
 
-body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topbar a.chat-page-back:hover,
-body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topbar button.chat-page-back:hover {
+#chat-doom-scroll-overlay .chat-doom-topbar a.chat-page-back:hover,
+#chat-doom-scroll-overlay .chat-doom-topbar button.chat-page-back:hover {
 	background: rgba(255, 255, 255, 0.14) !important;
 	filter: none !important;
 }
 
-body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topbar a.chat-page-back:focus-visible,
-body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topbar button.chat-page-back:focus-visible {
+#chat-doom-scroll-overlay .chat-doom-topbar a.chat-page-back:focus-visible,
+#chat-doom-scroll-overlay .chat-doom-topbar button.chat-page-back:focus-visible {
 	outline-color: #fff;
 }
 
-body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topbar a.chat-page-back:active,
-body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topbar button.chat-page-back:active {
+#chat-doom-scroll-overlay .chat-doom-topbar a.chat-page-back:active,
+#chat-doom-scroll-overlay .chat-doom-topbar button.chat-page-back:active {
 	transform: none !important;
 }
 
@@ -3702,7 +3704,7 @@ body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topb
 }
 
 /* Mute: icon only — no pill, no hover disk. */
-body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topbar button.creation-detail-video-muted-badge {
+#chat-doom-scroll-overlay .chat-doom-topbar button.creation-detail-video-muted-badge {
 	background: transparent !important;
 	border: none !important;
 	border-radius: 0 !important;
@@ -3734,7 +3736,7 @@ body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topb
 	transition: opacity 0.16s ease, transform 0.16s ease;
 }
 
-body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topbar button.creation-detail-video-muted-badge:hover {
+#chat-doom-scroll-overlay .chat-doom-topbar button.creation-detail-video-muted-badge:hover {
 	background: transparent !important;
 	border: none !important;
 	filter: none !important;
@@ -3749,7 +3751,7 @@ body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topb
 	transform: scale(0.97);
 }
 
-body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topbar button.creation-detail-video-muted-badge:active {
+#chat-doom-scroll-overlay .chat-doom-topbar button.creation-detail-video-muted-badge:active {
 	transform: scale(0.97);
 }
 
@@ -3806,7 +3808,7 @@ body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topb
 }
 
 /* One slide = one dynamic viewport (zydeco-style), not `%` of nested flex. */
-.chat-page-messages--doom-host .chat-doom-slide,
+#chat-doom-scroll-overlay .chat-doom-slide,
 .chat-doom-slide {
 	position: relative;
 	flex-shrink: 0;
@@ -3959,12 +3961,24 @@ body.view-nsfw .chat-doom-slide-media-frame.nsfw::after {
 }
 
 .chat-doom-play-overlay-inner--pausehint {
-	position: absolute;
-	inset: 0;
+	position: static;
+	inset: auto;
+	width: 72px;
+	height: 72px;
+	border-radius: 50%;
+	background: rgba(0, 0, 0, 0.45);
+	color: #fff;
+	box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	pointer-events: none;
+}
+
+@media (hover: none), (pointer: coarse) {
+	.chat-doom-play-overlay-inner--pausehint {
+		display: none !important;
+	}
 }
 
 .chat-doom-progress {
@@ -4019,8 +4033,8 @@ body.view-nsfw .chat-doom-slide-media-frame.nsfw::after {
 	z-index: 3;
 }
 
-body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-rail button.chat-doom-rail-btn,
-body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-rail button.feed-card-action {
+#chat-doom-scroll-overlay .chat-doom-rail button.chat-doom-rail-btn,
+#chat-doom-scroll-overlay .chat-doom-rail button.feed-card-action {
 	background: transparent !important;
 	border: none !important;
 	box-shadow: none !important;
@@ -4030,19 +4044,19 @@ body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-rail
 	font-weight: 500;
 }
 
-body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-rail button.chat-doom-rail-btn:hover,
-body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-rail button.feed-card-action:hover {
+#chat-doom-scroll-overlay .chat-doom-rail button.chat-doom-rail-btn:hover,
+#chat-doom-scroll-overlay .chat-doom-rail button.feed-card-action:hover {
 	filter: none !important;
 	transform: none !important;
 	background: rgba(255, 255, 255, 0.08) !important;
 }
 
-body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-rail button.chat-doom-rail-btn:active,
-body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-rail button.feed-card-action:active {
+#chat-doom-scroll-overlay .chat-doom-rail button.chat-doom-rail-btn:active,
+#chat-doom-scroll-overlay .chat-doom-rail button.feed-card-action:active {
 	transform: none !important;
 }
 
-body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-rail a.chat-doom-rail-btn {
+#chat-doom-scroll-overlay .chat-doom-rail a.chat-doom-rail-btn {
 	background: transparent !important;
 	border: none !important;
 	box-shadow: none !important;
@@ -4053,7 +4067,7 @@ body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-rail
 	-webkit-tap-highlight-color: transparent;
 }
 
-body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-rail a.chat-doom-rail-btn:hover {
+#chat-doom-scroll-overlay .chat-doom-rail a.chat-doom-rail-btn:hover {
 	filter: none !important;
 	transform: none !important;
 	background: rgba(255, 255, 255, 0.08) !important;
@@ -4065,19 +4079,19 @@ body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-rail
  * the circle. The icon itself already has its own (now-transparent) hit area; suppress all
  * interactive surfaces on the anchor for this one link.
  */
-body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-rail a.chat-doom-rail-btn[data-chat-doom-creation-detail],
-body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-rail a.chat-doom-rail-btn[data-chat-doom-creation-detail]:hover,
-body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-rail a.chat-doom-rail-btn[data-chat-doom-creation-detail]:active,
-body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-rail a.chat-doom-rail-btn[data-chat-doom-creation-detail]:focus,
-body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-rail a.chat-doom-rail-btn[data-chat-doom-creation-detail]:focus-visible,
-body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-rail a.chat-doom-rail-btn[data-chat-doom-creation-detail]:focus-within {
+#chat-doom-scroll-overlay .chat-doom-rail a.chat-doom-rail-btn[data-chat-doom-creation-detail],
+#chat-doom-scroll-overlay .chat-doom-rail a.chat-doom-rail-btn[data-chat-doom-creation-detail]:hover,
+#chat-doom-scroll-overlay .chat-doom-rail a.chat-doom-rail-btn[data-chat-doom-creation-detail]:active,
+#chat-doom-scroll-overlay .chat-doom-rail a.chat-doom-rail-btn[data-chat-doom-creation-detail]:focus,
+#chat-doom-scroll-overlay .chat-doom-rail a.chat-doom-rail-btn[data-chat-doom-creation-detail]:focus-visible,
+#chat-doom-scroll-overlay .chat-doom-rail a.chat-doom-rail-btn[data-chat-doom-creation-detail]:focus-within {
 	background: transparent !important;
 	outline: none !important;
 	box-shadow: none !important;
 	-webkit-tap-highlight-color: transparent !important;
 }
 
-body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-rail a.chat-doom-rail-btn:active {
+#chat-doom-scroll-overlay .chat-doom-rail a.chat-doom-rail-btn:active {
 	transform: none !important;
 }
 
@@ -4087,8 +4101,8 @@ body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-rail
  * area and reads as a stray rectangle. Suppress it on the link itself; the inner badge's
  * own :hover wash + active state still provides feedback.
  */
-body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-rail a.chat-doom-rail-btn:focus,
-body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-rail a.chat-doom-rail-btn:focus-visible {
+#chat-doom-scroll-overlay .chat-doom-rail a.chat-doom-rail-btn:focus,
+#chat-doom-scroll-overlay .chat-doom-rail a.chat-doom-rail-btn:focus-visible {
 	outline: none !important;
 	box-shadow: none !important;
 	background: transparent !important;

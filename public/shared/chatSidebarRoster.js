@@ -19,15 +19,11 @@ function escapeHtmlPseudoStrip(str) {
 /**
  * Slugs for the fixed channel rows in the top strip (no section label) above DMs on chat + Connect sidebars.
  * Order: Feed, Challenges, My Creations, Comments, Explore, Prompt Library, Feedback.
- * A separate “Help” row (not a channel) links to `/help` and is appended after Feedback.
  */
 export const SIDEBAR_PSEUDO_STRIP_ORDER = ['feed', 'challenges', 'creations', 'comments', 'explore', 'prompt-library', 'feedback'];
 
 /** Notes-to-self shortcut: not a channel, opens the viewer's own DM. */
 export const SIDEBAR_NOTES_STRIP_HREF = '/chat/notes';
-
-/** App help docs — sidebar strip row under Feedback; not a chat channel. */
-export const SIDEBAR_HELP_STRIP_HREF = '/help';
 
 /** @type {Record<string, string>} */
 const SIDEBAR_PSEUDO_STRIP_TITLES = {
@@ -58,7 +54,6 @@ function pseudoStripRouteIconSvg(slug, routeIconClass = 'chat-page-sidebar-chann
 	const cls = String(routeIconClass || '').trim() || 'chat-page-sidebar-channel-route-icon';
 	if (key === 'create' || key === 'creation') return creationsRouteIcon(cls);
 	if (key === 'notes') return sidebarNotesStripIconSvg(cls);
-	if (key === 'help') return sidebarHelpStripIconSvg(cls);
 	if (key === 'feed') return typeof Icons.homeIcon === 'function' ? Icons.homeIcon(cls) : '';
 	if (key === 'challenges') return typeof Icons.trophyIcon === 'function' ? Icons.trophyIcon(cls) : '';
 	if (key === 'explore') return typeof Icons.globeIcon === 'function' ? Icons.globeIcon(cls) : '';
@@ -365,31 +360,10 @@ function stripRequestPathname(requestPath) {
 	return noQuery.startsWith('/') ? noQuery : `/${noQuery}`;
 }
 
-/** True when `requestPath` is the help page (SSR first paint). */
-export function isSidebarHelpPathActive(requestPath) {
-	const path = stripRequestPathname(requestPath);
-	return path === '/help' || path.startsWith('/help/');
-}
-
-/** Strip row object merged with channel stubs for client render. */
-export function buildSidebarHelpStripRow() {
-	return { type: 'sidebar_help', title: 'Help', href: SIDEBAR_HELP_STRIP_HREF };
-}
-
-function sidebarHelpStripIconSvg(routeIconClass = 'chat-page-sidebar-channel-route-icon') {
-	const cls = String(routeIconClass || '').trim() || 'chat-page-sidebar-channel-route-icon';
-	return typeof Icons.helpIcon === 'function' ? Icons.helpIcon(cls) : '';
-}
-
 function sidebarNotesStripIconSvg(routeIconClass = 'chat-page-sidebar-channel-route-icon') {
 	const cls = String(routeIconClass || '').trim() || 'chat-page-sidebar-channel-route-icon';
 	if (typeof Icons.notesIcon === 'function') return Icons.notesIcon(cls);
 	return `<svg class="${escapeHtmlPseudoStrip(cls)}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 2.5m0 2.25a2.25 2.25 0 0 1 2.25 -2.25h11.5a2.25 2.25 0 0 1 2.25 2.25v14.5a2.25 2.25 0 0 1 -2.25 2.25h-11.5a2.25 2.25 0 0 1 -2.25 -2.25z"></path><path d="M8.25 7l7.5 0"></path><path d="M8.25 11.5l7.5 0"></path><path d="M8.25 16l5 0"></path></svg>`;
-}
-
-function sidebarHelpStripAvatarHtml() {
-	const icon = sidebarHelpStripIconSvg();
-	return `<div class="comment-avatar connect-chat-thread-row-channel-avatar chat-page-sidebar-channel-avatar chat-page-sidebar-channel-avatar--icon-only" aria-hidden="true">${icon}</div>`;
 }
 
 function sidebarNotesStripAvatarHtml() {
@@ -416,19 +390,6 @@ export function buildSidebarNotesStripAnchorHtml(requestPath = '') {
 				<div class="chat-page-sidebar-row-body">
 					<div class="chat-page-sidebar-row-title-line">
 						<span class="chat-page-sidebar-row-title">My Notes</span>
-					</div>
-				</div>
-			</a>`;
-}
-
-export function buildSidebarHelpStripAnchorHtml(requestPath = '') {
-	const activeCls = isSidebarHelpPathActive(requestPath) ? ' is-active' : '';
-	const avatarHtml = sidebarHelpStripAvatarHtml();
-	return `<a class="chat-page-sidebar-row chat-page-sidebar-row--sidebar-help${activeCls}" href="${escapeHtmlPseudoStrip(SIDEBAR_HELP_STRIP_HREF)}" data-chat-sidebar-help="1">
-				${avatarHtml}
-				<div class="chat-page-sidebar-row-body">
-					<div class="chat-page-sidebar-row-title-line">
-						<span class="chat-page-sidebar-row-title">Help</span>
 					</div>
 				</div>
 			</a>`;
@@ -465,7 +426,7 @@ export function buildSidebarPseudoStripListStaticHtml(requestPath = '', opts = {
 				</div>
 			</a>${notesHtml}`;
 	}).join('');
-	return channelHtml + buildSidebarHelpStripAnchorHtml(requestPath);
+	return channelHtml;
 }
 
 /**
@@ -495,7 +456,7 @@ export function getSidebarPseudoStripRowsMerged(channelRowsRaw) {
 			out.push(buildSidebarNotesStripRow());
 		}
 	}
-	return [...out, buildSidebarHelpStripRow()];
+	return out;
 }
 
 /** @param {object} meta */
@@ -503,10 +464,6 @@ export function buildChatThreadUrl(meta) {
 	if (!meta) return '/connect#chat';
 	if (meta.type === 'sidebar_notes') {
 		return SIDEBAR_NOTES_STRIP_HREF;
-	}
-	if (meta.type === 'sidebar_help') {
-		const h = typeof meta.href === 'string' && meta.href.trim() ? meta.href.trim() : SIDEBAR_HELP_STRIP_HREF;
-		return h.startsWith('/') ? h : SIDEBAR_HELP_STRIP_HREF;
 	}
 	if (meta.type === 'channel' && meta.channel_slug) {
 		const slug = String(meta.channel_slug).trim().toLowerCase();
@@ -714,10 +671,6 @@ export function isChatSidebarHrefActive(href, ctx = {}) {
 		return true;
 	}
 
-	if (hrefPath === SIDEBAR_HELP_STRIP_HREF) {
-		return isSidebarHelpPathActive(curPath);
-	}
-
 	const cur = parseChatSidebarPathname(curPath);
 	const target = parseChatSidebarPathname(hrefPath);
 	if (cur.kind === 'invalid' || target.kind === 'invalid') return false;
@@ -794,9 +747,8 @@ export function tryPatchPseudoStripDomInPlace(listEl, stripRows, nav) {
 	for (let i = 0; i < rows.length; i++) {
 		const t = rows[i];
 		const a = anchors[i];
-		if (t?.type === 'sidebar_help' || t?.type === 'sidebar_notes') {
-			const attr = t.type === 'sidebar_notes' ? 'data-chat-sidebar-notes' : 'data-chat-sidebar-help';
-			if (a.getAttribute(attr) !== '1') return false;
+		if (t?.type === 'sidebar_notes') {
+			if (a.getAttribute('data-chat-sidebar-notes') !== '1') return false;
 			let wantPath;
 			let curPath;
 			try {
@@ -838,15 +790,9 @@ export function tryPatchPseudoStripDomInPlace(listEl, stripRows, nav) {
 		a.setAttribute('href', href);
 		if (t?.type === 'sidebar_notes') {
 			a.setAttribute('data-chat-sidebar-notes', '1');
-			a.removeAttribute('data-chat-sidebar-help');
-			a.removeAttribute('data-chat-pseudo-slug');
-		} else if (t?.type === 'sidebar_help') {
-			a.setAttribute('data-chat-sidebar-help', '1');
-			a.removeAttribute('data-chat-sidebar-notes');
 			a.removeAttribute('data-chat-pseudo-slug');
 		} else if (slug) {
 			a.setAttribute('data-chat-pseudo-slug', slug);
-			a.removeAttribute('data-chat-sidebar-help');
 			a.removeAttribute('data-chat-sidebar-notes');
 		}
 		a.classList.toggle('is-active', active);
@@ -914,9 +860,6 @@ export function buildChatThreadRowAvatarHtml(t, deps) {
 	const { renderCommentAvatarHtml, getAvatarColor } = deps;
 	if (t?.type === 'sidebar_notes') {
 		return sidebarNotesStripAvatarHtml();
-	}
-	if (t?.type === 'sidebar_help') {
-		return sidebarHelpStripAvatarHtml();
 	}
 	if (t?.type === 'dm') {
 		const ou = t.other_user;

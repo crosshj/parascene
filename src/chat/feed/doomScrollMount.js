@@ -8,6 +8,7 @@ import {
 	DOOM_FEED_PAGE_SIZE,
 	normalizeDoomAnchorMountItems
 } from './doomFeedData.js';
+import { attachMediaAudioLeveling, resumeMediaAudioLevelingContext } from '../../shared/mediaAudioLeveling.js';
 import {
 	isMediaAutoplayBlockedError,
 	isMediaPlayAbortError,
@@ -33,11 +34,97 @@ import {
 } from '../../shared/feedCardBuild.js';
 import { mountSequentialVideoPlayer } from '../../shared/sequentialVideoPlayer.js';
 
+/** @param {Record<string, unknown>} [patch] */
+function mergeChatDoomScrollHistoryState(patch = {}) {
+	const curState = window.history?.state;
+	const baseState = curState && typeof curState === 'object' ? curState : {};
+	return {
+		...baseState,
+		prsnChat: true,
+		...patch,
+	};
+}
+
 /** @type {null | (() => void)} */
 let activeTeardown = null;
 
+/** @type {null | ((stash: { resumeOnRestore: boolean, userPaused: boolean }) => void)} */
+let activeDetailPlaybackRestore = null;
+
+/** @type {{ resumeOnRestore: boolean, userPaused: boolean } | null} */
+let doomDetailOverlayPlaybackStash = null;
+
 /** @type {WeakMap<HTMLElement, ReturnType<typeof mountSequentialVideoPlayer>>} */
 const doomGroupVideoPlayers = new WeakMap();
+
+/**
+ * @returns {HTMLElement | null}
+ */
+function findCenteredDoomSlide() {
+	const scroller = document.querySelector('#chat-doom-scroll-overlay [data-chat-doom-scroller]');
+	if (!(scroller instanceof HTMLElement)) return null;
+	const slides = Array.from(scroller.querySelectorAll('.chat-doom-slide'));
+	if (slides.length === 0) return null;
+	const scrollerRect = scroller.getBoundingClientRect();
+	const mid = scrollerRect.top + scrollerRect.height / 2;
+	let best = 0;
+	let bestDist = Infinity;
+	for (let i = 0; i < slides.length; i += 1) {
+		const slide = slides[i];
+		if (!(slide instanceof HTMLElement)) continue;
+		const r = slide.getBoundingClientRect();
+		const center = r.top + r.height / 2;
+		const d = Math.abs(center - mid);
+		if (d < bestDist) {
+			bestDist = d;
+			best = i;
+		}
+	}
+	const slide = slides[best];
+	return slide instanceof HTMLElement ? slide : null;
+}
+
+/** Remember centered slide play state, then pause (e.g. before creation detail overlay). */
+export function stashActiveChatDoomScrollPlaybackForDetailOverlay() {
+	const slide = findCenteredDoomSlide();
+	if (!slide) {
+		doomDetailOverlayPlaybackStash = null;
+		return;
+	}
+	const userPaused = slide.getAttribute('data-chat-doom-user-paused') === '1';
+	const player = getDoomGroupVideoPlayer(slide);
+	let wasPlaying = false;
+	if (player) {
+		const v = player.getActiveVideo();
+		wasPlaying = v instanceof HTMLVideoElement && !v.paused;
+		if (wasPlaying && typeof player.pause === 'function') player.pause();
+	} else {
+		const v = resolveDoomSlideVideo(slide);
+		if (v instanceof HTMLVideoElement) {
+			wasPlaying = !v.paused;
+			if (wasPlaying) v.pause();
+		}
+	}
+	doomDetailOverlayPlaybackStash = {
+		resumeOnRestore: wasPlaying && !userPaused,
+		userPaused,
+	};
+}
+
+/** Restore play state stashed when opening creation detail from doom. */
+export function restoreStashedChatDoomScrollPlaybackAfterDetailOverlay() {
+	const stash = doomDetailOverlayPlaybackStash;
+	doomDetailOverlayPlaybackStash = null;
+	if (!stash) return;
+	if (!findCenteredDoomSlide()) return;
+	if (typeof activeDetailPlaybackRestore === 'function') {
+		activeDetailPlaybackRestore(stash);
+	}
+}
+
+export function clearStashedChatDoomScrollPlaybackForDetailOverlay() {
+	doomDetailOverlayPlaybackStash = null;
+}
 
 /**
  * @param {HTMLElement | null | undefined} slide
@@ -135,7 +222,14 @@ function setChatPageDoomScrollBodyClass(on) {
 	document.body.classList.toggle('chat-page--doom-scroll', Boolean(on));
 }
 
+/** Pause the centered doom slide (e.g. before opening creation detail on top). */
+export function pauseActiveChatDoomScrollPlayback() {
+	stashActiveChatDoomScrollPlaybackForDetailOverlay();
+}
+
 export function teardownChatDoomScroll() {
+	doomDetailOverlayPlaybackStash = null;
+	activeDetailPlaybackRestore = null;
 	setChatPageDoomScrollBodyClass(false);
 	if (typeof activeTeardown === 'function') {
 		try {
@@ -149,17 +243,17 @@ export function teardownChatDoomScroll() {
 
 /**
  * @param {object} opts
- * @param {HTMLElement} opts.messagesEl
+ * @param {HTMLElement} opts.hostEl
  * @param {number} opts.startCreationId
  * @param {Function} opts.fetchJsonWithStatusDeduped
  * @param {() => string[]} opts.getHiddenFeedItems
  * @param {number | null} opts.viewerUserId
  * @param {() => void} [opts.applyComposerState]
  * @param {() => void} [opts.syncChatBrowseViewBodyClass]
- * @param {() => void} [opts.navigateToFeedChannel] SPA back navigation (defaults to full navigation)
+ * @param {() => void} [opts.onDismiss] SPA back navigation (defaults to full navigation)
  */
 export async function mountChatDoomScroll(opts) {
-	const messagesEl = opts.messagesEl;
+	const hostEl = opts.hostEl;
 	const startCreationId = opts.startCreationId;
 	const fetchJsonWithStatusDeduped = opts.fetchJsonWithStatusDeduped;
 	const getHiddenFeedItems = opts.getHiddenFeedItems;
@@ -168,7 +262,7 @@ export async function mountChatDoomScroll(opts) {
 			? Number(opts.viewerUserId)
 			: null;
 
-	if (!(messagesEl instanceof HTMLElement)) return;
+	if (!(hostEl instanceof HTMLElement)) return;
 	teardownChatDoomScroll();
 
 	const doomPager = createDoomFeedPager({
@@ -199,9 +293,8 @@ export async function mountChatDoomScroll(opts) {
 		videoByKey.set(k, it);
 	}
 
-	messagesEl.classList.add('chat-page-messages--doom-host');
 	setChatPageDoomScrollBodyClass(true);
-	messagesEl.innerHTML = '';
+	hostEl.innerHTML = '';
 
 	if (orderedVideos.length === 0 || anchorIndex < 0) {
 		const err = document.createElement('div');
@@ -211,12 +304,12 @@ export async function mountChatDoomScroll(opts) {
 			<p class="chat-doom-error-detail">This creation could not be loaded in the feed viewer.</p>
 			<button type="button" class="btn-primary chat-doom-error-back" data-chat-doom-back>Back to feed</button>
 		`;
-		messagesEl.appendChild(err);
+		hostEl.appendChild(err);
 		const eb = err.querySelector('[data-chat-doom-back]');
 		if (eb instanceof HTMLElement) {
 			eb.addEventListener('click', () => {
-				if (typeof opts.navigateToFeedChannel === 'function') {
-					opts.navigateToFeedChannel();
+				if (typeof opts.onDismiss === 'function') {
+					opts.onDismiss();
 				} else {
 					window.location.href = '/chat/c/feed';
 				}
@@ -224,8 +317,7 @@ export async function mountChatDoomScroll(opts) {
 		}
 		if (typeof opts.applyComposerState === 'function') opts.applyComposerState();
 		activeTeardown = () => {
-			setChatPageDoomScrollBodyClass(false);
-			messagesEl.classList.remove('chat-page-messages--doom-host');
+			hostEl.innerHTML = '';
 		};
 		return;
 	}
@@ -238,9 +330,8 @@ export async function mountChatDoomScroll(opts) {
 	const muteOff = shell.querySelector('[data-chat-doom-mute-off]');
 
 	if (!(scroller instanceof HTMLElement)) {
-		messagesEl.innerHTML = '';
+		hostEl.innerHTML = '';
 		setChatPageDoomScrollBodyClass(false);
-		messagesEl.classList.remove('chat-page-messages--doom-host');
 		return;
 	}
 
@@ -268,9 +359,6 @@ export async function mountChatDoomScroll(opts) {
 		}
 	}
 
-	/** @type {ReturnType<typeof setTimeout> | null} */
-	let pauseFlashTimer = null;
-
 	function syncPlayOverlayForSlide(slide) {
 		if (slide instanceof HTMLElement && slide.dataset.chatDoomGroupVideoPlaylist === '1') {
 			const o = slide.querySelector('[data-chat-doom-play-overlay]');
@@ -292,26 +380,6 @@ export async function mountChatDoomScroll(opts) {
 		const showPlayHint = v.paused && userPaused && isActive;
 		o.hidden = !showPlayHint;
 		o.setAttribute('aria-hidden', showPlayHint ? 'false' : 'true');
-	}
-
-	function flashPauseHint(slide) {
-		const o = slide.querySelector('[data-chat-doom-play-overlay]');
-		const hint = o?.querySelector?.('[data-chat-doom-pause-hint]');
-		const playInner = o?.querySelector?.('[data-chat-doom-play-icon]');
-		if (!(o instanceof HTMLElement) || !(hint instanceof HTMLElement)) return;
-		if (pauseFlashTimer) window.clearTimeout(pauseFlashTimer);
-		o.hidden = false;
-		hint.hidden = false;
-		if (playInner instanceof HTMLElement) playInner.hidden = true;
-		o.setAttribute('aria-hidden', 'false');
-		pauseFlashTimer = window.setTimeout(() => {
-			pauseFlashTimer = null;
-			const v = resolveDoomSlideVideo(slide);
-			if (!(v instanceof HTMLVideoElement)) return;
-			hint.hidden = true;
-			if (playInner instanceof HTMLElement) playInner.hidden = false;
-			syncPlayOverlayForSlide(slide);
-		}, 480);
 	}
 
 	/**
@@ -353,7 +421,7 @@ export async function mountChatDoomScroll(opts) {
 		appendDoomSlideForItem(orderedVideos[si], si === anchorIndex);
 	}
 
-	messagesEl.appendChild(shell);
+	hostEl.appendChild(shell);
 
 	if (typeof opts.applyComposerState === 'function') opts.applyComposerState();
 	if (typeof opts.syncChatBrowseViewBodyClass === 'function') opts.syncChatBrowseViewBodyClass();
@@ -727,7 +795,7 @@ export async function mountChatDoomScroll(opts) {
 			const nextPath = `/chat/c/feed/doom/${encodeURIComponent(cid)}`;
 			const u = new URL(window.location.href);
 			if (u.pathname === nextPath) return;
-			history.replaceState({ prsnChat: true }, '', nextPath + u.search + u.hash);
+			history.replaceState(mergeChatDoomScrollHistoryState(), '', nextPath + u.search + u.hash);
 		} catch {
 			// ignore
 		}
@@ -758,7 +826,14 @@ export async function mountChatDoomScroll(opts) {
 			scheduleLightWarmAdjacentSlides();
 			refreshWarmupObservers();
 		} else if (!alreadyPlaying) {
-			playActive({ seekToStart: false });
+			const userPaused =
+				slide instanceof HTMLElement && slide.getAttribute('data-chat-doom-user-paused') === '1';
+			if (userPaused) {
+				syncMuteUi();
+				syncPlayOverlayForSlide(slide);
+			} else {
+				playActive({ seekToStart: false });
+			}
 		} else if (slide instanceof HTMLElement) {
 			syncMuteUi();
 			syncPlayOverlayForSlide(slide);
@@ -944,7 +1019,6 @@ export async function mountChatDoomScroll(opts) {
 		} else {
 			slide.setAttribute('data-chat-doom-user-paused', '1');
 			v.pause();
-			flashPauseHint(slide);
 		}
 	}
 	scroller.addEventListener('click', onDoomMediaClick);
@@ -1383,54 +1457,74 @@ export async function mountChatDoomScroll(opts) {
 	if (backBtn instanceof HTMLElement) {
 		backBtn.addEventListener('click', (ev) => {
 			ev.preventDefault();
-			if (typeof opts.navigateToFeedChannel === 'function') {
-				opts.navigateToFeedChannel();
+			if (typeof opts.onDismiss === 'function') {
+				opts.onDismiss();
 			} else {
 				window.location.href = '/chat/c/feed';
 			}
 		});
 	}
 
+	function applyMutedStateToVideo(v, muted) {
+		if (!(v instanceof HTMLVideoElement)) return;
+		v.muted = muted;
+		if (muted) v.setAttribute('muted', '');
+		else v.removeAttribute('muted');
+	}
+
 	if (muteBtn instanceof HTMLElement) {
-		muteBtn.addEventListener('click', () => {
+		muteBtn.addEventListener('click', (ev) => {
+			ev.preventDefault();
+			ev.stopPropagation();
 			const list = slides();
 			const slide = list[activeIdx];
-			const groupPlayer = getDoomGroupVideoPlayer(slide);
-			const v = resolveDoomSlideVideo(slide);
 			if (!(slide instanceof HTMLElement)) return;
-			if (groupPlayer) {
-				if (slideNsfwBlocked(slide)) return;
-				preferMuted = !groupPlayer.isMuted();
-				try {
-					sessionStorage.setItem('chatDoomPreferMuted', preferMuted ? '1' : '0');
-				} catch {
-					// ignore
-				}
-				groupPlayer.setMuted(preferMuted);
-				syncMuteUi();
-				if (!preferMuted) groupPlayer.play();
-				return;
-			}
-			if (!(v instanceof HTMLVideoElement)) return;
 			if (slideNsfwBlocked(slide)) return;
 
-			preferMuted = !v.muted;
+			preferMuted = !preferMuted;
 			try {
 				sessionStorage.setItem('chatDoomPreferMuted', preferMuted ? '1' : '0');
 			} catch {
 				// ignore
 			}
-			v.muted = preferMuted;
+
+			const groupPlayer = getDoomGroupVideoPlayer(slide);
+			if (groupPlayer) {
+				groupPlayer.setMuted(preferMuted);
+				syncMuteUi();
+				if (!preferMuted) {
+					resumeMediaAudioLevelingContext();
+					const activeVideo = groupPlayer.getActiveVideo();
+					if (activeVideo instanceof HTMLVideoElement) {
+						attachMediaAudioLeveling(activeVideo);
+					}
+					groupPlayer.play();
+				}
+				return;
+			}
+
+			const v = resolveDoomSlideVideo(slide);
+			if (!(v instanceof HTMLVideoElement)) return;
+
+			applyMutedStateToVideo(v, preferMuted);
 			syncMuteUi();
+
 			if (!preferMuted) {
+				resumeMediaAudioLevelingContext();
+				attachMediaAudioLeveling(v);
 				safeMediaPlayWithHandlers(v, {
 					onRejected: (err) => {
-						if (isMediaAutoplayBlockedError(err)) {
-							v.muted = true;
-							safeMediaPlay(v);
+						if (!isMediaAutoplayBlockedError(err)) return;
+						preferMuted = true;
+						try {
+							sessionStorage.setItem('chatDoomPreferMuted', '1');
+						} catch {
+							// ignore
 						}
+						applyMutedStateToVideo(v, true);
+						safeMediaPlay(v);
 						syncMuteUi();
-					}
+					},
 				});
 			}
 		});
@@ -1465,6 +1559,21 @@ export async function mountChatDoomScroll(opts) {
 		});
 	}
 
+	activeDetailPlaybackRestore = (stash) => {
+		if (!doomMountAlive) return;
+		const list = slides();
+		const slide = list[activeIdx];
+		if (!(slide instanceof HTMLElement)) return;
+		if (stash.resumeOnRestore) {
+			playActive({ seekToStart: false });
+			return;
+		}
+		if (stash.userPaused) {
+			slide.setAttribute('data-chat-doom-user-paused', '1');
+		}
+		syncPlayOverlayForSlide(slide);
+	};
+
 	activeTeardown = () => {
 		doomMountAlive = false;
 		destroyDoomCommentsPopover();
@@ -1472,7 +1581,6 @@ export async function mountChatDoomScroll(opts) {
 			detachProgressListener();
 			detachProgressListener = null;
 		}
-		if (pauseFlashTimer) window.clearTimeout(pauseFlashTimer);
 		if (doomIoAppendTimer != null) {
 			window.clearTimeout(doomIoAppendTimer);
 			doomIoAppendTimer = null;
@@ -1498,6 +1606,8 @@ export async function mountChatDoomScroll(opts) {
 		scroller.removeEventListener('click', onDoomMediaClick);
 		window.removeEventListener('keydown', onDoomKeydown);
 		window.clearTimeout(scrollIdle);
-		messagesEl.classList.remove('chat-page-messages--doom-host');
+		if (hostEl instanceof HTMLElement) {
+			hostEl.innerHTML = '';
+		}
 	};
 }

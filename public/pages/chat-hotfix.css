@@ -9,6 +9,15 @@ body.view-nsfw .feed-card-image.nsfw.error.feed-card-image-error-moderated::afte
 }
 
 /*
+ * Feed NSFW pill: 10px 20px (bundle may still ship stale min(4cqi,20px) symmetric padding).
+ */
+@supports (width: 1cqi) {
+	.feed-card-image.nsfw::before {
+		padding: 10px 20px;
+	}
+}
+
+/*
  * Chat page loads `/build/chat.bundle.css` (generated). Inline pasted-image layout/zoom fixes
  * live here so they apply even when the bundle is stale; this sheet is linked after the bundle on chat.html.
  */
@@ -1138,6 +1147,28 @@ button.chat-inline-image-lightbox-footer-btn.btn-secondary {
 	html.chat-page body.chat-page .chat-page-messages .connect-chat-creation-embed-group-nav {
 		top: 54%;
 	}
+
+	/* Grouped feed: pill + arrows on same vertical center as the image. */
+	html.chat-page body.chat-page .chat-page-messages .feed-card-image--group-carousel > .feed-card-group-nav,
+	html.chat-page body.chat-page .chat-page-messages .feed-card-image--group-carousel.nsfw:not(.nsfw-revealed)::before {
+		top: 50% !important;
+	}
+
+	/* Grouped feed tiles: keep carousel arrows on the sides (bundle may lag grid experiments). */
+	html.chat-page body.chat-page .chat-page-messages .feed-card-image--group-carousel > .feed-card-group-nav {
+		position: absolute !important;
+		z-index: 7;
+	}
+
+	html.chat-page body.chat-page .chat-page-messages .feed-card-image--group-carousel > .feed-card-group-nav--prev {
+		left: 8px;
+		right: auto;
+	}
+
+	html.chat-page body.chat-page .chat-page-messages .feed-card-image--group-carousel > .feed-card-group-nav--next {
+		right: 8px;
+		left: auto;
+	}
 }
 
 /*
@@ -1376,10 +1407,10 @@ button.chat-inline-image-lightbox-footer-btn.btn-secondary {
 }
 
 /* Doom topbar icons: no drop-shadow halo (bundle may still ship old filter until rebuild). */
-body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topbar a.chat-page-back,
-body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topbar button.chat-page-back,
-body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topbar a.chat-page-back:hover,
-body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topbar button.chat-page-back:hover {
+body.chat-page #chat-doom-scroll-overlay .chat-doom-topbar a.chat-page-back,
+body.chat-page #chat-doom-scroll-overlay .chat-doom-topbar button.chat-page-back,
+body.chat-page #chat-doom-scroll-overlay .chat-doom-topbar a.chat-page-back:hover,
+body.chat-page #chat-doom-scroll-overlay .chat-doom-topbar button.chat-page-back:hover {
 	filter: none !important;
 }
 
@@ -1392,8 +1423,8 @@ body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topb
 	text-shadow: none !important;
 }
 
-body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topbar button.creation-detail-video-muted-badge,
-body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topbar button.creation-detail-video-muted-badge:hover {
+body.chat-page #chat-doom-scroll-overlay .chat-doom-topbar button.creation-detail-video-muted-badge,
+body.chat-page #chat-doom-scroll-overlay .chat-doom-topbar button.creation-detail-video-muted-badge:hover {
 	filter: none !important;
 }
 
@@ -1424,7 +1455,7 @@ body.chat-page .chat-page-messages img.challenge-pane-hero-image {
 	object-position: center !important;
 }
 
-body.chat-page .chat-page-messages.chat-page-messages--doom-host img.chat-doom-avatar {
+body.chat-page #chat-doom-scroll-overlay img.chat-doom-avatar {
 	max-width: none !important;
 }
 
@@ -1453,7 +1484,7 @@ body.chat-page .chat-page-messages .chat-doom-bottom-row .chat-doom-avatar-slot 
 }
 
 /* No native playback chrome over doom metadata (custom rail + bottom bar only). */
-body.chat-page .chat-page-messages.chat-page-messages--doom-host video.chat-doom-video::-webkit-media-controls {
+body.chat-page #chat-doom-scroll-overlay video.chat-doom-video::-webkit-media-controls {
 	display: none !important;
 }
 

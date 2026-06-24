@@ -60,11 +60,6 @@ function isOverlayCapableShell() {
 	return entry === 'app' || entry === 'app-admin';
 }
 
-function isChatDoomScrollPath(pathname) {
-	const p = String(pathname || '').replace(/\/+$/, '') || '/';
-	return /^\/chat\/c\/feed\/doom\/\d+/.test(p);
-}
-
 function isOverlayLanePath(pathname) {
 	const p = String(pathname || '').replace(/\/+$/, '') || '/';
 	if (/^\/creations\/\d+(\/(edit|mutate))?$/.test(p)) {
@@ -73,8 +68,6 @@ function isOverlayLanePath(pathname) {
 	if (p === '/create') {
 		return Boolean(window.history?.state?.[HISTORY_FLAG]);
 	}
-	if (document.body?.classList?.contains('chat-page--doom-scroll')) return false;
-	if (isChatDoomScrollPath(p)) return false;
 	if (
 		p === '/' ||
 		p === '/index.html' ||
@@ -1013,11 +1006,12 @@ export function navigateToCreateFromSpa(href = '/create', ev, options = {}) {
 export function navigateToCreationDetailFromSpa(href, ev) {
 	if (ev && typeof ev.preventDefault === 'function') ev.preventDefault();
 	const id = parseCreationNavigationTargetId(href);
+	const detailPath = id ? `/creations/${id}` : '';
 	if (!id || !shouldUseCreationDetailOverlay()) {
 		window.location.assign(href);
 		return;
 	}
-	openWorkflowOverlayFromHref(`/creations/${id}`);
+	openWorkflowOverlayFromHref(detailPath);
 }
 
 function shouldInterceptWorkflowSpaLink(link, e) {

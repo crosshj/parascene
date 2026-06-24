@@ -3523,11 +3523,24 @@ app-route-feed {
 .feed-card-image--group-carousel .feed-card-img {
 	opacity: 0;
 	visibility: hidden;
+	pointer-events: none;
+	position: absolute;
+	width: 0;
+	height: 0;
+	overflow: hidden;
+}
+
+/* Loaded placeholder img must stay hidden; `.feed-card-image.loaded .feed-card-img` otherwise wins. */
+.feed-card-image.feed-card-image--group-carousel.loaded .feed-card-img {
+	opacity: 0;
+	visibility: hidden;
+	pointer-events: none;
 }
 
 .feed-card-group-stack {
 	position: absolute;
 	inset: 0;
+	z-index: 1;
 }
 
 .feed-card-group-img {
@@ -3599,6 +3612,35 @@ app-route-feed {
 .feed-card-group-nav:focus-visible {
 	outline: 2px solid var(--focus);
 	outline-offset: 2px;
+}
+
+/* Group carousel: prev/next stay side-anchored above stack + NSFW blur (not grid-centered). */
+.feed-card-image--group-carousel > .feed-card-group-nav {
+	position: absolute;
+	z-index: 7;
+}
+
+.feed-card-image--group-carousel.nsfw:not(.nsfw-revealed)::after {
+	z-index: 4;
+}
+
+.feed-card-image--group-carousel.nsfw:not(.nsfw-revealed)::before {
+	z-index: 5;
+}
+
+.feed-card-image.nsfw::before {
+	padding: 10px 20px;
+}
+
+@supports (width: 1cqi) {
+	.feed-card-image.nsfw::before {
+		padding: 10px 20px;
+	}
+}
+
+body.view-nsfw .feed-card-image--group-carousel.nsfw::after {
+	pointer-events: none;
+	cursor: default;
 }
 
 .feed-card-image--group-carousel .creation-published-badge,
@@ -7719,6 +7761,15 @@ body.chat-page .chat-page-thread-body {
 	body.chat-page .chat-page-messages .connect-chat-creation-embed-group-nav {
 		top: 54%;
 	}
+
+	/* Grouped feed: NSFW pill + prev/next share media vertical center (not 54% chrome offset). */
+	body.chat-page .chat-page-messages .feed-card-image--group-carousel > .feed-card-group-nav {
+		top: 50%;
+	}
+
+	body.chat-page .chat-page-messages .feed-card-image--group-carousel.nsfw:not(.nsfw-revealed)::before {
+		top: 50%;
+	}
 }
 
 /* Connect chat thread topbar + Connect sidebar head — same glass stack as main app header. */
@@ -10130,7 +10181,7 @@ body.chat-page.chat-page--pseudo-browse-view .chat-page-messages .feed-route.cha
 	}
 }
 
-body.chat-page.chat-page--pseudo-browse-view .chat-page-thread-body .chat-page-messages:not(.chat-page-messages--doom-host) {
+body.chat-page.chat-page--pseudo-browse-view .chat-page-thread-body .chat-page-messages {
 	width: 100%;
 	align-self: center;
 	box-sizing: border-box;
@@ -10139,14 +10190,14 @@ body.chat-page.chat-page--pseudo-browse-view .chat-page-thread-body .chat-page-m
 }
 
 @supports (width: 1cqi) {
-	body.chat-page.chat-page--pseudo-browse-view .chat-page-thread-body .chat-page-messages:not(.chat-page-messages--doom-host) {
+	body.chat-page.chat-page--pseudo-browse-view .chat-page-thread-body .chat-page-messages {
 		padding-left: max(16px, calc((100cqi - min(var(--chat-browse-lane-max, 960px), 100cqi)) / 2 + 16px));
 		padding-right: max(16px, calc((100cqi - min(var(--chat-browse-lane-max, 960px), 100cqi)) / 2 + 16px));
 	}
 }
 
 @media (max-width: 768px) {
-	body.chat-page.chat-page--pseudo-browse-view .chat-page-thread-body .chat-page-messages:not(.chat-page-messages--doom-host) {
+	body.chat-page.chat-page--pseudo-browse-view .chat-page-thread-body .chat-page-messages {
 		padding-top: calc(48px + 16px);
 		padding-left: 4px !important;
 		padding-right: 4px !important;
@@ -10161,7 +10212,7 @@ body.chat-page.chat-page--pseudo-browse-view .chat-page-thread-body .chat-page-m
 	}
 
 	@supports (width: 1cqi) {
-		body.chat-page.chat-page--pseudo-browse-view .chat-page-thread-body .chat-page-messages:not(.chat-page-messages--doom-host) {
+		body.chat-page.chat-page--pseudo-browse-view .chat-page-thread-body .chat-page-messages {
 			padding-left: 4px !important;
 			padding-right: 4px !important;
 		}
@@ -17252,9 +17303,7 @@ body.modal-open {
 
 @supports (width: 1cqi) {
 	.nsfw::before {
-		font-size: min(5cqi, 1.125rem);
 		padding: min(2cqi, 10px) min(4cqi, 20px);
-		border-radius: min(2.5cqi, 16px);
 	}
 }
 
