@@ -1,5 +1,20 @@
 /* Prompt library — matches app route layout (route-header + app-tabs + tables) */
 
+/* Embed iframe: scrollbar hiding (clearance is in global.css). */
+
+html.prompt-library-embed-doc,
+body.prompt-library-page.prompt-library-embed {
+	scrollbar-width: none;
+	-ms-overflow-style: none;
+}
+
+html.prompt-library-embed-doc::-webkit-scrollbar,
+body.prompt-library-page.prompt-library-embed::-webkit-scrollbar {
+	width: 0;
+	height: 0;
+	display: none;
+}
+
 .prompt-library-route {
 	width: 100%;
 }

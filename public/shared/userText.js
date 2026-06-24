@@ -2247,6 +2247,9 @@ export function hydrateSunoEmbeds(rootEl) {
 		const titleText = a.textContent ? String(a.textContent).trim() : '';
 
 		if (songId && SUNO_UUID_RE.test(songId)) {
+			// Reserve the placeholder before swapping so the link text never flashes
+			// and the layout height stays fixed across the swap.
+			a.dataset.sunoEmbedPending = 'true';
 			mountSunoEmbed(a, songId, titleText);
 			continue;
 		}

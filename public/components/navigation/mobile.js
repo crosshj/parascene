@@ -196,7 +196,8 @@ class AppNavigationMobile extends HTMLElement {
 			/^\/user\/\d+$/.test(window.location.pathname) ||
 			window.location.pathname.startsWith('/p/') ||
 			window.location.pathname.startsWith('/t/') ||
-			window.location.pathname.startsWith('/styles/');
+			window.location.pathname.startsWith('/styles/') ||
+			/^\/audio-clips\/\d+$/.test(window.location.pathname);
 		if (isServerSentPage) {
 			window.location.href = targetPath;
 			return;
@@ -302,6 +303,9 @@ class AppNavigationMobile extends HTMLElement {
 			currentRoute = null;
 		}
 		if (pathname === '/prompt-library') {
+			currentRoute = null;
+		}
+		if (/^\/audio-clips\/\d+$/.test(pathname)) {
 			currentRoute = null;
 		}
 		// Create is a standalone page at /create

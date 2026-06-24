@@ -2359,21 +2359,20 @@ body.creation-detail-page main {
 }
 
 body.creation-detail-page.creation-detail-embed {
-	--creation-detail-embed-chrome-top: calc(58px + env(safe-area-inset-top, 0px));
+	--creation-detail-embed-chrome-top: calc(58px + env(safe-area-inset-top, 0px) + 1em);
 	--workflow-embed-chrome-top: var(--creation-detail-embed-chrome-top);
 }
 
 body.creation-edit-page.creation-edit-embed,
 body.create-page.create-page-embed,
 body.create-page-advanced.create-page-embed {
-	--workflow-embed-chrome-top: calc(58px + env(safe-area-inset-top, 0px));
+	--workflow-embed-chrome-top: calc(58px + env(safe-area-inset-top, 0px) + 1em);
 	--workflow-embed-chrome-bottom: calc(48px + env(safe-area-inset-bottom, 0px));
 }
 
-body.creation-edit-page.creation-edit-embed main,
-body.create-page.create-page-embed main,
-body.create-page-advanced.create-page-embed main {
-	padding-top: var(--workflow-embed-chrome-top);
+body.creation-edit-page.creation-edit-embed,
+body.create-page.create-page-embed,
+body.create-page-advanced.create-page-embed {
 	padding-bottom: var(--workflow-embed-chrome-bottom);
 }
 
@@ -2397,8 +2396,7 @@ body.create-page-advanced.create-page-embed::-webkit-scrollbar {
 }
 
 body.creation-detail-page.creation-detail-embed main {
-	padding-top: var(--creation-detail-embed-chrome-top);
-	padding-bottom: 0;
+	padding: 0;
 }
 
 /* Embed iframe: same hidden-scrollbar pattern as .creation-detail-action-strip-scroll / .chat-page-messages. */
@@ -2439,8 +2437,7 @@ body.creation-detail-page.creation-detail-embed::-webkit-scrollbar {
 	}
 
 	body.creation-detail-page.creation-detail-embed main {
-		padding-top: var(--creation-detail-embed-chrome-top);
-		padding-bottom: 0;
+		padding: 0;
 	}
 
 	body.creation-detail-page:not(.creation-detail-embed) {

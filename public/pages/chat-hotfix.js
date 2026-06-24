@@ -518,3 +518,120 @@ document.addEventListener(
 	},
 	true
 );
+
+/**
+ * Profile overlay Message → DM: stale chat.bundle.js shellOut still full-reloads.
+ * Embed posts `prsn-chat-shell-navigate-from-embed`; close overlay + SPA-navigate here.
+ */
+function initChatOverlayEmbedDmNavigation() {
+	window.addEventListener('message', (event) => {
+		if (event.origin !== window.location.origin) return;
+		const data = event.data;
+		if (!data || typeof data !== 'object') return;
+		if (data.type !== 'prsn-chat-shell-navigate-from-embed') return;
+		const href = String(data.href || '').trim();
+		if (!href) return;
+		void handleChatOverlayEmbedDmNavigation(href);
+	});
+}
+
+async function handleChatOverlayEmbedDmNavigation(href) {
+	const qs = assetQuery();
+	const [overlayMod, submitMod] = await Promise.all([
+		import(`/shared/spaPageOverlay.js${qs}`),
+		import(`/shared/createSubmit.js${qs}`),
+	]);
+	if (typeof overlayMod.closeSpaPageOverlay === 'function') {
+		overlayMod.closeSpaPageOverlay({ skipScrollRestore: true });
+	}
+	if (typeof submitMod.navigateToChatPathFromOverlay === 'function') {
+		if (submitMod.navigateToChatPathFromOverlay(href)) return;
+	}
+	window.location.assign(href.startsWith('/') ? href : `/${href}`);
+}
+
+initChatOverlayEmbedDmNavigation();
+
+/**
+ * Stale chat.bundle.js sets iframe src to about:blank before navigating — visible flash.
+ * Swap blank for a themed srcdoc placeholder until the embed URL loads.
+ */
+function shellBackgroundColor() {
+	try {
+		const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+		if (bg) return bg;
+	} catch {
+		// ignore
+	}
+	return '#0f0d1a';
+}
+
+function themedOverlayFramePlaceholderSrcdoc(bg) {
+	const safe = String(bg || '').replace(/[<>"']/g, '');
+	return `<!DOCTYPE html><html style="background:${safe};margin:0"><head><meta charset="utf-8"><meta name="color-scheme" content="light dark"></head><body style="background:${safe};margin:0"></body></html>`;
+}
+
+function guardOverlayFrameAgainstAboutBlank(frame) {
+	if (!(frame instanceof HTMLIFrameElement)) return;
+	if (frame.dataset.prsnOverlayBlankGuard === '1') return;
+	frame.dataset.prsnOverlayBlankGuard = '1';
+
+	const protoSrc = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'src');
+	if (!protoSrc?.get || !protoSrc?.set) return;
+
+	Object.defineProperty(frame, 'src', {
+		configurable: true,
+		enumerable: true,
+		get() {
+			return protoSrc.get.call(this);
+		},
+		set(value) {
+			if (value === 'about:blank') {
+				try {
+					this.removeAttribute('src');
+					this.srcdoc = themedOverlayFramePlaceholderSrcdoc(shellBackgroundColor());
+				} catch {
+					// ignore
+				}
+				return;
+			}
+			try {
+				this.removeAttribute('srcdoc');
+			} catch {
+				// ignore
+			}
+			protoSrc.set.call(this, value);
+		},
+	});
+
+	const current = frame.getAttribute('src');
+	if (current === 'about:blank') {
+		frame.src = 'about:blank';
+	}
+}
+
+function initOverlayIframeBlankFlashGuard() {
+	const scan = (root) => {
+		if (!(root instanceof Element || root instanceof Document)) return;
+		for (const frame of root.querySelectorAll?.('.creation-detail-overlay-frame') || []) {
+			guardOverlayFrameAgainstAboutBlank(frame);
+		}
+	};
+
+	scan(document);
+	const observer = new MutationObserver((records) => {
+		for (const record of records) {
+			for (const node of record.addedNodes) {
+				if (!(node instanceof Element)) continue;
+				if (node.matches?.('.creation-detail-overlay-frame')) {
+					guardOverlayFrameAgainstAboutBlank(node);
+					continue;
+				}
+				scan(node);
+			}
+		}
+	});
+	observer.observe(document.documentElement, { childList: true, subtree: true });
+}
+
+initOverlayIframeBlankFlashGuard();

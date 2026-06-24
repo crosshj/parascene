@@ -61,7 +61,8 @@ function isServerSentPathname(pathname) {
 		/^\/user\/\d+$/.test(p) ||
 		/^\/p\/[a-z0-9][a-z0-9_-]{2,23}$/i.test(p) ||
 		/^\/t\/[a-z0-9][a-z0-9_-]{1,31}$/i.test(p) ||
-		p.startsWith('/styles/')
+		p.startsWith('/styles/') ||
+		/^\/audio-clips\/\d+$/.test(p)
 	);
 }
 
@@ -228,6 +229,7 @@ class AppNavigation extends HTMLElement {
 		document.addEventListener('visibilitychange', this._onDocumentVisibilityChatTitle);
 		document.addEventListener('feed-beta-changed', this.handleFeedBetaChanged);
 		document.addEventListener('prsn-creation-detail-overlay-dismissed', this.handleOverlayDismissed);
+		document.addEventListener('prsn-prompt-library-overlay-dismissed', this.handleOverlayDismissed);
 		this.loadNotificationCount();
 		this.loadCreditsCount();
 		// Don't show credits callout until claim status is known from API.
@@ -259,6 +261,7 @@ class AppNavigation extends HTMLElement {
 		document.removeEventListener('visibilitychange', this._onDocumentVisibilityChatTitle);
 		document.removeEventListener('feed-beta-changed', this.handleFeedBetaChanged);
 		document.removeEventListener('prsn-creation-detail-overlay-dismissed', this.handleOverlayDismissed);
+		document.removeEventListener('prsn-prompt-library-overlay-dismissed', this.handleOverlayDismissed);
 		try {
 			restoreChatGlobalUnreadFavicon();
 		} catch {

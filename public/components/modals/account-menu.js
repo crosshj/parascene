@@ -252,6 +252,8 @@ class AppAccountMenu extends HTMLElement {
 			e.preventDefault();
 			this.close();
 			await loadAccountMenuDeps();
+			const qs = getImportQuery(getAssetVersionParam());
+			const overlayMod = await import(`../../shared/spaPageOverlay.js${qs}`);
 			try {
 				const res = await fetchJsonWithStatusDeduped('/api/profile', { credentials: 'include' }, { windowMs: 0 });
 				if (res?.ok && res.data) {
@@ -260,13 +262,13 @@ class AppAccountMenu extends HTMLElement {
 							userName: res.data.profile?.user_name,
 							userId: res.data.id
 						}) || '/user';
-					window.location.href = href;
+					overlayMod.navigateToSpaPageFromSpa(href);
 					return;
 				}
 			} catch {
 				// fall through
 			}
-			window.location.href = '/user';
+			overlayMod.navigateToSpaPageFromSpa('/user');
 			return;
 		}
 		if (action === 'settings') {
@@ -278,7 +280,10 @@ class AppAccountMenu extends HTMLElement {
 		if (action === 'integrations') {
 			e.preventDefault();
 			this.close();
-			window.location.href = '/integrations';
+			await loadAccountMenuDeps();
+			const qs = getImportQuery(getAssetVersionParam());
+			const overlayMod = await import(`../../shared/spaPageOverlay.js${qs}`);
+			overlayMod.navigateToSpaPageFromSpa('/integrations');
 			return;
 		}
 		if (action === 'logout') {

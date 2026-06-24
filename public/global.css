@@ -12855,6 +12855,29 @@ button.msg-reply-indicator-inner:hover {
 	background: var(--bg);
 }
 
+.creation-detail-overlay-frame.is-overlay-loading {
+	opacity: 0;
+}
+
+.creation-detail-overlay-frame-veil {
+	position: absolute;
+	inset: 0;
+	z-index: 2;
+	background: var(--bg);
+	pointer-events: none;
+	opacity: 0;
+	visibility: hidden;
+}
+
+.creation-detail-overlay-frame-veil.is-active {
+	opacity: 1;
+	visibility: visible;
+}
+
+.creation-detail-overlay-chrome {
+	z-index: 3;
+}
+
 body.creation-detail-overlay-open {
 	overflow: hidden;
 	position: fixed;
@@ -12919,6 +12942,85 @@ body.chat-page.creation-detail-overlay-shell-out {
 body.creation-detail-embed app-navigation,
 body.creation-detail-embed app-navigation-mobile {
 	display: none !important;
+}
+
+body.prompt-library-embed app-navigation,
+body.prompt-library-embed app-navigation-mobile {
+	display: none !important;
+}
+
+body.profile-page-embed app-navigation,
+body.profile-page-embed app-navigation-mobile,
+body.style-detail-embed app-navigation,
+body.style-detail-embed app-navigation-mobile,
+body.audio-clip-detail-embed app-navigation,
+body.audio-clip-detail-embed app-navigation-mobile,
+body.integrations-embed app-navigation,
+body.integrations-embed app-navigation-mobile {
+	display: none !important;
+}
+
+body.integrations-embed .site-footer {
+	display: none !important;
+}
+
+/* SPA overlay iframe (?embed=1) — body clearance for parent chrome + side gutters. */
+body.prompt-library-page.prompt-library-embed,
+body.profile-page-embed[data-entry="user-profile"],
+body.style-detail-page.style-detail-embed,
+body.audio-clip-detail-page.audio-clip-detail-embed,
+body.creation-detail-page.creation-detail-embed,
+body.creation-edit-page.creation-edit-embed,
+body.create-page.create-page-embed,
+body.create-page-advanced.create-page-embed,
+body.integrations-page.integrations-embed {
+	--workflow-embed-chrome-top: calc(58px + env(safe-area-inset-top, 0px) + 1em);
+	box-sizing: border-box;
+	padding-top: var(--workflow-embed-chrome-top);
+	padding-right: 16px;
+	padding-bottom: 24px;
+	padding-left: 16px;
+}
+
+@media (min-width: 769px) {
+	body.prompt-library-page.prompt-library-embed,
+	body.profile-page-embed[data-entry="user-profile"],
+	body.style-detail-page.style-detail-embed,
+	body.audio-clip-detail-page.audio-clip-detail-embed,
+	body.creation-detail-page.creation-detail-embed,
+	body.creation-edit-page.creation-edit-embed,
+	body.create-page.create-page-embed,
+	body.create-page-advanced.create-page-embed,
+	body.integrations-page.integrations-embed {
+		padding-right: 24px;
+		padding-left: 24px;
+	}
+}
+
+body.prompt-library-page.prompt-library-embed main,
+body.profile-page-embed[data-entry="user-profile"] main,
+body.style-detail-page.style-detail-embed main,
+body.audio-clip-detail-page.audio-clip-detail-embed main,
+body.creation-detail-page.creation-detail-embed main,
+body.creation-edit-page.creation-edit-embed main,
+body.create-page.create-page-embed main,
+body.create-page-advanced.create-page-embed main,
+body.integrations-page.integrations-embed main {
+	max-width: 1400px;
+	margin-right: auto;
+	margin-left: auto;
+	padding: 0;
+	width: 100%;
+	box-sizing: border-box;
+}
+
+body.prompt-library-page.prompt-library-embed main > section:first-of-type,
+body.profile-page-embed[data-entry="user-profile"] main > section:first-of-type,
+body.style-detail-page.style-detail-embed main > section:first-of-type,
+body.audio-clip-detail-page.audio-clip-detail-embed main > section:first-of-type,
+body.creation-detail-page.creation-detail-embed main > section:first-of-type,
+body.integrations-page.integrations-embed main > .route-header:first-child {
+	margin-top: 0;
 }
 
 .chat-inline-image-lightbox {
@@ -13922,6 +14024,31 @@ body:has(.chat-hashtag-nav-overlay) {
 	border: 0;
 	border-radius: 12px;
 	background-color: var(--image-placeholder);
+}
+
+/* Suno placeholder: reserve the final embed size and hide the raw link text while
+   the song resolves, so swapping in the player never shifts layout (chat scroll). */
+a.creation-link[data-suno-url][data-suno-embed-pending="true"] {
+	display: block;
+	width: 100%;
+	min-width: 0;
+	max-width: 100%;
+	margin-top: 6px;
+	box-sizing: border-box;
+	aspect-ratio: 19 / 6;
+	border: 0;
+	border-radius: 12px;
+	overflow: hidden;
+	color: transparent;
+	font-size: 0;
+	line-height: 0;
+	pointer-events: none;
+	background-color: var(--image-placeholder);
+	animation: connect-chat-creation-embed-pulse 1.2s ease-in-out infinite;
+}
+
+.connect-chat-msg-bubble a.creation-link[data-suno-url][data-suno-embed-pending="true"] {
+	margin-top: 0;
 }
 
 .connect-chat-creation-embed--square.connect-chat-creation-embed--loading .connect-chat-creation-embed-skeleton {

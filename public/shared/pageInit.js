@@ -5,6 +5,8 @@
  * Used by entry-*.js after loading their components.
  */
 
+import { isSpaPageEmbedFrame, notifySpaPageOverlayEmbedReady } from './embedPageRuntime.js';
+
 let refreshAutoGrowTextareas;
 let closeModalsAndNavigate;
 let initNsfwViewPreference;
@@ -111,6 +113,9 @@ export async function waitForComponents(customElementTags) {
 		});
 	});
 	document.body.classList.add('loaded');
+	if (isSpaPageEmbedFrame()) {
+		notifySpaPageOverlayEmbedReady();
+	}
 }
 
 /**

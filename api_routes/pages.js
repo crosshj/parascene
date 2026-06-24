@@ -875,13 +875,32 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 				// console.warn("Failed to extract role header for profile page:", error?.message || error);
 			}
 
-			if (headerHtml) {
-				pageHtml = pageHtml.replace("<!--APP_HEADER-->", headerHtml);
+			const embedOverlay = req.query?.embed === '1' || req.query?.embed === 1;
+
+			if (embedOverlay) {
+				pageHtml = pageHtml.replace("<!--APP_HEADER-->", "");
+				pageHtml = pageHtml.replace("<!--APP_MOBILE_BOTTOM_NAV-->", "");
+				pageHtml = pageHtml.replace(
+					'<html lang="en">',
+					'<html lang="en" class="profile-page-embed-doc">'
+				);
+				pageHtml = pageHtml.replace(
+					'<body data-entry="user-profile">',
+					'<body data-entry="user-profile" class="profile-page-embed">'
+				);
+				pageHtml = pageHtml.replace(
+					'</head>',
+					'<script>window.__ps_profile_embed=true;</script></head>'
+				);
+			} else {
+				if (headerHtml) {
+					pageHtml = pageHtml.replace("<!--APP_HEADER-->", headerHtml);
+				}
+				pageHtml = pageHtml.replace(
+					"<!--APP_MOBILE_BOTTOM_NAV-->",
+					includeMobileBottomNav ? "<app-navigation-mobile></app-navigation-mobile>" : ""
+				);
 			}
-			pageHtml = pageHtml.replace(
-				"<!--APP_MOBILE_BOTTOM_NAV-->",
-				includeMobileBottomNav ? "<app-navigation-mobile></app-navigation-mobile>" : ""
-			);
 			const profileContextScript = `<script>window.__ps_profile_context=${serializeInlineScript(profileRouteContext)};</script>`;
 			pageHtml = pageHtml.replace(
 				/<script\s+type="module"\s+src="\/pages\/user-profile\.js\{\{V\}\}"><\/script>/i,
@@ -918,13 +937,32 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 			// ignore
 		}
 
-		if (headerHtml) {
-			pageHtml = pageHtml.replace("<!--APP_HEADER-->", headerHtml);
+		const embedOverlay = req.query?.embed === '1' || req.query?.embed === 1;
+
+		if (embedOverlay) {
+			pageHtml = pageHtml.replace("<!--APP_HEADER-->", "");
+			pageHtml = pageHtml.replace("<!--APP_MOBILE_BOTTOM_NAV-->", "");
+			pageHtml = pageHtml.replace(
+				'<html lang="en">',
+				'<html lang="en" class="style-detail-embed-doc">'
+			);
+			pageHtml = pageHtml.replace(
+				'<body data-entry="style-detail" class="style-detail-page">',
+				'<body data-entry="style-detail" class="style-detail-page style-detail-embed">'
+			);
+			pageHtml = pageHtml.replace(
+				'</head>',
+				'<script>window.__ps_style_embed=true;</script></head>'
+			);
+		} else {
+			if (headerHtml) {
+				pageHtml = pageHtml.replace("<!--APP_HEADER-->", headerHtml);
+			}
+			pageHtml = pageHtml.replace(
+				"<!--APP_MOBILE_BOTTOM_NAV-->",
+				includeMobileBottomNav ? "<app-navigation-mobile></app-navigation-mobile>" : ""
+			);
 		}
-		pageHtml = pageHtml.replace(
-			"<!--APP_MOBILE_BOTTOM_NAV-->",
-			includeMobileBottomNav ? "<app-navigation-mobile></app-navigation-mobile>" : ""
-		);
 
 		pageHtml = injectCommonHead(pageHtml, getPageTokens(req));
 
@@ -1052,13 +1090,32 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 				// ignore
 			}
 
-			if (headerHtml) {
-				pageHtml = pageHtml.replace("<!--APP_HEADER-->", headerHtml);
+			const embedOverlay = req.query?.embed === '1' || req.query?.embed === 1;
+
+			if (embedOverlay) {
+				pageHtml = pageHtml.replace("<!--APP_HEADER-->", "");
+				pageHtml = pageHtml.replace("<!--APP_MOBILE_BOTTOM_NAV-->", "");
+				pageHtml = pageHtml.replace(
+					'<html lang="en">',
+					'<html lang="en" class="prompt-library-embed-doc">'
+				);
+				pageHtml = pageHtml.replace(
+					'<body class="prompt-library-page" data-entry="prompt-library">',
+					'<body class="prompt-library-page prompt-library-embed" data-entry="prompt-library">'
+				);
+				pageHtml = pageHtml.replace(
+					'</head>',
+					'<script>window.__ps_prompt_library_embed=true;</script></head>'
+				);
+			} else {
+				if (headerHtml) {
+					pageHtml = pageHtml.replace("<!--APP_HEADER-->", headerHtml);
+				}
+				pageHtml = pageHtml.replace(
+					"<!--APP_MOBILE_BOTTOM_NAV-->",
+					includeMobileBottomNav ? "<app-navigation-mobile></app-navigation-mobile>" : ""
+				);
 			}
-			pageHtml = pageHtml.replace(
-				"<!--APP_MOBILE_BOTTOM_NAV-->",
-				includeMobileBottomNav ? "<app-navigation-mobile></app-navigation-mobile>" : ""
-			);
 
 			pageHtml = injectCommonHead(pageHtml, getPageTokens(req));
 
@@ -1089,13 +1146,32 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 			// ignore
 		}
 
-		if (headerHtml) {
-			pageHtml = pageHtml.replace("<!--APP_HEADER-->", headerHtml);
+		const embedOverlay = req.query?.embed === '1' || req.query?.embed === 1;
+
+		if (embedOverlay) {
+			pageHtml = pageHtml.replace("<!--APP_HEADER-->", "");
+			pageHtml = pageHtml.replace("<!--APP_MOBILE_BOTTOM_NAV-->", "");
+			pageHtml = pageHtml.replace(
+				'<html lang="en">',
+				'<html lang="en" class="audio-clip-detail-embed-doc">'
+			);
+			pageHtml = pageHtml.replace(
+				'<body data-entry="audio-clip-detail" class="audio-clip-detail-page">',
+				'<body data-entry="audio-clip-detail" class="audio-clip-detail-page audio-clip-detail-embed">'
+			);
+			pageHtml = pageHtml.replace(
+				'</head>',
+				'<script>window.__ps_audio_clip_embed=true;</script></head>'
+			);
+		} else {
+			if (headerHtml) {
+				pageHtml = pageHtml.replace("<!--APP_HEADER-->", headerHtml);
+			}
+			pageHtml = pageHtml.replace(
+				"<!--APP_MOBILE_BOTTOM_NAV-->",
+				includeMobileBottomNav ? "<app-navigation-mobile></app-navigation-mobile>" : ""
+			);
 		}
-		pageHtml = pageHtml.replace(
-			"<!--APP_MOBILE_BOTTOM_NAV-->",
-			includeMobileBottomNav ? "<app-navigation-mobile></app-navigation-mobile>" : ""
-		);
 
 		pageHtml = injectCommonHead(pageHtml, getPageTokens(req));
 
@@ -1458,11 +1534,31 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 		} catch {
 			// ignore
 		}
-		pageHtml = pageHtml.replace("<!--APP_HEADER-->", headerHtml || guestHeaderHtml);
-		pageHtml = pageHtml.replace(
-			"<!--APP_MOBILE_BOTTOM_NAV-->",
-			includeMobileBottomNav ? "<app-navigation-mobile></app-navigation-mobile>" : ""
-		);
+
+		const embedOverlay = req.query?.embed === '1' || req.query?.embed === 1;
+
+		if (embedOverlay) {
+			pageHtml = pageHtml.replace("<!--APP_HEADER-->", "");
+			pageHtml = pageHtml.replace("<!--APP_MOBILE_BOTTOM_NAV-->", "");
+			pageHtml = pageHtml.replace(
+				'<html lang="en">',
+				'<html lang="en" class="integrations-embed-doc">'
+			);
+			pageHtml = pageHtml.replace(
+				'<body class="integrations-page">',
+				'<body class="integrations-page integrations-embed">'
+			);
+			pageHtml = pageHtml.replace(
+				'</head>',
+				'<script>window.__ps_integrations_embed=true;</script></head>'
+			);
+		} else {
+			pageHtml = pageHtml.replace("<!--APP_HEADER-->", headerHtml || guestHeaderHtml);
+			pageHtml = pageHtml.replace(
+				"<!--APP_MOBILE_BOTTOM_NAV-->",
+				includeMobileBottomNav ? "<app-navigation-mobile></app-navigation-mobile>" : ""
+			);
+		}
 
 		const tokens = getPageTokens(req);
 		tokens.PAGE_META_DESCRIPTION =

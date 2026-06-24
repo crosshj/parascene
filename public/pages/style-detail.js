@@ -8,12 +8,31 @@
 
 const STYLE_TAG_RE = /^(?=.*[a-z])[a-z0-9][a-z0-9_-]{0,63}$/;
 
+const styleEmbedNav = {
+	assign(href) {
+		window.location.href = href;
+	},
+	shellOut(href) {
+		window.location.href = href;
+	},
+};
+
 function getAssetVersionQs() {
 	const v = document.querySelector('meta[name="asset-version"]')?.getAttribute("content")?.trim() || "";
 	return v ? `?v=${encodeURIComponent(v)}` : "";
 }
 
 let styleDetailDepsPromise = null;
+
+async function ensureStyleEmbedRuntime() {
+	if (window.__ps_style_embed !== true) return;
+	const qs = getAssetVersionQs();
+	const mod = await import(`../shared/styleDetailRuntime.js${qs}`);
+	styleEmbedNav.assign = mod.assignStyleDetailLocation;
+	styleEmbedNav.shellOut = mod.shellOut;
+	mod.bindStyleDetailEmbedNavigation();
+	mod.bindStyleDetailEmbedEscape();
+}
 
 async function ensureStyleDetailDeps() {
 	if (!styleDetailDepsPromise) {
@@ -145,7 +164,7 @@ function wireStyleThumbModal(root, tag) {
 					});
 					const data = await res.json().catch(() => ({}));
 					if (res.status === 401) {
-						window.location.href = `/auth.html?returnUrl=${encodeURIComponent(window.location.pathname)}`;
+						styleEmbedNav.shellOut(`/auth.html?returnUrl=${encodeURIComponent(window.location.pathname)}`);
 						return;
 					}
 					if (res.status === 403) {
@@ -198,7 +217,7 @@ function wireStyleThumbModal(root, tag) {
 				});
 				const data = await res.json().catch(() => ({}));
 				if (res.status === 401) {
-					window.location.href = `/auth.html?returnUrl=${encodeURIComponent(window.location.pathname)}`;
+					styleEmbedNav.shellOut(`/auth.html?returnUrl=${encodeURIComponent(window.location.pathname)}`);
 					return;
 				}
 				if (res.status === 403) {
@@ -318,7 +337,7 @@ function wireStyleEditModal(root, style) {
 				});
 				const data = await res.json().catch(() => ({}));
 				if (res.status === 401) {
-					window.location.href = `/auth.html?returnUrl=${encodeURIComponent(window.location.pathname)}`;
+					styleEmbedNav.shellOut(`/auth.html?returnUrl=${encodeURIComponent(window.location.pathname)}`);
 					return;
 				}
 				if (res.status === 403) {
@@ -540,7 +559,7 @@ function renderStyle(root, loading, errRoot, style, adminCanDelete, canSetStyleT
 						deleteBtn.disabled = false;
 						return;
 					}
-					window.location.href = "/prompt-library#styles";
+					styleEmbedNav.assign("/prompt-library#styles");
 				} catch {
 					deleteBtn.disabled = false;
 					window.alert("Could not delete style.");
@@ -668,7 +687,7 @@ function renderNewStyleForm(root, loading, errRoot) {
 				});
 				const data = await res.json().catch(() => ({}));
 				if (res.status === 401) {
-					window.location.href = `/auth.html?returnUrl=${encodeURIComponent(window.location.pathname)}`;
+					styleEmbedNav.shellOut(`/auth.html?returnUrl=${encodeURIComponent(window.location.pathname)}`);
 					return;
 				}
 				if (res.status === 403) {
@@ -703,7 +722,7 @@ function renderNewStyleForm(root, loading, errRoot) {
 						return;
 					}
 				}
-				window.location.href = `/styles/${encodeURIComponent(savedTag)}`;
+				styleEmbedNav.assign(`/styles/${encodeURIComponent(savedTag)}`);
 			} catch {
 				showError("Could not save style.");
 			} finally {
@@ -723,7 +742,7 @@ async function loadNewStylePage() {
 		const data = await res.json().catch(() => ({}));
 
 		if (res.status === 401) {
-			window.location.href = `/auth.html?returnUrl=${encodeURIComponent(window.location.pathname)}`;
+			styleEmbedNav.shellOut(`/auth.html?returnUrl=${encodeURIComponent(window.location.pathname)}`);
 			return;
 		}
 		if (!res.ok) {
@@ -756,7 +775,7 @@ async function loadExistingStyle(deps) {
 		const data = await res.json().catch(() => ({}));
 
 		if (res.status === 401) {
-			window.location.href = `/auth.html?returnUrl=${encodeURIComponent(window.location.pathname)}`;
+			styleEmbedNav.shellOut(`/auth.html?returnUrl=${encodeURIComponent(window.location.pathname)}`);
 			return;
 		}
 		if (res.status === 404) {
@@ -785,6 +804,7 @@ async function loadExistingStyle(deps) {
 }
 
 async function load() {
+	await ensureStyleEmbedRuntime();
 	if (isNewStylePath()) {
 		await loadNewStylePage();
 		return;

@@ -1,5 +1,25 @@
 /* Audio clip hub — layout only; tokens from global.css */
 
+/* Embed iframe: scrollbar hiding (clearance is in global.css). */
+
+html.audio-clip-detail-embed-doc,
+body.audio-clip-detail-page.audio-clip-detail-embed {
+	scrollbar-width: none;
+	-ms-overflow-style: none;
+}
+
+html.audio-clip-detail-embed-doc::-webkit-scrollbar,
+body.audio-clip-detail-page.audio-clip-detail-embed::-webkit-scrollbar {
+	width: 0;
+	height: 0;
+	display: none;
+}
+
+body.audio-clip-detail-page.audio-clip-detail-embed .audio-clip-detail-route {
+	padding-right: 0;
+	padding-left: 0;
+}
+
 .audio-clip-detail-route {
 	max-width: 900px;
 	margin: 0 auto;

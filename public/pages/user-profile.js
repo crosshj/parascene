@@ -25,6 +25,12 @@ let REACTION_ORDER;
 let REACTION_ICONS;
 let setupReactionTooltipTap;
 
+let navigateToCreation = (href) => {
+	window.location.assign(href);
+};
+/** @type {((root?: ParentNode) => void) | null} */
+let bindProfileEmbedDmLinks = null;
+
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
 	return meta?.getAttribute('content')?.trim() || '';
@@ -801,7 +807,7 @@ function renderImageGrid(
 			+ (showPersonaAvatarBtn ? ' route-card-image--persona-mentions-avatar' : '');
 		card.style.cursor = 'pointer';
 		card.addEventListener('click', () => {
-			window.location.href = `/creations/${item.id}`;
+			navigateToCreation(`/creations/${item.id}`);
 		});
 
 		const isPublished = item.published === true || item.published === 1;
@@ -886,7 +892,7 @@ function appendImageGridCards(grid, items, showBadge = false) {
 		const card = document.createElement('div');
 		card.className = 'route-card route-card-image';
 		card.style.cursor = 'pointer';
-		card.addEventListener('click', () => { window.location.href = `/creations/${item.id}`; });
+		card.addEventListener('click', () => { navigateToCreation(`/creations/${item.id}`); });
 
 		const isPublished = item.published === true || item.published === 1;
 		const userDeleted = Boolean(item.user_deleted);
@@ -1999,10 +2005,22 @@ async function runPersonaSetAvatarFromCreation(container, tag, creationId, btn) 
 
 async function init() {
 	await loadDeps();
-	const container = document.querySelector('.user-profile-page');
+	if (window.__ps_profile_embed === true) {
+		const qs = getImportQuery(getAssetVersionParam());
+		const profileRuntime = await import(`../shared/profilePageRuntime.js${qs}`);
+		navigateToCreation = profileRuntime.navigateToCreation;
+		profileRuntime.bindProfilePageEmbedNavigation();
+		profileRuntime.bindProfilePageEmbedEscape();
+		bindProfileEmbedDmLinks = profileRuntime.bindProfileEmbedDmLinks;
+	}
+	const container = document.querySelector('main .user-profile-page');
 	if (!container) return;
 
 	container.innerHTML = renderProfilePageSkeleton();
+	if (window.__ps_profile_embed === true) {
+		const embedRuntime = await import(`../shared/embedPageRuntime.js${getImportQuery(getAssetVersionParam())}`);
+		embedRuntime.notifySpaPageOverlayEmbedReady();
+	}
 
 	const serverContext = getServerProfileContext();
 
@@ -2193,6 +2211,10 @@ async function init() {
 		isAdmin,
 		viewerUserId
 	});
+
+	if (typeof bindProfileEmbedDmLinks === 'function') {
+		bindProfileEmbedDmLinks(container);
+	}
 
 	// Hydrate any links in user-generated content (e.g., About field)
 	hydrateUserTextLinks(container);

@@ -332,6 +332,7 @@ export function isOnMyCreationsLane() {
 
 function stripWorkflowOverlayHistoryState(state) {
 	const baseState = state && typeof state === 'object' ? { ...state } : {};
+	delete baseState.prsnSpaPageOverlay;
 	delete baseState.prsnCreationDetailOverlay;
 	delete baseState.prsnCreationDetailId;
 	delete baseState.prsnOverlayPage;
@@ -423,6 +424,47 @@ export function navigateToMyCreationsIfNeeded({
 	}
 
 	window.location.hash = 'creations';
+}
+
+/**
+ * SPA-navigate to a /chat/* route from an overlay on the chat shell (no full page reload).
+ * Dispatches `prsn-chat-open-path` with `{ href }` for chatPage `navigateWithinChatShell`.
+ * @param {string} href
+ * @returns {boolean} true when handled on chat shell
+ */
+export function navigateToChatPathFromOverlay(href) {
+	const raw = String(href || '').trim();
+	if (!raw) return false;
+	let url;
+	try {
+		url = new URL(raw, window.location.origin);
+		if (url.origin !== window.location.origin) return false;
+	} catch {
+		return false;
+	}
+	const pathOnly = (url.pathname || '/').replace(/\/+$/, '') || '/';
+	if (pathOnly !== '/chat' && !pathOnly.startsWith('/chat/')) return false;
+
+	const onChatPage =
+		typeof document !== 'undefined' &&
+		(document.body?.classList?.contains('chat-page') ||
+			document.documentElement?.classList?.contains('chat-page') ||
+			document.body?.dataset?.entry === 'chat') &&
+		document.querySelector('[data-chat-page]');
+	if (!onChatPage) return false;
+
+	const target = url.pathname + url.search + url.hash;
+	try {
+		document.dispatchEvent(
+			new CustomEvent('prsn-chat-open-path', {
+				bubbles: true,
+				detail: { href: target },
+			})
+		);
+	} catch {
+		return false;
+	}
+	return true;
 }
 
 function navigateToCreations({ mode, creationId, forceFreshFirstPage = true }) {

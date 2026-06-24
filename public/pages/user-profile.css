@@ -2,6 +2,26 @@
    User Profile Page Styles
    ============================================ */
 
+/* Embed iframe: scrollbar hiding + layout (chrome clearance in global.css). */
+html.profile-page-embed-doc,
+body.profile-page-embed[data-entry="user-profile"] {
+	scrollbar-width: none;
+	-ms-overflow-style: none;
+}
+
+html.profile-page-embed-doc::-webkit-scrollbar,
+body.profile-page-embed[data-entry="user-profile"]::-webkit-scrollbar {
+	width: 0;
+	height: 0;
+	display: none;
+}
+
+body.profile-page-embed[data-entry="user-profile"] main .user-profile-page {
+	width: 100%;
+	max-width: 100%;
+	box-sizing: border-box;
+}
+
 .user-profile-hero {
 	border: 1px solid var(--border);
 	border-radius: 14px;

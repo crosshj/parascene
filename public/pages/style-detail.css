@@ -1,5 +1,25 @@
 /* Style detail page — layout only; tokens from global.css */
 
+/* Embed iframe: scrollbar hiding (clearance is in global.css). */
+
+html.style-detail-embed-doc,
+body.style-detail-page.style-detail-embed {
+	scrollbar-width: none;
+	-ms-overflow-style: none;
+}
+
+html.style-detail-embed-doc::-webkit-scrollbar,
+body.style-detail-page.style-detail-embed::-webkit-scrollbar {
+	width: 0;
+	height: 0;
+	display: none;
+}
+
+body.style-detail-page.style-detail-embed .style-detail-route {
+	padding-right: 0;
+	padding-left: 0;
+}
+
 .style-detail-route {
 	max-width: 720px;
 	margin: 0 auto;

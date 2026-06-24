@@ -410,6 +410,12 @@ const CREATION_DETAIL_CONTENT_SKELETON_HTML = `<div class="creation-detail-skele
 function showCreationDetailContentSkeleton(detailContent = document.querySelector('[data-detail-content]')) {
 	if (!(detailContent instanceof HTMLElement)) return;
 	detailContent.innerHTML = CREATION_DETAIL_CONTENT_SKELETON_HTML;
+	if (isCreationDetailEmbed()) {
+		const qs = getImportQuery(getAssetVersionParam());
+		void import(`/shared/embedPageRuntime.js${qs}`).then((mod) => {
+			mod.notifySpaPageOverlayEmbedReady();
+		});
+	}
 }
 
 function prepareCreationDetailHeroForLoad(

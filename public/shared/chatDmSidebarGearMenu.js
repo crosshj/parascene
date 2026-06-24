@@ -24,6 +24,7 @@ export function closeDmSidebarGearMenu() {
  * @param {{
  *   onAfterPinChange?: () => void,
  *   onMarkAsRead?: () => (void | Promise<void>),
+ *   onViewProfile?: (href: string) => void,
  *   showProfile?: boolean,
  *   showPinToggle?: boolean,
  *   extraItems?: Array<{ action: string, label: string }>,
@@ -153,7 +154,19 @@ export function openDmSidebarGearMenu(btn, opts = {}) {
 		if (act === 'profile') {
 			const href = item.getAttribute('data-chat-dm-menu-profile-href') || '/user';
 			closeDmSidebarGearMenu();
-			window.location.assign(href);
+			if (typeof opts.onViewProfile === 'function') {
+				opts.onViewProfile(href);
+				return;
+			}
+			const v = document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() || '';
+			const qs = v ? `?v=${encodeURIComponent(v)}` : '';
+			void import(`/shared/spaPageOverlay.js${qs}`)
+				.then((mod) => {
+					mod.navigateToSpaPageFromSpa(href);
+				})
+				.catch(() => {
+					window.location.assign(href);
+				});
 			return;
 		}
 		const key = item.getAttribute('data-chat-dm-menu-key') || pinKey;

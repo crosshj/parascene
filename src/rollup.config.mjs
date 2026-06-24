@@ -54,6 +54,8 @@ function stripUrlQueryAndHash(id) {
  * Map `/shared/<file>.js` → `src/shared/<file>.js` when the bundle needs different wiring than `public/shared`
  * (relative `./` inside public modules resolves against `/build/chat.bundle.js` → 404).
  */
+const SPA_PAGE_OVERLAY_SRC = path.join(repoRoot, 'src', 'shared', 'spaPageOverlay.js');
+
 const CHAT_BUNDLE_SHARED_OVERRIDES = {
 	'/shared/autogrow.js': path.join(repoRoot, 'src', 'shared', 'autogrow.js'),
 	'/shared/triggeredSuggest.js': path.join(repoRoot, 'src', 'shared', 'triggeredSuggest.js'),
@@ -62,7 +64,8 @@ const CHAT_BUNDLE_SHARED_OVERRIDES = {
 	'/shared/safeMediaPlay.js': path.join(repoRoot, 'src', 'shared', 'safeMediaPlay.js'),
 	'/shared/comments.js': path.join(repoRoot, 'src', 'shared', 'comments.js'),
 	'/shared/supabaseBrowser.js': path.join(repoRoot, 'src', 'shared', 'supabaseBrowser.js'),
-	'/shared/realtimeBroadcast.js': path.join(repoRoot, 'src', 'shared', 'realtimeBroadcast.js')
+	'/shared/realtimeBroadcast.js': path.join(repoRoot, 'src', 'shared', 'realtimeBroadcast.js'),
+	'/shared/spaPageOverlay.js': SPA_PAGE_OVERLAY_SRC
 };
 
 /** Single `@supabase/supabase-js` graph: `realtimeBroadcast` imports `./supabaseBrowser.js` → must not resolve to `public/` (import-map comment only; Rollup must use `src/shared`). */
@@ -111,6 +114,9 @@ function resolvePublicAbsoluteImports() {
 		resolveDynamicImport(specifier) {
 			if (typeof specifier !== 'string') return null;
 			const clean = stripUrlQueryAndHash(specifier);
+			if (clean === './spaPageOverlay.js' || clean.endsWith('/spaPageOverlay.js')) {
+				return SPA_PAGE_OVERLAY_SRC;
+			}
 			if (Object.hasOwn(CHAT_BUNDLE_SHARED_OVERRIDES, clean)) {
 				return CHAT_BUNDLE_SHARED_OVERRIDES[clean];
 			}
@@ -120,6 +126,28 @@ function resolvePublicAbsoluteImports() {
 				}
 			}
 			return null;
+		}
+	};
+}
+
+/** `./spaPageOverlay.js` from bundled gear menu resolves to `/build/spaPageOverlay.js` at runtime. */
+function writeSpaPageOverlayShimPlugin() {
+	const shimPath = path.join(repoRoot, 'public', 'build', 'spaPageOverlay.js');
+	const shimSource = `/**
+ * Runtime shim for chat bundles that dynamic-import \`./spaPageOverlay.js\`
+ * relative to \`/build/chat.bundle.js\`. Re-exports the real overlay module.
+ */
+export * from '/shared/spaPageOverlay.js';
+`;
+	return {
+		name: 'write-spa-page-overlay-shim',
+		writeBundle() {
+			try {
+				fs.mkdirSync(path.dirname(shimPath), { recursive: true });
+				fs.writeFileSync(shimPath, shimSource, 'utf8');
+			} catch {
+				// ignore
+			}
 		}
 	};
 }
@@ -178,6 +206,7 @@ export default {
 			]
 			: []),
 		buildChatCssBundlePlugin(),
+		writeSpaPageOverlayShimPlugin(),
 		touchDevAssetStampPlugin(),
 	],
 	onwarn(warning, warn) {

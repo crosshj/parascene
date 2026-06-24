@@ -4,6 +4,15 @@
 
 const PROMPT_LIBRARY_AUDIO_CLIPS_HREF = "/prompt-library#audio-clips";
 
+async function ensureAudioClipEmbedRuntime() {
+	if (window.__ps_audio_clip_embed !== true) return;
+	const v = document.querySelector('meta[name="asset-version"]')?.getAttribute("content")?.trim() || "";
+	const qs = v ? `?v=${encodeURIComponent(v)}` : "";
+	const mod = await import(`../shared/audioClipDetailRuntime.js${qs}`);
+	mod.bindAudioClipDetailEmbedNavigation();
+	mod.bindAudioClipDetailEmbedEscape();
+}
+
 function escapeHtml(text) {
 	return String(text ?? "")
 		.replace(/&/g, "&amp;")
@@ -72,6 +81,7 @@ function renderUsedInGrid(items) {
 }
 
 async function loadClipHub() {
+	await ensureAudioClipEmbedRuntime();
 	const loading = document.querySelector("[data-audio-clip-detail-loading]");
 	const root = document.querySelector("[data-audio-clip-detail-root]");
 	const errRoot = document.querySelector("[data-audio-clip-detail-error]");

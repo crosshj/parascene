@@ -5,6 +5,7 @@ import { getHelpHref } from '../../helpUrl.js';
 import { userProfileIcon, gearIcon, globeIcon, helpIcon, logOutIcon, infoIcon } from '/icons/svg-strings.js';
 import { confirmAndHardReloadAfterClearingCaches } from '/shared/clearClientCaches.js';
 import { openAboutModal } from './about.js';
+import { navigateToSpaPageFromSpa } from '../../spaPageOverlay.js';
 
 function clearLogoutSideEffects() {
 	try {
@@ -218,13 +219,13 @@ class AppAccountMenu extends HTMLElement {
 							userName: res.data.profile?.user_name,
 							userId: res.data.id
 						}) || '/user';
-					window.location.href = href;
+					navigateToSpaPageFromSpa(href);
 					return;
 				}
 			} catch {
 				// fall through
 			}
-			window.location.href = '/user';
+			navigateToSpaPageFromSpa('/user');
 			return;
 		}
 		if (action === 'settings') {
@@ -236,7 +237,7 @@ class AppAccountMenu extends HTMLElement {
 		if (action === 'integrations') {
 			e.preventDefault();
 			this.close();
-			window.location.href = '/integrations';
+			navigateToSpaPageFromSpa('/integrations');
 			return;
 		}
 		if (action === 'logout') {

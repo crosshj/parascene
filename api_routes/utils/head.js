@@ -132,9 +132,31 @@ function getSupabaseBootHtml() {
 function getLoadGuardStyleBlock() {
 	return html`
 		<style id="prsn-load-guard">
+			html {
+				background: #f6f7fb;
+				color-scheme: light dark;
+			}
+
+			@media (prefers-color-scheme: dark) {
+				html {
+					background: #0f0d1a;
+				}
+			}
+
 			body:not(.loaded) {
 				visibility: hidden;
 				opacity: 0;
+			}
+
+			/* SPA overlay embed: match parent shell --bg before global.css loads */
+			html[data-shell-bg] {
+				background: var(--prsn-shell-bg, #f6f7fb);
+			}
+
+			@media (prefers-color-scheme: dark) {
+				html[data-shell-bg] {
+					--prsn-shell-bg: var(--prsn-shell-bg, #0f0d1a);
+				}
 			}
 
 			/* Light-DOM route labels (e.g. Chat / Explore / Creations) before app-navigation upgrades */
@@ -142,6 +164,19 @@ function getLoadGuardStyleBlock() {
 				display: none !important;
 			}
 		</style>
+		<script>
+			(function () {
+				try {
+					var bg = new URLSearchParams(location.search).get('shell_bg');
+					if (!bg || /[<>"']/.test(bg)) return;
+					document.documentElement.setAttribute('data-shell-bg', '');
+					document.documentElement.style.setProperty('--prsn-shell-bg', bg);
+					document.documentElement.style.backgroundColor = bg;
+				} catch (e) {
+					// ignore
+				}
+			})();
+		</script>
 	`.trimEnd();
 }
 

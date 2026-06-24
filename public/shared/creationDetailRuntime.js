@@ -6,7 +6,10 @@
 import { notifyCreationDetailEmbedShellSync } from './creationDetailEmbedShell.js';
 
 const ROUTE_MESSAGE = 'prsn-creation-detail-overlay-route';
+const SPA_ROUTE_MESSAGE = 'prsn-spa-page-overlay-route';
 const CLOSE_MESSAGE = 'prsn-creation-detail-overlay-close';
+const SHELL_OUT_MESSAGE = 'prsn-spa-page-overlay-shell-out';
+const LEGACY_SHELL_OUT_MESSAGE = 'prsn-creation-detail-overlay-shell-out';
 
 /** @type {null | (() => void | Promise<void>)} */
 let refreshHandler = null;
@@ -98,6 +101,7 @@ export function navigate(href) {
 	}
 
 	if (isCreationDetailEmbed()) {
+		postToParentOverlay({ type: SPA_ROUTE_MESSAGE, href: raw });
 		postToParentOverlay({ type: ROUTE_MESSAGE, href: raw });
 		return;
 	}
@@ -107,7 +111,21 @@ export function navigate(href) {
 
 /** Leave overlay and open a full-page route on the parent shell. */
 export function shellOut(href) {
-	navigate(href);
+	const raw = String(href || '').trim();
+	if (!raw || raw.startsWith('#')) return;
+
+	if (isExternalNavigationHref(raw)) {
+		window.location.assign(raw);
+		return;
+	}
+
+	if (isCreationDetailEmbedFrame()) {
+		postToParentOverlay({ type: SHELL_OUT_MESSAGE, href: raw });
+		postToParentOverlay({ type: LEGACY_SHELL_OUT_MESSAGE, href: raw });
+		return;
+	}
+
+	window.location.assign(raw);
 }
 
 export function requestCloseOverlay() {
@@ -159,7 +177,18 @@ export function bindCreationDetailEmbedNavigation() {
 			if (!shouldInterceptEmbedLink(link, e)) return;
 			e.preventDefault();
 			e.stopPropagation();
-			navigate(link.getAttribute('href') || '');
+			const href = link.getAttribute('href') || '';
+			let path = '';
+			try {
+				path = new URL(href, window.location.origin).pathname.replace(/\/+$/, '') || '/';
+			} catch {
+				path = '';
+			}
+			if (path.startsWith('/chat')) {
+				shellOut(href);
+				return;
+			}
+			navigate(href);
 		},
 		true
 	);

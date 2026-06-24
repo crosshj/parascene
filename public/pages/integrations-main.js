@@ -7,6 +7,32 @@ function getImportQuery(version) {
 	return version && typeof version === 'string' ? `?v=${encodeURIComponent(version)}` : '';
 }
 
+async function initIntegrationsEmbedRuntime() {
+	if (window.__ps_integrations_embed !== true) return;
+	try {
+		const qs = getImportQuery(getAssetVersionParam());
+		const mod = await import(`../shared/integrationsRuntime.js${qs}`);
+		mod.bindIntegrationsEmbedNavigation();
+		mod.bindIntegrationsEmbedEscape();
+		mod.notifyIntegrationsEmbedReady();
+	} catch {
+		// ignore
+	}
+}
+
+/** OAuth providers refuse to render inside a frame; navigate the top window when embedded. */
+function navigateTopLevel(href) {
+	try {
+		if (window.__ps_integrations_embed === true && window.top && window.top !== window) {
+			window.top.location.href = href;
+			return;
+		}
+	} catch {
+		// cross-origin top (shouldn't happen, same-origin shell) — fall through
+	}
+	window.location.href = href;
+}
+
 async function invalidateOwnPublicProfileCache(profileUser) {
 	const userId = Number(profileUser?.id);
 	if (!Number.isFinite(userId) || userId <= 0) return;
@@ -433,7 +459,7 @@ async function main() {
 		e.preventDefault();
 
 		if (connectBtn) {
-			window.location.href = `/api/google-photos/connect?returnUrl=${encodeURIComponent('/integrations')}`;
+			navigateTopLevel(`/api/google-photos/connect?returnUrl=${encodeURIComponent('/integrations')}`);
 			return;
 		}
 
@@ -503,7 +529,7 @@ async function main() {
 		} else if (hash.includes('google-photos=fail')) {
 			setStatus(statusEl, 'Google Photos connection failed.', 'error');
 		} else if (hash.includes('google-photos=connect')) {
-			window.location.href = `/api/google-photos/connect?returnUrl=${encodeURIComponent('/integrations')}`;
+			navigateTopLevel(`/api/google-photos/connect?returnUrl=${encodeURIComponent('/integrations')}`);
 		}
 	}
 
@@ -592,4 +618,5 @@ async function main() {
 	await load();
 }
 
+void initIntegrationsEmbedRuntime();
 main().catch(() => {});

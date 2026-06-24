@@ -14,6 +14,9 @@ const PERSONA_TAG_RE = /^[a-z0-9][a-z0-9_-]{2,23}$/;
 
 const PROMPT_LIBRARY_TAB_IDS = new Set(["styles", "personas", "audio-clips"]);
 
+let notifyPromptLibraryEmbedHash = () => {};
+let bindPromptLibraryEmbedNavigation = () => {};
+
 function hashTabIdFromLocation() {
 	return (window.location.hash || "").replace(/^#/, "").trim().toLowerCase();
 }
@@ -59,8 +62,23 @@ function setupPromptLibraryTabsHashSync() {
 			syncPromptLibraryHeaderActions(id);
 			return;
 		}
-		window.location.hash = id;
+		// Initial hydrate fires tab-change with no tab hash yet; replace (don't push)
+		// so the URL normalizes without trapping the browser Back button.
+		if (isPromptLibraryTabId(hashTabIdFromLocation())) {
+			window.location.hash = id;
+		} else {
+			try {
+				history.replaceState(
+					history.state,
+					"",
+					`${window.location.pathname}${window.location.search}#${id}`
+				);
+			} catch {
+				window.location.hash = id;
+			}
+		}
 		syncPromptLibraryHeaderActions(id);
+		notifyPromptLibraryEmbedHash(id);
 	});
 }
 
@@ -653,9 +671,21 @@ async function loadPromptLibrary() {
 	queueApplyPromptLibraryTabFromHash();
 }
 
-window.addEventListener("hashchange", () => queueApplyPromptLibraryTabFromHash());
+window.addEventListener("hashchange", () => {
+	queueApplyPromptLibraryTabFromHash();
+	notifyPromptLibraryEmbedHash(hashTabIdFromLocation());
+});
 
 function bootPromptLibraryPage() {
+	const v = document.querySelector('meta[name="asset-version"]')?.getAttribute("content")?.trim() || "";
+	const qs = v ? `?v=${encodeURIComponent(v)}` : "";
+	if (window.__ps_prompt_library_embed === true) {
+		void import(`../shared/promptLibraryRuntime.js${qs}`).then((mod) => {
+			notifyPromptLibraryEmbedHash = mod.notifyPromptLibraryEmbedHash;
+			bindPromptLibraryEmbedNavigation = mod.bindPromptLibraryEmbedNavigation;
+			bindPromptLibraryEmbedNavigation();
+		});
+	}
 	seedPromptLibraryTabsActiveFromHash();
 	setupPromptLibraryTabsHashSync();
 	setupAudioClipsTabControls();

@@ -417,7 +417,11 @@ class AppModalUser extends HTMLElement {
 				this._profileLink.onclick = (e) => {
 					e.preventDefault();
 					this.close();
-					window.location.href = profileHref;
+					const v = document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() || '';
+					const qs = v ? `?v=${encodeURIComponent(v)}` : '';
+					void import(`../../shared/spaPageOverlay.js${qs}`).then((mod) => {
+						mod.navigateToSpaPageFromSpa(profileHref);
+					});
 				};
 			} else {
 				this._profileLink.style.display = 'none';

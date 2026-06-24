@@ -1004,6 +1004,27 @@ body.chat-page .chat-page-messages .connect-chat-suno-embed-iframe {
 	background-color: var(--image-placeholder);
 }
 
+/* Suno placeholder reserves final embed size + hides link text while resolving so
+   the player swap never shifts chat scroll position. */
+body.chat-page .chat-page-messages a.creation-link[data-suno-url][data-suno-embed-pending="true"] {
+	display: block;
+	width: 100%;
+	min-width: 0;
+	max-width: 100%;
+	margin-top: 0;
+	box-sizing: border-box;
+	aspect-ratio: 19 / 6;
+	border: 0;
+	border-radius: 12px;
+	overflow: hidden;
+	color: transparent;
+	font-size: 0;
+	line-height: 0;
+	pointer-events: none;
+	background-color: var(--image-placeholder);
+	animation: connect-chat-creation-embed-pulse 1.2s ease-in-out infinite;
+}
+
 /* Stale chat.bundle: group + single-image previews use cover (feed parity) in the 260px tile */
 .connect-chat-creation-embed--square .connect-chat-creation-embed-img {
 	object-fit: cover;
