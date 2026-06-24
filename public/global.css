@@ -13023,6 +13023,26 @@ body.integrations-page.integrations-embed main > .route-header:first-child {
 	margin-top: 0;
 }
 
+/* Creation detail in the SPA overlay is full-bleed: it manages its own horizontal layout
+   (like the standalone page), so drop the side gutters + width cap other embeds rely on.
+   Top padding is just the chrome height (no +1em gap) so the hero sits flush under it. */
+body.creation-detail-page.creation-detail-embed {
+	--workflow-embed-chrome-top: calc(58px + env(safe-area-inset-top, 0px));
+	padding-left: 0;
+	padding-right: 0;
+}
+
+body.creation-detail-page.creation-detail-embed main {
+	max-width: 100%;
+}
+
+@media (min-width: 769px) {
+	body.creation-detail-page.creation-detail-embed {
+		padding-left: 0;
+		padding-right: 0;
+	}
+}
+
 .chat-inline-image-lightbox {
 	position: fixed;
 	inset: 0;

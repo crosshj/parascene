@@ -2359,7 +2359,9 @@ body.creation-detail-page main {
 }
 
 body.creation-detail-page.creation-detail-embed {
-	--creation-detail-embed-chrome-top: calc(58px + env(safe-area-inset-top, 0px) + 1em);
+	/* Full-bleed hero must sit flush under the overlay chrome — no extra +1em gap
+	   (unlike profile/prompt-library embeds). Top padding == chrome height only. */
+	--creation-detail-embed-chrome-top: calc(58px + env(safe-area-inset-top, 0px));
 	--workflow-embed-chrome-top: var(--creation-detail-embed-chrome-top);
 }
 
@@ -4481,6 +4483,20 @@ button.creation-detail-group-item {
 .creation-detail-group-item-fallback {
 	font-size: 0.75rem;
 	color: var(--text-muted);
+}
+
+/* Group thumbnails inherit the item's NSFW blur: stay obscured (with a compact label)
+   until the viewer reveals the item via the hero/carousel or by tapping a thumbnail. */
+.creation-detail-group-thumb-wrap.nsfw:not(.nsfw-revealed) {
+	cursor: pointer;
+}
+
+.creation-detail-group-thumb-wrap.nsfw::before {
+	font-size: 0.5rem;
+	letter-spacing: 0.04em;
+	padding: 2px 6px;
+	border-radius: 6px;
+	white-space: nowrap;
 }
 
 .creation-detail-group-actions {

@@ -3196,6 +3196,12 @@ async function loadCreation() {
 		}
 		const canReorderGroupSources = isOwner && !isPublished;
 		const groupMediaCountLabel = isGroupVideo ? 'video' : 'image';
+		// When the group creation is NSFW (hero blurred), blur its thumbnails too. Mirror the
+		// hero's reveal model: pre-reveal when the viewer shows unobscured, else one-off reveal.
+		const groupIsNsfw = Boolean(creation.nsfw ?? creation.meta?.nsfw);
+		const groupThumbNsfwClass = groupIsNsfw
+			? (showUnobscured ? ' nsfw nsfw-revealed' : ' nsfw')
+			: '';
 		const groupSectionHtml = isGroupCreation && groupSources.length > 0
 			? html`
 				<section class="creation-detail-group-section" data-group-creation-section>
@@ -3216,7 +3222,7 @@ async function loadCreation() {
 						? html`<button type="button" class="creation-detail-group-move-left" data-group-move-left="${source.id}" aria-label="Move left">${GROUP_MOVE_LEFT_BTN_SVG}</button>`
 						: '';
 					return html`<div class="creation-detail-group-slot">
-								<div class="creation-detail-group-thumb-wrap">${thumbHtml}${moveLeftHtml}</div>
+								<div class="creation-detail-group-thumb-wrap${groupThumbNsfwClass}">${thumbHtml}${moveLeftHtml}</div>
 							</div>`;
 				}).join('')}
 					</div>

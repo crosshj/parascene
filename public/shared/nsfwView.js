@@ -130,6 +130,20 @@ export function revealNsfwElementOnly(nsfwEl) {
 }
 
 /**
+ * Reveal every blurred NSFW surface for the current creation-detail item at once:
+ * the hero (single image or carousel) and all grouped-source thumbnails. Used so that
+ * confirming on either the hero/carousel or a thumbnail unblurs the whole item together.
+ */
+export function revealCreationDetailNsfw() {
+	try {
+		const els = document.querySelectorAll(
+			'.creation-detail-image-wrapper.nsfw, .creation-detail-group-thumb-wrap.nsfw'
+		);
+		els.forEach((el) => el.classList.add('nsfw-revealed'));
+	} catch (_) {}
+}
+
+/**
  * Handle a click that might be on an NSFW overlay. If view is not yet enabled, show confirm
  * and on confirm either reveal only that image (creation-detail) or enable session view and navigate.
  * Returns true if the click was handled (intercepted); false if the caller should allow default behavior.
@@ -176,13 +190,17 @@ export function handleNsfwClick(e) {
 	// On creation-detail: reveal only when user has enabled NSFW in profile; otherwise swallow click on blurred hero only.
 	if (onDetailPage) {
 		if (document.body.classList.contains(NSFW_VIEW_BODY_CLASS)) return false;
-		/* Revealed hero: allow play/pause, mute, and group nav — no repeat confirm. */
+		/* Revealed hero/thumb: allow play/pause, mute, group nav, carousel switch — no repeat confirm. */
 		if (e.target?.closest?.('.creation-detail-image-wrapper.nsfw.nsfw-revealed')) return false;
-		const nsfwEl = e.target?.closest?.('.creation-detail-image-wrapper.nsfw:not(.nsfw-revealed)');
+		if (e.target?.closest?.('.creation-detail-group-thumb-wrap.nsfw.nsfw-revealed')) return false;
+		const nsfwEl =
+			e.target?.closest?.('.creation-detail-image-wrapper.nsfw:not(.nsfw-revealed)') ||
+			e.target?.closest?.('.creation-detail-group-thumb-wrap.nsfw:not(.nsfw-revealed)');
 		if (!nsfwEl) return false;
 		if (document.body.dataset.enableNsfw !== '1') return true;
 		if (!window.confirm(NSFW_CONFIRM_MESSAGE_THIS_IMAGE)) return true;
-		revealNsfwElementOnly(nsfwEl);
+		/* Reveal hero + every grouped thumbnail together so the whole item unblurs at once. */
+		revealCreationDetailNsfw();
 		return true;
 	}
 
