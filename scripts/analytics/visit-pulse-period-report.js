@@ -8,6 +8,7 @@
  *   node scripts/analytics/visit-pulse-period-report.js --from 2026-05-20 --to 2026-06-14
  *
  * `--to` today is clamped to yesterday (incomplete partition). Default window already ends yesterday.
+ * Pass `--include-today` with `--to` to keep the partial current day.
  * HTML: visit-pulse-period-report.html · CSS: report.css
  */
 
@@ -72,12 +73,16 @@ function dayCountInclusive(fromDay, toDay) {
 	return n;
 }
 
+function hasFlag(name) {
+	return process.argv.slice(2).includes(`--${name}`);
+}
+
 function resolveWindow() {
 	const fromArg = getArg("from");
 	const toArg = getArg("to");
 	if (/^\d{4}-\d{2}-\d{2}$/.test(fromArg) && /^\d{4}-\d{2}-\d{2}$/.test(toArg)) {
 		const today = usEastDayKey();
-		if (toArg >= today) {
+		if (toArg >= today && !hasFlag("include-today")) {
 			const toDay = yesterdayUsEastDayKey();
 			if (toArg === today) {
 				console.warn(

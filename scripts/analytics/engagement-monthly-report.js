@@ -9,7 +9,7 @@
  *   node scripts/analytics/engagement-monthly-report.js --from 2026-05-20 --to 2026-05-28
  *
  * Default: current US East calendar month through yesterday (incomplete today excluded).
- * `--to` today is clamped to yesterday. `--days` = trailing N days instead of calendar month.
+ * `--to` today is clamped to yesterday unless `--include-today`. `--days` = trailing N days.
  * HTML: engagement-monthly-report.html · CSS: report.css
  */
 
@@ -82,6 +82,10 @@ function getArg(name) {
 	return "";
 }
 
+function hasFlag(name) {
+	return process.argv.slice(2).includes(`--${name}`);
+}
+
 function shiftDayKey(dayKey, deltaDays) {
 	return usEastDayKey(new Date(usEastDayStartMs(dayKey) + deltaDays * PULSE_DAY_MS));
 }
@@ -117,7 +121,7 @@ function resolveWindow() {
 	if (/^\d{4}-\d{2}-\d{2}$/.test(fromArg) && /^\d{4}-\d{2}-\d{2}$/.test(toArg)) {
 		const today = usEastDayKey();
 		let toDay = toArg;
-		if (toArg >= today) {
+		if (toArg >= today && !hasFlag("include-today")) {
 			toDay = yesterdayUsEastDayKey();
 			if (toArg === today) {
 				console.warn(
@@ -132,8 +136,12 @@ function resolveWindow() {
 	if (/^\d{4}-\d{2}$/.test(monthArg)) {
 		const fromDay = `${monthArg}-01`;
 		const monthEnd = usEastMonthEndKey(fromDay);
+		const today = usEastDayKey();
 		const yesterday = yesterdayUsEastDayKey();
-		const toDay = monthEnd <= yesterday ? monthEnd : yesterday;
+		let toDay = monthEnd <= yesterday ? monthEnd : yesterday;
+		if (hasFlag("include-today") && monthArg === today.slice(0, 7)) {
+			toDay = today;
+		}
 		return { fromDay, toDay };
 	}
 
