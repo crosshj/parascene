@@ -1,5 +1,50 @@
 import { isChatBroadcastMentionSlug } from "../../public/shared/chatBroadcastMentions.js";
 
+function escapeRegExp(value) {
+	return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Whether text contains @slug as a mention token for persona discovery.
+ * Requires @slug followed by whitespace, end of text, end of line, or sentence-ending . ! ?
+ * — not @slugfoo or mid-sentence punctuation like commas.
+ * @param {string} text
+ * @param {string} normalizedSlug — lowercase slug without @
+ */
+export function textContainsBoundedPersonalityMention(text, normalizedSlug) {
+	const raw = typeof text === "string" ? text : "";
+	const slug = typeof normalizedSlug === "string" ? normalizedSlug.trim().toLowerCase() : "";
+	if (!raw || !slug) return false;
+	const re = new RegExp(
+		`(^|[^a-zA-Z0-9_-])@${escapeRegExp(slug)}($|\\s|[.!?](?=$|\\s))`,
+		"i"
+	);
+	return re.test(raw);
+}
+
+/**
+ * Prompt fields on a creation meta blob that may contain @mentions.
+ * @param {object | string | null | undefined} meta
+ * @returns {string[]}
+ */
+export function collectCreationPromptMentionTexts(meta) {
+	let parsed = meta;
+	if (typeof parsed === "string") {
+		try {
+			parsed = JSON.parse(parsed);
+		} catch {
+			parsed = null;
+		}
+	}
+	if (!parsed || typeof parsed !== "object") return [];
+	const texts = [];
+	const userPrompt = typeof parsed.user_prompt === "string" ? parsed.user_prompt.trim() : "";
+	const argsPrompt = typeof parsed.args?.prompt === "string" ? parsed.args.prompt.trim() : "";
+	if (userPrompt) texts.push(userPrompt);
+	if (argsPrompt) texts.push(argsPrompt);
+	return texts;
+}
+
 /**
  * Normalize @handle token for profile lookup (aligned with chat/DM rules).
  * @param {string} token — without @

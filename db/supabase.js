@@ -6,6 +6,10 @@ import { getThumbnailUrl } from "../api_routes/utils/url.js";
 import { isRecommendableCreationRow } from "../api_routes/utils/recommendableCreations.js";
 import { putAnchorCreationFirst } from "../api_routes/feed/doomSiteVideoTimeline.js";
 import { createSelectFeedBetaSitewideCatalog } from "./feedBetaSitewideCatalog.js";
+import {
+	collectCreationPromptMentionTexts,
+	textContainsBoundedPersonalityMention
+} from "../api_routes/utils/textMentions.js";
 
 // Note: Supabase schema must be provisioned separately (SQL editor/migrations).
 // All application tables use the "prsn_" prefix.
@@ -5255,98 +5259,64 @@ export function openDb() {
 				const normalized = String(personality || "").trim().toLowerCase();
 				if (!/^[a-z0-9][a-z0-9_-]{2,23}$/.test(normalized)) return [];
 				const mentionNeedle = `@${normalized}`;
+				const mentionCandidate = `%${mentionNeedle}%`;
 				const limit = Math.min(200, Math.max(1, Number.parseInt(String(options?.limit ?? "50"), 10) || 50));
 				const offset = Math.max(0, Number.parseInt(String(options?.offset ?? "0"), 10) || 0);
 
-				const tagNeedle = normalized;
-				const [descriptionRes, titleRes, commentsRes, descTagRes, titleTagRes, metaUserPromptRes, metaArgsPromptRes] =
-					await Promise.all([
-						serviceClient
-							.from(prefixedTable("created_images"))
-							.select("id")
-							.eq("published", true)
-							.is("unavailable_at", null)
-							.ilike("description", `%${mentionNeedle}%`)
-							.limit(5000),
-						serviceClient
-							.from(prefixedTable("created_images"))
-							.select("id")
-							.eq("published", true)
-							.is("unavailable_at", null)
-							.ilike("title", `%${mentionNeedle}%`)
-							.limit(5000),
-						serviceClient
-							.from(prefixedTable("comments_created_image"))
-							.select("created_image_id")
-							.or(`text.ilike.%${mentionNeedle}%,text.ilike.%${tagNeedle}%`)
-							.limit(5000),
-						serviceClient
-							.from(prefixedTable("created_images"))
-							.select("id")
-							.eq("published", true)
-							.is("unavailable_at", null)
-							.ilike("description", `%${tagNeedle}%`)
-							.limit(5000),
-						serviceClient
-							.from(prefixedTable("created_images"))
-							.select("id")
-							.eq("published", true)
-							.is("unavailable_at", null)
-							.ilike("title", `%${tagNeedle}%`)
-							.limit(5000),
-						serviceClient
-							.from(prefixedTable("created_images"))
-							.select("id")
-							.eq("published", true)
-							.is("unavailable_at", null)
-							.or(
-								`meta->>user_prompt.ilike.%${mentionNeedle}%,meta->>user_prompt.ilike.%${tagNeedle}%`
-							)
-							.limit(5000),
-						serviceClient
-							.from(prefixedTable("created_images"))
-							.select("id")
-							.eq("published", true)
-							.is("unavailable_at", null)
-							.or(
-								`meta->args->>prompt.ilike.%${mentionNeedle}%,meta->args->>prompt.ilike.%${tagNeedle}%`
-							)
-							.limit(5000)
-					]);
+				const [descriptionRes, titleRes, commentsRes, metaRes] = await Promise.all([
+					serviceClient
+						.from(prefixedTable("created_images"))
+						.select("id, description")
+						.eq("published", true)
+						.is("unavailable_at", null)
+						.ilike("description", mentionCandidate)
+						.limit(5000),
+					serviceClient
+						.from(prefixedTable("created_images"))
+						.select("id, title")
+						.eq("published", true)
+						.is("unavailable_at", null)
+						.ilike("title", mentionCandidate)
+						.limit(5000),
+					serviceClient
+						.from(prefixedTable("comments_created_image"))
+						.select("created_image_id, text")
+						.ilike("text", mentionCandidate)
+						.limit(5000),
+					serviceClient
+						.from(prefixedTable("created_images"))
+						.select("id, meta")
+						.eq("published", true)
+						.is("unavailable_at", null)
+						.or(
+							`meta->>user_prompt.ilike.${mentionCandidate},meta->args->>prompt.ilike.${mentionCandidate}`
+						)
+						.limit(5000)
+				]);
 				if (descriptionRes.error) throw descriptionRes.error;
 				if (titleRes.error) throw titleRes.error;
 				if (commentsRes.error) throw commentsRes.error;
-				if (descTagRes.error) throw descTagRes.error;
-				if (titleTagRes.error) throw titleTagRes.error;
-				if (metaUserPromptRes.error) throw metaUserPromptRes.error;
-				if (metaArgsPromptRes.error) throw metaArgsPromptRes.error;
+				if (metaRes.error) throw metaRes.error;
 
 				const idSet = new Set();
 				for (const row of descriptionRes.data ?? []) {
+					if (!textContainsBoundedPersonalityMention(row?.description, normalized)) continue;
 					const id = Number(row?.id);
 					if (Number.isFinite(id) && id > 0) idSet.add(id);
 				}
 				for (const row of titleRes.data ?? []) {
+					if (!textContainsBoundedPersonalityMention(row?.title, normalized)) continue;
 					const id = Number(row?.id);
 					if (Number.isFinite(id) && id > 0) idSet.add(id);
 				}
 				for (const row of commentsRes.data ?? []) {
+					if (!textContainsBoundedPersonalityMention(row?.text, normalized)) continue;
 					const id = Number(row?.created_image_id);
 					if (Number.isFinite(id) && id > 0) idSet.add(id);
 				}
-				for (const row of descTagRes.data ?? []) {
-					const id = Number(row?.id);
-					if (Number.isFinite(id) && id > 0) idSet.add(id);
-				}
-				for (const row of titleTagRes.data ?? []) {
-					const id = Number(row?.id);
-					if (Number.isFinite(id) && id > 0) idSet.add(id);
-				}
-				for (const row of metaUserPromptRes.data ?? []) {
-					const id = Number(row?.id);
-					if (Number.isFinite(id) && id > 0) idSet.add(id);
-				}
-				for (const row of metaArgsPromptRes.data ?? []) {
+				for (const row of metaRes.data ?? []) {
+					const texts = collectCreationPromptMentionTexts(row?.meta);
+					if (!texts.some((text) => textContainsBoundedPersonalityMention(text, normalized))) continue;
 					const id = Number(row?.id);
 					if (Number.isFinite(id) && id > 0) idSet.add(id);
 				}

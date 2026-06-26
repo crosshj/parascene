@@ -409,8 +409,9 @@ export default function createExploreRoutes({ queries }) {
 		}
 	});
 
-	// Personality discovery: published creations that reference @personality or the bare tag
-	// in title, stored prompt (meta), description, or comments.
+	// Personality discovery: published creations that reference @personality followed by
+	// whitespace, end of text/line, or sentence-ending punctuation in title, description,
+	// stored prompt (meta), or comments.
 	router.get("/api/personalities/:personality/creations", async (req, res) => {
 		try {
 			if (!req.auth?.userId) {
