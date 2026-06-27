@@ -531,6 +531,40 @@
 		<app-modal-notifications></app-modal-notifications>
 		<app-modal-credits></app-modal-credits>
 	</div>
+	<dialog class="creation-detail-dialog share-audio-modal" data-chat-history-copy-modal
+		aria-labelledby="chat-history-copy-modal-title">
+		<h2 id="chat-history-copy-modal-title" class="dialog-title">Copy chat history</h2>
+		<button class="modal-close" type="button" aria-label="Close" data-chat-history-copy-close-btn>
+			<svg class="modal-close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+				stroke-linecap="round" stroke-linejoin="round">
+				<line x1="18" y1="6" x2="6" y2="18"></line>
+				<line x1="6" y1="6" x2="18" y2="18"></line>
+			</svg>
+		</button>
+		<div class="share-audio-modal-content">
+			<div class="share-audio-modal-stage">
+				<div class="share-audio-panel share-audio-progress-panel is-active"
+					data-chat-history-copy-panel="progress">
+					<div class="share-audio-progress-wrap">
+						<div class="share-audio-progress-track" aria-hidden="true">
+							<div class="share-audio-progress-bar chat-history-copy-progress-bar"
+								data-chat-history-copy-progress-bar></div>
+						</div>
+						<p class="share-audio-progress-label" data-chat-history-copy-progress-label role="status"
+							aria-live="polite">Loading chat history…</p>
+					</div>
+				</div>
+				<div class="share-audio-panel share-audio-ready-panel" data-chat-history-copy-panel="ready">
+					<p class="share-audio-prompt">Chat history is ready. Copy the full thread as plain text.</p>
+				</div>
+			</div>
+			<p class="share-audio-error" data-chat-history-copy-error role="alert"></p>
+		</div>
+		<div class="share-audio-modal-actions">
+			<button type="button" class="btn-primary share-audio-copy-btn" data-chat-history-copy-btn hidden>Copy
+				text</button>
+		</div>
+	</dialog>
 	<script type="module" src="/pages/chat-hotfix.js{{V}}"></script>
 </body>
 

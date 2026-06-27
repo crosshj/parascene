@@ -4336,3 +4336,22 @@ body.chat-page .feed-card-challenge-loading .feed-card-engagement-inner.feed-car
 	}
 }
 
+/* Copy chat history modal — indeterminate progress while paging thread */
+.share-audio-progress-bar.chat-history-copy-progress-bar.is-cycling {
+	width: 32%;
+	transition: none;
+	animation: chat-history-copy-progress-cycle 1.35s ease-in-out infinite alternate;
+}
+
+@keyframes chat-history-copy-progress-cycle {
+	from {
+		margin-left: 0;
+		width: 22%;
+	}
+
+	to {
+		margin-left: 58%;
+		width: 38%;
+	}
+}
+

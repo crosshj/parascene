@@ -48,6 +48,7 @@ import { CHAT_UPLOAD_MAX_BYTES, chatUploadMaxSizeLabel } from '../shared/chatUpl
 import { safeMediaPlay } from '../shared/safeMediaPlay.js';
 import { bindMobileCreationsBulkLongPress } from '../shared/creationsBulkLongPress.js';
 import { showToast } from '/shared/toast.js';
+import { openChatHistoryCopyModal } from '../shared/chatHistoryCopyModal.js';
 import {
 	notificationChatHref,
 	notificationCreationHref,
@@ -9209,6 +9210,106 @@ export async function initChatPage(root, options = {}) {
 		}
 	}
 
+	function canCopyLoadedChatHistory() {
+		return (
+			!activePseudoChannelSlug &&
+			Number.isFinite(Number(activeThreadId)) &&
+			Number(activeThreadId) > 0
+		);
+	}
+
+	function formatChatHistoryReplyLine(m, messageById) {
+		const rs = m?.meta?.reply;
+		if (!rs || typeof rs !== 'object') return '';
+		const refId = Number(rs.referenced_id);
+		if (!Number.isFinite(refId) || refId <= 0) return '';
+
+		const unreachable = m?.reply_parent_exists === false;
+		const preview =
+			typeof rs.preview_text === 'string' && rs.preview_text.trim() ? rs.preview_text.trim() : '';
+		const replyToWho =
+			typeof rs.sender_user_name === 'string' && rs.sender_user_name.trim()
+				? `@${rs.sender_user_name.trim()}`
+				: Number.isFinite(Number(rs.sender_id)) && Number(rs.sender_id) > 0
+					? `User ${Number(rs.sender_id)}`
+					: 'Unknown';
+
+		if (unreachable) {
+			return preview ? `↳ Reply to (unavailable): ${preview}` : '↳ Reply to unavailable message';
+		}
+
+		const parent = messageById.get(refId);
+		if (parent) {
+			const parentWho =
+				typeof parent.sender_user_name === 'string' && parent.sender_user_name.trim()
+					? `@${parent.sender_user_name.trim()}`
+					: 'Unknown';
+			const parentBody = parent?.body != null ? String(parent.body).trim().replace(/\s+/g, ' ') : '';
+			const quoted = preview || parentBody;
+			if (quoted) return `↳ Reply to ${parentWho}: ${quoted}`;
+			return `↳ Reply to ${parentWho}`;
+		}
+
+		if (preview) return `↳ Reply to ${replyToWho}: ${preview}`;
+		return `↳ Reply to ${replyToWho}`;
+	}
+
+	function formatChatHistoryText(messages) {
+		const title = root.querySelector('[data-chat-title]')?.textContent?.trim() || 'Chat';
+		const messageById = new Map();
+		for (const m of messages) {
+			const id = Number(m?.id);
+			if (Number.isFinite(id) && id > 0) messageById.set(id, m);
+		}
+
+		const lines = [`Chat: ${title}`, ''];
+		for (const m of messages) {
+			const who =
+				typeof m?.sender_user_name === 'string' && m.sender_user_name.trim()
+					? m.sender_user_name.trim()
+					: 'Unknown';
+			const when =
+				m?.created_at != null
+					? _cdDatetime.formatDateTime(m.created_at) || String(m.created_at)
+					: '';
+			const body = m?.body != null ? String(m.body).trim() : '';
+			if (!body) continue;
+			lines.push(`${who} · ${when}`);
+			const replyLine = formatChatHistoryReplyLine(m, messageById);
+			if (replyLine) lines.push(replyLine);
+			lines.push(body);
+			lines.push('');
+		}
+		return lines.join('\n').trimEnd();
+	}
+
+	function appendCopyHistoryMenuItem(container) {
+		if (!(container instanceof HTMLElement) || !canCopyLoadedChatHistory()) return;
+		const btn = document.createElement('button');
+		btn.type = 'button';
+		btn.className = 'feed-card-menu-item';
+		btn.dataset.chatCopyHistory = '';
+		btn.setAttribute('role', 'menuitem');
+		btn.textContent = 'Copy chat history';
+		container.appendChild(btn);
+	}
+
+	function copyLoadedChatHistory() {
+		if (!canCopyLoadedChatHistory()) return;
+		const tid = Number(activeThreadId);
+		if (!Number.isFinite(tid) || tid <= 0) return;
+
+		openChatHistoryCopyModal({
+			loadHistory: async () => {
+				let messages = lastChatMessagesPayload;
+				if (threadMessagesHasMore) {
+					messages = await fetchAllThreadMessagesForCopy(tid);
+				}
+				return formatChatHistoryText(messages);
+			},
+		});
+	}
+
 	function insertChatCreationsPseudoBulkChrome(routeWrap, cardsEl) {
 		if (!(routeWrap instanceof HTMLElement) || !(cardsEl instanceof HTMLElement)) return;
 		const shell = document.createElement('div');
@@ -10393,6 +10494,23 @@ export async function initChatPage(root, options = {}) {
 			hasMore: data.hasMore === true,
 			nextBefore,
 		};
+	}
+
+	async function fetchAllThreadMessagesForCopy(threadId) {
+		const tid = Number(threadId);
+		if (!Number.isFinite(tid) || tid <= 0) return [];
+
+		let before = /** @type {string | null} */ (null);
+		let aggregated = /** @type {object[]} */ ([]);
+
+		for (;;) {
+			const page = await fetchThreadMessagesPage(tid, { before, limit: 100 });
+			aggregated = [...page.messages, ...aggregated];
+			if (!page.hasMore || !page.nextBefore) break;
+			before = page.nextBefore;
+		}
+
+		return aggregated;
 	}
 
 	async function fetchActiveThreadMessagesForUi(threadId) {
@@ -13129,6 +13247,7 @@ export async function initChatPage(root, options = {}) {
 			divider.setAttribute('aria-hidden', 'true');
 			body.appendChild(divider);
 		}
+		appendCopyHistoryMenuItem(body);
 		const refresh = document.createElement('button');
 		refresh.type = 'button';
 		refresh.className = 'feed-card-menu-item';
@@ -13683,6 +13802,7 @@ export async function initChatPage(root, options = {}) {
 			divider.setAttribute('aria-hidden', 'true');
 			dyn.appendChild(divider);
 		}
+		appendCopyHistoryMenuItem(dyn);
 		const refreshBtn = document.createElement('button');
 		refreshBtn.type = 'button';
 		refreshBtn.className = 'feed-card-menu-item';
@@ -14134,6 +14254,13 @@ export async function initChatPage(root, options = {}) {
 			closeMobileChromeSheet();
 			closeTopbarMenu();
 			runChatRefresh();
+			return;
+		}
+		if (t.closest('[data-chat-copy-history]')) {
+			e.preventDefault();
+			closeMobileChromeSheet();
+			closeTopbarMenu();
+			copyLoadedChatHistory();
 			return;
 		}
 		const dmProfileOpenEl = t.closest('[data-chat-dm-profile-open]');
