@@ -417,6 +417,23 @@ a.feed-card-engagement-title.feed-card-engagement-title-link:hover {
 	min-width: 0;
 }
 
+.feed-card-engagement-inner-challenge .challenge-pane-history-card-thumb-wrap {
+	width: 62px;
+	height: 62px;
+	flex: 0 0 62px;
+	border-radius: 10px;
+	border: 1px solid color-mix(in srgb, #ffffff 18%, transparent);
+}
+
+.feed-card-engagement-inner-challenge .challenge-pane-history-card-thumb-fallback {
+	background: linear-gradient(
+		110deg,
+		rgba(230, 200, 245, 0.18) 8%,
+		rgba(250, 215, 245, 0.38) 18%,
+		rgba(230, 200, 245, 0.18) 33%
+	);
+}
+
 .feed-card-engagement-next-body--no-media {
 	padding-left: 0;
 }

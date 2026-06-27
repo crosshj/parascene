@@ -150,10 +150,31 @@ const HERO_MEDIA_REF_MAX = 2000;
  */
 export function pickChallengeHeroImageUrl(cfg) {
 	if (!cfg || typeof cfg !== 'object') return '';
-	const v = cfg.hero_image_url ?? cfg.cover_image_url ?? cfg.image_url;
-	let s = typeof v === 'string' ? v.trim() : String(v ?? '').trim();
-	if (s.length > HERO_MEDIA_REF_MAX) s = s.slice(0, HERO_MEDIA_REF_MAX);
-	return s;
+	const candidates = [
+		cfg.hero_image_url,
+		cfg.cover_image_url,
+		cfg.image_url,
+		cfg.hero_image,
+		cfg.hero_media_url,
+		cfg.hero_media,
+		cfg.hero_ref,
+		cfg.hero_url,
+		cfg.cover,
+		cfg.cover_url,
+		cfg.cover_image,
+		cfg.image,
+		cfg.image_ref,
+		cfg.image_path,
+		cfg.thumbnail_url,
+		cfg.creation_url
+	];
+	for (const raw of candidates) {
+		let s = typeof raw === 'string' ? raw.trim() : String(raw ?? '').trim();
+		if (!s) continue;
+		if (s.length > HERO_MEDIA_REF_MAX) s = s.slice(0, HERO_MEDIA_REF_MAX);
+		return s;
+	}
+	return '';
 }
 
 /** @param {unknown} raw organizer form value before save */

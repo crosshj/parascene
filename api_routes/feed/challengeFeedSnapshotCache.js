@@ -4,7 +4,7 @@ import {
 	applyChallengeViewerOverlay
 } from './challengeFeedSnapshotShared.js';
 
-export const CHALLENGE_FEED_SNAPSHOT_REDIS_KEY = 'feed-beta:challenge-snapshot:v1';
+export const CHALLENGE_FEED_SNAPSHOT_REDIS_KEY = 'feed-beta:challenge-snapshot:v2';
 
 /** Rebuilt by scheduled worker; TTL is a safety net. */
 export const CHALLENGE_FEED_SNAPSHOT_TTL_SEC = 20 * 60;

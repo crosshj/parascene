@@ -231,6 +231,14 @@ export function buildChallengeEngagementVirtualRows(snapshot) {
 			heroImageUrl:
 				typeof snapshot.heroImageUrl === "string" && snapshot.heroImageUrl.trim()
 					? snapshot.heroImageUrl.trim()
+					: "",
+			heroImageRef:
+				typeof snapshot.heroImageRef === "string" && snapshot.heroImageRef.trim()
+					? snapshot.heroImageRef.trim()
+					: "",
+			challengeId:
+				typeof snapshot.challengeId === "string" && snapshot.challengeId.trim()
+					? snapshot.challengeId.trim()
 					: ""
 		};
 		const next = phase === "pre_submit"
@@ -257,13 +265,26 @@ export function buildChallengeEngagementVirtualRows(snapshot) {
 			typeof next?.heroImageUrl === "string" && next.heroImageUrl.trim()
 				? next.heroImageUrl.trim()
 				: "";
+		const nextChallengeHeroRef =
+			typeof next?.heroImageRef === "string" && next.heroImageRef.trim()
+				? next.heroImageRef.trim()
+				: "";
+		const nextChallengeId =
+			typeof next?.challengeId === "string" && next.challengeId.trim()
+				? next.challengeId.trim()
+				: "";
+		const nextChallengeImageUrlForCard = nextChallengeHeroRef ? "" : nextChallengeImageUrl;
 		const inactiveStatusChip =
 			phase === "pre_submit"
 				? previous?.phase === "finalizing"
 					? "FINALIZING"
 					: previous?.phase === "results"
 						? "ENDED"
-						: "NO ACTIVE"
+						: previous?.phase === "submitting" ||
+							  previous?.phase === "voting" ||
+							  previous?.phase === "submit_and_vote"
+							? "OPEN"
+						: "ENDED"
 				: phase === "finalizing"
 					? "FINALIZING"
 					: "ENDED";
@@ -305,6 +326,21 @@ export function buildChallengeEngagementVirtualRows(snapshot) {
 				: typeof snapshot.heroImageUrl === "string" && snapshot.heroImageUrl.trim()
 					? snapshot.heroImageUrl.trim()
 					: "";
+		const inactiveHeroRef =
+			phase === "pre_submit"
+				? typeof previous?.heroImageRef === "string" && previous.heroImageRef.trim()
+					? previous.heroImageRef.trim()
+					: ""
+				: typeof snapshot.heroImageRef === "string" && snapshot.heroImageRef.trim()
+					? snapshot.heroImageRef.trim()
+					: "";
+		const previousChallengeId =
+			phase === "pre_submit" &&
+			typeof previous?.challengeId === "string" &&
+			previous.challengeId.trim()
+				? previous.challengeId.trim()
+				: "";
+		const inactiveHeroForCard = inactiveHeroRef ? "" : inactiveHero;
 
 		return [
 			{
@@ -319,10 +355,14 @@ export function buildChallengeEngagementVirtualRows(snapshot) {
 					subtitle: inactiveSubtitle,
 					statusChip: inactiveStatusChip,
 					hook: inactiveHook,
-					heroImageUrl: inactiveHero,
+					heroImageUrl: inactiveHeroForCard,
+					heroImageRef: inactiveHeroRef,
+					previousChallengeId,
 					nextChallengeTitle,
 					nextChallengeSubtitle,
-					nextChallengeImageUrl,
+					nextChallengeImageUrl: nextChallengeImageUrlForCard,
+					nextChallengeHeroRef,
+					nextChallengeId,
 					inactiveTone,
 					ctaLabel: "View challenges",
 					ctaRoute: "/challenges",

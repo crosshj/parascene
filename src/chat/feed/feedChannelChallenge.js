@@ -3,6 +3,7 @@
  */
 
 import { isChatFeedChallengePlaceholder } from '../../shared/chatFeedMobilePartition.js';
+import { hydrateChallengeFeedCardThumbsLikePane } from '../../shared/challengeHistoryThumb.js';
 
 export const CHAT_FEED_CHALLENGE_ENGAGEMENT_URL = '/api/feed/challenge-engagement';
 
@@ -189,6 +190,18 @@ function mountChatFeedChallengeItem(messagesEl, routeWrap, mobileLayout, item, r
 }
 
 /**
+ * @param {HTMLElement|null|undefined} messagesEl
+ * @param {HTMLElement|null|undefined} routeWrap
+ * @param {Function} fetchJson
+ */
+function hydrateMountedChatFeedChallengeCard(messagesEl, routeWrap, fetchJson) {
+	const slot = findChatFeedChallengeSlot(messagesEl, routeWrap);
+	if (!(slot instanceof HTMLElement)) return;
+	if (slot.classList.contains('feed-card-challenge-loading')) return;
+	void hydrateChallengeFeedCardThumbsLikePane(slot, fetchJson);
+}
+
+/**
  * @param {object} opts
  * @param {HTMLElement} opts.messagesEl
  * @param {HTMLElement} opts.routeWrap
@@ -204,6 +217,7 @@ export async function loadDeferredChatFeedChallenge(opts) {
 	if (staleItem) {
 		if (typeof isStale === 'function' && isStale()) return;
 		mountChatFeedChallengeItem(messagesEl, routeWrap, mobileLayout, staleItem, renderCard);
+		hydrateMountedChatFeedChallengeCard(messagesEl, routeWrap, fetchJson);
 	} else if (!mobileLayout) {
 		ensureChatFeedChallengeDesktopSkeleton(routeWrap);
 	}
@@ -220,6 +234,7 @@ export async function loadDeferredChatFeedChallenge(opts) {
 		if (challengeEngagementItemsEqual(staleItem, item)) return;
 
 		mountChatFeedChallengeItem(messagesEl, routeWrap, mobileLayout, item, renderCard);
+		hydrateMountedChatFeedChallengeCard(messagesEl, routeWrap, fetchJson);
 	} catch (err) {
 		console.warn('[Chat feed] challenge engagement', err?.message || err);
 		if (!staleItem) {

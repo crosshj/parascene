@@ -1,5 +1,8 @@
 import { pullChallengeFeedSnapshot } from './pullChallengeFeedSnapshot.js';
-import { rebuildChallengeFeedSnapshotCache } from './challengeFeedSnapshotCache.js';
+import {
+	rebuildChallengeFeedSnapshotCache,
+	invalidateChallengeFeedSnapshotMemCache
+} from './challengeFeedSnapshotCache.js';
 import { applyChallengeViewerOverlay } from './challengeFeedSnapshotShared.js';
 import { buildChallengeEngagementVirtualRows } from './engagementAndNewbie.js';
 
@@ -17,10 +20,20 @@ function challengeSnapshotToFeedItem(snapshot) {
  *
  * @param {object} queries
  * @param {number} viewerUserId
- * @param {{ syncRebuildOnMiss?: boolean }} [opts]
+ * @param {{ syncRebuildOnMiss?: boolean, fresh?: boolean }} [opts]
  * @returns {Promise<object|null>}
  */
 export async function buildChallengeEngagementFeedItemForViewer(queries, viewerUserId, opts = {}) {
+	const fresh = opts.fresh !== false;
+	if (fresh) {
+		invalidateChallengeFeedSnapshotMemCache();
+		const rebuilt = await rebuildChallengeFeedSnapshotCache({ queries });
+		if (rebuilt?.ok === true) {
+			const snapshot = applyChallengeViewerOverlay(rebuilt, viewerUserId);
+			return challengeSnapshotToFeedItem(snapshot) ?? null;
+		}
+	}
+
 	const syncRebuildOnMiss = opts.syncRebuildOnMiss !== false;
 	let snapshot = await pullChallengeFeedSnapshot({
 		viewerUserId,

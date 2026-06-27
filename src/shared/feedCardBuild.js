@@ -18,6 +18,7 @@ import {
 } from './chatFeedMobilePartition.js';
 import { addHiddenFeedItem, getHiddenFeedItems } from './feedHiddenItems.js';
 import { primeMediaElementForAudioLeveling } from './mediaAudioLeveling.js';
+import { renderChallengeHistoryThumbWrapHtml } from './challengeHistoryThumb.js';
 export {
 	addHiddenFeedItem,
 	getHiddenFeedItems,
@@ -628,10 +629,10 @@ function buildEngagementFeedCard(item, performShellNavigation = null) {
 				? payload.inactiveTone.trim().toLowerCase()
 				: "ended";
 		const hook = payload.hook ? escapeHtmlFeedCardText(String(payload.hook)) : "";
-		const heroImageUrl =
-			typeof payload.heroImageUrl === "string" && payload.heroImageUrl.trim()
-				? escapeHtmlFeedCardText(payload.heroImageUrl.trim())
-				: "";
+		const heroImageRefRaw =
+			typeof payload.heroImageRef === "string" ? payload.heroImageRef.trim() : "";
+		const previousChallengeIdRaw =
+			typeof payload.previousChallengeId === "string" ? payload.previousChallengeId.trim() : "";
 		const nextChallengeTitle =
 			typeof payload.nextChallengeTitle === "string" && payload.nextChallengeTitle.trim()
 				? escapeHtmlFeedCardText(payload.nextChallengeTitle.trim())
@@ -640,10 +641,10 @@ function buildEngagementFeedCard(item, performShellNavigation = null) {
 			typeof payload.nextChallengeSubtitle === "string" && payload.nextChallengeSubtitle.trim()
 				? escapeHtmlFeedCardText(payload.nextChallengeSubtitle.trim())
 				: "";
-		const nextChallengeImageUrl =
-			typeof payload.nextChallengeImageUrl === "string" && payload.nextChallengeImageUrl.trim()
-				? escapeHtmlFeedCardText(payload.nextChallengeImageUrl.trim())
-				: "";
+		const nextChallengeHeroRefRaw =
+			typeof payload.nextChallengeHeroRef === "string" ? payload.nextChallengeHeroRef.trim() : "";
+		const nextChallengeIdRaw =
+			typeof payload.nextChallengeId === "string" ? payload.nextChallengeId.trim() : "";
 		const ctaLabel = escapeHtmlFeedCardText(payload.ctaLabel || "View challenges");
 		const rawCtaRoute = String(payload.ctaRoute || "/challenges").trim();
 		const ctaRoute = rawCtaRoute.startsWith("/help") ? getHelpHref(rawCtaRoute) : rawCtaRoute;
@@ -652,17 +653,19 @@ function buildEngagementFeedCard(item, performShellNavigation = null) {
 			? getHelpHref(rawChallengeTitleRoute)
 			: rawChallengeTitleRoute;
 
-		const mainThumbBlock = heroImageUrl
-			? html`<div class="feed-card-engagement-thumb-wrap feed-card-engagement-thumb-wrap--focus is-loading" data-engagement-thumb-wrap>
-					<span class="feed-card-engagement-thumb-placeholder" aria-hidden="true"></span>
-					<img class="feed-card-engagement-thumb" src="${heroImageUrl}" alt="" loading="lazy" decoding="async" data-engagement-thumb>
-				</div>`
+		const mainThumbBlock = previousChallengeIdRaw
+			? renderChallengeHistoryThumbWrapHtml(
+					heroImageRefRaw,
+					previousChallengeIdRaw,
+					escapeHtmlFeedCardText
+				)
 			: "";
-		const nextThumbBlock = nextChallengeImageUrl
-			? html`<div class="feed-card-engagement-thumb-wrap feed-card-engagement-thumb-wrap--focus is-loading" data-engagement-thumb-wrap>
-					<span class="feed-card-engagement-thumb-placeholder" aria-hidden="true"></span>
-					<img class="feed-card-engagement-thumb" src="${nextChallengeImageUrl}" alt="" loading="lazy" decoding="async" data-engagement-thumb>
-				</div>`
+		const nextThumbBlock = nextChallengeIdRaw
+			? renderChallengeHistoryThumbWrapHtml(
+					nextChallengeHeroRefRaw,
+					nextChallengeIdRaw,
+					escapeHtmlFeedCardText
+				)
 			: "";
 		const nextChallengeBlock = nextChallengeTitle
 			? html`<div class="feed-card-engagement-next-hero">
@@ -740,25 +743,6 @@ function buildEngagementFeedCard(item, performShellNavigation = null) {
 			navigateEngagementFeedCardHref(challengeTitleHref || "/challenges", e, performShellNavigation);
 		});
 
-		const thumbWraps = Array.from(card.querySelectorAll("[data-engagement-thumb-wrap]"));
-		for (const wrap of thumbWraps) {
-			if (!(wrap instanceof HTMLElement)) continue;
-			const img = wrap.querySelector("[data-engagement-thumb]");
-			if (!(img instanceof HTMLImageElement)) continue;
-			const markLoaded = () => {
-				wrap.classList.remove("is-loading", "is-error");
-				wrap.classList.add("is-loaded");
-			};
-			const markError = () => {
-				wrap.classList.remove("is-loading", "is-loaded");
-				wrap.classList.add("is-error");
-			};
-			img.addEventListener("load", markLoaded, { once: true });
-			img.addEventListener("error", markError, { once: true });
-			if (img.complete && img.naturalWidth > 0) {
-				markLoaded();
-			}
-		}
 		return card;
 	}
 

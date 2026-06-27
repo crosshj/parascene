@@ -8,6 +8,7 @@ import {
 import { deriveChallengePhase } from '../model/phases.js';
 import { ACTIVE_PARTICIPANT_PHASES } from '../model/participantSlice.js';
 import { parseHeroCreationOrShareRef } from '../../../shared/userText.js';
+import { renderChallengeHistoryThumbWrapHtml } from '../../../shared/challengeHistoryThumb.js';
 
 /**
  * @param {string} raw results_creation_url value
@@ -70,11 +71,7 @@ function renderChallengeHistoryCardInner({
 	stateLabel,
 	stateClass
 }) {
-	const challengeIdAttr = challengeId ? ` data-challenge-id="${esc(challengeId)}"` : '';
-	return `<div class="challenge-pane-history-card-thumb-wrap" data-challenge-history-thumb-pending data-challenge-history-thumb-ref="${esc(heroRef)}"${challengeIdAttr}>
-					<img class="challenge-pane-history-card-thumb" alt="" loading="lazy" hidden data-challenge-history-thumb-img />
-					<div class="challenge-pane-history-card-thumb-fallback" aria-hidden="true" data-challenge-history-thumb-fallback></div>
-				</div>
+	return `${renderChallengeHistoryThumbWrapHtml(heroRef, challengeId, esc)}
 				<div class="challenge-pane-history-card-content">
 					<h3 class="challenge-pane-history-card-title">${esc(title)}</h3>
 					<p class="challenge-pane-history-card-range">${esc(activeRange)}</p>
@@ -108,29 +105,7 @@ function challengeActiveRangeLabel(payload) {
 }
 
 function challengeHistoryThumbnailRef(payload) {
-	const fromPrimary = pickChallengeHeroImageUrl(payload);
-	if (fromPrimary) return fromPrimary;
-	const p = payload && typeof payload === 'object' ? payload : {};
-	const candidates = [
-		p.hero_image,
-		p.hero_media_url,
-		p.hero_media,
-		p.hero_ref,
-		p.hero_url,
-		p.cover,
-		p.cover_url,
-		p.cover_image,
-		p.image,
-		p.image_ref,
-		p.image_path,
-		p.thumbnail_url,
-		p.creation_url
-	];
-	for (const raw of candidates) {
-		const value = typeof raw === 'string' ? raw.trim() : String(raw ?? '').trim();
-		if (value) return value;
-	}
-	return '';
+	return pickChallengeHeroImageUrl(payload);
 }
 
 
@@ -170,8 +145,8 @@ function renderChallengeHistoryCards(configs = [], opts = {}) {
 		typeof opts.excludeChallengeId === 'string' ? opts.excludeChallengeId.trim() : '';
 	const summaries = summarizeLatestChallengeConfigs(configs).filter((s) => {
 		const cid = typeof s.challenge_id === 'string' ? s.challenge_id.trim() : '';
-		if (!excludeChallengeId) return true;
-		return cid !== excludeChallengeId;
+		if (excludeChallengeId) return cid !== excludeChallengeId;
+		return true;
 	}).filter((s) => {
 		const challengeId =
 			typeof s.challenge_id === 'string' ? s.challenge_id.trim() : '';
@@ -180,6 +155,15 @@ function renderChallengeHistoryCards(configs = [], opts = {}) {
 		if (phase === 'pre_submit') return false;
 		if (ACTIVE_PARTICIPANT_PHASES.has(phase)) return false;
 		return true;
+	}).sort((a, b) => {
+		const aPayload = effectiveChallengePayload(configs, a.payload, a.challenge_id);
+		const bPayload = effectiveChallengePayload(configs, b.payload, b.challenge_id);
+		const aEnd = Date.parse(String(pickChallengeConfigTimestamp(aPayload, 'voting_end_at') || ''));
+		const bEnd = Date.parse(String(pickChallengeConfigTimestamp(bPayload, 'voting_end_at') || ''));
+		if (!Number.isFinite(aEnd) && !Number.isFinite(bEnd)) return b.sortKey - a.sortKey;
+		if (!Number.isFinite(aEnd)) return 1;
+		if (!Number.isFinite(bEnd)) return -1;
+		return bEnd - aEnd;
 	});
 	if (!summaries.length) {
 		return `<p class="challenge-pane-muted">No challenges have been posted yet.</p>`;
@@ -227,19 +211,16 @@ export function renderNextChallengeSection(configs = [], opts = {}) {
 	const title = summary.title && summary.title.trim()
 		? summary.title.trim()
 		: `Challenge ${summary.challenge_id}`;
-	const activeRange = challengeActiveRangeLabel(summary.payload);
-	const heroRef = challengeHistoryThumbnailRef(summary.payload);
 	const challengeId =
 		typeof summary.challenge_id === 'string' ? summary.challenge_id.trim() : '';
-	const challengeIdAttr = challengeId ? ` data-challenge-id="${esc(challengeId)}"` : '';
+	const effectivePayload = effectiveChallengePayload(configs, summary.payload, challengeId);
+	const activeRange = challengeActiveRangeLabel(effectivePayload);
+	const heroRef = challengeHistoryThumbnailRef(effectivePayload);
 	return `<section class="challenge-pane-section challenge-pane-next-section">
 			<h3 class="challenge-pane-section-label">Next challenge</h3>
 			<ul class="challenge-pane-history-list">
 				<li class="challenge-pane-card challenge-pane-history-card">
-					<div class="challenge-pane-history-card-thumb-wrap" data-challenge-history-thumb-pending data-challenge-history-thumb-ref="${esc(heroRef)}"${challengeIdAttr}>
-						<img class="challenge-pane-history-card-thumb" alt="" loading="lazy" hidden data-challenge-history-thumb-img />
-						<div class="challenge-pane-history-card-thumb-fallback" aria-hidden="true" data-challenge-history-thumb-fallback></div>
-					</div>
+					${renderChallengeHistoryThumbWrapHtml(heroRef, challengeId, esc)}
 					<div class="challenge-pane-history-card-content">
 						<h3 class="challenge-pane-history-card-title">${esc(title)}</h3>
 						<p class="challenge-pane-history-card-range">${esc(activeRange)}</p>

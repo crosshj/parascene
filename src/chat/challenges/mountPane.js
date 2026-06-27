@@ -15,6 +15,7 @@ import {
 	parseHeroCreationOrShareRef,
 	parseHeroDirectMediaUrl
 } from '../../shared/userText.js';
+import { hydrateChallengeHistoryThumbnails } from '../../shared/challengeHistoryThumb.js';
 import { createChallengeVoteModal, buildVoteSlidesNewestFirst } from './challengeVoteModal.js';
 
 /**
@@ -115,81 +116,6 @@ async function hydrateChallengeHeroImage(rootEl) {
 	img.src = src;
 	if (img.complete && img.naturalWidth > 0) {
 		revealLoaded();
-	}
-}
-
-/**
- * Resolve challenge history card media refs inside `.challenge-pane-root`.
- * @param {Element | null | undefined} rootEl
- */
-async function hydrateChallengeHistoryThumbnails(rootEl) {
-	const wraps = Array.from(
-		rootEl?.querySelectorAll?.('[data-challenge-history-thumb-pending]') || []
-	);
-	for (const wrap of wraps) {
-		if (!(wrap instanceof HTMLElement)) continue;
-		const raw = wrap.getAttribute('data-challenge-history-thumb-ref') || '';
-		const img = wrap.querySelector('[data-challenge-history-thumb-img]');
-		const fallback = wrap.querySelector('[data-challenge-history-thumb-fallback]');
-
-		const showFallback = () => {
-			wrap.removeAttribute('data-challenge-history-thumb-pending');
-			if (img instanceof HTMLImageElement) {
-				img.removeAttribute('src');
-				img.hidden = true;
-			}
-			if (fallback instanceof HTMLElement) {
-				fallback.hidden = false;
-			}
-		};
-
-		if (!(img instanceof HTMLImageElement)) {
-			showFallback();
-			continue;
-		}
-
-		let src = null;
-		const challengeId = wrap.getAttribute('data-challenge-id') || '';
-		const challengeOpts = challengeId ? { challengeId } : null;
-		const cref = parseHeroCreationOrShareRef(raw);
-		if (cref?.kind === 'creation') {
-			const data = await fetchCreationEmbedPayload(cref.creationId, cref.shareOpts, challengeOpts);
-			src = imageUrlFromCreationPayload(data);
-		} else {
-			src = parseHeroDirectMediaUrl(raw);
-		}
-
-		if (!src) {
-			showFallback();
-			continue;
-		}
-
-		if (fallback instanceof HTMLElement) fallback.hidden = true;
-		// Reveal immediately once a resolvable source exists; if load fails, error handler restores fallback.
-		wrap.removeAttribute('data-challenge-history-thumb-pending');
-		img.hidden = false;
-		img.addEventListener(
-			'error',
-			() => {
-				showFallback();
-			},
-			{ once: true }
-		);
-		img.addEventListener(
-			'load',
-			() => {
-				if (img.naturalWidth > 0) {
-					wrap.removeAttribute('data-challenge-history-thumb-pending');
-					img.hidden = false;
-				}
-			},
-			{ once: true }
-		);
-		img.src = src;
-		if (img.complete && img.naturalWidth > 0) {
-			wrap.removeAttribute('data-challenge-history-thumb-pending');
-			img.hidden = false;
-		}
 	}
 }
 

@@ -60,6 +60,7 @@ const CHAT_BUNDLE_SHARED_OVERRIDES = {
 	'/shared/autogrow.js': path.join(repoRoot, 'src', 'shared', 'autogrow.js'),
 	'/shared/triggeredSuggest.js': path.join(repoRoot, 'src', 'shared', 'triggeredSuggest.js'),
 	'/shared/feedCardBuild.js': path.join(repoRoot, 'src', 'shared', 'feedCardBuild.js'),
+	'/shared/challengeHistoryThumb.js': path.join(repoRoot, 'src', 'shared', 'challengeHistoryThumb.js'),
 	'/shared/mediaAudioLeveling.js': path.join(repoRoot, 'src', 'shared', 'mediaAudioLeveling.js'),
 	'/shared/safeMediaPlay.js': path.join(repoRoot, 'src', 'shared', 'safeMediaPlay.js'),
 	'/shared/comments.js': path.join(repoRoot, 'src', 'shared', 'comments.js'),
