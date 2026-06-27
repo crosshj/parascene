@@ -15,7 +15,7 @@ import {
 	safeMediaPlay,
 	safeMediaPlayWithHandlers
 } from '../../shared/safeMediaPlay.js';
-import { initLikeButton } from '../../shared/likes.js';
+import { enableLikeButtons, initLikeButton } from '../../shared/likes.js';
 import {
 	bindDoomVideoRevealWhenFrameReady,
 	createDoomScrollShell,
@@ -422,6 +422,11 @@ export async function mountChatDoomScroll(opts) {
 	}
 
 	hostEl.appendChild(shell);
+
+	/* Overlay lives on `document.body`, outside `[data-chat-page]`, so the chat root's
+	   delegated like-click listener never sees taps on the doom heart. Bind one to the
+	   overlay host (capture-phase + WeakSet-deduped) so likes register here too. */
+	enableLikeButtons(hostEl);
 
 	if (typeof opts.applyComposerState === 'function') opts.applyComposerState();
 	if (typeof opts.syncChatBrowseViewBodyClass === 'function') opts.syncChatBrowseViewBodyClass();
