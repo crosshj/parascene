@@ -1225,8 +1225,14 @@ function buildFeedCreationCard(
 	const isVideo = mediaType === "video" && typeof item.video_url === "string" && item.video_url;
 
 	const parsedMeta = parseFeedItemMeta(item);
+	const isChallengeEntry = creationMetaHasChallengeSubmission(parsedMeta);
+	card.dataset.inChallenge = isChallengeEntry ? '1' : '0';
+	// The challenge "entry pending" blur/badge only applies to unpublished entries whose challenge
+	// is still active. Published items (e.g. anything in the main feed) never show it; NSFW blur is separate.
+	const isPublishedEntry = item.published === true || item.published === 1;
+	const challengeEnded = item.challenge_ended === true;
 	const challengeThumbnailBlur =
-		creationMetaHasChallengeSubmission(parsedMeta) && !item.nsfw;
+		isChallengeEntry && !isPublishedEntry && !challengeEnded && !item.nsfw;
 	const challengeBlurClass = challengeThumbnailBlur ? ' feed-card-image--challenge-pending' : '';
 	const challengeBlurOverlay = challengeThumbnailBlur
 		? html`<span class="route-media-challenge-blur-overlay" aria-hidden="true"></span>${challengeEnteredBadgeHtml()}`

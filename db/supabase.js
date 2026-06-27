@@ -5225,6 +5225,13 @@ export function openDb() {
 				if (options?.viewerEnableNsfw === false) {
 					query = query.or("meta->>nsfw.is.null,meta->>nsfw.eq.false");
 				}
+				// Restrict to creations entered in at least one challenge.
+				// meta.challenge_submissions is a jsonb array; empty/missing means "not a challenge entry".
+				if (options?.challengeOnly === true) {
+					query = query
+						.not("meta->>challenge_submissions", "is", null)
+						.neq("meta->>challenge_submissions", "[]");
+				}
 				const { data, error } = await query.range(offset, offset + limit - 1);
 				if (error) throw error;
 				return data ?? [];

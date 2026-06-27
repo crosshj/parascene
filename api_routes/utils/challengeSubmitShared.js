@@ -6,6 +6,13 @@ const MESSAGE_FETCH_LIMIT = 500;
 const RECENT_SELF_SCAN = 120;
 
 /**
+ * Phases where voting has closed and the challenge is considered "over" (no longer
+ * active for submissions/voting). Entries in these phases may be published and can
+ * no longer be withdrawn.
+ */
+export const CHALLENGE_ENDED_PHASES = new Set(["finalizing", "results"]);
+
+/**
  * @param {unknown} body
  */
 export function tryParseChallengeJsonBody(body) {
@@ -462,4 +469,132 @@ export async function validateChallengeSubmission({ sb, userId, ownerUserId, cre
 		const msg = err?.message || "Challenge validation failed";
 		return { ok: false, status: 500, message: msg };
 	}
+}
+
+/**
+ * Summarize the lifecycle phase of every challenge a creation is entered in
+ * (derived from the latest `challenge_config` for each entry's thread/challenge id).
+ *
+ * @param {{
+ *   sb: import("@supabase/supabase-js").SupabaseClient,
+ *   meta: object | null | undefined,
+ *   nowMs?: number,
+ * }} args
+ * @returns {Promise<{
+ *   hasSubmission: boolean,
+ *   allEnded: boolean,
+ *   anyActive: boolean,
+ *   entries: { thread_id: number, challenge_id: string, phase: string, ended: boolean, title: string }[],
+ * }>}
+ */
+export async function summarizeChallengeSubmissionPhases({ sb, meta, nowMs }) {
+	const now = typeof nowMs === "number" ? nowMs : Date.now();
+	const subs = Array.isArray(meta?.challenge_submissions) ? meta.challenge_submissions : [];
+	const empty = { hasSubmission: false, allEnded: false, anyActive: false, entries: [] };
+	if (subs.length === 0 || !sb) return empty;
+
+	// Group submissions by thread so we fetch each thread's messages once.
+	const byThread = new Map();
+	for (const s of subs) {
+		const tid = Number(s?.thread_id);
+		if (!Number.isFinite(tid) || tid <= 0) continue;
+		if (!byThread.has(tid)) byThread.set(tid, []);
+		byThread.get(tid).push(s);
+	}
+
+	const entries = [];
+	for (const [tid, list] of byThread) {
+		let messagesNewest = [];
+		try {
+			messagesNewest = await fetchThreadMessagesNewestFirst(sb, tid);
+		} catch {
+			messagesNewest = [];
+		}
+		for (const s of list) {
+			const cid = String(s?.challenge_id || "").trim();
+			const cfg = cid ? pickLatestChallengeConfigForChallengeId(messagesNewest, cid) : null;
+			const phase = deriveChallengePhase(cfg, now);
+			const rawTitle = cfg && typeof cfg.title === "string" ? cfg.title.trim() : "";
+			const title = rawTitle || (cid ? `Challenge: ${cid}` : "Challenge");
+			entries.push({
+				thread_id: tid,
+				challenge_id: cid,
+				phase,
+				ended: CHALLENGE_ENDED_PHASES.has(phase),
+				title
+			});
+		}
+	}
+
+	if (entries.length === 0) return empty;
+
+	return {
+		hasSubmission: true,
+		allEnded: entries.every((e) => e.ended),
+		anyActive: entries.some((e) => !e.ended),
+		entries
+	};
+}
+
+/**
+ * Batch variant of {@link summarizeChallengeSubmissionPhases} for list views: for a page of
+ * creation rows, determine whether every challenge each row is entered in has ended.
+ * Each referenced #challenges thread's config is fetched once (not per row).
+ *
+ * @param {{
+ *   sb: import("@supabase/supabase-js").SupabaseClient,
+ *   images: { id?: unknown, meta?: object | null }[],
+ *   nowMs?: number,
+ * }} args
+ * @returns {Promise<Map<number, boolean>>} Map of creation id -> all challenges ended.
+ *   Only rows that have at least one challenge submission are included.
+ */
+export async function computeChallengeEndedByImageId({ sb, images, nowMs }) {
+	const now = typeof nowMs === "number" ? nowMs : Date.now();
+	const result = new Map();
+	if (!sb || !Array.isArray(images)) return result;
+
+	const threadIds = new Set();
+	for (const img of images) {
+		const subs = Array.isArray(img?.meta?.challenge_submissions)
+			? img.meta.challenge_submissions
+			: [];
+		for (const s of subs) {
+			const tid = Number(s?.thread_id);
+			if (Number.isFinite(tid) && tid > 0) threadIds.add(tid);
+		}
+	}
+	if (threadIds.size === 0) return result;
+
+	const configByThread = new Map();
+	for (const tid of threadIds) {
+		let msgs = [];
+		try {
+			msgs = await fetchThreadMessagesNewestFirst(sb, tid);
+		} catch {
+			msgs = [];
+		}
+		configByThread.set(tid, latestChallengeConfigByChallengeId(msgs));
+	}
+
+	for (const img of images) {
+		const subs = Array.isArray(img?.meta?.challenge_submissions)
+			? img.meta.challenge_submissions
+			: [];
+		if (subs.length === 0) continue;
+		let allEnded = true;
+		for (const s of subs) {
+			const tid = Number(s?.thread_id);
+			const cid = String(s?.challenge_id || "").trim();
+			const cfgEntry = configByThread.get(tid);
+			const cfg = cfgEntry ? cfgEntry.get(cid)?.payload : null;
+			const phase = deriveChallengePhase(cfg, now);
+			if (!CHALLENGE_ENDED_PHASES.has(phase)) {
+				allEnded = false;
+				break;
+			}
+		}
+		result.set(Number(img.id), allEnded);
+	}
+	return result;
 }

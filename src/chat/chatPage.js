@@ -1225,6 +1225,9 @@ export async function initChatPage(root, options = {}) {
 	let activeHeaderMeta = null;
 	/** @type {string | null} — e.g. reserved `comments`; not a real chat thread id. */
 	let activePseudoChannelSlug = null;
+	/** Creations pane filter UI state (persists across pane rebuilds/polls). */
+	let chatCreationsFilterOpen = false;
+	let chatCreationsOnlyChallenge = false;
 	/** Shared pager for pseudo-column data (#comments / #feed / #explore / #creations); view layer owns DOM + sentinels. */
 	let pseudoColumnPager = null;
 	/** @type {IntersectionObserver | null} */
@@ -3655,6 +3658,7 @@ export async function initChatPage(root, options = {}) {
 			media_type: typeof img?.media_type === 'string' ? img.media_type : 'image',
 			video_url: typeof img?.video_url === 'string' ? img.video_url : null,
 			meta: img?.meta && typeof img.meta === 'object' ? img.meta : null,
+			challenge_ended: img?.challenge_ended === true,
 		};
 	}
 
@@ -8530,7 +8534,10 @@ export async function initChatPage(root, options = {}) {
 		}
 		if (loadingPseudoChannelMessages) return;
 		const bulkHost = messagesEl.querySelector('[data-chat-creations-bulk-host]');
-		if (bulkHost instanceof HTMLElement && bulkHost.classList.contains('is-bulk-mode')) {
+		if (
+			bulkHost instanceof HTMLElement &&
+			(bulkHost.classList.contains('is-bulk-mode') || bulkHost.classList.contains('is-filter-only-challenge'))
+		) {
 			return;
 		}
 		try {
@@ -9312,6 +9319,25 @@ export async function initChatPage(root, options = {}) {
 
 	function insertChatCreationsPseudoBulkChrome(routeWrap, cardsEl) {
 		if (!(routeWrap instanceof HTMLElement) || !(cardsEl instanceof HTMLElement)) return;
+		const filterShell = document.createElement('div');
+		filterShell.innerHTML = `
+		<div class="creations-filter-bar" data-creations-filter-bar hidden>
+			<label class="form-switch creations-filter-switch">
+				<input type="checkbox" class="form-switch-input" data-creations-filter-challenge />
+				<span class="form-switch-track"><span class="form-switch-thumb"></span></span>
+				<span class="creations-filter-switch-label">Only challenge entries</span>
+			</label>
+			<button type="button" class="creations-filter-dismiss" data-creations-filter-dismiss aria-label="Hide filters">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+					<line x1="18" y1="6" x2="6" y2="18"></line>
+					<line x1="6" y1="6" x2="18" y2="18"></line>
+				</svg>
+			</button>
+		</div>`;
+		const filterBar = filterShell.querySelector('[data-creations-filter-bar]');
+		if (filterBar instanceof HTMLElement) {
+			routeWrap.insertBefore(filterBar, cardsEl);
+		}
 		const shell = document.createElement('div');
 		shell.innerHTML = `
 		<div class="creations-bulk-bar" data-creations-bulk-bar aria-hidden="true">
@@ -9459,6 +9485,52 @@ export async function initChatPage(root, options = {}) {
 
 		routeWrap._enterChatCreationsBulk = enterBulkMode;
 		routeWrap._exitChatCreationsBulk = exitBulkMode;
+
+		// Filter bar (challenge entries toggle). State persists across pane rebuilds.
+		const filterBar = routeWrap.querySelector('[data-creations-filter-bar]');
+		const filterChallengeToggle = routeWrap.querySelector('[data-creations-filter-challenge]');
+		const filterDismiss = routeWrap.querySelector('[data-creations-filter-dismiss]');
+		function applyCreationsFilter() {
+			routeWrap.classList.toggle('is-filter-only-challenge', chatCreationsOnlyChallenge);
+		}
+		function showCreationsFilter() {
+			chatCreationsFilterOpen = true;
+			if (filterBar instanceof HTMLElement) filterBar.hidden = false;
+		}
+		function hideCreationsFilter() {
+			const wasOnlyChallenge = chatCreationsOnlyChallenge;
+			chatCreationsFilterOpen = false;
+			chatCreationsOnlyChallenge = false;
+			if (filterBar instanceof HTMLElement) filterBar.hidden = true;
+			if (filterChallengeToggle instanceof HTMLInputElement) filterChallengeToggle.checked = false;
+			applyCreationsFilter();
+			// Restore the full list from the DB when clearing an active challenge-only filter.
+			if (wasOnlyChallenge) {
+				void loadCreationsChannelMessages({ forceFreshFirstPage: true });
+			}
+		}
+		if (filterDismiss instanceof HTMLElement) {
+			filterDismiss.addEventListener('click', (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				hideCreationsFilter();
+			});
+		}
+		if (filterChallengeToggle instanceof HTMLInputElement) {
+			filterChallengeToggle.addEventListener('change', () => {
+				chatCreationsOnlyChallenge = filterChallengeToggle.checked;
+				applyCreationsFilter();
+				// The result set changes, so refetch from the DB (server-side challenge filter + pagination).
+				void loadCreationsChannelMessages({ forceFreshFirstPage: true });
+			});
+		}
+		routeWrap._showChatCreationsFilter = showCreationsFilter;
+		// Re-apply persisted filter state when the pane is rebuilt (e.g. after a poll).
+		if (filterBar instanceof HTMLElement) filterBar.hidden = !chatCreationsFilterOpen;
+		if (filterChallengeToggle instanceof HTMLInputElement) {
+			filterChallengeToggle.checked = chatCreationsOnlyChallenge;
+		}
+		applyCreationsFilter();
 
 		const escAc = new AbortController();
 		routeWrap._chatBulkEsc = escAc;
@@ -9859,8 +9931,9 @@ export async function initChatPage(root, options = {}) {
 						forceFreshFirstPage && offset === 0
 							? { windowMs: 0, dedupeKey: `chat-creations-list-p0-${Date.now()}` }
 							: { windowMs: 30000 };
+					const challengeOnlyParam = chatCreationsOnlyChallenge ? '&challenge_only=1' : '';
 					const res = await fetchJsonWithStatusDeduped(
-						`/api/create/images?limit=${CREATIONS_CHANNEL_PAGE_SIZE}&offset=${offset}`,
+						`/api/create/images?limit=${CREATIONS_CHANNEL_PAGE_SIZE}&offset=${offset}${challengeOnlyParam}`,
 						{ credentials: 'include' },
 						listDedupeOpts
 					);
@@ -13163,6 +13236,13 @@ export async function initChatPage(root, options = {}) {
 			bulkMb.setAttribute('role', 'menuitem');
 			bulkMb.textContent = 'Bulk actions';
 			body.appendChild(bulkMb);
+			const filterMb = document.createElement('button');
+			filterMb.type = 'button';
+			filterMb.className = 'feed-card-menu-item';
+			filterMb.dataset.chatCreationsFilter = '';
+			filterMb.setAttribute('role', 'menuitem');
+			filterMb.textContent = 'Filter';
+			body.appendChild(filterMb);
 			const divTop = document.createElement('div');
 			divTop.className = 'chat-page-mobile-chrome-sheet-divider';
 			divTop.setAttribute('aria-hidden', 'true');
@@ -13762,6 +13842,13 @@ export async function initChatPage(root, options = {}) {
 			bulkBtn.setAttribute('role', 'menuitem');
 			bulkBtn.textContent = 'Bulk actions';
 			dyn.appendChild(bulkBtn);
+			const filterBtn = document.createElement('button');
+			filterBtn.type = 'button';
+			filterBtn.className = 'feed-card-menu-item';
+			filterBtn.dataset.chatCreationsFilter = '';
+			filterBtn.setAttribute('role', 'menuitem');
+			filterBtn.textContent = 'Filter';
+			dyn.appendChild(filterBtn);
 		}
 		if (chatChallengesOrganizerEligible && activePseudoChannelSlug === 'challenges') {
 			const orgBtn = document.createElement('button');
@@ -14239,6 +14326,17 @@ export async function initChatPage(root, options = {}) {
 			const host = root.querySelector('[data-chat-creations-bulk-host]');
 			if (host instanceof HTMLElement && typeof host._enterChatCreationsBulk === 'function') {
 				host._enterChatCreationsBulk();
+			}
+			return;
+		}
+		const creationsFilterTrig = t.closest('[data-chat-creations-filter]');
+		if (creationsFilterTrig instanceof HTMLElement && mainColumn?.contains(creationsFilterTrig)) {
+			e.preventDefault();
+			closeTopbarMenu();
+			closeMobileChromeSheet();
+			const host = root.querySelector('[data-chat-creations-bulk-host]');
+			if (host instanceof HTMLElement && typeof host._showChatCreationsFilter === 'function') {
+				host._showChatCreationsFilter();
 			}
 			return;
 		}

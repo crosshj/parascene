@@ -217,12 +217,25 @@ class AppRouteCreations extends HTMLElement {
           <div class="route-header-title-row">
             <h3>Creations</h3>
             <div class="creation-detail-more creations-page-kebab">
-              ${renderCreationKebabHtml({
-			menuContentHtml: '<button class="feed-card-menu-item" type="button" data-creations-bulk-actions>Bulk Actions</button><button class="feed-card-menu-item" type="button" data-creations-refresh>Refresh</button>'
+			${renderCreationKebabHtml({
+			menuContentHtml: '<button class="feed-card-menu-item" type="button" data-creations-bulk-actions>Bulk Actions</button><button class="feed-card-menu-item" type="button" data-creations-filter>Filter</button><button class="feed-card-menu-item" type="button" data-creations-refresh>Refresh</button>'
 		})}
             </div>
           </div>
           <p>Your generated creations. Share them when you're ready.</p>
+        </div>
+        <div class="creations-filter-bar" data-creations-filter-bar hidden>
+          <label class="form-switch creations-filter-switch">
+            <input type="checkbox" class="form-switch-input" data-creations-filter-challenge />
+            <span class="form-switch-track"><span class="form-switch-thumb"></span></span>
+            <span class="creations-filter-switch-label">Only challenge entries</span>
+          </label>
+          <button type="button" class="creations-filter-dismiss" data-creations-filter-dismiss aria-label="Hide filters">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
         </div>
         <div class="creations-bulk-bar" data-creations-bulk-bar aria-hidden="true">
           <div class="creations-bulk-bar-inner">
@@ -299,6 +312,7 @@ class AppRouteCreations extends HTMLElement {
 			this.startPolling();
 		}
 		this.setupCreationsPageKebab();
+		this.setupCreationsFilter();
 		this.setupBulkActions();
 		this._boundBulkEscape = (e) => {
 			if (e.key !== 'Escape') return;
@@ -317,6 +331,7 @@ class AppRouteCreations extends HTMLElement {
 		const menu = this.querySelector('.creations-page-kebab [data-creation-menu]');
 		const refreshBtn = this.querySelector('[data-creations-refresh]');
 		const bulkActionsBtn = this.querySelector('[data-creations-bulk-actions]');
+		const filterBtn = this.querySelector('[data-creations-filter]');
 		if (moreBtn && menu && wrap) {
 			setupKebabDropdown(moreBtn, menu, { wrapEl: wrap });
 		}
@@ -335,6 +350,59 @@ class AppRouteCreations extends HTMLElement {
 				menu?.style && (menu.style.display = 'none');
 				this.enterBulkMode();
 			});
+		}
+		if (filterBtn) {
+			filterBtn.addEventListener('click', (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				menu?.style && (menu.style.display = 'none');
+				this.showCreationsFilter();
+			});
+		}
+	}
+
+	setupCreationsFilter() {
+		const dismissBtn = this.querySelector('[data-creations-filter-dismiss]');
+		const challengeToggle = this.querySelector('[data-creations-filter-challenge]');
+		if (dismissBtn) {
+			dismissBtn.addEventListener('click', (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				this.hideCreationsFilter();
+			});
+		}
+		if (challengeToggle) {
+			challengeToggle.addEventListener('change', () => {
+				this.applyCreationsFilter();
+			});
+		}
+	}
+
+	showCreationsFilter() {
+		const bar = this.querySelector('[data-creations-filter-bar]');
+		if (bar) bar.hidden = false;
+	}
+
+	// Dismissing the filter clears any active filtering so a hidden bar never silently hides cards.
+	hideCreationsFilter() {
+		const bar = this.querySelector('[data-creations-filter-bar]');
+		if (bar) bar.hidden = true;
+		const challengeToggle = this.querySelector('[data-creations-filter-challenge]');
+		if (challengeToggle) challengeToggle.checked = false;
+		this.applyCreationsFilter();
+	}
+
+	applyCreationsFilter() {
+		const route = this.querySelector('.creations-route');
+		const challengeToggle = this.querySelector('[data-creations-filter-challenge]');
+		if (!route) return;
+		const onlyChallenge = Boolean(challengeToggle && challengeToggle.checked);
+		route.classList.toggle('is-filter-only-challenge', onlyChallenge);
+		// The result set changes, so refetch from the DB (server-side challenge filter + pagination).
+		const changed = this._filterOnlyChallenge !== onlyChallenge;
+		this._filterOnlyChallenge = onlyChallenge;
+		if (changed && this.hasLoadedOnce) {
+			this.loadCreations({ force: true });
 		}
 	}
 
@@ -1076,8 +1144,9 @@ class AppRouteCreations extends HTMLElement {
 		}
 		try {
 			const offset = reset || !this.hasLoadedOnce ? 0 : this.creationsOffset;
+			const challengeOnlyParam = this._filterOnlyChallenge ? '&challenge_only=1' : '';
 			const creationsResult = await fetchJsonWithStatusDeduped(
-				`/api/create/images?limit=${CREATIONS_PAGE_SIZE}&offset=${offset}`,
+				`/api/create/images?limit=${CREATIONS_PAGE_SIZE}&offset=${offset}${challengeOnlyParam}`,
 				{ credentials: 'include' },
 				{ windowMs: 500 }
 			).catch(() => ({ ok: false, status: 0, data: null }));
@@ -1221,6 +1290,7 @@ class AppRouteCreations extends HTMLElement {
 	buildCreationCardElement(item, index) {
 		const card = document.createElement('div');
 		card.className = 'route-card route-card-image';
+		card.dataset.inChallenge = '0';
 
 		const meta = parseMeta(item.meta);
 		const rawStatus = item.status || 'completed';
@@ -1299,6 +1369,8 @@ class AppRouteCreations extends HTMLElement {
 			}
 			const itemMeta = parseMeta(item.meta);
 			const inChallenge = creationMetaHasChallengeSubmission(itemMeta);
+			const challengeEnded = item.challenge_ended === true;
+			card.dataset.inChallenge = inChallenge ? '1' : '0';
 			const mediaType =
 				typeof item.media_type === 'string'
 					? item.media_type
@@ -1315,7 +1387,7 @@ class AppRouteCreations extends HTMLElement {
 				badgesHtml: publishedBadge + routeCardGroupBadgeHtml(item),
 				bulkOverlayHtml: bulkOverlay(),
 				nsfw: Boolean(item.nsfw),
-				challengeGridBlur: inChallenge && !item.nsfw,
+				challengeGridBlur: inChallenge && !isPublished && !challengeEnded && !item.nsfw,
 			});
 			const mediaEl = card.querySelector('.route-media');
 			if (mediaEl && typeof hydrateRouteCardMedia === 'function') {
@@ -1340,8 +1412,9 @@ class AppRouteCreations extends HTMLElement {
 		this.isLoadingMore = true;
 		this.updateLoadMoreFallback();
 		try {
+			const challengeOnlyParam = this._filterOnlyChallenge ? '&challenge_only=1' : '';
 			const res = await fetchJsonWithStatusDeduped(
-				`/api/create/images?limit=${CREATIONS_PAGE_SIZE}&offset=${this.creationsOffset}`,
+				`/api/create/images?limit=${CREATIONS_PAGE_SIZE}&offset=${this.creationsOffset}${challengeOnlyParam}`,
 				{ credentials: 'include' },
 				{ windowMs: 500 }
 			).catch(() => ({ ok: false, data: null }));

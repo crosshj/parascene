@@ -57,7 +57,9 @@ import {
 	canViewUnpublishedCreationViaChallengeHero,
 	fetchChatChannelThreadRow,
 	findChallengesChannelThreadId,
-	validateChallengeSubmission
+	validateChallengeSubmission,
+	summarizeChallengeSubmissionPhases,
+	computeChallengeEndedByImageId
 } from "./utils/challengeSubmitShared.js";
 import { resolveCreationImageForExport } from "./utils/resolveCreationImageForExport.js";
 import { applySourceShareUrlToMutateArgsWhenMatching } from "./utils/mutateLineageImageUrl.js";
@@ -2988,12 +2990,15 @@ export default function createCreateRoutes({ queries, storage }) {
 		try {
 			const pageLimit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
 			const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+			const challengeOnly =
+				req.query.challenge_only === "1" || req.query.challenge_only === "true";
 
 			const enableNsfw = Boolean(user.meta && user.meta.enableNsfw === true);
 			const images = await queries.selectCreatedImagesForUser.all(user.id, {
 				limit: pageLimit,
 				offset,
-				viewerEnableNsfw: enableNsfw
+				viewerEnableNsfw: enableNsfw,
+				challengeOnly
 			});
 
 			const imagesWithUrls = (Array.isArray(images) ? images : []).map((img) => {
@@ -3033,6 +3038,21 @@ export default function createCreateRoutes({ queries, storage }) {
 
 			const filtered = enableNsfw ? imagesWithUrls : imagesWithUrls.filter((img) => !img.nsfw);
 			const has_more = images.length === pageLimit;
+
+			// Flag challenge entries whose challenge has ended so the grid can drop the "pending" blur.
+			try {
+				const endedMap = await computeChallengeEndedByImageId({
+					sb: getSupabaseServiceClient(),
+					images: filtered
+				});
+				if (endedMap.size > 0) {
+					for (const item of filtered) {
+						if (endedMap.has(item.id)) item.challenge_ended = endedMap.get(item.id);
+					}
+				}
+			} catch {
+				// On failure, leave challenge_ended unset (cards stay blurred — safe default).
+			}
 
 			return res.json({ images: filtered, has_more });
 		} catch (error) {
@@ -3399,6 +3419,27 @@ export default function createCreateRoutes({ queries, storage }) {
 			}
 			await appendChallengeSubmitEligibility(req, user, image, meta, response);
 
+			if (Array.isArray(meta?.challenge_submissions) && meta.challenge_submissions.length > 0) {
+				try {
+					const sbEntry = getSupabaseServiceClient();
+					const summary = await summarizeChallengeSubmissionPhases({ sb: sbEntry, meta });
+					response.challenge_entry = {
+						has_submission: summary.hasSubmission,
+						all_ended: summary.allEnded,
+						any_active: summary.anyActive,
+						entries: summary.entries
+					};
+				} catch {
+					// On failure, fall back to "active" so publishing stays gated.
+					response.challenge_entry = {
+						has_submission: true,
+						all_ended: false,
+						any_active: true,
+						entries: []
+					};
+				}
+			}
+
 			try {
 				response.lineage_descendants = await buildLineageDescendantsForParent(image.id, user);
 			} catch {
@@ -3603,11 +3644,37 @@ export default function createCreateRoutes({ queries, storage }) {
 				}
 			}
 
-			const toRemove = subs.filter((s) => challengesThreadIds.has(Number(s?.thread_id)));
-			const nextSubs = subs.filter((s) => !challengesThreadIds.has(Number(s?.thread_id)));
+			const inChallengesChannel = (s) => challengesThreadIds.has(Number(s?.thread_id));
+
+			// Entries whose challenge has ended can no longer be removed (permanent record).
+			let endedEntryKeys = new Set();
+			try {
+				const summary = await summarizeChallengeSubmissionPhases({ sb, meta });
+				for (const e of summary.entries) {
+					if (e.ended) {
+						endedEntryKeys.add(`${Number(e.thread_id)}::${String(e.challenge_id || "").trim()}`);
+					}
+				}
+			} catch {
+				endedEntryKeys = new Set();
+			}
+			const entryKey = (s) =>
+				`${Number(s?.thread_id)}::${String(s?.challenge_id || "").trim()}`;
+			const isEnded = (s) => endedEntryKeys.has(entryKey(s));
+
+			const channelEntries = subs.filter(inChallengesChannel);
+			if (channelEntries.length === 0) {
+				return res.status(400).json({ error: "No challenge entry found for the community Challenges channel." });
+			}
+
+			// Only active challenge entries are removable; ended entries stay in meta.
+			const toRemove = channelEntries.filter((s) => !isEnded(s));
+			const nextSubs = subs.filter((s) => !inChallengesChannel(s) || isEnded(s));
 
 			if (toRemove.length === 0) {
-				return res.status(400).json({ error: "No challenge entry found for the community Challenges channel." });
+				return res.status(400).json({
+					error: "This challenge has ended, so this entry can no longer be removed."
+				});
 			}
 
 			for (const r of toRemove) {
@@ -4734,9 +4801,18 @@ export default function createCreateRoutes({ queries, storage }) {
 				Array.isArray(publishMeta.challenge_submissions) &&
 				publishMeta.challenge_submissions.length > 0
 			) {
-				return res.status(400).json({
-					error: "Creations submitted to a challenge cannot be published."
+				// Challenge entries can only be published once every challenge they are
+				// entered in has ended (voting closed). Active challenges still block.
+				const publishSb = getSupabaseServiceClient();
+				const challengeSummary = await summarizeChallengeSubmissionPhases({
+					sb: publishSb,
+					meta: publishMeta
 				});
+				if (challengeSummary.anyActive || !challengeSummary.allEnded) {
+					return res.status(400).json({
+						error: "This creation is entered in an active challenge and can be published once the challenge ends."
+					});
+				}
 			}
 
 			if (targetImage.published === 1 || targetImage.published === true) {

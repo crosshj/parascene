@@ -3840,6 +3840,22 @@ body.view-nsfw .creation-detail-image-wrapper.nsfw::after {
 	background: color-mix(in srgb, var(--accent) 8%, var(--surface));
 }
 
+/* Ended challenge: voting closed, publishing now available -> positive accent */
+.creation-detail-challenge-banner-ended {
+	border-color: color-mix(in srgb, var(--color-green) 36%, var(--border));
+	background: var(--color-green-bg-subtle);
+}
+
+.creation-detail-challenge-banner-ended .creation-detail-challenge-banner-icon {
+	color: var(--color-green-fg);
+}
+
+.creation-detail-challenge-chip-ended {
+	color: var(--color-green-fg);
+	border-color: color-mix(in srgb, var(--color-green) 48%, transparent);
+	background: var(--color-green-bg-subtle);
+}
+
 .creation-detail-challenge-banner-main {
 	display: flex;
 	align-items: flex-start;

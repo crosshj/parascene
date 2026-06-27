@@ -2775,6 +2775,13 @@ async function loadCreation() {
 
 		const challengeSubmissions = Array.isArray(meta?.challenge_submissions) ? meta.challenge_submissions : [];
 		const hasChallengeSubmission = challengeSubmissions.length > 0;
+		const challengeEntry = creation.challenge_entry && typeof creation.challenge_entry === 'object'
+			? creation.challenge_entry
+			: null;
+		// All challenges this creation is entered in have ended (voting closed) -> publishing allowed,
+		// withdrawal disabled. Defaults to "still active" when status is unknown.
+		const challengeAllEnded = hasChallengeSubmission && challengeEntry?.all_ended === true;
+		const challengeAnyActive = hasChallengeSubmission && !challengeAllEnded;
 		const mediaType = typeof creation.media_type === 'string'
 			? creation.media_type
 			: (meta && typeof meta.media_type === 'string' ? meta.media_type : 'image');
@@ -3036,7 +3043,7 @@ async function loadCreation() {
 				status === 'completed' &&
 				!isFailed &&
 				!adminViewingUserDeleted &&
-				!hasChallengeSubmission,
+				(!hasChallengeSubmission || challengeAllEnded),
 			showEdit: canEdit && status === 'completed' && !isFailed && !adminViewingUserDeleted,
 			showUnpublish: canEdit && isPublished && !isFailed && !adminViewingUserDeleted,
 			showMutate: !isAdmin && status === 'completed' && !isFailed && Boolean(creation.url),
@@ -3641,20 +3648,30 @@ async function loadCreation() {
 	<path d="M17 8h2a2 2 0 0 0 2-2V5h-4"></path>
 </svg>`;
 		const challengesChannelHref = '/chat/c/challenges';
+		// Withdrawal is only offered while at least one entered challenge is still active.
 		const challengeWithdrawBtnHtml =
-			isOwner && hasChallengeSubmission
+			isOwner && hasChallengeSubmission && challengeAnyActive
 				? html`<button type="button" class="creation-detail-challenge-banner-withdraw" data-challenge-withdraw-btn>Remove from challenge</button>`
 				: '';
+		const challengeBannerTitle = challengeAllEnded ? 'Challenge ended' : 'Challenge entry';
+		let challengeBannerDetail;
+		if (challengeAllEnded) {
+			challengeBannerDetail = isOwner && !isPublished
+				? 'This challenge has ended — you can now publish this creation.'
+				: 'This creation was entered in a community challenge that has now ended.';
+		} else {
+			challengeBannerDetail = isOwner && !isPublished
+				? 'This creation is entered in a challenge. You can publish it once the challenge ends.'
+				: 'This creation was submitted to a community challenge.';
+		}
 		const challengeDetailBannerHtml = hasChallengeSubmission
 			? html`
-			<div class="creation-detail-challenge-banner" role="status">
+			<div class="creation-detail-challenge-banner${challengeAllEnded ? ' creation-detail-challenge-banner-ended' : ''}" role="status">
 				<div class="creation-detail-challenge-banner-main">
 					<div class="creation-detail-challenge-banner-icon">${challengeTrophyIconSvg}</div>
 					<div class="creation-detail-challenge-banner-body">
-						<p class="creation-detail-challenge-banner-title">Challenge entry</p>
-						<p class="creation-detail-challenge-banner-detail">${isOwner && !isPublished
-							? 'This creation is entered in a challenge. Publishing is not available while it remains a challenge entry.'
-							: 'This creation was submitted to a community challenge.'}</p>
+						<p class="creation-detail-challenge-banner-title">${challengeBannerTitle}</p>
+						<p class="creation-detail-challenge-banner-detail">${challengeBannerDetail}</p>
 					</div>
 				</div>
 				<div class="creation-detail-challenge-banner-actions">
@@ -3717,7 +3734,7 @@ async function loadCreation() {
 		detailContent.innerHTML = html`
 			${showTitleRow ? html`<div class="creation-detail-title-row">
 				${hasNsfwTag ? html`<span class="creation-detail-nsfw-tag">NSFW</span>` : ''}
-				${hasChallengeSubmission ? html`<span class="creation-detail-challenge-chip" title="Entered in a community challenge">${challengeTrophyIconSvg}<span class="creation-detail-challenge-chip-label">Challenge entry</span></span>` :
+				${hasChallengeSubmission ? html`<span class="creation-detail-challenge-chip${challengeAllEnded ? ' creation-detail-challenge-chip-ended' : ''}" title="${challengeAllEnded ? 'Entered in a community challenge that has ended' : 'Entered in a community challenge'}">${challengeTrophyIconSvg}<span class="creation-detail-challenge-chip-label">${challengeAllEnded ? 'Challenge ended' : 'Challenge entry'}</span></span>` :
 				''}
 				${needsTitleSlot ? html`<div class="creation-detail-title${isUntitled ? ' creation-detail-title-untitled' : ''}"${displayTitle ? '' : ' hidden'}>${displayTitle ? escapeHtml(displayTitle) : ''}</div>` : ''}
 			</div>` : ''}
