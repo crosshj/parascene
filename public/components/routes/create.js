@@ -75,35 +75,55 @@ async function loadDeps() {
 	const v = getAssetVersionParam();
 	const qs = getImportQuery(v);
 	_depsPromise = (async () => {
-		const apiMod = await import(`../../shared/api.js${qs}`);
+		// Load all create-route deps concurrently — they are independent, and a sequential
+		// `await import(...)` chain otherwise serializes (and on a cold load, network-waterfalls)
+		// every module before the form can render.
+		const [
+			apiMod,
+			createSubmitMod,
+			providerFormFieldsMod,
+			aspectRatioMod,
+			mutateQueueSyncMod,
+			createSettingsSyncMod,
+			promptFieldClearMod,
+			autogrowMod,
+			suggestMod,
+		] = await Promise.all([
+			import(`../../shared/api.js${qs}`),
+			import(`../../shared/createSubmit.js${qs}`),
+			import(`../../shared/providerFormFields.js${qs}`),
+			import(`../../shared/aspectRatio.js${qs}`),
+			import(`../../shared/mutateQueueSync.js${qs}`),
+			import(`../../shared/createSettingsSync.js${qs}`),
+			import(`../../shared/promptFieldClear.js${qs}`),
+			import(`../../shared/autogrow.js${qs}`),
+			import(`../../shared/triggeredSuggest.js${qs}`),
+		]);
+
 		fetchJsonWithStatusDeduped = apiMod.fetchJsonWithStatusDeduped;
 
-		const createSubmitMod = await import(`../../shared/createSubmit.js${qs}`);
 		submitCreationWithPending = createSubmitMod.submitCreationWithPending;
 		uploadImageFile = createSubmitMod.uploadImageFile;
 		readRasterFileDimensions = createSubmitMod.readRasterFileDimensions;
 		readImageUrlDimensions = createSubmitMod.readImageUrlDimensions;
 		formatMentionsFailureForDialog = createSubmitMod.formatMentionsFailureForDialog;
 
-		const providerFormFieldsMod = await import(`../../shared/providerFormFields.js${qs}`);
 		renderFields = providerFormFieldsMod.renderFields;
-		const aspectRatioMod = await import(`../../shared/aspectRatio.js${qs}`);
-		shouldUseAspectRatioSelector = aspectRatioMod.shouldUseAspectRatioSelector;
-		getVirtualAspectRatioField = aspectRatioMod.getVirtualAspectRatioField;
-		closestAspectRatioPreset = aspectRatioMod.closestAspectRatioPreset;
-		buildAspectRatioMismatchMessage = aspectRatioMod.buildAspectRatioMismatchMessage;
 		isPromptLikeField = providerFormFieldsMod.isPromptLikeField;
 		isImageUrlField = providerFormFieldsMod.isImageUrlField;
 		isImageUrlArrayField = providerFormFieldsMod.isImageUrlArrayField;
 
-		const mutateQueueSyncMod = await import(`../../shared/mutateQueueSync.js${qs}`);
+		shouldUseAspectRatioSelector = aspectRatioMod.shouldUseAspectRatioSelector;
+		getVirtualAspectRatioField = aspectRatioMod.getVirtualAspectRatioField;
+		closestAspectRatioPreset = aspectRatioMod.closestAspectRatioPreset;
+		buildAspectRatioMismatchMessage = aspectRatioMod.buildAspectRatioMismatchMessage;
+
 		getMutateLineageForImageUrls = mutateQueueSyncMod.getMutateLineageForImageUrls;
 		getMutateQueuePrefillForProviderFields = mutateQueueSyncMod.getMutateQueuePrefillForProviderFields;
 		syncMutateQueueFromProviderFieldValues = mutateQueueSyncMod.syncMutateQueueFromProviderFieldValues;
 		MUTATE_QUEUE_UPDATED_EVENT = mutateQueueSyncMod.MUTATE_QUEUE_UPDATED_EVENT;
 		MUTATE_QUEUE_STORAGE_KEY = mutateQueueSyncMod.MUTATE_QUEUE_STORAGE_KEY;
 
-		const createSettingsSyncMod = await import(`../../shared/createSettingsSync.js${qs}`);
 		mergeSharedSettingsIntoSessionSelections = createSettingsSyncMod.mergeSharedSettingsIntoSessionSelections;
 		getSharedFieldValueOverrides = createSettingsSyncMod.getSharedFieldValueOverrides;
 		getSharedModelForContext = createSettingsSyncMod.getSharedModelForContext;
@@ -115,13 +135,10 @@ async function loadDeps() {
 		persistSharedAspectRatio = createSettingsSyncMod.persistSharedAspectRatio;
 		CREATE_SETTINGS_UPDATED_EVENT = createSettingsSyncMod.CREATE_SETTINGS_UPDATED_EVENT;
 
-		const promptFieldClearMod = await import(`../../shared/promptFieldClear.js${qs}`);
 		attachPromptFieldClear = promptFieldClearMod.attachPromptFieldClear;
 
-		const autogrowMod = await import(`../../shared/autogrow.js${qs}`);
 		attachAutoGrowTextarea = autogrowMod.attachAutoGrowTextarea;
 
-		const suggestMod = await import(`../../shared/triggeredSuggest.js${qs}`);
 		attachPromptInlineSuggest = suggestMod.attachPromptInlineSuggest;
 	})();
 	return _depsPromise;
@@ -239,56 +256,12 @@ class AppRouteCreate extends HTMLElement {
 		} catch (_) {
 			// Ignore storage errors
 		}
-		let showBlogTab = false;
-		try {
-			// Dedicated dedupe key: generic /api/profile responses can be cached from before login (401);
-			// sharing that cache would hide the Blog tab until expiry even after sign-in.
-			const pr = await fetchJsonWithStatusDeduped(
-				"/api/profile",
-				{ credentials: "include" },
-				{ windowMs: 30000, dedupeKey: "app-route-create-profile-blog-gate" }
-			);
-			const p = pr.data;
-			const plan = p?.plan ?? p?.meta?.plan;
-			if (pr.ok && (p?.role === "admin" || plan === "founder")) showBlogTab = true;
-			if (pr.ok) this._blogUserIsAdmin = p?.role === "admin";
-		} catch (_) {
-			// offline / profile unavailable
-		}
-		this._showBlogTab = showBlogTab;
+		// The Blog tab is admin/founder-only and requires a /api/profile round-trip to gate.
+		// In an overlay the create form renders in a fresh iframe context (empty request-dedupe
+		// cache), so awaiting that fetch here delays first paint of the form on every open.
+		// Render the form immediately without the Blog tab and inject it later if eligible.
+		this._showBlogTab = false;
 		if (this._blogUserIsAdmin == null) this._blogUserIsAdmin = false;
-		const blogTabSection = showBlogTab
-			? html`
-          <tab data-id="blog" label="Blog">
-            <div class="create-route-blog">
-              <div class="route-header">
-                <p>Manage blog posts (draft, publish, archive).</p>
-              </div>
-              <div class="create-route-blog-toolbar">
-                <button type="button" class="btn-primary create-button" data-blog-new>New draft</button>
-                <button type="button" class="btn-secondary" data-blog-refresh>Refresh</button>
-              </div>
-              <div class="create-route-blog-table-container" data-blog-table-container></div>
-              <p class="create-cost" data-blog-status aria-live="polite"></p>
-              <div class="create-route-advanced-confirm create-route-blog-campaign-dialog" data-blog-campaign-dialog hidden>
-                <div class="create-route-advanced-confirm-overlay" data-blog-campaign-overlay></div>
-                <div class="create-route-advanced-confirm-panel create-route-blog-campaign-panel">
-                  <div class="create-route-advanced-preview-header">
-                    <p class="create-route-advanced-preview-title" data-blog-campaign-title>Links</p>
-                    <button type="button" class="modal-close" data-blog-campaign-close-x aria-label="Close">
-                      <svg class="modal-close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                      </svg>
-                    </button>
-                  </div>
-                  <div class="create-route-blog-campaign-body" data-blog-campaign-body></div>
-                </div>
-              </div>
-            </div>
-          </tab>
-        `
-			: "";
 		this._serversLoading = true;
 		this.innerHTML = html`
       <div class="create-route">
@@ -414,7 +387,6 @@ class AppRouteCreate extends HTMLElement {
               </div>
             </div>
           </tab>
-          ${blogTabSection}
         </app-tabs>
         <div class="create-route-advanced-confirm" data-advanced-confirm-dialog hidden>
           <div class="create-route-advanced-confirm-overlay" data-advanced-confirm-overlay></div>
@@ -462,15 +434,28 @@ class AppRouteCreate extends HTMLElement {
 		}
 		window.addEventListener('storage', this.handleMutateQueueStorageSync);
 		window.addEventListener('pageshow', this.handlePageShowForMutateQueue);
-		if (this._showBlogTab) {
-			this.setupBlogTab();
-		}
-		// Defer API calls until after first paint to improve perceived load
-		const runDataLoad = () => { this.loadServers(); this.loadCredits(); };
-		if (typeof requestIdleCallback !== 'undefined') {
-			requestIdleCallback(runDataLoad, { timeout: 120 });
+		// Blog tab is gated on a profile fetch; do it off the critical path and inject if eligible.
+		void this._maybeAddBlogTabFromProfile();
+		// Paint the form synchronously from the servers cache when available. localStorage is shared
+		// across the overlay iframe (same origin), so on warm opens this reveals the form instantly
+		// without waiting on /api/servers. Doing this inline (rather than inside a deferred
+		// requestIdleCallback) is what makes the cache actually pay off in overlay mode, where a
+		// not-yet-revealed iframe can have its idle callbacks throttled.
+		const hadServersCache = this.applyServersFromCache();
+		const refreshData = () => {
+			this.refreshServersFromNetwork();
+			this.loadCredits();
+		};
+		if (hadServersCache) {
+			// Form is already visible from cache; refresh in the background.
+			if (typeof requestIdleCallback !== 'undefined') {
+				requestIdleCallback(refreshData, { timeout: 500 });
+			} else {
+				setTimeout(refreshData, 0);
+			}
 		} else {
-			setTimeout(runDataLoad, 0);
+			// No cache — start the network fetch immediately so the form appears as soon as possible.
+			refreshData();
 		}
 		// Attach autogrow and mention suggest to prompt textarea
 		const promptTextarea = this.querySelector('[data-advanced-prompt]');
@@ -492,12 +477,87 @@ class AppRouteCreate extends HTMLElement {
 		}
 	}
 
+	/** Markup for the admin/founder-only Blog tab, injected after the profile gate resolves. */
+	_blogTabMarkup() {
+		return html`
+          <tab data-id="blog" label="Blog">
+            <div class="create-route-blog">
+              <div class="route-header">
+                <p>Manage blog posts (draft, publish, archive).</p>
+              </div>
+              <div class="create-route-blog-toolbar">
+                <button type="button" class="btn-primary create-button" data-blog-new>New draft</button>
+                <button type="button" class="btn-secondary" data-blog-refresh>Refresh</button>
+              </div>
+              <div class="create-route-blog-table-container" data-blog-table-container></div>
+              <p class="create-cost" data-blog-status aria-live="polite"></p>
+              <div class="create-route-advanced-confirm create-route-blog-campaign-dialog" data-blog-campaign-dialog hidden>
+                <div class="create-route-advanced-confirm-overlay" data-blog-campaign-overlay></div>
+                <div class="create-route-advanced-confirm-panel create-route-blog-campaign-panel">
+                  <div class="create-route-advanced-preview-header">
+                    <p class="create-route-advanced-preview-title" data-blog-campaign-title>Links</p>
+                    <button type="button" class="modal-close" data-blog-campaign-close-x aria-label="Close">
+                      <svg class="modal-close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                      </svg>
+                    </button>
+                  </div>
+                  <div class="create-route-blog-campaign-body" data-blog-campaign-body></div>
+                </div>
+              </div>
+            </div>
+          </tab>
+        `;
+	}
+
+	/** Resolve the admin/founder Blog-tab gate without blocking the create form's first paint. */
+	async _maybeAddBlogTabFromProfile() {
+		try {
+			// Dedicated dedupe key: generic /api/profile responses can be cached from before login (401);
+			// sharing that cache would hide the Blog tab until expiry even after sign-in.
+			const pr = await fetchJsonWithStatusDeduped(
+				"/api/profile",
+				{ credentials: "include" },
+				{ windowMs: 30000, dedupeKey: "app-route-create-profile-blog-gate" }
+			);
+			const p = pr.data;
+			const plan = p?.plan ?? p?.meta?.plan;
+			if (pr.ok) this._blogUserIsAdmin = p?.role === "admin";
+			const eligible = pr.ok && (p?.role === "admin" || plan === "founder");
+			if (eligible) this._addBlogTab();
+		} catch (_) {
+			// offline / profile unavailable — Blog tab stays hidden
+		}
+	}
+
+	/** Append the Blog tab to the already-rendered tab strip and wire it up. */
+	_addBlogTab() {
+		if (this._showBlogTab) return;
+		const tabs = this.querySelector('app-tabs');
+		if (!tabs || !this.isConnected) return;
+		const tpl = document.createElement('template');
+		tpl.innerHTML = this._blogTabMarkup();
+		const tabEl = tpl.content.querySelector('tab');
+		if (!tabEl) return;
+		this._showBlogTab = true;
+		tabs.appendChild(tabEl);
+		// Re-hydrate so the new tab gets a button; active tab is preserved via the `active` attribute.
+		if (typeof tabs.hydrate === 'function') tabs.hydrate();
+		try {
+			this.setupBlogTab();
+		} catch (_) {
+			// ignore blog tab wiring errors
+		}
+	}
+
 	disconnectedCallback() {
 		if (typeof this._flushSharedSettingsOnLeave === 'function') {
 			window.removeEventListener('pagehide', this._flushSharedSettingsOnLeave);
 		}
 		document.removeEventListener('credits-updated', this.handleCreditsUpdated);
-		document.removeEventListener('parascene:servers-config-updated', this.handleServersConfigUpdated);
+		// server.js dispatches this on window, so the listener must be on window too.
+		window.removeEventListener('parascene:servers-config-updated', this.handleServersConfigUpdated);
 		if (CREATE_SETTINGS_UPDATED_EVENT && this.handleCreateSettingsUpdated) {
 			document.removeEventListener(CREATE_SETTINGS_UPDATED_EVENT, this.handleCreateSettingsUpdated);
 		}
@@ -645,7 +705,10 @@ class AppRouteCreate extends HTMLElement {
 		// Restore and persist active tab (Basic / Advanced / Blog); sync with URL hash (#basic, #advanced, #blog)
 		const tabsEl = this.querySelector('app-tabs');
 		if (tabsEl) {
-			const CREATE_TAB_IDS = this._showBlogTab ? ['basic', 'advanced', 'blog'] : ['basic', 'advanced'];
+			// 'blog' is always listed: the Blog tab is injected asynchronously (admin/founder only) after
+			// the profile gate resolves, so render-time `_showBlogTab` may still be false here.
+			// setActiveTab() safely falls back to the first tab when the target id isn't present.
+			const CREATE_TAB_IDS = ['basic', 'advanced', 'blog'];
 			const syncTabFromHash = () => {
 				if (window.location.pathname !== '/create') return;
 				const hash = (window.location.hash || '').replace(/^#/, '').toLowerCase();
@@ -715,7 +778,8 @@ class AppRouteCreate extends HTMLElement {
 		}
 
 		document.addEventListener('credits-updated', this.handleCreditsUpdated);
-		document.addEventListener('parascene:servers-config-updated', this.handleServersConfigUpdated);
+		// server.js dispatches this on window, so the listener must be on window too.
+		window.addEventListener('parascene:servers-config-updated', this.handleServersConfigUpdated);
 		this.handleCreateSettingsUpdated = () => this.syncSharedPromptToFields();
 		if (CREATE_SETTINGS_UPDATED_EVENT) {
 			document.addEventListener(CREATE_SETTINGS_UPDATED_EVENT, this.handleCreateSettingsUpdated);
@@ -865,28 +929,40 @@ class AppRouteCreate extends HTMLElement {
 		}
 	}
 
+	/** Read the processed servers list from localStorage cache (shared across the overlay iframe). */
+	readServersCacheList() {
+		try {
+			const storage = typeof localStorage !== 'undefined' ? localStorage : null;
+			const cached = storage?.getItem('create-servers-cache');
+			if (!cached) return null;
+			const { servers } = JSON.parse(cached);
+			return Array.isArray(servers) && servers.length > 0 ? servers : null;
+		} catch (e) {
+			return null;
+		}
+	}
+
+	/** Synchronously reveal the form from cached servers if available. Returns true when applied. */
+	applyServersFromCache() {
+		const servers = this.readServersCacheList();
+		if (!servers) return false;
+		this.applyServers(servers);
+		this._serversLoading = false;
+		this.updateCreateFormVisibility();
+		return true;
+	}
+
 	/** Cache-then-refresh: show cached servers immediately if available (localStorage), then refresh in background. */
 	loadServers(options = {}) {
+		this.applyServersFromCache();
+		this.refreshServersFromNetwork(options);
+	}
+
+	/** Fetch /api/servers, update the cache, and re-apply only when the list/config changed. */
+	refreshServersFromNetwork(options = {}) {
 		const { forceApply = false } = options;
 		const CACHE_KEY = 'create-servers-cache';
 		const storage = typeof localStorage !== 'undefined' ? localStorage : null;
-		try {
-			const cached = storage?.getItem(CACHE_KEY);
-			if (cached) {
-				const { servers } = JSON.parse(cached);
-				if (Array.isArray(servers) && servers.length > 0) {
-					this.applyServers(servers);
-					this._serversLoading = false;
-					this.updateCreateFormVisibility();
-					// Still fetch in background to refresh cache
-				} else {
-					this._serversLoading = false;
-					this.updateCreateFormVisibility();
-				}
-			}
-		} catch (e) {
-			// ignore invalid cache
-		}
 		fetchJsonWithStatusDeduped('/api/servers', { credentials: 'include' }, { windowMs: 2000 })
 			.then((result) => {
 				this._serversLoading = false;
