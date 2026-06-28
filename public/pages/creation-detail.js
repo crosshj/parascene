@@ -425,6 +425,9 @@ function prepareCreationDetailHeroForLoad(
 ) {
 	if (!(imageWrapper instanceof HTMLElement)) return;
 	imageWrapper.classList.add('image-loading');
+	// Mark the hero as "resolving" so a stale server-rendered <img> src that errors
+	// before loadCreation() commits the real URL doesn't flash the failed icon (overlay/embed).
+	imageWrapper.dataset.heroResolving = '1';
 	if (resetMedia) {
 		imageWrapper.classList.remove(
 			'image-error',
@@ -1893,6 +1896,7 @@ async function loadCreation() {
 		if (!heroVideoAwaitingReveal()) {
 			imageWrapper?.classList.remove('image-loading', 'image-error', 'image-error-moderated');
 		}
+		if (imageWrapper) delete imageWrapper.dataset.heroResolving;
 		const url = String(heroImageDisplayedUrl() || '').trim();
 		if (url) {
 			imageEl.dataset.currentUrl = url;
@@ -1923,6 +1927,7 @@ async function loadCreation() {
 		if (!heroVideoAwaitingReveal()) {
 			imageWrapper?.classList.remove('image-loading', 'image-error', 'image-error-moderated');
 		}
+		if (imageWrapper) delete imageWrapper.dataset.heroResolving;
 	}
 
 	/** @returns {boolean} true if src was assigned (false = already on this url) */
@@ -2496,6 +2501,14 @@ async function loadCreation() {
 		imageEl.addEventListener('load', applyLoadedImageState);
 
 		imageEl.addEventListener('error', (event) => {
+			// In overlay/embed mode the server-rendered hero <img> may carry a src the viewer
+			// can't load directly (non-owner / lineage / challenge URLs need query params the API
+			// adds). While loadCreation() is still resolving + preloading the correct URL, keep the
+			// loading state instead of flashing the "failed" icon. Genuine failures still surface via
+			// the preload-error / 404 / failed-status paths.
+			if (isCreationDetailEmbed() && imageWrapper?.dataset.heroResolving === '1') {
+				return;
+			}
 			// eslint-disable-next-line no-console
 			console.error('[creation-detail] image load error', {
 				src: imageEl?.currentSrc || imageEl?.src || null,
