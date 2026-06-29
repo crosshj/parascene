@@ -999,6 +999,11 @@ body.prsn-creation-composer-drag-active .create-composer:not(.is-drop-target) .c
 
 /* app-route-create (createAdvanced): form, tabs, dialogs, image fields — in creations.css for faster load */
 
+/* Overlay embed: provider form only — hide Blog / Data Builder tab strip. */
+body.create-page-advanced.create-page-embed app-route-create app-tabs.create-route-tabs-embed .app-tabs {
+	display: none;
+}
+
 /* Create route: blank until servers loaded */
 app-route-create .create-route .create-route-loading[hidden] {
 	display: none;

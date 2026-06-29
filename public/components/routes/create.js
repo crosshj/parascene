@@ -47,6 +47,82 @@ function isStandaloneCreatePagePath() {
 	return window.location.pathname === '/create' && !isCreatePageEmbed();
 }
 
+function dataBuilderTabMarkup() {
+	return html`
+          <tab data-id="advanced" label="Data Builder">
+            <div class="create-route-advanced">
+              <div class="create-route-advanced-server form-group">
+                <label class="form-label" for="advanced-server-select">Server</label>
+                <select class="form-select" id="advanced-server-select" data-advanced-server-select>
+                  <option value="">Select a server...</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="advanced-prompt">Prompt</label>
+                <div class="create-prompt-wrap">
+                  <textarea class="form-input prompt-editor" id="advanced-prompt" data-advanced-prompt data-autogrow="true" rows="3" placeholder="Enter a prompt..."></textarea>
+                  <a href="#" class="create-prompt-clear" tabindex="-1" aria-label="Clear field" data-prompt-clear>clear</a>
+                </div>
+              </div>
+              <div class="form-group create-route-advanced-data">
+                <label class="form-label">Data Builder</label>
+                <ul class="create-route-advanced-list" data-advanced-list role="list">
+                <li class="create-route-advanced-item">
+                  <button type="button" class="create-route-advanced-switch" role="switch" aria-checked="false" data-advanced-option="recent_comments" aria-label="Include recent comments">
+                  </button>
+                  <div class="create-route-advanced-item-desc">
+                    <strong>Recent comments</strong>
+                    Latest comments across the platform.
+                  </div>
+                </li>
+                <li class="create-route-advanced-item">
+                  <button type="button" class="create-route-advanced-switch" role="switch" aria-checked="false" data-advanced-option="recent_posts" aria-label="Include recent posts">
+                  </button>
+                  <div class="create-route-advanced-item-desc">
+                    <strong>Newest</strong>
+                    Latest published creations on the platform.
+                  </div>
+                </li>
+                <li class="create-route-advanced-item">
+                  <button type="button" class="create-route-advanced-switch" role="switch" aria-checked="false" data-advanced-option="top_likes" aria-label="Include top likes">
+                  </button>
+                  <div class="create-route-advanced-item-desc">
+                    <strong>Most likes</strong>
+                    Creations with the most likes on the platform.
+                  </div>
+                </li>
+                <li class="create-route-advanced-item">
+                  <button type="button" class="create-route-advanced-switch" role="switch" aria-checked="false" data-advanced-option="bottom_likes" aria-label="Include bottom likes">
+                  </button>
+                  <div class="create-route-advanced-item-desc">
+                    <strong>Least likes</strong>
+                    Creations with the fewest likes on the platform.
+                  </div>
+                </li>
+                <li class="create-route-advanced-item">
+                  <button type="button" class="create-route-advanced-switch" role="switch" aria-checked="false" data-advanced-option="most_mutated" aria-label="Include most mutated">
+                  </button>
+                  <div class="create-route-advanced-item-desc">
+                    <strong>Most mutated</strong>
+                    Creations that appear the most in mutation lineages (history).
+                  </div>
+                </li>
+              </ul>
+              <p class="create-route-advanced-preview-hint">
+                <button type="button" class="create-route-advanced-preview-link" data-advanced-preview-payload>See what we send to the server</button>
+              </p>
+              </div>
+              <div class="create-route-advanced-actions">
+                <button type="button" class="btn-primary create-button" data-advanced-create-button disabled>
+                  Query
+                </button>
+                <p class="create-cost" data-advanced-create-cost>Turn on at least one Data Builder option to create.</p>
+                <p class="create-cost" data-advanced-create-cost-query hidden>Query the server to check support and cost.</p>
+              </div>
+            </div>
+          </tab>`;
+}
+
 async function afterCreateRouteSubmitInEmbed(result) {
 	if (!isCreatePageEmbed() || !result?.id) return;
 	const v = getAssetVersionParam();
@@ -257,9 +333,13 @@ class AppRouteCreate extends HTMLElement {
 		// In an overlay the create form renders in a fresh iframe context (empty request-dedupe
 		// cache), so awaiting that fetch here delays first paint of the form on every open.
 		// Render the form immediately without the Blog tab and inject it later if eligible.
+		// Overlay embed omits Blog and Data Builder tabs entirely (provider form only).
 		this._showBlogTab = false;
 		if (this._blogUserIsAdmin == null) this._blogUserIsAdmin = false;
 		this._serversLoading = true;
+		const embedOnly = isCreatePageEmbed();
+		this._embedOnly = embedOnly;
+		const dataBuilderTab = embedOnly ? '' : dataBuilderTabMarkup();
 		this.innerHTML = html`
       <div class="create-route">
         <div class="create-route-loading" data-create-loading aria-busy="true"></div>
@@ -269,7 +349,7 @@ class AppRouteCreate extends HTMLElement {
           <div class="route-empty-message">You don't have access to any servers yet. Add a server to get started.</div>
         </div>
         <div class="create-route-form-wrap" data-create-form-wrap hidden aria-hidden="true">
-        <app-tabs active="basic">
+        <app-tabs active="basic"${embedOnly ? ' class="create-route-tabs-embed"' : ''}>
           <tab data-id="basic" label="Advanced" default>
             <div class="route-header">
               <p>Select a server and generation method to create a new image.</p>
@@ -302,78 +382,7 @@ class AppRouteCreate extends HTMLElement {
               <p class="create-cost" data-create-cost>Select a server and method to see cost</p>
             </div>
           </tab>
-          <tab data-id="advanced" label="Data Builder">
-            <div class="create-route-advanced">
-              <div class="create-route-advanced-server form-group">
-                <label class="form-label" for="advanced-server-select">Server</label>
-                <select class="form-select" id="advanced-server-select" data-advanced-server-select>
-                  <option value="">Select a server...</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label class="form-label" for="advanced-prompt">Prompt</label>
-                <div class="create-prompt-wrap">
-                  <textarea class="form-input prompt-editor" id="advanced-prompt" data-advanced-prompt data-autogrow="true" rows="3" placeholder="Enter a prompt..."></textarea>
-                  <a href="#" class="create-prompt-clear" tabindex="-1" aria-label="Clear field" data-prompt-clear>clear</a>
-                </div>
-              </div>
-              <div class="form-group create-route-advanced-data">
-                <label class="form-label">Data Builder</label>
-                <ul class="create-route-advanced-list" data-advanced-list role="list">
-                <li class="create-route-advanced-item">
-                  <button type="button" class="create-route-advanced-switch" role="switch" aria-checked="false" data-advanced-option="recent_comments" aria-label="Include recent comments">
-                  </button>
-                  <div class="create-route-advanced-item-desc">
-                    <strong>Recent comments</strong>
-                    Latest comments across the platform.
-                  </div>
-                </li>
-                <li class="create-route-advanced-item">
-                  <button type="button" class="create-route-advanced-switch" role="switch" aria-checked="false" data-advanced-option="recent_posts" aria-label="Include recent posts">
-                  </button>
-                  <div class="create-route-advanced-item-desc">
-                    <strong>Newest</strong>
-                    Latest published creations on the platform.
-                  </div>
-                </li>
-                <li class="create-route-advanced-item">
-                  <button type="button" class="create-route-advanced-switch" role="switch" aria-checked="false" data-advanced-option="top_likes" aria-label="Include top likes">
-                  </button>
-                  <div class="create-route-advanced-item-desc">
-                    <strong>Most likes</strong>
-                    Creations with the most likes on the platform.
-                  </div>
-                </li>
-                <li class="create-route-advanced-item">
-                  <button type="button" class="create-route-advanced-switch" role="switch" aria-checked="false" data-advanced-option="bottom_likes" aria-label="Include bottom likes">
-                  </button>
-                  <div class="create-route-advanced-item-desc">
-                    <strong>Least likes</strong>
-                    Creations with the fewest likes on the platform.
-                  </div>
-                </li>
-                <li class="create-route-advanced-item">
-                  <button type="button" class="create-route-advanced-switch" role="switch" aria-checked="false" data-advanced-option="most_mutated" aria-label="Include most mutated">
-                  </button>
-                  <div class="create-route-advanced-item-desc">
-                    <strong>Most mutated</strong>
-                    Creations that appear the most in mutation lineages (history).
-                  </div>
-                </li>
-              </ul>
-              <p class="create-route-advanced-preview-hint">
-                <button type="button" class="create-route-advanced-preview-link" data-advanced-preview-payload>See what we send to the server</button>
-              </p>
-              </div>
-              <div class="create-route-advanced-actions">
-                <button type="button" class="btn-primary create-button" data-advanced-create-button disabled>
-                  Query
-                </button>
-                <p class="create-cost" data-advanced-create-cost>Turn on at least one Data Builder option to create.</p>
-                <p class="create-cost" data-advanced-create-cost-query hidden>Query the server to check support and cost.</p>
-              </div>
-            </div>
-          </tab>
+          ${dataBuilderTab}
         </app-tabs>
         <div class="create-route-advanced-confirm" data-advanced-confirm-dialog hidden>
           <div class="create-route-advanced-confirm-overlay" data-advanced-confirm-overlay></div>
@@ -422,7 +431,7 @@ class AppRouteCreate extends HTMLElement {
 		window.addEventListener('storage', this.handleMutateQueueStorageSync);
 		window.addEventListener('pageshow', this.handlePageShowForMutateQueue);
 		// Blog tab is gated on a profile fetch; do it off the critical path and inject if eligible.
-		void this._maybeAddBlogTabFromProfile();
+		if (!embedOnly) void this._maybeAddBlogTabFromProfile();
 		// Paint the form synchronously from the servers cache when available. localStorage is shared
 		// across the overlay iframe (same origin), so on warm opens this reveals the form instantly
 		// without waiting on /api/servers. Doing this inline (rather than inside a deferred
@@ -500,6 +509,7 @@ class AppRouteCreate extends HTMLElement {
 
 	/** Resolve the admin/founder Blog-tab gate without blocking the create form's first paint. */
 	async _maybeAddBlogTabFromProfile() {
+		if (this._embedOnly) return;
 		try {
 			// Dedicated dedupe key: generic /api/profile responses can be cached from before login (401);
 			// sharing that cache would hide the Blog tab until expiry even after sign-in.
@@ -520,7 +530,7 @@ class AppRouteCreate extends HTMLElement {
 
 	/** Append the Blog tab to the already-rendered tab strip and wire it up. */
 	_addBlogTab() {
-		if (this._showBlogTab) return;
+		if (this._embedOnly || this._showBlogTab) return;
 		const tabs = this.querySelector('app-tabs');
 		if (!tabs || !this.isConnected) return;
 		const tpl = document.createElement('template');
@@ -694,7 +704,7 @@ class AppRouteCreate extends HTMLElement {
 			// 'blog' is always listed: the Blog tab is injected asynchronously (admin/founder only) after
 			// the profile gate resolves, so render-time `_showBlogTab` may still be false here.
 			// setActiveTab() safely falls back to the first tab when the target id isn't present.
-			const CREATE_TAB_IDS = ['basic', 'advanced', 'blog'];
+			const CREATE_TAB_IDS = this._embedOnly ? ['basic'] : ['basic', 'advanced', 'blog'];
 			const syncTabFromHash = () => {
 				if (window.location.pathname !== '/create') return;
 				const hash = (window.location.hash || '').replace(/^#/, '').toLowerCase();
