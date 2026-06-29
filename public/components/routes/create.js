@@ -1918,6 +1918,29 @@ class AppRouteCreate extends HTMLElement {
 				return;
 			}
 
+			if (pendingSaved && isImageUrlField(field)) {
+				const saved = pendingSaved[fieldKey];
+				if (typeof saved === 'string' && saved.trim()) {
+					const trimmed = saved.trim();
+					fieldsForRender[fieldKey] = { ...field, default: trimmed };
+					this.fieldValues[fieldKey] = trimmed;
+					return;
+				}
+			}
+			if (pendingSaved && isImageUrlArrayField(field)) {
+				const saved = pendingSaved[fieldKey];
+				if (Array.isArray(saved)) {
+					const urls = saved
+						.filter((item) => typeof item === 'string' && item.trim())
+						.map((item) => item.trim());
+					if (urls.length > 0) {
+						fieldsForRender[fieldKey] = { ...field, default: urls };
+						this.fieldValues[fieldKey] = urls;
+						return;
+					}
+				}
+			}
+
 			if (typeof window !== 'undefined' && window.location?.pathname === '/create') {
 				try {
 					const prefill = getMutateQueuePrefillForProviderFields({ [fieldKey]: field });
@@ -1940,25 +1963,6 @@ class AppRouteCreate extends HTMLElement {
 				}
 			}
 
-			if (pendingSaved && isImageUrlField(field)) {
-				const saved = pendingSaved[fieldKey];
-				if (typeof saved === 'string' && saved.trim()) {
-					fieldsForRender[fieldKey] = { ...field, default: saved.trim() };
-					return;
-				}
-			}
-			if (pendingSaved && isImageUrlArrayField(field)) {
-				const saved = pendingSaved[fieldKey];
-				if (Array.isArray(saved)) {
-					const urls = saved
-						.filter((item) => typeof item === 'string' && item.trim())
-						.map((item) => item.trim());
-					if (urls.length > 0) {
-						fieldsForRender[fieldKey] = { ...field, default: urls };
-						return;
-					}
-				}
-			}
 			if (pendingSaved && fieldKey === 'aspect_ratio') {
 				const saved = pendingSaved[fieldKey];
 				if (typeof saved === 'string' && saved.trim()) {
@@ -3427,11 +3431,26 @@ class AppRouteCreate extends HTMLElement {
 
 			const field = fields[fieldKey];
 			if (isImageUrlField(field)) {
+				const saved = mergedSavedFieldValues[fieldKey];
+				if (typeof saved === 'string' && saved.trim()) {
+					this.fieldValues[fieldKey] = saved.trim();
+					return;
+				}
 				const url = typeof queuePrefill[fieldKey] === 'string' ? queuePrefill[fieldKey].trim() : '';
 				this.fieldValues[fieldKey] = url;
 				return;
 			}
 			if (isImageUrlArrayField(field)) {
+				const saved = mergedSavedFieldValues[fieldKey];
+				if (Array.isArray(saved)) {
+					const urls = saved
+						.filter((item) => typeof item === 'string' && item.trim())
+						.map((item) => item.trim());
+					if (urls.length > 0) {
+						this.fieldValues[fieldKey] = urls;
+						return;
+					}
+				}
 				const urls = Array.isArray(queuePrefill[fieldKey])
 					? queuePrefill[fieldKey].map((v) => String(v).trim()).filter(Boolean)
 					: [];
@@ -3548,6 +3567,15 @@ class AppRouteCreate extends HTMLElement {
 			return;
 		}
 		prefill = prefill && typeof prefill === 'object' ? prefill : {};
+
+		const queueUrls = Object.values(prefill).flatMap((val) => {
+			if (typeof val === 'string' && val.trim()) return [val.trim()];
+			if (Array.isArray(val)) {
+				return val.map((v) => String(v).trim()).filter(Boolean);
+			}
+			return [];
+		});
+		if (queueUrls.length === 0) return;
 
 		let changed = false;
 		for (const [fieldKey, field] of Object.entries(fields)) {

@@ -359,7 +359,7 @@ function createImageField(fieldKey, field, context) {
 	const { inputClassName, fieldIdPrefix, onValueChange } = context;
 	const defaultValue = typeof field?.default === 'string' ? field.default : '';
 	let initialValue = defaultValue;
-	if (typeof window !== 'undefined' && window.location?.pathname === '/create') {
+	if (typeof window !== 'undefined' && window.location?.pathname === '/create' && !defaultValue.trim()) {
 		try {
 			const prefill = getMutateQueuePrefillForProviderFields({ [fieldKey]: field });
 			const fromQueue = prefill[fieldKey];
@@ -559,7 +559,11 @@ function createImageArrayField(fieldKey, field, context) {
 	const { inputClassName, fieldIdPrefix, onValueChange } = context;
 	const defaultArr = parseImageArrayDefault(field?.default);
 	let initialItems = [...defaultArr];
-	if (typeof window !== 'undefined' && window.location?.pathname === '/create') {
+	if (
+		typeof window !== 'undefined' &&
+		window.location?.pathname === '/create' &&
+		initialItems.length === 0
+	) {
 		try {
 			const prefill = getMutateQueuePrefillForProviderFields({ [fieldKey]: field });
 			const fromQueue = prefill[fieldKey];

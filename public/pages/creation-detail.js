@@ -715,8 +715,99 @@ function renderCreationDetailActionStrip(stripData, escapeFn) {
 </div>`;
 }
 
+function canRecreateFromCreationMeta(meta) {
+	if (!meta || typeof meta !== 'object') return false;
+	const serverId = Number(meta.server_id);
+	const methodKey = typeof meta.method === 'string' ? meta.method.trim() : '';
+	return Number.isFinite(serverId) && serverId > 0 && methodKey.length > 0;
+}
+
+function userPromptFromRecreateMeta(meta) {
+	if (!meta || typeof meta !== 'object') return '';
+	const stored = typeof meta.user_prompt === 'string' ? meta.user_prompt.trim() : '';
+	if (stored) return stored;
+	const args = meta.args;
+	const argsPrompt =
+		args && typeof args === 'object' && !Array.isArray(args) && typeof args.prompt === 'string'
+			? args.prompt.trim()
+			: '';
+	if (!argsPrompt) return '';
+	if (argsPrompt.startsWith('{')) {
+		try {
+			const parsed = JSON.parse(argsPrompt);
+			if (
+				parsed &&
+				typeof parsed === 'object' &&
+				!Array.isArray(parsed) &&
+				(parsed.cast != null || typeof parsed.prompt === 'string')
+			) {
+				return '';
+			}
+		} catch {
+			// fall through
+		}
+	}
+	return argsPrompt;
+}
+
+async function handleRecreateInAdvanced() {
+	await loadDeps();
+	const creation = lastCreationMeta;
+	if (!creation) return;
+
+	let recreateMeta = creation.meta && typeof creation.meta === 'object' ? creation.meta : null;
+	let outputMode =
+		creation.media_type === 'video' || recreateMeta?.media_type === 'video' ? 'video' : 'image';
+
+	if (lastDetailIsGroupCreation) {
+		const target = getGroupActionTarget();
+		if (!target) {
+			alert('Select a source image in the group first.');
+			return;
+		}
+		const source = lastGroupSourcesById.get(target.sourceId);
+		if (source?.meta && typeof source.meta === 'object') {
+			recreateMeta = source.meta;
+			outputMode = source.mediaType === 'video' ? 'video' : 'image';
+		}
+	}
+
+	if (!recreateMeta) {
+		alert('Cannot recreate this creation because settings are missing.');
+		return;
+	}
+
+	const styleMeta =
+		recreateMeta.style && typeof recreateMeta.style === 'object' ? recreateMeta.style : null;
+	const styleKey = typeof styleMeta?.key === 'string' ? styleMeta.key.trim() : '';
+
+	const qs = getImportQuery(getAssetVersionParam());
+	const mutateQueueSyncMod = await import(`/shared/mutateQueueSync.js${qs}`);
+	const createPageRuntimeMod = await import(`/shared/createPageRuntime.js${qs}`);
+	const synced = mutateQueueSyncMod.syncCreationDetailToAdvancedCreate({
+		serverId: recreateMeta.server_id,
+		methodKey: typeof recreateMeta.method === 'string' ? recreateMeta.method : '',
+		args:
+			recreateMeta.args && typeof recreateMeta.args === 'object' && !Array.isArray(recreateMeta.args)
+				? recreateMeta.args
+				: null,
+		userPrompt: userPromptFromRecreateMeta(recreateMeta),
+		outputMode,
+		styleKey,
+	});
+
+	if (!synced) {
+		alert('Cannot recreate this creation because server or method information is missing.');
+		return;
+	}
+
+	createPageRuntimeMod.setCreateEditorMode('advanced');
+	navigateCreationDetail('/create');
+}
+
 /** More menu item defs: each has action (data-creation-more-action), show(menuData), icon (svg string), label (string or (menuData)=>string), danger?: boolean. */
-const MORE_MENU_ITEM_DEFS = [
+function getCreationDetailMoreMenuItemDefs() {
+	return [
 	{
 		action: 'copy-link',
 		show: () => true,
@@ -738,6 +829,12 @@ const MORE_MENU_ITEM_DEFS = [
 	<line x1="3" y1="10" x2="21" y2="10"></line>
 </svg>`,
 		label: (d) => (d.actionsContext?.queueForLaterLabel ?? 'Queue for later')
+	},
+	{
+		action: 'recreate',
+		show: (d) => d.actionsContext?.showRecreate,
+		icon: html`${sparkleIcon('')}`,
+		label: 'Recreate'
 	},
 	{
 		action: 'set-video-poster',
@@ -821,7 +918,8 @@ const MORE_MENU_ITEM_DEFS = [
 		label: (d) => (typeof d.actionsContext?.deleteLabel === 'string' ? d.actionsContext.deleteLabel.trim() : 'Delete'),
 		danger: true
 	}
-];
+	];
+}
 
 /**
  * Renders the creation-detail-more-menu from item defs. Renders for failed creations when owner can delete.
@@ -830,7 +928,7 @@ const MORE_MENU_ITEM_DEFS = [
  * @returns {string}
  */
 function renderCreationDetailMoreMenu(menuData, escapeFn) {
-	const items = MORE_MENU_ITEM_DEFS.filter((def) => def.show(menuData)).map((def) => {
+	const items = getCreationDetailMoreMenuItemDefs().filter((def) => def.show(menuData)).map((def) => {
 		const label = typeof def.label === 'function' ? def.label(menuData) : def.label;
 		const itemClass = def.danger ? 'creation-detail-more-menu-item creation-detail-more-menu-item-danger' : 'creation-detail-more-menu-item';
 		const labelHtml = def.action === 'queue-for-later'
@@ -3069,6 +3167,7 @@ async function loadCreation() {
 			showQueueForLater,
 			showQueueFromFrame,
 			showSetVideoPoster,
+			showRecreate: false,
 			queueForLaterLabel,
 			isFailed,
 			deleteDisabled: (userDeleted && isAdmin) ? false : !(!isPublished && (status === 'failed' || (status === 'creating' && isTimedOut) || status === 'completed')),
@@ -3193,6 +3292,13 @@ async function loadCreation() {
 			lastGroupSourcesById = new Map();
 			lastGroupSelectedSourceId = null;
 		}
+
+		actionsContext.showRecreate =
+			!adminViewingUserDeleted &&
+			(status === 'completed' || isFailed) &&
+			(isGroupCreation
+				? groupSources.some((source) => canRecreateFromCreationMeta(source.meta))
+				: canRecreateFromCreationMeta(meta));
 
 		if (isGroupCreation && groupSources.length > 0) {
 			applyDetailHeroAspectLayout(groupSources[0]);
@@ -5252,6 +5358,9 @@ async function loadCreation() {
 				const targets = {
 					'more-info': () => openDetailsModal(),
 					'copy-link': () => detailContent.querySelector('[data-copy-link-button]')?.click(),
+					'recreate': () => {
+						void handleRecreateInAdvanced();
+					},
 					'set-avatar': () => detailContent.querySelector('button[data-set-avatar-button]')?.click(),
 					'landscape': () => openLandscapeModalFromLoadedCreation(),
 					'unpublish': () => handleUnpublish(),

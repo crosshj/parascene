@@ -367,3 +367,98 @@ describe('syncMutatePageToAdvancedCreate', () => {
 		expect(selections.fieldValues.prompt).toBe('make it blue');
 	});
 });
+
+describe('syncCreationDetailToAdvancedCreate', () => {
+	const ls = new Map();
+	const ss = new Map();
+
+	beforeEach(() => {
+		ls.clear();
+		ss.clear();
+		global.window = {
+			localStorage: {
+				getItem: (key) => ls.get(key) ?? null,
+				setItem: (key, value) => {
+					ls.set(key, value);
+				},
+				removeItem: (key) => {
+					ls.delete(key);
+				},
+			},
+			sessionStorage: {
+				getItem: (key) => ss.get(key) ?? null,
+				setItem: (key, value) => {
+					ss.set(key, value);
+				},
+				removeItem: (key) => {
+					ss.delete(key);
+				},
+			},
+			location: { origin: 'https://app.test' },
+			document: {
+				dispatchEvent: () => {},
+			},
+		};
+	});
+
+	afterEach(() => {
+		delete global.window;
+	});
+
+	test('persists full provider args and route from creation meta', async () => {
+		const { loadMutateQueue } = await import('../public/shared/mutateQueue.js');
+		const { syncCreationDetailToAdvancedCreate } = await import('../public/shared/mutateQueueSync.js');
+		const { readSharedCreateSettings, CREATE_PAGE_SELECTIONS_SESSION_KEY } = await import(
+			'../public/shared/createSettingsSync.js'
+		);
+
+		loadMutateQueue().push({
+			sourceId: 99,
+			imageUrl: 'https://app.test/wrong-output.png',
+			published: true,
+		});
+
+		const result = syncCreationDetailToAdvancedCreate({
+			serverId: 2,
+			methodKey: 'replicate',
+			args: {
+				prompt: '{"cast":[]}',
+				model: 'bytedance/seedream-4',
+				aspect_ratio: '1:1',
+				duration: 8,
+				image_url: 'https://app.test/input.png',
+				image_url_array: ['https://app.test/ref-a.png', 'https://app.test/ref-b.png'],
+			},
+			userPrompt: 'A holy vehicle in bubbling darkness',
+			outputMode: 'video',
+			styleKey: 'cinematic',
+		});
+
+		expect(result).toEqual({
+			serverId: 2,
+			methodKey: 'replicate',
+			model: 'bytedance/seedream-4',
+			outputMode: 'video',
+		});
+
+		expect(loadMutateQueue()).toEqual([]);
+
+		const settings = readSharedCreateSettings();
+		expect(settings.prompt).toBe('A holy vehicle in bubbling darkness');
+		expect(settings.aspectRatio).toBe('1:1');
+		expect(settings.outputMode).toBe('video');
+		expect(settings.styleSelected).toBe('cinematic');
+
+		const selections = JSON.parse(ss.get(CREATE_PAGE_SELECTIONS_SESSION_KEY));
+		expect(selections.serverId).toBe(2);
+		expect(selections.methodKey).toBe('replicate');
+		expect(selections.fieldValues.model).toBe('bytedance/seedream-4');
+		expect(selections.fieldValues.duration).toBe(8);
+		expect(selections.fieldValues.prompt).toBe('A holy vehicle in bubbling darkness');
+		expect(selections.fieldValues.image_url).toBe('https://app.test/input.png');
+		expect(selections.fieldValues.image_url_array).toEqual([
+			'https://app.test/ref-a.png',
+			'https://app.test/ref-b.png',
+		]);
+	});
+});

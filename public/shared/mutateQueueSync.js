@@ -12,12 +12,14 @@ import {
 } from './mutateQueue.js';
 import {
 	CREATE_PAGE_SELECTIONS_SESSION_KEY,
+	CREATE_SETTINGS_STORAGE_KEYS,
 	encodeSharedModelRoute,
 	notifyCreateSettingsUpdated,
 	persistSharedAspectRatio,
 	persistSharedModelRoute,
 	persistSharedOutputMode,
 	persistSharedPrompt,
+	persistSharedStyleSelected,
 } from './createSettingsSync.js';
 import {
 	MUTATE_DEFAULT_METHOD_KEY,
@@ -355,6 +357,144 @@ export function resolveMutateSubmitRoute(mode, i2vEngine = 'ltx') {
 		model: MUTATE_DEFAULT_MODEL,
 		outputMode: 'image',
 	};
+}
+
+/**
+ * @param {Record<string, unknown> | null | undefined} args
+ * @returns {Record<string, string | number | boolean | string[]>}
+ */
+function serializeCreationArgsForFieldValues(args) {
+	const out = {};
+	if (!args || typeof args !== 'object' || Array.isArray(args)) return out;
+	for (const [key, val] of Object.entries(args)) {
+		if (val == null) continue;
+		if (typeof val === 'string' || typeof val === 'number' || typeof val === 'boolean') {
+			out[key] = val;
+			continue;
+		}
+		if (Array.isArray(val)) {
+			const strings = val.filter((item) => typeof item === 'string' && item.trim());
+			if (strings.length > 0 && strings.length === val.length) {
+				out[key] = strings;
+			}
+		}
+	}
+	return out;
+}
+
+/**
+ * Persist creation meta (server, method, provider args) so /create advanced opens with the same recipe.
+ * Restores provider form fields from meta.args — does not use the mutate image queue (that would
+ * mis-route the creation output into image fields).
+ *
+ * @param {{
+ *   serverId?: number | null,
+ *   methodKey?: string,
+ *   args?: Record<string, unknown> | null,
+ *   userPrompt?: string,
+ *   outputMode?: 'image' | 'video',
+ *   styleKey?: string,
+ * }} snapshot
+ * @returns {{ serverId: number, methodKey: string, model: string, outputMode: 'image' | 'video' } | null}
+ */
+export function syncCreationDetailToAdvancedCreate(snapshot = {}) {
+	const serverId = Number(snapshot.serverId);
+	const methodKey = typeof snapshot.methodKey === 'string' ? snapshot.methodKey.trim() : '';
+	if (!Number.isFinite(serverId) || serverId < 1 || !methodKey) {
+		return null;
+	}
+
+	const args =
+		snapshot.args && typeof snapshot.args === 'object' && !Array.isArray(snapshot.args)
+			? snapshot.args
+			: {};
+	const userPrompt = typeof snapshot.userPrompt === 'string' ? snapshot.userPrompt.trim() : '';
+	const fieldValues = serializeCreationArgsForFieldValues(args);
+	if (userPrompt) {
+		fieldValues.prompt = userPrompt;
+	}
+
+	const aspect =
+		typeof fieldValues.aspect_ratio === 'string' && fieldValues.aspect_ratio.trim()
+			? fieldValues.aspect_ratio.trim()
+			: '';
+	const outputMode = snapshot.outputMode === 'video' ? 'video' : 'image';
+	const model = typeof fieldValues.model === 'string' ? fieldValues.model.trim() : '';
+	const advancedPrompt =
+		userPrompt ||
+		(typeof fieldValues.prompt === 'string' ? fieldValues.prompt.trim() : '');
+
+	if (advancedPrompt) {
+		persistSharedPrompt(advancedPrompt, { notify: false });
+	}
+	if (aspect) {
+		persistSharedAspectRatio(aspect, { notify: false });
+	}
+	persistSharedOutputMode(outputMode, { notify: false });
+	if (model) {
+		persistSharedModelRoute(encodeSharedModelRoute(serverId, methodKey, model), {
+			outputMode,
+			notify: false,
+		});
+	}
+
+	const styleKey =
+		typeof snapshot.styleKey === 'string' && snapshot.styleKey.trim()
+			? snapshot.styleKey.trim()
+			: '';
+	if (styleKey) {
+		persistSharedStyleSelected(styleKey, { notify: false });
+	}
+
+	// Clear mutate queue / composer attachments so image fields restore from saved args only.
+	try {
+		replaceMutateQueueFromImageUrls([]);
+		persistCreateAttachmentUrls([]);
+	} catch {
+		// ignore storage errors
+	}
+
+	try {
+		const ss = typeof window !== 'undefined' ? window.sessionStorage : null;
+		if (ss) {
+			let selections = {};
+			try {
+				const stored = ss.getItem(CREATE_PAGE_SELECTIONS_SESSION_KEY);
+				if (stored) selections = JSON.parse(stored);
+			} catch {
+				selections = {};
+			}
+			if (!selections || typeof selections !== 'object') selections = {};
+			selections.serverId = serverId;
+			selections.methodKey = methodKey;
+			selections.tab = 'basic';
+			selections.fieldValues = { ...fieldValues };
+			const adv =
+				selections.advancedOptions && typeof selections.advancedOptions === 'object'
+					? selections.advancedOptions
+					: {};
+			selections.advancedOptions = {
+				...adv,
+				...(advancedPrompt ? { prompt: advancedPrompt } : {}),
+			};
+			ss.setItem(CREATE_PAGE_SELECTIONS_SESSION_KEY, JSON.stringify(selections));
+		}
+	} catch {
+		// ignore storage errors
+	}
+
+	try {
+		const ls = typeof window !== 'undefined' ? window.localStorage : null;
+		if (ls) {
+			ls.setItem(CREATE_SETTINGS_STORAGE_KEYS.serverId, String(serverId));
+			ls.setItem(CREATE_SETTINGS_STORAGE_KEYS.methodKey, methodKey);
+		}
+	} catch {
+		// ignore storage errors
+	}
+
+	notifyCreateSettingsUpdated();
+	return { serverId, methodKey, model, outputMode };
 }
 
 /**
