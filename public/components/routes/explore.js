@@ -159,6 +159,7 @@ class AppRouteExplore extends HTMLElement {
 		if (!scopes.includes('explore') && !scopes.includes('creation')) return;
 		if (detail.reason === 'deleted' || detail.reason === 'unpublished') return;
 		if (detail.reason === 'like-changed') return;
+		if (detail.reason === 'comment-changed') return;
 		if (this.isRouteActive()) {
 			this.loadExplore({ reset: true });
 		}

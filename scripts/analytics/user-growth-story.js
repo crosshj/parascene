@@ -2,6 +2,9 @@
 /**
  * User growth story report.
  *
+ * Rolling windows and latest day/week/month comparisons exclude today (partial UTC day).
+ * Visit-pulse funnel uses US East yesterday (see visitPulseCore).
+ *
  * HTML: user-growth-story.html · CSS: report.css ({{!styleBlock}})
  */
 import fs from 'fs/promises'
@@ -164,6 +167,36 @@ function startOfUtcWeek(date) {
 
 function getWeekKey(date) {
 	return toIsoDate(startOfUtcWeek(date))
+}
+
+function startOfTodayUtc() {
+	return startOfUtcDay(new Date())
+}
+
+/** Last fully elapsed UTC calendar day (today excluded). */
+function completeThroughUtcDay() {
+	return addDays(startOfTodayUtc(), -1)
+}
+
+function completeThroughUtcDayKey() {
+	return toIsoDate(completeThroughUtcDay())
+}
+
+function isCurrentUtcWeek(weekKey) {
+	return weekKey === getWeekKey(new Date())
+}
+
+function isCurrentUtcMonth(monthKey) {
+	const d = new Date()
+	return monthKey === `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
+}
+
+function completeRollingWindowBounds() {
+	const latestWindowEnd = startOfTodayUtc()
+	const latestWindowStart = addDays(latestWindowEnd, -WINDOW_DAYS)
+	const prevWindowEnd = latestWindowStart
+	const prevWindowStart = addDays(prevWindowEnd, -WINDOW_DAYS)
+	return { latestWindowStart, latestWindowEnd, prevWindowStart, prevWindowEnd }
 }
 
 function safeDate(value) {
@@ -438,7 +471,8 @@ async function loadFromDbInstance(dbInstance, minIso) {
 	const allowedUserIds = new Set(users.map((u) => Number(u.id)))
 	const events = []
 	const minDate = new Date(minIso)
-	const window30Start = addDays(startOfUtcDay(new Date()), -(WINDOW_DAYS - 1))
+	const { latestWindowStart } = completeRollingWindowBounds()
+	const window30Start = latestWindowStart
 	const add = (userIdRaw, tsRaw, type, extra = {}) => {
 		const userId = Number(userIdRaw)
 		const ts = safeDate(tsRaw)
@@ -695,7 +729,7 @@ function buildStory(users, events) {
 	if (users.length) {
 		const firstUserDate = safeDate(users[0]?.created_at) || startOfUtcDay(new Date())
 		const startDay = startOfUtcDay(firstUserDate)
-		const endDay = startOfUtcDay(new Date())
+		const endDay = completeThroughUtcDay()
 		for (let d = new Date(startDay.getTime()); d <= endDay; d = addDays(d, 1)) {
 			const key = toIsoDate(d)
 			dailyAllTimeRows.push({
@@ -714,7 +748,7 @@ function buildStory(users, events) {
 	if (users.length) {
 		const firstUserDate = safeDate(users[0]?.created_at) || startOfUtcWeek(new Date())
 		const startWeek = startOfUtcWeek(firstUserDate)
-		const endWeek = startOfUtcWeek(new Date())
+		const endWeek = startOfUtcWeek(completeThroughUtcDay())
 		for (let d = new Date(startWeek.getTime()); d <= endWeek; d = addDays(d, 7)) {
 			const weekKey = toIsoDate(d)
 			weeklyAllTimeRows.push({
@@ -743,7 +777,8 @@ function buildStory(users, events) {
 	if (users.length) {
 		const firstUserDate = safeDate(users[0]?.created_at) || new Date()
 		const startMonth = new Date(Date.UTC(firstUserDate.getUTCFullYear(), firstUserDate.getUTCMonth(), 1))
-		const endMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
+		const ctd = completeThroughUtcDay()
+		const endMonth = new Date(Date.UTC(ctd.getUTCFullYear(), ctd.getUTCMonth(), 1))
 		for (let d = new Date(startMonth.getTime()); d <= endMonth; d = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1))) {
 			const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
 			monthlyAllTimeRows.push({
@@ -753,17 +788,23 @@ function buildStory(users, events) {
 		}
 	}
 
-	const latestDay = dayRows[dayRows.length - 1] || { day: '-', dau: 0, new_users: 0 }
-	const prevDay = dayRows[dayRows.length - 2] || { day: '-', dau: 0, new_users: 0 }
-	const latestWeek = weekRows[weekRows.length - 1] || { week: '-', wau: 0, new_users: 0 }
-	const prevWeek = weekRows[weekRows.length - 2] || { week: '-', wau: 0, new_users: 0 }
-	const latestMonth = monthRows[monthRows.length - 1] || { month: '-', mau: 0 }
-	const prevMonth = monthRows[monthRows.length - 2] || { month: '-', mau: 0 }
+	const completeDayKey = completeThroughUtcDayKey()
+	const completeDayRows = dayRows.filter((r) => r.day <= completeDayKey)
+	const latestDay = completeDayRows[completeDayRows.length - 1] || { day: '-', dau: 0, new_users: 0 }
+	const prevDay = completeDayRows[completeDayRows.length - 2] || { day: '-', dau: 0, new_users: 0 }
+
+	const completeWeekRows = weekRows.filter((r) => !isCurrentUtcWeek(r.week))
+	const latestWeek = completeWeekRows[completeWeekRows.length - 1] || { week: '-', wau: 0, new_users: 0 }
+	const prevWeek = completeWeekRows[completeWeekRows.length - 2] || { week: '-', wau: 0, new_users: 0 }
+
+	const completeMonthRows = monthRows.filter((r) => !isCurrentUtcMonth(r.month))
+	const latestMonth = completeMonthRows[completeMonthRows.length - 1] || { month: '-', mau: 0 }
+	const prevMonth = completeMonthRows[completeMonthRows.length - 2] || { month: '-', mau: 0 }
 
 	const cohortRows = []
-	const mondayNow = startOfUtcWeek(new Date())
+	const latestCompleteWeekStart = startOfUtcWeek(completeThroughUtcDay())
 	for (let i = COHORT_WEEKS - 1; i >= 0; i--) {
-		const cohortStart = addDays(mondayNow, -i * 7)
+		const cohortStart = addDays(latestCompleteWeekStart, -i * 7)
 		const cohortEnd = addDays(cohortStart, 7)
 		const cohortKey = toIsoDate(cohortStart)
 		const usersInCohort = users.filter(u => {
@@ -795,10 +836,8 @@ function buildStory(users, events) {
 		})
 	}
 
-	const latestWindowStart = addDays(startOfUtcDay(new Date()), -(WINDOW_DAYS - 1))
-	const latestWindowEnd = addDays(startOfUtcDay(new Date()), 1)
-	const prevWindowStart = addDays(latestWindowStart, -WINDOW_DAYS)
-	const prevWindowEnd = latestWindowStart
+	const { latestWindowStart, latestWindowEnd, prevWindowStart, prevWindowEnd } =
+		completeRollingWindowBounds()
 
 	const inRange = (ts, start, end) => ts >= start && ts < end
 	const currActive = new Set(events.filter(e => inRange(e.ts, latestWindowStart, latestWindowEnd)).map(e => e.user_id))
@@ -858,7 +897,7 @@ function buildStory(users, events) {
 		}
 	}).sort((a, b) => b.core_actions - a.core_actions).slice(0, 25)
 
-	const weeklyGrowthRows = weekRows.slice(-10).map((row, idx, arr) => {
+	const weeklyGrowthRows = completeWeekRows.slice(-10).map((row, idx, arr) => {
 		const prev = arr[idx - 1]
 		return {
 			week: row.week,
@@ -869,14 +908,15 @@ function buildStory(users, events) {
 		}
 	})
 
-	const last6Weeks = weekRows.slice(-6)
+	const last6Weeks = completeWeekRows.slice(-6)
 	const avgWau = last6Weeks.length ? last6Weeks.reduce((s, r) => s + r.wau, 0) / last6Weeks.length : 0
 	const avgNewUsers = last6Weeks.length ? last6Weeks.reduce((s, r) => s + r.new_users, 0) / last6Weeks.length : 0
 	const avgW1 = cohortRows.filter(r => r.signups > 0).slice(-8).reduce((s, r) => s + r.w1_rate, 0) / Math.max(cohortRows.filter(r => r.signups > 0).slice(-8).length, 1)
 	const avgW4 = cohortRows.filter(r => r.signups > 0).slice(-8).reduce((s, r) => s + r.w4_rate, 0) / Math.max(cohortRows.filter(r => r.signups > 0).slice(-8).length, 1)
 
 	const observations = [
-		`Active base: DAU is ${latestDay.dau} (${signedPct(latestDay.dau, prevDay.dau)} vs prior day), WAU is ${latestWeek.wau} (${signedPct(latestWeek.wau, prevWeek.wau)} vs prior week), and MAU is ${latestMonth.mau} (${signedPct(latestMonth.mau, prevMonth.mau)} vs prior month).`,
+		`Rolling metrics use complete UTC days through ${completeDayKey}; today is excluded.`,
+		`Active base: DAU is ${latestDay.dau} on ${latestDay.day} (${signedPct(latestDay.dau, prevDay.dau)} vs prior complete day), WAU is ${latestWeek.wau} for week ${latestWeek.week} (${signedPct(latestWeek.wau, prevWeek.wau)} vs prior complete week), and MAU is ${latestMonth.mau} for ${latestMonth.month} (${signedPct(latestMonth.mau, prevMonth.mau)} vs prior complete month).`,
 		`Acquisition: ${latestWeek.new_users} new users joined this week (${signedPct(latestWeek.new_users, prevWeek.new_users)} WoW). Recent 6-week averages are ${avgWau.toFixed(1)} WAU and ${avgNewUsers.toFixed(1)} new users/week.`,
 		`Retention quality: average W+1 retention across recent cohorts is ${(avgW1 * 100).toFixed(1)}%, and W+4 is ${(avgW4 * 100).toFixed(1)}%.`,
 		`Engagement depth: in the last ${WINDOW_DAYS} days, active users performed ${coreActions} core actions, or ${actionsPerActive.toFixed(2)} core actions per active user.`,
@@ -885,6 +925,7 @@ function buildStory(users, events) {
 	]
 
 	return {
+		completeThroughDay: completeDayKey,
 		latestDay, latestWeek, latestMonth, dayRows, weekRows, monthRows,
 		cohortRows, weeklyGrowthRows, observations, actionLeaders,
 		dailyAllTimeRows, weeklyAllTimeRows, cumulativeUsersByWeek, monthlyAllTimeRows,
@@ -1058,6 +1099,7 @@ async function renderHtml(report) {
 		dataSource: 'Supabase',
 		generatedAt: fmt.format(now),
 		tzLabel: TZ,
+		completeThroughDay: report.completeThroughDay || completeThroughUtcDayKey(),
 		earliestWeek,
 		latestWeek,
 		lookbackDays: LOOKBACK_DAYS,

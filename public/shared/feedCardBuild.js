@@ -938,7 +938,7 @@ function buildFeedCreationCard(
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 15a4 4 0 0 1-4 4H8l-5 5V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path>
             </svg>
-            <span class="feed-card-action-count">${item.comment_count ?? 0}</span>
+            <span class="feed-card-action-count" data-comment-count>${item.comment_count ?? 0}</span>
           </button>
           <button class="feed-card-action" type="button" aria-label="Like" data-like-button>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">

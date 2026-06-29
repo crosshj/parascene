@@ -9,7 +9,7 @@ import { challengeEnteredBadgeHtml, publishedBadgeHtml } from './creationBadges.
 export const CREATION_DETAIL_SHELL_SYNC_MESSAGE = 'prsn-creation-detail-overlay-shell-sync';
 export const CREATION_DETAIL_SHELL_SYNC_EVENT = 'prsn-creation-detail-overlay-shell-sync';
 
-/** @typedef {'published'|'unpublished'|'edited'|'deleted'|'refreshed'|'status-changed'|'like-changed'|'challenge-submitted'|'challenge-withdrawn'} CreationDetailShellSyncReason */
+/** @typedef {'published'|'unpublished'|'edited'|'deleted'|'refreshed'|'status-changed'|'like-changed'|'comment-changed'|'challenge-submitted'|'challenge-withdrawn'} CreationDetailShellSyncReason */
 
 export const CREATION_DETAIL_SHELL_SCOPE = {
 	CREATIONS: 'creations',
@@ -62,6 +62,7 @@ export function defaultScopesForCreationShellSyncReason(reason) {
 				CREATION_DETAIL_SHELL_SCOPE.CREATION,
 			];
 		case 'like-changed':
+		case 'comment-changed':
 			return [
 				CREATION_DETAIL_SHELL_SCOPE.FEED,
 				CREATION_DETAIL_SHELL_SCOPE.EXPLORE,
@@ -101,7 +102,7 @@ export function normalizeCreationDetailShellSyncScopes(scopes) {
 
 /**
  * @param {unknown} payload
- * @returns {{ creationId: number, reason: string, scopes: string[], like_count?: number, viewer_liked?: boolean } | null}
+ * @returns {{ creationId: number, reason: string, scopes: string[], like_count?: number, viewer_liked?: boolean, comment_count?: number } | null}
  */
 export function normalizeCreationDetailShellSyncDetail(payload) {
 	if (!payload || typeof payload !== 'object') return null;
@@ -120,11 +121,15 @@ export function normalizeCreationDetailShellSyncDetail(payload) {
 	if (typeof payload.viewer_liked === 'boolean') {
 		detail.viewer_liked = payload.viewer_liked;
 	}
+	if (payload.comment_count !== undefined && payload.comment_count !== null) {
+		const commentCount = Number(payload.comment_count);
+		if (Number.isFinite(commentCount)) detail.comment_count = Math.max(0, commentCount);
+	}
 	return detail;
 }
 
 /**
- * @param {{ creationId?: number|string, reason?: CreationDetailShellSyncReason|string, scopes?: string[], like_count?: number, viewer_liked?: boolean }} [options]
+ * @param {{ creationId?: number|string, reason?: CreationDetailShellSyncReason|string, scopes?: string[], like_count?: number, viewer_liked?: boolean, comment_count?: number }} [options]
  * @returns {boolean}
  */
 export function notifyCreationDetailEmbedShellSync(options = {}) {
@@ -145,6 +150,7 @@ export function notifyCreationDetailEmbedShellSync(options = {}) {
 		scopes: scopes.length ? scopes : defaultScopesForCreationShellSyncReason(reason),
 		like_count: options.like_count,
 		viewer_liked: options.viewer_liked,
+		comment_count: options.comment_count,
 	});
 	if (!detail) return false;
 	try {
@@ -156,6 +162,7 @@ export function notifyCreationDetailEmbedShellSync(options = {}) {
 		};
 		if (detail.like_count !== undefined) message.like_count = detail.like_count;
 		if (typeof detail.viewer_liked === 'boolean') message.viewer_liked = detail.viewer_liked;
+		if (detail.comment_count !== undefined) message.comment_count = detail.comment_count;
 		window.parent.postMessage(message, window.location.origin);
 		return true;
 	} catch {
@@ -304,6 +311,28 @@ export function patchCreationCardLikeInDocument(creationId, likeState, root = do
 }
 
 /**
+ * @param {number|string} creationId
+ * @param {number} commentCount
+ * @param {Document | Element | DocumentFragment} [root]
+ */
+export function patchCreationCardCommentInDocument(creationId, commentCount, root = document) {
+	const id = String(creationId);
+	if (!id) return;
+	const count = Math.max(0, Number(commentCount) || 0);
+	const scopeRoot = resolveDomPatchRoot(root);
+	const selectors = [
+		`.feed-card[data-creation-id="${id}"] button[data-comment-button] [data-comment-count]`,
+		`.feed-card[data-image-id="${id}"] button[data-comment-button] [data-comment-count]`,
+		`.chat-doom-slide[data-creation-id="${id}"] [data-chat-doom-comments] .chat-doom-rail-count`,
+	];
+	for (const sel of selectors) {
+		scopeRoot.querySelectorAll(sel).forEach((el) => {
+			if (el instanceof HTMLElement) el.textContent = String(count);
+		});
+	}
+}
+
+/**
  * @param {{ creationId: number, reason: string, scopes: string[], like_count?: number, viewer_liked?: boolean }} detail
  * @param {Document | Element | DocumentFragment} [root]
  */
@@ -329,6 +358,10 @@ export function applyCreationDetailShellSyncDomPatches(detail, root = document) 
 			{ like_count: detail.like_count, viewer_liked: detail.viewer_liked },
 			root
 		);
+		return;
+	}
+	if (reason === 'comment-changed' && detail.comment_count !== undefined) {
+		patchCreationCardCommentInDocument(creationId, detail.comment_count, root);
 		return;
 	}
 	if (reason === 'challenge-submitted') {

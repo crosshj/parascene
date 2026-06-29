@@ -222,6 +222,10 @@ class AppRouteFeed extends HTMLElement {
 			this.patchFeedItemLikeState(detail);
 			return;
 		}
+		if (detail.reason === 'comment-changed') {
+			this.patchFeedItemCommentState(detail);
+			return;
+		}
 		if (detail.reason === 'challenge-submitted' || detail.reason === 'challenge-withdrawn') {
 			this.patchFeedItemChallengeState(detail);
 			return;
@@ -247,6 +251,20 @@ class AppRouteFeed extends HTMLElement {
 			if (itemId !== id) continue;
 			item.viewer_liked = detail.viewer_liked;
 			if (Number.isFinite(likeCount)) item.like_count = Math.max(0, likeCount);
+			break;
+		}
+	}
+
+	patchFeedItemCommentState(detail) {
+		const id = Number(detail.creationId);
+		if (!Number.isFinite(id) || id <= 0) return;
+		const commentCount = Number(detail.comment_count);
+		if (!Number.isFinite(commentCount)) return;
+		if (!Array.isArray(this.feedItems)) return;
+		for (const item of this.feedItems) {
+			const itemId = Number(item?.created_image_id ?? item?.id);
+			if (itemId !== id) continue;
+			item.comment_count = Math.max(0, commentCount);
 			break;
 		}
 	}

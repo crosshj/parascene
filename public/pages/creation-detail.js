@@ -5869,6 +5869,10 @@ async function loadCreation() {
 			const threadMod = await perf.timeAsync('comments', 'importModule', () =>
 				import(`/shared/creationCommentsThread.js${threadQs}`)
 			);
+			// Mirror likes: when the comment count changes here, tell the overlay
+			// shell so the underlying feed/explore card count updates on return.
+			const embedShellMod = await import(`/shared/creationDetailEmbedShell.js${threadQs}`);
+			let lastSyncedCommentCount = null;
 			await perf.timeAsync('comments', 'mount', () =>
 				threadMod.mountCreationCommentsThread(commentsHost, {
 					createdImageId: creationId,
@@ -5883,6 +5887,22 @@ async function loadCreation() {
 					},
 					isAdmin,
 					autoScrollOnHash: true,
+					onCommentCountChange: (count) => {
+						const n = Number(count);
+						if (!Number.isFinite(n)) return;
+						// Skip the first (initial-load) value; only sync real changes.
+						if (lastSyncedCommentCount === null) {
+							lastSyncedCommentCount = n;
+							return;
+						}
+						if (n === lastSyncedCommentCount) return;
+						lastSyncedCommentCount = n;
+						embedShellMod.notifyCreationDetailEmbedShellSync({
+							creationId,
+							reason: 'comment-changed',
+							comment_count: n,
+						});
+					},
 				})
 			);
 			perf.markReady('comments');
