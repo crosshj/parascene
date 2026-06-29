@@ -17028,6 +17028,31 @@ body.view-nsfw .connect-comment-thumb[data-media-type="video"].nsfw::after {
 	padding: 0 4px 0 12px;
 }
 
+.skeleton-feed-card--image-only {
+	gap: 0;
+	padding: 0;
+	margin: 0;
+	min-width: 0;
+	width: 100%;
+}
+
+.skeleton-feed-card--image-only + .skeleton-feed-card--image-only {
+	padding-top: 0;
+}
+
+.chat-page-messages .feed-route.chat-feed-channel-route.chat-feed-channel-route--browse-view .skeleton-grid-tile,
+.chat-page-messages .feed-route.chat-feed-channel-route.chat-feed-channel-route--browse-view .skeleton-feed-card--image-only .skeleton-feed-card-image {
+	border-radius: 0;
+}
+
+@media (max-width: 768px) {
+
+	.chat-page-messages .feed-route.chat-feed-channel-route.chat-feed-channel-route--browse-view .skeleton-grid-tile,
+	.chat-page-messages .feed-route.chat-feed-channel-route.chat-feed-channel-route--browse-view .skeleton-feed-card--image-only .skeleton-feed-card-image {
+		border-radius: 8px;
+	}
+}
+
 @media (prefers-reduced-motion: reduce) {
 	.skeleton-feed-card-image::after {
 		animation: none;

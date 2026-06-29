@@ -57,12 +57,31 @@ export function renderFeedCardSkeleton() {
 }
 
 /**
+ * Image-only feed tile skeleton (matches `feed-card--image-only` browse lanes).
+ * @returns {string}
+ */
+export function renderFeedCardImageOnlySkeleton() {
+	return `<div class="skeleton-feed-card skeleton-feed-card--image-only" aria-hidden="true">
+		<div class="skeleton-feed-card-image"></div>
+	</div>`;
+}
+
+/**
  * @param {number} [count] - Number of feed card skeletons (default 4).
  * @returns {string} HTML for N feed card skeletons
  */
 export function renderFeedCardsSkeleton(count = 4) {
 	const n = Math.max(1, Math.min(10, Number(count) || 4));
 	return Array.from({ length: n }, () => renderFeedCardSkeleton()).join('');
+}
+
+/**
+ * @param {number} [count] - Number of image-only feed card skeletons (default 4).
+ * @returns {string}
+ */
+export function renderFeedCardsImageOnlySkeleton(count = 4) {
+	const n = Math.max(1, Math.min(10, Number(count) || 4));
+	return Array.from({ length: n }, () => renderFeedCardImageOnlySkeleton()).join('');
 }
 
 /**

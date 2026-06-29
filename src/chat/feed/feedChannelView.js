@@ -3,10 +3,33 @@
  */
 
 import { createFeedSpotlightVideoTile } from '../../shared/feedCardBuild.js';
-import { renderFeedCardsSkeleton } from '../../shared/skeleton.js';
+import {
+	renderFeedCardsImageOnlySkeleton,
+	renderFeedCardsSkeleton,
+	renderGridSkeleton,
+} from '../../shared/skeleton.js';
 
 const SPOTLIGHT_SLOTS = 4;
 const FEED_LOAD_MORE_SKELETON_COUNT = 3;
+const GRID_LOAD_MORE_SKELETON_COUNT = 8;
+
+/**
+ * @param {'feed' | 'grid' | 'image-only'} [variant]
+ * @param {number} [count]
+ * @returns {string}
+ */
+function renderChatFeedLoadMoreSkeletonMarkup(variant = 'feed', count) {
+	if (variant === 'grid') {
+		const n = count ?? GRID_LOAD_MORE_SKELETON_COUNT;
+		return renderGridSkeleton(n);
+	}
+	if (variant === 'image-only') {
+		const n = count ?? FEED_LOAD_MORE_SKELETON_COUNT;
+		return renderFeedCardsImageOnlySkeleton(n);
+	}
+	const n = count ?? FEED_LOAD_MORE_SKELETON_COUNT;
+	return renderFeedCardsSkeleton(n);
+}
 
 /**
  * Mobile-only (CSS): 2×2 strip above the vertical feed — skeleton tiles or image previews.
@@ -139,15 +162,18 @@ export function createChatFeedChannelElementsFromSegments(segments, renderCard, 
 /**
  * Append feed card skeletons at the bottom of a lane cards host while load-more is in flight.
  * @param {HTMLElement} cardsHost — `.route-cards.feed-cards` tail host for the active lane
+ * @param {{ variant?: 'feed' | 'grid' | 'image-only', count?: number }} [options]
  * @returns {HTMLElement[]}
  */
-export function mountChatFeedLoadMoreSkeleton(cardsHost) {
+export function mountChatFeedLoadMoreSkeleton(cardsHost, options = {}) {
 	if (!(cardsHost instanceof HTMLElement)) return [];
 	if (cardsHost.querySelector('[data-chat-feed-load-more-skeleton]')) {
 		return Array.from(cardsHost.querySelectorAll('[data-chat-feed-load-more-skeleton]'));
 	}
+	const variant =
+		options.variant === 'grid' || options.variant === 'image-only' ? options.variant : 'feed';
 	const temp = document.createElement('div');
-	temp.innerHTML = renderFeedCardsSkeleton(FEED_LOAD_MORE_SKELETON_COUNT);
+	temp.innerHTML = renderChatFeedLoadMoreSkeletonMarkup(variant, options.count);
 	/** @type {HTMLElement[]} */
 	const mounted = [];
 	while (temp.firstElementChild instanceof HTMLElement) {

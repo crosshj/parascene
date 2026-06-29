@@ -582,6 +582,8 @@ let createPseudoColumnPager;
 /** @type {((count?: number) => string) | undefined} */
 let renderFeedCardsSkeleton;
 /** @type {((count?: number) => string) | undefined} */
+let renderFeedCardsImageOnlySkeleton;
+/** @type {((count?: number) => string) | undefined} */
 let renderGridSkeleton;
 /** @type {((count?: number) => string) | undefined} */
 let renderCommentRowsSkeleton;
@@ -741,6 +743,7 @@ async function loadDeps() {
 	createConnectCommentRowElement = _cdConnectCommentCard.createConnectCommentRowElement;
 	createPseudoColumnPager = _cdPseudoChannelColumnPager.createPseudoColumnPager;
 	renderFeedCardsSkeleton = _cdSkeleton.renderFeedCardsSkeleton;
+	renderFeedCardsImageOnlySkeleton = _cdSkeleton.renderFeedCardsImageOnlySkeleton;
 	renderGridSkeleton = _cdSkeleton.renderGridSkeleton;
 	renderCommentRowsSkeleton = _cdSkeleton.renderCommentRowsSkeleton;
 	renderChatThreadSkeleton = _cdSkeleton.renderChatThreadSkeleton;
@@ -8580,6 +8583,29 @@ export async function initChatPage(root, options = {}) {
 
 	/**
 	 * @param {'feed' | 'explore' | 'creations'} laneSlug
+	 * @returns {'feed' | 'grid' | 'image-only'}
+	 */
+	function feedLaneLoadMoreSkeletonVariant(laneSlug) {
+		if (laneSlug === 'feed') return 'feed';
+		if (chatExploreCreationsBrowseView && (laneSlug === 'explore' || laneSlug === 'creations')) {
+			return 'grid';
+		}
+		if (laneSlug === 'explore' || laneSlug === 'creations') return 'image-only';
+		return 'feed';
+	}
+
+	function renderExploreCreationsChannelSkeletonMarkup() {
+		if (chatExploreCreationsBrowseView && typeof renderGridSkeleton === 'function') {
+			return renderGridSkeleton(25);
+		}
+		if (typeof renderFeedCardsImageOnlySkeleton === 'function') {
+			return renderFeedCardsImageOnlySkeleton(4);
+		}
+		return typeof renderFeedCardsSkeleton === 'function' ? renderFeedCardsSkeleton(4) : '';
+	}
+
+	/**
+	 * @param {'feed' | 'explore' | 'creations'} laneSlug
 	 */
 	async function loadMoreFeedLanePseudoChannelMessages(laneSlug) {
 		if (
@@ -8617,7 +8643,7 @@ export async function initChatPage(root, options = {}) {
 				anchor.getBoundingClientRect().top - messagesEl.getBoundingClientRect().top;
 		}
 
-		mountChatFeedLoadMoreSkeleton(cards);
+		mountChatFeedLoadMoreSkeleton(cards, { variant: feedLaneLoadMoreSkeletonVariant(laneSlug) });
 		try {
 			const r = await pseudoColumnPager.loadOlder();
 			if (!r.ok) {
@@ -10207,12 +10233,7 @@ export async function initChatPage(root, options = {}) {
 				disconnectFeedChannelLoadObserver();
 				exploreChannelSearchLoading = true;
 				syncActiveChatExploreSearchBar();
-				const searchGridInner =
-					chatExploreCreationsBrowseView && typeof renderGridSkeleton === 'function'
-						? renderGridSkeleton(25)
-						: typeof renderFeedCardsSkeleton === 'function'
-							? renderFeedCardsSkeleton(4)
-							: '';
+				const searchGridInner = renderExploreCreationsChannelSkeletonMarkup();
 				if (searchGridInner) {
 					messagesEl.innerHTML = `<div class="feed-route chat-feed-channel-route${chatExploreCreationsBrowseView ? ' chat-feed-channel-route--browse-view' : ''}">
 						${renderChatExploreSearchBarMarkup({ loading: true })}
@@ -12171,12 +12192,7 @@ export async function initChatPage(root, options = {}) {
 				const searchBar = channelSlugForLoading === 'explore'
 					? renderChatExploreSearchBarMarkup({ loading: pendingExploreSearch })
 					: '';
-				const gridInner =
-					chatExploreCreationsBrowseView && typeof renderGridSkeleton === 'function'
-						? renderGridSkeleton(25)
-						: typeof renderFeedCardsSkeleton === 'function'
-							? renderFeedCardsSkeleton(4)
-							: '';
+				const gridInner = renderExploreCreationsChannelSkeletonMarkup();
 				if (gridInner) {
 					messagesEl.innerHTML = `<div class="feed-route chat-feed-channel-route${creationsCls}${browseCls}">
 						${searchBar}
