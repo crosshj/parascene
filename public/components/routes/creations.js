@@ -882,6 +882,12 @@ class AppRouteCreations extends HTMLElement {
 		const scopes = Array.isArray(detail.scopes) ? detail.scopes : [];
 		if (!scopes.includes('creations') && !scopes.includes('creation')) return;
 		if (detail.reason === 'deleted') return;
+		if (
+			detail.reason === 'challenge-submitted' ||
+			detail.reason === 'challenge-withdrawn'
+		) {
+			return;
+		}
 		if (!this.isRouteActive()) return;
 		if (
 			detail.reason === 'create-submitted' ||

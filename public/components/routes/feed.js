@@ -222,6 +222,10 @@ class AppRouteFeed extends HTMLElement {
 			this.patchFeedItemLikeState(detail);
 			return;
 		}
+		if (detail.reason === 'challenge-submitted' || detail.reason === 'challenge-withdrawn') {
+			this.patchFeedItemChallengeState(detail);
+			return;
+		}
 		if (detail.reason === 'deleted' || detail.reason === 'unpublished') return;
 		const route =
 			window.__CURRENT_ROUTE__ ||
@@ -243,6 +247,29 @@ class AppRouteFeed extends HTMLElement {
 			if (itemId !== id) continue;
 			item.viewer_liked = detail.viewer_liked;
 			if (Number.isFinite(likeCount)) item.like_count = Math.max(0, likeCount);
+			break;
+		}
+	}
+
+	patchFeedItemChallengeState(detail) {
+		const id = Number(detail.creationId);
+		if (!Number.isFinite(id) || id <= 0) return;
+		if (!Array.isArray(this.feedItems)) return;
+		const entered = detail.reason === 'challenge-submitted';
+		for (const item of this.feedItems) {
+			const itemId = Number(item?.created_image_id ?? item?.id);
+			if (itemId !== id) continue;
+			const meta =
+				item.meta && typeof item.meta === 'object' && !Array.isArray(item.meta)
+					? { ...item.meta }
+					: {};
+			if (entered) {
+				const subs = Array.isArray(meta.challenge_submissions) ? meta.challenge_submissions : [];
+				if (!subs.length) meta.challenge_submissions = [{ thread_id: 0, challenge_id: '' }];
+			} else {
+				meta.challenge_submissions = [];
+			}
+			item.meta = meta;
 			break;
 		}
 	}

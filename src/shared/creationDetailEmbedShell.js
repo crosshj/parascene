@@ -4,12 +4,12 @@
  * `prsn-creation-detail-overlay-shell-sync` for lane components to handle.
  */
 
-import { publishedBadgeHtml } from './creationBadges.js';
+import { challengeEnteredBadgeHtml, publishedBadgeHtml } from './creationBadges.js';
 
 export const CREATION_DETAIL_SHELL_SYNC_MESSAGE = 'prsn-creation-detail-overlay-shell-sync';
 export const CREATION_DETAIL_SHELL_SYNC_EVENT = 'prsn-creation-detail-overlay-shell-sync';
 
-/** @typedef {'published'|'unpublished'|'edited'|'deleted'|'refreshed'|'status-changed'|'like-changed'} CreationDetailShellSyncReason */
+/** @typedef {'published'|'unpublished'|'edited'|'deleted'|'refreshed'|'status-changed'|'like-changed'|'challenge-submitted'|'challenge-withdrawn'} CreationDetailShellSyncReason */
 
 export const CREATION_DETAIL_SHELL_SCOPE = {
 	CREATIONS: 'creations',
@@ -65,6 +65,14 @@ export function defaultScopesForCreationShellSyncReason(reason) {
 				CREATION_DETAIL_SHELL_SCOPE.EXPLORE,
 				CREATION_DETAIL_SHELL_SCOPE.CHAT_FEED,
 				CREATION_DETAIL_SHELL_SCOPE.CHAT_EXPLORE,
+			];
+		case 'challenge-submitted':
+		case 'challenge-withdrawn':
+			return [
+				CREATION_DETAIL_SHELL_SCOPE.FEED,
+				CREATION_DETAIL_SHELL_SCOPE.CHAT_FEED,
+				CREATION_DETAIL_SHELL_SCOPE.CREATIONS,
+				CREATION_DETAIL_SHELL_SCOPE.CHAT_CREATIONS,
 			];
 		default:
 			return [
@@ -219,6 +227,53 @@ function patchLikeButtonEl(button, id, likeCount, viewerLiked) {
 }
 
 /**
+ * @param {HTMLElement} mediaEl
+ * @param {boolean} entered
+ */
+function applyChallengeEntryToMediaEl(mediaEl, entered) {
+	if (!(mediaEl instanceof HTMLElement)) return;
+	const isFeedImage = mediaEl.classList.contains('feed-card-image');
+	const pendingClass = isFeedImage ? 'feed-card-image--challenge-pending' : 'route-media--challenge-pending';
+	const isNsfw = mediaEl.classList.contains('nsfw');
+	if (entered && !isNsfw) {
+		mediaEl.classList.add(pendingClass);
+		if (!mediaEl.querySelector('.route-media-challenge-blur-overlay')) {
+			mediaEl.insertAdjacentHTML(
+				'afterbegin',
+				`<span class="route-media-challenge-blur-overlay" aria-hidden="true"></span>${challengeEnteredBadgeHtml()}`
+			);
+		}
+		return;
+	}
+	mediaEl.classList.remove(pendingClass);
+	mediaEl.querySelector('.route-media-challenge-blur-overlay')?.remove();
+	mediaEl.querySelector('.creation-challenge-entered-badge')?.remove();
+}
+
+/**
+ * @param {number|string} creationId
+ * @param {boolean} entered
+ * @param {Document | Element | DocumentFragment} [root]
+ */
+export function patchCreationCardChallengeEntryInDocument(creationId, entered, root = document) {
+	const id = String(creationId);
+	if (!id) return;
+	const scopeRoot = resolveDomPatchRoot(root);
+	scopeRoot
+		.querySelectorAll(
+			`.feed-card[data-creation-id="${id}"], .feed-card[data-image-id="${id}"]`
+		)
+		.forEach((card) => {
+			applyChallengeEntryToMediaEl(card.querySelector('.feed-card-image'), entered);
+		});
+	scopeRoot.querySelectorAll(`.route-card[data-image-id="${id}"]`).forEach((card) => {
+		if (!(card instanceof HTMLElement)) return;
+		card.dataset.inChallenge = entered ? '1' : '0';
+		applyChallengeEntryToMediaEl(card.querySelector('.route-media'), entered);
+	});
+}
+
+/**
  * @param {number|string} creationId
  * @param {{ like_count?: number, viewer_liked?: boolean }} likeState
  * @param {Document | Element | DocumentFragment} [root]
@@ -267,6 +322,14 @@ export function applyCreationDetailShellSyncDomPatches(detail, root = document) 
 			{ like_count: detail.like_count, viewer_liked: detail.viewer_liked },
 			root
 		);
+		return;
+	}
+	if (reason === 'challenge-submitted') {
+		patchCreationCardChallengeEntryInDocument(creationId, true, root);
+		return;
+	}
+	if (reason === 'challenge-withdrawn') {
+		patchCreationCardChallengeEntryInDocument(creationId, false, root);
 	}
 }
 

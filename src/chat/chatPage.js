@@ -10095,6 +10095,8 @@ export async function initChatPage(root, options = {}) {
 
 		if (reason === 'like-changed') return;
 
+		if (reason === 'challenge-submitted' || reason === 'challenge-withdrawn') return;
+
 		const refreshCreationsLane =
 			activePseudoChannelSlug === 'creations' &&
 			(hasScope('creations') || hasScope('chat-creations') || hasScope('creation'));

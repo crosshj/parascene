@@ -5232,7 +5232,7 @@ async function loadCreation() {
 				}
 				closeChallengeSubmitModal();
 				showToast('Submitted to challenge');
-				refreshAfterMutation('status-changed', { creationId });
+				refreshAfterMutation('challenge-submitted', { creationId });
 			} catch (err) {
 				const msg = err?.message || 'Could not submit';
 				if (challengeSubmitModalError instanceof HTMLElement) {
@@ -5280,7 +5280,7 @@ async function loadCreation() {
 						return;
 					}
 					showToast('Removed from challenge');
-					refreshAfterMutation('status-changed', { creationId });
+					refreshAfterMutation('challenge-withdrawn', { creationId });
 				} catch (err) {
 					showToast(err?.message || 'Could not remove from challenge');
 				} finally {

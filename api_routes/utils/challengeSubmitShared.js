@@ -47,6 +47,34 @@ export function pickLatestChallengeConfigPayload(messagesAsc) {
 }
 
 /**
+ * Latest `challenge_config` for a challenge that is currently accepting submissions.
+ * When multiple challenges exist in the thread (e.g. a new cycle opens while the previous
+ * one's results are still being published), ignores ended cycles and prefers the newest
+ * active one.
+ *
+ * @param {{ body?: unknown, created_at?: string }[]} messagesNewestFirst
+ * @param {number} [nowMs]
+ * @returns {object | null}
+ */
+export function pickChallengeConfigAcceptingSubmissions(messagesNewestFirst, nowMs) {
+	const now = typeof nowMs === "number" ? nowMs : Date.now();
+	const byId = latestChallengeConfigByChallengeId(messagesNewestFirst);
+	let best = null;
+	let bestCreated = -1;
+	for (const { payload: cfg, created_at } of byId.values()) {
+		const phase = deriveChallengePhase(cfg, now);
+		if (phase !== "submitting" && phase !== "submit_and_vote") continue;
+		const t = Date.parse(created_at || "");
+		const sortKey = Number.isFinite(t) ? t : 0;
+		if (!best || sortKey > bestCreated) {
+			best = cfg;
+			bestCreated = sortKey;
+		}
+	}
+	return best;
+}
+
+/**
  * @param {unknown} raw
  * @returns {string[]}
  */
@@ -439,16 +467,11 @@ export async function validateChallengeSubmission({ sb, userId, ownerUserId, cre
 		}
 
 		const messages = await fetchThreadMessagesChronological(sb, tid);
-		const cfg = pickLatestChallengeConfigPayload(messages);
+		const cfg = pickChallengeConfigAcceptingSubmissions([...messages].reverse(), now);
 		const challengeId =
 			cfg && cfg.challenge_id != null ? String(cfg.challenge_id).trim() : "";
 		if (!challengeId) {
-			return { ok: false, status: 400, message: "No challenge is configured in this thread yet." };
-		}
-
-		const phase = deriveChallengePhase(cfg, now);
-		if (phase !== "submitting" && phase !== "submit_and_vote") {
-			return { ok: false, status: 400, message: "This challenge is not accepting submissions right now." };
+			return { ok: false, status: 400, message: "No challenge is accepting submissions right now." };
 		}
 
 		if (metaHasChallengeSubmission(meta, tid, challengeId)) {
