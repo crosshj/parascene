@@ -218,6 +218,10 @@ class AppRouteFeed extends HTMLElement {
 		if (!detail || typeof detail !== 'object') return;
 		const scopes = Array.isArray(detail.scopes) ? detail.scopes : [];
 		if (!scopes.includes('feed') && !scopes.includes('creation')) return;
+		if (detail.reason === 'like-changed') {
+			this.patchFeedItemLikeState(detail);
+			return;
+		}
 		if (detail.reason === 'deleted' || detail.reason === 'unpublished') return;
 		const route =
 			window.__CURRENT_ROUTE__ ||
@@ -226,6 +230,21 @@ class AppRouteFeed extends HTMLElement {
 				: window.location.pathname.slice(1).split('/')[0]);
 		if (route !== 'feed') return;
 		this.loadFeed({ force: true });
+	}
+
+	patchFeedItemLikeState(detail) {
+		const id = Number(detail.creationId);
+		if (!Number.isFinite(id) || id <= 0) return;
+		if (typeof detail.viewer_liked !== 'boolean') return;
+		const likeCount = Number(detail.like_count);
+		if (!Array.isArray(this.feedItems)) return;
+		for (const item of this.feedItems) {
+			const itemId = Number(item?.created_image_id ?? item?.id);
+			if (itemId !== id) continue;
+			item.viewer_liked = detail.viewer_liked;
+			if (Number.isFinite(likeCount)) item.like_count = Math.max(0, likeCount);
+			break;
+		}
 	}
 
 	disconnectedCallback() {

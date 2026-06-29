@@ -9,7 +9,7 @@ import { publishedBadgeHtml } from './creationBadges.js';
 export const CREATION_DETAIL_SHELL_SYNC_MESSAGE = 'prsn-creation-detail-overlay-shell-sync';
 export const CREATION_DETAIL_SHELL_SYNC_EVENT = 'prsn-creation-detail-overlay-shell-sync';
 
-/** @typedef {'published'|'unpublished'|'edited'|'deleted'|'refreshed'|'status-changed'} CreationDetailShellSyncReason */
+/** @typedef {'published'|'unpublished'|'edited'|'deleted'|'refreshed'|'status-changed'|'like-changed'} CreationDetailShellSyncReason */
 
 export const CREATION_DETAIL_SHELL_SCOPE = {
 	CREATIONS: 'creations',
@@ -59,6 +59,13 @@ export function defaultScopesForCreationShellSyncReason(reason) {
 				CREATION_DETAIL_SHELL_SCOPE.CHAT_CREATIONS,
 				CREATION_DETAIL_SHELL_SCOPE.CREATION,
 			];
+		case 'like-changed':
+			return [
+				CREATION_DETAIL_SHELL_SCOPE.FEED,
+				CREATION_DETAIL_SHELL_SCOPE.EXPLORE,
+				CREATION_DETAIL_SHELL_SCOPE.CHAT_FEED,
+				CREATION_DETAIL_SHELL_SCOPE.CHAT_EXPLORE,
+			];
 		default:
 			return [
 				CREATION_DETAIL_SHELL_SCOPE.CREATIONS,
@@ -84,7 +91,7 @@ export function normalizeCreationDetailShellSyncScopes(scopes) {
 
 /**
  * @param {unknown} payload
- * @returns {{ creationId: number, reason: string, scopes: string[] } | null}
+ * @returns {{ creationId: number, reason: string, scopes: string[], like_count?: number, viewer_liked?: boolean } | null}
  */
 export function normalizeCreationDetailShellSyncDetail(payload) {
 	if (!payload || typeof payload !== 'object') return null;
@@ -95,11 +102,19 @@ export function normalizeCreationDetailShellSyncDetail(payload) {
 	if (!scopes.length) {
 		scopes = defaultScopesForCreationShellSyncReason(reason);
 	}
-	return { creationId, reason, scopes };
+	const detail = { creationId, reason, scopes };
+	if (payload.like_count !== undefined && payload.like_count !== null) {
+		const likeCount = Number(payload.like_count);
+		if (Number.isFinite(likeCount)) detail.like_count = Math.max(0, likeCount);
+	}
+	if (typeof payload.viewer_liked === 'boolean') {
+		detail.viewer_liked = payload.viewer_liked;
+	}
+	return detail;
 }
 
 /**
- * @param {{ creationId?: number|string, reason?: CreationDetailShellSyncReason|string, scopes?: string[] }} [options]
+ * @param {{ creationId?: number|string, reason?: CreationDetailShellSyncReason|string, scopes?: string[], like_count?: number, viewer_liked?: boolean }} [options]
  * @returns {boolean}
  */
 export function notifyCreationDetailEmbedShellSync(options = {}) {
@@ -113,18 +128,20 @@ export function notifyCreationDetailEmbedShellSync(options = {}) {
 		creationId,
 		reason,
 		scopes: scopes.length ? scopes : defaultScopesForCreationShellSyncReason(reason),
+		like_count: options.like_count,
+		viewer_liked: options.viewer_liked,
 	});
 	if (!detail) return false;
 	try {
-		window.parent.postMessage(
-			{
-				type: CREATION_DETAIL_SHELL_SYNC_MESSAGE,
-				creationId: detail.creationId,
-				reason: detail.reason,
-				scopes: detail.scopes,
-			},
-			window.location.origin
-		);
+		const message = {
+			type: CREATION_DETAIL_SHELL_SYNC_MESSAGE,
+			creationId: detail.creationId,
+			reason: detail.reason,
+			scopes: detail.scopes,
+		};
+		if (detail.like_count !== undefined) message.like_count = detail.like_count;
+		if (typeof detail.viewer_liked === 'boolean') message.viewer_liked = detail.viewer_liked;
+		window.parent.postMessage(message, window.location.origin);
 		return true;
 	} catch {
 		return false;
@@ -182,7 +199,50 @@ export function patchCreationCardPublishedInDocument(creationId, published, root
 }
 
 /**
- * @param {{ creationId: number, reason: string, scopes: string[] }} detail
+ * @param {HTMLElement} button
+ * @param {string} id
+ * @param {number} likeCount
+ * @param {boolean} viewerLiked
+ */
+function patchLikeButtonEl(button, id, likeCount, viewerLiked) {
+	if (!(button instanceof HTMLElement)) return;
+	const newBase = Math.max(0, likeCount - (viewerLiked ? 1 : 0));
+	button.dataset.likeId = id;
+	button.dataset.likeBaseCount = String(newBase);
+	button.setAttribute('aria-pressed', viewerLiked ? 'true' : 'false');
+	button.classList.toggle('is-liked', viewerLiked);
+	const countEl =
+		button.querySelector('[data-like-count]') ||
+		button.querySelector('.feed-card-action-count') ||
+		button.querySelector('.chat-doom-rail-count');
+	if (countEl instanceof HTMLElement) countEl.textContent = String(likeCount);
+}
+
+/**
+ * @param {number|string} creationId
+ * @param {{ like_count?: number, viewer_liked?: boolean }} likeState
+ * @param {Document | Element | DocumentFragment} [root]
+ */
+export function patchCreationCardLikeInDocument(creationId, likeState, root = document) {
+	const id = String(creationId);
+	if (!id) return;
+	const likeCount = Math.max(0, Number(likeState?.like_count) || 0);
+	const viewerLiked = Boolean(likeState?.viewer_liked);
+	const scopeRoot = resolveDomPatchRoot(root);
+	const selectors = [
+		`.feed-card[data-creation-id="${id}"] button[data-like-button]`,
+		`.feed-card[data-image-id="${id}"] button[data-like-button]`,
+		`.chat-doom-slide[data-creation-id="${id}"] button[data-like-button]`,
+	];
+	for (const sel of selectors) {
+		scopeRoot.querySelectorAll(sel).forEach((btn) => {
+			patchLikeButtonEl(btn, id, likeCount, viewerLiked);
+		});
+	}
+}
+
+/**
+ * @param {{ creationId: number, reason: string, scopes: string[], like_count?: number, viewer_liked?: boolean }} detail
  * @param {Document | Element | DocumentFragment} [root]
  */
 export function applyCreationDetailShellSyncDomPatches(detail, root = document) {
@@ -199,6 +259,14 @@ export function applyCreationDetailShellSyncDomPatches(detail, root = document) 
 	if (reason === 'unpublished') {
 		patchCreationCardPublishedInDocument(creationId, false, root);
 		removePublicLaneCreationCardsFromDocument(creationId, root);
+		return;
+	}
+	if (reason === 'like-changed' && typeof detail.viewer_liked === 'boolean') {
+		patchCreationCardLikeInDocument(
+			creationId,
+			{ like_count: detail.like_count, viewer_liked: detail.viewer_liked },
+			root
+		);
 	}
 }
 

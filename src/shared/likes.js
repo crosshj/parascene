@@ -1,3 +1,5 @@
+import { notifyCreationDetailEmbedShellSync } from './creationDetailEmbedShell.js';
+
 function getCreationLikeId(creation) {
 	if (!creation) return null;
 
@@ -215,6 +217,12 @@ export function enableLikeButtons(root = document) {
 				setDisplayedLikeCount(button, { like_count: newBase }, viewerLiked);
 				applyLikeButtonState(button, viewerLiked, false);
 				invalidateRelatedCachesAfterLikeMutation();
+				notifyCreationDetailEmbedShellSync({
+					creationId: imageId,
+					reason: 'like-changed',
+					like_count: likeCount,
+					viewer_liked: viewerLiked,
+				});
 			})
 			.catch(() => {
 				// Revert optimistic state on failure.

@@ -10067,6 +10067,8 @@ export async function initChatPage(root, options = {}) {
 
 		if (reason === 'deleted') return;
 
+		if (reason === 'like-changed') return;
+
 		const refreshCreationsLane =
 			activePseudoChannelSlug === 'creations' &&
 			(hasScope('creations') || hasScope('chat-creations') || hasScope('creation'));
