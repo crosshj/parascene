@@ -12039,8 +12039,17 @@ export async function initChatPage(root, options = {}) {
 	async function openThreadForCurrentPath() {
 		const pathForOverlayGuard = String(window.location.pathname || '');
 		const onChatRoute = pathForOverlayGuard === '/chat' || pathForOverlayGuard.startsWith('/chat/');
+		const parsedForOverlayGuard = parseChatPathname(pathForOverlayGuard);
+		const primaryPseudoSlug =
+			parsedForOverlayGuard.kind === 'channel'
+				? String(parsedForOverlayGuard.slug || '').trim().toLowerCase()
+				: '';
+		const isPrimaryPseudoLane = ['feed', 'explore', 'creations', 'comments', 'challenges'].includes(
+			primaryPseudoSlug
+		);
 		if (
 			!onChatRoute &&
+			!isPrimaryPseudoLane &&
 			(isCreationDetailOverlayOpen() || isCreationDetailOverlayHistoryActive())
 		) {
 			return;

@@ -753,12 +753,14 @@ function fallbackDismissEntireSpaPageOverlay(options = {}) {
 	store.overlayDismissEntirePending = false;
 	store.overlayPushCount = 0;
 	if (preferMyCreations) {
+		// Close before navigating so chat lane loaders (openThreadForCurrentPath) are not
+		// blocked by the overlay-open guard while the URL is already /creations.
+		closeSpaPageOverlay();
 		navigateToMyCreationsIfNeeded({
 			replace: true,
 			forceFreshFirstPage: false,
 			stripOverlayHistory: true,
 		});
-		closeSpaPageOverlay();
 		return;
 	}
 	try {

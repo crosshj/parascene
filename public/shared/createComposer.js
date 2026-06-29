@@ -945,6 +945,7 @@ export function mountCreateComposer(host, opts = {}) {
 	/** @type {number | null} */
 	let creditsBalance = null;
 	let promptSaveTimer;
+	let syncPromptClearVisibility = () => {};
 	let aspectPopoverIgnoreDocClose = false;
 	let submitInFlight = false;
 	const teardownFns = [];
@@ -1641,6 +1642,7 @@ export function mountCreateComposer(host, opts = {}) {
 				promptInput.value = prompt;
 				syncStyleSelectionFromPrompt();
 				updateSubmitButtonState();
+				syncPromptClearVisibility();
 				try {
 					refreshAutoGrow(host);
 				} catch (_) {}
@@ -2489,7 +2491,7 @@ export function mountCreateComposer(host, opts = {}) {
 			promptInput.removeEventListener('keydown', onPromptKeydown);
 		});
 		const promptInputRow = promptInput.closest('.create-composer-input-row');
-		attachPromptFieldClear(promptInput, {
+		const promptClear = attachPromptFieldClear(promptInput, {
 			variant: 'icon',
 			wrap: promptInputRow instanceof HTMLElement ? promptInputRow : null,
 			trackEmpty: false,
@@ -2502,6 +2504,9 @@ export function mountCreateComposer(host, opts = {}) {
 				} catch (_) {}
 			},
 		});
+		if (promptClear?.update) {
+			syncPromptClearVisibility = promptClear.update;
+		}
 	}
 
 	if (composerRoot instanceof HTMLElement) {

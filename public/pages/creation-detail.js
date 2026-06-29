@@ -32,6 +32,7 @@ let creditIcon;
 let eyeHiddenIcon;
 let shareIcon;
 let sparkleIcon;
+let recycleIcon;
 let audioClipMusicIcon;
 let pictureIcon;
 let sendIcon;
@@ -316,6 +317,7 @@ async function loadDeps() {
 		eyeHiddenIcon = iconsMod.eyeHiddenIcon;
 		shareIcon = iconsMod.shareIcon;
 		sparkleIcon = iconsMod.sparkleIcon;
+		recycleIcon = iconsMod.recycleIcon;
 		audioClipMusicIcon = iconsMod.audioClipMusicIcon;
 		pictureIcon = iconsMod.pictureIcon;
 		sendIcon = iconsMod.sendIcon;
@@ -809,6 +811,12 @@ async function handleRecreateInAdvanced() {
 function getCreationDetailMoreMenuItemDefs() {
 	return [
 	{
+		action: 'recreate',
+		show: (d) => d.actionsContext?.showRecreate,
+		icon: html`${recycleIcon('')}`,
+		label: 'Recreate'
+	},
+	{
 		action: 'copy-link',
 		show: () => true,
 		icon: html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
@@ -829,12 +837,6 @@ function getCreationDetailMoreMenuItemDefs() {
 	<line x1="3" y1="10" x2="21" y2="10"></line>
 </svg>`,
 		label: (d) => (d.actionsContext?.queueForLaterLabel ?? 'Queue for later')
-	},
-	{
-		action: 'recreate',
-		show: (d) => d.actionsContext?.showRecreate,
-		icon: html`${sparkleIcon('')}`,
-		label: 'Recreate'
 	},
 	{
 		action: 'set-video-poster',
