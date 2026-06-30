@@ -145,7 +145,7 @@ async function ensureAudioClipLibraryRowFromShareAudio({
 		Number.isFinite(durationNum) && durationNum > 0 ? durationNum : null;
 	try {
 		return await insertFn({
-			title: `Audio from ${titleBase}`,
+			title: titleBase,
 			description: null,
 			storage_key: key,
 			content_type: mimeType || "audio/webm",
@@ -2123,8 +2123,8 @@ export default function createCreateRoutes({ queries, storage }) {
 				const message =
 					failed_styles.length > 0
 						? (failed_styles || [])
-								.map((f) => `${f.token} (${f.reason})`)
-								.join(", ")
+							.map((f) => `${f.token} (${f.reason})`)
+							.join(", ")
 						: failed_mentions.map((f) => `${f.mention} (${f.reason})`).join(", ");
 				return res.status(400).json({
 					error,
@@ -2198,21 +2198,21 @@ export default function createCreateRoutes({ queries, storage }) {
 			}
 		}
 
-			const {
-				server_id,
-				method,
-				args,
-				creation_token,
-				retry_of_id,
-				mutate_of_id,
-				mutate_parent_ids,
-				credit_cost: bodyCreditCost,
-				hydrate_mentions,
-				style_key,
-				group_id: bodyGroupId,
-				group_of: bodyGroupOf
-			} = req.body;
-			const safeArgs = args && typeof args === "object" ? { ...args } : {};
+		const {
+			server_id,
+			method,
+			args,
+			creation_token,
+			retry_of_id,
+			mutate_of_id,
+			mutate_parent_ids,
+			credit_cost: bodyCreditCost,
+			hydrate_mentions,
+			style_key,
+			group_id: bodyGroupId,
+			group_of: bodyGroupOf
+		} = req.body;
+		const safeArgs = args && typeof args === "object" ? { ...args } : {};
 		const hydrateMentions = hydrate_mentions === true || hydrate_mentions === "true" || hydrate_mentions === 1 || hydrate_mentions === "1";
 
 		// Validate required fields
@@ -3451,7 +3451,7 @@ export default function createCreateRoutes({ queries, storage }) {
 				if (Number.isFinite(cid) && cid > 0) {
 					void queries.acknowledgeNotificationsForUserAndCreation
 						.run(user.id, user.role, cid)
-						.catch(() => {});
+						.catch(() => { });
 				}
 			}
 
@@ -5352,7 +5352,7 @@ export default function createCreateRoutes({ queries, storage }) {
 			}
 
 			await bumpFeedVersionCounter();
-			void invalidateFeedBetaCatalogSnapshot().catch(() => {});
+			void invalidateFeedBetaCatalogSnapshot().catch(() => { });
 
 			return res.json({
 				ok: true,
@@ -5371,138 +5371,138 @@ export default function createCreateRoutes({ queries, storage }) {
 		"/api/create/images/:id/share-audio",
 		express.raw({ type: () => true, limit: `${SHARE_AUDIO_MAX_BYTES}b` }),
 		async (req, res) => {
-		const user = await requireUser(req, res);
-		if (!user) return;
+			const user = await requireUser(req, res);
+			if (!user) return;
 
-		const id = Number(req.params.id);
-		if (!Number.isFinite(id) || id <= 0) {
-			return res.status(400).json({ error: "Invalid creation id" });
-		}
-
-		const image = await queries.selectCreatedImageByIdAnyUser?.get(id);
-		if (!image) {
-			return res.status(404).json({ error: "Creation not found" });
-		}
-
-		const isOwner = Number(image.user_id) === Number(user.id);
-		const isAdmin = user.role === "admin";
-		const isPublished = image.published === 1 || image.published === true;
-		if (!isOwner && !isAdmin && !isPublished) {
-			return res.status(403).json({ error: "Forbidden" });
-		}
-
-		if ((image.status || "") !== "completed") {
-			return res.status(400).json({ error: "Only completed creations support share audio" });
-		}
-
-		const existingMeta = parseMeta(image.meta) || {};
-		if (existingMeta?.group?.kind === "group_creations") {
-			return res.status(400).json({ error: "Share audio is not available for grouped creations" });
-		}
-		if (existingMeta.media_type !== "video" || !existingMeta?.video?.file_path) {
-			return res.status(400).json({ error: "Share audio is only available for video creations" });
-		}
-
-		const libraryAudioClipId = await resolveClipIdFromOutputMeta(queries, existingMeta);
-		if (libraryAudioClipId) {
-			return res.status(400).json({ error: "Share audio is not available for creations that use a library audio clip" });
-		}
-
-		const existingShareAudio =
-			existingMeta.share_audio && typeof existingMeta.share_audio === "object"
-				? existingMeta.share_audio
-				: null;
-		const existingKey =
-			typeof existingShareAudio?.key === "string" ? existingShareAudio.key.trim() : "";
-		const existingPath =
-			typeof existingShareAudio?.file_path === "string" ? existingShareAudio.file_path.trim() : "";
-		if (existingKey || existingPath) {
-			void ensureAudioClipLibraryRowFromShareAudio({
-				queries,
-				storageKey: existingKey,
-				mimeType: existingShareAudio?.content_type,
-				byteSize: 0,
-				extractorUserId: user.id,
-				sourceCreation: image,
-				durationSec: existingShareAudio?.duration_sec,
-			});
-			return res.json({
-				ok: true,
-				audio_url: existingPath || buildGenericUrl(existingKey),
-				share_audio: existingShareAudio,
-				already_exists: true,
-			});
-		}
-
-		if (typeof storage.uploadGenericImage !== "function") {
-			return res.status(503).json({ error: "Audio storage not available" });
-		}
-
-		try {
-			const audioBuffer = req.body;
-			if (!audioBuffer || !Buffer.isBuffer(audioBuffer) || audioBuffer.length === 0) {
-				return res.status(400).json({ error: "Empty audio upload" });
+			const id = Number(req.params.id);
+			if (!Number.isFinite(id) || id <= 0) {
+				return res.status(400).json({ error: "Invalid creation id" });
 			}
-			if (audioBuffer.length > SHARE_AUDIO_MAX_BYTES) {
-				return res.status(413).json({
-					error: "Audio file too large",
-					message: "Extracted audio must be 20 MB or smaller.",
-					max_bytes: SHARE_AUDIO_MAX_BYTES,
+
+			const image = await queries.selectCreatedImageByIdAnyUser?.get(id);
+			if (!image) {
+				return res.status(404).json({ error: "Creation not found" });
+			}
+
+			const isOwner = Number(image.user_id) === Number(user.id);
+			const isAdmin = user.role === "admin";
+			const isPublished = image.published === 1 || image.published === true;
+			if (!isOwner && !isAdmin && !isPublished) {
+				return res.status(403).json({ error: "Forbidden" });
+			}
+
+			if ((image.status || "") !== "completed") {
+				return res.status(400).json({ error: "Only completed creations support share audio" });
+			}
+
+			const existingMeta = parseMeta(image.meta) || {};
+			if (existingMeta?.group?.kind === "group_creations") {
+				return res.status(400).json({ error: "Share audio is not available for grouped creations" });
+			}
+			if (existingMeta.media_type !== "video" || !existingMeta?.video?.file_path) {
+				return res.status(400).json({ error: "Share audio is only available for video creations" });
+			}
+
+			const libraryAudioClipId = await resolveClipIdFromOutputMeta(queries, existingMeta);
+			if (libraryAudioClipId) {
+				return res.status(400).json({ error: "Share audio is not available for creations that use a library audio clip" });
+			}
+
+			const existingShareAudio =
+				existingMeta.share_audio && typeof existingMeta.share_audio === "object"
+					? existingMeta.share_audio
+					: null;
+			const existingKey =
+				typeof existingShareAudio?.key === "string" ? existingShareAudio.key.trim() : "";
+			const existingPath =
+				typeof existingShareAudio?.file_path === "string" ? existingShareAudio.file_path.trim() : "";
+			if (existingKey || existingPath) {
+				void ensureAudioClipLibraryRowFromShareAudio({
+					queries,
+					storageKey: existingKey,
+					mimeType: existingShareAudio?.content_type,
+					byteSize: 0,
+					extractorUserId: user.id,
+					sourceCreation: image,
+					durationSec: existingShareAudio?.duration_sec,
+				});
+				return res.json({
+					ok: true,
+					audio_url: existingPath || buildGenericUrl(existingKey),
+					share_audio: existingShareAudio,
+					already_exists: true,
 				});
 			}
 
-			const mimeType = normalizeShareAudioContentType(req.headers["content-type"]);
-			const durationHeader = req.headers["x-share-audio-duration-sec"];
-			const durationNum = durationHeader != null ? Number(durationHeader) : null;
-			const durationSec =
-				Number.isFinite(durationNum) && durationNum > 0 ? durationNum : null;
-			const safeExt = shareAudioExtFromContentType(mimeType);
-			const timestamp = Date.now();
-			const random = Math.random().toString(36).substring(2, 9);
-			const storageKey = `share-audio/${image.user_id}_${id}_${timestamp}_${random}.${safeExt}`;
-
-			await storage.uploadGenericImage(audioBuffer, storageKey, {
-				contentType: mimeType,
-			});
-			const audioUrl = buildGenericUrl(storageKey);
-
-			const shareAudio = {
-				key: storageKey,
-				file_path: audioUrl,
-				content_type: mimeType,
-				extracted_at: new Date().toISOString(),
-				...(durationSec != null ? { duration_sec: durationSec } : {}),
-			};
-			const mergedMeta = {
-				...existingMeta,
-				share_audio: shareAudio,
-			};
-
-			const updateResult = await queries.updateCreatedImageMeta.run(id, image.user_id, mergedMeta);
-			if (updateResult.changes === 0) {
-				return res.status(500).json({ error: "Failed to save audio reference on creation" });
+			if (typeof storage.uploadGenericImage !== "function") {
+				return res.status(503).json({ error: "Audio storage not available" });
 			}
 
-			void ensureAudioClipLibraryRowFromShareAudio({
-				queries,
-				storageKey,
-				mimeType,
-				byteSize: audioBuffer.length,
-				extractorUserId: user.id,
-				sourceCreation: image,
-				durationSec,
-			});
+			try {
+				const audioBuffer = req.body;
+				if (!audioBuffer || !Buffer.isBuffer(audioBuffer) || audioBuffer.length === 0) {
+					return res.status(400).json({ error: "Empty audio upload" });
+				}
+				if (audioBuffer.length > SHARE_AUDIO_MAX_BYTES) {
+					return res.status(413).json({
+						error: "Audio file too large",
+						message: "Extracted audio must be 20 MB or smaller.",
+						max_bytes: SHARE_AUDIO_MAX_BYTES,
+					});
+				}
 
-			return res.json({
-				ok: true,
-				audio_url: audioUrl,
-				share_audio: shareAudio,
-			});
-		} catch (err) {
-			const raw = err?.message && typeof err.message === "string" ? err.message : "Failed to save audio";
-			const message = raw.replace(/^Failed to upload generic image:\s*/i, "");
-			return res.status(500).json({ error: "Failed to save audio", message });
-		}
+				const mimeType = normalizeShareAudioContentType(req.headers["content-type"]);
+				const durationHeader = req.headers["x-share-audio-duration-sec"];
+				const durationNum = durationHeader != null ? Number(durationHeader) : null;
+				const durationSec =
+					Number.isFinite(durationNum) && durationNum > 0 ? durationNum : null;
+				const safeExt = shareAudioExtFromContentType(mimeType);
+				const timestamp = Date.now();
+				const random = Math.random().toString(36).substring(2, 9);
+				const storageKey = `share-audio/${image.user_id}_${id}_${timestamp}_${random}.${safeExt}`;
+
+				await storage.uploadGenericImage(audioBuffer, storageKey, {
+					contentType: mimeType,
+				});
+				const audioUrl = buildGenericUrl(storageKey);
+
+				const shareAudio = {
+					key: storageKey,
+					file_path: audioUrl,
+					content_type: mimeType,
+					extracted_at: new Date().toISOString(),
+					...(durationSec != null ? { duration_sec: durationSec } : {}),
+				};
+				const mergedMeta = {
+					...existingMeta,
+					share_audio: shareAudio,
+				};
+
+				const updateResult = await queries.updateCreatedImageMeta.run(id, image.user_id, mergedMeta);
+				if (updateResult.changes === 0) {
+					return res.status(500).json({ error: "Failed to save audio reference on creation" });
+				}
+
+				void ensureAudioClipLibraryRowFromShareAudio({
+					queries,
+					storageKey,
+					mimeType,
+					byteSize: audioBuffer.length,
+					extractorUserId: user.id,
+					sourceCreation: image,
+					durationSec,
+				});
+
+				return res.json({
+					ok: true,
+					audio_url: audioUrl,
+					share_audio: shareAudio,
+				});
+			} catch (err) {
+				const raw = err?.message && typeof err.message === "string" ? err.message : "Failed to save audio";
+				const message = raw.replace(/^Failed to upload generic image:\s*/i, "");
+				return res.status(500).json({ error: "Failed to save audio", message });
+			}
 		}
 	);
 

@@ -101,7 +101,7 @@ async function backfillClips(queries, { dryRun: isDryRun, limit: maxRows }) {
 					? row.title.trim()
 					: `Creation #${row.id}`;
 			const clipRow = {
-				title: `Audio from ${titleBase}`,
+				title: titleBase,
 				description: null,
 				storage_key: storageKey,
 				content_type:
