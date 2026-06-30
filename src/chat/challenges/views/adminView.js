@@ -516,11 +516,9 @@ export function renderChallengeOrganizerStatsModalInnerHtml(vm) {
 						? `<span class="challenge-pane-muted">User ${esc(String(creatorUid))}</span>`
 						: '<span class="challenge-pane-muted">Unknown</span>';
 			const creationCell = cid
-				? `<a class="challenge-pane-organizer-stats-creation" href="/creations/${encodeURIComponent(
-						String(cid)
-					)}" aria-label="View creation ${esc(String(cid))}" data-challenge-stats-creation-lightbox data-challenge-stats-creation-id="${esc(String(cid))}"${midAttr}>
+				? `<button type="button" class="challenge-pane-organizer-stats-creation" aria-label="Preview image" data-challenge-stats-creation-lightbox data-challenge-stats-creation-id="${esc(String(cid))}"${midAttr}>
 					${thumbBlock}
-				</a>`
+				</button>`
 				: '<span class="challenge-pane-muted">Unknown creation</span>';
 			return `<tr>
 				<td>${esc(String(rank))}</td>

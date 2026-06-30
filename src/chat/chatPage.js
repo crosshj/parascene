@@ -13780,7 +13780,7 @@ export async function initChatPage(root, options = {}) {
 		syncTopbarPinnedCanvasButton();
 	};
 
-	/** Desktop: show pinned canvas name in the top bar; click opens the canvas panel (no auto-open). */
+	/** Header accessory button: pinned canvas title (channels) or Organizer tools (#challenges). */
 	function syncTopbarPinnedCanvasButton() {
 		const desktopBtn = root.querySelector('[data-chat-topbar-pinned-canvas]');
 		const mobileBtn = mainColumn instanceof HTMLElement
@@ -13791,10 +13791,35 @@ export async function initChatPage(root, options = {}) {
 		const applyButtonState = (btn, { mobile = false } = {}) => {
 			if (!(btn instanceof HTMLButtonElement)) return;
 			btn.removeAttribute('data-chat-canvas-open');
+			delete btn.dataset.chatChallengesOrganizerOpen;
+			btn.classList.remove('is-active');
 			if ((mobile && !isMobile) || (!mobile && isMobile)) {
 				btn.hidden = true;
 				btn.textContent = '';
 				btn.removeAttribute('aria-label');
+				return;
+			}
+			if (chatChallengesOrganizerEligible && activePseudoChannelSlug === 'challenges') {
+				const label = 'Organizer tools';
+				const viewing = isChallengesOrganizerSidebarOpen();
+				if (viewing && !mobile) {
+					btn.hidden = true;
+					btn.textContent = '';
+					btn.removeAttribute('aria-label');
+					return;
+				}
+				btn.hidden = false;
+				btn.textContent = label;
+				btn.dataset.chatChallengesOrganizerOpen = '';
+				if (viewing && mobile) {
+					btn.classList.add('is-active');
+				}
+				btn.setAttribute(
+					'aria-label',
+					viewing
+						? 'Return to challenges from organizer tools'
+						: 'Open organizer tools'
+				);
 				return;
 			}
 			if (!isActiveThreadCanvasEligible()) {
@@ -14412,7 +14437,14 @@ export async function initChatPage(root, options = {}) {
 			e.preventDefault();
 			closeTopbarMenu();
 			closeMobileChromeSheet();
-			openChallengesOrganizerSidebar();
+			if (
+				t.closest('[data-chat-mobile-pinned-canvas]') &&
+				isChallengesOrganizerSidebarOpen()
+			) {
+				closeChallengesOrganizerSidebar();
+			} else {
+				openChallengesOrganizerSidebar();
+			}
 			return;
 		}
 		if (t.closest('[data-chat-challenges-organizer-close]')) {

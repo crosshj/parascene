@@ -538,19 +538,35 @@ export function mountChallengesOrganizerSidebar(host, opts) {
 		const t = e.target;
 		if (!(t instanceof Element)) return;
 
-		const statsCreationLink = t.closest('[data-challenge-stats-creation-lightbox]');
-		if (statsCreationLink instanceof HTMLAnchorElement) {
+		const statsCreationPreview = t.closest('[data-challenge-stats-creation-lightbox]');
+		if (statsCreationPreview instanceof HTMLElement) {
 			e.preventDefault();
 			e.stopPropagation();
-			const creationId = Number(statsCreationLink.getAttribute('data-challenge-stats-creation-id'));
+			const creationId = Number(statsCreationPreview.getAttribute('data-challenge-stats-creation-id'));
 			if (!Number.isFinite(creationId) || creationId <= 0) return;
 			const challengeMessageId = Number(
-				statsCreationLink.getAttribute('data-challenge-message-id')
+				statsCreationPreview.getAttribute('data-challenge-message-id')
 			);
+			const thumbImg = statsCreationPreview.querySelector('img.challenge-pane-organizer-stats-thumb');
+			const thumbSrc =
+				thumbImg instanceof HTMLImageElement
+					? String(thumbImg.currentSrc || thumbImg.src || '').trim()
+					: '';
 			const qs =
 				Number.isFinite(challengeMessageId) && challengeMessageId > 0
 					? `?challenge_message_id=${encodeURIComponent(String(challengeMessageId))}`
 					: '';
+			const openStatsCreationLightbox = (src, mediaType = 'image', videoUrl = '') => {
+				if (mediaType === 'video' && videoUrl) {
+					openChatAttachmentPreviewLightbox(videoUrl, 'video');
+					return;
+				}
+				const imageUrl = String(src || '').trim();
+				if (!imageUrl) return;
+				openChatInlineImageLightbox(imageUrl, {
+					...(thumbImg instanceof HTMLImageElement ? { sourceImg: thumbImg } : {})
+				});
+			};
 			void (async () => {
 				try {
 					const res = await fetch(
@@ -558,24 +574,26 @@ export function mountChallengesOrganizerSidebar(host, opts) {
 						{ credentials: 'include' }
 					);
 					const payload = res.ok ? await res.json().catch(() => null) : null;
-					if (!payload || payload._error) return;
-					const mediaType =
-						typeof payload.media_type === 'string' ? payload.media_type : 'image';
-					const imageUrl = typeof payload.url === 'string' ? payload.url.trim() : '';
-					const videoUrl =
-						typeof payload.video_url === 'string' ? payload.video_url.trim() : '';
-					if (mediaType === 'video' && videoUrl) {
-						openChatAttachmentPreviewLightbox(videoUrl, 'video', {
-							creationId: String(creationId)
-						});
-						return;
+					if (payload && !payload._error) {
+						const mediaType =
+							typeof payload.media_type === 'string' ? payload.media_type : 'image';
+						const videoUrl =
+							typeof payload.video_url === 'string' ? payload.video_url.trim() : '';
+						const imageUrl = statsThumbSrcFromCreationPayload(payload);
+						if (mediaType === 'video' && videoUrl) {
+							openStatsCreationLightbox(imageUrl, mediaType, videoUrl);
+							return;
+						}
+						if (imageUrl) {
+							openStatsCreationLightbox(imageUrl);
+							return;
+						}
 					}
-					if (!imageUrl) return;
-					openChatInlineImageLightbox(imageUrl, {
-						creationId: String(creationId)
-					});
 				} catch {
-					// ignore
+					// fall through to hydrated thumb
+				}
+				if (thumbSrc) {
+					openStatsCreationLightbox(thumbSrc);
 				}
 			})();
 			return;

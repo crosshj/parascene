@@ -707,13 +707,20 @@ body.chat-page main.chat-page-outer {
 	align-items: center;
 	justify-content: center;
 	max-width: 100%;
+	margin: 0;
+	padding: 0;
+	border: none;
+	background: transparent;
 	color: var(--text);
-	text-decoration: none;
+	font: inherit;
+	cursor: pointer;
+	-webkit-tap-highlight-color: transparent;
 }
 
-.challenge-pane-organizer-stats-creation:hover,
-.challenge-pane-organizer-stats-creation:focus-visible {
-	text-decoration: underline;
+.challenge-pane-organizer-stats-creation:hover .challenge-pane-organizer-stats-thumb,
+.challenge-pane-organizer-stats-creation:focus-visible .challenge-pane-organizer-stats-thumb {
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
 }
 
 .challenge-pane-organizer-stats-thumb {
