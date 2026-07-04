@@ -1177,6 +1177,7 @@ function shouldInterceptSpaOverlayLink(link, e) {
 	if (typeof e.button === 'number' && e.button !== 0) return false;
 	if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return false;
 	if (link.target === '_blank' || link.hasAttribute('download')) return false;
+	if (link.hasAttribute('data-chat-doom-comments')) return false;
 	const href = (link.getAttribute('href') || '').trim();
 	if (!href || href.startsWith('#')) return false;
 	return true;
