@@ -1,4 +1,8 @@
 import { isSystemReservedBlogCampaignId } from '../../shared/blogCampaignPath.js';
+import {
+	CREATE_SERVERS_CACHE_KEY,
+	DEFAULT_CREATE_SERVERS,
+} from '../../shared/createServersDefault.js';
 import { isPublicGenerationServerId } from '../../shared/generationDefaults.js';
 
 let fetchJsonWithStatusDeduped;
@@ -432,25 +436,21 @@ class AppRouteCreate extends HTMLElement {
 		window.addEventListener('pageshow', this.handlePageShowForMutateQueue);
 		// Blog tab is gated on a profile fetch; do it off the critical path and inject if eligible.
 		if (!embedOnly) void this._maybeAddBlogTabFromProfile();
-		// Paint the form synchronously from the servers cache when available. localStorage is shared
-		// across the overlay iframe (same origin), so on warm opens this reveals the form instantly
-		// without waiting on /api/servers. Doing this inline (rather than inside a deferred
-		// requestIdleCallback) is what makes the cache actually pay off in overlay mode, where a
-		// not-yet-revealed iframe can have its idle callbacks throttled.
-		const hadServersCache = this.applyServersFromCache();
+		// Paint the form synchronously: localStorage cache, else baked public-server default.
+		// Network refresh runs in the background and updates cache when /api/servers returns.
+		const serversPaintSource = this.applyServersFromCacheOrDefault();
 		const refreshData = () => {
 			this.refreshServersFromNetwork();
 			this.loadCredits();
 		};
-		if (hadServersCache) {
-			// Form is already visible from cache; refresh in the background.
+		if (serversPaintSource) {
+			// Form is visible from cache or baked default; refresh in the background.
 			if (typeof requestIdleCallback !== 'undefined') {
 				requestIdleCallback(refreshData, { timeout: 500 });
 			} else {
 				setTimeout(refreshData, 0);
 			}
 		} else {
-			// No cache — start the network fetch immediately so the form appears as soon as possible.
 			refreshData();
 		}
 		// Attach autogrow and mention suggest to prompt textarea
@@ -802,7 +802,7 @@ class AppRouteCreate extends HTMLElement {
 
 	clearServersCache() {
 		try {
-			localStorage.removeItem('create-servers-cache');
+			localStorage.removeItem(CREATE_SERVERS_CACHE_KEY);
 		} catch (e) {
 			// ignore
 		}
@@ -929,7 +929,7 @@ class AppRouteCreate extends HTMLElement {
 	readServersCacheList() {
 		try {
 			const storage = typeof localStorage !== 'undefined' ? localStorage : null;
-			const cached = storage?.getItem('create-servers-cache');
+			const cached = storage?.getItem(CREATE_SERVERS_CACHE_KEY);
 			if (!cached) return null;
 			const { servers } = JSON.parse(cached);
 			return Array.isArray(servers) && servers.length > 0 ? servers : null;
@@ -948,16 +948,34 @@ class AppRouteCreate extends HTMLElement {
 		return true;
 	}
 
-	/** Cache-then-refresh: show cached servers immediately if available (localStorage), then refresh in background. */
+	/** Instant cold start when localStorage cache is empty (public servers baked into the bundle). */
+	applyServersFromDefault() {
+		if (!Array.isArray(DEFAULT_CREATE_SERVERS) || DEFAULT_CREATE_SERVERS.length === 0) return false;
+		this.applyServers(JSON.parse(JSON.stringify(DEFAULT_CREATE_SERVERS)));
+		this._serversLoading = false;
+		this.updateCreateFormVisibility();
+		return true;
+	}
+
+	/**
+	 * Paint order: localStorage cache, then baked default, else stay on loading until network.
+	 * @returns {'cache'|'default'|false}
+	 */
+	applyServersFromCacheOrDefault() {
+		if (this.applyServersFromCache()) return 'cache';
+		if (this.applyServersFromDefault()) return 'default';
+		return false;
+	}
+
+	/** Cache/default-then-refresh: paint immediately when possible, then fetch /api/servers in background. */
 	loadServers(options = {}) {
-		this.applyServersFromCache();
+		this.applyServersFromCacheOrDefault();
 		this.refreshServersFromNetwork(options);
 	}
 
 	/** Fetch /api/servers, update the cache, and re-apply only when the list/config changed. */
 	refreshServersFromNetwork(options = {}) {
 		const { forceApply = false } = options;
-		const CACHE_KEY = 'create-servers-cache';
 		const storage = typeof localStorage !== 'undefined' ? localStorage : null;
 		fetchJsonWithStatusDeduped('/api/servers', { credentials: 'include' }, { windowMs: 2000 })
 			.then((result) => {
@@ -969,7 +987,10 @@ class AppRouteCreate extends HTMLElement {
 				const processed = this.processServers(result.data.servers);
 				try {
 					if (storage) {
-						storage.setItem(CACHE_KEY, JSON.stringify({ servers: processed, cachedAt: Date.now() }));
+						storage.setItem(
+							CREATE_SERVERS_CACHE_KEY,
+							JSON.stringify({ servers: processed, cachedAt: Date.now() })
+						);
 					}
 				} catch (e) {
 					// ignore
