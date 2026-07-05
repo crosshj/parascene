@@ -1,12 +1,13 @@
 /**
  * Mobile long-press → bulk selection on creation cards.
- * Arms on hold threshold, activates on pointer up so DOM updates never run mid-gesture (iOS click lockup).
+ * Activates when the hold threshold is met (no finger movement or release required).
+ * Ghost clicks on lift are blocked so mid-gesture DOM updates stay safe on touch browsers.
  */
 
 const DEFAULT_LONG_MS = 420;
 const DEFAULT_MOVE_THRESHOLD_PX = 18;
 const GHOST_CLICK_MS = 520;
-/** Set on the card while a bulk long-press is armed (before pointerup). */
+/** Set on the card from hold threshold until pointer up (blocks card navigation mid-gesture). */
 export const CREATIONS_BULK_LONG_PRESS_ARMED_ATTR = 'data-creations-bulk-long-press';
 
 /**
@@ -120,6 +121,7 @@ export function bindMobileCreationsBulkLongPress({
 			clearState();
 			return;
 		}
+		const activeCard = card;
 		try {
 			if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
 				navigator.vibrate(12);
@@ -127,15 +129,19 @@ export function bindMobileCreationsBulkLongPress({
 		} catch {
 			// ignore
 		}
-		card.setAttribute(CREATIONS_BULK_LONG_PRESS_ARMED_ATTR, 'armed');
-		armedCard = card;
+		activeCard.setAttribute(CREATIONS_BULK_LONG_PRESS_ARMED_ATTR, 'armed');
+		armedCard = activeCard;
+		onLongPress(activeCard);
+		blockGhostClick(activeCard);
+		// Android Chrome may not deliver pointerup while capture is held on a stationary finger.
+		releaseCapture(activeCard, pointerId);
 	};
 
 	const finishPointer = (e) => {
 		if (pointerId == null || e.pointerId !== pointerId) return;
-		const armed = armedCard instanceof HTMLElement ? armedCard : null;
+		const wasArmed = armedCard instanceof HTMLElement;
 		clearState();
-		if (!(armed instanceof HTMLElement)) return;
+		if (!wasArmed) return;
 		try {
 			e.preventDefault();
 		} catch {
@@ -146,8 +152,6 @@ export function bindMobileCreationsBulkLongPress({
 		} catch {
 			// ignore
 		}
-		onLongPress(armed);
-		blockGhostClick(armed);
 	};
 
 	if (signal) {
@@ -191,6 +195,7 @@ export function bindMobileCreationsBulkLongPress({
 		'pointermove',
 		(e) => {
 			if (pointerId == null || e.pointerId !== pointerId) return;
+			if (armedCard) return;
 			const dx = (Number(e.clientX) || 0) - startX;
 			const dy = (Number(e.clientY) || 0) - startY;
 			if (dx * dx + dy * dy > moveThresholdSq) {
@@ -202,6 +207,7 @@ export function bindMobileCreationsBulkLongPress({
 
 	container.addEventListener('pointerup', finishPointer, opts);
 	container.addEventListener('pointercancel', finishPointer, opts);
+	container.addEventListener('lostpointercapture', finishPointer, opts);
 
 	container.addEventListener(
 		'contextmenu',
