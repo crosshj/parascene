@@ -76,6 +76,11 @@ export function getThumbnailUrl(url) {
   }
 }
 
+/** True when client requests the downscaled variant (`?variant=thumbnail`). */
+export function isCreatedMediaThumbnailRequest(variant) {
+	return String(variant ?? "").trim().toLowerCase() === "thumbnail";
+}
+
 export function appendCreationIdToMediaUrl(url, creationId) {
 	if (!url) return url;
 	const id = Number(creationId);

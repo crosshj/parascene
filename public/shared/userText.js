@@ -359,7 +359,7 @@ function renderInlineGenericVideo(relativePath, originalUrl) {
 		`<div class="connect-chat-creation-embed connect-chat-creation-embed--square is-loading" data-generic-video-embed="1">` +
 		`<div class="connect-chat-creation-embed-media">` +
 		`<div class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--video" role="button" tabindex="0" aria-label="Open video" title="Open video">` +
-		`<video class="connect-chat-creation-embed-video" playsinline preload="metadata" crossorigin="anonymous" src="${rp}" aria-label="Attached video" data-inline-video-loading="1"></video>` +
+		`<video class="connect-chat-creation-embed-video" playsinline preload="metadata" src="${rp}" aria-label="Attached video" data-inline-video-loading="1"></video>` +
 		INLINE_CHAT_VIDEO_PLAY_OVERLAY_HTML +
 		`</div></div></div>`
 	);
@@ -1526,13 +1526,14 @@ function appendCreationIdToMediaUrl(url, creationId) {
 	const id = Number(creationId);
 	if (!raw || !Number.isFinite(id) || id <= 0) return raw;
 	if (!raw.includes('/api/images/created/') && !raw.includes('/api/videos/created/')) return raw;
-	const [beforeHash, hash = ''] = raw.split('#');
-	if (/[?&]creation_id=/.test(beforeHash)) {
-		return hash ? `${beforeHash}#${hash}` : beforeHash;
+	try {
+		const parsed = new URL(raw, 'http://localhost');
+		parsed.searchParams.set('creation_id', String(id));
+		return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+	} catch {
+		const sep = raw.includes('?') ? '&' : '?';
+		return `${raw}${sep}creation_id=${encodeURIComponent(String(id))}`;
 	}
-	const sep = beforeHash.includes('?') ? '&' : '?';
-	const next = `${beforeHash}${sep}creation_id=${encodeURIComponent(String(id))}`;
-	return hash ? `${next}#${hash}` : next;
 }
 
 function appendShareAccessToMediaUrl(url, shareOpts) {
@@ -2053,10 +2054,11 @@ export function hydrateChatCreationEmbeds(rootEl) {
 			}
 
 			if (mediaType === 'video' && videoUrl) {
-				const poster = url ? ` poster="${escapeHtml(url)}"` : '';
+				const posterSrc = url;
+				const poster = posterSrc ? ` poster="${escapeHtml(posterSrc)}"` : '';
 				/* Inline: paused thumb + play icon; full controls + sound in lightbox. */
 				wrap.classList.add('is-loading');
-				wrap.innerHTML = `<div class="connect-chat-creation-embed-media"><div class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--video${nsfwClass}"${nsfwDataAttr} role="button" tabindex="0" aria-label="Open video" title="Open video"><video class="connect-chat-creation-embed-video" playsinline preload="metadata" crossorigin="anonymous" src="${escapeHtml(videoUrl)}"${poster} data-inline-video-loading="1"></video>${INLINE_CHAT_VIDEO_PLAY_OVERLAY_HTML}</div></div>`;
+				wrap.innerHTML = `<div class="connect-chat-creation-embed-media"><div class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--video${nsfwClass}"${nsfwDataAttr} role="button" tabindex="0" aria-label="Open video" title="Open video"><video class="connect-chat-creation-embed-video" playsinline preload="metadata" src="${escapeHtml(videoUrl)}"${poster} data-inline-video-loading="1"></video>${INLINE_CHAT_VIDEO_PLAY_OVERLAY_HTML}</div></div>`;
 				trimWhitespaceOnlyTextNodes(wrap);
 				const vid = wrap.querySelector('.connect-chat-creation-embed-video');
 				if (vid instanceof HTMLVideoElement) {

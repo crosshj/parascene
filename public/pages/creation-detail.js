@@ -2225,13 +2225,14 @@ async function loadCreation() {
 		const id = Number(delegatedCreationId);
 		if (!raw || !Number.isFinite(id) || id <= 0) return raw;
 		if (!raw.includes('/api/images/created/') && !raw.includes('/api/videos/created/')) return raw;
-		const [beforeHash, hash = ''] = raw.split('#');
-		if (/[?&]creation_id=/.test(beforeHash)) {
-			return hash ? `${beforeHash}#${hash}` : beforeHash;
+		try {
+			const parsed = new URL(raw, 'http://localhost');
+			parsed.searchParams.set('creation_id', String(id));
+			return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+		} catch {
+			const sep = raw.includes('?') ? '&' : '?';
+			return `${raw}${sep}creation_id=${encodeURIComponent(String(id))}`;
 		}
-		const sep = beforeHash.includes('?') ? '&' : '?';
-		const next = `${beforeHash}${sep}creation_id=${encodeURIComponent(String(id))}`;
-		return hash ? `${next}#${hash}` : next;
 	}
 
 	function preloadHeroImageUrl(url) {

@@ -7,6 +7,7 @@ import {
 	appendCreationIdToMediaUrl,
 	appendShareAccessToMediaUrl,
 	getThumbnailUrl,
+	isCreatedMediaThumbnailRequest,
 	getBaseAppUrl,
 	getShareBaseUrl
 } from "./utils/url.js";
@@ -228,10 +229,19 @@ export default function createCreateRoutes({ queries, storage }) {
 				return res.status(404).json({ error: "Image not found" });
 			}
 
+			if (image.unavailable_at != null && String(image.unavailable_at) !== "") {
+				return res.status(404).json({ error: "Image not found" });
+			}
+
+			// Thumbnails are public: low-res, unguessable filenames, used in <img>/poster everywhere.
+			// Full-size (no variant) stays behind owner/published/delegation checks below.
+			const wantsThumbnail = isCreatedMediaThumbnailRequest(variant);
+
+			if (!wantsThumbnail) {
 			// Check access: user owns the image OR image is published OR user is admin OR lineage delegation
 			const userId = req.auth?.userId;
-			const isOwner = userId && image.user_id === userId;
-			const isPublished = image.published === 1 || image.published === true;
+			const isOwner = viewerOwnsCreationRow(image, userId);
+			const isPublished = isCreationPublished(image);
 
 			// Get user to check admin role
 			let isAdmin = false;
@@ -264,19 +274,15 @@ export default function createCreateRoutes({ queries, storage }) {
 				}
 			}
 			let creationDelegationOk = false;
-			const delegatedRaw = req.query?.creation_id ?? req.query?.group_id ?? req.query?.group_of;
-			const delegatedCreationId =
-				typeof delegatedRaw === "string" ? parseInt(delegatedRaw, 10) : Number(delegatedRaw);
-			if (!isOwner && !isPublished && !isAdmin && Number.isFinite(delegatedCreationId) && delegatedCreationId > 0) {
+			if (!isOwner && !isPublished && !isAdmin) {
 				try {
 					if (userId && !viewerRole) {
 						const u = await queries.selectUserById.get(userId);
 						viewerRole = u?.role || "";
 					}
-					creationDelegationOk = await canViewUnpublishedCreationViaCreationDelegation({
+					creationDelegationOk = await tryCreationDelegationForMediaRequest(req, {
 						ancestorRow: image,
-						creationId: delegatedCreationId,
-						viewerUserId: userId ?? null,
+						userId,
 						viewerRole
 					});
 				} catch {
@@ -342,8 +348,18 @@ export default function createCreateRoutes({ queries, storage }) {
 				}
 			}
 
-			if (!isOwner && !isPublished && !isAdmin && !lineageOk && !creationDelegationOk && !challengeMessageOk && !challengeHeroOk && !shareDelegationOk) {
+			if (
+				!isOwner &&
+				!isPublished &&
+				!isAdmin &&
+				!lineageOk &&
+				!creationDelegationOk &&
+				!challengeMessageOk &&
+				!challengeHeroOk &&
+				!shareDelegationOk
+			) {
 				return res.status(403).json({ error: "Access denied" });
+			}
 			}
 
 			// Serve current storage key when the URL path is a stale filename (e.g. after video poster update).
@@ -399,14 +415,16 @@ export default function createCreateRoutes({ queries, storage }) {
 			}
 
 			const userId = req.auth?.userId;
-			const isOwner = userId && image.user_id === userId;
-			const isPublished = image.published === 1 || image.published === true;
+			const isOwner = viewerOwnsCreationRow(image, userId);
+			const isPublished = isCreationPublished(image);
 
 			let isAdmin = false;
+			let viewerRoleVideo = "";
 			if (userId && !isOwner && !isPublished) {
 				try {
 					const user = await queries.selectUserById.get(userId);
 					isAdmin = user?.role === "admin";
+					viewerRoleVideo = user?.role || "";
 				} catch {
 					// ignore errors checking user
 				}
@@ -417,33 +435,31 @@ export default function createCreateRoutes({ queries, storage }) {
 			const lineageParentIdV = typeof lineageRawV === "string" ? parseInt(lineageRawV, 10) : Number(lineageRawV);
 			if (!isOwner && !isPublished && !isAdmin && userId && Number.isFinite(lineageParentIdV) && lineageParentIdV > 0) {
 				try {
-					const u = await queries.selectUserById.get(userId);
+					if (!viewerRoleVideo) {
+						const u = await queries.selectUserById.get(userId);
+						viewerRoleVideo = u?.role || "";
+					}
 					lineageOkVideo = await canViewUnpublishedCreationViaLineageDelegation({
 						ancestorRow: image,
 						lineageParentId: lineageParentIdV,
 						viewerUserId: userId,
-						viewerRole: u?.role || ""
+						viewerRole: viewerRoleVideo
 					});
 				} catch {
 					lineageOkVideo = false;
 				}
 			}
 			let creationDelegationOkVideo = false;
-			const delegatedRawV = req.query?.creation_id ?? req.query?.group_id ?? req.query?.group_of;
-			const delegatedCreationIdV =
-				typeof delegatedRawV === "string" ? parseInt(delegatedRawV, 10) : Number(delegatedRawV);
-			if (!isOwner && !isPublished && !isAdmin && Number.isFinite(delegatedCreationIdV) && delegatedCreationIdV > 0) {
+			if (!isOwner && !isPublished && !isAdmin) {
 				try {
-					let viewerRole = "";
-					if (userId) {
+					if (!viewerRoleVideo) {
 						const u = await queries.selectUserById.get(userId);
-						viewerRole = u?.role || "";
+						viewerRoleVideo = u?.role || "";
 					}
-					creationDelegationOkVideo = await canViewUnpublishedCreationViaCreationDelegation({
+					creationDelegationOkVideo = await tryCreationDelegationForMediaRequest(req, {
 						ancestorRow: image,
-						creationId: delegatedCreationIdV,
-						viewerUserId: userId ?? null,
-						viewerRole
+						userId,
+						viewerRole: viewerRoleVideo
 					});
 				} catch {
 					creationDelegationOkVideo = false;
@@ -1164,6 +1180,42 @@ export default function createCreateRoutes({ queries, storage }) {
 	function viewerOwnsCreationRow(row, viewerUserId) {
 		if (!row || viewerUserId == null) return false;
 		return Number(row.user_id) === Number(viewerUserId);
+	}
+
+	function isCreationPublished(row) {
+		return row?.published === 1 || row?.published === true;
+	}
+
+	/** Query param first, then Referer /creations/:id when different (wrong source id baked into group URLs). */
+	function collectDelegatedCreationIdCandidatesFromMediaRequest(req) {
+		const out = [];
+		const seen = new Set();
+		const add = (raw) => {
+			const id = typeof raw === "string" ? parseInt(raw, 10) : Number(raw);
+			if (!Number.isFinite(id) || id <= 0 || seen.has(id)) return;
+			seen.add(id);
+			out.push(id);
+		};
+		const delegatedRaw = req.query?.creation_id ?? req.query?.group_id ?? req.query?.group_of;
+		add(delegatedRaw);
+		const ref = String(req.get("referer") || "");
+		const m = ref.match(/\/creations\/(\d+)/);
+		if (m) add(m[1]);
+		return out;
+	}
+
+	async function tryCreationDelegationForMediaRequest(req, { ancestorRow, userId, viewerRole }) {
+		const candidates = collectDelegatedCreationIdCandidatesFromMediaRequest(req);
+		for (const creationId of candidates) {
+			const ok = await canViewUnpublishedCreationViaCreationDelegation({
+				ancestorRow,
+				creationId,
+				viewerUserId: userId ?? null,
+				viewerRole
+			});
+			if (ok) return true;
+		}
+		return false;
 	}
 
 	function parsePositiveIntQuery(value) {

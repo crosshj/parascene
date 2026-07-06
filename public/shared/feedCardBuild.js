@@ -89,13 +89,14 @@ function appendCreationIdToMediaUrl(url, creationId) {
 	if (!Number.isFinite(id) || id <= 0) return String(url);
 	const s = String(url);
 	if (!s.includes('/api/images/created/') && !s.includes('/api/videos/created/')) return s;
-	const [beforeHash, hash = ''] = s.split('#');
-	const [pathAndQuery, existingHashRemainder] = [beforeHash, hash ? `#${hash}` : ''];
-	if (/[?&]creation_id=/.test(pathAndQuery)) {
-		return `${pathAndQuery}${existingHashRemainder}`;
+	try {
+		const parsed = new URL(s, 'http://localhost');
+		parsed.searchParams.set('creation_id', String(id));
+		return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+	} catch {
+		const sep = s.includes('?') ? '&' : '?';
+		return `${s}${sep}creation_id=${encodeURIComponent(String(id))}`;
 	}
-	const sep = pathAndQuery.includes('?') ? '&' : '?';
-	return `${pathAndQuery}${sep}creation_id=${encodeURIComponent(String(id))}${existingHashRemainder}`;
 }
 
 export function getHiddenFeedItems() {
