@@ -3,7 +3,7 @@
 
 <head>
 	<meta charset="utf-8" />
-	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
 	<meta name="color-scheme" content="light dark" />
 	<meta name="description" content="Parascene — a community for creating and sharing with generative tools." />
 	<title>parascene</title>
@@ -316,13 +316,35 @@
 		}
 
 		@media (max-width: 768px) {
+			html {
+				overflow: hidden;
+				max-width: 100%;
+				overscroll-behavior: none;
+			}
+
 			body.vl-page {
-				overflow-x: hidden;
+				overflow: hidden;
+				height: 100dvh;
+				max-height: 100dvh;
+				min-height: 0;
+				overscroll-behavior: none;
 			}
 
 			main {
-				padding-left: 0;
-				padding-right: 0;
+				flex: 1 1 auto;
+				min-height: 0;
+				overflow: hidden;
+				padding: 10px 0;
+				width: 100%;
+				max-width: 100%;
+			}
+
+			.vl-shell,
+			.vl-hero {
+				width: 100%;
+				max-width: 100%;
+				overflow-x: clip;
+				min-height: 0;
 			}
 
 			.vl-logo,
@@ -338,12 +360,21 @@
 			.vl-video {
 				width: 150vw;
 				max-width: none;
-				margin-top: 16px;
+				max-height: min(52dvh, calc(150vw * 9 / 16));
+				margin-top: 12px;
 				border-radius: 0;
+				flex-shrink: 1;
 			}
 
 			.vl-cta-row {
-				margin-top: 28px;
+				margin-top: 20px;
+				flex-shrink: 0;
+			}
+
+			.vl-footer {
+				flex-shrink: 0;
+				padding-top: 14px;
+				padding-bottom: 14px;
 			}
 		}
 	</style>
