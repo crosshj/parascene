@@ -397,6 +397,38 @@
 			var loadPromise = null;
 			var cta = document.querySelector(".vl-cta");
 			var ctaAttentionPlayed = false;
+			var landingVariant = "video";
+			var trackedPlay = false;
+			var trackedComplete = false;
+
+			var landingUtm = (function () {
+				var params = new URLSearchParams(window.location.search);
+				var keys = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"];
+				var out = {};
+				keys.forEach(function (key) {
+					var val = params.get(key);
+					if (val) out[key] = val;
+				});
+				return Object.keys(out).length ? out : null;
+			})();
+
+			function trackLandingEvent(event) {
+				var body = { event: event, variant: landingVariant };
+				if (landingUtm) body.utm = landingUtm;
+				fetch("/api/landing/event", {
+					method: "POST",
+					credentials: "include",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify(body),
+					keepalive: event === "cta_click"
+				}).catch(function () {});
+			}
+
+			if (cta) {
+				cta.addEventListener("click", function () {
+					trackLandingEvent("cta_click");
+				});
+			}
 
 			function playCtaAttention() {
 				if (ctaAttentionPlayed || !cta) return;
@@ -477,6 +509,12 @@
 						updateControlLabel();
 						return video.play();
 					})
+					.then(function () {
+						if (!trackedPlay) {
+							trackedPlay = true;
+							trackLandingEvent("video_play");
+						}
+					})
 					.catch(function () {});
 			}
 
@@ -505,6 +543,10 @@
 					} catch (e) {}
 				}
 				updateControlLabel();
+				if (!trackedComplete) {
+					trackedComplete = true;
+					trackLandingEvent("video_complete");
+				}
 				playCtaAttention();
 			});
 			updateControlLabel();

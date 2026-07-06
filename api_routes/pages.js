@@ -14,7 +14,8 @@ import { buildSidebarPseudoStripListStaticHtml } from "../public/shared/chatSide
 import { isChatBroadcastMentionSlug } from "../public/shared/chatBroadcastMentions.js";
 import { portraitHeroSizing, resolveExtendedHeroLayout } from "../public/shared/aspectRatio.js";
 import { canAccessFeedBeta } from "./feedBeta/access.js";
-import { LANDING_PAGE_HTML, LANDING_PAGE_STANDALONE } from "./utils/landingPage.js";
+import { LANDING_PAGE_HTML, LANDING_PAGE_STANDALONE, LANDING_PAGE_VARIANT } from "./utils/landingPage.js";
+import { recordLandingFunnelEvent } from "./utils/landingAnalytics.js";
 
 function getPageForUser(user) {
 	const roleToPage = {
@@ -726,6 +727,13 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 		return injectCommonHead(htmlContent, tokens);
 	}
 
+	function logLandingPageView(req) {
+		void recordLandingFunnelEvent(req, {
+			eventType: "view",
+			variant: LANDING_PAGE_VARIANT
+		}).catch(() => {});
+	}
+
 	// Handle root and index.html - same logic
 	router.get(["/", "/index.html"], async (req, res) => {
 		const userId = req.auth?.userId;
@@ -735,6 +743,7 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 			const fs = await import("fs/promises");
 			let htmlContent = await fs.readFile(path.join(pagesDir, LANDING_PAGE_HTML), "utf-8");
 			htmlContent = injectLandingHtml(htmlContent, req);
+			logLandingPageView(req);
 			res.setHeader("Content-Type", "text/html");
 			return res.send(htmlContent);
 		}
@@ -749,6 +758,7 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 			const fs = await import("fs/promises");
 			let htmlContent = await fs.readFile(path.join(pagesDir, LANDING_PAGE_HTML), "utf-8");
 			htmlContent = injectLandingHtml(htmlContent, req);
+			logLandingPageView(req);
 			res.setHeader("Content-Type", "text/html");
 			return res.send(htmlContent);
 		}

@@ -4,6 +4,10 @@ import {
 	buildFeedImpressionSnapshotFromRedis
 } from "./feedImpressionPulse.js";
 import {
+	attachLandingFunnelToPulseSnapshot,
+	buildLandingFunnelSnapshotFromRedis
+} from "./landingFunnelPulse.js";
+import {
 	buildDaySnapshotFromRedis,
 	usEastDayKey,
 	yesterdayUsEastDayKey
@@ -21,7 +25,9 @@ export async function runVisitPulseFlush({ args = {} } = {}) {
 
 	let snapshot = await buildDaySnapshotFromRedis(dayKey);
 	const feedSnapshot = await buildFeedImpressionSnapshotFromRedis(dayKey);
+	const landingSnapshot = await buildLandingFunnelSnapshotFromRedis(dayKey);
 	snapshot = attachFeedImpressionsToPulseSnapshot(snapshot, feedSnapshot);
+	snapshot = attachLandingFunnelToPulseSnapshot(snapshot, landingSnapshot);
 	snapshot.flushed_at = new Date().toISOString();
 
 	const { queries } = await openDb({ quiet: true });
@@ -50,12 +56,25 @@ export async function runVisitPulseFlush({ args = {} } = {}) {
 		};
 	}
 
+	const landingRedisEmpty =
+		!landingSnapshot?.by_variant || !Object.keys(landingSnapshot.by_variant).length;
+	const dbHadLanding = Boolean(existing?.details?.landing_funnel?.by_variant);
 	if (!force && feedRedisEmpty && dbHadFeed && existing?.details?.feed_impressions) {
 		snapshot = {
 			...snapshot,
 			details: {
 				...(snapshot.details && typeof snapshot.details === "object" ? snapshot.details : {}),
 				feed_impressions: existing.details.feed_impressions
+			}
+		};
+	}
+
+	if (!force && landingRedisEmpty && dbHadLanding && existing?.details?.landing_funnel) {
+		snapshot = {
+			...snapshot,
+			details: {
+				...(snapshot.details && typeof snapshot.details === "object" ? snapshot.details : {}),
+				landing_funnel: existing.details.landing_funnel
 			}
 		};
 	}
@@ -71,7 +90,9 @@ export async function runVisitPulseFlush({ args = {} } = {}) {
 		total_hits: snapshot.total_hits,
 		total_active_blocks: snapshot.total_active_blocks,
 		feed_impression_users: snapshot.details?.feed_impressions?.unique_impressors ?? 0,
-		feed_impressions_total: snapshot.details?.feed_impressions?.total_impressions ?? 0
+		feed_impressions_total: snapshot.details?.feed_impressions?.total_impressions ?? 0,
+		landing_funnel_views:
+			snapshot.details?.landing_funnel?.by_variant?.video?.view_total ?? 0
 	};
 }
 

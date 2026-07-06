@@ -36,6 +36,7 @@ import createPromptInjectionsRoutes from "../api_routes/prompt_injections.js";
 import createAudioClipsRoutes from "../api_routes/audio_clips.js";
 import createQRRoutes from "../api_routes/qr.js";
 import createPolicyRoutes from "../api_routes/policy.js";
+import createLandingRoutes from "../api_routes/landing.js";
 import createTryRoutes from "../api_routes/try.js";
 import {
 	authMiddleware,
@@ -345,6 +346,7 @@ app.use(createHelpRoutes({ pagesDir, queries }));
 app.use(createPageRoutes({ queries, pagesDir, staticDir, storage }));
 app.use(createTodoRoutes());
 app.use(createPolicyRoutes());
+app.use(createLandingRoutes());
 app.use(createTryRoutes({ queries, storage }));
 app.use(createYoutubeRoutes());
 app.use(createSunoRoutes());
