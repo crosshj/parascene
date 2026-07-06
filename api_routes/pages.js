@@ -1,7 +1,7 @@
 import express from "express";
 import path from "path";
 import { clearAuthCookie, COOKIE_NAME } from "./auth.js";
-import { injectCommonHead, getPageTokens } from "./utils/head.js";
+import { injectCommonHead, getPageTokens, getCanonicalLinkForRequest } from "./utils/head.js";
 import {
 	appendCreationIdToMediaUrl,
 	appendShareAccessToMediaUrl,
@@ -14,6 +14,7 @@ import { buildSidebarPseudoStripListStaticHtml } from "../public/shared/chatSide
 import { isChatBroadcastMentionSlug } from "../public/shared/chatBroadcastMentions.js";
 import { portraitHeroSizing, resolveExtendedHeroLayout } from "../public/shared/aspectRatio.js";
 import { canAccessFeedBeta } from "./feedBeta/access.js";
+import { LANDING_PAGE_HTML, LANDING_PAGE_STANDALONE } from "./utils/landingPage.js";
 
 function getPageForUser(user) {
 	const roleToPage = {
@@ -716,6 +717,15 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 		}
 	});
 
+	function injectLandingHtml(htmlContent, req) {
+		const tokens = getPageTokens(req);
+		if (LANDING_PAGE_STANDALONE) {
+			tokens.CANONICAL_LINK = getCanonicalLinkForRequest(req);
+			return replaceTemplateTokens(htmlContent, tokens);
+		}
+		return injectCommonHead(htmlContent, tokens);
+	}
+
 	// Handle root and index.html - same logic
 	router.get(["/", "/index.html"], async (req, res) => {
 		const userId = req.auth?.userId;
@@ -723,8 +733,8 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 		// NOT logged in → landing page
 		if (!userId) {
 			const fs = await import("fs/promises");
-			let htmlContent = await fs.readFile(path.join(pagesDir, "index.html"), "utf-8");
-			htmlContent = injectCommonHead(htmlContent, getPageTokens(req));
+			let htmlContent = await fs.readFile(path.join(pagesDir, LANDING_PAGE_HTML), "utf-8");
+			htmlContent = injectLandingHtml(htmlContent, req);
 			res.setHeader("Content-Type", "text/html");
 			return res.send(htmlContent);
 		}
@@ -737,8 +747,8 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 				clearAuthCookie(res, req);
 			}
 			const fs = await import("fs/promises");
-			let htmlContent = await fs.readFile(path.join(pagesDir, "index.html"), "utf-8");
-			htmlContent = injectCommonHead(htmlContent, getPageTokens(req));
+			let htmlContent = await fs.readFile(path.join(pagesDir, LANDING_PAGE_HTML), "utf-8");
+			htmlContent = injectLandingHtml(htmlContent, req);
 			res.setHeader("Content-Type", "text/html");
 			return res.send(htmlContent);
 		}

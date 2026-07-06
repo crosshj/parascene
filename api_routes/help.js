@@ -3,6 +3,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { marked } from "marked";
 import { injectCommonHead, getPageTokens } from "./utils/head.js";
+import { LANDING_PAGE_HTML } from "./utils/landingPage.js";
 import { homeIcon } from "../public/icons/svg-strings.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -418,10 +419,12 @@ export default function createHelpRoutes({ pagesDir, queries }) {
 	/** Header for unauthenticated users (logo + Login/Sign up from landing page). */
 	async function getPublicHeaderHtml() {
 		const fs = await import("fs/promises");
-		const indexPath = path.join(pagesDir, 'index.html');
+		const indexPath = path.join(pagesDir, LANDING_PAGE_HTML);
 		try {
 			const indexHtml = await fs.readFile(indexPath, 'utf-8');
-			const match = indexHtml.match(/<app-navigation[\s\S]*?<\/app-navigation>/i);
+			const match =
+				indexHtml.match(/<app-navigation[\s\S]*?<\/app-navigation>/i) ||
+				indexHtml.match(/<header class="vl-header"[\s\S]*?<\/header>/i);
 			return match ? match[0] : '';
 		} catch {
 			return '';

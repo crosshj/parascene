@@ -4,6 +4,7 @@ import { marked } from "marked";
 import markedFootnote from "marked-footnote";
 import { getAvatarColor } from "../public/shared/avatar.js";
 import { injectCommonHead, getPageTokens, getCanonicalLinkHtml } from "./utils/head.js";
+import { LANDING_PAGE_HTML } from "./utils/landingPage.js";
 import { buildRequestMeta } from "./utils/analytics.js";
 import { getBaseAppUrl } from "./utils/url.js";
 import { scanBlogDirectory, sortBlogPosts } from "../lib/blog/parseAndScan.js";
@@ -349,10 +350,12 @@ export default function createBlogRoutes({ pagesDir, queries }) {
 
 	async function getPublicHeaderHtml() {
 		const fs = await import("fs/promises");
-		const indexPath = path.join(pagesDir, "index.html");
+		const indexPath = path.join(pagesDir, LANDING_PAGE_HTML);
 		try {
 			const indexHtml = await fs.readFile(indexPath, "utf-8");
-			const match = indexHtml.match(/<app-navigation[\s\S]*?<\/app-navigation>/i);
+			const match =
+				indexHtml.match(/<app-navigation[\s\S]*?<\/app-navigation>/i) ||
+				indexHtml.match(/<header class="vl-header"[\s\S]*?<\/header>/i);
 			return match ? match[0] : "";
 		} catch {
 			return "";
