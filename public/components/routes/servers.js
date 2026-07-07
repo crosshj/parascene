@@ -439,6 +439,8 @@ class AppRouteServers extends HTMLElement {
 				e.stopPropagation();
 				if (typeof this._openDmSidebarGearMenu === 'function') {
 					this._openDmSidebarGearMenu(dmGearBtn, {
+						showRemove: true,
+						onRemove: () => this.hideDmFromConnectSidebar(dmGearBtn),
 						onAfterPinChange: () => {
 							this.renderConnectChatThreadList();
 						}
@@ -818,6 +820,25 @@ class AppRouteServers extends HTMLElement {
 		return appendReservedPseudoChannels ? appendReservedPseudoChannels(merged) : merged;
 	}
 
+	/** Hide a DM from the connect sidebar (server-side, per-member). */
+	async hideDmFromConnectSidebar(dmGearBtn) {
+		const tid = Number(dmGearBtn?.getAttribute?.('data-chat-row-menu-thread-id'));
+		if (!Number.isFinite(tid) || tid <= 0) {
+			throw new Error('Invalid conversation');
+		}
+		const res = await fetch(`/api/chat/threads/${tid}/hide`, {
+			method: 'POST',
+			credentials: 'include',
+			headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+			body: JSON.stringify({ hidden: true })
+		});
+		const data = await res.json().catch(() => ({}));
+		if (!res.ok) {
+			throw new Error(data?.message || data?.error || `Could not close DM (${res.status})`);
+		}
+		await this.loadChatThreads({ forceNetwork: true });
+	}
+
 	renderConnectChatThreadList() {
 		const listRoot = this.querySelector('[data-connect-chat-scroll]');
 		const listsRoot = this.querySelector('[data-connect-chat-lists]');
@@ -958,7 +979,7 @@ class AppRouteServers extends HTMLElement {
 					</div>
 				</div>
 				</a>
-				<button type="button" class="chat-page-sidebar-server-settings chat-page-sidebar-dm-menu-btn" data-chat-dm-menu="${escapeHtml(pinKey)}" data-chat-dm-profile-href="${profileHrefAttr}" data-chat-dm-other-user-id="${escapeHtml(otherUserIdAttr)}" aria-label="Direct message options" aria-haspopup="menu" aria-expanded="false">${gearSvg}</button>
+				<button type="button" class="chat-page-sidebar-server-settings chat-page-sidebar-dm-menu-btn" data-chat-dm-menu="${escapeHtml(pinKey)}" data-chat-dm-profile-href="${profileHrefAttr}" data-chat-dm-other-user-id="${escapeHtml(otherUserIdAttr)}" data-chat-row-menu-thread-id="${escapeHtml(String(t.id ?? ''))}" aria-label="Direct message options" aria-haspopup="menu" aria-expanded="false">${gearSvg}</button>
 			</div>`;
 			}
 			return `<a class="chat-page-sidebar-row${pc}${extraRow}" href="${escapeHtml(href)}">

@@ -3,6 +3,142 @@ import { isDmPinKeyActive, pinDmKey, unpinDmKey } from './chatDmPins.js';
 let menuEl = null;
 let outsideHandler = null;
 let escHandler = null;
+let closeDmConfirmEl = null;
+let closeDmConfirmEscHandler = null;
+
+function dmTitleFromGearBtn(btn) {
+	const row = btn?.closest?.('.chat-page-sidebar-row, .chat-page-sidebar-row--dm-with-menu');
+	const titleEl = row?.querySelector?.('.chat-page-sidebar-row-title');
+	const title = titleEl?.textContent?.trim();
+	return title || 'this conversation';
+}
+
+function closeCloseDmConfirm() {
+	if (closeDmConfirmEl) {
+		closeDmConfirmEl.classList.remove('open');
+		closeDmConfirmEl.setAttribute('aria-hidden', 'true');
+		const errEl = closeDmConfirmEl.querySelector('[data-chat-dm-close-confirm-error]');
+		if (errEl instanceof HTMLElement) {
+			errEl.hidden = true;
+			errEl.textContent = '';
+		}
+		const confirmBtn = closeDmConfirmEl.querySelector('[data-chat-dm-close-confirm-submit]');
+		if (confirmBtn instanceof HTMLButtonElement) {
+			confirmBtn.disabled = false;
+			confirmBtn.classList.remove('is-loading');
+			confirmBtn.removeAttribute('aria-busy');
+		}
+		const cancelBtn = closeDmConfirmEl.querySelector('[data-chat-dm-close-confirm-cancel]');
+		if (cancelBtn instanceof HTMLButtonElement) cancelBtn.disabled = false;
+	}
+	if (closeDmConfirmEscHandler) {
+		document.removeEventListener('keydown', closeDmConfirmEscHandler, true);
+		closeDmConfirmEscHandler = null;
+	}
+	try {
+		document.body.classList.remove('modal-open');
+	} catch {
+		// ignore
+	}
+}
+
+function ensureCloseDmConfirmEl() {
+	if (closeDmConfirmEl) return closeDmConfirmEl;
+	const overlay = document.createElement('div');
+	overlay.className = 'chat-dm-close-confirm-overlay';
+	overlay.setAttribute('aria-hidden', 'true');
+	overlay.innerHTML = `<div class="chat-dm-close-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="chat-dm-close-confirm-title">
+		<h3 id="chat-dm-close-confirm-title" class="chat-dm-close-confirm-title">Close DM</h3>
+		<p class="chat-dm-close-confirm-message" data-chat-dm-close-confirm-message></p>
+		<p class="alert error chat-dm-close-confirm-error" data-chat-dm-close-confirm-error hidden></p>
+		<div class="chat-dm-close-confirm-footer">
+			<button type="button" class="btn-secondary" data-chat-dm-close-confirm-cancel>Cancel</button>
+			<button type="button" class="btn-primary chat-dm-close-confirm-submit" data-chat-dm-close-confirm-submit>
+				<span class="chat-dm-close-confirm-submit-label">Close DM</span>
+				<span class="chat-dm-close-confirm-submit-spinner" aria-hidden="true"></span>
+			</button>
+		</div>
+	</div>`;
+	overlay.addEventListener('click', (ev) => {
+		if (ev.target === overlay) closeCloseDmConfirm();
+	});
+	const cancelBtn = overlay.querySelector('[data-chat-dm-close-confirm-cancel]');
+	if (cancelBtn instanceof HTMLButtonElement) {
+		cancelBtn.addEventListener('click', () => closeCloseDmConfirm());
+	}
+	document.body.appendChild(overlay);
+	closeDmConfirmEl = overlay;
+	return overlay;
+}
+
+/**
+ * @param {{ dmTitle?: string, onConfirm?: () => (void | Promise<void>) }} opts
+ */
+function openCloseDmConfirm(opts = {}) {
+	const overlay = ensureCloseDmConfirmEl();
+	const dmTitle = typeof opts.dmTitle === 'string' && opts.dmTitle.trim() ? opts.dmTitle.trim() : 'this conversation';
+	const msgEl = overlay.querySelector('[data-chat-dm-close-confirm-message]');
+	if (msgEl instanceof HTMLElement) {
+		msgEl.textContent = `Close your DM with ${dmTitle}? It will reappear in your sidebar if they message you again.`;
+	}
+	const errEl = overlay.querySelector('[data-chat-dm-close-confirm-error]');
+	if (errEl instanceof HTMLElement) {
+		errEl.hidden = true;
+		errEl.textContent = '';
+	}
+	const confirmBtn = overlay.querySelector('[data-chat-dm-close-confirm-submit]');
+	const cancelBtn = overlay.querySelector('[data-chat-dm-close-confirm-cancel]');
+	if (confirmBtn instanceof HTMLButtonElement) {
+		confirmBtn.disabled = false;
+		confirmBtn.classList.remove('is-loading');
+		confirmBtn.removeAttribute('aria-busy');
+	}
+	if (cancelBtn instanceof HTMLButtonElement) cancelBtn.disabled = false;
+
+	overlay.classList.add('open');
+	overlay.setAttribute('aria-hidden', 'false');
+	try {
+		document.body.classList.add('modal-open');
+	} catch {
+		// ignore
+	}
+
+	if (closeDmConfirmEscHandler) {
+		document.removeEventListener('keydown', closeDmConfirmEscHandler, true);
+	}
+	closeDmConfirmEscHandler = (ev) => {
+		if (ev.key === 'Escape') closeCloseDmConfirm();
+	};
+	document.addEventListener('keydown', closeDmConfirmEscHandler, true);
+
+	const onConfirm = typeof opts.onConfirm === 'function' ? opts.onConfirm : null;
+	if (confirmBtn instanceof HTMLButtonElement) {
+		confirmBtn.onclick = () => {
+			if (!onConfirm || confirmBtn.classList.contains('is-loading')) return;
+			errEl.hidden = true;
+			errEl.textContent = '';
+			confirmBtn.disabled = true;
+			confirmBtn.classList.add('is-loading');
+			confirmBtn.setAttribute('aria-busy', 'true');
+			if (cancelBtn instanceof HTMLButtonElement) cancelBtn.disabled = true;
+			void Promise.resolve(onConfirm())
+				.then(() => {
+					closeCloseDmConfirm();
+				})
+				.catch((err) => {
+					if (errEl instanceof HTMLElement) {
+						errEl.hidden = false;
+						errEl.textContent = err?.message || 'Could not close DM.';
+					}
+					confirmBtn.disabled = false;
+					confirmBtn.classList.remove('is-loading');
+					confirmBtn.removeAttribute('aria-busy');
+					if (cancelBtn instanceof HTMLButtonElement) cancelBtn.disabled = false;
+				});
+		};
+	}
+	requestAnimationFrame(() => cancelBtn?.focus?.());
+}
 
 export function closeDmSidebarGearMenu() {
 	if (menuEl) {
@@ -27,8 +163,10 @@ export function closeDmSidebarGearMenu() {
  *   onViewProfile?: (href: string) => void,
  *   showProfile?: boolean,
  *   showPinToggle?: boolean,
+ *   showRemove?: boolean,
  *   extraItems?: Array<{ action: string, label: string }>,
- *   onAction?: (action: string) => (void | Promise<void>)
+ *   onAction?: (action: string) => (void | Promise<void>),
+ *   onRemove?: () => (void | Promise<void>)
  * }} [opts]
  */
 export function openDmSidebarGearMenu(btn, opts = {}) {
@@ -48,6 +186,7 @@ export function openDmSidebarGearMenu(btn, opts = {}) {
 	const pinned = isDmPinKeyActive(pinKey);
 	const showProfile = opts.showProfile === true || (opts.showProfile !== false && inDmContext);
 	const showPinToggle = opts.showPinToggle === true || (opts.showPinToggle !== false && Boolean(pinKey.trim()));
+	const showRemove = opts.showRemove === true && Boolean(pinKey.trim());
 
 	const menu = document.createElement('div');
 	menu.className = 'feed-card-menu chat-page-sidebar-dm-row-menu';
@@ -97,6 +236,17 @@ export function openDmSidebarGearMenu(btn, opts = {}) {
 			pin.textContent = 'Pin Chat';
 			menu.appendChild(pin);
 		}
+	}
+
+	if (showRemove) {
+		const remove = document.createElement('button');
+		remove.type = 'button';
+		remove.className = 'feed-card-menu-item';
+		remove.setAttribute('role', 'menuitem');
+		remove.dataset.chatDmMenuAction = 'remove';
+		remove.dataset.chatDmMenuKey = pinKey;
+		remove.textContent = 'Close DM';
+		menu.appendChild(remove);
 	}
 
 	const extraItems = Array.isArray(opts.extraItems) ? opts.extraItems : [];
@@ -193,6 +343,20 @@ export function openDmSidebarGearMenu(btn, opts = {}) {
 			} catch {
 				// ignore
 			}
+			return;
+		}
+		if (act === 'remove') {
+			closeDmSidebarGearMenu();
+			const dmTitle = dmTitleFromGearBtn(btn);
+			openCloseDmConfirm({
+				dmTitle,
+				onConfirm: async () => {
+					if (typeof opts.onRemove === 'function') {
+						await opts.onRemove();
+					}
+					unpinDmKey(key);
+				}
+			});
 			return;
 		}
 		if (typeof opts.onAction === 'function') {

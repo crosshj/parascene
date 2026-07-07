@@ -1976,6 +1976,35 @@ function buildChannelInviteSystemBody({ inviterHandle, invitedHandles }) {
 		}
 	});
 
+	// POST /api/chat/threads/:threadId/hide — hide a DM from the sidebar (per-member).
+	// Body { hidden: false } clears it. Hidden DMs reappear once a newer message arrives.
+	router.post("/api/chat/threads/:threadId/hide", async (req, res) => {
+		const userId = requireUser(req, res);
+		if (userId == null) return;
+		const sb = getSb(res);
+		if (!sb) return;
+		const threadId = Number(req.params.threadId);
+		if (!Number.isFinite(threadId) || threadId <= 0) {
+			return res.status(400).json({ error: "Bad request", message: "Invalid thread id" });
+		}
+		const hidden = req.body?.hidden !== false;
+		try {
+			if (!(await isMember(sb, threadId, userId))) {
+				return res.status(403).json({ error: "Forbidden", message: "Not a member of this thread" });
+			}
+			const { error } = await sb
+				.from("prsn_chat_members")
+				.update({ hidden_at: hidden ? new Date().toISOString() : null })
+				.eq("thread_id", threadId)
+				.eq("user_id", userId);
+			if (error) throw error;
+			return res.status(200).json({ ok: true, hidden });
+		} catch (err) {
+			console.error("[POST /api/chat/threads/:threadId/hide]", err);
+			return res.status(500).json({ error: "Server error", message: err?.message || "Failed" });
+		}
+	});
+
 	// GET /api/chat/threads/:threadId/messages?limit=&before=
 	router.get("/api/chat/threads/:threadId/messages", async (req, res) => {
 		const userId = requireUser(req, res);

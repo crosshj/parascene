@@ -8,6 +8,7 @@ let helpIcon;
 let globeIcon;
 let logOutIcon;
 let infoIcon;
+let statsBarsIcon;
 let confirmAndHardReloadAfterClearingCaches;
 
 function getAssetVersionParam() {
@@ -40,6 +41,7 @@ async function loadAccountMenuDeps() {
 		globeIcon = iconsMod.globeIcon;
 		logOutIcon = iconsMod.logOutIcon;
 		infoIcon = iconsMod.infoIcon;
+		statsBarsIcon = iconsMod.statsBarsIcon;
 		const clearMod = await import(`../../shared/clearClientCaches.js${qs}`);
 		confirmAndHardReloadAfterClearingCaches = clearMod.confirmAndHardReloadAfterClearingCaches;
 	})();
@@ -212,6 +214,10 @@ class AppAccountMenu extends HTMLElement {
 					${infoIcon('account-menu-svg')}
 					<span class="account-menu-label">About</span>
 				</button>
+				<button type="button" class="account-menu-item" data-action="reports" role="menuitem" data-reports-item hidden>
+					${statsBarsIcon('account-menu-svg')}
+					<span class="account-menu-label">Reports</span>
+				</button>
 				<button type="button" class="account-menu-item" data-action="clear-cache" role="menuitem">
 					${gearIcon('account-menu-svg')}
 					<span class="account-menu-label">Clear cache</span>
@@ -308,6 +314,12 @@ class AppAccountMenu extends HTMLElement {
 			await aboutMod.openAboutModal();
 			return;
 		}
+		if (action === 'reports') {
+			e.preventDefault();
+			this.close();
+			window.location.assign('/reports/');
+			return;
+		}
 		if (action === 'clear-cache') {
 			e.preventDefault();
 			this.close();
@@ -318,9 +330,22 @@ class AppAccountMenu extends HTMLElement {
 		}
 	}
 
+	/** Reports item is localhost-only and shown only when opened from the chat sidebar. */
+	_syncReportsItem(el) {
+		const item = this.shadowRoot.querySelector('[data-reports-item]');
+		if (!item) return;
+		const host = window.location?.hostname || '';
+		const isLocal = host === 'localhost' || host === '127.0.0.1' || host === '[::1]';
+		const fromChatSidebar = !!(
+			el && (el.matches?.('[data-chat-sidebar-open-profile]') || el.closest?.('[data-chat-sidebar-open-profile]'))
+		);
+		item.hidden = !(isLocal && fromChatSidebar);
+	}
+
 	async open(anchor) {
 		await this._initPromise;
 		const el = resolveMenuAnchor(anchor);
+		this._syncReportsItem(el);
 		const rect = el?.getBoundingClientRect?.() ?? null;
 		const r = rect && Number.isFinite(rect.top) ? rect : fallbackAnchorRect();
 		const panel = this.shadowRoot.querySelector('.account-menu-panel');

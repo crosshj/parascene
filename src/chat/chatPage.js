@@ -1812,6 +1812,30 @@ export async function initChatPage(root, options = {}) {
 		}
 	}
 
+	async function hideDmFromSidebar(threadId) {
+		const tid = Number(threadId);
+		if (!Number.isFinite(tid) || tid <= 0) {
+			throw new Error('Invalid conversation');
+		}
+		const wasActive = Number(activeThreadId) === tid;
+		const res = await fetch(`/api/chat/threads/${tid}/hide`, {
+			method: 'POST',
+			credentials: 'include',
+			headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+			body: JSON.stringify({ hidden: true })
+		});
+		const data = await res.json().catch(() => ({}));
+		if (!res.ok) {
+			throw new Error(data?.message || data?.error || `Could not close DM (${res.status})`);
+		}
+		await loadChatThreads({ forceNetwork: true });
+		await refreshChatSidebar({ skipThreadsFetch: true });
+		if (wasActive) {
+			history.pushState({ prsnChat: true }, '', '/chat/c/feed');
+			await openThreadForCurrentPath();
+		}
+	}
+
 	function openServerDetailsFromSidebarButton(settingsBtn) {
 		if (!(settingsBtn instanceof HTMLButtonElement)) return;
 		const sid = Number(settingsBtn.getAttribute('data-chat-server-settings'));
@@ -6538,10 +6562,15 @@ export async function initChatPage(root, options = {}) {
 				e.preventDefault();
 				e.stopPropagation();
 				openDmSidebarGearMenu(dmGearBtn, {
+					showRemove: true,
 					onViewProfile: (href) => navigateToSpaPageFromSpa(href),
 					onMarkAsRead: () => {
 						const tid = Number(dmGearBtn.getAttribute('data-chat-row-menu-thread-id'));
 						return markSidebarThreadRead(tid);
+					},
+					onRemove: () => {
+						const tid = Number(dmGearBtn.getAttribute('data-chat-row-menu-thread-id'));
+						return hideDmFromSidebar(tid);
 					},
 					onAfterPinChange: () => void refreshChatSidebar({ skipThreadsFetch: true })
 				});

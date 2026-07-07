@@ -15661,6 +15661,101 @@ body.view-nsfw .connect-comment-thumb[data-media-type="video"].nsfw::after {
 	border-color: var(--error-text);
 }
 
+/* Chat: close DM confirm (sidebar gear menu) */
+.chat-dm-close-confirm-overlay {
+	position: fixed;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.5);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 100010;
+	opacity: 0;
+	visibility: hidden;
+	pointer-events: none;
+	transition: opacity 0.2s, visibility 0.2s;
+}
+
+.chat-dm-close-confirm-overlay.open {
+	opacity: 1;
+	visibility: visible;
+	pointer-events: auto;
+}
+
+.chat-dm-close-confirm-modal {
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: 14px;
+	box-shadow: var(--shadow);
+	max-width: 380px;
+	width: 90%;
+	padding: 20px;
+	transform: scale(0.95);
+	transition: transform 0.2s;
+}
+
+.chat-dm-close-confirm-overlay.open .chat-dm-close-confirm-modal {
+	transform: scale(1);
+}
+
+.chat-dm-close-confirm-title {
+	margin: 0 0 12px;
+	font-size: 1.125rem;
+	font-weight: 600;
+	color: var(--text);
+}
+
+.chat-dm-close-confirm-message {
+	margin: 0 0 16px;
+	color: var(--text-muted);
+	font-size: 0.9375rem;
+	line-height: 1.45;
+}
+
+.chat-dm-close-confirm-error {
+	margin: 0 0 12px;
+}
+
+.chat-dm-close-confirm-footer {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 8px;
+	margin-top: 16px;
+}
+
+.chat-dm-close-confirm-submit {
+	min-width: 100px;
+	position: relative;
+}
+
+.chat-dm-close-confirm-submit-spinner {
+	display: none;
+	width: 1em;
+	height: 1em;
+	border: 2px solid color-mix(in srgb, currentColor 40%, transparent);
+	border-top-color: currentColor;
+	border-radius: 50%;
+	animation: spin 0.8s linear infinite;
+}
+
+.chat-dm-close-confirm-submit.is-loading .chat-dm-close-confirm-submit-label {
+	visibility: hidden;
+}
+
+.chat-dm-close-confirm-submit.is-loading .chat-dm-close-confirm-submit-spinner {
+	display: block;
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	margin-left: -0.5em;
+	margin-top: -0.5em;
+}
+
+.chat-dm-close-confirm-submit.is-loading:disabled {
+	opacity: 1;
+}
+
 /* Admin: add/replace video on creation detail */
 .creation-detail-admin-video {
 	margin: 12px 0 16px;

@@ -10,7 +10,7 @@
  * - vercel-friendly: warm lambda Map throttles Redis; nightly flush to DB
  * - low chatter: skip static, workers, webhooks, poll routes
  * - fail-open: Redis down → request still succeeds
- * - consume: scripts/analytics/visit-pulse-report.js (--live for Redis today)
+ * - consume: overview report (scripts/analytics/overview/, served at /reports/) via overview-refresh.js
  *
  * Redis keys
  * - pulse:day:{date}:{visitorKey}     HASH first_seen, last_seen, hits
