@@ -21,6 +21,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { REPO_ROOT, loadEnv } from "../repo-root.cjs";
 import { loadReportStyleBlock } from "./report-styles.js";
+import { buildLandingFunnelSectionHtml } from "./landingFunnelReport.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 loadEnv();
@@ -449,7 +450,8 @@ function buildVisitPulseSummaryPayload(bundle) {
 				active_hours: et.visitorActiveHourLabels(v, dayStartMs)
 			})),
 		anonymous: anonTables,
-		feed_impressions: row?.details?.feed_impressions ?? null
+		feed_impressions: row?.details?.feed_impressions ?? null,
+		landing_funnel: row?.details?.landing_funnel ?? null
 	};
 }
 
@@ -988,6 +990,7 @@ async function renderVisitPulseHtml(bundle) {
 		peakHourLabel: et.partitionHourShortLabel(stack.peakHour.h, dayStartMs),
 		displayTz,
 		feedImpressionsSectionHtml: buildFeedImpressionsSectionHtml(row?.details?.feed_impressions),
+		landingFunnelSectionHtml: buildLandingFunnelSectionHtml(row?.details?.landing_funnel, esc),
 		easternTz: EASTERN_TZ,
 		authedChartSvg: authedHourChartSvg({
 			series: stack.series,

@@ -2,6 +2,9 @@
 /**
  * Inception → outlook: all-time action metrics + visit pulse (when available) + linear projections.
  *
+ * Pulse rollups and 30d window metrics end at yesterday US East (last complete partition).
+ * Partial today is excluded from trends, charts, and milestone window metrics.
+ *
  *   node scripts/analytics/inception-outlook-report.js
  *   node scripts/analytics/inception-outlook-report.js --out .output/inception-outlook/custom.html
  */
@@ -131,6 +134,21 @@ function currentWeekKey() {
 
 function shiftDayKey(dayKey, deltaDays) {
 	return usEastDayKey(new Date(usEastDayStartMs(dayKey) + deltaDays * PULSE_DAY_MS));
+}
+
+/** Last complete US East pulse partition (yesterday). */
+function lastCompletePulseDay() {
+	return yesterdayUsEastDayKey();
+}
+
+/** @param {object[]} rows */
+function filterCompletePulseDays(rows) {
+	const through = lastCompletePulseDay();
+	return (rows || []).filter((r) => String(r.day) <= through);
+}
+
+function lastCompleteUtcDayKey() {
+	return toIsoDate(addDays(startOfUtcDay(new Date()), -1));
 }
 
 function eventUsEastDay(e) {
@@ -405,13 +423,15 @@ async function loadAllPulseDays() {
 	const url = process.env.SUPABASE_URL;
 	const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 	if (!url || !key) return [];
+	const through = lastCompletePulseDay();
 	const client = createClient(url, key, { auth: { persistSession: false } });
 	const { data, error } = await client
 		.from("prsn_visit_pulse_days")
 		.select("day, authed_visitors, unique_visitors, details")
+		.lte("day", through)
 		.order("day");
 	if (error) throw error;
-	return Array.isArray(data) ? data : [];
+	return filterCompletePulseDays(Array.isArray(data) ? data : []);
 }
 
 function avg(nums) {
@@ -530,10 +550,11 @@ function buildWeeklyTop2ShareSeries(events) {
 }
 
 function buildWindowMetrics(pulseDays, events, fromDay, toDay) {
+	const through = lastCompletePulseDay();
 	const visitDaysByUser = new Map();
 	for (const row of pulseDays) {
 		const day = String(row.day);
-		if (day < fromDay || day > toDay) continue;
+		if (day > through || day < fromDay || day > toDay) continue;
 		for (const v of row.details?.visitors || []) {
 			const uid = Number(v.user_id);
 			if (!Number.isFinite(uid) || uid <= 0) continue;
@@ -548,7 +569,7 @@ function buildWindowMetrics(pulseDays, events, fromDay, toDay) {
 	const actionCounts = new Map();
 	for (const e of events) {
 		const day = eventUsEastDay(e);
-		if (day < fromDay || day > toDay) continue;
+		if (day > through || day < fromDay || day > toDay) continue;
 		if (!CORE_ACTION_TYPES.has(e.type)) continue;
 		actionCounts.set(e.user_id, (actionCounts.get(e.user_id) || 0) + 1);
 	}
@@ -789,9 +810,11 @@ function top2ShareChart(hist, proj, weekLabelFrom) {
 }
 
 function buildWeeklyVisitWau(pulseDays) {
+	const through = lastCompletePulseDay();
 	const byWeek = new Map();
 	for (const row of pulseDays) {
 		const day = String(row.day);
+		if (day > through) continue;
 		const ws = usEastWeekStartKey(day);
 		if (!byWeek.has(ws)) byWeek.set(ws, new Set());
 		for (const v of row.details?.visitors || []) {
@@ -832,22 +855,25 @@ function buildStoryBullets(growth, pulseDays) {
 		);
 	}
 	const curMonth = currentMonthKey();
+	const completeUtcDay = lastCompleteUtcDayKey();
 	const partialMonth = growth.monthlyAllTimeRows?.find((m) => m.month === curMonth);
-	const partialDays = (growth.dailyAllTimeRows || []).filter((d) => d.day.startsWith(`${curMonth}-`)).length;
+	const partialDays = (growth.dailyAllTimeRows || []).filter(
+		(d) => d.day.startsWith(`${curMonth}-`) && d.day <= completeUtcDay
+	).length;
 	if (partialMonth && partialDays > 0) {
 		bullets.push(
-			`${curMonth} is partial (${partialDays} day(s) so far): action MAU ${partialMonth.mau} so far — not used in month-over-month trend lines.`
+			`${curMonth} is partial (${partialDays} complete UTC day(s) through ${completeUtcDay}): action MAU ${partialMonth.mau} so far — not used in month-over-month trend lines.`
 		);
 	}
 	const lastCompleteMonth = completeMonths(growth.monthlyAllTimeRows || []).at(-1);
 	bullets.push(
-		`Latest complete month: ${lastCompleteMonth?.month ?? "—"} (action MAU ${lastCompleteMonth?.mau ?? 0}). Today: action DAU ${growth.latestDay?.dau ?? 0}, WAU ${growth.latestWeek?.wau ?? 0}; ${growth.paidUsers} paid.`
+		`Latest complete month: ${lastCompleteMonth?.month ?? "—"} (action MAU ${lastCompleteMonth?.mau ?? 0}). Latest complete day: action DAU ${growth.latestDay?.dau ?? 0} on ${growth.latestDay?.day ?? "—"}, WAU ${growth.latestWeek?.wau ?? 0} for week ${growth.latestWeek?.week ?? "—"}; ${growth.paidUsers} paid.`
 	);
 	return bullets;
 }
 
 function resolvePulseWindow() {
-	const toDay = yesterdayUsEastDayKey();
+	const toDay = lastCompletePulseDay();
 	let fromDay = toDay;
 	for (let i = 0; i < WINDOW_DAYS - 1; i++) fromDay = shiftDayKey(fromDay, -1);
 	return { fromDay, toDay };
@@ -861,8 +887,8 @@ function buildOutlook(growth, pulseDays, events) {
 	const daily = (growth.dailyAllTimeRows || []).filter((r) => r.dau > 0);
 	const curMonth = currentMonthKey();
 	const partialMonth = monthly.find((m) => m.month === curMonth);
-	const partialDaysInMonth = (growth.dailyAllTimeRows || []).filter((d) =>
-		d.day.startsWith(`${curMonth}-`)
+	const partialDaysInMonth = (growth.dailyAllTimeRows || []).filter(
+		(d) => d.day.startsWith(`${curMonth}-`) && d.day <= lastCompleteUtcDayKey()
 	).length;
 
 	const usersProj = projectFromRecent(
@@ -906,11 +932,12 @@ function buildOutlook(growth, pulseDays, events) {
 	);
 
 	const pulseVisit = pulseDays
+		.filter((r) => String(r.day) <= lastCompletePulseDay())
 		.filter((r) => Number(r.authed_visitors) > 0)
 		.map((r) => ({ day: String(r.day), visit_dau: Number(r.authed_visitors) }));
-	const pulseThroughDay = yesterdayUsEastDayKey();
-	const pulseVisitComplete = pulseVisit.filter((r) => r.day <= pulseThroughDay);
-	const pulseVisitPartial = pulseVisit.filter((r) => r.day > pulseThroughDay);
+	const pulseThroughDay = lastCompletePulseDay();
+	const pulseVisitComplete = pulseVisit;
+	const pulseVisitPartial = [];
 	const visitUseAllPulseHistory =
 		pulseVisitComplete.length > 0 && pulseVisitComplete.length <= PULSE_USE_ALL_HISTORY_DAYS;
 	const visitRegressionDays = visitUseAllPulseHistory
@@ -1055,7 +1082,7 @@ function buildOutlook(growth, pulseDays, events) {
 	}));
 	if (partialMonth && partialDaysInMonth > 0) {
 		histMonths.push({
-			month: `${partialMonth.month} (partial, ${partialDaysInMonth}d)`,
+			month: `${partialMonth.month} (partial, ${partialDaysInMonth}d through ${lastCompleteUtcDayKey()})`,
 			action_mau: `${partialMonth.mau} so far`,
 			action_wau: "—",
 			total_users: "—",
@@ -1165,7 +1192,7 @@ async function main() {
 	const projEndMau = outlook.mauProj.projected[outlook.mauProj.projected.length - 1];
 	const partialNote =
 		outlook.partialMonth && outlook.partialDaysInMonth > 0
-			? ` ${currentMonthKey()} has only ${outlook.partialDaysInMonth} day(s) of data (MAU ${outlook.partialMonth.mau} so far) and is excluded from trend fits.`
+			? ` ${currentMonthKey()} has only ${outlook.partialDaysInMonth} complete UTC day(s) through ${lastCompleteUtcDayKey()} (MAU ${outlook.partialMonth.mau} so far) and is excluded from trend fits.`
 			: "";
 	const outlookSummary = projEndMau
 		? `If recent monthly slopes hold (last complete month: ${lastMau?.month ?? "—"}, action MAU ${lastMau?.mau ?? "?"}), action MAU could reach ~${Math.round(projEndMau.mau)} by ${projEndMau.month}.${partialNote} User base cumulative total ~${Math.round(outlook.usersProj.projected[outlook.usersProj.projected.length - 1]?.total_users ?? 0)}. Pulse visit DAU projected only from ${outlook.firstPulseDay} onward.`
@@ -1175,6 +1202,8 @@ async function main() {
 	const html = fillHtmlTemplate(template, {
 		styleBlock: await loadReportStyleBlock(),
 		generatedAt,
+		pulseThroughDay: outlook.pulseThroughDay,
+		partialUsEastDay: usEastDayKey(),
 		forwardMonths: String(FORWARD_MONTHS),
 		forwardWeeksShort: String(FORWARD_WEEKS_SHORT),
 		regressionWeeks: String(REGRESSION_WEEKS),
@@ -1184,10 +1213,7 @@ async function main() {
 			const fitLabel = outlook.visitUseAllPulseHistory
 				? `dashed trend fits all ${outlook.visitRegressionDays} complete pulse day(s) since ${outlook.firstPulseDay}`
 				: `dashed trend fits last ${outlook.visitRegressionDays} complete day(s)`;
-			const partial = outlook.pulseVisitPartial.length
-				? ` ${outlook.pulseVisitPartial[0].day} is partial (visit DAU ${outlook.pulseVisitPartial[0].visit_dau} so far) — excluded.`
-				: "";
-			return `${fitLabel} through ${outlook.pulseThroughDay}.${partial}`;
+			return `${fitLabel} through ${outlook.pulseThroughDay} (US East). ${usEastDayKey()} is partial — excluded from pulse rollups.`;
 		})(),
 		lede:
 			"Combines all-time core-action history (since first signup) with visit pulse where it exists, then extends recent trends forward ~3–4 months. Use for direction, not forecasting.",
@@ -1304,9 +1330,10 @@ async function main() {
 		])
 	});
 
-	const stamp = toIsoDate(startOfUtcDay(new Date()));
+	const throughDay = lastCompletePulseDay();
 	const out =
-		process.env.OUT || path.join(REPO_ROOT, ".output", "inception-outlook", `inception-outlook-${stamp}.html`);
+		process.env.OUT ||
+		path.join(REPO_ROOT, ".output", "inception-outlook", `inception-outlook-through-${throughDay}.html`);
 	await fs.mkdir(path.dirname(out), { recursive: true });
 	await fs.writeFile(out, html, "utf8");
 	console.log(out);

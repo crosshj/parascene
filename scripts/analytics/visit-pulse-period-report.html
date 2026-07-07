@@ -66,9 +66,25 @@
 </section>
 
 <section>
+	<h2>Landing funnel</h2>
+	<p class="small">{{landingFunnelIntro}}</p>
+	<h3>Views per day</h3>
+	<p class="small">Unique visitors who loaded the logged-out landing page.</p>
+	<div class="chart-wrap">{{!landingViewsChartHtml}}</div>
+	<h3>CTA clicks per day</h3>
+	<p class="small">Unique visitors who clicked the primary CTA (video variant).</p>
+	<div class="chart-wrap">{{!landingCtaChartHtml}}</div>
+</section>
+
+<section>
 	<h2>Feed impressions (beta)</h2>
-	<p class="small">Logged-in users with feed dwell/click beacons per day (from pulse flush rollup).</p>
+	<p class="small">{{feedImpressionsIntro}}</p>
+	<h3>Impressors per day</h3>
+	<p class="small">Logged-in users with at least one dwell or click.</p>
 	<div class="chart-wrap">{{!feedImpressorsChartHtml}}</div>
+	<h3>Impression volume per day</h3>
+	<p class="small">Total dwell + click beacons (card-level).</p>
+	<div class="chart-wrap">{{!feedImpressionVolumeChartHtml}}</div>
 </section>
 
 <section class="grid-2">

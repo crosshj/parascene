@@ -7,8 +7,8 @@
  *   node scripts/analytics/visit-pulse-period-report.js --days 30
  *   node scripts/analytics/visit-pulse-period-report.js --from 2026-05-20 --to 2026-06-14
  *
- * `--to` today is clamped to yesterday (incomplete partition). Default window already ends yesterday.
- * Pass `--include-today` with `--to` to keep the partial current day.
+ * `--to` today (or any future day) is clamped to yesterday — the last complete US East partition.
+ * Default window already ends yesterday. Partial today belongs in the daily pulse report only.
  * HTML: visit-pulse-period-report.html · CSS: report.css
  */
 
@@ -18,6 +18,7 @@ import { fileURLToPath } from "url";
 import { createClient } from "@supabase/supabase-js";
 import { REPO_ROOT, loadEnv } from "../repo-root.cjs";
 import { loadReportStyleBlock } from "./report-styles.js";
+import { landingMetricsFromPulseRow } from "./landingFunnelReport.js";
 import {
 	usEastDayKey,
 	usEastDayStartMs,
@@ -73,28 +74,45 @@ function dayCountInclusive(fromDay, toDay) {
 	return n;
 }
 
-function hasFlag(name) {
-	return process.argv.slice(2).includes(`--${name}`);
+/** Last flushed US East day (yesterday). Period rollups never include partial today. */
+function lastCompletePulseDay() {
+	return yesterdayUsEastDayKey();
+}
+
+/**
+ * @param {string} dayKey
+ * @param {string} label for warn messages
+ */
+function clampToCompletePulseDay(dayKey, label = "to") {
+	const lastComplete = lastCompletePulseDay();
+	if (dayKey <= lastComplete) return dayKey;
+	if (dayKey === usEastDayKey()) {
+		console.warn(
+			`[visit-pulse-period] --${label} ${dayKey} is today (incomplete); using ${lastComplete}`
+		);
+	} else {
+		console.warn(
+			`[visit-pulse-period] --${label} ${dayKey} is after last complete day; using ${lastComplete}`
+		);
+	}
+	return lastComplete;
 }
 
 function resolveWindow() {
 	const fromArg = getArg("from");
 	const toArg = getArg("to");
 	if (/^\d{4}-\d{2}-\d{2}$/.test(fromArg) && /^\d{4}-\d{2}-\d{2}$/.test(toArg)) {
-		const today = usEastDayKey();
-		if (toArg >= today && !hasFlag("include-today")) {
-			const toDay = yesterdayUsEastDayKey();
-			if (toArg === today) {
-				console.warn(
-					`[visit-pulse-period] --to ${toArg} is today (incomplete); using yesterday ${toDay}`
-				);
-			}
-			return { fromDay: fromArg, toDay: fromArg <= toDay ? toDay : fromArg };
+		const toDay = clampToCompletePulseDay(toArg, "to");
+		const fromDay = fromArg > toDay ? toDay : fromArg;
+		if (fromArg > toDay) {
+			console.warn(
+				`[visit-pulse-period] --from ${fromArg} is after --to ${toDay}; using single-day window ${toDay}`
+			);
 		}
-		return { fromDay: fromArg, toDay: toArg };
+		return { fromDay, toDay };
 	}
 	const days = Math.max(1, Number(getArg("days") || DEFAULT_DAYS) || DEFAULT_DAYS);
-	const toDay = yesterdayUsEastDayKey();
+	const toDay = lastCompletePulseDay();
 	const fromDay = shiftDayKey(toDay, -(days - 1));
 	return { fromDay, toDay };
 }
@@ -508,6 +526,19 @@ function buildObservations(report) {
 	obs.push(
 		`Logged-in share of daily traffic averages ${(authedShare * 100).toFixed(1)}% (visit DAU ÷ traffic DAU). Window WAU: ${fmt0(metrics.trafficWau)} traffic, ${fmt0(metrics.visitWau)} logged-in.`
 	);
+	if (report.landingDailyRows?.length) {
+		const avgLandingViews = avg(report.landingDailyRows.map((d) => d.landing_view_unique));
+		const avgLandingCta = avg(report.landingDailyRows.map((d) => d.landing_cta_unique));
+		const avgLandingPlay = avg(report.landingDailyRows.map((d) => d.landing_play_unique));
+		const playRate =
+			avgLandingViews > 0 ? `${Math.round((avgLandingPlay / avgLandingViews) * 100)}%` : null;
+		const ctaRate =
+			avgLandingViews > 0 ? `${Math.round((avgLandingCta / avgLandingViews) * 100)}%` : null;
+		let landingObs = `Landing funnel: avg ${fmt0(avgLandingViews)} views/day (unique) on ${report.landingDailyRows.length} day(s) with data.`;
+		if (playRate) landingObs += ` Play rate ${playRate} of views.`;
+		if (ctaRate) landingObs += ` CTA rate ${ctaRate} of views.`;
+		obs.push(landingObs);
+	}
 	if (report.feedDailyRows?.length) {
 		const avgFeedImpressors = avg(report.feedDailyRows.map((d) => d.feed_impressors));
 		const avgFeedImpressions = avg(report.feedDailyRows.map((d) => d.feed_impressions));
@@ -558,6 +589,7 @@ function buildPeriodReport(fromDay, toDay, pulseRows) {
 		const hits = Number(row?.total_hits) || 0;
 		const week_start = usEastWeekStartKey(d);
 		const feed = row?.details?.feed_impressions;
+		const landing = landingMetricsFromPulseRow(row);
 		dailyRows.push({
 			day: d,
 			week_start,
@@ -569,7 +601,11 @@ function buildPeriodReport(fromDay, toDay, pulseRows) {
 			feed_dwell: Number(feed?.dwell_impressions) || 0,
 			feed_click: Number(feed?.click_impressions) || 0,
 			feed_user_top1_share: Number(feed?.concentration?.users?.top1_share) || null,
-			feed_creation_top1_share: Number(feed?.concentration?.creations?.top1_share) || null
+			feed_creation_top1_share: Number(feed?.concentration?.creations?.top1_share) || null,
+			landing_view_unique: landing?.landing_view_unique ?? 0,
+			landing_view_total: landing?.landing_view_total ?? 0,
+			landing_play_unique: landing?.landing_play_unique ?? 0,
+			landing_cta_unique: landing?.landing_cta_unique ?? 0
 		});
 		if (traffic <= 0) continue;
 
@@ -688,6 +724,7 @@ function buildPeriodReport(fromDay, toDay, pulseRows) {
 
 	const activeDaily = dailyRows.filter((d) => d.traffic_dau > 0);
 	const feedDaily = dailyRows.filter((d) => d.feed_impressors > 0);
+	const landingDaily = dailyRows.filter((d) => d.landing_view_unique > 0);
 	const mid = Math.floor(activeDaily.length / 2);
 	const firstHalf = activeDaily.slice(0, mid);
 	const secondHalf = activeDaily.slice(mid);
@@ -724,6 +761,7 @@ function buildPeriodReport(fromDay, toDay, pulseRows) {
 		generatedAt: new Date().toISOString(),
 		dailyRows: activeDaily,
 		feedDailyRows: feedDaily,
+		landingDailyRows: landingDaily,
 		dowRows,
 		hourProfile,
 		heatmapMatrix,
@@ -850,6 +888,21 @@ async function renderHtml(report) {
 
 	const observationsHtml = report.observations.map((o) => `<li>${esc(o)}</li>`).join("");
 
+	const feedFirstDay = report.feedDailyRows[0]?.day;
+	const feedImpressionsIntro = !report.feedDailyRows.length
+		? "Logged-in feed-beta dwell/click beacons, flushed with visit pulse."
+		: feedFirstDay && feedFirstDay > report.fromDay
+			? `Rollup from pulse flush. Data begins ${feedFirstDay}; earlier days in this window have no feed block.`
+			: "Logged-in feed-beta dwell/click beacons, flushed with visit pulse.";
+	const landingFirstDay = report.landingDailyRows[0]?.day;
+	const landingFunnelIntro = !report.landingDailyRows.length
+		? "Logged-out landing page views and client funnel events, flushed with visit pulse."
+		: landingFirstDay && landingFirstDay > report.fromDay
+			? `Rollup from pulse flush. Data begins ${landingFirstDay}; earlier days in this window have no landing block.`
+			: "Logged-out landing page views and client funnel events, flushed with visit pulse.";
+	const feedSparklineOpts = { weekBoundaryKey: "week_start", showTrend: true };
+	const landingSparklineOpts = { weekBoundaryKey: "week_start", showTrend: true };
+
 	return fillHtmlTemplate(template, {
 		styleBlock,
 		periodLabel,
@@ -868,6 +921,14 @@ async function renderHtml(report) {
 		weekdayAvgTraffic: fmt0(report.metrics.weekdayAvgTraffic),
 		weekendAvgTraffic: fmt0(report.metrics.weekendAvgTraffic),
 		observationsHtml,
+		landingFunnelIntro,
+		landingViewsChartHtml: report.landingDailyRows.length
+			? sparkline(report.landingDailyRows, "landing_view_unique", "day", "#7c3aed", landingSparklineOpts)
+			: '<p class="small">No landing funnel rollups in this window yet (requires landing analytics after deploy).</p>',
+		landingCtaChartHtml: report.landingDailyRows.length
+			? sparkline(report.landingDailyRows, "landing_cta_unique", "day", "#a855f7", landingSparklineOpts)
+			: "",
+		feedImpressionsIntro,
 		trafficDailyChartHtml: sparkline(report.dailyRows, "traffic_dau", "day", "#0ea5e9", {
 			weekBoundaryKey: "week_start",
 			showTrend: true
@@ -877,11 +938,11 @@ async function renderHtml(report) {
 			showTrend: true
 		}),
 		feedImpressorsChartHtml: report.feedDailyRows.length
-			? sparkline(report.feedDailyRows, "feed_impressors", "day", "#059669", {
-					weekBoundaryKey: "week_start",
-					showTrend: true
-				})
+			? sparkline(report.feedDailyRows, "feed_impressors", "day", "#059669", feedSparklineOpts)
 			: '<p class="small">No feed impression rollups in this window yet (requires feed-beta beacons after deploy).</p>',
+		feedImpressionVolumeChartHtml: report.feedDailyRows.length
+			? sparkline(report.feedDailyRows, "feed_impressions", "day", "#10b981", feedSparklineOpts)
+			: "",
 		dowTrafficChartHtml: barChart(
 			report.dowRows.map((r) => r.dow),
 			report.dowRows.map((r) => r.avg_traffic),
@@ -942,8 +1003,11 @@ async function renderHtml(report) {
 }
 
 export async function loadVisitPulsePeriodReport(fromDay, toDay) {
-	const pulseRows = await loadPulseDays(fromDay, toDay);
-	const report = buildPeriodReport(fromDay, toDay, pulseRows);
+	const lastComplete = lastCompletePulseDay();
+	const safeTo = toDay > lastComplete ? lastComplete : toDay;
+	const safeFrom = fromDay > safeTo ? safeTo : fromDay;
+	const pulseRows = await loadPulseDays(safeFrom, safeTo);
+	const report = buildPeriodReport(safeFrom, safeTo, pulseRows);
 	report.topAuthed = await enrichTopAuthed(report.topAuthed);
 	return report;
 }
