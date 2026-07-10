@@ -709,3 +709,9 @@ function initOverlayIframeBlankFlashGuard() {
 }
 
 initOverlayIframeBlankFlashGuard();
+
+void import(`/shared/consoleGen.js${assetQuery()}`)
+	.then((mod) => {
+		mod.installConsoleGen?.();
+	})
+	.catch(() => {});

@@ -8,6 +8,7 @@ import { closeModalsAndNavigate } from './navigation.js';
 import { initNsfwViewPreference, handleNsfwClick } from './nsfwView.js';
 import * as supabaseBrowser from './supabaseBrowser.js';
 import { startPresenceHeartbeat } from './presenceHeartbeat.js';
+import { installConsoleGen } from './consoleGen.js';
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -23,6 +24,12 @@ export async function runBundledCommonAppInit() {
 		if (typeof window !== 'undefined' && window.__PRSN_SUPABASE__) {
 			await supabaseBrowser.ensureSupabaseSessionForApp();
 		}
+	} catch {
+		// ignore
+	}
+
+	try {
+		installConsoleGen();
 	} catch {
 		// ignore
 	}
