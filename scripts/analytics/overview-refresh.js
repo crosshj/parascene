@@ -8,9 +8,10 @@
  * this, then reload the page.
  *
  * Output (default): .output/overview/store.json  →  fetched by the report app.
- *   node scripts/analytics/overview-refresh.js
+ *   node scripts/analytics/overview-refresh.js              # incremental (default)
+ *   node scripts/analytics/overview-refresh.js --full         # full rebuild from DB
  *   node scripts/analytics/overview-refresh.js --out .output/overview/store.json
- *   node scripts/analytics/overview-refresh.js --no-live # skip today's Redis snapshot
+ *   node scripts/analytics/overview-refresh.js --no-live    # skip today's Redis snapshot
  *
  * Store shape (v1) is pinned in scripts/analytics/overview/metrics.js.
  */
@@ -79,13 +80,15 @@ function dayKeyOf(tsRaw) {
 	return d ? usEastDayKey(d) : null;
 }
 
-async function fetchSupabaseRows(client, table, columns) {
+async function fetchSupabaseRows(client, table, columns, { applyFilter } = {}) {
 	const pageSize = 1000;
 	const out = [];
 	let from = 0;
 	while (true) {
 		const to = from + pageSize - 1;
-		const { data, error } = await client.from(table).select(columns).range(from, to);
+		let q = client.from(table).select(columns);
+		if (applyFilter) q = applyFilter(q);
+		const { data, error } = await q.range(from, to);
 		if (error) throw new Error(`Supabase ${table}: ${error.message}`);
 		const rows = Array.isArray(data) ? data : [];
 		out.push(...rows);
@@ -93,6 +96,25 @@ async function fetchSupabaseRows(client, table, columns) {
 		from += rows.length;
 	}
 	return out;
+}
+
+async function readExistingStore(outPath) {
+	try {
+		const raw = await fs.readFile(outPath, "utf8");
+		const store = JSON.parse(raw);
+		if (!store?.meta || store.meta.schemaVersion !== SCHEMA_VERSION) return null;
+		return store;
+	} catch {
+		return null;
+	}
+}
+
+/** Keep rows before sinceDay; replace rows on/after sinceDay with fresh. */
+function mergeByDayKey(existing, fresh, key, sinceDay) {
+	if (!sinceDay) return fresh;
+	const kept = (existing || []).filter((r) => String(r[key]) < sinceDay);
+	const next = (fresh || []).filter((r) => String(r[key]) >= sinceDay);
+	return [...kept, ...next].sort((a, b) => (a[key] < b[key] ? -1 : a[key] > b[key] ? 1 : 0));
 }
 
 /** Active partition hours (0..23) a pulse visitor touched on a given US-East day. */
@@ -230,17 +252,24 @@ async function loadVisitUserHandles(visitDaily, users) {
 		.map((id) => ({ id, userName: labels.get(id)?.user_name ?? null }));
 }
 
-/** Aggregate all event tables into per-(user, day) core-action counts. */
-async function loadUserDay(client, allowedIds) {
+/** Aggregate event tables into per-(user, day) core-action counts. */
+async function loadUserDay(client, allowedIds, { sinceDay } = {}) {
+	const sinceIso = sinceDay ? new Date(usEastDayStartMs(sinceDay)).toISOString() : null;
+	const sinceFilter = (col) => (sinceIso ? (q) => q.gte(col, sinceIso) : undefined);
+
 	const [createdImages, comments, likes, reactions, tips, sessions, follows, chats] = await Promise.all([
-		fetchSupabaseRows(client, "prsn_created_images", "user_id,created_at,published_at,meta"),
-		fetchSupabaseRows(client, "prsn_comments_created_image", "user_id,created_at"),
-		fetchSupabaseRows(client, "prsn_likes_created_image", "user_id,created_at"),
-		fetchSupabaseRows(client, "prsn_comment_reactions", "user_id,created_at"),
-		fetchSupabaseRows(client, "prsn_tip_activity", "from_user_id,created_at"),
-		fetchSupabaseRows(client, "prsn_sessions", "user_id,created_at"),
-		fetchSupabaseRows(client, "prsn_user_follows", "follower_id,created_at"),
-		fetchSupabaseRows(client, "prsn_chat_messages", "sender_id,created_at")
+		sinceIso
+			? fetchSupabaseRows(client, "prsn_created_images", "user_id,created_at,published_at,meta", {
+					applyFilter: (q) => q.or(`created_at.gte.${sinceIso},published_at.gte.${sinceIso}`)
+				})
+			: fetchSupabaseRows(client, "prsn_created_images", "user_id,created_at,published_at,meta"),
+		fetchSupabaseRows(client, "prsn_comments_created_image", "user_id,created_at", { applyFilter: sinceFilter("created_at") }),
+		fetchSupabaseRows(client, "prsn_likes_created_image", "user_id,created_at", { applyFilter: sinceFilter("created_at") }),
+		fetchSupabaseRows(client, "prsn_comment_reactions", "user_id,created_at", { applyFilter: sinceFilter("created_at") }),
+		fetchSupabaseRows(client, "prsn_tip_activity", "from_user_id,created_at", { applyFilter: sinceFilter("created_at") }),
+		fetchSupabaseRows(client, "prsn_sessions", "user_id,created_at", { applyFilter: sinceFilter("created_at") }),
+		fetchSupabaseRows(client, "prsn_user_follows", "follower_id,created_at", { applyFilter: sinceFilter("created_at") }),
+		fetchSupabaseRows(client, "prsn_chat_messages", "sender_id,created_at", { applyFilter: sinceFilter("created_at") })
 	]);
 
 	const byKey = new Map();
@@ -276,11 +305,12 @@ async function loadUserDay(client, allowedIds) {
 	return [...byKey.values()].sort((a, b) => (a.d < b.d ? -1 : a.d > b.d ? 1 : a.u - b.u));
 }
 
-async function loadVisitDaily(client) {
+async function loadVisitDaily(client, { sinceDay } = {}) {
 	const rows = await fetchSupabaseRows(
 		client,
 		"prsn_visit_pulse_days",
-		"day, unique_visitors, authed_visitors, anon_visitors, total_hits, total_active_blocks, flushed_at, details"
+		"day, unique_visitors, authed_visitors, anon_visitors, total_hits, total_active_blocks, flushed_at, details",
+		{ applyFilter: sinceDay ? (q) => q.gte("day", sinceDay) : undefined }
 	);
 	return rows
 		.filter((r) => r?.day)
@@ -288,10 +318,15 @@ async function loadVisitDaily(client) {
 		.sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0));
 }
 
-async function loadFunnelDaily(client) {
+async function loadFunnelDaily(client, { sinceDay } = {}) {
+	const sinceIso = sinceDay ? new Date(usEastDayStartMs(sinceDay)).toISOString() : null;
 	const [shareRows, tryRows] = await Promise.all([
-		fetchSupabaseRows(client, "prsn_share_page_views", "viewed_at,anon_cid"),
-		fetchSupabaseRows(client, "prsn_try_requests", "anon_cid,created_at,meta")
+		fetchSupabaseRows(client, "prsn_share_page_views", "viewed_at,anon_cid", {
+			applyFilter: sinceIso ? (q) => q.gte("viewed_at", sinceIso) : undefined
+		}),
+		fetchSupabaseRows(client, "prsn_try_requests", "anon_cid,created_at,meta", {
+			applyFilter: sinceIso ? (q) => q.gte("created_at", sinceIso) : undefined
+		})
 	]);
 	const byDay = new Map();
 	const get = (day) => {
@@ -522,14 +557,35 @@ async function main() {
 	if (!url || !key) throw new Error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
 	const client = createClient(url, key, { auth: { persistSession: false } });
 
+	const outJson =
+		getArg("out") || process.env.OUT || path.join(REPO_ROOT, ".output", "overview", "store.json");
+	const existing = hasFlag("full") ? null : await readExistingStore(outJson);
+	const full = hasFlag("full") || !existing;
+	const sinceDay = full ? null : existing.meta.lastCompleteDay;
+
+	console.log(
+		full
+			? "[overview-refresh] mode: full rebuild"
+			: `[overview-refresh] mode: incremental (since ${sinceDay})`
+	);
+
 	const { users, allowedIds } = await loadUsers();
-	const [userDay, visitDaily, funnelDaily, transitions, challengeData] = await Promise.all([
-		loadUserDay(client, allowedIds),
-		loadVisitDaily(client),
-		loadFunnelDaily(client),
+	const [freshUserDay, freshVisitDaily, freshFunnelDaily, transitions, challengeData] = await Promise.all([
+		loadUserDay(client, allowedIds, { sinceDay }),
+		loadVisitDaily(client, { sinceDay }),
+		loadFunnelDaily(client, { sinceDay }),
 		loadTransitions(client),
 		loadChallenges(client)
 	]);
+
+	let userDay = freshUserDay;
+	let visitDaily = freshVisitDaily;
+	let funnelDaily = freshFunnelDaily;
+	if (!full) {
+		userDay = mergeByDayKey(existing.userDay, freshUserDay, "d", sinceDay);
+		visitDaily = mergeByDayKey(existing.visitDaily, freshVisitDaily, "day", sinceDay);
+		funnelDaily = mergeByDayKey(existing.funnelDaily, freshFunnelDaily, "day", sinceDay);
+	}
 	const userHandles = await loadVisitUserHandles(visitDaily, users);
 
 	if (!hasFlag("no-live")) {
@@ -564,14 +620,13 @@ async function main() {
 		challengeVotes: challengeData.challengeVotes
 	};
 
-	const outJson =
-		getArg("out") || process.env.OUT || path.join(REPO_ROOT, ".output", "overview", "store.json");
-	await fs.mkdir(path.dirname(outJson), { recursive: true });
+	const outJsonPath = outJson;
+	await fs.mkdir(path.dirname(outJsonPath), { recursive: true });
 	const json = JSON.stringify(store);
-	await fs.writeFile(outJson, json, "utf8");
+	await fs.writeFile(outJsonPath, json, "utf8");
 
 	console.log(
-		`[overview-refresh] wrote ${outJson}\n` +
+		`[overview-refresh] wrote ${outJsonPath}\n` +
 			`  users=${users.length} userDay=${userDay.length} visitDays=${visitDaily.length} funnelDays=${funnelDaily.length}\n` +
 			`  transitionDays=${transitions.transitionsDaily.length} topPaths=${transitions.transitionsTop.length} ` +
 			`challenges=${challengeData.challenges.length} challengeSubs=${challengeData.challengeSubs.length} challengeVotes=${challengeData.challengeVotes.length}\n` +

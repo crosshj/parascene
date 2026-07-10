@@ -54,7 +54,7 @@ Prev/Next and the inception from/to are pure client windowing over the same stor
 
 ## Phase 1 — refresh (ETL) (DONE)
 
-- `scripts/analytics/overview-refresh.js`: queries Supabase (users via openDb; events, pulse days, share/try via service role) + best-effort live Redis snapshot for today, transforms to the v1 store shape, writes `.output/overview/store.json` (plain JSON). `--out` overrides the path; `--no-live` skips Redis. Imports the shared schema constants from `overview/metrics.js` (native ESM).
+- `scripts/analytics/overview-refresh.js`: queries Supabase (users via openDb; events, pulse days, share/try via service role) + best-effort live Redis snapshot for today, transforms to the v1 store shape, writes `.output/overview/store.json` (plain JSON). Default is **incremental** (loads existing store, re-fetches from `lastCompleteDay` onward, merges). `--full` rebuilds launch → now. `--out` overrides path; `--no-live` skips Redis. Imports shared schema constants from `overview/metrics.js` (native ESM).
 - Full rebuild launch → now each run (~38s at current scale). Store ≈ 1.9 MB (bulk = per-day `visitorKeys`; interning anon cids to ints is an easy later shrink).
 - Validated against `engagement-monthly-report` for a 30-day window: action/visit MAU, avg DAUs, cohorts, and action mix all match. Publishes differ (+29 in store) because the store catches late publishes of pre-window creations that the windowed report drops — store is the more correct side.
 

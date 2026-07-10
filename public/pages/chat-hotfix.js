@@ -550,7 +550,81 @@ async function handleChatOverlayEmbedDmNavigation(href) {
 	window.location.assign(href.startsWith('/') ? href : `/${href}`);
 }
 
+/**
+ * Creation-detail embed #tag click: dismiss overlay first, then run channel-vs-tag chooser
+ * on the chat shell (same UX as in-bubble hashtags).
+ */
+function initChatOverlayEmbedHashtagIntent() {
+	window.addEventListener('message', (event) => {
+		if (event.origin !== window.location.origin) return;
+		const data = event.data;
+		if (!data || typeof data !== 'object') return;
+		if (data.type !== 'prsn-chat-hashtag-intent') return;
+		const slug = String(data.slug || '')
+			.trim()
+			.toLowerCase();
+		if (!slug) return;
+		void handleChatOverlayEmbedHashtagIntent(slug);
+	});
+}
+
+async function handleChatOverlayEmbedHashtagIntent(slug) {
+	const qs = assetQuery();
+	const [overlayMod, hashtagMod, submitMod] = await Promise.all([
+		import(`/shared/spaPageOverlay.js${qs}`),
+		import(`/shared/hashtagDestination.js${qs}`),
+		import(`/shared/createSubmit.js${qs}`),
+	]);
+	if (typeof overlayMod.closeSpaPageOverlay === 'function') {
+		overlayMod.closeSpaPageOverlay({ skipScrollRestore: true });
+	}
+	if (typeof hashtagMod.openHashtagDestination !== 'function') return;
+
+	// Cover the exists-check gap after overlay dismiss (same veil as overlay shell-out).
+	if (typeof overlayMod.showShellOutVeil === 'function') {
+		overlayMod.showShellOutVeil();
+	}
+
+	const navigateFromHashtag = (href) => {
+		const raw = String(href || '').trim();
+		if (!raw) return;
+		let pathOnly = raw;
+		try {
+			pathOnly = new URL(raw, window.location.origin).pathname;
+		} catch {
+			pathOnly = raw.split('?')[0].split('#')[0];
+		}
+		pathOnly = String(pathOnly || '').replace(/\/+$/, '') || '/';
+		// Chat SPA: same as create-submit — in-shell nav paints lane/thread skeleton (no veil).
+		if (
+			(pathOnly === '/chat' || pathOnly.startsWith('/chat/')) &&
+			typeof submitMod.navigateToChatPathFromOverlay === 'function' &&
+			submitMod.navigateToChatPathFromOverlay(raw)
+		) {
+			if (typeof overlayMod.hideShellOutVeil === 'function') {
+				overlayMod.hideShellOutVeil();
+			}
+			return;
+		}
+		if (typeof overlayMod.assignWithShellOutVeil === 'function') {
+			overlayMod.assignWithShellOutVeil(raw);
+			return;
+		}
+		window.location.assign(raw.startsWith('/') ? raw : `/${raw}`);
+	};
+
+	await hashtagMod.openHashtagDestination(slug, {
+		onBeforeChoice: () => {
+			if (typeof overlayMod.hideShellOutVeil === 'function') {
+				overlayMod.hideShellOutVeil();
+			}
+		},
+		navigate: navigateFromHashtag,
+	});
+}
+
 initChatOverlayEmbedDmNavigation();
+initChatOverlayEmbedHashtagIntent();
 
 /**
  * Stale chat.bundle.js sets iframe src to about:blank before navigating — visible flash.

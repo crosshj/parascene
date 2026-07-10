@@ -13477,7 +13477,7 @@ button.chat-inline-image-lightbox-footer-btn.btn-secondary {
 	pointer-events: auto;
 }
 
-/* #hashtag in chat: choose channel vs tag page (chat.js). */
+/* #hashtag: choose channel vs tag page (chat + creation detail). */
 body.chat-hashtag-nav-open,
 body:has(.chat-hashtag-nav-overlay) {
 	overflow: hidden;

@@ -25,7 +25,7 @@ import * as M from "./metrics.js";
 		metaLine.textContent = "";
 		view.innerHTML = errorBox(
 			"No data store found",
-			"Run <code>node scripts/analytics/overview-refresh.js</code>, then reload this page."
+			"Run <code>node scripts/analytics/overview-refresh.js</code> (incremental; add <code>--full</code> to rebuild from scratch), then reload this page."
 		);
 		return;
 	}

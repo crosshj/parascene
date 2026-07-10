@@ -4,6 +4,12 @@
  */
 
 import { notifyCreationDetailEmbedShellSync } from './creationDetailEmbedShell.js';
+import {
+	CHAT_HASHTAG_INTENT_MESSAGE,
+	openHashtagDestination,
+	parseHashtagSlugFromTagPath,
+	shouldDelegateHashtagIntentToParentChatShell,
+} from './hashtagDestination.js';
 
 const ROUTE_MESSAGE = 'prsn-creation-detail-overlay-route';
 const SPA_ROUTE_MESSAGE = 'prsn-spa-page-overlay-route';
@@ -140,6 +146,84 @@ export function navigateFromModal(href) {
 	navigate(raw);
 }
 
+/**
+ * Handle a #tag click that maps to /t/:slug.
+ * Chat SPA embed: dismiss overlay via parent and let chat run the chooser.
+ * Standalone / non-chat embed: run the shared chooser here.
+ * @param {string} slug
+ */
+export function requestHashtagIntent(slug) {
+	const safe = String(slug || '')
+		.trim()
+		.toLowerCase();
+	if (!safe) return;
+
+	if (shouldDelegateHashtagIntentToParentChatShell()) {
+		postToParentOverlay({ type: CHAT_HASHTAG_INTENT_MESSAGE, slug: safe });
+		return;
+	}
+
+	void openHashtagDestination(safe, {
+		navigate: (href) => {
+			const raw = String(href || '').trim();
+			if (!raw) return;
+			if (isCreationDetailEmbedFrame()) {
+				shellOut(raw);
+				return;
+			}
+			// Standalone: full-page hop — same shell-out veil as overlay leave.
+			void import('/shared/spaPageOverlay.js')
+				.then((mod) => {
+					if (typeof mod.assignWithShellOutVeil === 'function') {
+						mod.assignWithShellOutVeil(raw);
+						return;
+					}
+					window.location.assign(raw);
+				})
+				.catch(() => {
+					window.location.assign(raw);
+				});
+		},
+	});
+}
+
+function shouldInterceptHashtagMentionLink(link, e) {
+	if (!(link instanceof HTMLAnchorElement)) return false;
+	if (!link.classList.contains('mention-link')) return false;
+	if (e.defaultPrevented) return false;
+	if (typeof e.button === 'number' && e.button !== 0) return false;
+	if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return false;
+	const href = (link.getAttribute('href') || '').trim();
+	if (!href || href.startsWith('#')) return false;
+	if (link.hasAttribute('download')) return false;
+	if (link.target === '_blank') return false;
+	if (isExternalNavigationHref(href)) return false;
+	return Boolean(parseHashtagSlugFromTagPath(href));
+}
+
+/**
+ * Intercept #tag mention links (description, comments, modals) for channel-vs-tag chooser.
+ * Standalone + embed. Capture phase so embed generic nav does not shell-out to /t/ first.
+ */
+export function bindCreationDetailHashtagClicks() {
+	if (document.documentElement.dataset.prsnCreationHashtagBound === '1') return;
+	document.documentElement.dataset.prsnCreationHashtagBound = '1';
+	document.addEventListener(
+		'click',
+		(e) => {
+			const link = e.target?.closest?.('a.mention-link[href]');
+			if (!shouldInterceptHashtagMentionLink(link, e)) return;
+			const href = link.getAttribute('href') || '';
+			const slug = parseHashtagSlugFromTagPath(href);
+			if (!slug) return;
+			e.preventDefault();
+			e.stopPropagation();
+			requestHashtagIntent(slug);
+		},
+		true
+	);
+}
+
 function shouldInterceptEmbedLink(link, e) {
 	if (!(link instanceof HTMLAnchorElement)) return false;
 	if (e.defaultPrevented) return false;
@@ -162,6 +246,10 @@ function shouldInterceptEmbedLink(link, e) {
 	if (link.hasAttribute('download')) return false;
 	if (link.target === '_blank') return false;
 	if (isExternalNavigationHref(href)) return false;
+	// Hashtag binder owns /t/:slug mention-links (channel-vs-tag / parent intent).
+	if (link.classList.contains('mention-link') && parseHashtagSlugFromTagPath(href)) {
+		return false;
+	}
 	return true;
 }
 
@@ -170,6 +258,8 @@ function shouldInterceptEmbedLink(link, e) {
  */
 export function bindCreationDetailEmbedNavigation() {
 	if (!isCreationDetailEmbed()) return;
+	if (document.documentElement.dataset.prsnCreationEmbedNavBound === '1') return;
+	document.documentElement.dataset.prsnCreationEmbedNavBound = '1';
 	document.addEventListener(
 		'click',
 		(e) => {

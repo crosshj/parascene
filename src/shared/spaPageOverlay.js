@@ -554,7 +554,8 @@ function notifyOverlayDismissed(returnPath) {
 	}
 }
 
-function showShellOutVeil() {
+/** Full-viewport loading cover used when leaving an overlay for a full page load. */
+export function showShellOutVeil() {
 	let veil = document.getElementById(SHELL_OUT_VEIL_ID);
 	if (!(veil instanceof HTMLElement)) {
 		veil = document.createElement('div');
@@ -567,6 +568,30 @@ function showShellOutVeil() {
 	}
 	veil.hidden = false;
 	document.body.classList.add('creation-detail-overlay-shell-out');
+}
+
+export function hideShellOutVeil() {
+	const veil = document.getElementById(SHELL_OUT_VEIL_ID);
+	if (veil instanceof HTMLElement) {
+		veil.hidden = true;
+	}
+	try {
+		document.body.classList.remove('creation-detail-overlay-shell-out');
+	} catch {
+		// ignore
+	}
+}
+
+/** Show the shell-out veil, then full-navigate (same timing as overlay shell-out). */
+export function assignWithShellOutVeil(href) {
+	const raw = String(href || '').trim();
+	if (!raw) return;
+	showShellOutVeil();
+	requestAnimationFrame(() => {
+		requestAnimationFrame(() => {
+			window.location.assign(raw.startsWith('/') || raw.startsWith('http') ? raw : `/${raw}`);
+		});
+	});
 }
 
 export function shellOutFromSpaPageOverlay(href) {
@@ -584,12 +609,7 @@ export function shellOutFromSpaPageOverlay(href) {
 	if (navigateToChatPathFromOverlay(targetPath)) {
 		return;
 	}
-	showShellOutVeil();
-	requestAnimationFrame(() => {
-		requestAnimationFrame(() => {
-			window.location.assign(targetPath);
-		});
-	});
+	assignWithShellOutVeil(targetPath);
 }
 
 export const shellOutFromCreationDetailOverlay = shellOutFromSpaPageOverlay;
