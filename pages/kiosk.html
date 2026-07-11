@@ -219,35 +219,11 @@
 			border-color: rgba(255, 255, 255, 0.35);
 			color: #fff;
 		}
-
-		.kiosk-keys {
-			position: absolute;
-			z-index: 3;
-			top: 12px;
-			left: 12px;
-			max-width: min(420px, calc(100vw - 24px));
-			padding: 6px 8px;
-			border-radius: 6px;
-			font: 12px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-			color: rgba(255, 255, 255, 0.72);
-			background: rgba(0, 0, 0, 0.35);
-			text-shadow: 0 1px 1px rgba(0, 0, 0, 0.45);
-			pointer-events: none;
-			white-space: pre-wrap;
-			word-break: break-word;
-		}
-
-		.kiosk:not(.has-share) .kiosk-keys {
-			color: color-mix(in srgb, var(--text) 70%, transparent);
-			background: color-mix(in srgb, var(--text) 8%, transparent);
-			text-shadow: none;
-		}
 	</style>
 </head>
 
 <body>
 	<div class="kiosk" id="kiosk">
-		<div class="kiosk-keys" id="kiosk-keys" aria-hidden="true">keys: waiting…</div>
 		<div class="kiosk-stage" id="kiosk-stage" aria-hidden="true">
 			<div class="kiosk-layer" id="kiosk-layer-a"></div>
 			<div class="kiosk-layer" id="kiosk-layer-b"></div>
@@ -284,7 +260,6 @@
 			var layerA = document.getElementById("kiosk-layer-a");
 			var layerB = document.getElementById("kiosk-layer-b");
 			var viewersRoot = document.getElementById("kiosk-viewers");
-			var keysHud = document.getElementById("kiosk-keys");
 			if (!shell || !stage || !layerA || !layerB || !viewersRoot || !slug || !token) return;
 
 			var pollTimer = null;
@@ -298,32 +273,10 @@
 			var activeIsA = true;
 			var transitioning = false;
 			var kenToggle = false;
-			var keyLog = [];
-			var keyHudTimer = null;
-
-			function noteKey(e) {
-				if (!keysHud) return;
-				var line =
-					e.type +
-					" " +
-					(e.key || "?") +
-					" code=" +
-					(e.code || "?") +
-					" which=" +
-					String(e.which != null ? e.which : e.keyCode != null ? e.keyCode : "?");
-				keyLog.unshift(line);
-				if (keyLog.length > 4) keyLog.length = 4;
-				keysHud.textContent = keyLog.join("\n");
-				if (keyHudTimer) clearTimeout(keyHudTimer);
-				keyHudTimer = setTimeout(function () {
-					keysHud.textContent = "keys: idle (last ok)";
-				}, 8000);
-			}
-
-			window.addEventListener("keydown", noteKey, true);
-			window.addEventListener("keyup", noteKey, true);
-			document.addEventListener("keydown", noteKey, true);
-			document.addEventListener("keyup", noteKey, true);
+			var paused = false;
+			var lastKeyStamp = "";
+			var lastKeyAt = 0;
+			var KEY_DEBOUNCE_MS = 280;
 
 			function apiUrl(path) {
 				return "/api/kiosk/" + encodeURIComponent(slug) + "/" + path + "?token=" + encodeURIComponent(token);
@@ -456,12 +409,12 @@
 
 			function scheduleAdvance(share, mediaEl) {
 				clearAdvanceTimer();
-				if (!share) return;
+				if (!share || paused) return;
 
 				if (share.media_type === "video" && mediaEl && mediaEl.tagName === "VIDEO") {
 					var advanced = false;
 					function go() {
-						if (advanced) return;
+						if (advanced || paused) return;
 						advanced = true;
 						advance();
 					}
@@ -470,6 +423,7 @@
 					var play = mediaEl.play();
 					if (play && typeof play.catch === "function") {
 						play.catch(function () {
+							if (paused) return;
 							advanceTimer = setTimeout(go, IMAGE_DWELL_MS);
 						});
 					}
@@ -477,8 +431,51 @@
 				}
 
 				advanceTimer = setTimeout(function () {
+					if (paused) return;
 					advance();
 				}, IMAGE_DWELL_MS);
+			}
+
+			function pauseMediaIn(layer) {
+				if (!layer) return;
+				var video = layer.querySelector("video");
+				if (video) {
+					try {
+						video.pause();
+					} catch (err) {}
+				}
+			}
+
+			function resumeMediaIn(layer) {
+				if (!layer) return;
+				var video = layer.querySelector("video");
+				if (video) {
+					var play = video.play();
+					if (play && typeof play.catch === "function") play.catch(function () {});
+				}
+			}
+
+			function currentShare() {
+				if (!currentId) return null;
+				for (var i = 0; i < playlist.length; i++) {
+					if (shareKey(playlist[i]) === currentId) return playlist[i];
+				}
+				return null;
+			}
+
+			function togglePause() {
+				paused = !paused;
+				shell.classList.toggle("is-paused", paused);
+				if (paused) {
+					clearAdvanceTimer();
+					pauseMediaIn(activeLayer());
+					return;
+				}
+				var share = currentShare();
+				var layer = activeLayer();
+				var mediaEl = layer ? layer.querySelector("video, img") : null;
+				resumeMediaIn(layer);
+				scheduleAdvance(share, mediaEl);
 			}
 
 			function showShare(share, opts) {
@@ -549,6 +546,74 @@
 				}
 				showShare(next, { force: true });
 			}
+
+			function stepBy(delta) {
+				if (transitioning) return;
+				if (!playlist.length) return;
+
+				var idx = -1;
+				for (var i = 0; i < playlist.length; i++) {
+					if (shareKey(playlist[i]) === currentId) {
+						idx = i;
+						break;
+					}
+				}
+				if (idx < 0) idx = 0;
+				var nextIdx = (idx + delta) % playlist.length;
+				if (nextIdx < 0) nextIdx += playlist.length;
+				var target = playlist[nextIdx];
+				if (!target) return;
+				if (shareKey(target) === currentId && playlist.length > 1) return;
+				showShare(target, { force: true });
+			}
+
+			function noopKey() {}
+
+			/** Remote / keyboard actions. Unwired keys are listed as no-ops for later use. */
+			var KEY_ACTIONS = {
+				ArrowUp: noopKey,
+				ArrowDown: noopKey,
+				ArrowLeft: function () {
+					stepBy(-1);
+				},
+				ArrowRight: function () {
+					stepBy(1);
+				},
+				ChannelUp: function () {
+					stepBy(1);
+				},
+				ChannelDown: function () {
+					stepBy(-1);
+				},
+				Enter: function () {
+					togglePause();
+				}
+			};
+
+			function onRemoteKey(e) {
+				if (e.type !== "keydown") return;
+				if (e.repeat) return;
+
+				var key = String(e.key || "");
+				var action = KEY_ACTIONS[key];
+				if (typeof action !== "function") return;
+
+				var stamp =
+					key +
+					"|" +
+					String(e.code || "") +
+					"|" +
+					String(e.which != null ? e.which : e.keyCode != null ? e.keyCode : "");
+				var now = Date.now();
+				if (stamp === lastKeyStamp && now - lastKeyAt < KEY_DEBOUNCE_MS) return;
+				lastKeyStamp = stamp;
+				lastKeyAt = now;
+
+				e.preventDefault();
+				action();
+			}
+
+			window.addEventListener("keydown", onRemoteKey, true);
 
 			function mergePlaylist(shares) {
 				var list = Array.isArray(shares) ? shares.filter(function (s) { return s && s.id; }) : [];
