@@ -219,11 +219,35 @@
 			border-color: rgba(255, 255, 255, 0.35);
 			color: #fff;
 		}
+
+		.kiosk-keys {
+			position: absolute;
+			z-index: 3;
+			top: 12px;
+			left: 12px;
+			max-width: min(420px, calc(100vw - 24px));
+			padding: 6px 8px;
+			border-radius: 6px;
+			font: 12px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+			color: rgba(255, 255, 255, 0.72);
+			background: rgba(0, 0, 0, 0.35);
+			text-shadow: 0 1px 1px rgba(0, 0, 0, 0.45);
+			pointer-events: none;
+			white-space: pre-wrap;
+			word-break: break-word;
+		}
+
+		.kiosk:not(.has-share) .kiosk-keys {
+			color: color-mix(in srgb, var(--text) 70%, transparent);
+			background: color-mix(in srgb, var(--text) 8%, transparent);
+			text-shadow: none;
+		}
 	</style>
 </head>
 
 <body>
 	<div class="kiosk" id="kiosk">
+		<div class="kiosk-keys" id="kiosk-keys" aria-hidden="true">keys: waiting…</div>
 		<div class="kiosk-stage" id="kiosk-stage" aria-hidden="true">
 			<div class="kiosk-layer" id="kiosk-layer-a"></div>
 			<div class="kiosk-layer" id="kiosk-layer-b"></div>
@@ -260,6 +284,7 @@
 			var layerA = document.getElementById("kiosk-layer-a");
 			var layerB = document.getElementById("kiosk-layer-b");
 			var viewersRoot = document.getElementById("kiosk-viewers");
+			var keysHud = document.getElementById("kiosk-keys");
 			if (!shell || !stage || !layerA || !layerB || !viewersRoot || !slug || !token) return;
 
 			var pollTimer = null;
@@ -273,6 +298,32 @@
 			var activeIsA = true;
 			var transitioning = false;
 			var kenToggle = false;
+			var keyLog = [];
+			var keyHudTimer = null;
+
+			function noteKey(e) {
+				if (!keysHud) return;
+				var line =
+					e.type +
+					" " +
+					(e.key || "?") +
+					" code=" +
+					(e.code || "?") +
+					" which=" +
+					String(e.which != null ? e.which : e.keyCode != null ? e.keyCode : "?");
+				keyLog.unshift(line);
+				if (keyLog.length > 4) keyLog.length = 4;
+				keysHud.textContent = keyLog.join("\n");
+				if (keyHudTimer) clearTimeout(keyHudTimer);
+				keyHudTimer = setTimeout(function () {
+					keysHud.textContent = "keys: idle (last ok)";
+				}, 8000);
+			}
+
+			window.addEventListener("keydown", noteKey, true);
+			window.addEventListener("keyup", noteKey, true);
+			document.addEventListener("keydown", noteKey, true);
+			document.addEventListener("keyup", noteKey, true);
 
 			function apiUrl(path) {
 				return "/api/kiosk/" + encodeURIComponent(slug) + "/" + path + "?token=" + encodeURIComponent(token);
