@@ -55,13 +55,13 @@ export { mintKioskToken };
 
 /**
  * @param {string} body
- * @returns {{ version: string, token: string } | null} last valid share in the body
+ * @returns {Array<{ version: string, token: string, imageId: number }>}
  */
-function findLastShareInBody(body) {
+function findSharesInBody(body) {
 	const text = typeof body === "string" ? body : "";
-	if (!text) return null;
+	if (!text) return [];
 	SHARE_URL_RE.lastIndex = 0;
-	let last = null;
+	const out = [];
 	let m;
 	while ((m = SHARE_URL_RE.exec(text)) !== null) {
 		const version = String(m[1] || "").trim();
@@ -69,9 +69,18 @@ function findLastShareInBody(body) {
 		if (!version || !token) continue;
 		const verified = verifyShareToken({ version, token });
 		if (!verified.ok) continue;
-		last = { version, token, imageId: verified.imageId };
+		out.push({ version, token, imageId: verified.imageId });
 	}
-	return last;
+	return out;
+}
+
+/**
+ * @param {string} body
+ * @returns {{ version: string, token: string, imageId: number } | null}
+ */
+function findLastShareInBody(body) {
+	const all = findSharesInBody(body);
+	return all.length ? all[all.length - 1] : null;
 }
 
 function parseImageMeta(raw) {
@@ -198,8 +207,91 @@ export default function createKioskRoutes({ queries }) {
 	});
 
 	/**
+	 * GET /api/kiosk/:slug/shares?token=...
+	 * Playlist of unique share links in recent channel messages (newest first).
+	 */
+	router.get("/api/kiosk/:slug/shares", async (req, res) => {
+		const gate = await requireKioskChannel(req);
+		if (!gate.ok) return res.status(gate.status).json(gate.body);
+
+		try {
+			const sb = getSupabaseServiceClient();
+			if (!sb) {
+				return res.status(503).json({ error: "Unavailable" });
+			}
+
+			const { data: rows, error } = await sb
+				.from("prsn_chat_messages")
+				.select("id, body, created_at")
+				.eq("thread_id", gate.channel.id)
+				.order("id", { ascending: false })
+				.limit(LATEST_SHARE_SCAN_LIMIT);
+			if (error) throw error;
+
+			/** @type {Array<{ message_id: number, version: string, token: string, image_id: number }>} */
+			const found = [];
+			const seenImageIds = new Set();
+			for (const row of rows || []) {
+				const messageId = Number(row.id);
+				const shares = findSharesInBody(row?.body);
+				for (let i = shares.length - 1; i >= 0; i--) {
+					const share = shares[i];
+					const imageId = Number(share.imageId);
+					if (!Number.isFinite(imageId) || imageId <= 0 || seenImageIds.has(imageId)) continue;
+					seenImageIds.add(imageId);
+					found.push({
+						message_id: messageId,
+						version: share.version,
+						token: share.token,
+						image_id: imageId
+					});
+				}
+			}
+
+			const mediaByImageId = new Map();
+			await Promise.all(
+				found.map(async (item) => {
+					const image = await queries.selectCreatedImageByIdAnyUser?.get(item.image_id);
+					let mediaType = "image";
+					if (image) {
+						const meta = parseImageMeta(image.meta);
+						const mt =
+							typeof meta?.media_type === "string" ? meta.media_type.trim().toLowerCase() : "";
+						if (mt === "video" && meta?.video) mediaType = "video";
+					}
+					mediaByImageId.set(item.image_id, mediaType);
+				})
+			);
+
+			const shares = found.map((item) => {
+				const version = item.version || ACTIVE_SHARE_VERSION;
+				const token = item.token;
+				const mediaType = mediaByImageId.get(item.image_id) || "image";
+				const imageUrl = `/api/share/${encodeURIComponent(version)}/${encodeURIComponent(token)}/image`;
+				const videoUrl =
+					mediaType === "video"
+						? `/api/share/${encodeURIComponent(version)}/${encodeURIComponent(token)}/video`
+						: null;
+				return {
+					id: `${version}:${token}`,
+					message_id: item.message_id,
+					image_id: item.image_id,
+					media_type: mediaType,
+					image_url: imageUrl,
+					video_url: videoUrl
+				};
+			});
+
+			return res.json({ shares });
+		} catch (err) {
+			console.warn("[kiosk] shares", err?.message || err);
+			return res.status(500).json({ error: "Internal server error" });
+		}
+	});
+
+	/**
 	 * GET /api/kiosk/:slug/latest-share?token=...
-	 * Latest share link in recent channel messages (newest message wins).
+	 * Latest share (compat); prefer /shares for slideshow.
 	 */
 	router.get("/api/kiosk/:slug/latest-share", async (req, res) => {
 		const gate = await requireKioskChannel(req);
@@ -256,6 +348,7 @@ export default function createKioskRoutes({ queries }) {
 
 			return res.json({
 				share: {
+					id: `${version}:${token}`,
 					message_id: found.message_id,
 					media_type: mediaType,
 					image_url: imageUrl,
