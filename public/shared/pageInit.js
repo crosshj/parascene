@@ -139,6 +139,15 @@ export async function runCommonAppInit() {
 
 	try {
 		const v = getAssetVersionParam();
+		const qs = getImportQuery(v);
+		const mod = await import(`./consoleGen.js${qs}`);
+		mod.installConsoleGen();
+	} catch {
+		// ignore
+	}
+
+	try {
+		const v = getAssetVersionParam();
 		const qs = v ? `?v=${encodeURIComponent(v)}` : '';
 		const mod = await import(`./presenceHeartbeat.js${qs}`);
 		mod.startPresenceHeartbeat();

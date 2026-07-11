@@ -103,6 +103,7 @@ function ensureCreationDetailRuntime() {
 	if (!creationDetailRuntimeReady) {
 		creationDetailRuntimeReady = import(`/shared/creationDetailRuntime.js${_creationDetailRuntimeQs}`)
 			.then((mod) => {
+				mod.bindCreationDetailHashtagClicks();
 				mod.bindCreationDetailEmbedNavigation();
 				mod.bindCreationDetailEmbedEscape(creationDetailPageHasOpenEscapeTarget);
 				mod.registerCreationDetailRefreshHandler(loadCreation);
@@ -144,6 +145,7 @@ function creationDetailHostModalIsOpen(host) {
 /** True when Escape should close a page-local layer instead of dismissing the overlay. */
 function creationDetailPageHasOpenEscapeTarget() {
 	if (document.querySelector('.chat-inline-image-lightbox')) return true;
+	if (document.querySelector('.chat-hashtag-nav-overlay')) return true;
 
 	const lineageModal = document.querySelector('[data-lineage-modal]');
 	if (lineageModal instanceof HTMLElement && lineageModal.classList.contains('open')) return true;

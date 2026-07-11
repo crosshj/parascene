@@ -4909,9 +4909,10 @@ export default function createCreateRoutes({ queries, storage }) {
 				}
 			}
 
-			// Create feed item
+			// Create feed item.
+			// feed_items.title is NOT NULL; map optional empty creation titles to "Untitled".
 			await queries.insertFeedItem.run(
-				title.trim(),
+				titleValue || 'Untitled',
 				description ? description.trim() : '',
 				feedAuthor,
 				null, // tags
@@ -4935,7 +4936,7 @@ export default function createCreateRoutes({ queries, storage }) {
 				queries,
 				creationId: updatedImage.id,
 				publisherUserId: targetImage.user_id,
-				title: title.trim(),
+				title: titleValue,
 				description: description ? description.trim() : null,
 				meta: updatedMeta
 			});
@@ -5026,12 +5027,13 @@ export default function createCreateRoutes({ queries, storage }) {
 				await queries.updateCreatedImageMeta.run(req.params.id, targetImage.user_id, mergedMeta);
 			}
 
-			// Update the associated feed item if it exists
+			// Update the associated feed item if it exists.
+			// feed_items.title is NOT NULL; map optional empty creation titles to "Untitled".
 			const feedItem = await queries.selectFeedItemByCreatedImageId?.get(parseInt(req.params.id));
 			if (feedItem) {
 				await queries.updateFeedItem?.run(
 					parseInt(req.params.id),
-					titleValue,
+					titleValue || 'Untitled',
 					description ? description.trim() : ''
 				);
 			}

@@ -1,5 +1,6 @@
 import { eyeHiddenIcon, linkIcon2 } from '/icons/svg-strings.js';
 import { isChatBroadcastMentionSlug } from './chatBroadcastMentions.js';
+import { SPECIAL_HASHTAG_HREFS } from './hashtagDestination.js';
 import {
 	attachMediaAudioLeveling,
 	primeMediaElementForAudioLeveling
@@ -96,21 +97,7 @@ function renderPlainUserTextSegmentBase(text) {
 		} else if (sigil === '@' && /^[a-z0-9][a-z0-9_-]{2,23}$/.test(normalized)) {
 			out += `<a href="/p/${escapeHtml(normalized)}" class="user-link mention-link">@${escapeHtml(rawToken)}</a>`;
 		} else if (sigil === '#' && /^[a-z0-9][a-z0-9_-]{1,31}$/.test(normalized)) {
-			const specialHashtagHref = (() => {
-				const map = {
-					create: '/create',
-					feed: '/feed',
-					help: '/help',
-					creations: '/chat/c/creations',
-					creation: '/chat/c/creations',
-					challenges: '/challenges',
-					notes: '/chat/notes',
-					explore: '/explore',
-					comments: '/chat/c/comments',
-					feedback: '/chat/c/feedback'
-				};
-				return map[normalized] || '';
-			})();
+			const specialHashtagHref = SPECIAL_HASHTAG_HREFS[normalized] || '';
 			const href = specialHashtagHref || `/t/${normalized}`;
 			out += `<a href="${escapeHtml(href)}" class="user-link mention-link">#${escapeHtml(rawToken)}</a>`;
 		} else if (sigil === '$' && /^(?=.*[a-z])[a-z0-9][a-z0-9_-]{0,63}$/.test(normalized)) {

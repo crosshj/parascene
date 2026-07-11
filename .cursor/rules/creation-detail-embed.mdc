@@ -20,6 +20,7 @@ See `_docs/PLAN_creation_detail_embed.md` for invariants and migration status.
 - All creation-detail navigation and post-mutation refresh goes through `creationDetailRuntime.js`.
 - Mutations: `refreshAfterMutation(reason, { creationId })` — registers handler calls `loadCreation`; embed notifies parent via shell sync.
 - Navigation: `navigate(href)` (in-overlay), `shellOut(href)` (leave overlay), `navigateFromModal(href)` (modals), `requestCloseOverlay()` (Escape).
+- Hashtags: `requestHashtagIntent(slug)` / `bindCreationDetailHashtagClicks()` — under chat SPA embed, post `prsn-chat-hashtag-intent` to parent (dismiss overlay + chooser on shell); otherwise run shared chooser via `hashtagDestination.js`.
 - Do not add scattered `if (isCreationDetailEmbed())` branches for reload/href; extend the runtime if a new intent is needed.
 
 ## API (creationDetailRuntime.js)
@@ -27,6 +28,7 @@ See `_docs/PLAN_creation_detail_embed.md` for invariants and migration status.
 - `registerCreationDetailRefreshHandler(fn)` — page registers `loadCreation`
 - `refreshAfterMutation(reason, options?)` — reasons: published, unpublished, deleted, edited, status-changed, profile-updated
 - `navigate(href)` / `shellOut(href)` / `navigateFromModal(href)` / `requestCloseOverlay()`
+- `requestHashtagIntent(slug)` / `bindCreationDetailHashtagClicks()`
 - `bindCreationDetailEmbedNavigation()` / `bindCreationDetailEmbedEscape(hasOpenEscapeTarget)`
 
 Run `npm run check:creation-detail-embed` after edits to embed-capable files.

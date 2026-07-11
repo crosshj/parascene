@@ -21,6 +21,7 @@ Goal: one mental model for standalone `/creations/:id` and embed (`?embed=1` in 
 
 - overlay: `/creations/:id` (same or other id)
 - shell-out: `/creations/:id/edit|mutate`, `/creations`, `/feed`, `/explore`, `/chat/*`, `/user/*`, profile paths
+- hashtag `/t/:slug` mention: `requestHashtagIntent` — under chat SPA post `prsn-chat-hashtag-intent` (parent dismisses overlay + chooser); else shared chooser then navigate/shellOut
 - external: off-origin, mailto, tel
 
 ## Mutation reasons → shell scopes

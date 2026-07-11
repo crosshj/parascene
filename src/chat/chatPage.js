@@ -20,6 +20,10 @@ import {
 	openChatInlineImageLightbox as openChatInlineImageLightboxShared,
 } from '../shared/chatInlineImageLightbox.js';
 import {
+	closeHashtagChoiceModal,
+	openHashtagDestination,
+} from '../shared/hashtagDestination.js';
+import {
 	handleSpaPageOverlayPopstate,
 	isCreationDetailOverlayHistoryActive,
 	isCreationDetailOverlayOpen,
@@ -70,7 +74,6 @@ import {
 	replyTurnIcon,
 	pencilIcon,
 	trashIcon,
-	helpIcon,
 	linkIcon2
 } from '/icons/svg-strings.js';
 import * as rosterMod from '../shared/chatSidebarRoster.js';
@@ -1383,8 +1386,6 @@ export async function initChatPage(root, options = {}) {
 	let chatToolbarUnpinOnOtherRowHover = null;
 	/** @type {null | (() => void)} */
 	let chatInlineImageLightboxClickUnbind = null;
-	/** @type {null | (() => void)} */
-	let chatHashtagChoiceModalCleanup = null;
 	/** @type {HTMLElement | null} */
 	let chatSidebarDmHoverPopoverEl = null;
 	/** @type {HTMLElement | null} */
@@ -1809,6 +1810,30 @@ export async function initChatPage(root, options = {}) {
 				errEl.hidden = false;
 				errEl.textContent = err?.message || 'Could not leave channel.';
 			}
+		}
+	}
+
+	async function hideDmFromSidebar(threadId) {
+		const tid = Number(threadId);
+		if (!Number.isFinite(tid) || tid <= 0) {
+			throw new Error('Invalid conversation');
+		}
+		const wasActive = Number(activeThreadId) === tid;
+		const res = await fetch(`/api/chat/threads/${tid}/hide`, {
+			method: 'POST',
+			credentials: 'include',
+			headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+			body: JSON.stringify({ hidden: true })
+		});
+		const data = await res.json().catch(() => ({}));
+		if (!res.ok) {
+			throw new Error(data?.message || data?.error || `Could not close DM (${res.status})`);
+		}
+		await loadChatThreads({ forceNetwork: true });
+		await refreshChatSidebar({ skipThreadsFetch: true });
+		if (wasActive) {
+			history.pushState({ prsnChat: true }, '', '/chat/c/feed');
+			await openThreadForCurrentPath();
 		}
 	}
 
@@ -6538,10 +6563,15 @@ export async function initChatPage(root, options = {}) {
 				e.preventDefault();
 				e.stopPropagation();
 				openDmSidebarGearMenu(dmGearBtn, {
+					showRemove: true,
 					onViewProfile: (href) => navigateToSpaPageFromSpa(href),
 					onMarkAsRead: () => {
 						const tid = Number(dmGearBtn.getAttribute('data-chat-row-menu-thread-id'));
 						return markSidebarThreadRead(tid);
+					},
+					onRemove: () => {
+						const tid = Number(dmGearBtn.getAttribute('data-chat-row-menu-thread-id'));
+						return hideDmFromSidebar(tid);
 					},
 					onAfterPinChange: () => void refreshChatSidebar({ skipThreadsFetch: true })
 				});
@@ -12562,195 +12592,29 @@ export async function initChatPage(root, options = {}) {
 	}
 
 	function closeChatHashtagChoiceModal() {
-		if (typeof chatHashtagChoiceModalCleanup === 'function') {
-			chatHashtagChoiceModalCleanup();
-			chatHashtagChoiceModalCleanup = null;
-		}
-	}
-
-	function showChatHashtagChoiceModal(slug) {
-		closeChatHashtagChoiceModal();
-		const label = `#${slug}`;
-		const overlay = document.createElement('div');
-		overlay.className = 'chat-hashtag-nav-overlay';
-		overlay.setAttribute('role', 'dialog');
-		overlay.setAttribute('aria-modal', 'true');
-		overlay.setAttribute('aria-labelledby', 'chat-hashtag-nav-title');
-		overlay.setAttribute('aria-describedby', 'chat-hashtag-nav-desc');
-
-		const panel = document.createElement('div');
-		panel.className = 'chat-hashtag-nav-dialog';
-
-		const header = document.createElement('div');
-		header.className = 'chat-hashtag-nav-header';
-
-		const title = document.createElement('h2');
-		title.id = 'chat-hashtag-nav-title';
-		title.className = 'chat-hashtag-nav-title';
-		title.textContent = label;
-
-		const closeBtn = document.createElement('button');
-		closeBtn.type = 'button';
-		closeBtn.className = 'chat-hashtag-nav-close';
-		closeBtn.setAttribute('aria-label', 'Close');
-		closeBtn.title = 'Close (Esc)';
-		closeBtn.textContent = '×';
-		closeBtn.addEventListener('click', () => closeChatHashtagChoiceModal());
-
-		header.appendChild(title);
-		header.appendChild(closeBtn);
-
-		const lead = document.createElement('div');
-		lead.className = 'chat-hashtag-nav-lead';
-
-		const illust = document.createElement('div');
-		illust.className = 'chat-hashtag-nav-illustration';
-		illust.innerHTML = helpIcon('chat-hashtag-nav-illustration-svg');
-
-		const hint = document.createElement('p');
-		hint.id = 'chat-hashtag-nav-desc';
-		hint.className = 'chat-hashtag-nav-hint';
-		hint.textContent = 'Where would you like to go?';
-
-		lead.appendChild(illust);
-		lead.appendChild(hint);
-
-		const actions = document.createElement('div');
-		actions.className = 'chat-hashtag-nav-actions';
-
-		const btnChannel = document.createElement('button');
-		btnChannel.type = 'button';
-		btnChannel.className = 'btn-primary chat-hashtag-nav-btn chat-hashtag-nav-btn--channel';
-		btnChannel.setAttribute('data-chat-hashtag-pick', 'channel');
-		btnChannel.textContent = 'Channel';
-
-		const btnTag = document.createElement('button');
-		btnTag.type = 'button';
-		btnTag.className = 'btn-secondary chat-hashtag-nav-btn chat-hashtag-nav-btn--tag';
-		btnTag.setAttribute('data-chat-hashtag-pick', 'tag');
-		btnTag.textContent = 'Tag page';
-
-		actions.appendChild(btnTag);
-		actions.appendChild(btnChannel);
-		panel.appendChild(header);
-		panel.appendChild(lead);
-		panel.appendChild(actions);
-		overlay.appendChild(panel);
-
-		const onKeydown = (ev) => {
-			if (ev.key === 'Escape') {
-				ev.preventDefault();
-				closeChatHashtagChoiceModal();
-			}
-		};
-
-		chatHashtagChoiceModalCleanup = () => {
-			document.removeEventListener('keydown', onKeydown);
-			if (overlay.parentNode) {
-				overlay.parentNode.removeChild(overlay);
-			}
-			try {
-				document.body.classList.remove('chat-hashtag-nav-open');
-			} catch {
-				// ignore
-			}
-		};
-
-		document.addEventListener('keydown', onKeydown);
-		overlay.addEventListener('click', (ev) => {
-			if (ev.target === overlay) {
-				closeChatHashtagChoiceModal();
-			}
-		});
-		btnChannel.addEventListener('click', async () => {
-			closeChatHashtagChoiceModal();
-			await navigateToChatChannelSlug(slug);
-		});
-		btnTag.addEventListener('click', () => {
-			closeChatHashtagChoiceModal();
-			window.location.href = `/t/${encodeURIComponent(slug)}`;
-		});
-
-		document.body.appendChild(overlay);
-		try {
-			document.body.classList.add('chat-hashtag-nav-open');
-		} catch {
-			// ignore
-		}
-		requestAnimationFrame(() => {
-			try {
-				btnChannel.focus({ preventScroll: true });
-			} catch {
-				btnChannel.focus();
-			}
-		});
-	}
-
-	async function navigateToChatChannelSlug(slug) {
-		const path = `/chat/c/${encodeURIComponent(slug)}`;
-		history.pushState({ prsnChat: true }, '', path);
-		await openThreadForCurrentPath();
-	}
-
-	function resolveSpecialHashtagDestination(slug) {
-		const key = String(slug || '').trim().toLowerCase();
-		if (!key) return null;
-		const map = {
-			create: '/create',
-			feed: '/feed',
-			help: '/help',
-			creations: '/chat/c/creations',
-			creation: '/chat/c/creations',
-			challenges: '/challenges',
-			notes: '/chat/notes',
-			explore: '/explore',
-			comments: '/chat/c/comments',
-			feedback: '/chat/c/feedback'
-		};
-		const href = map[key];
-		if (href) return { kind: 'path', href };
-		return null;
+		closeHashtagChoiceModal();
 	}
 
 	async function openChatHashtagDestination(slug) {
-		const safe = String(slug || '')
-			.trim()
-			.toLowerCase();
-		if (!safe) {
-			return;
-		}
-		const special = resolveSpecialHashtagDestination(safe);
-		if (special?.kind === 'path' && special.href) {
-			const href = String(special.href || '').trim();
-			if (href.startsWith('/chat/')) {
-				history.pushState({ prsnChat: true }, '', href);
-				await openThreadForCurrentPath();
-				return;
-			}
-			window.location.href = href;
-			return;
-		}
-		try {
-			const res = await fetch(`/api/chat/hashtag-channel-exists/${encodeURIComponent(safe)}${qs}`, {
-				credentials: 'include',
-			});
-			if (res.status === 401) {
-				window.location.href = `/t/${encodeURIComponent(safe)}`;
-				return;
-			}
-			const data = await res.json().catch(() => ({}));
-			if (!res.ok) {
-				window.location.href = `/t/${encodeURIComponent(safe)}`;
-				return;
-			}
-			if (data.channelExists === true) {
-				showChatHashtagChoiceModal(safe);
-				return;
-			}
-			window.location.href = `/t/${encodeURIComponent(safe)}`;
-		} catch {
-			window.location.href = `/t/${encodeURIComponent(safe)}`;
-		}
+		await openHashtagDestination(slug, {
+			navigate: (href) => {
+				const raw = String(href || '').trim();
+				if (!raw) return;
+				let pathOnly = raw;
+				try {
+					pathOnly = new URL(raw, window.location.origin).pathname;
+				} catch {
+					pathOnly = raw.split('?')[0].split('#')[0];
+				}
+				pathOnly = String(pathOnly || '').replace(/\/+$/, '') || '/';
+				if (pathOnly === '/chat' || pathOnly.startsWith('/chat/')) {
+					// Same path as create-submit SPA: navigateWithinChatShell paints thread skeleton immediately.
+					navigateWithinChatShell(raw);
+					return;
+				}
+				window.location.href = raw;
+			},
+		});
 	}
 
 	const composer = root.querySelector('[data-chat-composer]');
