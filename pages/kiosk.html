@@ -219,11 +219,48 @@
 			border-color: rgba(255, 255, 255, 0.35);
 			color: #fff;
 		}
+
+		.kiosk-pause {
+			position: absolute;
+			z-index: 3;
+			top: 16px;
+			right: 16px;
+			width: 48px;
+			height: 48px;
+			display: none;
+			align-items: center;
+			justify-content: center;
+			border-radius: 10px;
+			background: rgba(0, 0, 0, 0.45);
+			color: #fff;
+			pointer-events: none;
+		}
+
+		.kiosk.is-paused .kiosk-pause {
+			display: flex;
+		}
+
+		.kiosk-pause svg {
+			display: block;
+			width: 22px;
+			height: 22px;
+		}
+
+		.kiosk.is-paused .kiosk-layer img.ken-burns,
+		.kiosk.is-paused .kiosk-layer img.ken-burns-alt {
+			animation-play-state: paused;
+		}
 	</style>
 </head>
 
 <body>
 	<div class="kiosk" id="kiosk">
+		<div class="kiosk-pause" id="kiosk-pause" aria-hidden="true">
+			<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+				<rect x="5" y="3" width="5" height="18" rx="1" />
+				<rect x="14" y="3" width="5" height="18" rx="1" />
+			</svg>
+		</div>
 		<div class="kiosk-stage" id="kiosk-stage" aria-hidden="true">
 			<div class="kiosk-layer" id="kiosk-layer-a"></div>
 			<div class="kiosk-layer" id="kiosk-layer-b"></div>
@@ -466,6 +503,10 @@
 			function togglePause() {
 				paused = !paused;
 				shell.classList.toggle("is-paused", paused);
+				var pauseEl = document.getElementById("kiosk-pause");
+				if (pauseEl) {
+					pauseEl.setAttribute("aria-hidden", paused ? "false" : "true");
+				}
 				if (paused) {
 					clearAdvanceTimer();
 					pauseMediaIn(activeLayer());
