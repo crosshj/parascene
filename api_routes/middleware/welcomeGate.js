@@ -19,6 +19,7 @@ const ALLOWED_PATHS = [
 	{ path: "/api/try/discard", methods: ["POST"] },
 	{ pathPrefix: "/api/try/images/", method: "GET" },
 	{ path: "/api/qr", methods: ["GET"] },
+	{ pathPrefix: "/api/kiosk/", method: "GET" },
 	{ path: "/logout", methods: ["POST"] },
 	{ path: "/auth.html", methods: ["GET"] },
 	{ path: "/me", methods: ["GET"] },

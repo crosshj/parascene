@@ -16,6 +16,8 @@ import { portraitHeroSizing, resolveExtendedHeroLayout } from "../public/shared/
 import { canAccessFeedBeta } from "./feedBeta/access.js";
 import { LANDING_PAGE_HTML, LANDING_PAGE_STANDALONE, LANDING_PAGE_VARIANT } from "./utils/landingPage.js";
 import { recordLandingFunnelEvent } from "./utils/landingAnalytics.js";
+import { findPublicChannelBySlug, mintKioskToken } from "./kiosk.js";
+import { normalizeTag } from "./utils/tag.js";
 
 function getPageForUser(user) {
 	const roleToPage = {
@@ -1597,12 +1599,34 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 		return res.send(htmlContent);
 	});
 
-	// Kiosk mode (unauthenticated) — standalone logo screen.
-	router.get("/kiosk", async (req, res) => {
-		const fs = await import("fs/promises");
-		const htmlContent = await fs.readFile(path.join(pagesDir, "kiosk.html"), "utf-8");
-		res.setHeader("Content-Type", "text/html");
-		return res.send(htmlContent);
+	// Kiosk TV — public channel must already exist; scoped token for viewers API.
+	router.get("/kiosk/:slug", async (req, res) => {
+		const slug = normalizeTag(req.params?.slug);
+		if (!slug) {
+			return res.status(404).send("Not found");
+		}
+		try {
+			const channel = await findPublicChannelBySlug(slug);
+			if (!channel) {
+				return res.status(404).send("Not found");
+			}
+			const token = mintKioskToken({ threadId: channel.id, slug: channel.channel_slug });
+			const fs = await import("fs/promises");
+			let htmlContent = await fs.readFile(path.join(pagesDir, "kiosk.html"), "utf-8");
+			htmlContent = htmlContent.replace(
+				"window.__KIOSK__ = null;",
+				`window.__KIOSK__ = ${serializeInlineScript({
+					slug: channel.channel_slug,
+					token
+				})};`
+			);
+			res.setHeader("Content-Type", "text/html");
+			res.setHeader("Cache-Control", "no-store");
+			return res.send(htmlContent);
+		} catch (err) {
+			console.warn("[kiosk] page", err?.message || err);
+			return res.status(500).send("Internal server error");
+		}
 	});
 
 	// Party Mode — logged-in; same image-to-image path as basic create (Grok via replicate).
@@ -1635,7 +1659,7 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 			req.path.startsWith("/help") ||
 			req.path === "/welcome" ||
 			req.path === "/party" ||
-			req.path === "/kiosk" ||
+			req.path.startsWith("/kiosk/") ||
 			req.path === "/prompt-library" ||
 			req.path.startsWith("/audio-clips/") ||
 			req.path === "/user" ||

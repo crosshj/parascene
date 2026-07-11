@@ -43,7 +43,8 @@ const LOCAL_MAP_MAX_KEYS = 10_000;
 const SKIP_PATH_PREFIXES = [
 	"/api/worker/",
 	"/api/webhooks/",
-	"/api/presence/"
+	"/api/presence/",
+	"/api/kiosk/"
 ];
 
 /** Background polls — any HTTP method */
