@@ -2,11 +2,21 @@ import express from "express";
 import { getSupabaseServiceClient } from "./utils/supabaseService.js";
 import { normalizeTag } from "./utils/tag.js";
 import { mintKioskToken, verifyKioskToken } from "./utils/kioskToken.js";
+import { verifyShareToken, ACTIVE_SHARE_VERSION } from "./utils/shareLink.js";
+import { SHARE_HOSTNAME } from "./utils/url.js";
 
 /** Same online window as api_routes/presence.js */
 const PRESENCE_ONLINE_WINDOW_MS = 2 * 60 * 1000;
 
 const PSEUDO_CHANNEL_SLUGS = new Set(["comments", "feed", "explore", "creations"]);
+
+/** How many recent messages to scan for a share URL. */
+const LATEST_SHARE_SCAN_LIMIT = 100;
+
+const SHARE_URL_RE = new RegExp(
+	`https?://${SHARE_HOSTNAME.replace(/\./g, "\\.")}/s/([^/\\s]+)/([^/\\s]+)(?:/[^\\s]*)?`,
+	"gi"
+);
 
 function threadIsPublic(meta) {
 	if (!meta || typeof meta !== "object" || Array.isArray(meta)) return true;
@@ -43,6 +53,74 @@ export async function findPublicChannelBySlug(slugInput) {
 
 export { mintKioskToken };
 
+/**
+ * @param {string} body
+ * @returns {{ version: string, token: string } | null} last valid share in the body
+ */
+function findLastShareInBody(body) {
+	const text = typeof body === "string" ? body : "";
+	if (!text) return null;
+	SHARE_URL_RE.lastIndex = 0;
+	let last = null;
+	let m;
+	while ((m = SHARE_URL_RE.exec(text)) !== null) {
+		const version = String(m[1] || "").trim();
+		const token = String(m[2] || "").trim();
+		if (!version || !token) continue;
+		const verified = verifyShareToken({ version, token });
+		if (!verified.ok) continue;
+		last = { version, token, imageId: verified.imageId };
+	}
+	return last;
+}
+
+function parseImageMeta(raw) {
+	if (raw == null) return null;
+	if (typeof raw === "object") return raw;
+	if (typeof raw !== "string") return null;
+	try {
+		return JSON.parse(raw);
+	} catch {
+		return null;
+	}
+}
+
+function readKioskToken(req) {
+	if (typeof req.query?.token === "string" && req.query.token.trim()) {
+		return req.query.token.trim();
+	}
+	const auth = typeof req.headers?.authorization === "string" ? req.headers.authorization : "";
+	if (auth.toLowerCase().startsWith("bearer ")) {
+		return auth.slice(7).trim();
+	}
+	return "";
+}
+
+/**
+ * @returns {{ ok: true, slug: string, channel: { id: number, channel_slug: string } } | { ok: false, status: number, body: object }}
+ */
+async function requireKioskChannel(req) {
+	const slug = normalizeTag(req.params?.slug);
+	if (!slug) {
+		return { ok: false, status: 400, body: { error: "Invalid slug" } };
+	}
+
+	const verified = verifyKioskToken(readKioskToken(req));
+	if (!verified.ok) {
+		return { ok: false, status: 401, body: { error: "Unauthorized", code: verified.error } };
+	}
+	if (verified.slug !== slug) {
+		return { ok: false, status: 401, body: { error: "Unauthorized", code: "SLUG_MISMATCH" } };
+	}
+
+	const channel = await findPublicChannelBySlug(slug);
+	if (!channel || channel.id !== verified.threadId) {
+		return { ok: false, status: 404, body: { error: "Not found" } };
+	}
+
+	return { ok: true, slug, channel };
+}
+
 export default function createKioskRoutes({ queries }) {
 	const router = express.Router();
 
@@ -51,33 +129,10 @@ export default function createKioskRoutes({ queries }) {
 	 * Requires scoped kiosk token. Returns channel members who are presence-online.
 	 */
 	router.get("/api/kiosk/:slug/viewers", async (req, res) => {
-		const slug = normalizeTag(req.params?.slug);
-		if (!slug) {
-			return res.status(400).json({ error: "Invalid slug" });
-		}
-
-		const tokenRaw =
-			typeof req.query?.token === "string"
-				? req.query.token.trim()
-				: typeof req.headers?.authorization === "string" &&
-					  req.headers.authorization.toLowerCase().startsWith("bearer ")
-					? req.headers.authorization.slice(7).trim()
-					: "";
-
-		const verified = verifyKioskToken(tokenRaw);
-		if (!verified.ok) {
-			return res.status(401).json({ error: "Unauthorized", code: verified.error });
-		}
-		if (verified.slug !== slug) {
-			return res.status(401).json({ error: "Unauthorized", code: "SLUG_MISMATCH" });
-		}
+		const gate = await requireKioskChannel(req);
+		if (!gate.ok) return res.status(gate.status).json(gate.body);
 
 		try {
-			const channel = await findPublicChannelBySlug(slug);
-			if (!channel || channel.id !== verified.threadId) {
-				return res.status(404).json({ error: "Not found" });
-			}
-
 			const sb = getSupabaseServiceClient();
 			if (!sb) {
 				return res.status(503).json({ error: "Unavailable" });
@@ -86,7 +141,7 @@ export default function createKioskRoutes({ queries }) {
 			const { data: memRows, error: memErr } = await sb
 				.from("prsn_chat_members")
 				.select("user_id")
-				.eq("thread_id", channel.id);
+				.eq("thread_id", gate.channel.id);
 			if (memErr) throw memErr;
 
 			const memberIds = [
@@ -138,6 +193,77 @@ export default function createKioskRoutes({ queries }) {
 			return res.json({ users, windowMs: PRESENCE_ONLINE_WINDOW_MS });
 		} catch (err) {
 			console.warn("[kiosk] viewers", err?.message || err);
+			return res.status(500).json({ error: "Internal server error" });
+		}
+	});
+
+	/**
+	 * GET /api/kiosk/:slug/latest-share?token=...
+	 * Latest share link in recent channel messages (newest message wins).
+	 */
+	router.get("/api/kiosk/:slug/latest-share", async (req, res) => {
+		const gate = await requireKioskChannel(req);
+		if (!gate.ok) return res.status(gate.status).json(gate.body);
+
+		try {
+			const sb = getSupabaseServiceClient();
+			if (!sb) {
+				return res.status(503).json({ error: "Unavailable" });
+			}
+
+			const { data: rows, error } = await sb
+				.from("prsn_chat_messages")
+				.select("id, body, created_at")
+				.eq("thread_id", gate.channel.id)
+				.order("id", { ascending: false })
+				.limit(LATEST_SHARE_SCAN_LIMIT);
+			if (error) throw error;
+
+			let found = null;
+			for (const row of rows || []) {
+				const share = findLastShareInBody(row?.body);
+				if (!share) continue;
+				found = {
+					message_id: Number(row.id),
+					version: share.version,
+					token: share.token,
+					image_id: share.imageId
+				};
+				break;
+			}
+
+			if (!found) {
+				return res.json({ share: null });
+			}
+
+			let mediaType = "image";
+			const image = await queries.selectCreatedImageByIdAnyUser?.get(found.image_id);
+			if (image) {
+				const meta = parseImageMeta(image.meta);
+				const mt = typeof meta?.media_type === "string" ? meta.media_type.trim().toLowerCase() : "";
+				if (mt === "video" && meta?.video) {
+					mediaType = "video";
+				}
+			}
+
+			const version = found.version || ACTIVE_SHARE_VERSION;
+			const token = found.token;
+			const imageUrl = `/api/share/${encodeURIComponent(version)}/${encodeURIComponent(token)}/image`;
+			const videoUrl =
+				mediaType === "video"
+					? `/api/share/${encodeURIComponent(version)}/${encodeURIComponent(token)}/video`
+					: null;
+
+			return res.json({
+				share: {
+					message_id: found.message_id,
+					media_type: mediaType,
+					image_url: imageUrl,
+					video_url: videoUrl
+				}
+			});
+		} catch (err) {
+			console.warn("[kiosk] latest-share", err?.message || err);
 			return res.status(500).json({ error: "Internal server error" });
 		}
 	});
