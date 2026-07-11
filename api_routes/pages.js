@@ -1597,6 +1597,14 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 		return res.send(htmlContent);
 	});
 
+	// Kiosk mode (unauthenticated) — standalone logo screen.
+	router.get("/kiosk", async (req, res) => {
+		const fs = await import("fs/promises");
+		const htmlContent = await fs.readFile(path.join(pagesDir, "kiosk.html"), "utf-8");
+		res.setHeader("Content-Type", "text/html");
+		return res.send(htmlContent);
+	});
+
 	// Party Mode — logged-in; same image-to-image path as basic create (Grok via replicate).
 	router.get("/party", async (req, res) => {
 		const user = await requireLoggedInUser(req, res);
@@ -1627,6 +1635,7 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 			req.path.startsWith("/help") ||
 			req.path === "/welcome" ||
 			req.path === "/party" ||
+			req.path === "/kiosk" ||
 			req.path === "/prompt-library" ||
 			req.path.startsWith("/audio-clips/") ||
 			req.path === "/user" ||
