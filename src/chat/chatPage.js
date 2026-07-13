@@ -10149,6 +10149,10 @@ export async function initChatPage(root, options = {}) {
 				maybeStartChatCreationsPseudoChannelPoll();
 				return;
 			}
+			if (reason === 'create-completed') {
+				void loadCreationsChannelMessages({ forceFreshFirstPage: true });
+				return;
+			}
 			void loadCreationsChannelMessages({ forceFreshFirstPage: true });
 		}
 		if (refreshFeedLane && reason !== 'unpublished') {

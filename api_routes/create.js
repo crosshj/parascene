@@ -64,6 +64,7 @@ import {
 } from "./utils/challengeSubmitShared.js";
 import { resolveCreationImageForExport } from "./utils/resolveCreationImageForExport.js";
 import { applySourceShareUrlToMutateArgsWhenMatching } from "./utils/mutateLineageImageUrl.js";
+import { buildMutateLineageMetaFields } from "./utils/mutateLineageMeta.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -2559,13 +2560,11 @@ export default function createCreateRoutes({ queries, storage }) {
 				}
 
 				const sourceMeta = parseMeta(source.meta) || {};
-				const prior = Array.isArray(sourceMeta.history) ? sourceMeta.history : null;
-				const priorIds = Array.isArray(prior)
-					? prior.map((v) => Number(v)).filter((n) => Number.isFinite(n) && n > 0)
-					: [];
-				meta.history = [...priorIds, sourceId];
-				meta.mutate_of_id = sourceId;
-				meta.direct_parent_ids = [sourceId];
+				const lineage = buildMutateLineageMetaFields(sourceMeta, sourceId);
+				if (!lineage) {
+					return res.status(404).json({ error: "Image not found" });
+				}
+				Object.assign(meta, lineage);
 
 				// Normalize all image_url- and image_url_array-typed fields for mutate flows.
 				for (const key of imageUrlKeys) {
@@ -2634,13 +2633,8 @@ export default function createCreateRoutes({ queries, storage }) {
 				}
 				if (source) {
 					const sourceMeta = parseMeta(source.meta) || {};
-					const prior = Array.isArray(sourceMeta.history) ? sourceMeta.history : null;
-					const priorIds = Array.isArray(prior)
-						? prior.map((v) => Number(v)).filter((n) => Number.isFinite(n) && n > 0)
-						: [];
-					meta.history = [...priorIds, sourceId];
-					meta.mutate_of_id = sourceId;
-					meta.direct_parent_ids = [sourceId];
+					const lineage = buildMutateLineageMetaFields(sourceMeta, sourceId);
+					if (lineage) Object.assign(meta, lineage);
 					// Unpublished source: use share URL when input matches source image (not generic frame uploads).
 					const sourcePublished = source.published === 1 || source.published === true;
 					if (!sourcePublished && source.status === "completed" && source.filename) {
@@ -5420,7 +5414,8 @@ export default function createCreateRoutes({ queries, storage }) {
 		}
 	});
 
-	// POST /api/create/images/:id/adjust — Owner/admin: save client-side brightness/contrast/saturation as a new completed creation.
+	// POST /api/create/images/:id/adjust — Signed-in user: save client-side brightness/contrast/saturation
+	// as a new completed creation owned by the caller (source may be own or published).
 	router.post("/api/create/images/:id/adjust", async (req, res) => {
 		const user = await requireUser(req, res);
 		if (!user) return;
@@ -5430,16 +5425,15 @@ export default function createCreateRoutes({ queries, storage }) {
 			return res.status(400).json({ error: "Invalid creation id" });
 		}
 
-		let image = await queries.selectCreatedImageById?.get(id, user.id);
+		const image = await queries.selectCreatedImageByIdAnyUser?.get(id);
 		if (!image) {
-			image = await queries.selectCreatedImageByIdAnyUser?.get(id);
-			if (!image) {
-				return res.status(404).json({ error: "Creation not found" });
-			}
-			const isOwner = Number(image.user_id) === Number(user.id);
-			if (!isOwner && user.role !== "admin") {
-				return res.status(403).json({ error: "Forbidden" });
-			}
+			return res.status(404).json({ error: "Creation not found" });
+		}
+		const isOwner = Number(image.user_id) === Number(user.id);
+		const isAdmin = user.role === "admin";
+		const isPublished = image.published === 1 || image.published === true;
+		if (!isOwner && !isAdmin && !isPublished) {
+			return res.status(403).json({ error: "Forbidden" });
 		}
 
 		if ((image.status || "") !== "completed") {
@@ -5497,15 +5491,20 @@ export default function createCreateRoutes({ queries, storage }) {
 
 			const sourceTitle = typeof image.title === "string" ? image.title.trim() : "";
 			const sourceDescription = typeof image.description === "string" ? image.description.trim() : "";
+			const lineage = buildMutateLineageMetaFields(existingMeta, id);
+			if (!lineage) {
+				return res.status(400).json({ error: "Invalid source creation for adjust" });
+			}
 			const nextMeta = {
 				media_type: "image",
-				mutate_of_id: id,
-				client_adjust: {
+				method: "adjust",
+				method_name: "Adjust",
+				args: {
 					brightness,
 					contrast,
 					saturation,
-					source_id: id,
 				},
+				...lineage,
 			};
 
 			const insertResult = await queries.insertCreatedImage.run(

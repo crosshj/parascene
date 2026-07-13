@@ -901,7 +901,51 @@ class AppRouteCreations extends HTMLElement {
 			}
 			return;
 		}
+		if (detail.reason === 'create-completed') {
+			void this.ensureCreationCardFromApi(detail.creationId);
+			return;
+		}
 		this.loadCreations({ force: true });
+	}
+
+	/**
+	 * Selectively prepend a completed creation when it is missing from the grid (e.g. client adjust save).
+	 * @param {number|string} creationId
+	 */
+	async ensureCreationCardFromApi(creationId) {
+		const id = Number(creationId);
+		if (!Number.isFinite(id) || id <= 0) return;
+		if (!this.isRouteActive()) return;
+		if (this._filterOnlyChallenge) return;
+
+		const container = this.querySelector('[data-creations-container]');
+		if (!container) return;
+		if (container.querySelector(`.route-media[data-image-id="${id}"]`)) return;
+
+		try {
+			const result = await fetchJsonWithStatusDeduped(
+				`/api/create/images/${encodeURIComponent(String(id))}`,
+				{ credentials: 'include' },
+				{ windowMs: 300 }
+			);
+			if (!result.ok || !result.data || typeof result.data !== 'object') return;
+			const item = result.data;
+			if (Number(item.id) !== id) return;
+			if (container.querySelector(`.route-media[data-image-id="${id}"]`)) return;
+
+			if (container.querySelector('.route-empty-image-grid, .route-empty')) {
+				container.innerHTML = '';
+				if (this.imageObserver) this.imageObserver.disconnect();
+				this.imageLoadQueue = [];
+				this.imageLoadsInFlight = 0;
+				this.setupImageLazyLoading();
+			}
+
+			this.prependCreationCards(container, [item]);
+			this.hasLoadedOnce = true;
+		} catch {
+			// ignore
+		}
 	}
 
 	/** Incrementally merge session pending/creating placeholders into the grid (no full reload). */

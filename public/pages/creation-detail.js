@@ -3164,8 +3164,7 @@ async function loadCreation() {
 			typeof canSetVideoPosterFromFirstFrame === 'function' &&
 			canSetVideoPosterFromFirstFrame(creation);
 		const showAdjustImage =
-			canEdit &&
-			!adminViewingUserDeleted &&
+			!isAdmin &&
 			status === 'completed' &&
 			!isFailed &&
 			mediaType === 'image' &&
@@ -5491,6 +5490,10 @@ async function loadCreation() {
 									throw new Error('Could not save adjusted image');
 								}
 								showToast('Adjusted image saved');
+								await refreshAfterMutation('create-completed', {
+									creationId: newId,
+									skipContentRefresh: true,
+								});
 								navigateCreationDetail(`/creations/${newId}`);
 							},
 						});

@@ -152,7 +152,15 @@ function setSaveEnabled(enabled) {
 }
 
 function updateSaveButtonState() {
-	setSaveEnabled(previewReady && !adjustmentsAreDefault(values));
+	const canSave = previewReady && !adjustmentsAreDefault(values);
+	setSaveEnabled(canSave);
+	const { saveBtn, resetBtn } = getModalElements() || {};
+	if (saveBtn instanceof HTMLButtonElement) {
+		saveBtn.title = canSave ? '' : 'Change at least one slider to save';
+	}
+	if (resetBtn instanceof HTMLButtonElement && !modalRoot?.classList.contains('is-busy')) {
+		resetBtn.disabled = !previewReady || adjustmentsAreDefault(values);
+	}
 }
 
 function applyPreviewFilter() {
@@ -198,7 +206,9 @@ function setModalBusy(busy) {
 			updateSaveButtonState();
 		}
 	}
-	if (resetBtn instanceof HTMLButtonElement) resetBtn.disabled = busy;
+	if (resetBtn instanceof HTMLButtonElement) {
+		resetBtn.disabled = busy || !previewReady || adjustmentsAreDefault(values);
+	}
 	if (cancelBtn instanceof HTMLButtonElement) cancelBtn.disabled = busy;
 	if (closeBtn instanceof HTMLButtonElement) closeBtn.disabled = busy;
 	for (const input of [brightness, contrast, saturation]) {

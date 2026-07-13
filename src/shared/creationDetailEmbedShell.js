@@ -9,7 +9,7 @@ import { challengeEnteredBadgeHtml, publishedBadgeHtml } from './creationBadges.
 export const CREATION_DETAIL_SHELL_SYNC_MESSAGE = 'prsn-creation-detail-overlay-shell-sync';
 export const CREATION_DETAIL_SHELL_SYNC_EVENT = 'prsn-creation-detail-overlay-shell-sync';
 
-/** @typedef {'published'|'unpublished'|'edited'|'deleted'|'refreshed'|'status-changed'|'like-changed'|'comment-changed'|'challenge-submitted'|'challenge-withdrawn'} CreationDetailShellSyncReason */
+/** @typedef {'published'|'unpublished'|'edited'|'deleted'|'refreshed'|'status-changed'|'create-submitted'|'mutate-submitted'|'create-completed'|'like-changed'|'comment-changed'|'challenge-submitted'|'challenge-withdrawn'} CreationDetailShellSyncReason */
 
 export const CREATION_DETAIL_SHELL_SCOPE = {
 	CREATIONS: 'creations',
@@ -54,6 +54,9 @@ export function defaultScopesForCreationShellSyncReason(reason) {
 				CREATION_DETAIL_SHELL_SCOPE.CREATION,
 			];
 		case 'status-changed':
+		case 'mutate-submitted':
+		case 'create-submitted':
+		case 'create-completed':
 			return [
 				CREATION_DETAIL_SHELL_SCOPE.CREATIONS,
 				CREATION_DETAIL_SHELL_SCOPE.CHAT_CREATIONS,
