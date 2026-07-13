@@ -60,6 +60,7 @@ let canSetVideoPosterFromFirstFrame;
 let videoHeroDimensionsFromCreation;
 let captureVideoFirstFrameFile;
 let openShareAudioModal;
+let openAdjustImageModal;
 
 /** Set true locally when debugging creation-detail page load timing in the console. */
 const CREATION_DETAIL_LOG_PAGE_LOAD_TIMING = false;
@@ -152,6 +153,16 @@ function creationDetailPageHasOpenEscapeTarget() {
 
 	const setAvatarModal = document.querySelector('[data-set-avatar-modal]');
 	if (setAvatarModal instanceof HTMLElement && setAvatarModal.getAttribute('aria-hidden') === 'false') {
+		return true;
+	}
+
+	const adjustImageModal = document.querySelector('[data-adjust-image-modal]');
+	if (adjustImageModal instanceof HTMLElement && adjustImageModal.classList.contains('open')) {
+		return true;
+	}
+
+	const queueFromFrameModal = document.querySelector('[data-queue-from-frame-modal]');
+	if (queueFromFrameModal instanceof HTMLElement && queueFromFrameModal.classList.contains('open')) {
 		return true;
 	}
 
@@ -366,6 +377,9 @@ async function loadDeps() {
 
 		const shareAudioMod = await import(`/shared/shareAudioModal.js${qs}`);
 		openShareAudioModal = shareAudioMod.openShareAudioModal;
+
+		const adjustImageMod = await import(`/shared/adjustImageModal.js${qs}`);
+		openAdjustImageModal = adjustImageMod.openAdjustImageModal;
 	})();
 	return _depsPromise;
 }
@@ -881,6 +895,23 @@ function getCreationDetailMoreMenuItemDefs() {
 	<circle cx="12" cy="7" r="4"></circle>
 </svg>`,
 		label: 'Set as profile picture'
+	},
+	{
+		action: 'adjust-image',
+		show: (d) => d.actionsContext?.showAdjustImage,
+		icon: html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+	stroke-linejoin="round" aria-hidden="true">
+	<line x1="4" y1="21" x2="4" y2="14"></line>
+	<line x1="4" y1="10" x2="4" y2="3"></line>
+	<line x1="12" y1="21" x2="12" y2="12"></line>
+	<line x1="12" y1="8" x2="12" y2="3"></line>
+	<line x1="20" y1="21" x2="20" y2="16"></line>
+	<line x1="20" y1="12" x2="20" y2="3"></line>
+	<line x1="1" y1="14" x2="7" y2="14"></line>
+	<line x1="9" y1="8" x2="15" y2="8"></line>
+	<line x1="17" y1="16" x2="23" y2="16"></line>
+</svg>`,
+		label: 'Adjust Image'
 	},
 	{
 		action: 'landscape',
@@ -3132,6 +3163,13 @@ async function loadCreation() {
 			Boolean(creation.video_url) &&
 			typeof canSetVideoPosterFromFirstFrame === 'function' &&
 			canSetVideoPosterFromFirstFrame(creation);
+		const showAdjustImage =
+			canEdit &&
+			!adminViewingUserDeleted &&
+			status === 'completed' &&
+			!isFailed &&
+			mediaType === 'image' &&
+			Boolean(creation.url);
 		const showAdminVideoTools = isAdmin && !adminViewingUserDeleted && (status === 'completed' || status === 'failed' || status === 'creating');
 		const normalizedImageUrlForQueue = showQueueForLater ? normalizeImageUrlForQueue(creation.url) : '';
 		let isQueuedForLater = false;
@@ -3172,6 +3210,7 @@ async function loadCreation() {
 			showQueueForLater,
 			showQueueFromFrame,
 			showSetVideoPoster,
+			showAdjustImage,
 			showRecreate: false,
 			queueForLaterLabel,
 			isFailed,
@@ -3185,6 +3224,7 @@ async function loadCreation() {
 			actionsContext.showRetry = false;
 			actionsContext.showQueueFromFrame = false;
 			actionsContext.showSetVideoPoster = false;
+			actionsContext.showAdjustImage = false;
 		}
 		const groupSourcesRaw = Array.isArray(groupMeta?.source_creations) ? groupMeta.source_creations : [];
 		const groupSourcesMapped = groupSourcesRaw
@@ -5420,6 +5460,39 @@ async function loadCreation() {
 							uploadImageFile,
 							addToMutateQueue,
 							showToast,
+						});
+					},
+					'adjust-image': async () => {
+						if (!actionsContext.showAdjustImage || !creation.url) return;
+						closeMobileMoreMenu();
+						await loadDeps();
+						if (typeof openAdjustImageModal !== 'function') return;
+						openAdjustImageModal({
+							imageUrl: String(creation.url),
+							sourceId: Number(creationId),
+							showToast,
+							onSave: async (file, adjustments) => {
+								const formData = new FormData();
+								formData.append('image', file);
+								formData.append('brightness', String(adjustments.brightness));
+								formData.append('contrast', String(adjustments.contrast));
+								formData.append('saturation', String(adjustments.saturation));
+								const res = await fetch(`/api/create/images/${encodeURIComponent(creationId)}/adjust`, {
+									method: 'POST',
+									credentials: 'include',
+									body: formData,
+								});
+								const data = await res.json().catch(() => ({}));
+								if (!res.ok) {
+									throw new Error(data?.message || data?.error || 'Could not save adjusted image');
+								}
+								const newId = Number(data?.id);
+								if (!Number.isFinite(newId) || newId <= 0) {
+									throw new Error('Could not save adjusted image');
+								}
+								showToast('Adjusted image saved');
+								navigateCreationDetail(`/creations/${newId}`);
+							},
 						});
 					},
 					'set-video-poster': async () => {
