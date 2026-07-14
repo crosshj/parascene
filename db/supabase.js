@@ -962,7 +962,7 @@ export function openDb() {
 			}
 		},
 		insertOauthClient: {
-			run: async ({ ownerUserId, clientId, name, redirectUrisJson }) => {
+			run: async ({ ownerUserId, clientId, name, redirectUrisJson, meta }) => {
 				let urs = redirectUrisJson;
 				if (typeof redirectUrisJson === "string") {
 					try {
@@ -972,14 +972,18 @@ export function openDb() {
 					}
 				}
 				if (!Array.isArray(urs)) urs = [];
+				const row = {
+					owner_user_id: ownerUserId,
+					client_id: clientId,
+					name,
+					redirect_uris: urs
+				};
+				if (meta != null && typeof meta === "object" && !Array.isArray(meta)) {
+					row.meta = meta;
+				}
 				const { data, error } = await serviceClient
 					.from(prefixedTable("oauth_clients"))
-					.insert({
-						owner_user_id: ownerUserId,
-						client_id: clientId,
-						name,
-						redirect_uris: urs
-					})
+					.insert(row)
 					.select("id")
 					.single();
 				if (error) throw error;
@@ -1032,7 +1036,7 @@ export function openDb() {
 			}
 		},
 		updateOauthClientForOwner: {
-			run: async (internalId, ownerUserId, { name, redirectUrisJson }) => {
+			run: async (internalId, ownerUserId, { name, redirectUrisJson, meta }) => {
 				let urs = redirectUrisJson;
 				if (typeof redirectUrisJson === "string") {
 					try {
@@ -1042,12 +1046,16 @@ export function openDb() {
 					}
 				}
 				if (!Array.isArray(urs)) urs = [];
+				const patch = {
+					name,
+					redirect_uris: urs
+				};
+				if (meta != null && typeof meta === "object" && !Array.isArray(meta)) {
+					patch.meta = meta;
+				}
 				const { error } = await serviceClient
 					.from(prefixedTable("oauth_clients"))
-					.update({
-						name,
-						redirect_uris: urs
-					})
+					.update(patch)
 					.eq("id", internalId)
 					.eq("owner_user_id", ownerUserId);
 				if (error) throw error;

@@ -3,7 +3,14 @@ title: Log in with Parascene (developer)
 description: Register an app you build, PKCE, tokens, and where users revoke access
 ---
 
-Third-party apps can use an authorization-code flow with PKCE. End users sign in on Parascene and approve access; **your server** exchanges the code using **your** Parascene API key (`psn_…`) and receives short-lived access tokens to call APIs as that user. Users revoke access on the **Connections** page (`/integrations`, account menu) under **Sites & apps you use**. Your Parascene API key for token exchange is on the same page under **API & credentials**.
+Third-party apps can use an authorization-code flow with PKCE. End users sign in on Parascene and approve access; your app then exchanges the code for short-lived access tokens to call APIs as that user.
+
+There are two client types:
+
+- **Confidential** (web backends): exchange the code on **your server** using **your** Parascene API key (`psn_…`). Never put `psn_` in a browser or shipped binary.
+- **Public / native** (desktop & mobile): register the app as a public client. Exchange with **PKCE only** (`client_id` + `code_verifier`)—no developer API key in the app.
+
+Users revoke access on the **Connections** page (`/integrations`, account menu) under **Sites & apps you use**. Your Parascene API key (for confidential apps) is on the same page under **API & credentials**.
 
 For general API usage (personal API key, route list), see **[API Overview](/help/developer/api)**.
 
@@ -36,16 +43,17 @@ Body (JSON):
 ```json
 {
   "name": "My App",
-  "redirect_uris": ["https://myapp.com/oauth/callback"]
+  "redirect_uris": ["https://myapp.com/oauth/callback"],
+  "client_type": "confidential"
 }
 ```
 
-The response includes **`client_id`** (public). Save it.
+For a desktop or mobile app that cannot hold a developer API key, set `"client_type": "public"` (or `"public_client": true`). The response includes **`client_id`** (public) and **`client_type`**. Save it.
 
-- `PATCH /api/integration/apps/:client_id` — update `name` and/or `redirect_uris` (same JSON shape).
+- `PATCH /api/integration/apps/:client_id` — update `name`, `redirect_uris`, and/or `client_type` (same JSON shape).
 - `DELETE /api/integration/apps/:client_id` — remove the app registration.
 
-Redirect URIs must **exactly** match the callback URL you use (scheme, host, path). Register `http://localhost:PORT/path` for local development if needed.
+Redirect URIs must **exactly** match the callback URL you use (scheme, host, path). Register `http://127.0.0.1:PORT/path` or `http://localhost:PORT/path` for local development if needed.
 
 ## Authorization URL (browser)
 
@@ -67,14 +75,23 @@ Generate **`code_verifier`** (43–128 characters) and keep it server-side until
 
 If the user is not signed in, they are redirected to sign in and then returned to this authorize URL. Users who have not finished onboarding may be sent to **Welcome** first.
 
-## Token endpoint (server only)
+## Token endpoint
 
 `POST /oauth/token`
+
+`Content-Type: application/x-www-form-urlencoded` (JSON bodies are also accepted).
+
+### Confidential apps
 
 Headers:
 
 - `Authorization: Bearer psn_<your developer API key>`
-- `Content-Type: application/x-www-form-urlencoded`
+
+The API key must belong to the **same account** that registered `client_id`.
+
+### Public / native apps
+
+No `Authorization` header. Identify the app with `client_id` and prove possession of the PKCE verifier (authorization code grant) or a valid refresh token.
 
 **Authorization code exchange** (`grant_type=authorization_code`):
 
@@ -86,11 +103,9 @@ Headers:
 | `redirect_uri` | Same URI as in `/oauth/authorize` |
 | `code_verifier` | Your PKCE verifier |
 
-The API key must belong to the **same account** that registered `client_id`.
-
 Success returns JSON: `access_token`, `token_type`, `expires_in` (about 15 minutes), `refresh_token`, `scope`.
 
-**Refresh** (`grant_type=refresh_token`): send `client_id`, `refresh_token` (`prt_…`), same `Authorization: Bearer psn_…`. Store the latest refresh token if a new one is returned.
+**Refresh** (`grant_type=refresh_token`): send `client_id` and `refresh_token` (`prt_…`). Confidential apps still require the API key header; public apps do not. Store the latest refresh token if a new one is returned.
 
 Errors use `error` and `error_description` (OAuth-style).
 
@@ -116,5 +131,6 @@ Users remove access on **Connections** under **Sites & apps you use**. After rev
 
 - Always send `state` and verify it on callback.
 - Use PKCE (`S256`).
-- Never expose `psn_` or `prt_` tokens in frontend code.
-- Use HTTPS redirect URIs in production.
+- Use a **public** client for native apps; never put `psn_` in a shipped desktop/mobile binary.
+- For confidential (server) apps, never expose `psn_` or `prt_` tokens in frontend code.
+- Use HTTPS redirect URIs in production (loopback `http://127.0.0.1` is fine for local native apps).

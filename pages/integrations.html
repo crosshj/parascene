@@ -67,8 +67,9 @@
 		<section class="integrations-section integrations-section--dev" aria-labelledby="integrations-dev-heading">
 			<h4 id="integrations-dev-heading" class="integrations-section-title">Apps you build</h4>
 			<p class="integrations-intro">
-				For developers: each registered app gets a public ID and redirect URLs. Exchange authorization codes on
-				<strong>your server</strong> with your Parascene API key—never in the browser.
+				For developers: each registered app gets a public ID and redirect URLs. Server apps exchange codes with
+				your Parascene API key. Native / desktop apps can be marked
+				<strong>public</strong> and exchange with PKCE only (no API key in the app).
 			</p>
 			<p class="integrations-toolbar integrations-toolbar--actions">
 				<button type="button" class="btn-primary" data-open-register-dialog>Register an app</button>
@@ -114,6 +115,10 @@
 				placeholder="https://myapp.com/oauth/callback"
 				data-dialog-uris
 			></textarea>
+			<label class="integrations-dialog-check">
+				<input type="checkbox" data-dialog-public-client />
+				Native / public client (desktop &amp; mobile — token exchange with PKCE only, no API key)
+			</label>
 			<div class="integrations-dialog-actions">
 				<button type="button" class="btn-primary" data-dialog-save>Save</button>
 				<button type="button" class="btn-secondary" data-dialog-cancel>Cancel</button>

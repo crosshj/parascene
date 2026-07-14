@@ -70,6 +70,39 @@ function escapeHtml(s) {
 		.replace(/'/g, "&#39;");
 }
 
+function parseClientMeta(raw) {
+	if (raw && typeof raw === "object" && !Array.isArray(raw)) return { ...raw };
+	if (typeof raw === "string") {
+		try {
+			const j = JSON.parse(raw);
+			if (j && typeof j === "object" && !Array.isArray(j)) return { ...j };
+		} catch {
+			/* ignore */
+		}
+	}
+	return {};
+}
+
+/** Public/native clients exchange tokens with PKCE only (no psn_ developer key). */
+function isPublicOauthClient(row) {
+	const meta = parseClientMeta(row?.meta);
+	return meta.client_type === "public" || meta.token_endpoint_auth_method === "none";
+}
+
+function clientTypeFromBody(body, fallback = "confidential") {
+	if (body?.public_client === true || body?.client_type === "public") return "public";
+	if (body?.public_client === false || body?.client_type === "confidential") return "confidential";
+	if (typeof body?.client_type === "string") {
+		const t = body.client_type.trim().toLowerCase();
+		if (t === "public" || t === "confidential") return t;
+	}
+	return fallback;
+}
+
+function clientTypeFromRow(row) {
+	return isPublicOauthClient(row) ? "public" : "confidential";
+}
+
 function oauthParamsFromQuery(q) {
 	const response_type = typeof q.response_type === "string" ? q.response_type.trim() : "";
 	const client_id = typeof q.client_id === "string" ? q.client_id.trim() : "";
@@ -154,6 +187,7 @@ export default function createOAuthIntegrationRoutes({ queries }) {
 				client_id: r.client_id,
 				name: r.name,
 				redirect_uris: parseRedirectUris(r.redirect_uris),
+				client_type: clientTypeFromRow(r),
 				created_at: r.created_at
 			}));
 			return res.json({ apps: out });
@@ -196,18 +230,25 @@ export default function createOAuthIntegrationRoutes({ queries }) {
 		}
 		const clientId = crypto.randomUUID();
 		const redirectUrisJson = JSON.stringify(redirectStrings);
+		const clientType = clientTypeFromBody(body, "confidential");
+		const meta = { client_type: clientType };
+		if (clientType === "public") {
+			meta.token_endpoint_auth_method = "none";
+		}
 		try {
 			await queries.insertOauthClient.run({
 				ownerUserId: req.auth.userId,
 				clientId,
 				name,
-				redirectUrisJson
+				redirectUrisJson,
+				meta
 			});
 			return res.status(201).json({
 				ok: true,
 				client_id: clientId,
 				name,
-				redirect_uris: redirectStrings
+				redirect_uris: redirectStrings,
+				client_type: clientType
 			});
 		} catch (err) {
 			console.error("[POST /api/integration/apps]", err);
@@ -251,12 +292,30 @@ export default function createOAuthIntegrationRoutes({ queries }) {
 				return res.status(400).json({ error: "Invalid redirect_uri" });
 			}
 		}
+		const prevMeta = parseClientMeta(row.meta);
+		const clientType = clientTypeFromBody(body, clientTypeFromRow(row));
+		const meta = {
+			...prevMeta,
+			client_type: clientType
+		};
+		if (clientType === "public") {
+			meta.token_endpoint_auth_method = "none";
+		} else {
+			delete meta.token_endpoint_auth_method;
+		}
 		try {
 			await queries.updateOauthClientForOwner.run(row.id, req.auth.userId, {
 				name,
-				redirectUrisJson: JSON.stringify(redirectStrings)
+				redirectUrisJson: JSON.stringify(redirectStrings),
+				meta
 			});
-			return res.json({ ok: true, client_id: publicClientId, name, redirect_uris: redirectStrings });
+			return res.json({
+				ok: true,
+				client_id: publicClientId,
+				name,
+				redirect_uris: redirectStrings,
+				client_type: clientType
+			});
 		} catch (err) {
 			console.error("[PATCH /api/integration/apps/:clientId]", err);
 			return res.status(500).json({ error: "Server error", message: err?.message });
@@ -481,7 +540,9 @@ export default function createOAuthIntegrationRoutes({ queries }) {
 		return res.redirect(302, dest.toString());
 	});
 
-	// ——— Token endpoint (integrator uses psn_ API key) ———
+	// ——— Token endpoint ———
+	// Confidential apps: Authorization Bearer psn_… (developer API key)
+	// Public/native apps: PKCE only (client_id + code_verifier / refresh_token)
 
 	router.post("/oauth/token", async (req, res) => {
 		if (
@@ -494,23 +555,40 @@ export default function createOAuthIntegrationRoutes({ queries }) {
 		) {
 			return res.status(503).json({ error: "server_error", error_description: "OAuth not configured" });
 		}
-		if (!req.auth?.userId || !req.auth?.apiKeyAuth) {
-			return res.status(401).json({
-				error: "invalid_client",
-				error_description: "Use Authorization: Bearer with your Parascene API key (psn_…)."
-			});
-		}
 
 		const body = req.body && typeof req.body === "object" ? req.body : {};
 		const grant_type = typeof body.grant_type === "string" ? body.grant_type.trim() : "";
 		const client_id = typeof body.client_id === "string" ? body.client_id.trim() : "";
 
+		if (!client_id) {
+			return res.status(400).json({
+				error: "invalid_request",
+				error_description: "client_id is required"
+			});
+		}
+
 		const appRow = await queries.selectOauthClientByPublicClientId.get(client_id);
-		if (!appRow || Number(appRow.owner_user_id) !== Number(req.auth.userId)) {
+		if (!appRow) {
 			return res.status(401).json({
 				error: "invalid_client",
-				error_description: "client_id does not match API key owner"
+				error_description: "Unknown client_id"
 			});
+		}
+
+		const isPublic = isPublicOauthClient(appRow);
+		if (!isPublic) {
+			if (!req.auth?.userId || !req.auth?.apiKeyAuth) {
+				return res.status(401).json({
+					error: "invalid_client",
+					error_description: "Use Authorization: Bearer with your Parascene API key (psn_…)."
+				});
+			}
+			if (Number(appRow.owner_user_id) !== Number(req.auth.userId)) {
+				return res.status(401).json({
+					error: "invalid_client",
+					error_description: "client_id does not match API key owner"
+				});
+			}
 		}
 
 		if (grant_type === "authorization_code") {

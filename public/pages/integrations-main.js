@@ -105,14 +105,20 @@ function renderAppCard(app) {
 	const id = app.client_id;
 	const uris = Array.isArray(app.redirect_uris) ? app.redirect_uris : [];
 	const uriItems = uris.map((u) => `<li>${escapeHtml(u)}</li>`).join('');
+	const clientType = app.client_type === 'public' ? 'public' : 'confidential';
+	const typeLabel =
+		clientType === 'public'
+			? 'Native / public (PKCE only)'
+			: 'Confidential (API key for token exchange)';
 	return `
-<div class="integrations-card" data-client-id="${escapeHtml(id)}">
+<div class="integrations-card" data-client-id="${escapeHtml(id)}" data-client-type="${escapeHtml(clientType)}">
 	<h4 class="integrations-card-title">${escapeHtml(app.name || 'App')}</h4>
 	<div class="integrations-client-row">
 		<span class="integrations-client-label">Public app ID</span>
 		<code>${escapeHtml(id)}</code>
 		<button type="button" class="btn-secondary" data-action="copy" title="Copy app ID">Copy</button>
 	</div>
+	<p class="integrations-client-type">${escapeHtml(typeLabel)}</p>
 	<p class="integrations-uri-caption">Redirect URLs</p>
 	<ul class="integrations-uri-list">${uriItems || '<li>(none)</li>'}</ul>
 	<div class="integrations-actions">
@@ -224,6 +230,7 @@ async function main() {
 	const dialogTitle = dialogEl?.querySelector('[data-dialog-title]');
 	const dialogName = dialogEl?.querySelector('[data-dialog-name]');
 	const dialogUris = dialogEl?.querySelector('[data-dialog-uris]');
+	const dialogPublicClient = dialogEl?.querySelector('[data-dialog-public-client]');
 	const dialogClientWrap = dialogEl?.querySelector('[data-dialog-client-id-wrap]');
 	const dialogClientId = dialogEl?.querySelector('[data-dialog-client-id]');
 	const btnSave = dialogEl?.querySelector('[data-dialog-save]');
@@ -255,6 +262,7 @@ async function main() {
 		if (dialogClientWrap) dialogClientWrap.hidden = true;
 		if (dialogName) dialogName.value = '';
 		if (dialogUris) dialogUris.value = '';
+		if (dialogPublicClient) dialogPublicClient.checked = false;
 		dialogEl?.showModal?.();
 		dialogName?.focus?.();
 	}
@@ -270,6 +278,7 @@ async function main() {
 		}
 		if (dialogName) dialogName.value = typeof app.name === 'string' ? app.name : '';
 		if (dialogUris) dialogUris.value = uris.join('\n');
+		if (dialogPublicClient) dialogPublicClient.checked = app.client_type === 'public';
 		dialogEl?.showModal?.();
 		dialogName?.focus?.();
 	}
@@ -297,6 +306,7 @@ async function main() {
 	btnSave?.addEventListener('click', async () => {
 		const name = typeof dialogName?.value === 'string' ? dialogName.value.trim() : '';
 		const uris = parseUriLines(dialogUris?.value);
+		const client_type = dialogPublicClient?.checked ? 'public' : 'confidential';
 		const bad = validateRedirectUris(uris);
 		if (!name) {
 			setStatus(statusEl, 'Enter a display name.', 'error');
@@ -315,7 +325,7 @@ async function main() {
 		if (editingPublicClientId) {
 			const res = await fetchJson(`/api/integration/apps/${encodeURIComponent(editingPublicClientId)}`, {
 				method: 'PATCH',
-				body: JSON.stringify({ name, redirect_uris: uris })
+				body: JSON.stringify({ name, redirect_uris: uris, client_type })
 			});
 			if (!res.ok) {
 				setStatus(statusEl, res.data?.message || res.data?.error || 'Could not save.', 'error');
@@ -330,7 +340,7 @@ async function main() {
 		if (btnSave) btnSave.disabled = true;
 		const res = await fetchJson('/api/integration/apps', {
 			method: 'POST',
-			body: JSON.stringify({ name, redirect_uris: uris })
+			body: JSON.stringify({ name, redirect_uris: uris, client_type })
 		});
 		if (btnSave) btnSave.disabled = false;
 		if (!res.ok) {
