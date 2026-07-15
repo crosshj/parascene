@@ -4288,7 +4288,9 @@ export default function createCreateRoutes({ queries, storage }) {
 		}
 	});
 
-	// POST /api/create/images/:id/fit-thumbnail — generate fit thumb for one creation.
+	// POST /api/create/images/:id/fit-thumbnail
+	// Generate fit from stored full image/poster, OR accept a client-provided native-aspect JPEG
+	// (`image_base64` / multipart `image`) — used when desktop heals from local video frames.
 	router.post("/api/create/images/:id/fit-thumbnail", async (req, res) => {
 		const user = await requireUser(req, res);
 		if (!user) return;
@@ -4309,15 +4311,61 @@ export default function createCreateRoutes({ queries, storage }) {
 			if (!storageFilename) {
 				return res.status(400).json({ error: "No storage filename for creation" });
 			}
-			const fullBuffer = await storage.getImageBuffer(storageFilename, {});
-			const sharpMeta = await sharp(fullBuffer, { failOn: "none" }).metadata();
+
+			let sourceBuffer = null;
+			let fromClient = false;
+
+			if (req.is("multipart/form-data")) {
+				const maxBytes = 8 * 1024 * 1024;
+				const { files } = await parseMultipartCreate(req, { maxFileBytes: maxBytes });
+				const imageFile = files?.image;
+				if (imageFile && Buffer.isBuffer(imageFile.buffer) && imageFile.buffer.length > 0) {
+					sourceBuffer = imageFile.buffer;
+					fromClient = true;
+				}
+			} else if (typeof req.body?.image_base64 === "string" && req.body.image_base64.trim()) {
+				const raw = req.body.image_base64.trim().replace(/^data:image\/[a-zA-Z0-9+.-]+;base64,/, "");
+				try {
+					sourceBuffer = Buffer.from(raw, "base64");
+					fromClient = true;
+				} catch {
+					return res.status(400).json({ error: "Invalid image_base64" });
+				}
+				if (!sourceBuffer.length) {
+					return res.status(400).json({ error: "Empty image_base64" });
+				}
+				if (sourceBuffer.length > 8 * 1024 * 1024) {
+					return res.status(400).json({ error: "Image too large" });
+				}
+			}
+
+			if (!sourceBuffer) {
+				sourceBuffer = await storage.getImageBuffer(storageFilename, {
+					throwIfMissing: true
+				});
+			}
+
+			const sharpMeta = await sharp(sourceBuffer, { failOn: "none" }).metadata();
 			const bw = Number(sharpMeta.width) || 0;
 			const bh = Number(sharpMeta.height) || 0;
 			if (bw > 0 && bh > 0 && !shouldGenerateFitThumbnail(bw, bh)) {
+				if (fromClient) {
+					return res.status(400).json({
+						error: "Uploaded fit thumbnail is square; expected native aspect"
+					});
+				}
 				return res.json({ ok: true, skipped: true, reason: "square", id });
 			}
-			await storage.uploadFitThumbnail(fullBuffer, storageFilename);
-			return res.json({ ok: true, id, filename: storageFilename });
+
+			await storage.uploadFitThumbnail(sourceBuffer, storageFilename);
+			return res.json({
+				ok: true,
+				id,
+				filename: storageFilename,
+				from_client: fromClient,
+				width: bw || null,
+				height: bh || null
+			});
 		} catch (error) {
 			console.error("fit-thumbnail failed:", error);
 			if (error?.message && String(error.message).includes("not found")) {
