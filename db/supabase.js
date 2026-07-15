@@ -5,6 +5,7 @@ import { RELATED_PARAM_DEFAULTS, RELATED_PARAM_KEYS } from "./relatedParams.js";
 import { getThumbnailUrl } from "../api_routes/utils/url.js";
 import {
 	buildFitThumbnailBuffer,
+	fitThumbnailStorageKey,
 	shouldGenerateFitThumbnail,
 } from "../api_routes/utils/fitThumbnail.js";
 import { isRecommendableCreationRow } from "../api_routes/utils/recommendableCreations.js";
@@ -7724,8 +7725,6 @@ export function openDb() {
 	const STORAGE_BUCKET = "prsn_created-images";
 	const STORAGE_BUCKET_ANON = "prsn_created-images-anon";
 	const STORAGE_THUMBNAIL_BUCKET = "prsn_created-images-thumbnails";
-	/** Native-aspect alt thumbs (desktop); same object key as full image. */
-	const STORAGE_FIT_THUMBNAIL_BUCKET = "prsn_created-images-fit-thumbnails";
 	const GENERIC_BUCKET = "prsn_generic-images";
 	const MISC_BUCKET = "prsn_misc";
 
@@ -7744,10 +7743,11 @@ export function openDb() {
 	}
 
 	async function uploadFitThumbnailObject(buffer, filename) {
+		const fitKey = fitThumbnailStorageKey(filename);
 		const fitBuffer = await buildFitThumbnailBuffer(buffer);
 		const { error: fitError } = await storageClient.storage
-			.from(STORAGE_FIT_THUMBNAIL_BUCKET)
-			.upload(filename, fitBuffer, {
+			.from(STORAGE_THUMBNAIL_BUCKET)
+			.upload(fitKey, fitBuffer, {
 				contentType: "image/jpeg",
 				upsert: true
 			});
@@ -7808,11 +7808,12 @@ export function openDb() {
 			return uploadFitThumbnailObject(buffer, filename);
 		},
 
-		/** True when a fit object exists for this storage key. */
+		/** True when a fit object exists for this full-image storage key. */
 		hasFitThumbnail: async (filename) => {
+			const fitKey = fitThumbnailStorageKey(filename);
 			const { data, error } = await storageClient.storage
-				.from(STORAGE_FIT_THUMBNAIL_BUCKET)
-				.download(filename);
+				.from(STORAGE_THUMBNAIL_BUCKET)
+				.download(fitKey);
 			if (error || !data) return false;
 			return true;
 		},
@@ -7873,22 +7874,22 @@ export function openDb() {
 			const variant = String(options?.variant ?? "").trim().toLowerCase();
 			const isThumbnail = variant === "thumbnail";
 			const isFit = variant === "fit";
-			const bucket = isFit
-				? STORAGE_FIT_THUMBNAIL_BUCKET
-				: isThumbnail
-					? STORAGE_THUMBNAIL_BUCKET
-					: STORAGE_BUCKET;
+			const bucket = isThumbnail || isFit ? STORAGE_THUMBNAIL_BUCKET : STORAGE_BUCKET;
+			const objectKey = isFit ? fitThumbnailStorageKey(filename) : filename;
 			// Fetch image from Supabase Storage and return as buffer
 			// Uses storage client (service role if available) to access private bucket
-			const { data, error } = await storageClient.storage
+			let { data, error } = await storageClient.storage
 				.from(bucket)
-				.download(filename);
+				.download(objectKey);
+
+			// Fit is optional — fall back to the square thumb key when _fit.jpg is missing.
+			if (error && isFit) {
+				({ data, error } = await storageClient.storage
+					.from(STORAGE_THUMBNAIL_BUCKET)
+					.download(filename));
+			}
 
 			if (error) {
-				// Fit is optional — never invent a gray placeholder (clients fall back to square).
-				if (isFit) {
-					throw new Error(`Fit thumbnail not found: ${filename}`);
-				}
 				// console.error("Supabase image fetch failed, serving fallback image.", {
 				// 	bucket,
 				// 		filename,

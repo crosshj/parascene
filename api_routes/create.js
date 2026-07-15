@@ -378,9 +378,15 @@ export default function createCreateRoutes({ queries, storage }) {
 					: (resolveCreatedImageStorageFilename(image) || filename);
 			const imageBuffer = await storage.getImageBuffer(storageFilename, { variant });
 			if (wantsFit) {
-				res.setHeader("Content-Type", "image/jpeg");
+				res.setHeader(
+					"Content-Type",
+					isPng(imageBuffer) ? "image/png" : "image/jpeg"
+				);
 				res.setHeader("Cache-Control", "public, max-age=3600");
-				return res.send(imageBuffer);
+				const body = isPng(imageBuffer)
+					? await ensurePngBuffer(imageBuffer)
+					: imageBuffer;
+				return res.send(body);
 			}
 			const png = await ensurePngBuffer(imageBuffer);
 

@@ -1,3 +1,4 @@
+import path from "path";
 import sharp from "sharp";
 import {
 	ASPECT_RATIO_PRESETS,
@@ -9,6 +10,22 @@ import {
 /** Long edge for native-aspect (`fit`) board thumbs. */
 export const FIT_THUMB_LONG_EDGE = 720;
 export const FIT_THUMB_JPEG_QUALITY = 85;
+
+/**
+ * Storage key for native-aspect fit thumb in the thumbnail bucket.
+ * Square thumb keeps the full-image filename; fit uses `{base}_fit.jpg`.
+ * @param {string} filename — full image or square-thumb storage key
+ * @returns {string}
+ */
+export function fitThumbnailStorageKey(filename) {
+	const raw = String(filename || "").trim();
+	if (!raw) return "";
+	const ext = path.extname(raw);
+	const dir = path.dirname(raw);
+	const base = path.basename(raw, ext);
+	const key = `${base}_fit.jpg`;
+	return dir && dir !== "." ? path.join(dir, key) : key;
+}
 
 /**
  * True when pixel dims (or closest MVP preset) are square — skip fit generation.

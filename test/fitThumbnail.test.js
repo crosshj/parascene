@@ -3,6 +3,7 @@ import sharp from "sharp";
 import {
 	aspectRatioForGroupFirstSource,
 	buildFitThumbnailBuffer,
+	fitThumbnailStorageKey,
 	shouldGenerateFitThumbnail,
 	withGroupAspectRatioFromFirst,
 	FIT_THUMB_LONG_EDGE,
@@ -19,6 +20,15 @@ describe("fit thumbnail helpers", () => {
 		expect(shouldGenerateFitThumbnail(1024, 1024)).toBe(false);
 		expect(shouldGenerateFitThumbnail(576, 1024)).toBe(true);
 		expect(shouldGenerateFitThumbnail(1920, 1080)).toBe(true);
+	});
+
+	it("fitThumbnailStorageKey uses _fit.jpg beside square key in same bucket", () => {
+		expect(fitThumbnailStorageKey("26_18161_1784092010983_53r10vg.png")).toBe(
+			"26_18161_1784092010983_53r10vg_fit.jpg"
+		);
+		expect(fitThumbnailStorageKey("landscape/26_99_x.png")).toBe(
+			"landscape/26_99_x_fit.jpg"
+		);
 	});
 
 	it("builds a long-edge JPEG preserving aspect", async () => {
