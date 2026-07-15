@@ -3,6 +3,10 @@ import path from "path";
 import sharp from "sharp";
 import { RELATED_PARAM_DEFAULTS, RELATED_PARAM_KEYS } from "./relatedParams.js";
 import { getThumbnailUrl } from "../api_routes/utils/url.js";
+import {
+	buildFitThumbnailBuffer,
+	shouldGenerateFitThumbnail,
+} from "../api_routes/utils/fitThumbnail.js";
 import { isRecommendableCreationRow } from "../api_routes/utils/recommendableCreations.js";
 import { putAnchorCreationFirst } from "../api_routes/feed/doomSiteVideoTimeline.js";
 import { createSelectFeedBetaSitewideCatalog } from "./feedBetaSitewideCatalog.js";
@@ -7720,6 +7724,8 @@ export function openDb() {
 	const STORAGE_BUCKET = "prsn_created-images";
 	const STORAGE_BUCKET_ANON = "prsn_created-images-anon";
 	const STORAGE_THUMBNAIL_BUCKET = "prsn_created-images-thumbnails";
+	/** Native-aspect alt thumbs (desktop); same object key as full image. */
+	const STORAGE_FIT_THUMBNAIL_BUCKET = "prsn_created-images-fit-thumbnails";
 	const GENERIC_BUCKET = "prsn_generic-images";
 	const MISC_BUCKET = "prsn_misc";
 
@@ -7735,6 +7741,20 @@ export function openDb() {
 		const ext = path.extname(filename);
 		const base = path.basename(filename, ext);
 		return `${base}_th${ext || ""}`;
+	}
+
+	async function uploadFitThumbnailObject(buffer, filename) {
+		const fitBuffer = await buildFitThumbnailBuffer(buffer);
+		const { error: fitError } = await storageClient.storage
+			.from(STORAGE_FIT_THUMBNAIL_BUCKET)
+			.upload(filename, fitBuffer, {
+				contentType: "image/jpeg",
+				upsert: true
+			});
+		if (fitError) {
+			throw new Error(`Failed to upload fit thumbnail to Supabase Storage: ${fitError.message}`);
+		}
+		return true;
 	}
 
 	const storage = {
@@ -7765,9 +7785,36 @@ export function openDb() {
 				throw new Error(`Failed to upload thumbnail to Supabase Storage: ${thumbnailError.message}`);
 			}
 
+			// Native-aspect fit thumb for non-square media (does not replace square thumbnail).
+			try {
+				const dims = await sharp(buffer, { failOn: "none" }).metadata();
+				const w = Number(dims.width) || 0;
+				const h = Number(dims.height) || 0;
+				if (w > 0 && h > 0 && shouldGenerateFitThumbnail(w, h)) {
+					await uploadFitThumbnailObject(buffer, filename);
+				}
+			} catch (fitErr) {
+				// Square thumb already uploaded; fit is additive — log and continue.
+				console.error("Failed to upload fit thumbnail:", fitErr?.message || fitErr);
+			}
+
 			// Return backend route URL instead of public Supabase URL
 			// Images will be served through /api/images/created/:filename
 			return `/api/images/created/${filename}`;
+		},
+
+		/** Upload / overwrite a native-aspect fit thumb from a full image buffer. */
+		uploadFitThumbnail: async (buffer, filename) => {
+			return uploadFitThumbnailObject(buffer, filename);
+		},
+
+		/** True when a fit object exists for this storage key. */
+		hasFitThumbnail: async (filename) => {
+			const { data, error } = await storageClient.storage
+				.from(STORAGE_FIT_THUMBNAIL_BUCKET)
+				.download(filename);
+			if (error || !data) return false;
+			return true;
 		},
 
 		uploadVideo: async (buffer, filename, options = {}) => {
@@ -7823,8 +7870,14 @@ export function openDb() {
 		},
 
 		getImageBuffer: async (filename, options = {}) => {
-			const isThumbnail = options?.variant === "thumbnail";
-			const bucket = isThumbnail ? STORAGE_THUMBNAIL_BUCKET : STORAGE_BUCKET;
+			const variant = String(options?.variant ?? "").trim().toLowerCase();
+			const isThumbnail = variant === "thumbnail";
+			const isFit = variant === "fit";
+			const bucket = isFit
+				? STORAGE_FIT_THUMBNAIL_BUCKET
+				: isThumbnail
+					? STORAGE_THUMBNAIL_BUCKET
+					: STORAGE_BUCKET;
 			// Fetch image from Supabase Storage and return as buffer
 			// Uses storage client (service role if available) to access private bucket
 			const { data, error } = await storageClient.storage
@@ -7832,6 +7885,10 @@ export function openDb() {
 				.download(filename);
 
 			if (error) {
+				// Fit is optional — never invent a gray placeholder (clients fall back to square).
+				if (isFit) {
+					throw new Error(`Fit thumbnail not found: ${filename}`);
+				}
 				// console.error("Supabase image fetch failed, serving fallback image.", {
 				// 	bucket,
 				// 		filename,

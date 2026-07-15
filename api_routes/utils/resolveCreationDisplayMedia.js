@@ -2,7 +2,7 @@ import {
 	parseCreationMeta,
 	extractFilenameFromCreatedImagePath
 } from "./resolveCreatedImageStorageFilename.js";
-import { appendCreationIdToMediaUrl, getThumbnailUrl } from "./url.js";
+import { appendCreationIdToMediaUrl, getFitThumbnailUrl, getThumbnailUrl } from "./url.js";
 
 export function getGroupCoverSource(meta) {
 	const groupPayload = meta?.group && typeof meta.group === "object" ? meta.group : null;
@@ -109,6 +109,7 @@ export function resolveCreationDisplayMediaUrls({ row = {}, meta: metaIn = null,
 	return {
 		url,
 		thumbnail_url: url ? getThumbnailUrl(url) : null,
+		fit_thumbnail_url: url ? getFitThumbnailUrl(url) : null,
 		video_url: videoUrl || null,
 		media_type: mediaType
 	};
@@ -126,6 +127,7 @@ export function mapCreatedImageRowMediaFields(img, { storage = null, includeMeta
 	const out = {
 		url: media.url,
 		thumbnail_url: media.thumbnail_url,
+		fit_thumbnail_url: media.fit_thumbnail_url,
 		video_url: media.video_url,
 		media_type: media.media_type
 	};

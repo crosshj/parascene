@@ -76,9 +76,27 @@ export function getThumbnailUrl(url) {
   }
 }
 
+/** Native-aspect alt thumb for desktop / non-square boards (`?variant=fit`). */
+export function getFitThumbnailUrl(url) {
+  if (!url) return url;
+  try {
+    const parsed = new URL(url, "http://localhost");
+    parsed.searchParams.set("variant", "fit");
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch (error) {
+    const separator = url.includes("?") ? "&" : "?";
+    return `${url}${separator}variant=fit`;
+  }
+}
+
 /** True when client requests the downscaled variant (`?variant=thumbnail`). */
 export function isCreatedMediaThumbnailRequest(variant) {
 	return String(variant ?? "").trim().toLowerCase() === "thumbnail";
+}
+
+/** True when client requests the native-aspect fit thumb (`?variant=fit`). */
+export function isCreatedMediaFitThumbnailRequest(variant) {
+	return String(variant ?? "").trim().toLowerCase() === "fit";
 }
 
 export function appendCreationIdToMediaUrl(url, creationId) {
