@@ -248,6 +248,16 @@ function isPollingHeavyPath(pathname) {
 function isApiKeyRequest(req) {
 	return req?.auth?.apiKeyAuth === true || req?.auth?.integrationAccess === true;
 }
+
+/** Desktop library repair / fit-thumb upload — heavier than typical write traffic. */
+function isLibraryMaintenanceWritePath(pathname) {
+	const p = String(pathname || "");
+	if (p === "/api/create/images/repair-fit-thumbnails") return true;
+	if (p === "/api/create/images/repair-group-aspect") return true;
+	if (/^\/api\/create\/images\/\d+\/fit-thumbnail$/.test(p)) return true;
+	return false;
+}
+
 app.use(
 	createRateLimitMiddleware({
 		bucket: "api-polling",
@@ -292,6 +302,21 @@ app.use(
 );
 app.use(
 	createRateLimitMiddleware({
+		bucket: "api-library-maintenance",
+		windowSec: 60,
+		limit: (req) => {
+			if (!isApiKeyRequest(req)) return null;
+			// Desktop Sync repair + fit uploads need headroom above general writes.
+			return req.auth?.userId ? 180 : 60;
+		},
+		methods: ["POST"],
+		shouldApply: (req) => isApiKeyRequest(req) && isLibraryMaintenanceWritePath(req.path),
+		apiOnly: true,
+		failOpen: true
+	})
+);
+app.use(
+	createRateLimitMiddleware({
 		bucket: "api-write",
 		windowSec: 60,
 		limit: (req) => {
@@ -299,7 +324,7 @@ app.use(
 			return req.auth?.userId ? 40 : 20;
 		},
 		methods: ["POST", "PUT", "PATCH", "DELETE"],
-		shouldApply: isApiKeyRequest,
+		shouldApply: (req) => isApiKeyRequest(req) && !isLibraryMaintenanceWritePath(req.path),
 		apiOnly: true,
 		failOpen: true
 	})
