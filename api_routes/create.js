@@ -4149,9 +4149,13 @@ export default function createCreateRoutes({ queries, storage }) {
 			}
 			const bodyIds = Array.isArray(req.body?.ids) ? req.body.ids : null;
 			const limit = Math.min(50, Math.max(1, parseInt(req.body?.limit, 10) || 25));
+			const offset = Math.max(0, parseInt(req.body?.offset, 10) || 0);
 			const force = req.body?.force === true;
 			const updated = [];
 			const skipped = [];
+			let scanned = 0;
+			let nextOffset = offset;
+			let exhausted = false;
 
 			/** @type {object[]} */
 			let candidates = [];
@@ -4163,21 +4167,32 @@ export default function createCreateRoutes({ queries, storage }) {
 					if (row) candidates.push(row);
 					else skipped.push({ id, reason: "not_found" });
 				}
+				exhausted = true;
 			} else {
-				const pages = Math.ceil(limit / 50);
-				for (let p = 0; p < pages && candidates.length < limit; p++) {
+				// Page through the library until we have `limit` candidates past `offset`
+				// (not just the newest page — older non-square rows must get repaired too).
+				const pageSize = 50;
+				while (candidates.length < limit) {
 					const batch = await queries.selectCreatedImagesForUser.all(user.id, {
-						limit: 50,
-						offset: p * 50,
+						limit: pageSize,
+						offset: nextOffset,
 						viewerEnableNsfw: true
 					});
-					if (!Array.isArray(batch) || batch.length === 0) break;
+					if (!Array.isArray(batch) || batch.length === 0) {
+						exhausted = true;
+						break;
+					}
 					for (const row of batch) {
+						nextOffset += 1;
+						scanned += 1;
 						if ((row.status || "completed") !== "completed") continue;
 						candidates.push(row);
 						if (candidates.length >= limit) break;
 					}
-					if (batch.length < 50) break;
+					if (batch.length < pageSize) {
+						exhausted = true;
+						break;
+					}
 				}
 			}
 
@@ -4186,6 +4201,10 @@ export default function createCreateRoutes({ queries, storage }) {
 				const w = Number(row.width);
 				const h = Number(row.height);
 				const meta = parseMeta(row.meta) || {};
+				const mediaType =
+					typeof meta?.media_type === "string" && meta.media_type.trim()
+						? meta.media_type.trim()
+						: "image";
 				const dimsW = Number.isFinite(w) && w > 0 ? w : null;
 				const dimsH = Number.isFinite(h) && h > 0 ? h : null;
 				if (dimsW && dimsH && !shouldGenerateFitThumbnail(dimsW, dimsH)) {
@@ -4213,9 +4232,15 @@ export default function createCreateRoutes({ queries, storage }) {
 
 				let fullBuffer;
 				try {
-					fullBuffer = await storage.getImageBuffer(storageFilename, {});
+					fullBuffer = await storage.getImageBuffer(storageFilename, {
+						throwIfMissing: true
+					});
 				} catch (e) {
-					skipped.push({ id, reason: "media_missing", detail: e?.message || String(e) });
+					skipped.push({
+						id,
+						reason: mediaType === "video" ? "video_needs_poster_or_local_fill" : "media_missing",
+						detail: e?.message || String(e)
+					});
 					continue;
 				}
 
@@ -4225,7 +4250,13 @@ export default function createCreateRoutes({ queries, storage }) {
 					const bw = Number(sharpMeta.width) || 0;
 					const bh = Number(sharpMeta.height) || 0;
 					if (bw > 0 && bh > 0 && !shouldGenerateFitThumbnail(bw, bh)) {
-						skipped.push({ id, reason: "square" });
+						// Video posters are often square even when the video is 9:16 — cloud
+						// fit can't invent native aspect from a square poster.
+						skipped.push({
+							id,
+							reason: mediaType === "video" ? "square_poster" : "square",
+							detail: `${bw}x${bh}`
+						});
 						continue;
 					}
 				} catch {
@@ -4245,7 +4276,11 @@ export default function createCreateRoutes({ queries, storage }) {
 				updated,
 				skipped,
 				updated_count: updated.length,
-				skipped_count: skipped.length
+				skipped_count: skipped.length,
+				scanned: bodyIds ? candidates.length : scanned,
+				offset,
+				next_offset: nextOffset,
+				exhausted: Boolean(exhausted || (bodyIds && bodyIds.length > 0))
 			});
 		} catch (error) {
 			console.error("repair-fit-thumbnails failed:", error);

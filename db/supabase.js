@@ -7874,6 +7874,7 @@ export function openDb() {
 			const variant = String(options?.variant ?? "").trim().toLowerCase();
 			const isThumbnail = variant === "thumbnail";
 			const isFit = variant === "fit";
+			const throwIfMissing = options?.throwIfMissing === true;
 			const bucket = isThumbnail || isFit ? STORAGE_THUMBNAIL_BUCKET : STORAGE_BUCKET;
 			const objectKey = isFit ? fitThumbnailStorageKey(filename) : filename;
 			// Fetch image from Supabase Storage and return as buffer
@@ -7890,6 +7891,9 @@ export function openDb() {
 			}
 
 			if (error) {
+				if (throwIfMissing || isFit) {
+					throw new Error(`Image not found: ${objectKey}`);
+				}
 				// console.error("Supabase image fetch failed, serving fallback image.", {
 				// 	bucket,
 				// 		filename,
