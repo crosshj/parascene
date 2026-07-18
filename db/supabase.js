@@ -5097,6 +5097,41 @@ export function openDb() {
 				return { changes };
 			}
 		},
+		/** Desktop Library folders: per-user revision + folder membership snapshot. */
+		getLibraryFoldersSnapshot: {
+			get: async (userId) => {
+				const uid = Number(userId);
+				if (!Number.isFinite(uid) || uid <= 0) {
+					return { ok: true, revision: 0, folders: [] };
+				}
+				const { data, error } = await serviceClient.rpc("prsn_library_folders_get_snapshot", {
+					p_user_id: uid
+				});
+				if (error) throw error;
+				if (data && typeof data === "object") return data;
+				return { ok: true, revision: 0, folders: [] };
+			}
+		},
+		mutateLibraryFolders: {
+			run: async (userId, baseRevision, operations) => {
+				const uid = Number(userId);
+				const rev = Number(baseRevision);
+				if (!Number.isFinite(uid) || uid <= 0) {
+					return { ok: false, error: "validation", message: "invalid user_id" };
+				}
+				if (!Number.isFinite(rev) || !Number.isInteger(rev) || rev < 0) {
+					return { ok: false, error: "validation", message: "invalid base_revision" };
+				}
+				const { data, error } = await serviceClient.rpc("prsn_library_folders_mutate", {
+					p_user_id: uid,
+					p_base_revision: rev,
+					p_operations: Array.isArray(operations) ? operations : []
+				});
+				if (error) throw error;
+				if (data && typeof data === "object") return data;
+				return { ok: false, error: "validation", message: "empty mutate response" };
+			}
+		},
 		updateCreatedImageMetaAnyUser: {
 			run: async (id, meta) => {
 				const imageId = Number(id);

@@ -115,6 +115,13 @@ Image and video URLs for creations are returned on API objects; you do not need 
 
 Details: **[API - Chat](/help/developer/api-chat)**
 
+### Library folders (desktop sync)
+
+- `GET` `/api/library/folders`
+- `POST` `/api/library/folders/mutate`
+
+Details: **[API - Library folders](/help/developer/api-library-folders)**
+
 ### Servers
 
 - `GET` `/api/servers`
