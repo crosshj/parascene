@@ -5,6 +5,9 @@ import {
 	parseIso
 } from './constants.js';
 import { MODAL_DISMISS_ICON_SVG } from '../../shared/modalDismiss.js';
+import { dropMissingVoteSlide, shouldSkipVoteSlideForCreation } from './voteSlideSkip.js';
+
+export { dropMissingVoteSlide, shouldSkipVoteSlideForCreation };
 
 /**
  * Set while the vote modal is open. Chat page `popstate` must call
@@ -170,6 +173,14 @@ export function createChallengeVoteModal(opts) {
 	let modalTrack = /** @type {string} */ ('');
 	/** `pushState` layer while modal is open — browser back should close modal. */
 	let voteModalHistoryPushed = false;
+
+	function dropCurrentSlideAsMissing() {
+		const dropped = dropMissingVoteSlide(slides, slideIdx);
+		slides = dropped.slides;
+		slideIdx = dropped.index;
+		lastVoteMediaCreationId = null;
+		syncChrome({ reloadMedia: true });
+	}
 
 	function cancelVoteCommitDebounce() {
 		if (voteCommitTimer != null) {
@@ -615,10 +626,7 @@ export function createChallengeVoteModal(opts) {
 	async function renderMedia(stage, row) {
 		const cid = row.creationId != null ? Number(row.creationId) : NaN;
 		if (!Number.isFinite(cid) || cid <= 0) {
-			setVoteMediaSunoMode(stage, false);
-			stage.innerHTML =
-				'<p class="challenge-vote-modal-media-fallback" role="status">No image for this entry.</p>';
-			lastVoteMediaCreationId = null;
+			dropCurrentSlideAsMissing();
 			return;
 		}
 
@@ -632,11 +640,8 @@ export function createChallengeVoteModal(opts) {
 		const cached = fetchKey && cacheByCreationId.has(fetchKey) ? cacheByCreationId.get(fetchKey) : undefined;
 		if (cached !== undefined) {
 			if (!overlay) return;
-			if (!cached || cached._error) {
-				setVoteMediaSunoMode(stage, false);
-				stage.innerHTML =
-					'<p class="challenge-vote-modal-media-fallback" role="status">Could not load this creation.</p>';
-				lastVoteMediaCreationId = null;
+			if (shouldSkipVoteSlideForCreation(cached)) {
+				dropCurrentSlideAsMissing();
 				return;
 			}
 			injectVoteMediaFromCreation(stage, cached, cid);
@@ -647,11 +652,8 @@ export function createChallengeVoteModal(opts) {
 		stage.innerHTML = '<p class="challenge-vote-modal-media-loading" role="status">Loading…</p>';
 		const c = await fetchCreation(cid, msgId);
 		if (!overlay) return;
-		if (!c || c._error) {
-			setVoteMediaSunoMode(stage, false);
-			stage.innerHTML =
-				'<p class="challenge-vote-modal-media-fallback" role="status">Could not load this creation.</p>';
-			lastVoteMediaCreationId = null;
+		if (shouldSkipVoteSlideForCreation(c)) {
+			dropCurrentSlideAsMissing();
 			return;
 		}
 		injectVoteMediaFromCreation(stage, c, cid);
@@ -752,7 +754,7 @@ export function createChallengeVoteModal(opts) {
 			if (stage instanceof HTMLElement) {
 				setVoteMediaSunoMode(stage, false);
 				stage.innerHTML =
-					'<p class="challenge-vote-modal-media-fallback challenge-vote-modal-media-fallback--empty" role="status">No other entries to score here yet (for example, you may be the only submitter, or every peer entry is already scored). Open Challenges for the full view.</p>';
+					'<p class="challenge-vote-modal-media-fallback challenge-vote-modal-media-fallback--empty" role="status">No entries available to score right now.</p>';
 			}
 			return;
 		}

@@ -81,6 +81,86 @@ export function creationMetaHasChallengeAnnotation(meta, nowMs = Date.now()) {
 }
 
 /**
+ * True when archiving (group/party/delete) would hide a creation that is still
+ * tied to a challenge as an entry, active feed pin, or organizer media.
+ * @param {unknown} meta
+ * @param {number} [nowMs]
+ * @returns {{ blocked: boolean, kind: 'submission' | 'organizer' | null }}
+ */
+export function creationArchiveBlockedByChallenge(meta, nowMs = Date.now()) {
+	if (creationMetaHasChallengeSubmission(meta)) {
+		return { blocked: true, kind: 'submission' };
+	}
+	if (creationMetaHasChallengeOrganizerRef(meta) || creationMetaHasActiveChallengeFeedPin(meta, nowMs)) {
+		return { blocked: true, kind: 'organizer' };
+	}
+	return { blocked: false, kind: null };
+}
+
+/**
+ * @param {'submission' | 'organizer' | string | null | undefined} kind
+ * @param {string} [actionWord] e.g. "grouping", "deleting"
+ * @returns {string | null}
+ */
+export function challengeArchiveBlockMessageForKind(kind, actionWord) {
+	const verb =
+		typeof actionWord === 'string' && actionWord.trim() ? actionWord.trim() : 'changing it';
+	if (kind === 'submission') {
+		return `This creation is entered in a challenge. Remove it from the challenge before ${verb}.`;
+	}
+	if (kind === 'organizer') {
+		return `This creation is used by a challenge (hero, results, theme vote, or feed pin). Clear that use before ${verb}.`;
+	}
+	return null;
+}
+
+/**
+ * @param {unknown} meta
+ * @param {string} [actionWord]
+ * @param {number} [nowMs]
+ * @returns {string | null}
+ */
+export function challengeArchiveBlockMessage(meta, actionWord, nowMs = Date.now()) {
+	const block = creationArchiveBlockedByChallenge(meta, nowMs);
+	if (!block.blocked) return null;
+	return challengeArchiveBlockMessageForKind(block.kind, actionWord);
+}
+
+/**
+ * Drop challenge stamps so a new group row does not inherit entry/pin/organizer state
+ * from the first source's meta.
+ * @param {unknown} meta
+ * @returns {object}
+ */
+export function stripChallengeStampsFromCreationMeta(meta) {
+	const base = meta && typeof meta === 'object' && !Array.isArray(meta) ? { ...meta } : {};
+	delete base.challenge_submissions;
+	delete base.challenge_feed_pins;
+	delete base.challenge_organizer_refs;
+	return base;
+}
+
+/**
+ * @param {unknown} meta
+ * @returns {number[]}
+ */
+export function groupSourceCreationIdsFromMeta(meta) {
+	const group = meta?.group && typeof meta.group === 'object' ? meta.group : null;
+	if (!group || group.kind !== 'group_creations') return [];
+	const fromIds = Array.isArray(group.source_creation_ids) ? group.source_creation_ids : [];
+	const fromSources = Array.isArray(group.source_creations) ? group.source_creations : [];
+	const out = [];
+	const seen = new Set();
+	for (const raw of [...fromIds, ...fromSources.map((s) => s?.id)]) {
+		const id = Number(raw);
+		if (!Number.isFinite(id) || id <= 0 || seen.has(id)) continue;
+		seen.add(id);
+		out.push(id);
+	}
+	return out;
+}
+
+/**
  * Upsert one feed-pin stamp onto creation meta (idempotent by pin_id).
  * @param {object|null|undefined} meta
  * @param {{

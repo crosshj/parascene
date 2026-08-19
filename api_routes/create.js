@@ -87,8 +87,10 @@ import { canViewUnpublishedChallengeResultsCreation } from "./utils/challengeRes
 import { loadChallengeFeedSnapshotSharedCached } from "./feed/challengeFeedSnapshotCache.js";
 import {
 	creationMetaHasActiveChallengeFeedPin,
-	creationMetaHasChallengeSubmission,
+	challengeArchiveBlockMessage,
+	challengeArchiveBlockMessageForKind,
 	listActiveChallengeFeedPinsFromMeta,
+	stripChallengeStampsFromCreationMeta,
 	upsertChallengeFeedPinInMeta
 } from "../src/shared/challengeSubmitMeta.js";
 import {
@@ -687,6 +689,20 @@ export default function createCreateRoutes({ queries, storage }) {
 		} catch {
 			return null;
 		}
+	}
+
+	async function challengeArchiveBlockForCreation(imageId, meta, actionWord) {
+		const fromMeta = challengeArchiveBlockMessage(meta, actionWord);
+		if (fromMeta) return fromMeta;
+		try {
+			const pinStatus = await getCreationFeedPinStatus(queries, imageId, { meta });
+			if (pinStatus?.active) {
+				return challengeArchiveBlockMessageForKind("organizer", actionWord);
+			}
+		} catch {
+			// meta pins already covered
+		}
+		return null;
 	}
 
 	const MAX_CHALLENGE_CHAT_BODY_CHARS = 4000;
@@ -1577,6 +1593,10 @@ export default function createCreateRoutes({ queries, storage }) {
 			if (!Number.isFinite(timeoutAt) || Date.now() <= timeoutAt) {
 				return { ok: false, error: "Cannot delete while a photo is still processing" };
 			}
+		}
+		const challengeBlock = await challengeArchiveBlockForCreation(id, meta, "deleting");
+		if (challengeBlock) {
+			return { ok: false, error: challengeBlock };
 		}
 		const markResult = await queries.markCreatedImageUnavailable?.run(id, user.id);
 		if (!markResult || markResult.changes === 0) {
@@ -4781,6 +4801,17 @@ export default function createCreateRoutes({ queries, storage }) {
 				if (rowsToAdd.length === 0) {
 					return res.status(400).json({ error: "Select at least one non-group creation to add" });
 				}
+				for (const row of rowsToAdd) {
+					const rowMeta = parseMeta(row.meta) || {};
+					const challengeBlock = await challengeArchiveBlockForCreation(
+						row.id,
+						rowMeta,
+						"grouping"
+					);
+					if (challengeBlock) {
+						return res.status(400).json({ error: challengeBlock });
+					}
+				}
 				const existingGroupMediaType = resolveCreationMediaType(targetGroupMeta);
 				for (const row of rowsToAdd) {
 					const rowMeta = parseMeta(row.meta) || {};
@@ -4911,6 +4942,13 @@ export default function createCreateRoutes({ queries, storage }) {
 			}
 
 			const sourceRows = selectedRows;
+			for (const row of sourceRows) {
+				const rowMeta = parseMeta(row.meta) || {};
+				const challengeBlock = await challengeArchiveBlockForCreation(row.id, rowMeta, "grouping");
+				if (challengeBlock) {
+					return res.status(400).json({ error: challengeBlock });
+				}
+			}
 			const first = sourceRows[0];
 			const groupedAt = nowIso();
 			const firstFilenameRaw = typeof first.filename === "string" ? first.filename.trim() : "";
@@ -4950,7 +4988,7 @@ export default function createCreateRoutes({ queries, storage }) {
 				};
 			});
 			const partyMetaBlock = buildPartyGroupMeta(effectivePartyName, partySettingsParsed);
-			const firstMeta = parseMeta(first.meta) || {};
+			const firstMeta = stripChallengeStampsFromCreationMeta(parseMeta(first.meta) || {});
 			const groupedMetaBase = {
 				...firstMeta,
 				media_type: groupMediaType || resolveCreationMediaType(firstMeta),
@@ -5238,6 +5276,19 @@ export default function createCreateRoutes({ queries, storage }) {
 				return res.status(400).json({ error: "Creation is not a party group" });
 			}
 
+			const sourceRow = await queries.selectCreatedImageById.get(creationId, user.id);
+			if (sourceRow) {
+				const sourceMeta = parseMeta(sourceRow.meta);
+				const challengeBlock = await challengeArchiveBlockForCreation(
+					creationId,
+					sourceMeta,
+					"deleting"
+				);
+				if (challengeBlock) {
+					return res.status(400).json({ error: challengeBlock });
+				}
+			}
+
 			const removedState = removeCreationFromPartyGroupMeta(meta, creationId);
 			if (!removedState) {
 				return res.status(400).json({ error: "Invalid creation id" });
@@ -5282,7 +5333,6 @@ export default function createCreateRoutes({ queries, storage }) {
 				}
 			}
 
-			const sourceRow = await queries.selectCreatedImageById.get(creationId, user.id);
 			if (sourceRow) {
 				const markResult = await queries.markCreatedImageUnavailable?.run(creationId, user.id);
 				if (!markResult || markResult.changes === 0) {
@@ -6601,30 +6651,9 @@ export default function createCreateRoutes({ queries, storage }) {
 				return res.status(404).json({ error: "Image not found" });
 			}
 			const meta = parseMeta(image.meta);
-			if (creationMetaHasChallengeSubmission(meta)) {
-				return res.status(400).json({
-					error:
-						"This creation is entered in a challenge. Remove it from the challenge before deleting."
-				});
-			}
-			try {
-				const pinStatus = await getCreationFeedPinStatus(queries, image.id, { meta });
-				if (pinStatus.active || creationMetaHasChallengeOrganizerRef(meta)) {
-					return res.status(400).json({
-						error:
-							"This creation is used by a challenge (hero, results, theme vote, or feed pin). Clear that use before deleting."
-					});
-				}
-			} catch {
-				if (
-					creationMetaHasActiveChallengeFeedPin(meta) ||
-					creationMetaHasChallengeOrganizerRef(meta)
-				) {
-					return res.status(400).json({
-						error:
-							"This creation is used by a challenge (hero, results, theme vote, or feed pin). Clear that use before deleting."
-					});
-				}
+			const challengeBlock = await challengeArchiveBlockForCreation(image.id, meta, "deleting");
+			if (challengeBlock) {
+				return res.status(400).json({ error: challengeBlock });
 			}
 			const status = image.status || "completed";
 			if (status === "creating") {

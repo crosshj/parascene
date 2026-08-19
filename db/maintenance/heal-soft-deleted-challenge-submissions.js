@@ -11,6 +11,7 @@ import { createClient } from '@supabase/supabase-js';
 import { broadcastRoomDirty, broadcastUserInboxDirty } from '../../api_routes/utils/realtimeBroadcast.js';
 import { invalidateChallengeFeedSnapshotCache } from '../../api_routes/feed/challengeFeedSnapshotCache.js';
 import { repairLastReadPointersForDeletedMessages } from '../../api_routes/utils/chatInviteCleanup.js';
+import { groupSourceCreationIdsFromMeta } from '../../src/shared/challengeSubmitMeta.js';
 
 const MESSAGES_TABLE = 'prsn_chat_messages';
 const THREADS_TABLE = 'prsn_chat_threads';
@@ -53,6 +54,49 @@ function parseMeta(raw) {
 function imageIsGone(row) {
 	if (!row) return true;
 	return row.unavailable_at != null && String(row.unavailable_at) !== '';
+}
+
+function filterChallengeSubmissionsNotMatching(prev, dropMids, dropCids) {
+	const list = Array.isArray(prev) ? prev : [];
+	return list.filter((entry) => {
+		const mid = Number(entry?.message_id);
+		if (Number.isFinite(mid) && dropMids.has(mid)) return false;
+		const cid = String(entry?.challenge_id || '').trim();
+		if (cid && dropCids.has(cid)) return false;
+		return true;
+	});
+}
+
+async function fetchGroupRowsForUsers(sb, userIds) {
+	const out = [];
+	const seen = new Set();
+	for (const rawUid of userIds) {
+		const uid = Number(rawUid);
+		if (!Number.isFinite(uid) || uid <= 0) continue;
+		let beforeId = null;
+		for (;;) {
+			let q = sb
+				.from(CREATIONS_TABLE)
+				.select('id, user_id, filename, meta')
+				.eq('user_id', uid)
+				.like('filename', 'group/%')
+				.order('id', { ascending: false })
+				.limit(PAGE_SIZE);
+			if (beforeId != null) q = q.lt('id', beforeId);
+			const { data, error } = await q;
+			if (error) throw error;
+			const rows = Array.isArray(data) ? data : [];
+			for (const row of rows) {
+				const id = Number(row?.id);
+				if (!Number.isFinite(id) || id <= 0 || seen.has(id)) continue;
+				seen.add(id);
+				out.push(row);
+			}
+			if (rows.length < PAGE_SIZE) break;
+			beforeId = rows[rows.length - 1].id;
+		}
+	}
+	return out;
 }
 
 async function fetchAllThreadMessages(sb, threadId) {
@@ -127,6 +171,35 @@ async function main() {
 			`  msg ${s.message_id} challenge=${s.challenge_id || '(none)'} creation=${s.created_image_id} sender=${s.sender_id}`
 		);
 	}
+
+	const staleCreationIds = new Set(stale.map((s) => s.created_image_id));
+	const dropMids = new Set(stale.map((s) => s.message_id));
+	const dropCids = new Set(stale.map((s) => s.challenge_id).filter(Boolean));
+	const senderIds = [...new Set(stale.map((s) => s.sender_id).filter((id) => Number.isFinite(id) && id > 0))];
+	const groupRows = await fetchGroupRowsForUsers(sb, senderIds);
+	const groupsToHeal = [];
+	for (const row of groupRows) {
+		const meta = parseMeta(row.meta);
+		const sourceIds = groupSourceCreationIdsFromMeta(meta);
+		if (!sourceIds.some((id) => staleCreationIds.has(id))) continue;
+		const prev = Array.isArray(meta.challenge_submissions) ? meta.challenge_submissions : [];
+		const next = filterChallengeSubmissionsNotMatching(prev, dropMids, dropCids);
+		if (next.length === prev.length && prev.length === 0) {
+			groupsToHeal.push({ row, meta, prev, next, stampChange: false });
+			continue;
+		}
+		if (next.length === prev.length) continue;
+		groupsToHeal.push({ row, meta, prev, next, stampChange: true });
+	}
+	if (groupsToHeal.length) {
+		console.log(`group rows whose sources include healed creations: ${groupsToHeal.length}`);
+		for (const g of groupsToHeal) {
+			console.log(
+				`  group ${g.row.id} filename=${g.row.filename} challenge_submissions ${g.prev.length} → ${g.next.length}`
+			);
+		}
+	}
+
 	if (dryRun) {
 		console.log('dry-run: no writes');
 		return;
@@ -153,15 +226,11 @@ async function main() {
 		if (!img) continue;
 		const meta = parseMeta(img.meta);
 		const prev = Array.isArray(meta.challenge_submissions) ? meta.challenge_submissions : [];
-		const dropMids = new Set(rows.map((r) => r.message_id));
-		const dropCids = new Set(rows.map((r) => r.challenge_id).filter(Boolean));
-		const next = prev.filter((entry) => {
-			const mid = Number(entry?.message_id);
-			if (Number.isFinite(mid) && dropMids.has(mid)) return false;
-			const cid = String(entry?.challenge_id || '').trim();
-			if (cid && dropCids.has(cid)) return false;
-			return true;
-		});
+		const next = filterChallengeSubmissionsNotMatching(
+			prev,
+			new Set(rows.map((r) => r.message_id)),
+			new Set(rows.map((r) => r.challenge_id).filter(Boolean))
+		);
 		if (next.length === prev.length) {
 			console.log(`  creation ${creationId}: meta unchanged (${prev.length} submission stamp(s))`);
 			continue;
@@ -172,6 +241,19 @@ async function main() {
 			.eq('id', creationId);
 		if (upErr) throw upErr;
 		console.log(`  creation ${creationId}: challenge_submissions ${prev.length} → ${next.length}`);
+	}
+
+	for (const g of groupsToHeal) {
+		if (!g.stampChange) {
+			console.log(`  group ${g.row.id}: no copied challenge_submissions to strip`);
+			continue;
+		}
+		const { error: upErr } = await sb
+			.from(CREATIONS_TABLE)
+			.update({ meta: { ...g.meta, challenge_submissions: g.next } })
+			.eq('id', g.row.id);
+		if (upErr) throw upErr;
+		console.log(`  group ${g.row.id}: challenge_submissions ${g.prev.length} → ${g.next.length}`);
 	}
 
 	const { data: lastRow } = await sb

@@ -9994,8 +9994,9 @@ export async function initChatPage(root, options = {}) {
 			);
 			const homogeneousMedia = selectedMediaTypes.size <= 1;
 			const selectedGroups = selectedCards.filter((card) => card.dataset.groupCreation === '1');
+			const challengeLockedCards = selectedCards.filter((card) => card.dataset.inChallenge === '1');
 			let canGroup = false;
-			if (selectedCards.length > 0 && eligibleCards.length === selectedCards.length && homogeneousMedia && selectedGroups.length <= 1) {
+			if (selectedCards.length > 0 && eligibleCards.length === selectedCards.length && homogeneousMedia && selectedGroups.length <= 1 && challengeLockedCards.length === 0) {
 				if (selectedGroups.length === 0) {
 					canGroup = selectedCards.length >= 2;
 				} else {
@@ -10397,6 +10398,11 @@ export async function initChatPage(root, options = {}) {
 			const selectedGroups = selected.filter((card) => card.dataset.groupCreation === '1');
 			if (selectedGroups.length > 1) {
 				alert('Select at most one existing group when grouping creations.');
+				return;
+			}
+			const challengeLocked = selected.filter((card) => card.dataset.inChallenge === '1');
+			if (challengeLocked.length > 0) {
+				alert('Creations entered in a challenge cannot be grouped. Remove them from the challenge first.');
 				return;
 			}
 			const ids = selected

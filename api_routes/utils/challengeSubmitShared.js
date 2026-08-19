@@ -602,6 +602,13 @@ export async function validateChallengeSubmission({
 	if (Number(userId) !== Number(ownerUserId)) {
 		return { ok: false, status: 403, message: "Only the creation owner can submit to a challenge." };
 	}
+	if (meta?.group?.kind === "group_creations") {
+		return {
+			ok: false,
+			status: 400,
+			message: "Group creations cannot be submitted as one challenge entry."
+		};
+	}
 	const tid = Number(threadId);
 	if (!Number.isFinite(tid) || tid <= 0) {
 		return { ok: false, status: 400, message: "Invalid challenge thread." };
