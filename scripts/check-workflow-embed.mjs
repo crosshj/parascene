@@ -29,7 +29,7 @@ const ALLOWED_LINE_PATTERNS = [
 	/\bisCreationEditEmbed\s*\(/,
 	/\bisCreatePageEmbed\s*\(/,
 	/\bisCreatePageEmbedMode\s*\(/,
-	/\bisStandaloneCreatePagePath\s*\(/,
+	/\bisCreateWorkflowNativeHost\s*\(/,
 	/\bcreationEditNavigate\b/,
 	/\bcreationEditShellOut\b/,
 	/\bopenBlogEditorFromCreate\b/,
@@ -85,6 +85,9 @@ for (const rel of OVERLAY_FILES) {
 	}
 	if (/fetch\(\s*['"`]\/create\?embed=1/.test(source)) {
 		violations.push({ file: rel, line: 0, text: 'must not prefetch /create?embed=1 iframe HTML' });
+	}
+	if (/fetch\(\s*['"`]\/creations\/[^'"`]*mutate\?embed=1/.test(source)) {
+		violations.push({ file: rel, line: 0, text: 'must not prefetch mutate?embed=1 iframe HTML' });
 	}
 }
 

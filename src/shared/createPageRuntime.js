@@ -1,5 +1,5 @@
 /**
- * Create page runtime — standalone, embed iframe, and native overlay host.
+ * Create page runtime — native overlay host (create workflow mounted in parent DOM).
  */
 
 import {
@@ -33,56 +33,33 @@ const DISMISS_MESSAGE = 'prsn-workflow-overlay-dismiss';
 const CREATE_EDITOR_COOKIE = 'create_editor';
 
 export function isCreatePageEmbed() {
-	return isCreateWorkflowNativeHost() || window.__ps_create_embed === true;
-}
-
-export function isCreatePageEmbedFrame() {
-	if (isCreateWorkflowNativeHost()) return false;
-	return isCreatePageEmbed() && window.parent !== window;
-}
-
-function isWorkflowEmbedFrame() {
-	if (isCreateWorkflowNativeHost()) return false;
-	return (
-		window.parent !== window &&
-		(window.__ps_create_embed === true ||
-			window.__ps_creation_edit_embed === true ||
-			window.__ps_creation_detail_embed === true)
-	);
+	return isCreateWorkflowNativeHost();
 }
 
 function postToParentOverlay(payload) {
 	const host = getCreateWorkflowHost();
-	if (host) {
-		if (payload?.type === ROUTE_MESSAGE && typeof host.onNavigate === 'function') {
-			host.onNavigate(payload.href, { forceReload: Boolean(payload.forceReload) });
-			return true;
-		}
-		if (payload?.type === SHELL_OUT_MESSAGE && typeof host.onShellOut === 'function') {
-			host.onShellOut(payload.href);
-			return true;
-		}
-		if (payload?.type === CLOSE_MESSAGE && typeof host.onClose === 'function') {
-			host.onClose();
-			return true;
-		}
-		if (payload?.type === DISMISS_MESSAGE && typeof host.onDismiss === 'function') {
-			host.onDismiss();
-			return true;
-		}
-		if (payload?.type === CREATION_DETAIL_SHELL_SYNC_MESSAGE && typeof host.onShellSync === 'function') {
-			host.onShellSync(payload);
-			return true;
-		}
-		return false;
-	}
-	if (!isWorkflowEmbedFrame()) return false;
-	try {
-		window.parent.postMessage(payload, window.location.origin);
+	if (!host) return false;
+	if (payload?.type === ROUTE_MESSAGE && typeof host.onNavigate === 'function') {
+		host.onNavigate(payload.href, { forceReload: Boolean(payload.forceReload) });
 		return true;
-	} catch {
-		return false;
 	}
+	if (payload?.type === SHELL_OUT_MESSAGE && typeof host.onShellOut === 'function') {
+		host.onShellOut(payload.href);
+		return true;
+	}
+	if (payload?.type === CLOSE_MESSAGE && typeof host.onClose === 'function') {
+		host.onClose();
+		return true;
+	}
+	if (payload?.type === DISMISS_MESSAGE && typeof host.onDismiss === 'function') {
+		host.onDismiss();
+		return true;
+	}
+	if (payload?.type === CREATION_DETAIL_SHELL_SYNC_MESSAGE && typeof host.onShellSync === 'function') {
+		host.onShellSync(payload);
+		return true;
+	}
+	return false;
 }
 
 /** @param {'basic'|'advanced'} mode */
@@ -95,14 +72,14 @@ export function setCreateEditorMode(mode) {
 }
 
 /**
- * Switch basic ↔ advanced create (server picks template from cookie) and reload.
+ * Switch basic ↔ advanced create and remount the native overlay.
  * @param {'basic'|'advanced'} mode
  * @param {MouseEvent} [ev]
  */
 export function switchCreateEditorMode(mode, ev) {
 	if (ev && typeof ev.preventDefault === 'function') ev.preventDefault();
 	setCreateEditorMode(mode);
-	if (isCreateWorkflowNativeHost() || isWorkflowEmbedFrame()) {
+	if (isCreateWorkflowNativeHost()) {
 		postToParentOverlay({ type: ROUTE_MESSAGE, href: '/create', forceReload: true });
 		return;
 	}
@@ -155,7 +132,7 @@ export function shellOut(href) {
 		return;
 	}
 
-	if (isCreatePageEmbedFrame() || isCreateWorkflowNativeHost()) {
+	if (isCreateWorkflowNativeHost()) {
 		postToParentOverlay({ type: SHELL_OUT_MESSAGE, href: raw });
 		return;
 	}
@@ -174,11 +151,11 @@ export function requestCloseOverlay() {
 	return postToParentOverlay({ type: CLOSE_MESSAGE });
 }
 
-/** Standalone full-page navigation; shell-out when inside embed iframe. */
+/** Full-page navigation; shell-out when inside native create overlay. */
 export function openFullPageRoute(href) {
 	const raw = String(href || '').trim();
 	if (!raw) return;
-	if (isCreatePageEmbedFrame() || isCreateWorkflowNativeHost()) {
+	if (isCreateWorkflowNativeHost()) {
 		postToParentOverlay({ type: SHELL_OUT_MESSAGE, href: raw });
 		return;
 	}
@@ -189,7 +166,7 @@ export function openFullPageRoute(href) {
  * @param {{ creationId?: number|string }} [options]
  */
 export function refreshAfterSubmit(options = {}) {
-	if (!isCreatePageEmbedFrame() && !isCreateWorkflowNativeHost()) return;
+	if (!isCreateWorkflowNativeHost()) return;
 
 	const creationId = Number(options.creationId);
 	const reason = 'create-submitted';

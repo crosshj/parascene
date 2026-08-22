@@ -50,17 +50,18 @@ Note: `src/`-only pattern applies to bundled code (chat: `src/chat/main.js` → 
 
 ## SPA page overlay (embed)
 
-On feed, explore, creations, challenges, and chat shells, these routes open in a full-viewport iframe overlay (`spaPageOverlay.js`) when navigated from the lane (not on direct URL load):
+On feed, explore, creations, challenges, and chat shells, these routes open in a full-viewport overlay (`spaPageOverlay.js`) when navigated from the lane (not on direct URL load):
 
-- `/prompt-library` (+ hash tabs)
-- `/p/:handle`, `/user`, `/user/:id` (profiles)
-- `/styles/:slug`, `/styles/new`
-- `/audio-clips/:id`
-- `/creations/:id`, `/creations/:id/edit`, `/creations/:id/mutate`
-- `/create`
-- `/integrations` (Connections)
+- `/prompt-library` (+ hash tabs) — iframe `?embed=1`
+- `/p/:handle`, `/user`, `/user/:id` (profiles) — iframe `?embed=1`
+- `/styles/:slug`, `/styles/new` — iframe `?embed=1`
+- `/audio-clips/:id` — iframe `?embed=1`
+- `/creations/:id` — iframe `?embed=1`
+- `/creations/:id/mutate` — native div mount (`mountCreateWorkflow`)
+- `/create` — native div mount (`mountCreateWorkflow`)
+- `/integrations` (Connections) — iframe `?embed=1`
 
-Iframe pages use `?embed=1` (stripped nav, embed body class). Back navigates the overlay stack; Escape / close dismisses to the lane. Shell-out (full navigation) remains for `/chat/*`, `/auth`, `/pricing`, and off-origin links.
+Iframe pages use `?embed=1` (stripped nav, embed body class). Create/mutate use a native mount in the parent DOM (no HTML embed document). Back navigates the overlay stack; Escape / close dismisses to the lane. Shell-out (full navigation) remains for `/chat/*`, `/auth`, `/pricing`, and off-origin links.
 
 Manual back-stack checks:
 
@@ -73,5 +74,5 @@ Manual back-stack checks:
 - Chat `@mention` / `$style` → overlay
 - Audio clip hub → creation → creation detail in-overlay
 - Style save → `/styles/{tag}` in-overlay
-- Direct URL (no overlay history) → standalone full page
+- Direct URL (no overlay history) → standalone full page (create/mutate: chat shell + overlay restore)
 - Escape / X dismisses stack; lane scroll restored

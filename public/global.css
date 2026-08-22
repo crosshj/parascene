@@ -293,8 +293,6 @@ body:not(.loaded) {
 
 /* Overlay iframe already has a parent veil; don't keep embed documents invisible until JS. */
 html[class*='embed-doc'] body:not(.loaded),
-body.create-page-embed:not(.loaded),
-body.creation-edit-embed:not(.loaded),
 body.creation-detail-embed:not(.loaded) {
 	visibility: visible;
 	opacity: 1;
@@ -13368,9 +13366,6 @@ body.profile-page-embed[data-entry="user-profile"],
 body.style-detail-page.style-detail-embed,
 body.audio-clip-detail-page.audio-clip-detail-embed,
 body.creation-detail-page.creation-detail-embed,
-body.creation-edit-page.creation-edit-embed,
-body.create-page.create-page-embed,
-body.create-page-advanced.create-page-embed,
 body.integrations-page.integrations-embed {
 	--workflow-embed-chrome-top: calc(58px + env(safe-area-inset-top, 0px) + 1em);
 	box-sizing: border-box;
@@ -13386,9 +13381,6 @@ body.integrations-page.integrations-embed {
 	body.style-detail-page.style-detail-embed,
 	body.audio-clip-detail-page.audio-clip-detail-embed,
 	body.creation-detail-page.creation-detail-embed,
-	body.creation-edit-page.creation-edit-embed,
-	body.create-page.create-page-embed,
-	body.create-page-advanced.create-page-embed,
 	body.integrations-page.integrations-embed {
 		padding-right: 24px;
 		padding-left: 24px;
@@ -13400,9 +13392,6 @@ body.profile-page-embed[data-entry="user-profile"] main,
 body.style-detail-page.style-detail-embed main,
 body.audio-clip-detail-page.audio-clip-detail-embed main,
 body.creation-detail-page.creation-detail-embed main,
-body.creation-edit-page.creation-edit-embed main,
-body.create-page.create-page-embed main,
-body.create-page-advanced.create-page-embed main,
 body.integrations-page.integrations-embed main {
 	max-width: 1400px;
 	margin-right: auto;

@@ -79,10 +79,12 @@ Still valid for `app-admin.html` — do not delete without an admin replacement.
 - `public/components/routes/todo.js`, `users.js`, `analytics.js`
 - `public/pages/admin.js` (inline admin tabs)
 
-### Partially migrated create
+### Create / mutate (native overlay)
 
-- `public/components/routes/create.js` — only used on `pages/createAdvanced.html`
-- Basic `/create` uses `entry-create.js` + `createPageRuntime.js` instead
+- `public/components/routes/create.js` — advanced create in native overlay (`app-route-create`)
+- `public/pages/entry/entry-create.js` — basic create overlay mount (`mountBasicCreateWorkflow`)
+- `public/pages/creation-edit.js` — mutate overlay mount (`mountMutateWorkflow`)
+- Dead HTML documents (`create.html`, `createAdvanced.html`, `creation-edit.html`) removed; `/create` and `/mutate` serve chat shell + native restore
 
 ### Deprecated re-export shims
 
@@ -107,24 +109,26 @@ See `_docs/PLAN_chat_nav_unification.md`.
 
 ## Transition points: overlay dual-mode pages
 
-These pages are **not** orphaned. They deliberately serve two modes:
+Most of these pages still serve two modes:
 
 1. **Standalone** — direct URL loads full page with chrome (nav, etc.)
 2. **Embed** — `?embed=1` loads a stripped document; `spaPageOverlay.js` opens it in an iframe when the user navigates from within a shell
 
-Each page has three layers:
+**Exception — create / mutate:** native mount in a div (`mountCreateWorkflow`). Direct `/create` and `/creations/:id/mutate` serve chat shell + overlay restore; no HTML `?embed=1` document.
+
+Each iframe page has three layers:
 
 - HTML shell in `pages/`
 - Page script in `public/pages/` (or entry module in `public/pages/entry/`)
 - Embed runtime in `public/shared/*Runtime.js` (some duplicated under `src/shared/` for the chat bundle)
 
-Server injects embed flags in `api_routes/pages.js` when `?embed=1`.
+Server injects embed flags in `api_routes/pages.js` when `?embed=1` (iframe routes only).
 
 | Route | HTML | Page JS | Runtime | Embed flag |
 |---|---|---|---|---|
 | `/creations/:id` | `creation-detail.html` | `creation-detail.js` | `creationDetailRuntime.js` | `__ps_creation_detail_embed` |
-| `/creations/:id/edit`, `/mutate` | `creation-edit.html` | `creation-edit.js` | `creationEditRuntime.js` | `__ps_creation_edit_embed` |
-| `/create` | `create.html` | `entry-create.js` | `createPageRuntime.js` | `__ps_create_embed` |
+| `/creations/:id/mutate` | (native) | `creation-edit.js` | `creationEditRuntime.js` | native host |
+| `/create` | (native) | `entry-create.js` / `routes/create.js` | `createPageRuntime.js` | native host |
 | `/prompt-library` | `prompt-library.html` | `prompt-library.js` | `promptLibraryRuntime.js` | `__ps_prompt_library_embed` |
 | `/user`, `/user/:id`, `/p/:handle` | `user-profile.html` | `user-profile.js` | `profilePageRuntime.js` | `__ps_profile_embed` |
 | `/styles/:slug` | `style-detail.html` | `style-detail.js` | `styleDetailRuntime.js` | `__ps_style_embed` |
@@ -133,11 +137,12 @@ Server injects embed flags in `api_routes/pages.js` when `?embed=1`.
 
 Shared overlay infrastructure (also duplicated public/src):
 
-- `spaPageOverlay.js` — intercept, history, iframe stack
+- `spaPageOverlay.js` — intercept, history, iframe stack + native create/mutate mount
 - `embedPageRuntime.js` — postMessage bridge between iframe and parent
 - `creationDetailEmbedShell.js` — creation detail embed chrome
+- `createWorkflow.js` / `createWorkflowHost.js` — native create/mutate mount
 
-**Cleanup implication:** do not delete these until overlay navigation is replaced (e.g. by in-shell components or a single bundle route). Consolidation work is merging public/src copies and eventually dropping the iframe layer — not removing the pages.
+**Cleanup implication:** do not delete iframe dual-mode pages until overlay navigation is replaced (e.g. by in-shell components or a single bundle route). Consolidation work is merging public/src copies and eventually dropping the iframe layer — not removing the pages.
 
 **Special case — in-chat overlay (not iframe):** doom scroll (`src/chat/feed/chatDoomScrollOverlay.js`, `doomScrollMount.js`) is a fullscreen overlay inside the chat shell at `/chat/c/feed/doom/:creationId`. Different mechanism from `spaPageOverlay`.
 

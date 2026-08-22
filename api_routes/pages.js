@@ -1055,47 +1055,11 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 		}
 	});
 
-	// Create page — logged-in non-embed serves chat shell + native overlay restore.
-	const CREATE_EDITOR_COOKIE = "create_editor";
+	// Create — chat shell + native overlay restore (with or without ?embed=1).
 	router.get("/create", async (req, res) => {
 		const user = await requireLoggedInUser(req, res);
 		if (!user) return;
-
-		const embedOverlay = req.query?.embed === '1' || req.query?.embed === 1;
-		if (!embedOverlay) {
-			return serveChatOrRoleShell(req, res, user, "/chat/c/creations");
-		}
-
-		try {
-			const fs = await import("fs/promises");
-			const useSimple = req.cookies?.[CREATE_EDITOR_COOKIE] === "simple";
-			const htmlPath = path.join(pagesDir, useSimple ? "create.html" : "createAdvanced.html");
-			let pageHtml = await fs.readFile(htmlPath, "utf-8");
-
-			pageHtml = pageHtml.replace("<!--APP_HEADER-->", "");
-			pageHtml = pageHtml.replace("<!--APP_MOBILE_BOTTOM_NAV-->", "");
-			pageHtml = stripStandaloneAppChromeForEmbed(pageHtml);
-			pageHtml = pageHtml.replace(
-				'<html lang="en">',
-				'<html lang="en" class="create-page-embed-doc">'
-			);
-			const bodyClass = useSimple ? 'create-page' : 'create-page-advanced';
-			pageHtml = pageHtml.replace(
-				`<body class="${bodyClass}">`,
-				`<body class="${bodyClass} create-page-embed loaded">`
-			);
-			pageHtml = pageHtml.replace(
-				'</head>',
-				'<script>window.__ps_create_embed=true;</script></head>'
-			);
-
-			pageHtml = injectCommonHead(pageHtml, getPageTokens(req));
-
-			res.setHeader("Content-Type", "text/html");
-			return res.send(pageHtml);
-		} catch (error) {
-			return res.status(500).send("Internal server error");
-		}
+		return serveChatOrRoleShell(req, res, user, "/chat/c/creations");
 	});
 
 	router.get("/prompt-library", async (req, res) => {
@@ -1279,35 +1243,7 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 				}
 			}
 
-			const embedOverlay = req.query?.embed === '1' || req.query?.embed === 1;
-			if (!embedOverlay) {
-				return serveChatOrRoleShell(req, res, user, "/chat/c/creations");
-			}
-
-			const fs = await import('fs/promises');
-			const htmlPath = path.join(pagesDir, "creation-edit.html");
-			let pageHtml = await fs.readFile(htmlPath, 'utf-8');
-
-			pageHtml = pageHtml.replace("<!--APP_HEADER-->", "");
-			pageHtml = pageHtml.replace("<!--APP_MOBILE_BOTTOM_NAV-->", "");
-			pageHtml = stripStandaloneAppChromeForEmbed(pageHtml);
-			pageHtml = pageHtml.replace(
-				'<html lang="en">',
-				'<html lang="en" class="creation-edit-embed-doc">'
-			);
-			pageHtml = pageHtml.replace(
-				'<body class="creation-edit-page create-page">',
-				'<body class="creation-edit-page create-page creation-edit-embed">'
-			);
-			pageHtml = pageHtml.replace(
-				'</head>',
-				'<script>window.__ps_creation_edit_embed=true;</script></head>'
-			);
-
-			pageHtml = injectCommonHead(pageHtml, getPageTokens(req));
-
-			res.setHeader('Content-Type', 'text/html');
-			return res.send(pageHtml);
+			return serveChatOrRoleShell(req, res, user, "/chat/c/creations");
 		} catch (error) {
 			// console.error("Error loading creation mutate:", error);
 			return res.status(500).send("Internal server error");

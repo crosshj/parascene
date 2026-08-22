@@ -1,5 +1,5 @@
 /**
- * Creation mutate page runtime — standalone, embed iframe, and native overlay host.
+ * Creation mutate page runtime — native overlay host (mutate workflow mounted in parent DOM).
  */
 
 import {
@@ -32,46 +32,33 @@ const SHELL_OUT_MESSAGE = 'prsn-creation-detail-overlay-shell-out';
 const DISMISS_MESSAGE = 'prsn-workflow-overlay-dismiss';
 
 export function isCreationEditEmbed() {
-	return isCreateWorkflowNativeHost() || window.__ps_creation_edit_embed === true;
-}
-
-export function isCreationEditEmbedFrame() {
-	if (isCreateWorkflowNativeHost()) return false;
-	return isCreationEditEmbed() && window.parent !== window;
+	return isCreateWorkflowNativeHost();
 }
 
 function postToParentOverlay(payload) {
 	const host = getCreateWorkflowHost();
-	if (host) {
-		if (payload?.type === ROUTE_MESSAGE && typeof host.onNavigate === 'function') {
-			host.onNavigate(payload.href);
-			return true;
-		}
-		if (payload?.type === SHELL_OUT_MESSAGE && typeof host.onShellOut === 'function') {
-			host.onShellOut(payload.href);
-			return true;
-		}
-		if (payload?.type === CLOSE_MESSAGE && typeof host.onClose === 'function') {
-			host.onClose();
-			return true;
-		}
-		if (payload?.type === DISMISS_MESSAGE && typeof host.onDismiss === 'function') {
-			host.onDismiss();
-			return true;
-		}
-		if (payload?.type === CREATION_DETAIL_SHELL_SYNC_MESSAGE && typeof host.onShellSync === 'function') {
-			host.onShellSync(payload);
-			return true;
-		}
-		return false;
-	}
-	if (!isCreationEditEmbedFrame()) return false;
-	try {
-		window.parent.postMessage(payload, window.location.origin);
+	if (!host) return false;
+	if (payload?.type === ROUTE_MESSAGE && typeof host.onNavigate === 'function') {
+		host.onNavigate(payload.href);
 		return true;
-	} catch {
-		return false;
 	}
+	if (payload?.type === SHELL_OUT_MESSAGE && typeof host.onShellOut === 'function') {
+		host.onShellOut(payload.href);
+		return true;
+	}
+	if (payload?.type === CLOSE_MESSAGE && typeof host.onClose === 'function') {
+		host.onClose();
+		return true;
+	}
+	if (payload?.type === DISMISS_MESSAGE && typeof host.onDismiss === 'function') {
+		host.onDismiss();
+		return true;
+	}
+	if (payload?.type === CREATION_DETAIL_SHELL_SYNC_MESSAGE && typeof host.onShellSync === 'function') {
+		host.onShellSync(payload);
+		return true;
+	}
+	return false;
 }
 
 function isExternalNavigationHref(href) {
@@ -116,7 +103,7 @@ export function shellOut(href) {
 		return;
 	}
 
-	if (isCreationEditEmbedFrame() || isCreateWorkflowNativeHost()) {
+	if (isCreateWorkflowNativeHost()) {
 		postToParentOverlay({ type: SHELL_OUT_MESSAGE, href: raw });
 		return;
 	}
@@ -129,11 +116,11 @@ export function requestCloseOverlay() {
 }
 
 /**
- * After successful mutate submit in embed: sync parent lanes and dismiss overlay.
+ * After successful mutate submit: sync parent lanes and dismiss overlay.
  * @param {{ creationId?: number|string }} [options]
  */
 export function refreshAfterSubmit(options = {}) {
-	if (!isCreationEditEmbedFrame() && !isCreateWorkflowNativeHost()) return;
+	if (!isCreateWorkflowNativeHost()) return;
 
 	const creationId = Number(options.creationId);
 	const reason = 'mutate-submitted';

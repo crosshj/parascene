@@ -149,9 +149,6 @@ class AppNavigationMobile extends HTMLElement {
 		if (route === 'create') {
 			const v = getAssetVersionParam();
 			const qs = v ? `?v=${encodeURIComponent(v)}` : '';
-			void fetch('/create?embed=1', { credentials: 'include', headers: { Accept: 'text/html' } }).catch(
-				() => {}
-			);
 			void import(`../../shared/creationDetailOverlay.js${qs}`).then((mod) => {
 				try {
 					mod.prefetchCreateOverlayAssets?.();

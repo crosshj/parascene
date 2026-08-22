@@ -82,11 +82,7 @@ function getAssetVersionParam() {
 }
 
 function isCreatePageEmbed() {
-	return isCreateWorkflowNativeHost() || document.body?.classList.contains('create-page-embed');
-}
-
-function isStandaloneCreatePagePath() {
-	return window.location.pathname === '/create' && !isCreatePageEmbed();
+	return isCreateWorkflowNativeHost();
 }
 
 function dataBuilderTabMarkup() {
@@ -738,6 +734,10 @@ class AppRouteCreate extends HTMLElement {
 				true
 			);
 		}
+
+		void import(`../../shared/importMediaEntry.js${_qs}`).then((mod) =>
+			mod.bindImportSunoEntry(_qs)
+		);
 
 		// Restore and persist active tab (Basic / Advanced / Blog); sync with URL hash (#basic, #advanced, #blog)
 		const tabsEl = this.querySelector('app-tabs');
@@ -1602,14 +1602,13 @@ class AppRouteCreate extends HTMLElement {
 		}
 		const runSubmit = (hydrateMentions) => {
 			this.closeAdvancedConfirm();
-			const isStandaloneCreatePage = isStandaloneCreatePagePath();
 			submitCreationWithPending({
 				serverId: pending.serverId,
 				methodKey: 'advanced_generate',
 				args: pending.args,
 				creditCost: pending.cost,
 				hydrateMentions,
-				navigate: isStandaloneCreatePage ? 'full' : (isCreatePageEmbed() ? 'none' : 'spa'),
+				navigate: isCreatePageEmbed() ? 'none' : 'spa',
 				onInsufficientCredits: async () => { await this.loadCredits(); },
 				onError: async () => { await this.loadCredits(); }
 			}).then((result) => afterCreateRouteSubmitInEmbed(result));
@@ -2379,8 +2378,7 @@ class AppRouteCreate extends HTMLElement {
 			}
 		}
 
-		// Standalone create page (/create) needs full navigation to /creations; SPA only works when create is in-app.
-		const isStandaloneCreatePage = isStandaloneCreatePagePath();
+		// Native overlay uses navigate:none + refreshAfterSubmit; SPA shell uses spa navigate.
 		const argsToSend = collectedArgs || {};
 		let mutateParentIds = [];
 		let mutateOfIdFromQueue;
@@ -2425,7 +2423,7 @@ class AppRouteCreate extends HTMLElement {
 				mutateOfId,
 				mutateParentIds,
 				hydrateMentions,
-				navigate: isStandaloneCreatePage ? 'full' : (isCreatePageEmbed() ? 'none' : 'spa'),
+				navigate: isCreatePageEmbed() ? 'none' : 'spa',
 				onInsufficientCredits: async () => {
 					this.resetCreateButton(button);
 					await this.loadCredits();

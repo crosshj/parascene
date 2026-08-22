@@ -1,111 +1,10 @@
 /**
- * Create page: nav, nav-mobile, modals, tabs (create.html), route-create (createAdvanced.html).
- * Also runs create-page-specific wiring (image picker, localStorage, style cards, submit buttons).
- * Imports are dynamic with cache-busting (version) so components are not served from cache.
+ * Basic create workflow: style cards, prompts, submit buttons, native overlay mount.
+ * Advanced create lives in app-route-create; this module only serves basic overlay.
  */
-
-// Only wait for above-the-fold / interactive shell; modals hydrate in background.
-// Basic create (create.html) does not mount app-route-create; only advanced (createAdvanced.html) does.
-// So we only wait for app-route-create on advanced — otherwise a failing route-create load would block runCreatePageInit on basic.
-const TAGS_BASIC = ['app-navigation', 'app-navigation-mobile', 'app-tabs'];
-const TAGS_ADVANCED = [...TAGS_BASIC, 'app-route-create'];
 
 function getImportQuery(version) {
 	return version && typeof version === 'string' ? `?v=${encodeURIComponent(version)}` : '';
-}
-
-export async function init(version) {
-	const qs = getImportQuery(version);
-	const isEmbed = document.body.classList.contains('create-page-embed');
-	const isAdvanced = document.body.classList.contains('create-page-advanced');
-	const { waitForComponents } = await import(`../../shared/pageInit.js${qs}`);
-	const { refreshAutoGrowTextareas } = await import(`../../shared/autogrow.js${qs}`);
-	const createSettingsSyncMod = await import(`../../shared/createSettingsSync.js${qs}`);
-
-	if (isEmbed) {
-		const embedImports = [import(`../../components/elements/tabs.js${qs}`)];
-		if (isAdvanced) embedImports.push(import(`../../components/routes/create.js${qs}`));
-		await Promise.all(embedImports);
-		await waitForComponents(isAdvanced ? ['app-route-create', 'app-tabs'] : ['app-tabs']);
-		const runtimeMod = await import(`../../shared/createPageRuntime.js${qs}`);
-		runtimeMod.bindCreatePageEmbedNavigation();
-		runtimeMod.bindCreatePageEmbedEscape(() => {
-			return Boolean(document.querySelector('[data-import-suno-modal]'));
-		});
-		runCreatePageInit(refreshAutoGrowTextareas, createSettingsSyncMod);
-		bindImportSunoEntry(qs);
-		return;
-	}
-
-	const { importStandaloneAppChrome } = await import(`../../shared/embedPageRuntime.js${qs}`);
-	const importPromises = [
-		importStandaloneAppChrome(qs),
-		import(`../../components/modals/server.js${qs}`),
-		import(`../../components/elements/tabs.js${qs}`),
-	];
-	if (isAdvanced) {
-		importPromises.push(import(`../../components/routes/create.js${qs}`));
-	}
-	await Promise.all(importPromises);
-	await waitForComponents(isAdvanced ? TAGS_ADVANCED : TAGS_BASIC);
-	if (!isAdvanced) {
-		const runtimeMod = await import(`../../shared/createPageRuntime.js${qs}`);
-		const advancedLink = document.querySelector('.create-switch-to-advanced');
-		if (advancedLink) {
-			advancedLink.addEventListener('click', (e) => {
-				runtimeMod.switchCreateEditorMode('advanced', e);
-			});
-		}
-	}
-	runCreatePageInit(refreshAutoGrowTextareas, createSettingsSyncMod);
-	bindImportSunoEntry(qs);
-}
-
-async function bindImportSunoEntry(qs) {
-	if (document.documentElement.dataset.prsnImportMediaBound === '1') return;
-	document.documentElement.dataset.prsnImportMediaBound = '1';
-	const { openImportMediaModal } = await import(`../../shared/importSunoModal.js${qs}`);
-	const { showToast } = await import(`../../shared/toast.js${qs}`);
-	const { importCreationWithPending } = await import(`../../shared/createSubmit.js${qs}`);
-	const { importMediaFromUrl } = await import(`../../shared/importMedia.js${qs}`);
-
-	async function runImport({ provider, url }) {
-		const isEmbed =
-			document.body.classList.contains('create-page-embed') ||
-			Boolean(document.querySelector('.create-workflow-root'));
-		const result = await importCreationWithPending({
-			runImport: ({ creationToken }) =>
-				importMediaFromUrl(provider, url, { creationToken }),
-			navigate: isEmbed ? 'none' : 'full',
-		});
-		if (result?.warning?.code === 'duplicate_import') {
-			showToast(result.warning.message || 'You already imported this media', {
-				durationMs: 4000,
-			});
-		}
-		if (isEmbed) {
-			const runtimeMod = await import(`../../shared/createPageRuntime.js${qs}`);
-			runtimeMod.refreshAfterSubmit({ creationId: result.id });
-		}
-		return result;
-	}
-
-	document.addEventListener(
-		'click',
-		(e) => {
-			const btn = e.target?.closest?.('[data-import-media], [data-import-suno]');
-			if (!btn) return;
-			e.preventDefault();
-			e.stopPropagation();
-			openImportMediaModal({
-				onConfirm: runImport,
-				onError: (message) => {
-					if (message) alert(message);
-				},
-			});
-		},
-		true
-	);
 }
 
 function runCreatePageInit(refreshAutoGrowTextareas, createSettingsSyncMod = {}) {
@@ -139,8 +38,7 @@ function runCreatePageInit(refreshAutoGrowTextareas, createSettingsSyncMod = {})
 	}
 
 	function isCreatePageEmbedMode() {
-		return Boolean(document.querySelector('.create-workflow-root')) ||
-			document.body.classList.contains('create-page-embed');
+		return Boolean(document.querySelector('.create-workflow-root'));
 	}
 
 	function createSubmitNavigateMode() {
@@ -832,7 +730,8 @@ export async function mountBasicCreateWorkflow(root, opts = {}) {
 		return Boolean(document.querySelector('[data-import-suno-modal]'));
 	});
 	runCreatePageInit(refreshAutoGrowTextareas, createSettingsSyncMod);
-	bindImportSunoEntry(qs);
+	const { bindImportSunoEntry } = await import(`../../shared/importMediaEntry.js${qs}`);
+	await bindImportSunoEntry(qs);
 	return () => {
 		root.innerHTML = '';
 	};

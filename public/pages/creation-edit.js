@@ -1084,38 +1084,6 @@ export async function mountMutateWorkflow(root) {
 	};
 }
 
-function bootStandaloneMutate() {
-	if (document.querySelector('.create-workflow-root')) return;
-	void loadDeps()
-		.then(() => {
-			if (typeof bindCreationEditEmbedNavigation === 'function') {
-				bindCreationEditEmbedNavigation();
-			}
-			if (typeof bindCreationEditEmbedEscape === 'function') {
-				bindCreationEditEmbedEscape(() => {
-					const modal = document.querySelector('[data-creation-edit-i2v-modal][aria-hidden="false"]');
-					return modal instanceof HTMLElement;
-				});
-			}
-			void loadEditPage();
-		})
-		.catch((err) => {
-			console.error('Mutate page failed to load:', err);
-			document.body.classList.add('loaded');
-			const editContent = document.querySelector('[data-edit-content]');
-			if (editContent) {
-				const message = err?.message ? String(err.message) : 'An error occurred while loading mutate.';
-				editContent.innerHTML = `<div class="route-empty route-empty-state"><div class="route-empty-title">Unable to load mutate</div><div class="route-empty-message">${message.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</div></div>`;
-			}
-		});
-}
-
-if (document.readyState === 'loading') {
-	document.addEventListener('DOMContentLoaded', bootStandaloneMutate);
-} else {
-	bootStandaloneMutate();
-}
-
 document.addEventListener('click', (e) => {
 	const btn = e.target.closest('[data-generate-btn]');
 	if (!(btn instanceof HTMLButtonElement)) return;

@@ -44,8 +44,6 @@ export function isSpaPageEmbedFrame() {
 		window.__ps_style_embed === true ||
 		window.__ps_audio_clip_embed === true ||
 		window.__ps_prompt_library_embed === true ||
-		window.__ps_create_embed === true ||
-		window.__ps_creation_edit_embed === true ||
 		window.__ps_creation_detail_embed === true ||
 		window.__ps_integrations_embed === true
 	);

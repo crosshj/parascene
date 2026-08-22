@@ -1,5 +1,5 @@
 ---
-description: Create page embed runtime — navigation and submit
+description: Create page native overlay — navigation and submit
 globs:
   - public/pages/entry/entry-create.js
   - public/components/routes/create.js
@@ -7,14 +7,14 @@ globs:
   - public/shared/createWorkflow.js
 ---
 
-# Create page embed
+# Create page overlay
 
 See `_docs/PLAN_create_mutate_embed.md` for invariants.
 
 ## Rules
 
-- Overlay create/mutate is a native mount (`mountCreateWorkflow` in a div). Do not boot `/create?embed=1` or `/creations/:id/mutate?embed=1` in an iframe for these two routes.
-- Navigation and post-submit refresh go through `createPageRuntime.js` (iframe leftover or native host).
+- Overlay create/mutate is a native mount (`mountCreateWorkflow` in a div). Do not boot `/create?embed=1` or `/creations/:id/mutate?embed=1` in an iframe; those HTML documents are gone.
+- Navigation and post-submit refresh go through `createPageRuntime.js` (native host callbacks via `createWorkflowHost`).
 - Submit in overlay: `navigate: 'none'` on `submitCreationWithPending`, then `refreshAfterSubmit({ creationId })`.
 - Blog editor: `shellOut('/create/blog/:id')` from overlay.
 - Navigation: `navigate(href)` (in-overlay), `shellOut(href)` (leave overlay), `requestCloseOverlay()` (Escape).

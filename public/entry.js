@@ -7,13 +7,11 @@
 const ENTRY_FROM_BODY_CLASS = {
 	'landing-page': 'landing',
 	'blog-edit-page': 'blog-edit',
-	'create-page': 'create',
 	'try-page': 'try',
 	'share-page': 'try', // try.html has share-page too; use try entry
 	'pricing-page': 'pricing',
 	'integrations-page': 'integrations',
 	'creation-detail-page': 'creation-detail',
-	'creation-edit-page': 'creation-edit',
 	'style-detail-page': 'style-detail',
 	'audio-clip-detail-page': 'audio-clip-detail',
 	'welcome-page': 'welcome',

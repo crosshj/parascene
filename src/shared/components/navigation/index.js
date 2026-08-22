@@ -57,41 +57,9 @@ function isServerSentPathname(pathname) {
 	);
 }
 
-function isLegacyStandaloneWorkflowDocument() {
-	if (document.body.classList.contains('create-page-embed')) return false;
-	if (document.body.classList.contains('creation-edit-embed')) return false;
-	if (window.__ps_create_embed === true || window.__ps_creation_edit_embed === true) {
-		return false;
-	}
-	if (document.body.classList.contains('creation-edit-page')) return true;
-	return (
-		document.body.classList.contains('create-page') ||
-		document.body.classList.contains('create-page-advanced')
-	);
-}
-
-function pathnameMatchesLegacyWorkflowDocument(pathname) {
-	const p = normalizeNavPathname(pathname);
-	// Mutate page also has `create-page` — check edit/mutate before generic create.
-	if (document.body.classList.contains('creation-edit-page')) {
-		return /^\/creations\/\d+\/(edit|mutate)$/.test(p);
-	}
-	if (document.body.classList.contains('create-page-advanced')) {
-		return p === '/create';
-	}
-	if (document.body.classList.contains('create-page')) {
-		return p === '/create';
-	}
-	return false;
-}
-
-/** Standalone create/mutate pages: popstate must load the previous document, not SPA-route in place. */
+/** Standalone create/mutate HTML documents are gone; native overlay uses chat shell. */
 function reloadLegacyWorkflowDocumentIfPathMismatch() {
-	if (!isLegacyStandaloneWorkflowDocument()) return false;
-	if (pathnameMatchesLegacyWorkflowDocument(window.location.pathname)) return false;
-	const target = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-	window.location.assign(target);
-	return true;
+	return false;
 }
 
 const AVATAR_URL_STORAGE_KEY = 'profile-avatar-url';

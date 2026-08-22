@@ -153,16 +153,12 @@ function isEmbedBody() {
 		document.body.classList.contains('profile-page-embed') ||
 		document.body.classList.contains('style-detail-embed') ||
 		document.body.classList.contains('audio-clip-detail-embed') ||
-		document.body.classList.contains('create-page-embed') ||
-		document.body.classList.contains('creation-edit-embed') ||
 		document.body.classList.contains('integrations-embed') ||
 		window.__ps_creation_detail_embed === true ||
 		window.__ps_prompt_library_embed === true ||
 		window.__ps_profile_embed === true ||
 		window.__ps_style_embed === true ||
 		window.__ps_audio_clip_embed === true ||
-		window.__ps_create_embed === true ||
-		window.__ps_creation_edit_embed === true ||
 		window.__ps_integrations_embed === true
 	);
 }
@@ -175,10 +171,6 @@ function isStandaloneOverlayHostPage() {
 	if (entry === 'user-profile') return true;
 	if (entry === 'style-detail') return true;
 	if (entry === 'audio-clip-detail') return true;
-	if (document.body.classList.contains('create-page') || document.body.classList.contains('create-page-advanced')) {
-		return true;
-	}
-	if (document.body.classList.contains('creation-edit-page')) return true;
 	if (document.body.classList.contains('integrations-page')) return true;
 	return false;
 }
