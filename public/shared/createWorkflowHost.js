@@ -1,6 +1,10 @@
 /**
  * Native create/mutate overlay host. When set, create/mutate runtimes
  * navigate via callbacks instead of iframe postMessage.
+ *
+ * Host is stored on window so every module copy (bare vs `?v=` cache-bust)
+ * shares the same overlay callbacks. `let host` in this file would split
+ * across those copies and skip post-submit dismiss.
  */
 
 /** @typedef {{
@@ -12,25 +16,43 @@
  *   onShellSync?: (payload: object) => void,
  * }} CreateWorkflowHost */
 
+const HOST_KEY = '__prsnCreateWorkflowHost';
+
 /** @type {CreateWorkflowHost | null} */
-let host = null;
+let moduleHost = null;
+
+function readHost() {
+	if (typeof window !== 'undefined' && Object.prototype.hasOwnProperty.call(window, HOST_KEY)) {
+		return window[HOST_KEY];
+	}
+	return moduleHost;
+}
+
+/** @param {CreateWorkflowHost | null} next */
+function writeHost(next) {
+	const value = next && typeof next === 'object' ? next : null;
+	moduleHost = value;
+	if (typeof window !== 'undefined') {
+		window[HOST_KEY] = value;
+	}
+}
 
 /** @param {CreateWorkflowHost | null} next */
 export function setCreateWorkflowHost(next) {
-	host = next && typeof next === 'object' ? next : null;
+	writeHost(next);
 }
 
 export function clearCreateWorkflowHost() {
-	host = null;
+	writeHost(null);
 }
 
 /** @returns {CreateWorkflowHost | null} */
 export function getCreateWorkflowHost() {
-	return host;
+	return readHost();
 }
 
 export function isCreateWorkflowNativeHost() {
-	return Boolean(host);
+	return Boolean(readHost());
 }
 
 /**

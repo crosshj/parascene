@@ -11,21 +11,18 @@ export async function bindImportSunoEntry(qs = '') {
 	const { importMediaFromUrl } = await import(`./importMedia.js${qs}`);
 
 	async function runImport({ provider, url }) {
-		const isOverlay = Boolean(document.querySelector('.create-workflow-root'));
 		const result = await importCreationWithPending({
 			runImport: ({ creationToken }) =>
 				importMediaFromUrl(provider, url, { creationToken }),
-			navigate: isOverlay ? 'none' : 'full',
+			navigate: 'none',
 		});
 		if (result?.warning?.code === 'duplicate_import') {
 			showToast(result.warning.message || 'You already imported this media', {
 				durationMs: 4000,
 			});
 		}
-		if (isOverlay) {
-			const runtimeMod = await import(`./createPageRuntime.js${qs}`);
-			runtimeMod.refreshAfterSubmit({ creationId: result.id });
-		}
+		const runtimeMod = await import(`./createPageRuntime.js${qs}`);
+		runtimeMod.refreshAfterSubmit({ creationId: result.id });
 		return result;
 	}
 

@@ -37,16 +37,8 @@ function runCreatePageInit(refreshAutoGrowTextareas, createSettingsSyncMod = {})
 		);
 	}
 
-	function isCreatePageEmbedMode() {
-		return Boolean(document.querySelector('.create-workflow-root'));
-	}
-
-	function createSubmitNavigateMode() {
-		return isCreatePageEmbedMode() ? 'none' : 'full';
-	}
-
-	async function afterCreateSubmitInEmbed(result) {
-		if (!isCreatePageEmbedMode() || !result?.id) return;
+	async function afterCreateOverlaySubmit(result) {
+		if (!result?.id) return;
 		const runtimeMod = await import(`../../shared/createPageRuntime.js${sharedQs}`);
 		runtimeMod.refreshAfterSubmit({ creationId: result.id });
 	}
@@ -598,8 +590,8 @@ function runCreatePageInit(refreshAutoGrowTextareas, createSettingsSyncMod = {})
 					},
 					styleKey: styleKey !== 'none' ? styleKey : undefined,
 					hydrateMentions,
-					navigate: createSubmitNavigateMode(),
-				}).then((result) => afterCreateSubmitInEmbed(result));
+					navigate: 'none',
+				}).then((result) => afterCreateOverlaySubmit(result));
 			};
 			const mentions = extractMentions(userPrompt);
 			if (mentions.length === 0) {
@@ -682,9 +674,9 @@ function runCreatePageInit(refreshAutoGrowTextareas, createSettingsSyncMod = {})
 					methodKey: mutateOptions.methodKey,
 					args,
 					hydrateMentions,
-					navigate: createSubmitNavigateMode(),
+					navigate: 'none',
 					...mutateLineage,
-				}).then((result) => afterCreateSubmitInEmbed(result));
+				}).then((result) => afterCreateOverlaySubmit(result));
 			};
 			const mentions = extractMentions(userPrompt);
 			if (mentions.length === 0) {

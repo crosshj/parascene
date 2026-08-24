@@ -12,7 +12,6 @@ const [
 	aspectRatioMod,
 	createSettingsSyncMod,
 	embedPageRuntimeMod,
-	createWorkflowHostMod,
 	createServersCacheMod,
 ] = await Promise.all([
 	import(`../../shared/blogCampaignPath.js${_qs}`),
@@ -20,7 +19,6 @@ const [
 	import(`../../shared/aspectRatio.js${_qs}`),
 	import(`../../shared/createSettingsSync.js${_qs}`),
 	import(`../../shared/embedPageRuntime.js${_qs}`),
-	import(`../../shared/createWorkflowHost.js${_qs}`),
 	import(`../../shared/createServersCache.js${_qs}`),
 	// Define app-tabs before this module's customElements.define — connectedCallback
 	// paints <app-tabs> and calls setActiveTab; an unupgraded node has no such method.
@@ -52,7 +50,6 @@ const {
 	CREATE_SETTINGS_UPDATED_EVENT,
 } = createSettingsSyncMod;
 const { notifySpaPageOverlayEmbedReady } = embedPageRuntimeMod;
-const { isCreateWorkflowNativeHost } = createWorkflowHostMod;
 const {
 	getCreateServersPaint,
 	refreshCreateServersFromNetwork,
@@ -79,10 +76,6 @@ let attachPromptInlineSuggest;
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
 	return meta?.getAttribute('content')?.trim() || '';
-}
-
-function isCreatePageEmbed() {
-	return isCreateWorkflowNativeHost();
 }
 
 function dataBuilderTabMarkup() {
@@ -161,8 +154,8 @@ function dataBuilderTabMarkup() {
           </tab>`;
 }
 
-async function afterCreateRouteSubmitInEmbed(result) {
-	if (!isCreatePageEmbed() || !result?.id) return;
+async function afterCreateOverlaySubmit(result) {
+	if (!result?.id) return;
 	const v = getAssetVersionParam();
 	const qs = v ? `?v=${encodeURIComponent(v)}` : '';
 	const runtimeMod = await import(`../../shared/createPageRuntime.js${qs}`);
@@ -325,21 +318,19 @@ class AppRouteCreate extends HTMLElement {
 
 	async connectedCallback() {
 		const depsPromise = loadDeps();
-		if (isCreatePageEmbed()) {
-			const v = getAssetVersionParam();
-			const qs = v ? `?v=${encodeURIComponent(v)}` : '';
-			void import(`../../shared/createPageRuntime.js${qs}`).then((runtimeMod) => {
-				runtimeMod.bindCreatePageEmbedNavigation();
-				runtimeMod.bindCreatePageEmbedEscape(() => {
-					const confirm = this.querySelector('.create-route-advanced-confirm.open:not([hidden])');
-					if (confirm instanceof HTMLElement) return true;
-					const preview = this.querySelector('[data-advanced-preview-dialog].open:not([hidden])');
-					if (preview instanceof HTMLElement) return true;
-					const blog = this.querySelector('[data-blog-campaign-dialog].open:not([hidden])');
-					return blog instanceof HTMLElement;
-				});
+		const v = getAssetVersionParam();
+		const qs = v ? `?v=${encodeURIComponent(v)}` : '';
+		void import(`../../shared/createPageRuntime.js${qs}`).then((runtimeMod) => {
+			runtimeMod.bindCreatePageEmbedNavigation();
+			runtimeMod.bindCreatePageEmbedEscape(() => {
+				const confirm = this.querySelector('.create-route-advanced-confirm.open:not([hidden])');
+				if (confirm instanceof HTMLElement) return true;
+				const preview = this.querySelector('[data-advanced-preview-dialog].open:not([hidden])');
+				if (preview instanceof HTMLElement) return true;
+				const blog = this.querySelector('[data-blog-campaign-dialog].open:not([hidden])');
+				return blog instanceof HTMLElement;
 			});
-		}
+		});
 		try {
 			mergeSharedSettingsIntoSessionSelections();
 		} catch (_) {
@@ -348,8 +339,7 @@ class AppRouteCreate extends HTMLElement {
 		this._showBlogTab = false;
 		if (this._blogUserIsAdmin == null) this._blogUserIsAdmin = false;
 		this._serversLoading = true;
-		const embedOnly = isCreatePageEmbed();
-		this._embedOnly = embedOnly;
+		this._embedOnly = true;
 		// Locked to Advanced for now — hide Data Builder / Blog tab picker.
 		// const dataBuilderTab = embedOnly ? '' : dataBuilderTabMarkup();
 		const dataBuilderTab = '';
@@ -745,7 +735,7 @@ class AppRouteCreate extends HTMLElement {
 			// 'blog' is always listed: the Blog tab is injected asynchronously (admin/founder only) after
 			// the profile gate resolves, so render-time `_showBlogTab` may still be false here.
 			// setActiveTab() safely falls back to the first tab when the target id isn't present.
-			const CREATE_TAB_IDS = this._embedOnly ? ['basic'] : ['basic', 'advanced', 'blog'];
+			const CREATE_TAB_IDS = ['basic'];
 			const setCreateActiveTab = (id, opts) => {
 				if (typeof tabsEl.setActiveTab !== 'function') return;
 				tabsEl.setActiveTab(id, opts);
@@ -898,7 +888,6 @@ class AppRouteCreate extends HTMLElement {
 	}
 
 	_notifyCreateEmbedReady() {
-		if (!isCreatePageEmbed()) return;
 		if (this._createEmbedReadySent) return;
 		this._createEmbedReadySent = true;
 		notifySpaPageOverlayEmbedReady();
@@ -1608,10 +1597,10 @@ class AppRouteCreate extends HTMLElement {
 				args: pending.args,
 				creditCost: pending.cost,
 				hydrateMentions,
-				navigate: isCreatePageEmbed() ? 'none' : 'spa',
+				navigate: 'none',
 				onInsufficientCredits: async () => { await this.loadCredits(); },
 				onError: async () => { await this.loadCredits(); }
-			}).then((result) => afterCreateRouteSubmitInEmbed(result));
+			}).then((result) => afterCreateOverlaySubmit(result));
 		};
 
 		const prompt = typeof pending?.args?.prompt === 'string' ? pending.args.prompt : '';
@@ -2423,7 +2412,7 @@ class AppRouteCreate extends HTMLElement {
 				mutateOfId,
 				mutateParentIds,
 				hydrateMentions,
-				navigate: isCreatePageEmbed() ? 'none' : 'spa',
+				navigate: 'none',
 				onInsufficientCredits: async () => {
 					this.resetCreateButton(button);
 					await this.loadCredits();
@@ -2432,7 +2421,7 @@ class AppRouteCreate extends HTMLElement {
 					this.resetCreateButton(button);
 					await this.loadCredits();
 				}
-			}).then((result) => afterCreateRouteSubmitInEmbed(result));
+			}).then((result) => afterCreateOverlaySubmit(result));
 		};
 
 		async function runMentionsCheckAndSubmit() {

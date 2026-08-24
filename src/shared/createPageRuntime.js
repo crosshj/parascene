@@ -32,10 +32,6 @@ const SHELL_OUT_MESSAGE = 'prsn-creation-detail-overlay-shell-out';
 const DISMISS_MESSAGE = 'prsn-workflow-overlay-dismiss';
 const CREATE_EDITOR_COOKIE = 'create_editor';
 
-export function isCreatePageEmbed() {
-	return isCreateWorkflowNativeHost();
-}
-
 function postToParentOverlay(payload) {
 	const host = getCreateWorkflowHost();
 	if (!host) return false;
@@ -111,7 +107,7 @@ export function navigate(href, options = {}) {
 		return;
 	}
 
-	if (isCreatePageEmbed()) {
+	if (isCreateWorkflowNativeHost()) {
 		postToParentOverlay({
 			type: ROUTE_MESSAGE,
 			href: raw,
@@ -198,7 +194,7 @@ function shouldInterceptEmbedLink(link, e) {
 }
 
 export function bindCreatePageEmbedNavigation() {
-	if (!isCreatePageEmbed()) return;
+	if (!isCreateWorkflowNativeHost()) return;
 	if (document.documentElement.dataset.prsnCreateEmbedNavBound === '1') return;
 	document.documentElement.dataset.prsnCreateEmbedNavBound = '1';
 	document.addEventListener(
@@ -237,7 +233,7 @@ export function bindCreatePageEmbedNavigation() {
  * @param {() => boolean} hasOpenEscapeTarget
  */
 export function bindCreatePageEmbedEscape(hasOpenEscapeTarget) {
-	if (!isCreatePageEmbed()) return;
+	if (!isCreateWorkflowNativeHost()) return;
 	if (document.documentElement.dataset.prsnCreateEmbedEscBound === '1') return;
 	document.documentElement.dataset.prsnCreateEmbedEscBound = '1';
 	document.addEventListener(
