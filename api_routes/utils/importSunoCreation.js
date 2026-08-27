@@ -1,6 +1,6 @@
 import sharp from "sharp";
 import {
-	extractSunoLinkTarget,
+	isSunoSongImportUrl,
 	resolveSunoSongFromUrl,
 } from "../suno.js";
 import {
@@ -47,7 +47,7 @@ export async function previewSunoImport({ userId, url }) {
 	}
 
 	const rawUrl = typeof url === "string" ? url.trim() : "";
-	if (!rawUrl || !extractSunoLinkTarget(rawUrl)) {
+	if (!rawUrl || !isSunoSongImportUrl(rawUrl)) {
 		const err = new Error("Paste a suno.com song link");
 		err.status = 400;
 		err.code = "INVALID_SUNO_URL";
@@ -104,7 +104,7 @@ export async function importSunoCreation({ userId, url, creationToken, queries, 
 	}
 
 	const rawUrl = typeof url === "string" ? url.trim() : "";
-	if (!rawUrl || !extractSunoLinkTarget(rawUrl)) {
+	if (!rawUrl || !isSunoSongImportUrl(rawUrl)) {
 		const err = new Error("Paste a suno.com song link");
 		err.status = 400;
 		err.code = "INVALID_SUNO_URL";

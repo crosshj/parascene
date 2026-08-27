@@ -510,6 +510,10 @@ function extractXStatusInfo(url) {
 const SUNO_UUID_RE =
 	/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 
+function emptySunoLinkIds() {
+	return { songId: '', slug: '', hookId: '', playlistId: '' };
+}
+
 function extractSunoLinkInfo(url) {
 	let parsed;
 	try {
@@ -525,26 +529,80 @@ function extractSunoLinkInfo(url) {
 
 	const songMatch = pathname.match(/^\/song\/([a-f0-9-]{36})\/?$/i);
 	if (songMatch?.[1] && SUNO_UUID_RE.test(songMatch[1])) {
-		return { songId: songMatch[1].toLowerCase(), slug: '' };
+		return { kind: 'song', ...emptySunoLinkIds(), songId: songMatch[1].toLowerCase() };
 	}
 
 	const embedMatch = pathname.match(/^\/embed\/([a-f0-9-]{36})\/?$/i);
 	if (embedMatch?.[1] && SUNO_UUID_RE.test(embedMatch[1])) {
-		return { songId: embedMatch[1].toLowerCase(), slug: '' };
+		return { kind: 'song', ...emptySunoLinkIds(), songId: embedMatch[1].toLowerCase() };
 	}
 
 	const shareMatch = pathname.match(/^\/s\/([A-Za-z0-9]{8,32})\/?$/);
 	if (shareMatch?.[1]) {
-		return { songId: '', slug: shareMatch[1] };
+		return { kind: 'share', ...emptySunoLinkIds(), slug: shareMatch[1] };
+	}
+
+	const hookMatch = pathname.match(/^\/hook\/([a-f0-9-]{36})\/?$/i);
+	if (hookMatch?.[1] && SUNO_UUID_RE.test(hookMatch[1])) {
+		return { kind: 'hook', ...emptySunoLinkIds(), hookId: hookMatch[1].toLowerCase() };
+	}
+
+	const handleHookMatch = pathname.match(/^\/@([^/]+)\/hook\/([a-f0-9-]{36})\/?$/i);
+	if (handleHookMatch?.[2] && SUNO_UUID_RE.test(handleHookMatch[2])) {
+		return { kind: 'hook', ...emptySunoLinkIds(), hookId: handleHookMatch[2].toLowerCase() };
+	}
+
+	const playlistMatch = pathname.match(/^\/playlist\/([a-f0-9-]{36})\/?$/i);
+	if (playlistMatch?.[1] && SUNO_UUID_RE.test(playlistMatch[1])) {
+		return {
+			kind: 'playlist',
+			...emptySunoLinkIds(),
+			playlistId: playlistMatch[1].toLowerCase(),
+		};
+	}
+
+	const handlePlaylistMatch = pathname.match(
+		/^\/@([^/]+)\/playlist\/([a-f0-9-]{36})\/?$/i
+	);
+	if (handlePlaylistMatch?.[2] && SUNO_UUID_RE.test(handlePlaylistMatch[2])) {
+		return {
+			kind: 'playlist',
+			...emptySunoLinkIds(),
+			playlistId: handlePlaylistMatch[2].toLowerCase(),
+		};
 	}
 
 	return null;
 }
 
-function sunoLinkLabel({ songId, slug }) {
+function sunoLinkLabel({ kind, songId, slug, hookId, playlistId }) {
+	if (kind === 'hook' && hookId) return `hook ${hookId.slice(0, 8)}`;
+	if (kind === 'playlist' && playlistId) return `playlist ${playlistId.slice(0, 8)}`;
 	if (songId) return songId.slice(0, 8);
 	if (slug) return slug;
 	return 'suno';
+}
+
+function formatSunoUnfurlTitle(rawTitle, kind) {
+	let t = String(rawTitle || '').trim();
+	if (!t) return '';
+
+	if (kind === 'playlist') {
+		t = t.replace(/\s+\|\s+Suno(?:\s+Playlist)?\s*$/i, '');
+		t = t.replace(/\s+by\s+@[A-Za-z0-9._-]+\s*$/i, '');
+		t = t.trim();
+		return t ? `${t} | Suno playlist` : '';
+	}
+
+	if (kind === 'hook') {
+		if (/\|\s*Suno\s+hook\s*$/i.test(t)) return t;
+		if (/\s+\|\s+Suno\s*$/i.test(t)) {
+			return t.replace(/\s+\|\s+Suno\s*$/i, ' | Suno hook');
+		}
+		return `${t} | Suno hook`;
+	}
+
+	return t;
 }
 
 function extractXHashtagInfo(url) {
@@ -604,8 +662,8 @@ const CREATION_URL_RE = /https?:\/\/[^\s"'<>]+\/creations\/(\d+)\/?/g;
  * - Initial label is `youtube {videoId}`
  * - Call `hydrateYoutubeLinkTitles(rootEl)` to asynchronously replace the link text with `youtube @handle - {title...}`
  *
- * Also detects Suno URLs (`/s/…`, `/song/…`, `/embed/…`) and converts them into links labeled `suno …`.
- * Call `hydrateSunoLinkTitles(rootEl)` and `hydrateSunoEmbeds(rootEl)` (or `hydrateRichUserTextEmbeds`) for titles and player embeds.
+ * Also detects Suno URLs (`/s/…`, `/song/…`, `/embed/…`, `/hook/…`, `/playlist/…`) and converts them into links labeled `suno …`.
+ * Call `hydrateSunoLinkTitles(rootEl)` and `hydrateSunoEmbeds(rootEl)` (or `hydrateRichUserTextEmbeds`) for titles, song iframes, and hook/playlist cards.
  *
  * Also detects X/Twitter post URLs and converts them into links with a consistent label:
  * - Initial label is `x-twitter @{user}` (or `x-twitter {statusId}` when username not present)
@@ -667,11 +725,19 @@ function textWithCreationLinksCore(text, { inlineMarkdown = false } = {}) {
 		if (suno) {
 			const safeUrl = escapeHtml(url);
 			const label = sunoLinkLabel(suno);
+			const kind = suno.kind || 'song';
+			const kindAttr = ` data-suno-kind="${escapeHtml(kind)}"`;
 			const songAttr = suno.songId
 				? ` data-suno-song-id="${escapeHtml(suno.songId)}"`
 				: '';
 			const slugAttr = suno.slug ? ` data-suno-slug="${escapeHtml(suno.slug)}"` : '';
-			out += `<a href="${safeUrl}" class="user-link creation-link" target="_blank" rel="noopener noreferrer" data-suno-url="${safeUrl}"${songAttr}${slugAttr}>suno ${escapeHtml(label)}</a>`;
+			const hookAttr = suno.hookId
+				? ` data-suno-hook-id="${escapeHtml(suno.hookId)}"`
+				: '';
+			const playlistAttr = suno.playlistId
+				? ` data-suno-playlist-id="${escapeHtml(suno.playlistId)}"`
+				: '';
+			out += `<a href="${safeUrl}" class="user-link creation-link" target="_blank" rel="noopener noreferrer" data-suno-url="${safeUrl}" data-suno-preview-pending="true"${kindAttr}${songAttr}${slugAttr}${hookAttr}${playlistAttr} aria-label="suno ${escapeHtml(label)}">suno ${escapeHtml(label)}</a>`;
 			out += escapeHtml(trailing);
 			lastIndex = start + rawUrl.length;
 			continue;
@@ -967,28 +1033,56 @@ export function hydrateYoutubeLinkTitles(rootEl) {
 	}
 }
 
-const SUNO_RESOLVE_CACHE_PREFIX = 'ps_suno_resolve_v1:';
+const SUNO_RESOLVE_CACHE_PREFIX = 'ps_suno_resolve_v2:';
 const SUNO_RESOLVE_TTL_MS = 1000 * 60 * 60 * 24 * 30;
 const sunoResolveInFlight = new Map();
+
+function sunoResolveCacheKeyFromInfo(url, info) {
+	if (info?.kind === 'hook' && info.hookId) return `hook:${info.hookId}`;
+	if (info?.kind === 'playlist' && info.playlistId) return `playlist:${info.playlistId}`;
+	if (info?.kind === 'song' && info.songId) return `song:${info.songId}`;
+	return String(url || '').trim();
+}
+
+function sunoResolveCacheKeyFromPayload(url, payload) {
+	return sunoResolveCacheKeyFromInfo(url, payload);
+}
+
+function normalizeSunoResolvePayload(data) {
+	const songId = typeof data?.songId === 'string' ? data.songId.trim() : '';
+	const hookId = typeof data?.hookId === 'string' ? data.hookId.trim() : '';
+	const playlistId =
+		typeof data?.playlistId === 'string' ? data.playlistId.trim() : '';
+	let kind = data?.kind;
+	if (kind !== 'song' && kind !== 'hook' && kind !== 'playlist') {
+		if (hookId && SUNO_UUID_RE.test(hookId)) kind = 'hook';
+		else if (playlistId && SUNO_UUID_RE.test(playlistId)) kind = 'playlist';
+		else if (songId && SUNO_UUID_RE.test(songId)) kind = 'song';
+		else return null;
+	}
+	if (kind === 'song' && !SUNO_UUID_RE.test(songId)) return null;
+	if (kind === 'hook' && !SUNO_UUID_RE.test(hookId)) return null;
+	if (kind === 'playlist' && !SUNO_UUID_RE.test(playlistId)) return null;
+	return {
+		kind,
+		songId,
+		hookId,
+		playlistId,
+		title: typeof data?.title === 'string' ? data.title.trim() : '',
+		creator: typeof data?.creator === 'string' ? data.creator.trim() : '',
+		ogImage: typeof data?.ogImage === 'string' ? data.ogImage.trim() : '',
+		url: typeof data?.url === 'string' ? data.url.trim() : '',
+	};
+}
 
 function getCachedSunoResolve(cacheKey) {
 	try {
 		const raw = localStorage.getItem(`${SUNO_RESOLVE_CACHE_PREFIX}${cacheKey}`);
 		if (!raw) return null;
 		const parsed = JSON.parse(raw);
-		if (
-			!parsed ||
-			typeof parsed.songId !== 'string' ||
-			typeof parsed.savedAt !== 'number'
-		) {
-			return null;
-		}
+		if (!parsed || typeof parsed.savedAt !== 'number') return null;
 		if (Date.now() - parsed.savedAt > SUNO_RESOLVE_TTL_MS) return null;
-		return {
-			songId: parsed.songId,
-			title: typeof parsed.title === 'string' ? parsed.title : '',
-			creator: typeof parsed.creator === 'string' ? parsed.creator : '',
-		};
+		return normalizeSunoResolvePayload(parsed);
 	} catch {
 		return null;
 	}
@@ -999,9 +1093,7 @@ function setCachedSunoResolve(cacheKey, payload) {
 		localStorage.setItem(
 			`${SUNO_RESOLVE_CACHE_PREFIX}${cacheKey}`,
 			JSON.stringify({
-				songId: payload.songId,
-				title: payload.title || '',
-				creator: payload.creator || '',
+				...payload,
 				savedAt: Date.now(),
 			})
 		);
@@ -1010,20 +1102,35 @@ function setCachedSunoResolve(cacheKey, payload) {
 	}
 }
 
-function formatSunoLabel({ title, creator, songId, slug }) {
+function formatSunoLabel({ title, creator, kind, songId, slug, hookId, playlistId }) {
 	const t = clipText(title, { max: 72 });
 	const c = clipText(creator, { max: 40 });
 	if (t && c) return `suno ${c} - ${t}`;
 	if (t) return `suno - ${t}`;
+	if (kind === 'hook' && hookId) return `suno hook ${hookId.slice(0, 8)}`;
+	if (kind === 'playlist' && playlistId) {
+		return `suno playlist ${playlistId.slice(0, 8)}`;
+	}
 	if (songId) return `suno ${songId.slice(0, 8)}`;
 	if (slug) return `suno ${slug}`;
 	return '';
 }
 
+function applySunoResolveToAnchor(a, payload) {
+	if (!(a instanceof HTMLAnchorElement) || !payload) return;
+	a.dataset.sunoKind = payload.kind;
+	if (payload.songId) a.dataset.sunoSongId = payload.songId;
+	if (payload.hookId) a.dataset.sunoHookId = payload.hookId;
+	if (payload.playlistId) a.dataset.sunoPlaylistId = payload.playlistId;
+	if (payload.url) a.dataset.sunoCanonicalUrl = payload.url;
+}
+
 function fetchSunoResolve(url) {
 	const key = String(url || '').trim();
 	if (!key) return Promise.resolve(null);
-	const cached = getCachedSunoResolve(key);
+	const info = extractSunoLinkInfo(key);
+	const canonicalKey = sunoResolveCacheKeyFromInfo(key, info);
+	const cached = getCachedSunoResolve(canonicalKey) || getCachedSunoResolve(key);
 	if (cached) return Promise.resolve(cached);
 
 	let p = sunoResolveInFlight.get(key);
@@ -1035,16 +1142,14 @@ function fetchSunoResolve(url) {
 			.then(async (res) => {
 				if (!res.ok) return null;
 				const data = await res.json().catch(() => null);
-				const songId =
-					typeof data?.songId === 'string' ? data.songId.trim() : '';
-				if (!songId || !SUNO_UUID_RE.test(songId)) return null;
-				const payload = {
-					songId,
-					title: typeof data?.title === 'string' ? data.title.trim() : '',
-					creator:
-						typeof data?.creator === 'string' ? data.creator.trim() : '',
-				};
-				setCachedSunoResolve(key, payload);
+				const payload = normalizeSunoResolvePayload(data);
+				if (!payload) return null;
+				setCachedSunoResolve(canonicalKey, payload);
+				const payloadKey = sunoResolveCacheKeyFromPayload(key, payload);
+				if (payloadKey !== canonicalKey) setCachedSunoResolve(payloadKey, payload);
+				if (key !== canonicalKey && key !== payloadKey) {
+					setCachedSunoResolve(key, payload);
+				}
 				return payload;
 			})
 			.catch(() => null)
@@ -1065,37 +1170,50 @@ export function hydrateSunoLinkTitles(rootEl) {
 	for (const a of links) {
 		if (!(a instanceof HTMLAnchorElement)) continue;
 		if (a.dataset.sunoTitleHydrated === 'true') continue;
+		if (a.dataset.sunoPreviewPending === 'true' || a.dataset.sunoEmbedPending === 'true') {
+			continue;
+		}
+		const kind = String(a.dataset.sunoKind || '').trim();
+		if (kind === 'hook' || kind === 'playlist') continue;
 
 		const url = String(a.dataset.sunoUrl || a.getAttribute('href') || '').trim();
 		if (!url) continue;
 
 		const slug = String(a.dataset.sunoSlug || '').trim();
 		const songId = String(a.dataset.sunoSongId || '').trim();
-		const cacheKey = url;
+		const cacheKey = sunoResolveCacheKeyFromInfo(url, extractSunoLinkInfo(url));
 
-		const cached = getCachedSunoResolve(cacheKey);
+		const cached = getCachedSunoResolve(cacheKey) || getCachedSunoResolve(url);
 		if (cached) {
+			applySunoResolveToAnchor(a, cached);
+			if (cached.kind === 'hook' || cached.kind === 'playlist') continue;
 			const label = formatSunoLabel({
 				title: cached.title,
 				creator: cached.creator,
+				kind: cached.kind,
 				songId: cached.songId || songId,
 				slug,
+				hookId: cached.hookId,
+				playlistId: cached.playlistId,
 			});
 			if (label) a.textContent = label;
-			if (cached.songId) a.dataset.sunoSongId = cached.songId;
 			a.dataset.sunoTitleHydrated = 'true';
 			continue;
 		}
 
 		void fetchSunoResolve(url).then((payload) => {
-			if (!payload?.songId) return;
+			if (!payload) return;
 			if (a.dataset.sunoUrl !== url && a.getAttribute('href') !== url) return;
-			a.dataset.sunoSongId = payload.songId;
+			applySunoResolveToAnchor(a, payload);
+			if (payload.kind === 'hook' || payload.kind === 'playlist') return;
 			const label = formatSunoLabel({
 				title: payload.title,
 				creator: payload.creator,
+				kind: payload.kind,
 				songId: payload.songId,
 				slug,
+				hookId: payload.hookId,
+				playlistId: payload.playlistId,
 			});
 			if (label) a.textContent = label;
 			a.dataset.sunoTitleHydrated = 'true';
@@ -2215,8 +2333,105 @@ function mountSunoEmbed(a, songId, titleText) {
 	a.replaceWith(wrap);
 }
 
+function mountSunoPreviewCard(a, payload) {
+	if (!(a instanceof HTMLAnchorElement) || !payload) return;
+	if (a.dataset.sunoEmbedHydrated === 'true') return;
+	const kind = payload.kind === 'playlist' ? 'playlist' : 'hook';
+	a.dataset.sunoEmbedHydrated = 'true';
+
+	const wrap = document.createElement('a');
+	wrap.className = `connect-chat-suno-preview connect-chat-suno-preview--${kind}`;
+	const href = payload.url || a.getAttribute('href') || '';
+	wrap.href = href;
+	wrap.target = '_blank';
+	wrap.rel = 'noopener noreferrer';
+	wrap.dataset.sunoKind = kind;
+	if (payload.hookId) wrap.dataset.sunoHookId = payload.hookId;
+	if (payload.playlistId) wrap.dataset.sunoPlaylistId = payload.playlistId;
+
+	const media = document.createElement('span');
+	media.className = 'connect-chat-suno-preview-media';
+	if (payload.ogImage) {
+		const img = document.createElement('img');
+		img.className = 'connect-chat-suno-preview-img';
+		img.src = payload.ogImage;
+		img.alt = '';
+		img.loading = 'lazy';
+		img.decoding = 'async';
+		media.appendChild(img);
+	}
+	wrap.appendChild(media);
+
+	wrap.insertAdjacentHTML('beforeend', INLINE_CHAT_VIDEO_PLAY_OVERLAY_HTML);
+
+	const title = formatSunoUnfurlTitle(
+		payload.title ||
+			(kind === 'playlist' && payload.playlistId
+				? `playlist ${payload.playlistId.slice(0, 8)}`
+				: payload.hookId
+					? `hook ${payload.hookId.slice(0, 8)}`
+					: ''),
+		kind
+	);
+	const creator = payload.creator || '';
+	const showCreator = kind !== 'playlist' && Boolean(creator);
+	if (title || showCreator) {
+		const meta = document.createElement('span');
+		meta.className = 'connect-chat-suno-preview-meta';
+		if (title) {
+			const titleEl = document.createElement('span');
+			titleEl.className = 'connect-chat-suno-preview-title';
+			titleEl.textContent = title;
+			meta.appendChild(titleEl);
+		}
+		if (showCreator) {
+			const creatorEl = document.createElement('span');
+			creatorEl.className = 'connect-chat-suno-preview-creator';
+			creatorEl.textContent = creator;
+			meta.appendChild(creatorEl);
+		}
+		wrap.appendChild(meta);
+	}
+	const tooltip = kind === 'playlist' ? title : [title, creator].filter(Boolean).join(' · ');
+	if (tooltip) wrap.title = tooltip;
+	wrap.setAttribute(
+		'aria-label',
+		tooltip || (kind === 'playlist' ? 'Suno playlist' : 'Suno hook')
+	);
+	a.replaceWith(wrap);
+}
+
+function mountSunoFromPayload(a, payload, titleText) {
+	if (!payload) return;
+	applySunoResolveToAnchor(a, payload);
+	if (payload.kind === 'hook' || payload.kind === 'playlist') {
+		mountSunoPreviewCard(a, payload);
+		return;
+	}
+	if (payload.kind === 'song' && payload.songId) {
+		const label = formatSunoLabel({
+			title: payload.title,
+			creator: payload.creator,
+			kind: payload.kind,
+			songId: payload.songId,
+			slug: a.dataset.sunoSlug || '',
+			hookId: payload.hookId,
+			playlistId: payload.playlistId,
+		});
+		if (label && a.dataset.sunoTitleHydrated !== 'true') {
+			a.textContent = label;
+			a.dataset.sunoTitleHydrated = 'true';
+		}
+		mountSunoEmbed(
+			a,
+			payload.songId,
+			label || titleText || `suno ${payload.songId.slice(0, 8)}`
+		);
+	}
+}
+
 /**
- * Insert a Suno iframe sibling after each `a[data-suno-url]` link from `processUserText`.
+ * Insert a Suno iframe or OG preview card after each `a[data-suno-url]` from `processUserText`.
  * Short `/s/…` links are resolved via `/api/suno/resolve` before embedding.
  *
  * @param {Element|Document} rootEl
@@ -2232,41 +2447,43 @@ export function hydrateSunoEmbeds(rootEl) {
 		if (a.dataset.sunoEmbedHydrated === 'true') continue;
 
 		const url = String(a.dataset.sunoUrl || a.getAttribute('href') || '').trim();
+		const kind = String(a.dataset.sunoKind || '').trim();
 		let songId = String(a.dataset.sunoSongId || '').trim();
 		const titleText = a.textContent ? String(a.textContent).trim() : '';
+		const isPreviewKind = kind === 'hook' || kind === 'playlist';
+
+		if (isPreviewKind) {
+			if (!url) {
+				delete a.dataset.sunoPreviewPending;
+				continue;
+			}
+			void fetchSunoResolve(url).then((payload) => {
+				if (!payload || a.dataset.sunoEmbedHydrated === 'true') {
+					if (!payload) delete a.dataset.sunoPreviewPending;
+					return;
+				}
+				mountSunoFromPayload(a, payload, titleText);
+			});
+			continue;
+		}
 
 		if (songId && SUNO_UUID_RE.test(songId)) {
-			// Reserve the placeholder before swapping so the link text never flashes
-			// and the layout height stays fixed across the swap.
-			a.dataset.sunoEmbedPending = 'true';
 			mountSunoEmbed(a, songId, titleText);
 			continue;
 		}
 
-		if (!url) continue;
-		a.dataset.sunoEmbedPending = 'true';
+		if (!url) {
+			delete a.dataset.sunoPreviewPending;
+			continue;
+		}
 		void fetchSunoResolve(url).then((payload) => {
-			if (!payload?.songId) {
+			if (!payload) {
+				delete a.dataset.sunoPreviewPending;
 				delete a.dataset.sunoEmbedPending;
 				return;
 			}
 			if (a.dataset.sunoEmbedHydrated === 'true') return;
-			const label = formatSunoLabel({
-				title: payload.title,
-				creator: payload.creator,
-				songId: payload.songId,
-				slug: a.dataset.sunoSlug || '',
-			});
-			if (label && a.dataset.sunoTitleHydrated !== 'true') {
-				a.textContent = label;
-				a.dataset.sunoTitleHydrated = 'true';
-			}
-			mountSunoEmbed(
-				a,
-				payload.songId,
-				label || titleText || `suno ${payload.songId.slice(0, 8)}`
-			);
-			delete a.dataset.sunoEmbedPending;
+			mountSunoFromPayload(a, payload, titleText);
 		});
 	}
 }
