@@ -579,6 +579,16 @@ export async function runCreationJob({ queries, storage, payload }) {
 			throw err;
 		}
 		argsForProvider = audioOut.args;
+		if (audioOut.handled || args?.audio_creation_id != null) {
+			logCreation("audio materialize for provider", {
+				method,
+				handled: Boolean(audioOut.handled),
+				has_input_audio_urls: Array.isArray(argsForProvider.input_audio_urls)
+					? argsForProvider.input_audio_urls.length
+					: 0,
+				stripped_audio_creation_id: argsForProvider.audio_creation_id == null,
+			});
+		}
 
 		const providerPayload = asyncRequested
 			? { method, args: argsForProvider, async: true }

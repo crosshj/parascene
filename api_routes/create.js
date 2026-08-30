@@ -2513,6 +2513,11 @@ export default function createCreateRoutes({ queries, storage }) {
 				methodConfig?.fields || null
 			);
 			if (!clipResolved.ok) {
+				console.warn("[create] audio resolve failed", {
+					method,
+					audio_creation_id: argsForProvider.audio_creation_id ?? null,
+					error: clipResolved.error
+				});
 				return res.status(clipResolved.status).json({
 					error: clipResolved.error,
 					message: clipResolved.error,
@@ -2530,6 +2535,11 @@ export default function createCreateRoutes({ queries, storage }) {
 					}
 				);
 				if (!minted.ok) {
+					console.warn("[create] audio_creation_id mint failed", {
+						method,
+						audio_creation_id: clipResolved.args?.audio_creation_id ?? null,
+						error: minted.error
+					});
 					return res.status(minted.status).json({
 						error: minted.error,
 						message: minted.error,
@@ -2538,6 +2548,18 @@ export default function createCreateRoutes({ queries, storage }) {
 				}
 			}
 			argsForProvider = clipResolved.args;
+			if (argsForProvider.audio_creation_id != null || clipResolved.handled) {
+				console.log("[create] audio resolve", {
+					method,
+					audio_creation_id: argsForProvider.audio_creation_id ?? null,
+					audio_start_sec: argsForProvider.audio_start_sec ?? null,
+					audio_duration_sec: argsForProvider.audio_duration_sec ?? null,
+					handled: Boolean(clipResolved.handled),
+					has_input_audio_urls: Array.isArray(argsForProvider.input_audio_urls)
+						? argsForProvider.input_audio_urls.length
+						: 0
+				});
+			}
 
 			// Exact text the user entered (before $style expansion, hydrate JSON, create.html style wrapper, etc.).
 			// Shown on creation detail; meta.args.prompt is the provider payload (see More Info).
