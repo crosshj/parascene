@@ -1,5 +1,6 @@
 /** Shared helpers for prsn_audio_clips (owners in meta, storage URLs). */
 
+import { loadBlueCdnContext, mintCdnFetchLink, parseCdnWindowQuery } from "./blueCdn.js";
 import { mapCreatedImageRowMediaFields } from "./resolveCreationDisplayMedia.js";
 import { ACTIVE_SHARE_VERSION, mintShareToken, verifyShareToken } from "./shareLink.js";
 import { getShareBaseUrl } from "./url.js";
@@ -230,6 +231,234 @@ export function shareUrlForCreationExtractedAudio(creationId, sharedByUserId, ba
 		return `${base}/api/share/${encodeURIComponent(ACTIVE_SHARE_VERSION)}/${encodeURIComponent(token)}/audio`;
 	} catch {
 		return null;
+	}
+}
+
+/**
+ * Provider-fetchable CDN Creation audio URL (unauthed share → 302 Blue window).
+ * `so` / `du` are query params on the Parascene URL — Blue is minted on GET.
+ */
+export function shareUrlForCdnCreationAudio(
+	creationId,
+	sharedByUserId,
+	{ so, du } = {},
+	baseUrl = null
+) {
+	const id = Number(creationId);
+	const uid = Number(sharedByUserId);
+	if (!Number.isFinite(id) || id <= 0 || !Number.isFinite(uid) || uid <= 0) return null;
+	try {
+		const token = mintShareToken({
+			version: ACTIVE_SHARE_VERSION,
+			imageId: id,
+			sharedByUserId: uid
+		});
+		const base = (baseUrl || getShareBaseUrl() || "").replace(/\/$/, "");
+		let url = `${base}/api/share/${encodeURIComponent(ACTIVE_SHARE_VERSION)}/${encodeURIComponent(token)}/cdn-audio`;
+		const qs = new URLSearchParams();
+		if (so != null && Number.isFinite(Number(so))) qs.set("so", String(Number(so)));
+		if (du != null && Number.isFinite(Number(du)) && Number(du) > 0) {
+			qs.set("du", String(Number(du)));
+		}
+		const q = qs.toString();
+		if (q) url += `?${q}`;
+		return url;
+	} catch {
+		return null;
+	}
+}
+
+function parseMetaObject(raw) {
+	if (raw == null) return null;
+	if (typeof raw === "object" && !Array.isArray(raw)) return raw;
+	if (typeof raw !== "string") return null;
+	try {
+		const o = JSON.parse(raw);
+		return o && typeof o === "object" && !Array.isArray(o) ? o : null;
+	} catch {
+		return null;
+	}
+}
+
+function cdnIdFromCreationMeta(meta) {
+	const audio = meta?.audio && typeof meta.audio === "object" ? meta.audio : null;
+	const cdnId = typeof audio?.cdn_id === "string" ? audio.cdn_id.trim() : "";
+	return /^o_[a-f0-9]{24}$/i.test(cdnId) ? cdnId.toLowerCase() : "";
+}
+
+export function audioResolveError(status, error) {
+	return { ok: false, status, error, code: "audio_resolve_failed" };
+}
+
+/** Map a resolved audio URL onto whatever audio fields the method schema declares. */
+export function applyResolvedAudioUrl(args, audioUrl, methodFields = null) {
+	let applied = false;
+	if (methodFields && typeof methodFields === "object") {
+		for (const [key, spec] of Object.entries(methodFields)) {
+			const type = spec && spec.type;
+			if (type === "audio_url_array") {
+				args[key] = [audioUrl];
+				applied = true;
+			} else if (type === "audio_url") {
+				args[key] = audioUrl;
+				applied = true;
+			}
+		}
+	}
+	if (!applied) {
+		args.input_audio_urls = [audioUrl];
+		args.audio_url = audioUrl;
+		if (Object.prototype.hasOwnProperty.call(args, "input_audio_url")) {
+			args.input_audio_url = audioUrl;
+		}
+	}
+	return args;
+}
+
+export function stripParasceneAudioCreationRefs(args) {
+	delete args.audio_creation_id;
+	delete args.audio_start_sec;
+	delete args.audio_duration_sec;
+	delete args.audio_start;
+	delete args.audio_duration;
+	return args;
+}
+
+/**
+ * Resolve audio_creation_id + start/duration into provider-fetchable input_audio_urls.
+ * Prefer this over audio_clip_id when both are present.
+ */
+export async function resolveAudioCreationProviderArgs(
+	queries,
+	userId,
+	args,
+	providerBase = null,
+	methodFields = null
+) {
+	const next = args && typeof args === "object" ? { ...args } : {};
+	const creationId = Number(next.audio_creation_id);
+	if (!Number.isFinite(creationId) || creationId <= 0) {
+		if (next.audio_creation_id != null && String(next.audio_creation_id).trim() !== "") {
+			return audioResolveError(400, "audio_creation_id must be a positive number.");
+		}
+		return { ok: true, args: next, handled: false };
+	}
+	const uid = Number(userId);
+	if (!Number.isFinite(uid) || uid <= 0) {
+		return audioResolveError(401, "Sign in to use this audio creation.");
+	}
+
+	const image = await queries.selectCreatedImageByIdAnyUser?.get(creationId);
+	if (!image) {
+		return audioResolveError(404, "Audio creation not found.");
+	}
+	const status = image.status || "completed";
+	if (status !== "completed") {
+		return audioResolveError(404, "Audio creation is not ready yet.");
+	}
+	if (image.unavailable_at != null && image.unavailable_at !== "") {
+		return audioResolveError(404, "Audio creation not found.");
+	}
+	const meta = parseMetaObject(image.meta);
+	const cdnId = cdnIdFromCreationMeta(meta);
+	if (!cdnId) {
+		return audioResolveError(
+			400,
+			"This audio creation has no CDN audio. Import it again or pick another song."
+		);
+	}
+
+	let window;
+	try {
+		const startRaw = next.audio_start_sec ?? next.audio_start ?? 0;
+		const durRaw = next.audio_duration_sec ?? next.audio_duration;
+		if (durRaw == null || String(durRaw).trim() === "") {
+			const err = new Error("audio_duration_sec is required.");
+			err.status = 400;
+			throw err;
+		}
+		window = parseCdnWindowQuery(startRaw, durRaw);
+	} catch (err) {
+		return audioResolveError(Number(err?.status) || 400, err?.message || "Invalid audio window.");
+	}
+	if (window.du == null) {
+		return audioResolveError(400, "audio_duration_sec must be a positive number.");
+	}
+
+	const base = providerBase || getShareBaseUrl();
+	const audioUrl = shareUrlForCdnCreationAudio(creationId, uid, window, base);
+	if (!audioUrl) {
+		return audioResolveError(500, "Could not build a CDN link for this audio range.");
+	}
+
+	next.audio_creation_id = creationId;
+	next.audio_start_sec = window.so ?? 0;
+	next.audio_duration_sec = window.du;
+	delete next.audio_clip_id;
+	applyResolvedAudioUrl(next, audioUrl, methodFields);
+	return { ok: true, args: next, handled: true, cdnId, window };
+}
+
+/**
+ * Prefer CDN Creation audio window; otherwise library audio_clip_id (throwaway slices).
+ */
+export async function resolveAudioProviderArgs(
+	queries,
+	userId,
+	args,
+	providerBase = null,
+	methodFields = null
+) {
+	const creationResolved = await resolveAudioCreationProviderArgs(
+		queries,
+		userId,
+		args,
+		providerBase,
+		methodFields
+	);
+	if (!creationResolved.ok) return creationResolved;
+	if (creationResolved.handled) return creationResolved;
+	return resolveAudioClipProviderArgs(queries, userId, creationResolved.args, providerBase);
+}
+
+/**
+ * Mint a Blue CDN window for the resolved Creation range.
+ * Blue sees only audio URL field(s) — not audio_creation_id.
+ */
+export async function materializeBlueProviderAudioArgs(queries, userId, args, opts = {}) {
+	const methodFields = opts.methodFields || null;
+	const resolved = await resolveAudioProviderArgs(
+		queries,
+		userId,
+		args,
+		opts.providerBase || getShareBaseUrl(),
+		methodFields
+	);
+	if (!resolved.ok) return resolved;
+	const next = { ...resolved.args };
+	if (!resolved.handled || !resolved.cdnId) {
+		return { ok: true, args: next, handled: false };
+	}
+	try {
+		const loadCtx = opts.loadBlueCdnContext || loadBlueCdnContext;
+		const mint = opts.mintCdnFetchLink || mintCdnFetchLink;
+		const ctx = await loadCtx(queries);
+		const link = await mint(ctx, resolved.cdnId, resolved.window || {});
+		const url = typeof link?.url === "string" ? link.url.trim() : "";
+		if (!url) {
+			return audioResolveError(502, "Could not create a CDN link for this audio range.");
+		}
+		applyResolvedAudioUrl(next, url, methodFields);
+		stripParasceneAudioCreationRefs(next);
+		if (methodFields && !methodFields.audio_url) {
+			delete next.audio_url;
+		}
+		return { ok: true, args: next, handled: true };
+	} catch (err) {
+		return audioResolveError(
+			Number(err?.status) || 502,
+			err?.message || "Could not create a CDN link for this audio range."
+		);
 	}
 }
 

@@ -2,6 +2,11 @@ import express from "express";
 import sharp from "sharp";
 import { resolveCreatedImageStorageFilename } from "./utils/resolveCreatedImageStorageFilename.js";
 import { verifyShareToken } from "./utils/shareLink.js";
+import {
+	loadBlueCdnContext,
+	mintCdnFetchLink,
+	parseCdnWindowQuery
+} from "./utils/blueCdn.js";
 
 function parseMeta(raw) {
 	if (raw == null) return null;
@@ -318,6 +323,66 @@ export default function createShareRoutes({ queries, storage }) {
 			return res.send(audioBuffer);
 		} catch {
 			return res.status(500).json({ error: "Failed to serve audio" });
+		}
+	});
+
+	// GET /api/share/:version/:token/cdn-audio — unauthed; token imageId = Creation id with meta.audio.cdn_id.
+	// Query so/du mint a short-lived Blue CDN window URL (302). Providers must not hit authed /api/create/.../audio.
+	router.get("/api/share/:version/:token/cdn-audio", async (req, res) => {
+		const version = String(req.params.version || "");
+		const token = String(req.params.token || "");
+
+		const verified = verifyShareToken({ version, token });
+		if (!verified.ok) {
+			return res.status(404).json({ error: "Not found" });
+		}
+
+		try {
+			const image = await queries.selectCreatedImageByIdAnyUser?.get(verified.imageId);
+			if (!image) {
+				return res.status(404).json({ error: "Not found" });
+			}
+			const status = image.status || "completed";
+			if (status !== "completed") {
+				return res.status(404).json({ error: "Not found" });
+			}
+			if (image.unavailable_at != null && image.unavailable_at !== "") {
+				return res.status(404).json({ error: "Not found" });
+			}
+			const meta = parseMeta(image.meta);
+			const cdnId =
+				meta?.audio && typeof meta.audio === "object" && typeof meta.audio.cdn_id === "string"
+					? meta.audio.cdn_id.trim()
+					: "";
+			if (!/^o_[a-f0-9]{24}$/i.test(cdnId)) {
+				return res.status(404).json({ error: "Not found" });
+			}
+
+			let window;
+			try {
+				window = parseCdnWindowQuery(req.query?.so, req.query?.du);
+			} catch (err) {
+				return res.status(Number(err?.status) || 400).json({ error: err.message || "Invalid window" });
+			}
+
+			const ctx = await loadBlueCdnContext(queries);
+			const link = await mintCdnFetchLink(ctx, cdnId.toLowerCase(), window);
+			res.set("Cache-Control", "private, no-store");
+			const wantJson =
+				req.query?.format === "json" ||
+				String(req.headers.accept || "").toLowerCase().includes("application/json");
+			if (wantJson) {
+				return res.json({ url: link.url, expires_at: link.expires_at || null });
+			}
+			return res.redirect(302, link.url);
+		} catch (err) {
+			const status = Number(err?.status) || 500;
+			if (status >= 500) {
+				console.error("[share] cdn-audio redirect failed:", err?.message || err);
+			}
+			return res.status(status >= 400 && status < 600 ? status : 500).json({
+				error: status >= 500 ? "Failed to serve audio" : err?.message || "Failed to serve audio"
+			});
 		}
 	});
 

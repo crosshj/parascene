@@ -8,7 +8,11 @@ import { letterboxImageBuffer } from "./editedImageUpload.js";
 import { UPLOAD_IMAGE_METHOD_KEY } from "../../public/shared/generationDefaults.js";
 import { normalizeProviderArgsForAspectRatio } from "./normalizeProviderInputImages.js";
 import sharp from "sharp";
-import { buildAudioClipCreationSnapshot, resolveClipIdFromOutputMeta } from "./audioClips.js";
+import {
+	buildAudioClipCreationSnapshot,
+	materializeBlueProviderAudioArgs,
+	resolveClipIdFromOutputMeta,
+} from "./audioClips.js";
 
 const PROVIDER_TIMEOUT_MS = 50_000;
 /** When the provider returns finished video bytes (sync or async poll), allow long downloads. Override with CREATION_PROVIDER_VIDEO_FETCH_TIMEOUT_MS (ms, min 10000). */
@@ -79,6 +83,7 @@ function isAsyncAckBody(body, fallbackMethod) {
 function inferErrorCode(err) {
 	if (!err) return "unknown";
 	if (err.name === "AbortError") return "timeout";
+	if (err.code === "AUDIO_RESOLVE_FAILED") return "audio_resolve_failed";
 	return "provider_error";
 }
 
@@ -560,15 +565,27 @@ export async function runCreationJob({ queries, storage, payload }) {
 		}
 	}
 	const asyncRequested = asyncRequestedFlag === true;
-	const providerPayload = asyncRequested
-		? { method, args: argsForProvider, async: true }
-		: { method, args: argsForProvider };
 	const providerFetchTimeoutMs =
 		asyncRequested ? PROVIDER_TIMEOUT_MS : creationMethodMayReturnVideoBytes(method) ? PROVIDER_VIDEO_FETCH_TIMEOUT_MS : PROVIDER_TIMEOUT_MS;
 
-	console.log("[Creation] Sending to provider:", JSON.stringify(providerPayload, null, 2));
-
 	try {
+		const methodFields = server.server_config?.methods?.[method]?.fields || null;
+		const audioOut = await materializeBlueProviderAudioArgs(queries, userId, argsForProvider, {
+			methodFields,
+		});
+		if (!audioOut.ok) {
+			const err = new Error(audioOut.error || "Could not create a CDN link for this audio range.");
+			err.code = "AUDIO_RESOLVE_FAILED";
+			throw err;
+		}
+		argsForProvider = audioOut.args;
+
+		const providerPayload = asyncRequested
+			? { method, args: argsForProvider, async: true }
+			: { method, args: argsForProvider };
+
+		console.log("[Creation] Sending to provider:", JSON.stringify(providerPayload, null, 2));
+
 		const providerResponse = await fetch(server.server_url, {
 			method: "POST",
 			headers: buildProviderHeaders(

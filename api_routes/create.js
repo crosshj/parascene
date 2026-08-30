@@ -30,7 +30,12 @@ import { runLandscapeJob } from "./utils/landscapeJob.js";
 import { scheduleCreationJob, scheduleLandscapeJob } from "./utils/scheduleCreationJob.js";
 import { scheduleEmbeddingJob } from "./utils/embeddingJob.js";
 import { deleteCreationEmbedding } from "./utils/embeddings.js";
-import { buildClipOwnersMeta, resolveAudioClipProviderArgs, resolveClipIdFromOutputMeta } from "./utils/audioClips.js";
+import {
+	buildClipOwnersMeta,
+	materializeBlueProviderAudioArgs,
+	resolveAudioProviderArgs,
+	resolveClipIdFromOutputMeta
+} from "./utils/audioClips.js";
 import { getSupabaseServiceClient } from "./utils/supabaseService.js";
 import { verifyQStashRequest } from "./utils/qstashVerification.js";
 import {
@@ -1970,14 +1975,18 @@ export default function createCreateRoutes({ queries, storage }) {
 				}
 				extraArgs.prompt = expanded.providerPrompt;
 			}
-			const clipResolved = await resolveAudioClipProviderArgs(
+			const clipResolved = await resolveAudioProviderArgs(
 				queries,
 				user.id,
 				extraArgs,
 				getShareBaseUrl()
 			);
 			if (!clipResolved.ok) {
-				return res.status(clipResolved.status).json({ error: clipResolved.error });
+				return res.status(clipResolved.status).json({
+					error: clipResolved.error,
+					message: clipResolved.error,
+					code: clipResolved.code || "audio_resolve_failed"
+				});
 			}
 			const providerArgs = { items, ...clipResolved.args };
 			const payload = { method: "advanced_query", args: providerArgs };
@@ -2020,14 +2029,18 @@ export default function createCreateRoutes({ queries, storage }) {
 				}
 				extraArgs.prompt = expanded.providerPrompt;
 			}
-			const clipResolved = await resolveAudioClipProviderArgs(
+			const clipResolved = await resolveAudioProviderArgs(
 				queries,
 				user.id,
 				extraArgs,
 				getShareBaseUrl()
 			);
 			if (!clipResolved.ok) {
-				return res.status(clipResolved.status).json({ error: clipResolved.error });
+				return res.status(clipResolved.status).json({
+					error: clipResolved.error,
+					message: clipResolved.error,
+					code: clipResolved.code || "audio_resolve_failed"
+				});
 			}
 			const providerArgs = { items, ...clipResolved.args };
 
@@ -2492,17 +2505,37 @@ export default function createCreateRoutes({ queries, storage }) {
 			// argsForProvider is copied into meta.args below; after hydrate / job args, meta.args is synced to argsForJob so DB matches the provider payload.
 			argsForProvider = argsForProvider && typeof argsForProvider === "object" ? { ...argsForProvider } : {};
 
-			const clipResolved = await resolveAudioClipProviderArgs(
+			const clipResolved = await resolveAudioProviderArgs(
 				queries,
 				user.id,
 				argsForProvider,
-				getShareBaseUrl()
+				getShareBaseUrl(),
+				methodConfig?.fields || null
 			);
 			if (!clipResolved.ok) {
 				return res.status(clipResolved.status).json({
 					error: clipResolved.error,
-					message: clipResolved.error
+					message: clipResolved.error,
+					code: clipResolved.code || "audio_resolve_failed"
 				});
+			}
+			if (clipResolved.handled && clipResolved.cdnId) {
+				const minted = await materializeBlueProviderAudioArgs(
+					queries,
+					user.id,
+					clipResolved.args,
+					{
+						providerBase: getShareBaseUrl(),
+						methodFields: methodConfig?.fields || null
+					}
+				);
+				if (!minted.ok) {
+					return res.status(minted.status).json({
+						error: minted.error,
+						message: minted.error,
+						code: minted.code || "audio_resolve_failed"
+					});
+				}
 			}
 			argsForProvider = clipResolved.args;
 
