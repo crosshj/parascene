@@ -63,7 +63,8 @@ function mapExploreItemsToResponse(items) {
 			nsfw: !!(item?.nsfw ?? meta?.nsfw),
 			meta: mediaFields.meta,
 			media_type: mediaFields.media_type,
-			video_url: mediaFields.video_url
+			video_url: mediaFields.video_url,
+			audio_url: mediaFields.audio_url
 		};
 	});
 }
@@ -466,6 +467,7 @@ export default function createExploreRoutes({ queries }) {
 					nsfw,
 					media_type: mediaFields.media_type,
 					video_url: mediaFields.video_url,
+					audio_url: mediaFields.audio_url,
 					meta: mediaFields.meta
 				};
 			});
@@ -529,6 +531,7 @@ export default function createExploreRoutes({ queries }) {
 					nsfw,
 					media_type: mediaFields.media_type,
 					video_url: mediaFields.video_url,
+					audio_url: mediaFields.audio_url,
 					meta: mediaFields.meta
 				};
 			});

@@ -380,7 +380,9 @@ app.use(
 		limit: (req) => (req.auth?.userId ? 10 : null),
 		methods: ["POST"],
 		shouldApply: (req) =>
-			req.path === "/api/create/import-suno" || req.path === "/api/create/import-youtube",
+			req.path === "/api/create/import-suno" ||
+			req.path === "/api/create/import-youtube" ||
+			req.path === "/api/create/import-audio/finalize",
 		apiOnly: true,
 		failOpen: true
 	})

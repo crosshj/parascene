@@ -9,11 +9,21 @@ export async function bindImportSunoEntry(qs = '') {
 	const { showToast } = await import(`./toast.js${qs}`);
 	const { importCreationWithPending } = await import(`./createSubmit.js${qs}`);
 	const { importMediaFromUrl } = await import(`./importMedia.js${qs}`);
+	const { importAudioFile } = await import(`./importAudioFile.js${qs}`);
 
-	async function runImport({ provider, url }) {
+	async function runImport(payload, helpers = {}) {
+		const setStatus = typeof helpers.setStatus === 'function' ? helpers.setStatus : null;
 		const result = await importCreationWithPending({
-			runImport: ({ creationToken }) =>
-				importMediaFromUrl(provider, url, { creationToken }),
+			runImport: ({ creationToken }) => {
+				if (payload?.provider === 'audio_file') {
+					return importAudioFile(payload.file, {
+						creationToken,
+						onStatus: setStatus || undefined,
+					});
+				}
+				setStatus?.('Importing…');
+				return importMediaFromUrl(payload.provider, payload.url, { creationToken });
+			},
 			navigate: 'none',
 		});
 		if (result?.warning?.code === 'duplicate_import') {
@@ -35,9 +45,6 @@ export async function bindImportSunoEntry(qs = '') {
 			e.stopPropagation();
 			openImportMediaModal({
 				onConfirm: runImport,
-				onError: (message) => {
-					if (message) alert(message);
-				},
 			});
 		},
 		true

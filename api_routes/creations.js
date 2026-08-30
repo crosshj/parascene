@@ -247,6 +247,7 @@ function mapRelatedItemsToResponse(items, viewerLikedIds, reasonMetaByCreationId
 			meta: mediaFields.meta,
 			media_type: mediaFields.media_type,
 			video_url: mediaFields.video_url,
+			audio_url: mediaFields.audio_url,
 			doom_scroll_full_height:
 				meta && typeof meta === "object" && meta.doom_scroll_full_height === true
 		};

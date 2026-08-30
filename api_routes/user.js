@@ -1864,6 +1864,7 @@ export default function createProfileRoutes({ queries }) {
 					nsfw: !!(meta && meta.nsfw),
 					media_type: mediaFields.media_type,
 					video_url: mediaFields.video_url,
+					audio_url: mediaFields.audio_url,
 					meta: mediaFields.meta,
 					is_moderated_error: isModeratedError,
 					...(isAdmin && userDeleted ? { user_deleted: true } : {})
@@ -1921,6 +1922,7 @@ export default function createProfileRoutes({ queries }) {
 					nsfw,
 					media_type: mediaFields.media_type,
 					video_url: mediaFields.video_url,
+					audio_url: mediaFields.audio_url,
 					meta: mediaFields.meta
 				};
 			});

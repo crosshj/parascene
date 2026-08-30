@@ -1,5 +1,5 @@
 /**
- * Confirm / paste-link modals for importing Suno or YouTube media as a creation.
+ * Import Media modal: local audio file, or paste a Suno / YouTube link.
  * Modals only collect/confirm — callers own pending-grid import via importCreationWithPending.
  */
 
@@ -21,7 +21,7 @@ function escapeHtml(text) {
  * Paste-link modal for Import Media (Suno + YouTube).
  *
  * @param {{
- *   onConfirm?: (payload: { provider: 'suno'|'youtube', url: string }) => void | Promise<void>,
+ *   onConfirm?: (payload: { provider: 'suno'|'youtube'|'audio_file', url?: string, file?: File }, helpers?: { setStatus?: (status: string) => void }) => void | Promise<void>,
  *   onError?: (message: string) => void,
  * }} [options]
  */
@@ -57,11 +57,26 @@ export function openImportMediaModal(options = {}) {
 					placeholder="https://suno.com/song/… or https://youtu.be/…"
 					data-import-suno-url
 				/>
+				<div class="import-suno-modal-section">
+					<p class="import-suno-modal-hint">Or upload an audio file from your computer. We’ll host the song, use the embedded cover if it has one, and make a playable post. MP3, WAV, FLAC, M4A — 50 MB max.</p>
+					<label class="import-suno-modal-label" for="import-media-file-input">Audio file</label>
+					<input
+						id="import-media-file-input"
+						class="form-input import-suno-modal-file"
+						type="file"
+						accept="audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/flac,audio/ogg,audio/mp4,audio/aac,audio/x-m4a,audio/webm,.mp3,.wav,.flac,.m4a,.aac,.ogg,.oga,.mp4"
+						data-import-media-file
+					/>
+					<p class="import-suno-modal-file-name" data-import-media-file-name hidden></p>
+				</div>
 				<p class="import-suno-modal-error" data-import-suno-error role="alert" hidden></p>
 			</div>
 			<div class="import-suno-modal-footer" data-import-suno-footer>
 				<button type="button" class="btn-secondary" data-import-suno-cancel>Cancel</button>
-				<button type="button" class="btn-primary" data-import-suno-submit>Import</button>
+				<button type="button" class="btn-primary" data-import-suno-submit>
+					<span class="import-suno-modal-submit-spinner" data-import-suno-submit-spinner hidden aria-hidden="true"></span>
+					<span data-import-suno-submit-label>Import</span>
+				</button>
 			</div>
 		</div>
 	`;
@@ -69,12 +84,17 @@ export function openImportMediaModal(options = {}) {
 	getCreateWorkflowModalParent().appendChild(overlay);
 
 	const urlInput = overlay.querySelector('[data-import-suno-url]');
+	const fileInput = overlay.querySelector('[data-import-media-file]');
+	const fileNameEl = overlay.querySelector('[data-import-media-file-name]');
 	const errorEl = overlay.querySelector('[data-import-suno-error]');
 	const submitBtn = overlay.querySelector('[data-import-suno-submit]');
+	const submitLabel = overlay.querySelector('[data-import-suno-submit-label]');
+	const submitSpinner = overlay.querySelector('[data-import-suno-submit-spinner]');
 	const cancelBtn = overlay.querySelector('[data-import-suno-cancel]');
 	const closeBtn = overlay.querySelector('[data-import-suno-close]');
 
 	let closed = false;
+	let busy = false;
 
 	function setError(message) {
 		if (!(errorEl instanceof HTMLElement)) return;
@@ -88,9 +108,34 @@ export function openImportMediaModal(options = {}) {
 		errorEl.textContent = msg;
 	}
 
+	function setBusy(nextBusy, status) {
+		busy = Boolean(nextBusy);
+		overlay.classList.toggle('is-busy', busy);
+		if (submitBtn instanceof HTMLButtonElement) {
+			submitBtn.disabled = busy;
+			submitBtn.setAttribute('aria-busy', busy ? 'true' : 'false');
+		}
+		if (urlInput instanceof HTMLInputElement) urlInput.disabled = busy;
+		if (fileInput instanceof HTMLInputElement) fileInput.disabled = busy;
+		if (submitSpinner instanceof HTMLElement) {
+			submitSpinner.hidden = !busy;
+		}
+		if (submitLabel instanceof HTMLElement) {
+			submitLabel.textContent = busy ? status || 'Importing…' : 'Import';
+		}
+	}
+
+	function setStatus(status) {
+		if (closed || !busy) return;
+		const text = typeof status === 'string' ? status.trim() : '';
+		if (!text) return;
+		if (submitLabel instanceof HTMLElement) submitLabel.textContent = text;
+	}
+
 	function close() {
 		if (closed) return;
 		closed = true;
+		busy = false;
 		document.removeEventListener('keydown', onKeyDown, true);
 		overlay.remove();
 	}
@@ -103,41 +148,78 @@ export function openImportMediaModal(options = {}) {
 	}
 
 	async function submit() {
-		const url = urlInput instanceof HTMLInputElement ? urlInput.value.trim() : '';
-		if (!url) {
-			setError('Paste a Suno or YouTube link.');
-			urlInput?.focus?.();
-			return;
-		}
-		const detected = detectMediaImportUrl(url);
-		if (!detected) {
-			setError('Use a suno.com song link or a YouTube video link.');
-			urlInput?.focus?.();
-			return;
+		if (busy || closed) return;
+
+		const file =
+			fileInput instanceof HTMLInputElement && fileInput.files && fileInput.files[0]
+				? fileInput.files[0]
+				: null;
+
+		let payload = null;
+		if (file) {
+			payload = { provider: 'audio_file', file };
+		} else {
+			const url = urlInput instanceof HTMLInputElement ? urlInput.value.trim() : '';
+			if (!url) {
+				setError('Paste a Suno or YouTube link, or choose an audio file below.');
+				urlInput?.focus?.();
+				return;
+			}
+			const detected = detectMediaImportUrl(url);
+			if (!detected) {
+				setError('Use a suno.com song link, a YouTube video link, or an audio file below.');
+				urlInput?.focus?.();
+				return;
+			}
+			payload = detected;
 		}
 
-		close();
-		if (typeof options.onConfirm === 'function') {
-			try {
-				await options.onConfirm(detected);
-			} catch (err) {
-				const message =
-					err instanceof Error && err.message
-						? err.message
-						: 'Could not import that media.';
-				if (typeof options.onError === 'function') options.onError(message);
-				else alert(message);
+		setError('');
+		setBusy(true, file ? 'Uploading…' : 'Importing…');
+		try {
+			if (typeof options.onConfirm === 'function') {
+				await options.onConfirm(payload, { setStatus });
 			}
+			if (!closed) close();
+		} catch (err) {
+			if (closed) return;
+			const message =
+				err instanceof Error && err.message
+					? err.message
+					: file
+						? 'Could not import that audio file.'
+						: 'Could not import that media.';
+			setBusy(false);
+			setError(message);
 		}
 	}
 
+	function showSelectedFileName() {
+		if (!(fileNameEl instanceof HTMLElement)) return;
+		const file =
+			fileInput instanceof HTMLInputElement && fileInput.files && fileInput.files[0]
+				? fileInput.files[0]
+				: null;
+		if (!file) {
+			fileNameEl.hidden = true;
+			fileNameEl.textContent = '';
+			return;
+		}
+		fileNameEl.hidden = false;
+		fileNameEl.textContent = file.name || 'Audio file';
+		setError('');
+	}
+
 	overlay.addEventListener('click', (e) => {
-		if (e.target === overlay) close();
+		if (e.target === overlay && !busy) close();
 	});
 	closeBtn?.addEventListener('click', () => close());
 	cancelBtn?.addEventListener('click', () => close());
 	submitBtn?.addEventListener('click', () => {
 		void submit();
+	});
+	fileInput?.addEventListener('change', () => {
+		showSelectedFileName();
 	});
 	urlInput?.addEventListener('keydown', (e) => {
 		if (e.key === 'Enter') {

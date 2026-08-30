@@ -1336,6 +1336,17 @@ function getCreationDetailMoreMenuItemDefs() {
 		label: 'Download'
 	},
 	{
+		action: 'download-audio',
+		show: (d) => d.actionsContext?.showDownloadAudio,
+		icon: html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+	stroke-linejoin="round" aria-hidden="true">
+	<path d="M12 3v12"></path>
+	<polyline points="7 11 12 16 17 11"></polyline>
+	<path d="M5 21h14"></path>
+</svg>`,
+		label: 'Download'
+	},
+	{
 		action: 'queue-for-later',
 		show: (d) => d.actionsContext?.showQueueForLater,
 		icon: html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
@@ -2351,7 +2362,7 @@ function clearCreationDetailSunoPlayer(imageWrapper) {
 	);
 	wrap
 		.querySelectorAll(
-			'[data-suno-play], [data-suno-embed], [data-youtube-play], [data-youtube-embed]'
+			'[data-suno-play], [data-suno-embed], [data-youtube-play], [data-youtube-embed], [data-hosted-audio]'
 		)
 		.forEach((el) => el.remove());
 }
@@ -2369,6 +2380,270 @@ function getCreationImportProvider(meta) {
 function isExternalImportCreation(mediaType, meta) {
 	if (mediaType === 'audio') return true;
 	return mediaType === 'video' && getCreationImportProvider(meta) === 'youtube';
+}
+
+function getCreationHostedAudioUrl(creation, meta) {
+	const fromCreation =
+		typeof creation?.audio_url === 'string' ? creation.audio_url.trim() : '';
+	if (fromCreation) return fromCreation;
+	const cdnId =
+		meta?.audio && typeof meta.audio === 'object' && typeof meta.audio.cdn_id === 'string'
+			? meta.audio.cdn_id.trim()
+			: '';
+	const id = Number(creation?.id);
+	if (cdnId && Number.isFinite(id) && id > 0) {
+		return `/api/create/images/${id}/audio`;
+	}
+	return '';
+}
+
+function formatHostedAudioClock(seconds) {
+	const n = Number(seconds);
+	if (!Number.isFinite(n) || n < 0) return '0:00';
+	const s = Math.floor(n);
+	const m = Math.floor(s / 60);
+	const r = s % 60;
+	return `${m}:${String(r).padStart(2, '0')}`;
+}
+
+function hostedAudioDownloadFilename(creation, meta) {
+	const fromMeta =
+		meta?.audio && typeof meta.audio.filename === 'string' ? meta.audio.filename.trim() : '';
+	if (fromMeta) {
+		return fromMeta.replace(/[/\\]/g, '').slice(0, 200) || 'audio.mp3';
+	}
+	const title =
+		typeof creation?.title === 'string' && creation.title.trim()
+			? creation.title.trim()
+			: 'audio';
+	const stem = title.replace(/[/\\?%*:|"<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 80) || 'audio';
+	const ct =
+		meta?.audio && typeof meta.audio.content_type === 'string'
+			? meta.audio.content_type.trim().toLowerCase()
+			: '';
+	let ext = 'mp3';
+	if (ct.includes('wav')) ext = 'wav';
+	else if (ct.includes('flac')) ext = 'flac';
+	else if (ct.includes('ogg')) ext = 'ogg';
+	else if (ct.includes('aac')) ext = 'aac';
+	else if (ct.includes('mp4') || ct.includes('m4a')) ext = 'm4a';
+	else if (ct.includes('webm')) ext = 'webm';
+	else if (ct.includes('mpeg') || ct.includes('mp3')) ext = 'mp3';
+	if (new RegExp(`\\.${ext}$`, 'i').test(stem)) return stem;
+	return `${stem}.${ext}`;
+}
+
+function hostedAudioDurationSec(audio, meta) {
+	const fromEl = Number(audio?.duration);
+	if (Number.isFinite(fromEl) && fromEl > 0) return fromEl;
+	const fromMeta = Number(meta?.audio?.duration);
+	if (Number.isFinite(fromMeta) && fromMeta > 0) return fromMeta;
+	return 0;
+}
+
+/**
+ * Cover + compact Suno-style play/timeline for CDN-hosted audio (no title, logo, or gradient).
+ * @param {HTMLElement | null | undefined} imageWrapper
+ * @param {object | null | undefined} creation
+ * @param {object | null | undefined} meta
+ */
+function mountCreationDetailHostedAudio(imageWrapper, creation, meta) {
+	if (!(imageWrapper instanceof HTMLElement)) return;
+	clearCreationDetailSunoPlayer(imageWrapper);
+
+	const src = getCreationHostedAudioUrl(creation, meta);
+	if (!src) return;
+
+	const title =
+		typeof creation?.title === 'string' && creation.title.trim()
+			? creation.title.trim()
+			: 'Audio';
+
+	imageWrapper.classList.add('hero-audio-playing');
+
+	const wrap = document.createElement('div');
+	wrap.className = 'creation-detail-hosted-audio';
+	wrap.setAttribute('data-hosted-audio', '');
+
+	const audio = document.createElement('audio');
+	audio.preload = 'metadata';
+	audio.src = src;
+	audio.setAttribute('playsinline', '');
+	audio.setAttribute('controlslist', 'nodownload noplaybackrate');
+
+	const playBtn = document.createElement('button');
+	playBtn.type = 'button';
+	playBtn.className = 'hosted-audio-play';
+	playBtn.setAttribute('aria-label', `Play ${title}`);
+	playBtn.innerHTML =
+		'<span class="hosted-audio-play-icon" aria-hidden="true">' +
+		'<svg class="hosted-audio-play-tri" viewBox="0 0 12 14">' +
+		'<path d="M1 1.15 11.2 7 1 12.85z"></path>' +
+		'</svg>' +
+		'<span class="hosted-audio-bars">' +
+		'<span></span><span></span><span></span>' +
+		'</span>' +
+		'</span>';
+
+	const timeline = document.createElement('div');
+	timeline.className = 'hosted-audio-timeline';
+
+	const currentEl = document.createElement('span');
+	currentEl.className = 'hosted-audio-time';
+	currentEl.setAttribute('data-hosted-audio-current', '');
+	currentEl.textContent = '0:00';
+
+	const seek = document.createElement('div');
+	seek.className = 'hosted-audio-seek';
+	seek.setAttribute('role', 'slider');
+	seek.setAttribute('aria-label', 'Seek');
+	seek.setAttribute('aria-valuemin', '0');
+	seek.tabIndex = 0;
+
+	const seekTrack = document.createElement('div');
+	seekTrack.className = 'hosted-audio-seek-track';
+	const seekFill = document.createElement('div');
+	seekFill.className = 'hosted-audio-seek-fill';
+	const seekThumb = document.createElement('div');
+	seekThumb.className = 'hosted-audio-seek-thumb';
+	seekTrack.appendChild(seekFill);
+	seekTrack.appendChild(seekThumb);
+	seek.appendChild(seekTrack);
+
+	const durationEl = document.createElement('span');
+	durationEl.className = 'hosted-audio-time';
+	durationEl.setAttribute('data-hosted-audio-duration', '');
+	durationEl.textContent = formatHostedAudioClock(hostedAudioDurationSec(null, meta));
+
+	timeline.appendChild(currentEl);
+	timeline.appendChild(seek);
+	timeline.appendChild(durationEl);
+
+	wrap.appendChild(audio);
+	wrap.appendChild(playBtn);
+	wrap.appendChild(timeline);
+	imageWrapper.appendChild(wrap);
+
+	let dragging = false;
+
+	function duration() {
+		return hostedAudioDurationSec(audio, meta);
+	}
+
+	function setProgress(ratio) {
+		const r = Math.min(1, Math.max(0, ratio));
+		seekFill.style.width = `${r * 100}%`;
+		seekThumb.style.left = `${r * 100}%`;
+		const dur = duration();
+		const t = r * dur;
+		currentEl.textContent = formatHostedAudioClock(t);
+		seek.setAttribute('aria-valuenow', String(Math.floor(t)));
+		seek.setAttribute('aria-valuemax', String(Math.floor(dur) || 0));
+		seek.setAttribute(
+			'aria-valuetext',
+			`${formatHostedAudioClock(t)} of ${formatHostedAudioClock(dur)}`
+		);
+	}
+
+	function syncFromAudio() {
+		const dur = duration();
+		durationEl.textContent = formatHostedAudioClock(dur);
+		if (!(dur > 0)) {
+			setProgress(0);
+			return;
+		}
+		setProgress(audio.currentTime / dur);
+	}
+
+	function ratioFromPointer(clientX) {
+		const rect = seekTrack.getBoundingClientRect();
+		if (!(rect.width > 0)) return 0;
+		return (clientX - rect.left) / rect.width;
+	}
+
+	function seekToRatio(ratio) {
+		const dur = duration();
+		if (!(dur > 0)) return;
+		audio.currentTime = Math.min(dur, Math.max(0, ratio * dur));
+		syncFromAudio();
+	}
+
+	function setPlayingUi(playing) {
+		wrap.classList.toggle('is-playing', playing);
+		playBtn.setAttribute('aria-label', playing ? `Pause ${title}` : `Play ${title}`);
+	}
+
+	playBtn.addEventListener('click', () => {
+		if (audio.paused) {
+			void audio.play().catch(() => {
+				setPlayingUi(false);
+			});
+		} else {
+			audio.pause();
+		}
+	});
+
+	audio.addEventListener('play', () => setPlayingUi(true));
+	audio.addEventListener('pause', () => setPlayingUi(false));
+	audio.addEventListener('ended', () => {
+		setPlayingUi(false);
+		setProgress(0);
+	});
+	audio.addEventListener('timeupdate', () => {
+		if (!dragging) syncFromAudio();
+	});
+	audio.addEventListener('loadedmetadata', () => syncFromAudio());
+	audio.addEventListener('durationchange', () => syncFromAudio());
+
+	seek.addEventListener('pointerdown', (e) => {
+		if (e.button != null && e.button !== 0) return;
+		dragging = true;
+		seek.setPointerCapture?.(e.pointerId);
+		seekToRatio(ratioFromPointer(e.clientX));
+		e.preventDefault();
+	});
+	seek.addEventListener('pointermove', (e) => {
+		if (!dragging) return;
+		seekToRatio(ratioFromPointer(e.clientX));
+	});
+	const endDrag = (e) => {
+		if (!dragging) return;
+		dragging = false;
+		if (e?.pointerId != null) {
+			try {
+				seek.releasePointerCapture?.(e.pointerId);
+			} catch {
+				// ignore
+			}
+		}
+	};
+	seek.addEventListener('pointerup', endDrag);
+	seek.addEventListener('pointercancel', endDrag);
+
+	seek.addEventListener('keydown', (e) => {
+		const dur = duration();
+		if (!(dur > 0)) return;
+		const step = dur * 0.05;
+		if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+			e.preventDefault();
+			audio.currentTime = Math.max(0, audio.currentTime - step);
+			syncFromAudio();
+		} else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+			e.preventDefault();
+			audio.currentTime = Math.min(dur, audio.currentTime + step);
+			syncFromAudio();
+		} else if (e.key === 'Home') {
+			e.preventDefault();
+			audio.currentTime = 0;
+			syncFromAudio();
+		} else if (e.key === 'End') {
+			e.preventDefault();
+			audio.currentTime = dur;
+			syncFromAudio();
+		}
+	});
+
+	syncFromAudio();
 }
 
 /**
@@ -2671,6 +2946,37 @@ async function downloadOwnerCreationVideo() {
 			if (err && typeof err === 'object' && err.name === 'AbortError') return;
 		}
 	}
+	const objectUrl = URL.createObjectURL(blob);
+	triggerAnchorDownload(objectUrl, filename);
+	window.setTimeout(() => URL.revokeObjectURL(objectUrl), 4000);
+}
+
+async function downloadHostedCreationAudio() {
+	const creation = lastCreationMeta;
+	if (!creation || typeof creation !== 'object') {
+		if (typeof showToast === 'function') showToast('This audio cannot be downloaded.');
+		return;
+	}
+	const meta = creation.meta && typeof creation.meta === 'object' ? creation.meta : {};
+	const src = getCreationHostedAudioUrl(creation, meta);
+	if (!src) {
+		if (typeof showToast === 'function') showToast('This audio cannot be downloaded.');
+		return;
+	}
+	const filename = hostedAudioDownloadFilename(creation, meta);
+	if (typeof showToast === 'function') showToast('Downloading…');
+	const linkUrl = `${src}${src.includes('?') ? '&' : '?'}format=json`;
+	const linkRes = await fetch(linkUrl, {
+		credentials: 'include',
+		headers: { Accept: 'application/json' }
+	});
+	if (!linkRes.ok) throw new Error('Could not download audio');
+	const linkData = await linkRes.json().catch(() => null);
+	const fileUrl = typeof linkData?.url === 'string' ? linkData.url.trim() : '';
+	if (!fileUrl) throw new Error('Could not download audio');
+	const res = await fetch(fileUrl, { credentials: 'omit' });
+	if (!res.ok) throw new Error('Could not download audio');
+	const blob = await res.blob();
 	const objectUrl = URL.createObjectURL(blob);
 	triggerAnchorDownload(objectUrl, filename);
 	window.setTimeout(() => URL.revokeObjectURL(objectUrl), 4000);
@@ -4192,7 +4498,11 @@ async function loadCreation() {
 			);
 			applyDetailHeroAspectLayout(creation);
 			showHeroImage(creation.url);
-			mountCreationDetailSunoPlayer(imageWrapper, meta);
+			if (getCreationHostedAudioUrl(creation, meta)) {
+				mountCreationDetailHostedAudio(imageWrapper, creation, meta);
+			} else {
+				mountCreationDetailSunoPlayer(imageWrapper, meta);
+			}
 			markHeroReady({ state: 'audio' });
 		} else if (
 			status === 'completed' &&
@@ -4423,6 +4733,7 @@ async function loadCreation() {
 			showSetAvatar: isOwner && !isImportEmbedCreation && status === 'completed' && !isFailed,
 			showCopyLink: !isImportEmbedCreation,
 			showDownloadVideo: false,
+			showDownloadAudio: false,
 			showRecreate: false,
 			queueForLaterLabel,
 			isFailed,
@@ -4571,6 +4882,12 @@ async function loadCreation() {
 						!isExternalImportCreation('video', source.meta)
 				)
 				: mediaType === 'video' && Boolean(creation.video_url) && !isImportEmbedCreation);
+
+		actionsContext.showDownloadAudio =
+			status === 'completed' &&
+			!isFailed &&
+			!isGroupCreation &&
+			Boolean(getCreationHostedAudioUrl(creation, meta));
 
 		actionsContext.showRecreate =
 			!adminViewingUserDeleted &&
@@ -6998,6 +7315,14 @@ async function loadCreation() {
 						void downloadOwnerCreationVideo().catch((err) => {
 							if (typeof showToast === 'function') {
 								showToast(err?.message || 'Could not download video');
+							}
+						});
+					},
+					'download-audio': () => {
+						closeMobileMoreMenu();
+						void downloadHostedCreationAudio().catch((err) => {
+							if (typeof showToast === 'function') {
+								showToast(err?.message || 'Could not download audio');
 							}
 						});
 					},

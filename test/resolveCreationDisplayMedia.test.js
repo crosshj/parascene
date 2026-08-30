@@ -73,4 +73,35 @@ describe("resolveCreationDisplayMediaUrls", () => {
 		expect(media.url).toContain("poster.jpg");
 		expect(media.video_url).toContain("/api/videos/created/v1.mp4");
 	});
+
+	test("exposes a stable Parascene audio_url for CDN-backed audio", () => {
+		const meta = {
+			media_type: "audio",
+			audio: {
+				cdn_id: "o_0123456789abcdef01234567",
+				content_type: "audio/mpeg"
+			}
+		};
+		const media = resolveCreationDisplayMediaUrls({
+			row: {
+				id: 44,
+				filename: "7_cover.png",
+				file_path: "/api/images/created/7_cover.png"
+			},
+			meta,
+			creationId: 44
+		});
+		expect(media.media_type).toBe("audio");
+		expect(media.audio_url).toBe("/api/create/images/44/audio");
+		expect(media.url).toContain("/api/images/created/7_cover.png");
+	});
+
+	test("omits audio_url when there is no CDN object", () => {
+		const media = resolveCreationDisplayMediaUrls({
+			row: { id: 8, file_path: "/api/images/created/suno.png" },
+			meta: { media_type: "audio", import: { provider: "suno" } },
+			creationId: 8
+		});
+		expect(media.audio_url).toBeNull();
+	});
 });

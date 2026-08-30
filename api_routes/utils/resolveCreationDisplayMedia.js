@@ -106,11 +106,23 @@ export function resolveCreationDisplayMediaUrls({ row = {}, meta: metaIn = null,
 			? appendCreationIdToMediaUrl(rawVideoUrl, creationId)
 			: rawVideoUrl;
 
+	const cdnId =
+		sourceMeta?.audio && typeof sourceMeta.audio === "object"
+			? typeof sourceMeta.audio.cdn_id === "string"
+				? sourceMeta.audio.cdn_id.trim()
+				: ""
+			: "";
+	const audioUrl =
+		cdnId && Number.isFinite(creationId) && creationId > 0
+			? `/api/create/images/${creationId}/audio`
+			: null;
+
 	return {
 		url,
 		thumbnail_url: url ? getThumbnailUrl(url) : null,
 		fit_thumbnail_url: url ? getFitThumbnailUrl(url) : null,
 		video_url: videoUrl || null,
+		audio_url: audioUrl,
 		media_type: mediaType
 	};
 }
@@ -129,6 +141,7 @@ export function mapCreatedImageRowMediaFields(img, { storage = null, includeMeta
 		thumbnail_url: media.thumbnail_url,
 		fit_thumbnail_url: media.fit_thumbnail_url,
 		video_url: media.video_url,
+		audio_url: media.audio_url,
 		media_type: media.media_type
 	};
 	if (includeMeta) {

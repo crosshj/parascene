@@ -50,6 +50,8 @@ import { ACTIVE_SHARE_VERSION, mintShareToken, verifyShareToken } from "./utils/
 import { getStyleInfo } from "./utils/createStyles.js";
 import { importSunoCreation, previewSunoImport } from "./utils/importSunoCreation.js";
 import { importYoutubeCreation, previewYoutubeImport, refreshYoutubeImportCover } from "./utils/importYoutubeCreation.js";
+import { finalizeAudioFileImport, startAudioFileImport } from "./utils/importAudioFileCreation.js";
+import { deleteCdnObjectBestEffort, loadBlueCdnContext, mintCdnFetchLink, parseCdnWindowQuery } from "./utils/blueCdn.js";
 import {
 	applyPickerStyleModifiersToPrompt,
 	expandStyleSigilsForProvider,
@@ -3217,6 +3219,7 @@ export default function createCreateRoutes({ queries, storage }) {
 							thumbnail_url: null,
 							fit_thumbnail_url: null,
 							video_url: null,
+							audio_url: null,
 							media_type: typeof meta?.media_type === "string" ? meta.media_type : "image"
 						};
 
@@ -3239,7 +3242,8 @@ export default function createCreateRoutes({ queries, storage }) {
 					nsfw: !!meta?.nsfw,
 					is_moderated_error: isModeratedError(status, meta),
 					media_type: mediaFields.media_type,
-					video_url: mediaFields.video_url
+					video_url: mediaFields.video_url,
+					audio_url: mediaFields.audio_url
 				};
 			});
 
@@ -3549,13 +3553,16 @@ export default function createCreateRoutes({ queries, storage }) {
 
 			const status = image.status || 'completed';
 			const creationIdForMedia = Number(image.id);
+			const mediaFields =
+				status === "completed"
+					? mapCreatedImageRowMediaFields(image, { storage, includeMeta: false })
+					: null;
 			let url = null;
 			if (status === "completed") {
 				if (shareAccess) {
 					url = `/api/share/${encodeURIComponent(shareAccess.version)}/${encodeURIComponent(shareAccess.token)}/image`;
 				} else {
-					const mediaFields = mapCreatedImageRowMediaFields(image, { storage, includeMeta: false });
-					url = mediaFields.url;
+					url = mediaFields?.url || null;
 				}
 			}
 
@@ -3664,6 +3671,7 @@ export default function createCreateRoutes({ queries, storage }) {
 				is_moderated_error: isModeratedError(status, meta),
 				media_type: mediaType,
 				video_url: videoUrl,
+				audio_url: shareAccess ? null : (mediaFields?.audio_url || null),
 				source_image_url: sourceImageUrl,
 				creator: creator ? {
 					id: creator.id,
@@ -3841,6 +3849,78 @@ export default function createCreateRoutes({ queries, storage }) {
 		} catch (error) {
 			// console.error("Error fetching image:", error);
 			return res.status(500).json({ error: "Failed to fetch image" });
+		}
+	});
+
+	async function loadViewableCreationForAudio(user, creationId) {
+		let image = await queries.selectCreatedImageById.get(creationId, user.id);
+		if (image) return image;
+		const anyImage = await queries.selectCreatedImageByIdAnyUser?.get(creationId);
+		if (!anyImage) return null;
+		const isPublished = anyImage.published === 1 || anyImage.published === true;
+		const isAdmin = user.role === "admin";
+		const isUnavailable = anyImage.unavailable_at != null && anyImage.unavailable_at !== "";
+		if (isUnavailable && !isAdmin) return null;
+		if (!isPublished && !isAdmin) return null;
+		return anyImage;
+	}
+
+	// GET /api/create/images/:id/audio — 302 to a short-lived Blue CDN fetch URL (bytes never through Vercel).
+	router.get("/api/create/images/:id/audio", async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+
+		const creationId = Number(req.params.id);
+		if (!Number.isFinite(creationId) || creationId <= 0) {
+			return res.status(400).json({ error: "Invalid creation id" });
+		}
+
+		try {
+			const image = await loadViewableCreationForAudio(user, creationId);
+			if (!image) {
+				return res.status(404).json({ error: "Audio not found" });
+			}
+			const meta = parseMeta(image.meta);
+			const isNsfw = !!meta?.nsfw;
+			const viewerEnableNsfw = user.meta?.enableNsfw === true;
+			if (isNsfw && !viewerEnableNsfw && image.user_id !== user.id && user.role !== "admin") {
+				return res.status(404).json({ error: "Audio not found" });
+			}
+			const cdnId =
+				meta?.audio && typeof meta.audio === "object" && typeof meta.audio.cdn_id === "string"
+					? meta.audio.cdn_id.trim()
+					: "";
+			if (!cdnId) {
+				return res.status(404).json({ error: "Audio not found" });
+			}
+
+			let window;
+			try {
+				window = parseCdnWindowQuery(req.query?.so, req.query?.du);
+			} catch (err) {
+				return res.status(Number(err?.status) || 400).json({ error: err.message || "Invalid window" });
+			}
+
+			const ctx = await loadBlueCdnContext(queries);
+			const link = await mintCdnFetchLink(ctx, cdnId, window);
+			res.set("Cache-Control", "private, no-store");
+			const wantJson =
+				req.query?.format === "json" ||
+				String(req.headers.accept || "").toLowerCase().includes("application/json");
+			if (wantJson) {
+				return res.json({ url: link.url, expires_at: link.expires_at || null });
+			}
+			return res.redirect(302, link.url);
+		} catch (err) {
+			const status = Number(err?.status) || 500;
+			const message =
+				typeof err?.message === "string" && err.message.trim()
+					? err.message.trim()
+					: "Failed to load audio";
+			if (status >= 500) {
+				console.error("[create] audio redirect failed:", err?.message || err);
+			}
+			return res.status(status).json({ error: message });
 		}
 	});
 
@@ -6642,6 +6722,11 @@ export default function createCreateRoutes({ queries, storage }) {
 				if (deleteResult.changes === 0) {
 					return res.status(500).json({ error: "Failed to delete image" });
 				}
+				const audioCdnId =
+					typeof permMeta?.audio?.cdn_id === "string" ? permMeta.audio.cdn_id.trim() : "";
+				if (audioCdnId) {
+					await deleteCdnObjectBestEffort(queries, audioCdnId);
+				}
 				return res.json({ success: true, message: "Image permanently deleted" });
 			}
 
@@ -6798,6 +6883,63 @@ export default function createCreateRoutes({ queries, storage }) {
 					: "Failed to import video";
 			if (status >= 500) {
 				console.error("[create] import-youtube failed:", err?.message || err);
+			}
+			return res.status(status).json({ error: message });
+		}
+	});
+
+	// POST /api/create/import-audio/start — mint a Blue CDN upload URL (client PUTs bytes; not through Vercel).
+	router.post("/api/create/import-audio/start", async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+
+		try {
+			const result = await startAudioFileImport({
+				userId: user.id,
+				filename: req.body?.filename,
+				contentType: req.body?.content_type,
+				queries
+			});
+			return res.json(result);
+		} catch (err) {
+			const status = Number(err?.status) || 500;
+			const message =
+				typeof err?.message === "string" && err.message.trim()
+					? err.message.trim()
+					: "Failed to start audio import";
+			if (status >= 500) {
+				console.error("[create] import-audio start failed:", err?.message || err);
+			}
+			return res.status(status).json({ error: message });
+		}
+	});
+
+	// POST /api/create/import-audio/finalize — pin CDN object, still from ?cover=1, write audio Creation.
+	router.post("/api/create/import-audio/finalize", async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+
+		try {
+			const creationToken =
+				typeof req.body?.creation_token === "string" ? req.body.creation_token.trim() : "";
+			const result = await finalizeAudioFileImport({
+				userId: user.id,
+				ticket: req.body?.ticket,
+				title: req.body?.title,
+				durationSec: req.body?.duration_sec,
+				...(creationToken ? { creationToken } : {}),
+				queries,
+				storage
+			});
+			return res.status(201).json(result);
+		} catch (err) {
+			const status = Number(err?.status) || 500;
+			const message =
+				typeof err?.message === "string" && err.message.trim()
+					? err.message.trim()
+					: "Failed to import audio";
+			if (status >= 500) {
+				console.error("[create] import-audio finalize failed:", err?.message || err);
 			}
 			return res.status(status).json({ error: message });
 		}
