@@ -382,7 +382,8 @@ app.use(
 		shouldApply: (req) =>
 			req.path === "/api/create/import-suno" ||
 			req.path === "/api/create/import-youtube" ||
-			req.path === "/api/create/import-audio/finalize",
+			req.path === "/api/create/import-audio/finalize" ||
+			req.path === "/api/create/ephemeral-still/finalize",
 		apiOnly: true,
 		failOpen: true
 	})

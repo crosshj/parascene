@@ -56,6 +56,12 @@ import { getStyleInfo } from "./utils/createStyles.js";
 import { importSunoCreation, previewSunoImport } from "./utils/importSunoCreation.js";
 import { importYoutubeCreation, previewYoutubeImport, refreshYoutubeImportCover } from "./utils/importYoutubeCreation.js";
 import { finalizeAudioFileImport, startAudioFileImport } from "./utils/importAudioFileCreation.js";
+import {
+	finalizeEphemeralStill,
+	mintEphemeralStillFetch,
+	startEphemeralStill,
+	resolveEphemeralStillProviderArgs,
+} from "./utils/importEphemeralStill.js";
 import { deleteCdnObjectBestEffort, loadBlueCdnContext, mintCdnFetchLink, parseCdnWindowQuery } from "./utils/blueCdn.js";
 import {
 	applyPickerStyleModifiersToPrompt,
@@ -2548,6 +2554,17 @@ export default function createCreateRoutes({ queries, storage }) {
 				}
 			}
 			argsForProvider = clipResolved.args;
+			const stillResolved = await resolveEphemeralStillProviderArgs(argsForProvider, {
+				userId: user.id,
+				queries
+			});
+			if (!stillResolved.ok) {
+				return res.status(stillResolved.status || 400).json({
+					error: stillResolved.error,
+					message: stillResolved.error,
+					code: stillResolved.code || "still_resolve_failed"
+				});
+			}
 			if (argsForProvider.audio_creation_id != null || clipResolved.handled) {
 				console.log("[create] audio resolve", {
 					method,
@@ -6938,6 +6955,89 @@ export default function createCreateRoutes({ queries, storage }) {
 					: "Failed to import video";
 			if (status >= 500) {
 				console.error("[create] import-youtube failed:", err?.message || err);
+			}
+			return res.status(status).json({ error: message });
+		}
+	});
+
+	// POST /api/create/ephemeral-still/start — mint Blue CDN upload for a throwaway jpeg.
+	router.post("/api/create/ephemeral-still/start", async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+
+		try {
+			const result = await startEphemeralStill({
+				userId: user.id,
+				filename: req.body?.filename,
+				contentType: req.body?.content_type,
+				queries
+			});
+			return res.json(result);
+		} catch (err) {
+			const status = Number(err?.status) || 500;
+			const message =
+				typeof err?.message === "string" && err.message.trim()
+					? err.message.trim()
+					: "Failed to start still upload";
+			if (status >= 500) {
+				console.error("[create] ephemeral-still start failed:", err?.message || err);
+			}
+			return res.status(status).json({ error: message });
+		}
+	});
+
+	// POST /api/create/ephemeral-still/finalize — confirm PUT; return stable still_url (no Creation).
+	router.post("/api/create/ephemeral-still/finalize", async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+
+		try {
+			const result = await finalizeEphemeralStill({
+				userId: user.id,
+				ticket: req.body?.ticket,
+				queries
+			});
+			return res.status(201).json(result);
+		} catch (err) {
+			const status = Number(err?.status) || 500;
+			const message =
+				typeof err?.message === "string" && err.message.trim()
+					? err.message.trim()
+					: "Failed to store still";
+			if (status >= 500) {
+				console.error("[create] ephemeral-still finalize failed:", err?.message || err);
+			}
+			return res.status(status).json({ error: message });
+		}
+	});
+
+	// GET /api/create/ephemeral-still/:token — owner 302 to a short-lived Blue fetch.
+	router.get("/api/create/ephemeral-still/:token", async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+
+		try {
+			const link = await mintEphemeralStillFetch({
+				userId: user.id,
+				token: req.params.token,
+				queries
+			});
+			res.set("Cache-Control", "private, no-store");
+			const wantJson =
+				req.query?.format === "json" ||
+				String(req.headers.accept || "").toLowerCase().includes("application/json");
+			if (wantJson) {
+				return res.json({ url: link.url, expires_at: link.expires_at || null });
+			}
+			return res.redirect(302, link.url);
+		} catch (err) {
+			const status = Number(err?.status) || 500;
+			const message =
+				typeof err?.message === "string" && err.message.trim()
+					? err.message.trim()
+					: "Failed to load still";
+			if (status >= 500) {
+				console.error("[create] ephemeral-still redirect failed:", err?.message || err);
 			}
 			return res.status(status).json({ error: message });
 		}

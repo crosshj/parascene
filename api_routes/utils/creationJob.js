@@ -7,6 +7,7 @@ import {
 import { letterboxImageBuffer } from "./editedImageUpload.js";
 import { UPLOAD_IMAGE_METHOD_KEY } from "../../public/shared/generationDefaults.js";
 import { normalizeProviderArgsForAspectRatio } from "./normalizeProviderInputImages.js";
+import { resolveEphemeralStillProviderArgs } from "./importEphemeralStill.js";
 import sharp from "sharp";
 import {
 	buildAudioClipCreationSnapshot,
@@ -550,6 +551,18 @@ export async function runCreationJob({ queries, storage, payload }) {
 	let sourceImageUrlForMeta = null;
 
 	let argsForProvider = args && typeof args === "object" ? { ...args } : {};
+	{
+		const stillOut = await resolveEphemeralStillProviderArgs(argsForProvider, {
+			userId,
+			queries,
+		});
+		if (!stillOut.ok) {
+			const err = new Error(stillOut.error || "Could not resolve ephemeral still.");
+			err.code = "STILL_RESOLVE_FAILED";
+			throw err;
+		}
+		argsForProvider = stillOut.args;
+	}
 	if (method !== UPLOAD_IMAGE_METHOD_KEY) {
 		try {
 			argsForProvider = await normalizeProviderArgsForAspectRatio({
