@@ -39,6 +39,7 @@ import {
 import { getSupabaseServiceClient } from "./utils/supabaseService.js";
 import { verifyQStashRequest } from "./utils/qstashVerification.js";
 import {
+	creationIdFromParasceneVideoUrl,
 	resolveCreatedImageRowForCreatedMediaPath,
 	resolveCreatedImageStorageFilename,
 } from "./utils/resolveCreatedImageStorageFilename.js";
@@ -1745,6 +1746,15 @@ export default function createCreateRoutes({ queries, storage }) {
 		}
 	}
 
+	/** Same token as /image; streams the creation video for the provider. */
+	function shareUrlForVideo(imageId, sharedByUserId) {
+		const imageUrl = shareUrlForImage(imageId, sharedByUserId);
+		if (!imageUrl) return null;
+		return imageUrl.endsWith("/image")
+			? `${imageUrl.slice(0, -"/image".length)}/video`
+			: imageUrl.replace(/\/image$/, "/video");
+	}
+
 	// Data Builder option keys (boolean flags). Other keys (e.g. prompt) are passed through to the provider.
 	const ADVANCED_DATA_BUILDER_KEYS = ["recent_comments", "recent_posts", "top_likes", "bottom_likes", "most_mutated"];
 
@@ -2972,6 +2982,50 @@ export default function createCreateRoutes({ queries, storage }) {
 				if (Array.isArray(safeArgs[key])) {
 					const arr = await Promise.all(
 						safeArgs[key].map((v) => (typeof v === "string" ? replaceUnpublishedUrlWithShareUrl(v) : Promise.resolve(v)))
+					);
+					safeArgs[key] = arr;
+					meta.args[key] = arr;
+				}
+			}
+
+			// Unpublished videos: provider cannot GET /api/videos/created/… (403).
+			// Same share-token rewrite as images — /api/share/…/video needs no session.
+			let videoUrlKeys = Object.keys(methodFields).filter((k) => methodFields[k]?.type === "video_url");
+			let videoUrlArrayKeys = Object.keys(methodFields).filter((k) => methodFields[k]?.type === "video_url_array");
+			if (videoUrlArrayKeys.length === 0 && Array.isArray(safeArgs.input_video_urls)) {
+				videoUrlArrayKeys = ["input_video_urls"];
+			}
+			if (videoUrlKeys.length === 0 && typeof safeArgs.input_video_url === "string") {
+				videoUrlKeys.push("input_video_url");
+			}
+			async function replaceUnpublishedVideoUrlWithShareUrl(url) {
+				const creationId = creationIdFromParasceneVideoUrl(url, providerBase);
+				if (!creationId || !queries.selectCreatedImageByIdAnyUser?.get) {
+					return url;
+				}
+				const image = await queries.selectCreatedImageByIdAnyUser.get(creationId);
+				if (!image) return url;
+				const isPublished = image.published === 1 || image.published === true;
+				if (isPublished || (image.status || "") !== "completed") {
+					return url;
+				}
+				const isOwner = image.user_id === user.id;
+				const isAdmin = user.role === "admin";
+				if (!isOwner && !isAdmin) return url;
+				return shareUrlForVideo(image.id, user.id) || url;
+			}
+			for (const key of videoUrlKeys) {
+				if (typeof safeArgs[key] === "string") {
+					safeArgs[key] = await replaceUnpublishedVideoUrlWithShareUrl(safeArgs[key]);
+					meta.args[key] = safeArgs[key];
+				}
+			}
+			for (const key of videoUrlArrayKeys) {
+				if (Array.isArray(safeArgs[key])) {
+					const arr = await Promise.all(
+						safeArgs[key].map((v) =>
+							typeof v === "string" ? replaceUnpublishedVideoUrlWithShareUrl(v) : Promise.resolve(v)
+						)
 					);
 					safeArgs[key] = arr;
 					meta.args[key] = arr;

@@ -1,5 +1,6 @@
 import { describe, expect, test } from '@jest/globals';
 import {
+	creationIdFromParasceneVideoUrl,
 	parseCreationImageIdFromStorageFilename,
 	resolveCreatedImageRowForCreatedMediaPath,
 	resolveCreatedImageStorageFilename,
@@ -66,5 +67,31 @@ describe('resolveCreatedImageRowForCreatedMediaPath', () => {
 		});
 
 		expect(row).toEqual(currentRow);
+	});
+});
+
+describe('creationIdFromParasceneVideoUrl', () => {
+	test('prefers creation_id query', () => {
+		expect(
+			creationIdFromParasceneVideoUrl(
+				'https://www.parascene.com/api/videos/created/video/26_27644_1788399457200_8qcahtr.mp4?creation_id=27644',
+			),
+		).toBe(27644);
+	});
+
+	test('parses userId_imageId filename when query is missing', () => {
+		expect(
+			creationIdFromParasceneVideoUrl(
+				'/api/videos/created/video/26_27644_1788399457200_8qcahtr.mp4',
+			),
+		).toBe(27644);
+	});
+
+	test('ignores non-video URLs', () => {
+		expect(
+			creationIdFromParasceneVideoUrl(
+				'https://www.parascene.com/api/images/created/26_27644.png?creation_id=27644',
+			),
+		).toBe(null);
 	});
 });

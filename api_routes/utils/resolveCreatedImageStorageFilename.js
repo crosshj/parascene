@@ -51,6 +51,31 @@ export function parseCreationImageIdFromStorageFilename(filename) {
 }
 
 /**
+ * Creation id from a Parascene hosted video URL.
+ * Prefers `?creation_id=`; else `{userId}_{imageId}_…` in `/api/videos/created/video/…`.
+ * @param {string|null|undefined} raw
+ * @param {string} [baseOrigin]
+ * @returns {number|null}
+ */
+export function creationIdFromParasceneVideoUrl(raw, baseOrigin = "https://www.parascene.com") {
+	const s = typeof raw === "string" ? raw.trim() : "";
+	if (!s) return null;
+	if (!s.includes("/api/videos/created/") && !s.includes("/videos/created/")) return null;
+	try {
+		const u = new URL(s, baseOrigin);
+		const qid = Number(u.searchParams.get("creation_id"));
+		if (Number.isFinite(qid) && qid > 0) return qid;
+		const path = u.pathname || "";
+		const marker = "/api/videos/created/";
+		const idx = path.indexOf(marker);
+		const rest = idx >= 0 ? path.slice(idx + marker.length) : path.replace(/^\/+/, "");
+		return parseCreationImageIdFromStorageFilename(rest);
+	} catch {
+		return null;
+	}
+}
+
+/**
  * Resolve a created_images row for GET /api/images/created/* (incl. stale poster paths).
  * @param {{ queries: { selectCreatedImageByFilename?: { get: (filename: string) => Promise<object|undefined> }, selectCreatedImageByIdAnyUser?: { get: (id: number) => Promise<object|undefined> } }, filename: string, query?: Record<string, unknown>|null }} params
  * @returns {Promise<object|null|undefined>}
