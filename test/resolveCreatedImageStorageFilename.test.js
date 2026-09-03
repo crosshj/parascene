@@ -2,7 +2,9 @@ import { describe, expect, test } from '@jest/globals';
 import {
 	creationIdFromParasceneVideoUrl,
 	parseCreationImageIdFromStorageFilename,
+	parseParasceneCreatedImageUrl,
 	resolveCreatedImageRowForCreatedMediaPath,
+	resolveCreatedImageRowForProviderImageUrl,
 	resolveCreatedImageStorageFilename,
 } from '../api_routes/utils/resolveCreatedImageStorageFilename.js';
 
@@ -93,5 +95,45 @@ describe('creationIdFromParasceneVideoUrl', () => {
 				'https://www.parascene.com/api/images/created/26_27644.png?creation_id=27644',
 			),
 		).toBe(null);
+	});
+});
+
+describe('parseParasceneCreatedImageUrl', () => {
+	test('reads creation_id when filename has no image id', () => {
+		expect(
+			parseParasceneCreatedImageUrl(
+				'https://www.parascene.com/api/images/created/43_1788399386536_9v6dpvu.png?creation_id=27645',
+			),
+		).toEqual({
+			filename: '43_1788399386536_9v6dpvu.png',
+			creationId: 27645,
+		});
+	});
+});
+
+describe('resolveCreatedImageRowForProviderImageUrl', () => {
+	test('finds the row by creation_id when filename lookup misses', async () => {
+		const row = {
+			id: 27645,
+			filename: '43_27645_1788399386536_other.png',
+			user_id: 43,
+			published: 0,
+			status: 'completed',
+		};
+		const queries = {
+			selectCreatedImageByFilename: {
+				get: async () => undefined,
+			},
+			selectCreatedImageByIdAnyUser: {
+				get: async (id) => (Number(id) === 27645 ? row : undefined),
+			},
+		};
+
+		await expect(
+			resolveCreatedImageRowForProviderImageUrl({
+				queries,
+				url: 'https://www.parascene.com/api/images/created/43_1788399386536_9v6dpvu.png?creation_id=27645',
+			}),
+		).resolves.toEqual(row);
 	});
 });

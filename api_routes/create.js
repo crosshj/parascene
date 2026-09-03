@@ -41,6 +41,7 @@ import { verifyQStashRequest } from "./utils/qstashVerification.js";
 import {
 	creationIdFromParasceneVideoUrl,
 	resolveCreatedImageRowForCreatedMediaPath,
+	resolveCreatedImageRowForProviderImageUrl,
 	resolveCreatedImageStorageFilename,
 } from "./utils/resolveCreatedImageStorageFilename.js";
 import { invalidateFeedBetaCatalogSnapshot } from "./feedBeta/catalogSnapshot.js";
@@ -2934,33 +2935,17 @@ export default function createCreateRoutes({ queries, storage }) {
 
 			// Replace every parascene image URL that points to an unpublished creation with a share URL
 			// so the provider can fetch it (create flow with multiple images, or any URL not covered by single-parent blocks above).
-			function filenameFromParasceneImageUrl(raw) {
-				const normalized = toParasceneImageUrl(raw);
-				if (!normalized) return null;
-				try {
-					const u = new URL(normalized);
-					const path = u.pathname || "";
-					// Backend serves at /api/images/created/*; normalize legacy /images/created/ paths from storage.
-					const prefixWithApi = "/api/images/created/";
-					const prefixNoApi = "/images/created/";
-					if (path.startsWith(prefixWithApi)) return path.slice(prefixWithApi.length) || null;
-					if (path.startsWith(prefixNoApi)) return path.slice(prefixNoApi.length) || null;
-					return null;
-				} catch {
-					return null;
-				}
-			}
 			async function replaceUnpublishedUrlWithShareUrl(url) {
-				const filename = filenameFromParasceneImageUrl(url);
-				if (!filename || !queries.selectCreatedImageByFilename?.get) {
-					return toParasceneImageUrl(url) || url;
-				}
-				const image = await queries.selectCreatedImageByFilename.get(filename);
+				const image = await resolveCreatedImageRowForProviderImageUrl({
+					queries,
+					url,
+					baseOrigin: providerBase,
+				});
 				if (!image) {
 					return toParasceneImageUrl(url) || url;
 				}
 				const isPublished = image.published === 1 || image.published === true;
-				if (isPublished || (image.status || "") !== "completed" || !image.filename) {
+				if (isPublished || (image.status || "") !== "completed") {
 					return toParasceneImageUrl(url) || url;
 				}
 				const isOwner = image.user_id === user.id;

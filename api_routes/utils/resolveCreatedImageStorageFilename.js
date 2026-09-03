@@ -57,6 +57,68 @@ export function parseCreationImageIdFromStorageFilename(filename) {
  * @param {string} [baseOrigin]
  * @returns {number|null}
  */
+/**
+ * Filename + creation_id from a Parascene hosted still URL.
+ * `creation_id` is the reliable key — some uploads are `{userId}_{ts}_{rand}.png`.
+ * @param {string|null|undefined} raw
+ * @param {string} [baseOrigin]
+ * @returns {{ filename: string, creationId: number|null }|null}
+ */
+export function parseParasceneCreatedImageUrl(raw, baseOrigin = "https://www.parascene.com") {
+	const s = typeof raw === "string" ? raw.trim() : "";
+	if (!s) return null;
+	if (!s.includes("/api/images/created/") && !s.includes("/images/created/")) return null;
+	try {
+		const u = new URL(s, baseOrigin);
+		const path = u.pathname || "";
+		let filename = extractFilenameFromCreatedImagePath(`${path}`);
+		if (!filename) {
+			const legacy = "/images/created/";
+			const idx = path.indexOf(legacy);
+			if (idx >= 0) {
+				const rest = path.slice(idx + legacy.length);
+				if (rest && !rest.includes("..")) {
+					try {
+						filename = decodeURIComponent(rest);
+					} catch {
+						filename = rest;
+					}
+				}
+			}
+		}
+		if (!filename) return null;
+		const qid = Number(u.searchParams.get("creation_id"));
+		return {
+			filename,
+			creationId: Number.isFinite(qid) && qid > 0 ? qid : null,
+		};
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Provider rewrite lookup: `creation_id` first (desktop stamps it), then filename / embedded id.
+ * @param {{ queries: { selectCreatedImageByFilename?: { get: (filename: string) => Promise<object|undefined> }, selectCreatedImageByIdAnyUser?: { get: (id: number) => Promise<object|undefined> } }, url: string, baseOrigin?: string }} params
+ */
+export async function resolveCreatedImageRowForProviderImageUrl({
+	queries,
+	url,
+	baseOrigin = "https://www.parascene.com",
+}) {
+	const parsed = parseParasceneCreatedImageUrl(url, baseOrigin);
+	if (!parsed) return null;
+	if (parsed.creationId) {
+		const byId = await queries.selectCreatedImageByIdAnyUser?.get(parsed.creationId);
+		if (byId) return byId;
+	}
+	return resolveCreatedImageRowForCreatedMediaPath({
+		queries,
+		filename: parsed.filename,
+		query: parsed.creationId ? { creation_id: parsed.creationId } : null,
+	});
+}
+
 export function creationIdFromParasceneVideoUrl(raw, baseOrigin = "https://www.parascene.com") {
 	const s = typeof raw === "string" ? raw.trim() : "";
 	if (!s) return null;
