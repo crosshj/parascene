@@ -6,6 +6,7 @@ import {
 	primeMediaElementForAudioLeveling
 } from './mediaAudioLeveling.js';
 import { mountSequentialVideoPlayer } from './sequentialVideoPlayer.js';
+import { audioCoverWaveformHtml, creationNeedsAudioWaveformCover } from './audioCoverWaveform.js';
 
 /**
  * Escapes text for safe HTML insertion.
@@ -1986,6 +1987,8 @@ export function hydrateChatCreationEmbeds(rootEl) {
 			const videoUrl =
 				typeof data.video_url === 'string' ? data.video_url.trim() : '';
 			const url = typeof data.url === 'string' ? data.url.trim() : '';
+			const audioUrl =
+				typeof data.audio_url === 'string' ? data.audio_url.trim() : '';
 			const titleRaw =
 				typeof data.title === 'string' ? data.title.trim() : '';
 
@@ -2020,6 +2023,7 @@ export function hydrateChatCreationEmbeds(rootEl) {
 			const hasRenderableMedia =
 				Boolean(url) ||
 				(mediaType === 'video' && Boolean(videoUrl)) ||
+				(mediaType === 'audio' && Boolean(audioUrl || url)) ||
 				hasGroupCarouselUi;
 
 			if (isFailed) {
@@ -2154,6 +2158,35 @@ export function hydrateChatCreationEmbeds(rootEl) {
 						if (img instanceof HTMLImageElement) bindChatCreationEmbedMediaLoadError(wrap, img);
 					}
 				}
+				attachChatCreationEmbedDetailLinkReveal(wrap);
+				return;
+			}
+
+			if (mediaType === 'audio') {
+				let resolvedAudioUrl = audioUrl;
+				if (!resolvedAudioUrl && shareOpts?.shareVersion && shareOpts?.shareToken) {
+					resolvedAudioUrl = `/api/share/${encodeURIComponent(shareOpts.shareVersion)}/${encodeURIComponent(shareOpts.shareToken)}/cdn-audio`;
+				}
+				if (!resolvedAudioUrl && creationId) {
+					resolvedAudioUrl = `/api/create/images/${encodeURIComponent(creationId)}/audio`;
+				}
+				const useWaveform = creationNeedsAudioWaveformCover({
+					media_type: 'audio',
+					url,
+					meta: parsedEmbedMeta,
+				});
+				const coverHtml = useWaveform
+					? audioCoverWaveformHtml()
+					: url
+						? `<img class="connect-chat-creation-embed-img" src="${escapeHtml(url)}" alt="" width="260" height="260" loading="eager" decoding="async" />`
+						: audioCoverWaveformHtml();
+				wrap.innerHTML =
+					`<div class="connect-chat-creation-embed-media">` +
+					`<div class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--audio${useWaveform || !url ? ' creation-audio-cover' : ''}${nsfwClass}"${nsfwDataAttr} role="button" tabindex="0" aria-label="Play audio" title="Play audio"${resolvedAudioUrl ? ` data-audio-url="${escapeHtml(resolvedAudioUrl)}"` : ''}>` +
+					`${coverHtml}` +
+					`${INLINE_CHAT_VIDEO_PLAY_OVERLAY_HTML}` +
+					`</div></div>`;
+				trimWhitespaceOnlyTextNodes(wrap);
 				attachChatCreationEmbedDetailLinkReveal(wrap);
 				return;
 			}

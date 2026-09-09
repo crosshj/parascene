@@ -3817,7 +3817,10 @@ export default function createCreateRoutes({ queries, storage }) {
 				is_moderated_error: isModeratedError(status, meta),
 				media_type: mediaType,
 				video_url: videoUrl,
-				audio_url: shareAccess ? null : (mediaFields?.audio_url || null),
+				audio_url:
+					shareAccess && mediaType === "audio"
+						? `/api/share/${encodeURIComponent(shareAccess.version)}/${encodeURIComponent(shareAccess.token)}/cdn-audio`
+						: mediaFields?.audio_url || null,
 				source_image_url: sourceImageUrl,
 				creator: creator ? {
 					id: creator.id,

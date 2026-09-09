@@ -16,12 +16,14 @@ const [
 	modalDismissMod,
 	spaPageOverlayMod,
 	mediaAudioLevelingMod,
+	audioCoverWaveformMod,
 ] = await Promise.all([
 	import(`/icons/svg-strings.js${_qs}`),
 	import(`./userText.js${_qs}`),
 	import(`./modalDismiss.js${_qs}`),
 	import(`./spaPageOverlay.js${_qs}`),
 	import(`./mediaAudioLeveling.js${_qs}`),
+	import(`./audioCoverWaveform.js${_qs}`),
 ]);
 const { copyIcon, linkIcon2 } = svgMod;
 const { DEFAULT_APP_ORIGIN, collectInlineMediaGroupGallery } = userTextMod;
@@ -37,6 +39,7 @@ const {
 	attachMediaAudioLeveling,
 	primeMediaElementForAudioLeveling
 } = mediaAudioLevelingMod;
+const { audioCoverWaveformHtml } = audioCoverWaveformMod;
 
 /** @type {HTMLElement | null} */
 let chatInlineImageLightboxEl = null;
@@ -1757,7 +1760,7 @@ export function openChatAttachmentPreviewLightbox(src, kind, hooks) {
 	overlay.className = 'chat-inline-image-lightbox';
 	overlay.setAttribute('role', 'dialog');
 	overlay.setAttribute('aria-modal', 'true');
-	overlay.setAttribute('aria-label', kind === 'video' ? 'Video' : 'Preview');
+	overlay.setAttribute('aria-label', kind === 'video' ? 'Video' : kind === 'audio' ? 'Audio' : 'Preview');
 
 	const closeBtn = createModalDismissButton({ extraClass: 'chat-inline-image-lightbox-close' });
 
@@ -1852,6 +1855,19 @@ export function openChatAttachmentPreviewLightbox(src, kind, hooks) {
 		slot.appendChild(video);
 		if (!hasInlineFrame) slot.appendChild(placeholder);
 		frame.appendChild(slot);
+	} else if (kind === 'audio') {
+		const slot = document.createElement('div');
+		slot.className = 'chat-inline-image-lightbox-audio-slot creation-audio-cover';
+		slot.insertAdjacentHTML('afterbegin', audioCoverWaveformHtml('creation-audio-wave creation-audio-wave-lg'));
+		const audio = document.createElement('audio');
+		audio.className = 'chat-inline-image-lightbox-audio';
+		audio.controls = true;
+		audio.preload = 'auto';
+		audio.autoplay = true;
+		audio.src = url;
+		slot.appendChild(audio);
+		frame.appendChild(slot);
+		lightboxPreviewVideo = audio;
 	} else {
 		const iframe = document.createElement('iframe');
 		iframe.className = 'chat-inline-image-lightbox-iframe';
@@ -2037,6 +2053,25 @@ export function bindChatInlineImageLightboxClickDelegation(rootEl, options = {})
 				},
 				openHooks
 			);
+			return;
+		}
+
+		const audioInner = e.target.closest?.('.connect-chat-creation-embed-inner--audio');
+		if (audioInner && scope.contains(audioInner)) {
+			if (e.target.closest?.('.connect-chat-creation-embed-detail-link')) return;
+			const src = String(audioInner.getAttribute('data-audio-url') || '').trim();
+			if (!src) return;
+			const wrap = audioInner.closest('.connect-chat-creation-embed');
+			const creationId =
+				wrap instanceof HTMLElement
+					? String(wrap.getAttribute('data-creation-id') || '').trim()
+					: '';
+			e.preventDefault();
+			e.stopPropagation();
+			openChatAttachmentPreviewLightbox(src, 'audio', {
+				...openHooks,
+				...(creationId ? { creationId } : {}),
+			});
 			return;
 		}
 

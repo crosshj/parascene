@@ -4,6 +4,7 @@
  */
 
 import { challengeEnteredBadgeHtml } from './creationBadges.js';
+import { audioCoverWaveformHtml } from './audioCoverWaveform.js';
 
 const html = String.raw;
 
@@ -71,15 +72,18 @@ export function buildCreationCardShell(options) {
 		.filter(([, v]) => v != null && v !== '')
 		.map(([k, v]) => (v === true ? k : `${k}="${escapeAttr(v)}"`))
 		.join(' ');
+	const isAudio = mediaAttrs['data-media-type'] === 'audio';
 	const mediaClass =
 		'route-media' +
+		(isAudio ? ' creation-audio-cover' : '') +
 		(nsfw ? ' nsfw' : '') +
 		(challengeGridBlur && !nsfw ? ' route-media--challenge-pending' : '');
 	const blurOverlay =
 		challengeGridBlur && !nsfw
 			? html`<span class="route-media-challenge-blur-overlay" aria-hidden="true"></span>${challengeEnteredBadgeHtml()}`
 			: '';
-	const mediaTag = html`<div class="${mediaClass}" aria-hidden="true"${attrs ? ' ' + attrs : ''}>${blurOverlay}</div>`;
+	const audioWaveHtml = isAudio ? audioCoverWaveformHtml() : '';
+	const mediaTag = html`<div class="${mediaClass}" aria-hidden="true"${attrs ? ' ' + attrs : ''}>${audioWaveHtml}${blurOverlay}</div>`;
 	const detailsBlock =
 		typeof detailsContentHtml === 'string' && detailsContentHtml.trim()
 			? html`<div class="route-details">

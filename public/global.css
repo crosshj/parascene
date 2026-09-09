@@ -319,6 +319,10 @@ body.view-nsfw .route-media[data-media-type="video"]:not(.route-media-error).nsf
 	opacity: 0;
 }
 
+.route-media.route-media-has-image .creation-audio-wave {
+	display: none;
+}
+
 /* Hide content until page is fully loaded */
 body:not(.loaded) {
 	visibility: hidden;
@@ -13898,6 +13902,37 @@ button.chat-inline-image-lightbox-footer-btn.btn-secondary {
 
 .chat-inline-image-lightbox-iframe {
 	display: block;
+	width: min(92vw, 1100px);
+	height: min(86vh, 86dvh);
+	max-width: 100%;
+	border: 0;
+	border-radius: 10px;
+	background: #000;
+}
+
+.chat-inline-image-lightbox-audio-slot {
+	position: relative;
+	width: min(92vw, 420px);
+	aspect-ratio: 1 / 1;
+	border-radius: 10px;
+	overflow: hidden;
+}
+
+.chat-inline-image-lightbox-audio-slot .creation-audio-wave {
+	max-width: 220px;
+}
+
+.chat-inline-image-lightbox-audio {
+	position: absolute;
+	left: 12px;
+	right: 12px;
+	bottom: 12px;
+	width: auto;
+	z-index: 2;
+}
+
+.chat-inline-image-lightbox-iframe {
+	display: block;
 	width: min(92vw, 920px);
 	height: min(88vh, 920px);
 	max-width: min(92vw, 920px);
@@ -14675,20 +14710,23 @@ a.creation-link[data-suno-url][data-suno-preview-pending="true"] {
 	box-sizing: border-box;
 }
 
-.connect-chat-creation-embed-inner--video {
+.connect-chat-creation-embed-inner--video,
+.connect-chat-creation-embed-inner--audio {
 	position: relative;
 	border: none;
 	border-radius: 10px;
 	line-height: 0;
 }
 
-.connect-chat-creation-embed-inner--video:focus-visible {
+.connect-chat-creation-embed-inner--video:focus-visible,
+.connect-chat-creation-embed-inner--audio:focus-visible {
 	outline: 2px solid var(--focus);
 	outline-offset: 2px;
 }
 
 /* Square creation previews: videos should use the same 1×1 frame as images. */
-.connect-chat-creation-embed--square .connect-chat-creation-embed-inner.connect-chat-creation-embed-inner--video {
+.connect-chat-creation-embed--square .connect-chat-creation-embed-inner.connect-chat-creation-embed-inner--video,
+.connect-chat-creation-embed--square .connect-chat-creation-embed-inner.connect-chat-creation-embed-inner--audio {
 	display: block;
 	position: relative;
 	width: 100%;
@@ -14983,7 +15021,8 @@ a.creation-link[data-suno-url][data-suno-preview-pending="true"] {
 	cursor: zoom-in;
 }
 
-.connect-chat-msg-bubble .connect-chat-creation-embed-inner--video .chat-doom-play-overlay {
+.connect-chat-msg-bubble .connect-chat-creation-embed-inner--video .chat-doom-play-overlay,
+.connect-chat-msg-bubble .connect-chat-creation-embed-inner--audio .chat-doom-play-overlay {
 	position: absolute;
 	inset: 0;
 	z-index: 2;
@@ -14993,7 +15032,8 @@ a.creation-link[data-suno-url][data-suno-preview-pending="true"] {
 	pointer-events: none;
 }
 
-.connect-chat-msg-bubble .connect-chat-creation-embed-inner--video .chat-doom-play-overlay-inner {
+.connect-chat-msg-bubble .connect-chat-creation-embed-inner--video .chat-doom-play-overlay-inner,
+.connect-chat-msg-bubble .connect-chat-creation-embed-inner--audio .chat-doom-play-overlay-inner {
 	width: 72px;
 	height: 72px;
 	border-radius: 50%;
@@ -15005,7 +15045,8 @@ a.creation-link[data-suno-url][data-suno-preview-pending="true"] {
 	box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
 }
 
-.connect-chat-msg-bubble .connect-chat-creation-embed-inner--video .chat-doom-play-glyph {
+.connect-chat-msg-bubble .connect-chat-creation-embed-inner--video .chat-doom-play-glyph,
+.connect-chat-msg-bubble .connect-chat-creation-embed-inner--audio .chat-doom-play-glyph {
 	width: 36px;
 	height: 36px;
 	margin-left: 5px;

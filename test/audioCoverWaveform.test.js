@@ -6,6 +6,16 @@ import {
 } from '../public/shared/audioCoverWaveform.js';
 
 describe('creationNeedsAudioWaveformCover', () => {
+	test('generated speech with a placeholder PNG still uses waveform', () => {
+		expect(
+			creationNeedsAudioWaveformCover({
+				media_type: 'audio',
+				url: '/api/images/created/1',
+				meta: { media_type: 'audio', method: 'replicateSpeech' },
+			})
+		).toBe(true);
+	});
+
 	test('speech placeholder cover uses waveform', () => {
 		expect(
 			creationNeedsAudioWaveformCover({

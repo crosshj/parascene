@@ -35,12 +35,25 @@ function firstCoverUrl(item) {
 	return '';
 }
 
+function audioImportProvider(meta) {
+	const provider = meta?.import && typeof meta.import === 'object' ? meta.import.provider : '';
+	return typeof provider === 'string' ? provider.trim().toLowerCase() : '';
+}
+
+/** Suno (and similar) album art — keep the bitmap. Generated speech/music uses a transparent PNG. */
+export function creationHasRealAudioCover(item) {
+	if (creationMediaType(item) !== 'audio') return false;
+	const meta = parseCreationCoverMeta(item);
+	if (meta?.cover_placeholder === true) return false;
+	const provider = audioImportProvider(meta);
+	if ((provider === 'suno' || provider === 'file') && firstCoverUrl(item)) return true;
+	return false;
+}
+
 /** Speech / music / voice-train (or any audio) with no real cover art. */
 export function creationNeedsAudioWaveformCover(item) {
 	if (creationMediaType(item) !== 'audio') return false;
-	const meta = parseCreationCoverMeta(item);
-	if (meta?.cover_placeholder === true) return true;
-	return !firstCoverUrl(item);
+	return !creationHasRealAudioCover(item);
 }
 
 export function audioCoverWaveformHtml(className = 'creation-audio-wave') {
