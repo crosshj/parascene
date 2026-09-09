@@ -17,6 +17,7 @@ const [
 	spaPageOverlayMod,
 	mediaAudioLevelingMod,
 	audioCoverWaveformMod,
+	hostedAudioPlayerMod,
 ] = await Promise.all([
 	import(`/icons/svg-strings.js${_qs}`),
 	import(`./userText.js${_qs}`),
@@ -24,6 +25,7 @@ const [
 	import(`./spaPageOverlay.js${_qs}`),
 	import(`./mediaAudioLeveling.js${_qs}`),
 	import(`./audioCoverWaveform.js${_qs}`),
+	import(`./hostedAudioPlayer.js${_qs}`),
 ]);
 const { copyIcon, linkIcon2 } = svgMod;
 const { DEFAULT_APP_ORIGIN, collectInlineMediaGroupGallery } = userTextMod;
@@ -40,6 +42,7 @@ const {
 	primeMediaElementForAudioLeveling
 } = mediaAudioLevelingMod;
 const { audioCoverWaveformHtml } = audioCoverWaveformMod;
+const { mountHostedAudioPlayer } = hostedAudioPlayerMod;
 
 /** @type {HTMLElement | null} */
 let chatInlineImageLightboxEl = null;
@@ -207,6 +210,8 @@ function attachChatInlineImageLightboxBackdropClose(overlay) {
 			t.closest('.chat-inline-image-lightbox-gallery-nav') ||
 			t.closest('.chat-inline-image-lightbox-video') ||
 			t.closest('.chat-inline-image-lightbox-video-slot--gallery') ||
+			t.closest('.chat-inline-image-lightbox-audio-slot') ||
+			t.closest('[data-hosted-audio]') ||
 			t.closest('.chat-inline-image-lightbox-iframe')
 		) {
 			return;
@@ -1736,7 +1741,7 @@ function openChatMixedMediaGalleryLightbox(slides, hooks) {
 
 /**
  * @param {string} src
- * @param {'video' | 'html' | string} kind
+ * @param {'video' | 'audio' | 'html' | string} kind
  * @param {{ beforeOpen?: () => void, creationId?: string, sourceVideo?: HTMLVideoElement }} [hooks]
  */
 export function openChatAttachmentPreviewLightbox(src, kind, hooks) {
@@ -1767,7 +1772,7 @@ export function openChatAttachmentPreviewLightbox(src, kind, hooks) {
 	const frame = document.createElement('div');
 	frame.className = 'chat-inline-image-lightbox-frame';
 
-	/** @type {HTMLVideoElement | null} */
+	/** @type {HTMLVideoElement | HTMLAudioElement | null} */
 	let lightboxPreviewVideo = null;
 	/** @type {null | (() => void)} */
 	let revealChatLightboxVideo = null;
@@ -1857,17 +1862,26 @@ export function openChatAttachmentPreviewLightbox(src, kind, hooks) {
 		frame.appendChild(slot);
 	} else if (kind === 'audio') {
 		const slot = document.createElement('div');
-		slot.className = 'chat-inline-image-lightbox-audio-slot creation-audio-cover';
-		slot.insertAdjacentHTML('afterbegin', audioCoverWaveformHtml('creation-audio-wave creation-audio-wave-lg'));
-		const audio = document.createElement('audio');
-		audio.className = 'chat-inline-image-lightbox-audio';
-		audio.controls = true;
-		audio.preload = 'auto';
-		audio.autoplay = true;
-		audio.src = url;
-		slot.appendChild(audio);
+		slot.className =
+			'creation-detail-image-wrapper creation-audio-cover hero-audio-playing chat-inline-image-lightbox-audio-slot';
+		slot.style.pointerEvents = 'auto';
+
+		const waveWrap = document.createElement('div');
+		waveWrap.className = 'chat-inline-image-lightbox-audio-cover';
+		waveWrap.setAttribute('aria-hidden', 'true');
+		waveWrap.insertAdjacentHTML(
+			'afterbegin',
+			audioCoverWaveformHtml('creation-audio-wave creation-audio-wave-lg')
+		);
+		slot.appendChild(waveWrap);
+
+		const mounted = mountHostedAudioPlayer(slot, {
+			src: url,
+			title: 'Audio',
+			autoplay: true,
+		});
 		frame.appendChild(slot);
-		lightboxPreviewVideo = audio;
+		lightboxPreviewVideo = mounted?.audio || null;
 	} else {
 		const iframe = document.createElement('iframe');
 		iframe.className = 'chat-inline-image-lightbox-iframe';
@@ -1914,7 +1928,9 @@ export function openChatAttachmentPreviewLightbox(src, kind, hooks) {
 			closeBtn.focus();
 		}
 		if (lightboxPreviewVideo) {
-			attachMediaAudioLeveling(lightboxPreviewVideo);
+			if (!(lightboxPreviewVideo instanceof HTMLAudioElement)) {
+				attachMediaAudioLeveling(lightboxPreviewVideo);
+			}
 			void lightboxPreviewVideo.play().catch(() => {
 				// Placeholder stays until playback starts (e.g. user taps play if autoplay is blocked).
 			});

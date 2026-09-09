@@ -37,6 +37,7 @@ import {
 	resolveClipIdFromOutputMeta
 } from "./utils/audioClips.js";
 import { creationMethodIsAudio, resolveVoiceFileForProvider } from "./utils/persistGeneratedAudio.js";
+import { publicAudioWaveformCoverPath } from "./utils/audioCoverPublic.js";
 import { getSupabaseServiceClient } from "./utils/supabaseService.js";
 import { verifyQStashRequest } from "./utils/qstashVerification.js";
 import {
@@ -3765,6 +3766,9 @@ export default function createCreateRoutes({ queries, storage }) {
 			if (videoUrl && appendChallengeHeroToMediaUrls) {
 				videoUrl = appendChallengeIdToMediaUrl(videoUrl, challengeHeroId);
 			}
+			const waveformCover = publicAudioWaveformCoverPath(mediaType, meta, url);
+			if (waveformCover) url = waveformCover;
+
 			const sourceImageUrl =
 				typeof meta?.source_image_url === "string" && meta.source_image_url
 					? meta.source_image_url
@@ -3796,7 +3800,7 @@ export default function createCreateRoutes({ queries, storage }) {
 				id: image.id,
 				filename: image.filename,
 				url, // Use stored URL or generate one
-				thumbnail_url: url ? getThumbnailUrl(url) : null,
+				thumbnail_url: waveformCover || (url ? getThumbnailUrl(url) : null),
 				width: image.width,
 				height: image.height,
 				color: image.color,

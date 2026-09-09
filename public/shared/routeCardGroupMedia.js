@@ -4,6 +4,7 @@
 
 import { setRouteMediaBackgroundImage } from "./routeMedia.js";
 import {
+	creationMediaType,
 	creationNeedsAudioWaveformCover,
 	mountAudioCoverWaveform,
 } from "./audioCoverWaveform.js";
@@ -54,10 +55,7 @@ export function hydrateRouteCardMedia(mediaEl, item, options = {}) {
 
 	const feedItem = normalizeRouteCardFeedItem(item);
 	const meta = parseCreationItemMeta(feedItem);
-	const mediaType =
-		typeof feedItem.media_type === "string"
-			? feedItem.media_type.trim().toLowerCase()
-			: (typeof meta?.media_type === "string" ? meta.media_type.trim().toLowerCase() : "image");
+	const mediaType = creationMediaType(feedItem);
 	const hasImportProvider =
 		meta?.import &&
 		typeof meta.import === "object" &&

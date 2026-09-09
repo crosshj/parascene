@@ -56,6 +56,10 @@ import {
 	appendThumbnailVariant
 } from './creationGroupMedia.js';
 import { creationTitleDisplay } from './creationCard.js';
+import {
+	creationNeedsAudioWaveformCover,
+	mountAudioCoverWaveform,
+} from './audioCoverWaveform.js';
 import { applyWhoTooltipAttr } from './whoLabels.js';
 import { setupWhoTooltips } from './reactionTooltipTap.js';
 
@@ -497,6 +501,27 @@ export function markFeedCardImageUnavailable(imageContainer, imageEl, attrs = {}
 }
 
 /**
+ * @param {HTMLElement|null} imageContainer - .feed-card-image
+ * @param {HTMLImageElement|null} imageEl
+ * @param {object} item
+ */
+function applyFeedAudioWaveformCover(imageContainer, imageEl, item) {
+	if (!imageContainer || !creationNeedsAudioWaveformCover(item)) return false;
+	mountAudioCoverWaveform(imageContainer);
+	imageContainer.classList.remove('loading', 'error');
+	imageContainer.classList.add('loaded');
+	imageContainer.removeAttribute('data-feed-img-state');
+	imageContainer.removeAttribute('aria-label');
+	imageContainer.removeAttribute('role');
+	if (imageEl instanceof HTMLImageElement) {
+		imageEl.style.opacity = '0';
+		imageEl.removeAttribute('src');
+		imageEl.removeAttribute('data-feed-image-url');
+	}
+	return true;
+}
+
+/**
  * @param {HTMLImageElement|null} imageEl
  * @param {HTMLElement|null} imageContainer - .feed-card-image
  * @param {object} item - feed row
@@ -504,6 +529,7 @@ export function markFeedCardImageUnavailable(imageContainer, imageEl, attrs = {}
  * @param {boolean} preferThumbnail
  */
 export function attachFeedCardImage(imageEl, imageContainer, item, itemIndex, preferThumbnail = false) {
+	if (applyFeedAudioWaveformCover(imageContainer, imageEl, item)) return;
 	const urls = feedItemCardImageUrlCandidates(item, preferThumbnail);
 	const moderated = item?.is_moderated_error === true;
 	if (!imageEl || !imageContainer) return;
@@ -1951,6 +1977,8 @@ function finishFeedCreationCardMediaAndClick(
 	if (imageEl && imageContainer) {
 		if (processing) {
 			applyFeedCardCreationProcessingState(imageContainer, imageEl);
+		} else if (applyFeedAudioWaveformCover(imageContainer, imageEl, item)) {
+			// Waveform cover — skip image load for placeholder / missing audio art.
 		} else {
 			const canShowVideo = isVideo && Boolean(videoUrl);
 			const hasGroupCarousel = !isVideo && setupFeedCardGroupCarousel(imageContainer, item, { preferThumbnail });

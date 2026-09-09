@@ -6,6 +6,12 @@ import {
 	primeMediaElementForAudioLeveling
 } from './mediaAudioLeveling.js';
 import { mountSequentialVideoPlayer } from './sequentialVideoPlayer.js';
+import {
+	audioCoverWaveformHtml,
+	creationNeedsAudioWaveformCover,
+	creationMediaType,
+	resolveCreationAudioPlayUrl,
+} from './audioCoverWaveform.js';
 
 /**
  * Escapes text for safe HTML insertion.
@@ -1385,11 +1391,15 @@ function parseParasceneShareEmbedParams(href) {
 				? window.location.origin
 				: DEFAULT_APP_ORIGIN
 		);
-		if (u.hostname.toLowerCase() !== PARASCENE_SHARE_HOST) return null;
 		const m = (u.pathname || '').match(/^\/s\/([^/]+)\/([^/]+)\/[^/]+\/?$/);
 		if (!m) return null;
 		const shareVersion = m[1];
-		const shareToken = m[2];
+		let shareToken = m[2];
+		try {
+			shareToken = decodeURIComponent(shareToken);
+		} catch {
+			// keep raw
+		}
 		const id = decodeImageIdFromShareTokenPayload(shareToken);
 		if (!id) return null;
 		return { id, shareVersion, shareToken };
@@ -1689,6 +1699,9 @@ function bindChatCreationEmbedMediaLoadError(wrap, mediaEl) {
 	}
 		const onFail = () => {
 		if (!wrap.parentNode) return;
+		if (wrap.querySelector('.connect-chat-creation-embed-inner--audio')) return;
+		if (wrap.querySelector('.creation-audio-wave')) return;
+		if (wrap.getAttribute('data-prsn-audio-embed') === '1') return;
 		wrap.classList.remove('connect-chat-creation-embed--loading', 'connect-chat-creation-embed--pending');
 		wrap.classList.add('connect-chat-creation-embed--error');
 		const titleEl =
@@ -1981,8 +1994,7 @@ export function hydrateChatCreationEmbeds(rootEl) {
 				statusRaw === 'pending';
 			const isFailed = statusRaw === 'failed' || statusRaw === 'error';
 
-			const mediaType =
-				typeof data.media_type === 'string' ? data.media_type : 'image';
+			const mediaType = creationMediaType(data);
 			const videoUrl =
 				typeof data.video_url === 'string' ? data.video_url.trim() : '';
 			const url = typeof data.url === 'string' ? data.url.trim() : '';
@@ -2020,6 +2032,7 @@ export function hydrateChatCreationEmbeds(rootEl) {
 			const hasRenderableMedia =
 				Boolean(url) ||
 				(mediaType === 'video' && Boolean(videoUrl)) ||
+				mediaType === 'audio' ||
 				hasGroupCarouselUi;
 
 			if (isFailed) {
@@ -2154,6 +2167,33 @@ export function hydrateChatCreationEmbeds(rootEl) {
 						if (img instanceof HTMLImageElement) bindChatCreationEmbedMediaLoadError(wrap, img);
 					}
 				}
+				attachChatCreationEmbedDetailLinkReveal(wrap);
+				return;
+			}
+
+			if (mediaType === 'audio') {
+				const resolvedAudioUrl = resolveCreationAudioPlayUrl(data, {
+					creationId,
+					shareVersion: shareOpts?.shareVersion,
+					shareToken: shareOpts?.shareToken,
+				});
+				const useWaveform = creationNeedsAudioWaveformCover({
+					media_type: 'audio',
+					url,
+					meta: parsedEmbedMeta,
+				});
+				const coverHtml = useWaveform
+					? audioCoverWaveformHtml()
+					: url
+						? `<img class="connect-chat-creation-embed-img" src="${escapeHtml(url)}" alt="" width="260" height="260" loading="eager" decoding="async" />`
+						: audioCoverWaveformHtml();
+				wrap.innerHTML =
+					`<div class="connect-chat-creation-embed-media">` +
+					`<div class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--audio${useWaveform || !url ? ' creation-audio-cover' : ''}${nsfwClass}"${nsfwDataAttr} role="button" tabindex="0" aria-label="Play audio" title="Play audio"${resolvedAudioUrl ? ` data-audio-url="${escapeHtml(resolvedAudioUrl)}"` : ''}>` +
+					`${coverHtml}` +
+					`${INLINE_CHAT_VIDEO_PLAY_OVERLAY_HTML}` +
+					`</div></div>`;
+				trimWhitespaceOnlyTextNodes(wrap);
 				attachChatCreationEmbedDetailLinkReveal(wrap);
 				return;
 			}

@@ -3842,6 +3842,7 @@ export async function initChatPage(root, options = {}) {
 			is_moderated_error: img?.is_moderated_error === true,
 			media_type: typeof img?.media_type === 'string' ? img.media_type : 'image',
 			video_url: typeof img?.video_url === 'string' ? img.video_url : null,
+			audio_url: typeof img?.audio_url === 'string' ? img.audio_url : null,
 			meta: img?.meta && typeof img.meta === 'object' ? img.meta : null,
 			challenge_ended: img?.challenge_ended === true,
 		};

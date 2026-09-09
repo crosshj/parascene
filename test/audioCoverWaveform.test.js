@@ -3,6 +3,7 @@ import {
 	audioCoverWaveformHtml,
 	creationMediaType,
 	creationNeedsAudioWaveformCover,
+	resolveCreationAudioPlayUrl,
 } from '../public/shared/audioCoverWaveform.js';
 
 describe('creationNeedsAudioWaveformCover', () => {
@@ -40,9 +41,55 @@ describe('creationNeedsAudioWaveformCover', () => {
 		).toBe(false);
 	});
 
+	test('YouTube imports keep their thumbnail, never a waveform', () => {
+		expect(
+			creationNeedsAudioWaveformCover({
+				media_type: 'video',
+				url: 'https://i.ytimg.com/vi/abc/hqdefault.jpg',
+				meta: { media_type: 'video', import: { provider: 'youtube', video_id: 'abc' } },
+			})
+		).toBe(false);
+		expect(
+			creationMediaType({
+				url: 'https://i.ytimg.com/vi/abc/hqdefault.jpg',
+				meta: { import: { provider: 'youtube' }, method: 'voice-over' },
+			})
+		).toBe('video');
+	});
+
 	test('images never get a waveform cover', () => {
 		expect(creationNeedsAudioWaveformCover({ media_type: 'image', url: '/x.png' })).toBe(false);
 		expect(creationMediaType({ meta: { media_type: 'audio' } })).toBe('audio');
+	});
+
+	test('audio CDN id without media_type still uses waveform', () => {
+		expect(
+			creationNeedsAudioWaveformCover({
+				url: '/api/images/created/1',
+				meta: { audio: { cdn_id: 'o_aaaaaaaaaaaaaaaaaaaaaaaa' } },
+			})
+		).toBe(true);
+		expect(
+			creationMediaType({
+				audio_url: '/api/create/images/9/audio',
+				meta: { audio: { cdn_id: 'o_aaaaaaaaaaaaaaaaaaaaaaaa' } },
+			})
+		).toBe('audio');
+	});
+});
+
+describe('resolveCreationAudioPlayUrl', () => {
+	test('share token wins over a private audio_url so pasted share links can play', () => {
+		expect(resolveCreationAudioPlayUrl({ audio_url: '/api/create/images/3/audio' })).toBe(
+			'/api/create/images/3/audio'
+		);
+		expect(
+			resolveCreationAudioPlayUrl(
+				{ audio_url: '/api/create/images/3/audio' },
+				{ creationId: 3, shareVersion: 'v1', shareToken: 'tok' }
+			)
+		).toBe('/api/share/v1/tok/cdn-audio');
+		expect(resolveCreationAudioPlayUrl({}, { creationId: 9 })).toBe('/api/create/images/9/audio');
 	});
 });
 

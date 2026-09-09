@@ -402,6 +402,623 @@ function loadLightboxMod() {
 	return lightboxModPromise;
 }
 
+const HOTFIX_WAVE_BARS = [10, 18, 28, 40, 52, 40, 28, 18, 10, 16, 26, 38, 50, 38, 26, 16, 10];
+
+/** In-flow sizer that always loads, so stale hydrate `error` handlers never wipe the tile. */
+const AUDIO_TILE_SIZER_SRC =
+	'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+
+const AUDIO_PLAY_OVERLAY_HTML =
+	`<div class="chat-doom-play-overlay" aria-hidden="true" style="position:absolute;inset:0;z-index:3;display:flex;align-items:center;justify-content:center;pointer-events:none">` +
+	`<div class="chat-doom-play-overlay-inner" style="width:72px;height:72px;border-radius:50%;background:rgba(0,0,0,0.5);color:#fff;display:flex;align-items:center;justify-content:center">` +
+	`<svg class="chat-doom-play-glyph" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="width:36px;height:36px;margin-left:5px"><path d="M8 5v14l11-7z"></path></svg>` +
+	`</div></div>`;
+
+/** Same bars as feed `audioCoverWaveformHtml()`, sized by the feed CSS (58% / 140px). */
+function hotfixWaveformSvgHtml() {
+	const midY = 50;
+	const gap = 5;
+	const barW = 3.5;
+	const span = HOTFIX_WAVE_BARS.length * gap - (gap - barW);
+	const startX = (100 - span) / 2;
+	const rects = HOTFIX_WAVE_BARS.map((h, i) => {
+		const height = (h / 52) * 44;
+		const x = startX + i * gap;
+		const y = midY - height / 2;
+		return `<rect x="${x}" y="${y}" width="${barW}" height="${height}" rx="1.25" fill="currentColor"></rect>`;
+	}).join('');
+	return (
+		`<svg class="creation-audio-wave" viewBox="0 0 100 100" width="100" height="100" preserveAspectRatio="xMidYMid meet" aria-hidden="true" ` +
+		`style="position:absolute;left:50%;top:50%;width:58%;max-width:140px;height:auto;transform:translate(-50%,-50%);z-index:2;pointer-events:none;color:var(--color-purple,#a78bfa)">${rects}</svg>`
+	);
+}
+
+function chatAudioTileInnerHtml() {
+	return (
+		`<img class="connect-chat-creation-embed-img" src="${AUDIO_TILE_SIZER_SRC}" alt="" width="260" height="260" decoding="async" />` +
+		hotfixWaveformSvgHtml() +
+		AUDIO_PLAY_OVERLAY_HTML
+	);
+}
+
+/** @type {Promise<{ mountAudioCoverWaveform: Function }> | null} */
+let audioCoverModPromise = null;
+/** @type {{ mountAudioCoverWaveform: Function, removeAudioCoverWaveform: Function } | null} */
+let audioCoverModCached = null;
+function loadAudioCoverMod() {
+	if (!audioCoverModPromise) {
+		audioCoverModPromise = import(`/shared/audioCoverWaveform.js${assetQuery()}`).then((m) => {
+			audioCoverModCached = m;
+			return m;
+		});
+	}
+	return audioCoverModPromise;
+}
+
+function innerIsUsableAudioHost(inner) {
+	if (!(inner instanceof HTMLElement)) return false;
+	if (inner.classList.contains('connect-chat-creation-embed-inner--error-layout')) return false;
+	if (inner.classList.contains('connect-chat-creation-embed-inner--loading-shell')) return false;
+	if (inner.classList.contains('connect-chat-creation-embed-inner--video')) return false;
+	if (inner.classList.contains('connect-chat-creation-embed-inner--group-carousel')) return false;
+	return true;
+}
+
+function lockChatAudioTileSize(wrap, inner) {
+	const lockBox = (el, width) => {
+		if (!(el instanceof HTMLElement)) return;
+		el.style.setProperty('width', width, 'important');
+		el.style.setProperty('max-width', '100%', 'important');
+		el.style.setProperty('min-width', '0', 'important');
+	};
+	lockBox(wrap, '260px');
+	lockBox(wrap.querySelector('.connect-chat-creation-embed-media'), '100%');
+	if (inner instanceof HTMLElement) {
+		lockBox(inner, '260px');
+		inner.style.setProperty('height', '260px', 'important');
+		inner.style.setProperty('min-height', '260px', 'important');
+		inner.style.setProperty('max-height', '260px', 'important');
+		inner.style.setProperty('display', 'block', 'important');
+	}
+}
+
+function escapeHotfixHtml(value) {
+	return String(value ?? '')
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;');
+}
+
+function decodeImageIdFromShareToken(fullToken) {
+	const raw = String(fullToken || '').trim();
+	if (!raw.includes('.')) return '';
+	const p = raw.split('.')[0];
+	if (!p) return '';
+	const padded = p.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((p.length + 3) % 4);
+	try {
+		const binary = atob(padded);
+		if (binary.length < 3) return '';
+		const id = (binary.charCodeAt(0) << 16) | (binary.charCodeAt(1) << 8) | binary.charCodeAt(2);
+		return Number.isFinite(id) && id > 0 ? String(id) : '';
+	} catch {
+		return '';
+	}
+}
+
+function parseSharePathFromHref(raw) {
+	const href = String(raw || '').trim();
+	if (!href) return null;
+	try {
+		const u = new URL(href, window.location.origin);
+		const m = (u.pathname || '').match(/^\/s\/([^/]+)\/([^/]+)\/[^/]+\/?$/);
+		if (!m) return null;
+		let shareToken = m[2];
+		try {
+			shareToken = decodeURIComponent(shareToken);
+		} catch {
+			// keep raw
+		}
+		return {
+			shareVersion: m[1],
+			shareToken,
+			creationId: decodeImageIdFromShareToken(shareToken),
+		};
+	} catch {
+		return null;
+	}
+}
+
+function stampShareOptsOnWrap(wrap, parsed) {
+	if (!(wrap instanceof HTMLElement) || !parsed?.shareVersion || !parsed?.shareToken) return null;
+	wrap.setAttribute('data-share-version', parsed.shareVersion);
+	wrap.setAttribute('data-share-token', parsed.shareToken);
+	return { shareVersion: parsed.shareVersion, shareToken: parsed.shareToken };
+}
+
+function shareOptsFromLink(link) {
+	if (!(link instanceof HTMLAnchorElement)) return null;
+	return (
+		parseSharePathFromHref(link.getAttribute('href')) ||
+		parseSharePathFromHref(link.getAttribute('data-creation-link-original')) ||
+		parseSharePathFromHref(link.textContent)
+	);
+}
+
+function shareOptsFromCreationEmbed(wrap) {
+	if (!(wrap instanceof HTMLElement)) return null;
+	const stampedVersion = String(wrap.getAttribute('data-share-version') || '').trim();
+	const stampedToken = String(wrap.getAttribute('data-share-token') || '').trim();
+	if (stampedVersion && stampedToken) {
+		return { shareVersion: stampedVersion, shareToken: stampedToken };
+	}
+	const creationId = String(wrap.getAttribute('data-creation-id') || '').trim();
+	const consider = (parsed) => {
+		if (!parsed) return null;
+		if (creationId && parsed.creationId && parsed.creationId !== creationId) return null;
+		return stampShareOptsOnWrap(wrap, parsed);
+	};
+
+	let prev = wrap.previousElementSibling;
+	while (prev && !(prev instanceof HTMLAnchorElement)) {
+		if (prev instanceof HTMLElement && prev.classList.contains('connect-chat-creation-embed')) break;
+		prev = prev.previousElementSibling;
+	}
+	const fromPrev = consider(shareOptsFromLink(prev));
+	if (fromPrev) return fromPrev;
+
+	const scope =
+		wrap.closest('.connect-chat-msg-bubble, .comment-text, .chat-page-canvas-body-view') ||
+		wrap.parentElement;
+	if (scope instanceof HTMLElement) {
+		const links = scope.querySelectorAll('a.creation-link, a[href*="/s/"], a[data-creation-link-original]');
+		for (const link of links) {
+			const hit = consider(shareOptsFromLink(link));
+			if (hit) return hit;
+		}
+		const fromText = consider(parseSharePathFromHref(findShareHrefInText(scope.textContent)));
+		if (fromText) return fromText;
+	}
+	return null;
+}
+
+function findShareHrefInText(text) {
+	const m = String(text || '').match(/https?:\/\/[^\s"'<>]+\/s\/[^/\s"'<>]+\/[^/\s"'<>]+\/[^/\s"'<>]+/i);
+	if (m) return m[0];
+	const rel = String(text || '').match(/\/s\/[^/\s"'<>]+\/[^/\s"'<>]+\/[^/\s"'<>]+/);
+	return rel ? rel[0] : '';
+}
+
+function payloadLooksLikeAudio(data) {
+	if (!data || typeof data !== 'object' || data._error) return false;
+	const top = String(data.media_type || '').trim().toLowerCase();
+	if (top === 'audio') return true;
+	const meta = data.meta && typeof data.meta === 'object' ? data.meta : null;
+	if (String(meta?.media_type || '').trim().toLowerCase() === 'audio') return true;
+	if (top !== 'video' && meta?.cover_placeholder === true) return true;
+	if (typeof data.audio_url === 'string' && data.audio_url.trim()) return true;
+	const cdn =
+		meta?.audio && typeof meta.audio === 'object' ? String(meta.audio.cdn_id || '').trim() : '';
+	if (cdn) return true;
+	const method = String(meta?.method || '').trim().toLowerCase();
+	if (
+		method.includes('speech') ||
+		method.includes('music') ||
+		method.includes('lyria') ||
+		method.includes('voice')
+	) {
+		return true;
+	}
+	const intent = String(meta?.intent || '').trim().toLowerCase();
+	return (
+		intent === 'speech' ||
+		intent === 'music' ||
+		intent === 'voice-train' ||
+		intent === 'voice_train' ||
+		intent === 'audio_generate'
+	);
+}
+
+function payloadWantsChatAudioWaveform(data) {
+	if (!payloadLooksLikeAudio(data)) return false;
+	const meta = data.meta && typeof data.meta === 'object' ? data.meta : null;
+	if (meta?.cover_placeholder === true) return true;
+	const provider =
+		meta?.import && typeof meta.import === 'object'
+			? String(meta.import.provider || '').trim().toLowerCase()
+			: '';
+	const url = typeof data.url === 'string' ? data.url.trim() : '';
+	if ((provider === 'suno' || provider === 'file') && url) return false;
+	return true;
+}
+
+function wrapLooksLikeRealVideo(wrap) {
+	if (!(wrap instanceof HTMLElement)) return false;
+	if (!wrap.querySelector('.connect-chat-creation-embed-inner--video')) return false;
+	const vid = wrap.querySelector('video.connect-chat-creation-embed-video');
+	if (!(vid instanceof HTMLVideoElement)) return false;
+	const vsrc = String(vid.currentSrc || vid.getAttribute('src') || '').trim();
+	if (!vsrc) return false;
+	if (/cdn-audio|\/audio(?:\?|$)/i.test(vsrc)) return false;
+	return true;
+}
+
+function chatEmbedCoverImgIsBroken(wrap) {
+	if (!(wrap instanceof HTMLElement)) return false;
+	const img = wrap.querySelector(
+		'img.connect-chat-creation-embed-img, img.user-text-inline-image'
+	);
+	if (!(img instanceof HTMLImageElement)) return false;
+	return img.complete && img.naturalWidth === 0;
+}
+
+function chatAudioCoverIsPainted(wrap) {
+	const inner = wrap?.querySelector?.('.connect-chat-creation-embed-inner--audio, .connect-chat-creation-embed-inner');
+	return Boolean(inner instanceof HTMLElement && inner.querySelector('.creation-audio-wave'));
+}
+
+function audioSrcForShareOrPayload(creationId, shareOpts, data) {
+	if (shareOpts?.shareVersion && shareOpts?.shareToken) {
+		return `/api/share/${encodeURIComponent(shareOpts.shareVersion)}/${encodeURIComponent(shareOpts.shareToken)}/cdn-audio`;
+	}
+	if (typeof data?.audio_url === 'string' && data.audio_url.trim()) return data.audio_url.trim();
+	if (creationId) return `/api/create/images/${encodeURIComponent(creationId)}/audio`;
+	return '';
+}
+
+/** @type {Map<string, object>} */
+const hotfixEmbedCache = new Map();
+
+async function fetchHotfixCreationPayload(id, shareOpts) {
+	const shareVersion = shareOpts?.shareVersion || '';
+	const shareToken = shareOpts?.shareToken || '';
+	const key = `${id}\0${shareVersion}\0${shareToken}`;
+	if (hotfixEmbedCache.has(key)) return hotfixEmbedCache.get(key);
+	const headers = { Accept: 'application/json' };
+	if (shareVersion && shareToken) {
+		headers['X-Share-Version'] = shareVersion;
+		headers['X-Share-Token'] = shareToken;
+	}
+	const res = await fetch(`/api/create/images/${encodeURIComponent(id)}`, {
+		method: 'GET',
+		credentials: 'include',
+		headers,
+	});
+	if (!res.ok) return { _error: true, status: res.status };
+	const data = await res.json().catch(() => ({ _error: true }));
+	if (!data || data._error) return data || { _error: true };
+	hotfixEmbedCache.set(key, data);
+	return data;
+}
+
+function closeHotfixAudioLightbox() {
+	document.querySelectorAll('[data-prsn-hotfix-audio-lightbox]').forEach((el) => el.remove());
+}
+
+function openHotfixAudioLightbox(src, creationId) {
+	const url = String(src || '').trim();
+	if (!url) return;
+	closeHotfixAudioLightbox();
+	void loadLightboxMod().then(({ openChatAttachmentPreviewLightbox }) => {
+		openChatAttachmentPreviewLightbox(url, 'audio', {
+			...(creationId ? { creationId } : {}),
+		});
+	});
+}
+
+function cardLooksLikeGeneratedAudio(card) {
+	if (!(card instanceof HTMLElement)) return false;
+	if (card.querySelector('.creation-video-import-badge')) return false;
+	const mediaType = String(card.getAttribute('data-media-type') || '').trim().toLowerCase();
+	if (mediaType === 'video') return false;
+	if (mediaType === 'audio') return true;
+	return Boolean(card.querySelector('.creation-music-badge:not(.creation-video-import-badge)'));
+}
+
+function cardHasRealAudioCover(card) {
+	if (!(card instanceof HTMLElement)) return false;
+	const provider = String(card.getAttribute('data-import-provider') || '').trim().toLowerCase();
+	return provider === 'suno' || provider === 'file' || provider === 'youtube';
+}
+
+function restoreFeedCardImageAfterWaveform(card, removeAudioCoverWaveform) {
+	if (!(card instanceof HTMLElement) || typeof removeAudioCoverWaveform !== 'function') return;
+	if (card.querySelector('.creation-video-import-badge') == null) {
+		const mediaType = String(card.getAttribute('data-media-type') || '').trim().toLowerCase();
+		if (mediaType === 'audio') return;
+		if (card.querySelector('.creation-music-badge:not(.creation-video-import-badge)')) return;
+	}
+	const imageContainer = card.querySelector('.feed-card-image');
+	if (!(imageContainer instanceof HTMLElement)) return;
+	if (!imageContainer.classList.contains('creation-audio-cover') && !imageContainer.querySelector('.creation-audio-wave')) {
+		return;
+	}
+	removeAudioCoverWaveform(imageContainer);
+	const img = imageContainer.querySelector('.feed-card-img');
+	const url = String(card.dataset.imageUrl || card.dataset.imageUrlFull || '').trim();
+	if (img instanceof HTMLImageElement && url) {
+		img.src = url;
+		img.style.removeProperty('opacity');
+		img.style.removeProperty('visibility');
+	}
+}
+
+function applyWaveformToFeedCard(card, mountAudioCoverWaveform) {
+	if (!(card instanceof HTMLElement)) return;
+	if (!cardLooksLikeGeneratedAudio(card) || cardHasRealAudioCover(card)) return;
+	const imageContainer = card.querySelector('.feed-card-image');
+	if (!(imageContainer instanceof HTMLElement)) return;
+	mountAudioCoverWaveform(imageContainer);
+	const img = imageContainer.querySelector('.feed-card-img');
+	if (img instanceof HTMLImageElement) {
+		img.removeAttribute('src');
+		img.style.opacity = '0';
+		img.style.visibility = 'hidden';
+	}
+}
+
+function scanFeedAudioWaveformCovers(mountAudioCoverWaveform, removeAudioCoverWaveform) {
+	document.querySelectorAll('.feed-card[data-media-type="audio"]').forEach((card) => {
+		applyWaveformToFeedCard(card, mountAudioCoverWaveform);
+	});
+	document.querySelectorAll('.creation-music-badge:not(.creation-video-import-badge)').forEach((badge) => {
+		const card = badge.closest('.feed-card');
+		applyWaveformToFeedCard(card, mountAudioCoverWaveform);
+	});
+	document.querySelectorAll('.feed-card .creation-video-import-badge, .feed-card[data-media-type="video"]').forEach((el) => {
+		const card = el instanceof HTMLElement && el.classList.contains('feed-card') ? el : el.closest('.feed-card');
+		restoreFeedCardImageAfterWaveform(card, removeAudioCoverWaveform);
+	});
+	document.querySelectorAll('.route-media[data-media-type="audio"]').forEach((mediaEl) => {
+		if (!(mediaEl instanceof HTMLElement)) return;
+		const card = mediaEl.closest('.route-card, .feed-card');
+		if (card instanceof HTMLElement && cardHasRealAudioCover(card)) return;
+		if (mediaEl.closest('.feed-card')?.querySelector('.creation-video-import-badge')) return;
+		mountAudioCoverWaveform(mediaEl);
+	});
+}
+
+const watchedAudioEmbeds = new WeakSet();
+
+function watchAudioEmbed(wrap) {
+	if (!(wrap instanceof HTMLElement) || watchedAudioEmbeds.has(wrap)) return;
+	watchedAudioEmbeds.add(wrap);
+	const obs = new MutationObserver(() => {
+		if (!wrap.isConnected) {
+			obs.disconnect();
+			return;
+		}
+		if (wrap.getAttribute('data-prsn-audio-embed') !== '1') return;
+		if (wrap.dataset.prsnAudioPainting === '1') return;
+		if (chatAudioCoverIsPainted(wrap)) return;
+		const creationId = String(wrap.getAttribute('data-creation-id') || '').trim();
+		const shareOpts = shareOptsFromCreationEmbed(wrap);
+		paintChatAudioCover(wrap, audioSrcForShareOrPayload(creationId, shareOpts, null));
+	});
+	obs.observe(wrap, { childList: true, subtree: true });
+}
+
+function paintChatAudioCover(wrap, audioUrl) {
+	if (!(wrap instanceof HTMLElement)) return;
+	if (wrap.dataset.prsnAudioPainting === '1') return;
+	const src = String(audioUrl || '').trim();
+	if (chatAudioCoverIsPainted(wrap)) {
+		wrap.setAttribute('data-prsn-audio-embed', '1');
+		if (src) {
+			wrap.setAttribute('data-audio-url', src);
+			wrap.querySelector('.connect-chat-creation-embed-inner--audio')?.setAttribute('data-audio-url', src);
+		}
+		lockChatAudioTileSize(wrap, wrap.querySelector('.connect-chat-creation-embed-inner--audio'));
+		watchAudioEmbed(wrap);
+		return;
+	}
+	wrap.dataset.prsnAudioPainting = '1';
+	try {
+		wrap.classList.remove(
+			'connect-chat-creation-embed--loading',
+			'connect-chat-creation-embed--error',
+			'is-loading'
+		);
+		wrap.setAttribute('data-prsn-audio-embed', '1');
+		if (src) wrap.setAttribute('data-audio-url', src);
+
+		const tileAttrs =
+			` class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--audio creation-audio-cover"` +
+			` role="button" tabindex="0" aria-label="Play audio" title="Play audio"` +
+			(src ? ` data-audio-url="${escapeHotfixHtml(src)}"` : '');
+		const tileHtml = `<div${tileAttrs}>${chatAudioTileInnerHtml()}</div>`;
+
+		let inner = wrap.querySelector('.connect-chat-creation-embed-inner');
+		if (innerIsUsableAudioHost(inner)) {
+			inner.className = 'connect-chat-creation-embed-inner connect-chat-creation-embed-inner--audio creation-audio-cover';
+			inner.setAttribute('role', 'button');
+			inner.setAttribute('tabindex', '0');
+			inner.setAttribute('aria-label', 'Play audio');
+			inner.setAttribute('title', 'Play audio');
+			if (src) inner.setAttribute('data-audio-url', src);
+			else inner.removeAttribute('data-audio-url');
+			inner.innerHTML = chatAudioTileInnerHtml();
+		} else if (inner instanceof HTMLElement) {
+			inner.outerHTML = tileHtml;
+		} else {
+			const media = wrap.querySelector('.connect-chat-creation-embed-media');
+			if (media instanceof HTMLElement) media.insertAdjacentHTML('afterbegin', tileHtml);
+			else wrap.insertAdjacentHTML('afterbegin', `<div class="connect-chat-creation-embed-media">${tileHtml}</div>`);
+		}
+		lockChatAudioTileSize(wrap, wrap.querySelector('.connect-chat-creation-embed-inner--audio'));
+		watchAudioEmbed(wrap);
+	} finally {
+		delete wrap.dataset.prsnAudioPainting;
+	}
+}
+
+async function upgradeChatAudioEmbed(wrap) {
+	if (!(wrap instanceof HTMLElement)) return 'skip';
+	if (wrap.querySelector('.connect-chat-creation-embed-inner--group-carousel')) {
+		wrap.setAttribute('data-prsn-audio-embed', '0');
+		return 'image';
+	}
+	if (wrapLooksLikeRealVideo(wrap)) {
+		wrap.setAttribute('data-prsn-audio-embed', '0');
+		return 'image';
+	}
+	const creationId = String(wrap.getAttribute('data-creation-id') || '').trim();
+	if (!creationId) return 'skip';
+	const shareOpts = shareOptsFromCreationEmbed(wrap);
+	if (wrap.getAttribute('data-prsn-audio-embed') === '1') {
+		paintChatAudioCover(wrap, audioSrcForShareOrPayload(creationId, shareOpts, null));
+		return 'audio';
+	}
+	const existingAudio = wrap.querySelector('.connect-chat-creation-embed-inner--audio');
+	if (existingAudio instanceof HTMLElement) {
+		const img = existingAudio.querySelector('img');
+		const imgSrc = img instanceof HTMLImageElement
+			? String(img.getAttribute('src') || img.currentSrc || '')
+			: '';
+		const hasWave = Boolean(existingAudio.querySelector('.creation-audio-wave'));
+		const posterIsWaveform = imgSrc.includes('audio-cover-waveform');
+		if (hasWave || !img || posterIsWaveform || chatEmbedCoverImgIsBroken(wrap)) {
+			paintChatAudioCover(wrap, audioSrcForShareOrPayload(creationId, shareOpts, null));
+			return 'audio';
+		}
+	}
+	if (wrap.dataset.prsnAudioEmbedChecking === '1') {
+		return chatAudioCoverIsPainted(wrap) ? 'audio' : 'skip';
+	}
+	wrap.dataset.prsnAudioEmbedChecking = '1';
+	try {
+		const data = await fetchHotfixCreationPayload(creationId, shareOpts);
+		if (!wrap.parentNode) return 'skip';
+		if (data && data._error) return chatAudioCoverIsPainted(wrap) ? 'audio' : 'skip';
+		if (!payloadLooksLikeAudio(data)) {
+			wrap.setAttribute('data-prsn-audio-embed', '0');
+			return 'image';
+		}
+		if (!payloadWantsChatAudioWaveform(data)) {
+			const src = audioSrcForShareOrPayload(creationId, shareOpts, data);
+			wrap.setAttribute('data-prsn-audio-embed', 'art');
+			if (src) wrap.setAttribute('data-audio-url', src);
+			const inner = wrap.querySelector('.connect-chat-creation-embed-inner--audio');
+			if (inner instanceof HTMLElement && src) inner.setAttribute('data-audio-url', src);
+			return 'audio';
+		}
+		paintChatAudioCover(wrap, audioSrcForShareOrPayload(creationId, shareOpts, data));
+		return 'audio';
+	} catch {
+		return chatAudioCoverIsPainted(wrap) ? 'audio' : 'skip';
+	} finally {
+		delete wrap.dataset.prsnAudioEmbedChecking;
+	}
+}
+
+async function openChatCreationEmbedAfterAudioCheck(wrap) {
+	const kind = await upgradeChatAudioEmbed(wrap);
+	const creationId = String(wrap.getAttribute('data-creation-id') || '').trim();
+	const shareOpts = shareOptsFromCreationEmbed(wrap);
+	const audioSrc = String(
+		wrap.querySelector('.connect-chat-creation-embed-inner--audio')?.getAttribute('data-audio-url') ||
+			wrap.getAttribute('data-audio-url') ||
+			audioSrcForShareOrPayload(creationId, shareOpts, null)
+	).trim();
+	if (kind === 'audio' || (kind === 'skip' && audioSrc && wrap.getAttribute('data-prsn-audio-embed') !== '0')) {
+		if (audioSrc) openHotfixAudioLightbox(audioSrc, creationId);
+		return;
+	}
+	if (kind !== 'image') return;
+	const { openChatInlineImageLightbox } = await loadLightboxMod();
+	const a = wrap.querySelector('a.user-text-inline-image-link');
+	const img = wrap.querySelector('img.connect-chat-creation-embed-img');
+	let src = '';
+	if (img instanceof HTMLImageElement) src = img.currentSrc || img.getAttribute('src') || '';
+	if (!src && a instanceof HTMLAnchorElement) src = a.getAttribute('href') || '';
+	if (!src) return;
+	openChatInlineImageLightbox(src, {
+		...(creationId ? { creationId } : {}),
+		...(img instanceof HTMLImageElement ? { sourceImg: img } : {}),
+	});
+}
+
+function scanChatAudioCreationEmbeds() {
+	document.querySelectorAll('.connect-chat-creation-embed[data-creation-id]').forEach((wrap) => {
+		if (!(wrap instanceof HTMLElement)) return;
+		if (wrap.getAttribute('data-prsn-audio-embed') === '0') return;
+		if (wrap.getAttribute('data-prsn-audio-embed') === 'art') return;
+		if (wrap.getAttribute('data-prsn-audio-embed') === '1' && !chatAudioCoverIsPainted(wrap)) {
+			const creationId = String(wrap.getAttribute('data-creation-id') || '').trim();
+			const shareOpts = shareOptsFromCreationEmbed(wrap);
+			paintChatAudioCover(wrap, audioSrcForShareOrPayload(creationId, shareOpts, null));
+			return;
+		}
+		void upgradeChatAudioEmbed(wrap);
+	});
+}
+
+function applyHotfixCreationEmbedFailure(wrap) {
+	if (!(wrap instanceof HTMLElement)) return;
+	if (wrap.getAttribute('data-prsn-audio-embed') === '1') {
+		const creationId = String(wrap.getAttribute('data-creation-id') || '').trim();
+		paintChatAudioCover(wrap, audioSrcForShareOrPayload(creationId, shareOptsFromCreationEmbed(wrap), null));
+		return;
+	}
+	if (chatAudioCoverIsPainted(wrap)) return;
+	if (wrap.querySelector('.connect-chat-creation-embed-inner--error-layout')) return;
+	wrap.classList.remove('connect-chat-creation-embed--loading', 'connect-chat-creation-embed--pending');
+	wrap.classList.add('connect-chat-creation-embed--error');
+	wrap.innerHTML =
+		'<div class="connect-chat-creation-embed-media">' +
+		'<div class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--error-layout">' +
+		'<div class="route-media route-media-error connect-chat-creation-embed-route-error" aria-hidden="true"></div>' +
+		'</div></div>';
+	wrap.setAttribute('role', 'status');
+}
+
+function bindChatAudioEmbedMediaErrorCapture() {
+	if (bindChatAudioEmbedMediaErrorCapture._bound) return;
+	bindChatAudioEmbedMediaErrorCapture._bound = true;
+	window.addEventListener(
+		'error',
+		(e) => {
+			const t = e.target;
+			if (!(t instanceof HTMLImageElement) && !(t instanceof HTMLVideoElement)) return;
+			const wrap = t.closest?.('.connect-chat-creation-embed[data-creation-id]');
+			if (!(wrap instanceof HTMLElement)) return;
+			if (wrap.getAttribute('data-prsn-audio-embed') === '0') return;
+			if (wrap.getAttribute('data-prsn-audio-embed') === 'art') return;
+			if (wrapLooksLikeRealVideo(wrap)) return;
+			if (t instanceof HTMLImageElement && !String(t.getAttribute('src') || '').startsWith('data:')) {
+				t.src = AUDIO_TILE_SIZER_SRC;
+			}
+			e.stopPropagation();
+			e.stopImmediatePropagation();
+			void upgradeChatAudioEmbed(wrap).then((kind) => {
+				if (kind === 'audio' || chatAudioCoverIsPainted(wrap)) return;
+				if (kind === 'image') applyHotfixCreationEmbedFailure(wrap);
+			});
+		},
+		true
+	);
+}
+
+function initAudioCoversAndPlaybackHotfix() {
+	bindChatAudioEmbedMediaErrorCapture();
+	const run = () => {
+		void loadAudioCoverMod()
+			.then(({ mountAudioCoverWaveform, removeAudioCoverWaveform }) => {
+				scanFeedAudioWaveformCovers(mountAudioCoverWaveform, removeAudioCoverWaveform);
+			})
+			.catch(() => {});
+		scanChatAudioCreationEmbeds();
+	};
+	run();
+	document.addEventListener('DOMContentLoaded', run);
+	window.addEventListener('load', run);
+	const mo = new MutationObserver(() => {
+		window.clearTimeout(initAudioCoversAndPlaybackHotfix._t);
+		initAudioCoversAndPlaybackHotfix._t = window.setTimeout(run, 40);
+	});
+	mo.observe(document.documentElement, { childList: true, subtree: true });
+}
+
 document.addEventListener(
 	'click',
 	(e) => {
@@ -416,6 +1033,68 @@ document.addEventListener(
 			'.connect-chat-msg-bubble, .chat-page-canvas-body-view, .comment-text'
 		);
 		if (!scope) return;
+
+		const audioInner = e.target.closest('.connect-chat-creation-embed-inner--audio');
+		if (audioInner instanceof HTMLElement && scope.contains(audioInner)) {
+			if (e.target.closest('.connect-chat-creation-embed-detail-link')) return;
+			const wrap = audioInner.closest('.connect-chat-creation-embed');
+			const creationId =
+				wrap instanceof HTMLElement
+					? String(wrap.getAttribute('data-creation-id') || '').trim()
+					: '';
+			const shareOpts = wrap instanceof HTMLElement ? shareOptsFromCreationEmbed(wrap) : null;
+			const src = String(
+				audioInner.getAttribute('data-audio-url') ||
+					audioSrcForShareOrPayload(creationId, shareOpts, null)
+			).trim();
+			if (!src) return;
+			e.preventDefault();
+			e.stopImmediatePropagation();
+			openHotfixAudioLightbox(src, creationId);
+			return;
+		}
+
+		const creationEmbed = e.target.closest('.connect-chat-creation-embed[data-creation-id]');
+		if (
+			creationEmbed instanceof HTMLElement &&
+			scope.contains(creationEmbed) &&
+			!e.target.closest('.connect-chat-creation-embed-detail-link') &&
+			!e.target.closest('.connect-chat-creation-embed-inner--video') &&
+			!e.target.closest('.connect-chat-creation-embed-inner--group-carousel') &&
+			!e.target.closest('.connect-chat-creation-embed-group-nav')
+		) {
+			const known = creationEmbed.getAttribute('data-prsn-audio-embed');
+			if (known !== '0') {
+				const pendingAudioUrl = String(
+					creationEmbed.querySelector('.connect-chat-creation-embed-inner--audio')?.getAttribute('data-audio-url') ||
+						''
+				).trim();
+				if (known === '1' || known === 'art' || pendingAudioUrl) {
+					const creationId = String(creationEmbed.getAttribute('data-creation-id') || '').trim();
+					const shareOpts = shareOptsFromCreationEmbed(creationEmbed);
+					const src =
+						pendingAudioUrl ||
+						String(creationEmbed.getAttribute('data-audio-url') || '').trim() ||
+						audioSrcForShareOrPayload(creationId, shareOpts, null);
+					if (!src) return;
+					e.preventDefault();
+					e.stopImmediatePropagation();
+					openHotfixAudioLightbox(src, creationId);
+					return;
+				}
+				const inGroup = creationEmbed.closest('.user-text-inline-media-group');
+				if (
+					!inGroup &&
+					(e.target.closest('a.user-text-inline-image-link') ||
+						e.target.closest('.connect-chat-creation-embed-inner'))
+				) {
+					e.preventDefault();
+					e.stopImmediatePropagation();
+					void openChatCreationEmbedAfterAudioCheck(creationEmbed);
+					return;
+				}
+			}
+		}
 
 		const videoInner = e.target.closest('.connect-chat-creation-embed-inner--video');
 		if (videoInner instanceof HTMLElement && scope.contains(videoInner)) {
@@ -1259,6 +1938,8 @@ function initChallengeVoteNavOutsideHotfix() {
 }
 
 initChallengeVoteNavOutsideHotfix();
+
+initAudioCoversAndPlaybackHotfix();
 
 void import(`/shared/consoleGen.js${assetQuery()}`)
 	.then((mod) => {

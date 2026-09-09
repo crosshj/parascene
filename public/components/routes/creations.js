@@ -1459,20 +1459,21 @@ class AppRouteCreations extends HTMLElement {
 				typeof item.media_type === 'string'
 					? item.media_type
 					: (itemMeta && typeof itemMeta.media_type === 'string' ? itemMeta.media_type : 'image');
-			card.dataset.mediaType = (mediaType || 'image').toLowerCase();
+			const mediaTypeNorm = String(mediaType || 'image').trim().toLowerCase();
+			card.dataset.mediaType = mediaTypeNorm;
 			const isImportEmbed =
 				itemMeta?.import &&
 				typeof itemMeta.import === 'object' &&
 				typeof itemMeta.import.provider === 'string';
 			if (isImportEmbed) card.dataset.importProvider = String(itemMeta.import.provider).trim().toLowerCase();
-			const isNativeVideo = mediaType === 'video' && !isImportEmbed;
+			const isNativeVideo = mediaTypeNorm === 'video' && !isImportEmbed;
 			const mediaAttrs = {
 				'data-image-id': String(item.id),
 				'data-status': 'completed'
 			};
 			if (isNativeVideo) {
 				mediaAttrs['data-media-type'] = 'video';
-			} else if (mediaType === 'audio') {
+			} else if (mediaTypeNorm === 'audio') {
 				mediaAttrs['data-media-type'] = 'audio';
 			}
 			card.innerHTML = buildCreationCardShell({
@@ -1486,7 +1487,7 @@ class AppRouteCreations extends HTMLElement {
 					!isPublished &&
 					!challengeEnded &&
 					!item.nsfw &&
-					mediaType !== 'audio',
+					mediaTypeNorm !== 'audio',
 			});
 			const mediaEl = card.querySelector('.route-media');
 			if (mediaEl && typeof hydrateRouteCardMedia === 'function') {

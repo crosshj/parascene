@@ -12,6 +12,8 @@ import {
 	attachMediaAudioLeveling,
 	primeMediaElementForAudioLeveling
 } from './mediaAudioLeveling.js';
+import { audioCoverWaveformHtml } from './audioCoverWaveform.js';
+import { mountHostedAudioPlayer } from './hostedAudioPlayer.js';
 
 /** @type {HTMLElement | null} */
 let chatInlineImageLightboxEl = null;
@@ -179,6 +181,8 @@ function attachChatInlineImageLightboxBackdropClose(overlay) {
 			t.closest('.chat-inline-image-lightbox-gallery-nav') ||
 			t.closest('.chat-inline-image-lightbox-video') ||
 			t.closest('.chat-inline-image-lightbox-video-slot--gallery') ||
+			t.closest('.chat-inline-image-lightbox-audio-slot') ||
+			t.closest('[data-hosted-audio]') ||
 			t.closest('.chat-inline-image-lightbox-iframe')
 		) {
 			return;
@@ -1708,7 +1712,7 @@ function openChatMixedMediaGalleryLightbox(slides, hooks) {
 
 /**
  * @param {string} src
- * @param {'video' | 'html' | string} kind
+ * @param {'video' | 'audio' | 'html' | string} kind
  * @param {{ beforeOpen?: () => void, creationId?: string, sourceVideo?: HTMLVideoElement }} [hooks]
  */
 export function openChatAttachmentPreviewLightbox(src, kind, hooks) {
@@ -1732,14 +1736,14 @@ export function openChatAttachmentPreviewLightbox(src, kind, hooks) {
 	overlay.className = 'chat-inline-image-lightbox';
 	overlay.setAttribute('role', 'dialog');
 	overlay.setAttribute('aria-modal', 'true');
-	overlay.setAttribute('aria-label', kind === 'video' ? 'Video' : 'Preview');
+	overlay.setAttribute('aria-label', kind === 'video' ? 'Video' : kind === 'audio' ? 'Audio' : 'Preview');
 
 	const closeBtn = createModalDismissButton({ extraClass: 'chat-inline-image-lightbox-close' });
 
 	const frame = document.createElement('div');
 	frame.className = 'chat-inline-image-lightbox-frame';
 
-	/** @type {HTMLVideoElement | null} */
+	/** @type {HTMLVideoElement | HTMLAudioElement | null} */
 	let lightboxPreviewVideo = null;
 	/** @type {null | (() => void)} */
 	let revealChatLightboxVideo = null;
@@ -1827,6 +1831,28 @@ export function openChatAttachmentPreviewLightbox(src, kind, hooks) {
 		slot.appendChild(video);
 		if (!hasInlineFrame) slot.appendChild(placeholder);
 		frame.appendChild(slot);
+	} else if (kind === 'audio') {
+		const slot = document.createElement('div');
+		slot.className =
+			'creation-detail-image-wrapper creation-audio-cover hero-audio-playing chat-inline-image-lightbox-audio-slot';
+		slot.style.pointerEvents = 'auto';
+
+		const waveWrap = document.createElement('div');
+		waveWrap.className = 'chat-inline-image-lightbox-audio-cover';
+		waveWrap.setAttribute('aria-hidden', 'true');
+		waveWrap.insertAdjacentHTML(
+			'afterbegin',
+			audioCoverWaveformHtml('creation-audio-wave creation-audio-wave-lg')
+		);
+		slot.appendChild(waveWrap);
+
+		const mounted = mountHostedAudioPlayer(slot, {
+			src: url,
+			title: 'Audio',
+			autoplay: true,
+		});
+		frame.appendChild(slot);
+		lightboxPreviewVideo = mounted?.audio || null;
 	} else {
 		const iframe = document.createElement('iframe');
 		iframe.className = 'chat-inline-image-lightbox-iframe';
@@ -1873,7 +1899,9 @@ export function openChatAttachmentPreviewLightbox(src, kind, hooks) {
 			closeBtn.focus();
 		}
 		if (lightboxPreviewVideo) {
-			attachMediaAudioLeveling(lightboxPreviewVideo);
+			if (!(lightboxPreviewVideo instanceof HTMLAudioElement)) {
+				attachMediaAudioLeveling(lightboxPreviewVideo);
+			}
 			void lightboxPreviewVideo.play().catch(() => {
 				// Placeholder stays until playback starts (e.g. user taps play if autoplay is blocked).
 			});
@@ -2012,6 +2040,25 @@ export function bindChatInlineImageLightboxClickDelegation(rootEl, options = {})
 				},
 				openHooks
 			);
+			return;
+		}
+
+		const audioInner = e.target.closest?.('.connect-chat-creation-embed-inner--audio');
+		if (audioInner && scope.contains(audioInner)) {
+			if (e.target.closest?.('.connect-chat-creation-embed-detail-link')) return;
+			const src = String(audioInner.getAttribute('data-audio-url') || '').trim();
+			if (!src) return;
+			const wrap = audioInner.closest('.connect-chat-creation-embed');
+			const creationId =
+				wrap instanceof HTMLElement
+					? String(wrap.getAttribute('data-creation-id') || '').trim()
+					: '';
+			e.preventDefault();
+			e.stopPropagation();
+			openChatAttachmentPreviewLightbox(src, 'audio', {
+				...openHooks,
+				...(creationId ? { creationId } : {}),
+			});
 			return;
 		}
 
