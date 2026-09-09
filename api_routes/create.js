@@ -36,6 +36,7 @@ import {
 	resolveAudioProviderArgs,
 	resolveClipIdFromOutputMeta
 } from "./utils/audioClips.js";
+import { creationMethodIsAudio, resolveVoiceFileForProvider } from "./utils/persistGeneratedAudio.js";
 import { getSupabaseServiceClient } from "./utils/supabaseService.js";
 import { verifyQStashRequest } from "./utils/qstashVerification.js";
 import {
@@ -2589,6 +2590,19 @@ export default function createCreateRoutes({ queries, storage }) {
 				});
 			}
 
+			const voiceFileResolved = await resolveVoiceFileForProvider(
+				queries,
+				user.id,
+				argsForProvider
+			);
+			if (!voiceFileResolved.ok) {
+				return res.status(voiceFileResolved.status).json({
+					error: voiceFileResolved.error,
+					message: voiceFileResolved.error
+				});
+			}
+			argsForProvider = voiceFileResolved.args;
+
 			// Exact text the user entered (before $style expansion, hydrate JSON, create.html style wrapper, etc.).
 			// Shown on creation detail; meta.args.prompt is the provider payload (see More Info).
 			const originalPromptForMeta =
@@ -2734,6 +2748,20 @@ export default function createCreateRoutes({ queries, storage }) {
 				}
 			}
 
+			const methodFieldsForLimit =
+				methodConfig?.fields && typeof methodConfig.fields === "object" ? methodConfig.fields : {};
+			for (const [fieldName, fieldDef] of Object.entries(methodFieldsForLimit)) {
+				const max = Number(fieldDef?.max_length);
+				if (!Number.isFinite(max) || max <= 0) continue;
+				const value = argsForProvider?.[fieldName];
+				if (typeof value === "string" && value.length > max) {
+					return res.status(400).json({
+						error: "Argument too long",
+						message: `${fieldName} must be at most ${max} characters.`
+					});
+				}
+			}
+
 			// Check user's credit balance
 			let credits = await queries.selectUserCredits.get(user.id);
 
@@ -2772,6 +2800,13 @@ export default function createCreateRoutes({ queries, storage }) {
 				...(styleForMeta ? { style: styleForMeta } : {}),
 				...(originalPromptForMeta !== "" ? { user_prompt: originalPromptForMeta } : {}),
 			};
+			if (
+				methodConfig?.intent === "audio_generate" ||
+				methodConfig?.intent === "voice_train" ||
+				creationMethodIsAudio(method)
+			) {
+				meta.media_type = "audio";
+			}
 
 			// Mutate lineage: create/extend meta.history
 			if (mutate_of_id != null && Number.isFinite(Number(mutate_of_id))) {

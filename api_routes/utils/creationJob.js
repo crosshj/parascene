@@ -14,6 +14,12 @@ import {
 	materializeBlueProviderAudioArgs,
 	resolveClipIdFromOutputMeta,
 } from "./audioClips.js";
+import {
+	creationMethodMayReturnAudioBytes,
+	isVoiceTrainSuccessBody,
+	persistGeneratedAudioToCdn,
+	extensionForAudioContentType,
+} from "./persistGeneratedAudio.js";
 
 const PROVIDER_TIMEOUT_MS = 50_000;
 /** When the provider returns finished video bytes (sync or async poll), allow long downloads. Override with CREATION_PROVIDER_VIDEO_FETCH_TIMEOUT_MS (ms, min 10000). */
@@ -58,6 +64,10 @@ function mergeMeta(existing, patch) {
 function creationMethodMayReturnVideoBytes(method) {
 	const m = String(method || "").toLowerCase();
 	return m.includes("video") || m.includes("i2v") || m.includes("ltx");
+}
+
+function creationMethodNeedsLongFetch(method) {
+	return creationMethodMayReturnVideoBytes(method) || creationMethodMayReturnAudioBytes(method);
 }
 
 function isRemoteAsyncEnv() {
@@ -334,6 +344,10 @@ async function finalizeCreationJob({
 	videoBuffer,
 	videoContentType,
 	sourceImageUrlForMeta,
+	isAudio = false,
+	audioBuffer = null,
+	audioContentType = null,
+	voiceId = null,
 }) {
 	// Upload and finalize.
 	logCreation("Uploading image to storage");
@@ -382,6 +396,41 @@ async function finalizeCreationJob({
 		throw err;
 	}
 
+	let audioMeta = null;
+	let audioCoverPlaceholder = false;
+	const trimmedVoiceId = typeof voiceId === "string" && voiceId.trim() ? voiceId.trim() : "";
+	if (isAudio) {
+		if (audioBuffer) {
+			const persisted = await persistGeneratedAudioToCdn({
+				queries,
+				audioBuffer,
+				contentType: audioContentType || "audio/mpeg",
+				filename: `generated.${extensionForAudioContentType(audioContentType)}`,
+				createPlaceholder: () => createPlaceholderImageBuffer(),
+			});
+			imageBuffer = persisted.coverBuffer;
+			width = persisted.width;
+			height = persisted.height;
+			audioCoverPlaceholder = persisted.usedPlaceholder === true;
+			audioMeta = {
+				...persisted.audio,
+				...(trimmedVoiceId ? { voice_id: trimmedVoiceId } : {}),
+			};
+		} else if (trimmedVoiceId) {
+			if (!imageBuffer) {
+				imageBuffer = await createPlaceholderImageBuffer();
+				width = DEFAULT_WIDTH;
+				height = DEFAULT_HEIGHT;
+			}
+			audioCoverPlaceholder = true;
+			audioMeta = { voice_id: trimmedVoiceId };
+		} else {
+			const err = new Error("Audio completion requested but no audio bytes or voice_id were available.");
+			err.code = "AUDIO_STORAGE_FAILED";
+			throw err;
+		}
+	}
+
 	const completedAtIso = new Date().toISOString();
 	const startedAtMs = existingMeta && existingMeta.started_at ? Date.parse(existingMeta.started_at) : NaN;
 	const completedAtMs = Date.parse(completedAtIso);
@@ -393,7 +442,7 @@ async function finalizeCreationJob({
 	const completedMeta = mergeMeta(existingMeta, {
 		completed_at: completedAtIso,
 		...(Number.isFinite(durationMs) && durationMs >= 0 ? { duration_ms: durationMs } : {}),
-		media_type: isVideo ? "video" : "image",
+		media_type: isAudio ? "audio" : isVideo ? "video" : "image",
 		...(isVideo && videoUrl
 			? {
 				video: {
@@ -404,6 +453,8 @@ async function finalizeCreationJob({
 				source_image_url: sourceImageUrlForMeta,
 			}
 			: {}),
+		...(isAudio && audioMeta ? { audio: audioMeta } : {}),
+		...(isAudio && audioCoverPlaceholder ? { cover_placeholder: true } : {}),
 	});
 
 	const completedMetaWithClip = await applyAudioClipUsageOnFinalize({
@@ -549,6 +600,10 @@ export async function runCreationJob({ queries, storage, payload }) {
 	let videoBuffer = null;
 	let videoContentType = null;
 	let sourceImageUrlForMeta = null;
+	let isAudio = false;
+	let audioBuffer = null;
+	let audioContentType = null;
+	let voiceId = null;
 
 	let argsForProvider = args && typeof args === "object" ? { ...args } : {};
 	{
@@ -579,7 +634,7 @@ export async function runCreationJob({ queries, storage, payload }) {
 	}
 	const asyncRequested = asyncRequestedFlag === true;
 	const providerFetchTimeoutMs =
-		asyncRequested ? PROVIDER_TIMEOUT_MS : creationMethodMayReturnVideoBytes(method) ? PROVIDER_VIDEO_FETCH_TIMEOUT_MS : PROVIDER_TIMEOUT_MS;
+		asyncRequested ? PROVIDER_TIMEOUT_MS : creationMethodNeedsLongFetch(method) ? PROVIDER_VIDEO_FETCH_TIMEOUT_MS : PROVIDER_TIMEOUT_MS;
 
 	try {
 		const methodFields = server.server_config?.methods?.[method]?.fields || null;
@@ -727,20 +782,22 @@ export async function runCreationJob({ queries, storage, payload }) {
 				return { ok: true, reason: "async_queued_local" };
 			}
 
-			// JSON but not async-ack: treat as provider error in the same shape as non-2xx.
-			const providerMessage = providerBodyToMessage(body);
-			const err = new Error(providerMessage || "Provider returned JSON instead of image/video.");
-			err.code = "PROVIDER_UNEXPECTED_JSON";
-			err.provider = {
-				status: providerResponse.status,
-				statusText: providerResponse.statusText,
-				contentType: providerContentType,
-				body,
-			};
-			throw err;
-		}
-
-		if (providerContentType.startsWith("video/")) {
+			if (isVoiceTrainSuccessBody(body)) {
+				isAudio = true;
+				voiceId = String(body.voice_id).trim();
+			} else {
+				const providerMessage = providerBodyToMessage(body);
+				const err = new Error(providerMessage || "Provider returned JSON instead of image/video.");
+				err.code = "PROVIDER_UNEXPECTED_JSON";
+				err.provider = {
+					status: providerResponse.status,
+					statusText: providerResponse.statusText,
+					contentType: providerContentType,
+					body,
+				};
+				throw err;
+			}
+		} else if (providerContentType.startsWith("video/")) {
 			isVideo = true;
 			videoContentType = providerContentType || "video/mp4";
 			const arrayBuffer = await providerResponse.arrayBuffer();
@@ -763,6 +820,13 @@ export async function runCreationJob({ queries, storage, payload }) {
 			imageBuffer = posterResolved.imageBuffer;
 			width = posterResolved.width;
 			height = posterResolved.height;
+		} else if (providerContentType.startsWith("audio/")) {
+			isAudio = true;
+			audioContentType = providerContentType || "audio/mpeg";
+			audioBuffer = Buffer.from(await providerResponse.arrayBuffer());
+			const headerVoice = providerResponse.headers.get("X-Voice-Id");
+			if (headerVoice) voiceId = headerVoice.trim();
+			imageBuffer = await createPlaceholderImageBuffer();
 		} else {
 			if (providerContentType && !providerContentType.includes("image/png")) {
 				logCreationWarn("Provider returned non-PNG; converting to PNG", { providerContentType });
@@ -845,6 +909,10 @@ export async function runCreationJob({ queries, storage, payload }) {
 		videoBuffer,
 		videoContentType,
 		sourceImageUrlForMeta,
+		isAudio,
+		audioBuffer,
+		audioContentType,
+		voiceId,
 	});
 }
 
@@ -1066,6 +1134,10 @@ export async function runProviderPollJob({ queries, storage, payload }) {
 	let videoBuffer = null;
 	let videoContentType = null;
 	let sourceImageUrlForMeta = null;
+	let isAudio = false;
+	let audioBuffer = null;
+	let audioContentType = null;
+	let voiceId = null;
 
 	const pollAttempts = Number(existingMeta.provider_poll_attempts ?? 0) + 1;
 
@@ -1210,19 +1282,22 @@ export async function runProviderPollJob({ queries, storage, payload }) {
 				return { ok: true, reason: asyncEnv ? "async_poll_scheduled" : "async_poll_scheduled_local" };
 			}
 
-			const providerMessage = providerBodyToMessage(body);
-			const err = new Error(providerMessage || "Provider returned unexpected JSON during poll.");
-			err.code = "PROVIDER_UNEXPECTED_JSON";
-			err.provider = {
-				status: providerResponse.status,
-				statusText: providerResponse.statusText,
-				contentType: providerContentType,
-				body,
-			};
-			throw err;
-		}
-
-		if (providerContentType.startsWith("video/")) {
+			if (isVoiceTrainSuccessBody(body)) {
+				isAudio = true;
+				voiceId = String(body.voice_id).trim();
+			} else {
+				const providerMessage = providerBodyToMessage(body);
+				const err = new Error(providerMessage || "Provider returned unexpected JSON during poll.");
+				err.code = "PROVIDER_UNEXPECTED_JSON";
+				err.provider = {
+					status: providerResponse.status,
+					statusText: providerResponse.statusText,
+					contentType: providerContentType,
+					body,
+				};
+				throw err;
+			}
+		} else if (providerContentType.startsWith("video/")) {
 			isVideo = true;
 			videoContentType = providerContentType || "video/mp4";
 			const arrayBuffer = await providerResponse.arrayBuffer();
@@ -1252,6 +1327,13 @@ export async function runProviderPollJob({ queries, storage, payload }) {
 			imageBuffer = posterResolved.imageBuffer;
 			width = posterResolved.width;
 			height = posterResolved.height;
+		} else if (providerContentType.startsWith("audio/")) {
+			isAudio = true;
+			audioContentType = providerContentType || "audio/mpeg";
+			audioBuffer = Buffer.from(await providerResponse.arrayBuffer());
+			const headerVoice = providerResponse.headers.get("X-Voice-Id");
+			if (headerVoice) voiceId = headerVoice.trim();
+			imageBuffer = await createPlaceholderImageBuffer();
 		} else {
 			if (providerContentType && !providerContentType.includes("image/png")) {
 				logCreationWarn("Poll: provider returned non-PNG; converting to PNG", { providerContentType });
@@ -1334,6 +1416,10 @@ export async function runProviderPollJob({ queries, storage, payload }) {
 		videoBuffer,
 		videoContentType,
 		sourceImageUrlForMeta,
+		isAudio,
+		audioBuffer,
+		audioContentType,
+		voiceId,
 	});
 }
 

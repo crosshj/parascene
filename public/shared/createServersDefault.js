@@ -3,6 +3,8 @@
  * Regenerate: node db/maintenance/generate_create_servers_default.js
  */
 
+import { GEMINI_SYSTEM_VOICES, MINIMAX_SPEECH_EMOTIONS, MINIMAX_SPEECH_VOICE_OPTIONS, SPEECH_PROMPT_MAX_CHARS } from './audioVoices.js';
+
 export const CREATE_SERVERS_CACHE_KEY = 'create-servers-cache';
 
 /** @type {Array<{ id: number, name: string, server_config?: object, is_member?: boolean, is_owner?: boolean, suspended?: boolean }>} */
@@ -334,6 +336,120 @@ export const DEFAULT_CREATE_SERVERS = [
 					"intent": "video_generate",
 					"credits": 10,
 					"description": "Run a Replicate image-to-video model."
+				},
+				"replicateSpeech": {
+					"name": "Replicate Speech",
+					"async": true,
+					"intent": "audio_generate",
+					"credits": 2,
+					"description": "Run a Replicate text-to-speech model.",
+					"fields": {
+						"model": {
+							"type": "select",
+							"label": "Model",
+							"required": true,
+							"default": "google/gemini-3.1-flash-tts",
+							"options": [
+								{
+									"label": "MiniMax Speech 2.8 Turbo",
+									"value": "minimax/speech-2.8-turbo",
+									"hint": "Narration",
+									"fields": {
+										"voice": {
+											"label": "Voice",
+											"type": "select",
+											"required": false,
+											"options": MINIMAX_SPEECH_VOICE_OPTIONS
+										},
+										"voice_id": {
+											"label": "Voice ID",
+											"type": "text",
+											"hidden": true,
+											"required": false,
+											"show_when": { "field": "voice", "equals": "custom" }
+										},
+										"emotion": {
+											"label": "Emotion",
+											"type": "select",
+											"required": false,
+											"options": MINIMAX_SPEECH_EMOTIONS
+										}
+									}
+								},
+								{
+									"label": "Gemini 3.1 Flash TTS",
+									"value": "google/gemini-3.1-flash-tts",
+									"hint": "Narration / replacement line",
+									"fields": {
+										"voice": {
+											"label": "Voice",
+											"type": "select",
+											"required": false,
+											"options": GEMINI_SYSTEM_VOICES
+										},
+										"style": {
+											"label": "Style",
+											"type": "text",
+											"required": false
+										}
+									}
+								}
+							]
+						},
+						"prompt": {
+							"type": "text",
+							"label": "Prompt",
+							"required": true,
+							"max_length": SPEECH_PROMPT_MAX_CHARS,
+							"hint": `Max ${SPEECH_PROMPT_MAX_CHARS} characters`
+						}
+					}
+				},
+				"replicateMusic": {
+					"name": "Replicate Music",
+					"async": true,
+					"intent": "audio_generate",
+					"credits": 10,
+					"description": "Run a Replicate text-to-music model.",
+					"fields": {
+						"model": {
+							"type": "select",
+							"label": "Model",
+							"required": true,
+							"default": "google/lyria-3",
+							"options": [
+								{
+									"label": "Lyria 3",
+									"value": "google/lyria-3",
+									"hint": "Dramatic background score · 30s"
+								},
+								{
+									"label": "MiniMax Music 2.6",
+									"value": "minimax/music-2.6",
+									"hint": "Song / MV track"
+								}
+							]
+						},
+						"prompt": {
+							"type": "text",
+							"label": "Prompt",
+							"required": true
+						}
+					}
+				},
+				"replicateVoiceTrain": {
+					"name": "Replicate Voice Train",
+					"async": true,
+					"intent": "voice_train",
+					"credits": 175,
+					"description": "Train a custom voice from an audio file via Replicate. Returns voice_id plus a short preview clip.",
+					"fields": {
+						"voice_file": {
+							"type": "audio_url",
+							"label": "Voice file",
+							"required": true
+						}
+					}
 				}
 			},
 			"last_check_at": "2026-06-21T13:18:33.002Z"
