@@ -4,6 +4,10 @@
 
 import { setRouteMediaBackgroundImage } from "./routeMedia.js";
 import {
+	creationNeedsAudioWaveformCover,
+	mountAudioCoverWaveform,
+} from "./audioCoverWaveform.js";
+import {
 	normalizeRouteCardFeedItem,
 	parseCreationItemMeta,
 	resolveGroupCoverDisplayUrl,
@@ -43,7 +47,7 @@ function markRouteMediaGroupHost(mediaEl) {
  * @param {HTMLElement} mediaEl
  * @param {object} item
  * @param {{ preferThumbnail?: boolean, lowPriority?: boolean, eager?: boolean, observer?: IntersectionObserver, posterUrl?: string }} [options]
- * @returns {{ kind: 'group-video'|'group-carousel'|'single'|'none' }}
+ * @returns {{ kind: 'group-video'|'group-carousel'|'single'|'audio-wave'|'none' }}
  */
 export function hydrateRouteCardMedia(mediaEl, item, options = {}) {
 	if (!(mediaEl instanceof HTMLElement)) return { kind: "none" };
@@ -64,6 +68,14 @@ export function hydrateRouteCardMedia(mediaEl, item, options = {}) {
 		(meta?.video && typeof meta.video === "object");
 	// Imported YouTube covers are stills — treat like images so grid fill matches 9:16 photos.
 	const isVideo = mediaType === "video" && hasNativeVideoFile && !hasImportProvider;
+
+	if (mediaType === "audio") {
+		mediaEl.setAttribute("data-media-type", "audio");
+		if (creationNeedsAudioWaveformCover(feedItem)) {
+			mountAudioCoverWaveform(mediaEl);
+			return { kind: "audio-wave" };
+		}
+	}
 
 	const groupVideoSlides = getFeedItemGroupVideoSlides(feedItem);
 	if (isVideo && groupVideoSlides.length > 1) {

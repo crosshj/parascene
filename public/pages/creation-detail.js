@@ -67,6 +67,9 @@ let creationMetaHasChallengeResultsOrganizerRef;
 let creationMetaHasChallengeAnnotation;
 let challengeOrganizerRefRoleLabel;
 let listChallengeOrganizerRefsFromMeta;
+let creationNeedsAudioWaveformCover;
+let mountAudioCoverWaveform;
+let removeAudioCoverWaveform;
 
 /** Set true locally when debugging creation-detail page load timing in the console. */
 const CREATION_DETAIL_LOG_PAGE_LOAD_TIMING = false;
@@ -299,6 +302,7 @@ async function loadDeps() {
 			commentItemMod,
 			createSubmitMod,
 			aspectRatioMod,
+			audioCoverWaveformMod,
 		] = await Promise.all([
 			import(`/shared/datetime.js${qs}`),
 			import(`/shared/likes.js${qs}`),
@@ -327,6 +331,7 @@ async function loadDeps() {
 			import(`/shared/commentItem.js${qs}`),
 			import(`/shared/createSubmit.js${qs}`),
 			import(`/shared/aspectRatio.js${qs}`),
+			import(`/shared/audioCoverWaveform.js${qs}`),
 		]);
 
 		formatDateTime = datetimeMod.formatDateTime;
@@ -422,6 +427,10 @@ async function loadDeps() {
 		getLandscapeOutpaintEligibility = aspectRatioMod.getLandscapeOutpaintEligibility;
 		canSetVideoPosterFromFirstFrame = aspectRatioMod.canSetVideoPosterFromFirstFrame;
 		videoHeroDimensionsFromCreation = aspectRatioMod.videoHeroDimensionsFromCreation;
+
+		creationNeedsAudioWaveformCover = audioCoverWaveformMod.creationNeedsAudioWaveformCover;
+		mountAudioCoverWaveform = audioCoverWaveformMod.mountAudioCoverWaveform;
+		removeAudioCoverWaveform = audioCoverWaveformMod.removeAudioCoverWaveform;
 	})();
 	return _depsPromise;
 }
@@ -2014,6 +2023,8 @@ function initRelatedSection(root, currentCreationId, options = {}) {
 			};
 			if (mediaType === 'video') {
 				mediaAttrs['data-media-type'] = 'video';
+			} else if (mediaType === 'audio') {
+				mediaAttrs['data-media-type'] = 'audio';
 			}
 			card.innerHTML = buildCreationCardShell({
 				mediaAttrs,
@@ -3430,6 +3441,9 @@ async function loadCreation() {
 		imageEl.removeAttribute('src');
 		delete imageEl.dataset.currentUrl;
 		delete imageEl.dataset.pendingUrl;
+		if (typeof removeAudioCoverWaveform === 'function') {
+			removeAudioCoverWaveform(imageWrapper);
+		}
 	}
 
 	function heroPlaybackVideoHasSource(video) {
@@ -4487,7 +4501,7 @@ async function loadCreation() {
 			} else if (pendingGroupVideoPlaylist) {
 				resetHeroVideo();
 			}
-		} else if (status === 'completed' && mediaType === 'audio' && creation.url) {
+		} else if (status === 'completed' && mediaType === 'audio') {
 			const modIcon = imageWrapper?.querySelector('.creation-detail-error-icon-moderated');
 			if (modIcon) modIcon.remove();
 			imageWrapper?.classList.remove(
@@ -4497,7 +4511,18 @@ async function loadCreation() {
 				'hero-audio-playing'
 			);
 			applyDetailHeroAspectLayout(creation);
-			showHeroImage(creation.url);
+			const useWaveform =
+				typeof creationNeedsAudioWaveformCover === 'function' &&
+				creationNeedsAudioWaveformCover({ ...creation, meta });
+			if (useWaveform && imageWrapper) {
+				clearHeroImage();
+				mountAudioCoverWaveform(imageWrapper);
+			} else if (creation.url) {
+				if (typeof removeAudioCoverWaveform === 'function') {
+					removeAudioCoverWaveform(imageWrapper);
+				}
+				showHeroImage(creation.url);
+			}
 			if (getCreationHostedAudioUrl(creation, meta)) {
 				mountCreationDetailHostedAudio(imageWrapper, creation, meta);
 			} else {

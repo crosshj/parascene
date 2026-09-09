@@ -2,32 +2,28 @@
 
 Three repos. Provider first, then www persist, then desktop Help + suite 12.
 
-Provider (parascene-provider)
+Provider (parascene-provider) — done, deployed
 
 - Methods: `replicateSpeech`, `replicateMusic`, `replicateVoiceTrain`
-- Voice lists on capabilities. MiniMax includes Custom → hidden `voice_id` (`show_when`)
-- Train returns `voice_id` for Custom
+- Gemini + MiniMax voice lists. Custom → hidden `voice_id`. MiniMax emotion select
+- Speech: 2 credits, 400-char line cap
+- Music: 10 credits (Lyria + Music 2.6)
+- Train: 175 credits, returns `voice_id` + preview clip
 
-Www (parascene)
+Www (parascene) — done, deployed
 
 - Create jobs with `media_type: audio`
 - Provider audio bytes → Blue CDN + cover
-- Train JSON `{ voice_id }` (+ optional preview)
-- Deploy www, then `POST /api/servers/1/refresh` after provider methods exist
-- Until refresh, create 400s `Method not available`
+- Train audio + `X-Voice-Id` → CDN + `meta.audio.voice_id`
+- Server 1 refresh done (provider GET matches)
 
-Deploy / validate (before suite 12)
-
-- Deploy parascene-provider
-- Deploy parascene www (audio persist)
-- Refresh server 1
-- Confirm capabilities include `replicateSpeech`, `replicateMusic`, `replicateVoiceTrain` (Gemini + MiniMax voice lists, Custom → `voice_id`)
-- POST speech (Gemini / Kore, short line) → poll → audio Creation (`media_type: audio`, playable `audio_url`)
-- POST music (Lyria, short prompt) → same
-- Then desktop suite 12
-
-Desktop (parascene-desktop)
+Desktop (parascene-desktop) — code + Help + suite 12 written
 
 - Parascene Generate reads provider voice options
-- Suite 12: @awesome, new project, two speakers, background, A1/A2
-- One Help article. Seed 28006 stays.
+- Help: `generate-audio.html`. Seed 28006 stays.
+
+Still to prove live
+
+- POST speech (Gemini / Kore, short line) → audio Creation
+- POST music (Lyria, short prompt) → same
+- Run desktop suite 12 against live Parascene

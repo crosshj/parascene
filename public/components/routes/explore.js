@@ -668,6 +668,8 @@ class AppRouteExplore extends HTMLElement {
 			};
 			if (mediaType === 'video') {
 				mediaAttrs['data-media-type'] = 'video';
+			} else if (mediaType === 'audio') {
+				mediaAttrs['data-media-type'] = 'audio';
 			}
 			card.innerHTML = buildCreationCardShell({
 				mediaAttrs,

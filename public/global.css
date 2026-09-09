@@ -285,6 +285,40 @@ body.view-nsfw .route-media[data-media-type="video"]:not(.route-media-error).nsf
 	z-index: 1;
 }
 
+/* Audio cover fallback — same dark plate + bars as desktop when there is no real image */
+.creation-audio-cover {
+	background:
+		radial-gradient(ellipse at 50% 50%, color-mix(in srgb, var(--color-purple) 18%, transparent), transparent 55%),
+		#14141a;
+	color: var(--color-purple);
+}
+
+.creation-audio-cover .creation-audio-wave {
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	width: 58%;
+	max-width: 140px;
+	height: auto;
+	transform: translate(-50%, -50%);
+	color: inherit;
+	pointer-events: none;
+	z-index: 1;
+}
+
+.creation-detail-image-wrapper.creation-audio-cover .creation-audio-wave {
+	max-width: 220px;
+}
+
+.creation-detail-image-wrapper.creation-audio-cover [data-image],
+.creation-detail-image-wrapper.creation-audio-cover [data-background] {
+	opacity: 0;
+}
+
+.feed-card-image.creation-audio-cover .feed-card-img {
+	opacity: 0;
+}
+
 /* Hide content until page is fully loaded */
 body:not(.loaded) {
 	visibility: hidden;

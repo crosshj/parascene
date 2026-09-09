@@ -19,6 +19,7 @@ const [
 	promptFieldClearMod,
 	audioClipPickerMod,
 	createWorkflowHostMod,
+	fieldVisibilityMod,
 ] = await Promise.all([
 	import(`./aspectRatio.js${_qs}`),
 	import(`./autogrow.js${_qs}`),
@@ -28,6 +29,7 @@ const [
 	import(`./promptFieldClear.js${_qs}`),
 	import(`./audioClipPickerField.js${_qs}`),
 	import(`./createWorkflowHost.js${_qs}`),
+	import(`./providerFormFieldVisibility.js${_qs}`),
 ]);
 const { parseAspectRatioString, shouldUseAspectRatioSelector, ASPECT_RATIO_SELECTOR_LABELS } = aspectRatioMod;
 const { attachAutoGrowTextarea } = autogrowMod;
@@ -37,6 +39,23 @@ const { getMutateQueuePrefillForProviderFields } = mutateQueueSyncMod;
 const { attachPromptFieldClear } = promptFieldClearMod;
 const { createAudioClipPickerField, isAudioClipUrlField } = audioClipPickerMod;
 const { getCreateWorkflowModalParent } = createWorkflowHostMod;
+const {
+	isAlwaysHiddenField,
+	extraFieldsFromSelectOptions,
+	resolveRenderableFields,
+	applyShowWhenFields,
+	fieldMatchesShowWhen,
+	collectNamedFieldValues,
+} = fieldVisibilityMod;
+
+export {
+	isAlwaysHiddenField,
+	extraFieldsFromSelectOptions,
+	resolveRenderableFields,
+	applyShowWhenFields,
+	fieldMatchesShowWhen,
+	collectNamedFieldValues,
+};
 
 // --- Field type detection (used to choose handler) ---
 
@@ -911,14 +930,27 @@ export function renderFields(container, fields, options = {}) {
 
 	const opts = { ...DEFAULTS, ...options };
 	const baseFormContext = opts.formContext && typeof opts.formContext === 'object' ? opts.formContext : null;
-	const formContext = baseFormContext ? { ...baseFormContext, fields } : { fields };
-	const fieldKeys = sortedProviderFieldKeys(fields, formContext);
+	const selectValues = {
+		...(baseFormContext?.modelValue != null && String(baseFormContext.modelValue) !== ''
+			? { model: baseFormContext.modelValue }
+			: {}),
+	};
+	for (const [key, def] of Object.entries(fields)) {
+		if (def?.default !== undefined && def?.default !== null) {
+			selectValues[key] = def.default;
+		}
+	}
+	const renderableFields = resolveRenderableFields(fields, selectValues);
+	const formContext = baseFormContext
+		? { ...baseFormContext, fields: renderableFields }
+		: { fields: renderableFields };
+	const fieldKeys = sortedProviderFieldKeys(renderableFields, formContext);
 	if (fieldKeys.length === 0) return;
 
 	container.innerHTML = '';
 
 	fieldKeys.forEach((fieldKey) => {
-		const field = fields[fieldKey];
+		const field = renderableFields[fieldKey];
 		if (fieldKey === 'aspect_ratio' && !shouldUseAspectRatioSelector(formContext)) {
 			return;
 		}
@@ -926,8 +958,11 @@ export function renderFields(container, fields, options = {}) {
 		const type = getFieldType(fieldKey, field, formContext);
 		fieldGroup.className = type === 'boolean' ? 'form-group form-group-checkbox' : 'form-group';
 		fieldGroup.setAttribute('data-field-key', fieldKey);
-		const isProviderHidden = field && (field.hidden === true || field.hidden === 'true');
-		if (isProviderHidden && fieldKey !== 'aspect_ratio') {
+		if (field?.show_when?.field) {
+			fieldGroup.setAttribute('data-show-when-field', String(field.show_when.field));
+			fieldGroup.setAttribute('data-show-when-equals', String(field.show_when.equals ?? ''));
+		}
+		if (isAlwaysHiddenField(field) && fieldKey !== 'aspect_ratio') {
 			fieldGroup.classList.add('field-hidden');
 			fieldGroup.setAttribute('data-field-hidden', 'true');
 		}
@@ -992,4 +1027,6 @@ export function renderFields(container, fields, options = {}) {
 
 		container.appendChild(fieldGroup);
 	});
+
+	applyShowWhenFields(container, { ...selectValues, ...collectNamedFieldValues(container) });
 }

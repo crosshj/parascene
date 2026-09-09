@@ -849,7 +849,7 @@ function renderImageGrid(
 			inChallenge && typeof challengeLockedBadgeHtml === 'function'
 				? challengeLockedBadgeHtml('Locked to a challenge')
 				: '';
-		const mediaAttrs = isVideo ? ' data-media-type="video"' : '';
+		const mediaAttrs = isVideo ? ' data-media-type="video"' : isAudio ? ' data-media-type="audio"' : '';
 		const creationId = Number(item.id);
 		const personaAvatarBtn =
 			showPersonaAvatarBtn && !isVideo && Number.isFinite(creationId) && creationId > 0

@@ -30,6 +30,11 @@ const {
 	isPromptLikeField,
 	isImageUrlField,
 	isImageUrlArrayField,
+	extraFieldsFromSelectOptions,
+	resolveRenderableFields,
+	isAlwaysHiddenField,
+	applyShowWhenFields,
+	fieldMatchesShowWhen,
 } = providerFormFieldsMod;
 const {
 	shouldUseAspectRatioSelector,
@@ -311,6 +316,8 @@ class AppRouteCreate extends HTMLElement {
 		this._imageFieldPersistTokens = Object.create(null);
 		this._pendingSavedFieldValues = null;
 		this._crossMethodImageCarryover = null;
+		this._optionExtraFieldKeys = [];
+		this._optionExtraModel = null;
 		this.handleMutateQueueUpdated = this.handleMutateQueueUpdated.bind(this);
 		this.handleMutateQueueStorageSync = this.handleMutateQueueStorageSync.bind(this);
 		this.handlePageShowForMutateQueue = this.handlePageShowForMutateQueue.bind(this);
@@ -1743,6 +1750,8 @@ class AppRouteCreate extends HTMLElement {
 		if (!methodKey) {
 			this.selectedMethod = null;
 			this.fieldValues = {};
+			this._optionExtraFieldKeys = [];
+			this._optionExtraModel = null;
 			this._crossMethodImageCarryover = null;
 			this.hideFieldsGroup();
 			this.updateButtonState();
@@ -1776,6 +1785,8 @@ class AppRouteCreate extends HTMLElement {
 
 		this.selectedMethod = serverConfig.methods[methodKey];
 		this.fieldValues = {};
+		this._optionExtraFieldKeys = [];
+		this._optionExtraModel = null;
 		this.renderFields();
 		this.updateButtonState();
 		if (persist) this.saveSelections();
@@ -1823,6 +1834,7 @@ class AppRouteCreate extends HTMLElement {
 		this.applySharedAspectRatioToFieldValues();
 
 		const fields = this.selectedMethod.fields;
+		this.pruneStaleOptionFieldValues();
 		const pendingSaved =
 			this._pendingSavedFieldValues && typeof this._pendingSavedFieldValues === 'object'
 				? this._pendingSavedFieldValues
@@ -1929,6 +1941,21 @@ class AppRouteCreate extends HTMLElement {
 			fieldsForRender[fieldKey] = field;
 		});
 
+		const extraFields = extraFieldsFromSelectOptions(fields, {
+			...this.fieldValues,
+			model: this.resolveEffectiveModelValue(),
+		});
+		Object.entries(extraFields).forEach(([fieldKey, field]) => {
+			if (fieldsForRender[fieldKey]) return;
+			if (pendingSaved && pendingSaved[fieldKey] != null && String(pendingSaved[fieldKey]).trim() !== '') {
+				const saved = pendingSaved[fieldKey];
+				fieldsForRender[fieldKey] = { ...field, default: saved };
+				this.fieldValues[fieldKey] = saved;
+				return;
+			}
+			fieldsForRender[fieldKey] = field;
+		});
+
 		this.applyAspectRatioFieldVisibility(fieldsForRender, fields);
 
 		Object.keys(fieldsForRender).forEach((fieldKey) => {
@@ -1973,9 +2000,12 @@ class AppRouteCreate extends HTMLElement {
 						this.saveSelections();
 						this.persistImageFieldSelection(fieldKey, value);
 					}
-					if (fieldKey === 'model' && !this._renderingFields) {
-						this.syncAspectRatioFieldVisibility();
+					if (this._renderingFields) return;
+					if (fieldKey === 'model') {
+						this.renderFields();
+						return;
 					}
+					applyShowWhenFields(fieldsContainer, this.fieldValues);
 				}
 			});
 
@@ -1985,9 +2015,9 @@ class AppRouteCreate extends HTMLElement {
 				fieldsContainer.querySelectorAll(".field-hidden").forEach((node) => hiddenFieldsSlot.appendChild(node));
 			}
 
-			const hasHiddenFields = Object.entries(fields).some(([key, f]) => {
+			const hasHiddenFields = Object.entries(fieldsForRender).some(([key, f]) => {
 				if (key === 'aspect_ratio') return false;
-				return f && (f.hidden === true || f.hidden === 'true');
+				return isAlwaysHiddenField(f);
 			});
 			const toggleWrap = this.querySelector("[data-fields-toggle]");
 			const toggleLink = this.querySelector("[data-toggle-hidden-fields]");
@@ -2097,12 +2127,13 @@ class AppRouteCreate extends HTMLElement {
 		}
 
 		// Check if all required fields are filled
-		const fields = this.selectedMethod.fields || {};
+		const fields = this.getRenderableMethodFields();
 		const formContext = this.getFormFieldContext();
 		const requiredFields = Object.keys(fields).filter((key) => {
 			if (key === 'aspect_ratio' && typeof shouldUseAspectRatioSelector === 'function' && !shouldUseAspectRatioSelector(formContext)) {
 				return false;
 			}
+			if (!fieldMatchesShowWhen(fields[key], this.fieldValues)) return false;
 			return fields[key].required;
 		});
 		const allRequiredFilled = requiredFields.every(key => {
@@ -2248,14 +2279,18 @@ class AppRouteCreate extends HTMLElement {
 		}
 
 		// Collect all field values from inputs right before submission
-		const fields = this.selectedMethod.fields || {};
+		const fields = this.getRenderableMethodFields();
 		const collectedArgs = {};
 		Object.keys(fields).forEach(fieldKey => {
-			let input = this.querySelector(`#field-${fieldKey}`);
 			const field = fields[fieldKey];
+			if (!fieldMatchesShowWhen(field, this.fieldValues)) return;
+			let input = this.querySelector(`#field-${fieldKey}`);
 			if (input?.classList?.contains('form-switch')) {
 				input = input.querySelector('.form-switch-input');
 			}
+			const group = input?.closest?.('.form-group');
+			if (group && group.style.display === 'none') return;
+			if (input?.disabled) return;
 			if (input) {
 				if (field?.type === 'boolean' || input.type === 'checkbox') {
 					collectedArgs[fieldKey] = input.checked;
@@ -2567,12 +2602,39 @@ class AppRouteCreate extends HTMLElement {
 		return '';
 	}
 
+	getRenderableMethodFields() {
+		const fields = this.selectedMethod?.fields;
+		if (!fields || typeof fields !== 'object') return {};
+		return resolveRenderableFields(fields, {
+			...this.fieldValues,
+			model: this.resolveEffectiveModelValue(),
+		});
+	}
+
+	pruneStaleOptionFieldValues() {
+		const fields = this.selectedMethod?.fields;
+		if (!fields || typeof fields !== 'object') return;
+		const model = this.resolveEffectiveModelValue();
+		const extra = extraFieldsFromSelectOptions(fields, {
+			...this.fieldValues,
+			model,
+		});
+		const nextKeys = new Set(Object.keys(extra));
+		const prevKeys = Array.isArray(this._optionExtraFieldKeys) ? this._optionExtraFieldKeys : [];
+		const modelChanged = this._optionExtraModel != null && this._optionExtraModel !== model;
+		for (const key of prevKeys) {
+			if (modelChanged || !nextKeys.has(key)) delete this.fieldValues[key];
+		}
+		this._optionExtraFieldKeys = [...nextKeys];
+		this._optionExtraModel = model;
+	}
+
 	getFormFieldContext() {
 		return {
 			serverId: this.selectedServer?.id,
 			methodKey: this.getMethodKey(),
 			modelValue: this.resolveEffectiveModelValue(),
-			fields: this.selectedMethod?.fields ?? null,
+			fields: this.getRenderableMethodFields(),
 		};
 	}
 
@@ -3289,7 +3351,7 @@ class AppRouteCreate extends HTMLElement {
 	}
 
 	restoreFieldValues(savedFieldValues) {
-		const fields = this.selectedMethod?.fields || {};
+		const fields = this.getRenderableMethodFields();
 		let sharedOverrides = {};
 		try {
 			sharedOverrides = getSharedFieldValueOverrides(fields, {
