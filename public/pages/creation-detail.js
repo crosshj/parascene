@@ -1001,6 +1001,18 @@ function applyYoutubeImportHeroAspect(creation, meta) {
 	});
 }
 
+/** Missing object/key means show (v1 groups). */
+function groupActionSupported(group, key) {
+	if (!group || typeof group !== 'object') return true;
+	const supported = group.supported;
+	if (!supported || typeof supported !== 'object' || Array.isArray(supported)) {
+		if (key === 'ungroup' && group.ungroup_supported === false) return false;
+		return true;
+	}
+	if (!Object.prototype.hasOwnProperty.call(supported, key)) return true;
+	return supported[key] !== false;
+}
+
 /** Normalize image URL for queue match (origin + path). Same idea as creation-edit toParasceneImageUrl. */
 function normalizeImageUrlForQueue(raw) {
 	const base = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : '';
@@ -4588,6 +4600,7 @@ async function loadCreation() {
 		};
 		const groupMeta = meta?.group && typeof meta.group === 'object' ? meta.group : null;
 		const isGroupCreation = groupMeta?.kind === 'group_creations';
+		const groupCan = (key) => groupActionSupported(groupMeta, key);
 		if (isGroupCreation) {
 			actionsContext.showRetry = false;
 			actionsContext.showQueueFromFrame = false;
@@ -4654,12 +4667,21 @@ async function loadCreation() {
 				const sourceVideoUrl = sourceMediaType === 'video' && typeof sourceVideoUrlRaw === 'string' && sourceVideoUrlRaw.trim()
 					? appendCreationIdToMediaUrl(sourceVideoUrlRaw.trim(), creationId)
 					: '';
+				const sourceAudioCdn =
+					sourceMeta?.audio && typeof sourceMeta.audio === 'object' && typeof sourceMeta.audio.cdn_id === 'string'
+						? sourceMeta.audio.cdn_id.trim()
+						: '';
+				const sourceAudioUrl =
+					sourceMediaType === 'audio' && sourceAudioCdn
+						? `/api/create/images/${sourceId}/audio`
+						: '';
 				return {
 					id: sourceId,
 					title: sourceRawTitle ? `${sourceRawTitle} (${sourceId})` : `${groupTitleForSourceLabels} (${sourceId})`,
 					rawTitle: sourceRawTitle,
 					filePath: sourceFilePath,
 					videoUrl: sourceVideoUrl,
+					audioUrl: sourceAudioUrl,
 					mediaType: sourceMediaType,
 					width:
 						Number.isFinite(sourceDims.width) && sourceDims.width > 0 ? sourceDims.width : undefined,
@@ -4733,6 +4755,27 @@ async function loadCreation() {
 				? groupSources.some((source) => canRecreateFromCreationMeta(source.meta))
 				: canRecreateFromCreationMeta(meta));
 
+		if (isGroupCreation) {
+			if (!groupCan('publish')) {
+				actionsContext.showPublish = false;
+				actionsContext.showUnpublish = false;
+			}
+			if (!groupCan('delete')) actionsContext.showDelete = false;
+			if (!groupCan('edit')) actionsContext.showEdit = false;
+			if (!groupCan('share')) {
+				actionsContext.showShare = false;
+				actionsContext.showDownloadVideo = false;
+				actionsContext.showDownloadAudio = false;
+			}
+			if (!groupCan('remix')) {
+				actionsContext.showMutate = false;
+				actionsContext.showQueueForLater = false;
+				actionsContext.showQueueFromFrame = false;
+				actionsContext.showRecreate = false;
+				actionsContext.showSetAvatar = false;
+			}
+		}
+
 		if (isGroupCreation && groupSources.length > 0) {
 			applyDetailHeroAspectLayout(groupSources[0]);
 		} else {
@@ -4753,8 +4796,12 @@ async function loadCreation() {
 			groupHeroNextBtn.disabled = true;
 			groupHeroNextBtn.onclick = null;
 		}
-		const canReorderGroupSources = isOwner && !isPublished;
-		const groupMediaCountLabel = isGroupVideo ? 'video' : 'image';
+		const canReorderGroupSources = isOwner && !isPublished && groupCan('reorder');
+		const showGroupSetCover = isOwner && groupCan('set_cover');
+		const showGroupUngroup = isOwner && !isPublished && groupCan('ungroup');
+		const groupMediaKinds = new Set(groupSources.map((source) => source.mediaType).filter(Boolean));
+		const groupMediaCountLabel =
+			groupMediaKinds.size > 1 ? 'item' : isGroupVideo ? 'video' : 'image';
 		// When the group creation is NSFW (hero blurred), blur its thumbnails too. Mirror the
 		// hero's reveal model: pre-reveal when the viewer shows unobscured, else one-off reveal.
 		const groupIsNsfw = Boolean(creation.nsfw ?? creation.meta?.nsfw);
@@ -4770,13 +4817,20 @@ async function loadCreation() {
 					</div>
 					<div class="creation-detail-group-grid">
 						${groupSources.map((source, index) => {
+					const kindMark =
+						source.mediaType === 'video'
+							? html`<span class="creation-detail-group-kind creation-detail-group-kind--video" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"></path></svg></span>`
+							: source.mediaType === 'audio'
+								? html`<span class="creation-detail-group-kind creation-detail-group-kind--audio" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg></span>`
+								: '';
 					const thumbHtml = source.filePath
 						? html`<button type="button" class="creation-detail-group-item creation-detail-group-thumb${index === 0 ? ' is-active' : ''}"
 									data-group-source-thumb="${source.id}" aria-label="View ${escapeHtml(source.title)}">
 									<img src="${escapeHtml(source.filePath)}" alt="${escapeHtml(source.title)}" loading="eager" />
+									${kindMark}
 								</button>`
 						: html`<button type="button" class="creation-detail-group-item creation-detail-group-item-fallback creation-detail-group-thumb${index === 0 ? ' is-active' : ''}"
-									data-group-source-thumb="${source.id}" aria-label="View source #${source.id}">#${source.id}</button>`;
+									data-group-source-thumb="${source.id}" aria-label="View source #${source.id}">#${source.id}${kindMark}</button>`;
 					const moveLeftHtml = canReorderGroupSources && index > 0
 						? html`<button type="button" class="creation-detail-group-move-left" data-group-move-left="${source.id}" aria-label="Move left">${GROUP_MOVE_LEFT_BTN_SVG}</button>`
 						: '';
@@ -4785,10 +4839,12 @@ async function loadCreation() {
 							</div>`;
 				}).join('')}
 					</div>
-					${isOwner ? html`
+					${showGroupSetCover || showGroupUngroup ? html`
 					<div class="creation-detail-group-actions">
-						<button type="button" class="btn-secondary creation-detail-group-set-cover-btn" data-group-set-cover-btn disabled>Set as cover</button>
-						${!isPublished
+						${showGroupSetCover
+							? html`<button type="button" class="btn-secondary creation-detail-group-set-cover-btn" data-group-set-cover-btn disabled>Set as cover</button>`
+							: ''}
+						${showGroupUngroup
 							? html`<button type="button" class="btn-secondary creation-detail-ungroup-btn" data-ungroup-btn>Ungroup Creations</button>`
 							: ''}
 					</div>
@@ -5338,8 +5394,8 @@ async function loadCreation() {
 			</div>`
 				: '';
 
-		const showChallengeSubmitCta = Boolean(creation.challenge_submit?.eligible);
-		const showOrganizerAssignCta = Boolean(isOwner && !isPublished && !hasActiveFeedPin);
+		const showChallengeSubmitCta = Boolean(creation.challenge_submit?.eligible) && groupCan('challenge_submit');
+		const showOrganizerAssignCta = Boolean(isOwner && !isPublished && !hasActiveFeedPin) && groupCan('challenge_assign');
 		const challengeActionsHtml =
 			showChallengeSubmitCta || showOrganizerAssignCta
 				? html`
@@ -7483,12 +7539,43 @@ async function loadCreation() {
 				}
 
 				if (shouldUpdateMedia) {
-					if (groupVideoPlaylistEnabled && source.videoUrl) {
+					const clearGroupMemberAudio = () => {
+						clearCreationDetailSunoPlayer(imageWrapper);
+						if (typeof removeAudioCoverWaveform === 'function') {
+							removeAudioCoverWaveform(imageWrapper);
+						}
+					};
+					if (isGroupVideo && groupVideoPlaylistEnabled && source.videoUrl) {
+						clearGroupMemberAudio();
 						const idx = orderedSourceIds.indexOf(Number(source.id));
 						if (idx >= 0 && creationDetailHeroVideoPlayer) {
 							void creationDetailHeroVideoPlayer.goToIndex(idx, { autoplay: true });
 						}
+					} else if (!isGroupVideo && source.videoUrl) {
+						clearGroupMemberAudio();
+						teardownGroupHeroVideoPlayer();
+						if (source.filePath) {
+							showHeroImage(source.filePath);
+							setHeroBackgroundUrl(source.filePath);
+						}
+						imageWrapper?.classList.add('image-loading', 'hero-video-pending');
+						void mountHeroVideoPlaybackEarly([source], source.id, {
+							posterUrl: typeof source.filePath === 'string' ? source.filePath : '',
+							onFirstReveal: () => markHeroReady({ state: 'group-member-video' }),
+						});
+					} else if (source.mediaType === 'audio') {
+						teardownGroupHeroVideoPlayer();
+						clearGroupMemberAudio();
+						if (source.filePath) showHeroImage(source.filePath);
+						mountCreationDetailHostedAudio(
+							imageWrapper,
+							{ id: source.id, title: source.rawTitle || source.title, audio_url: source.audioUrl || '' },
+							source.meta
+						);
+						markHeroReady({ state: 'group-member-audio' });
 					} else if (source.filePath) {
+						teardownGroupHeroVideoPlayer();
+						clearGroupMemberAudio();
 						if (!groupCarouselEnabled || !setGroupHeroCarouselActive(source.id)) {
 							showHeroImage(source.filePath);
 						}

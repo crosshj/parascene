@@ -96,6 +96,35 @@ describe("resolveCreationDisplayMediaUrls", () => {
 		expect(media.url).toContain("/api/images/created/7_cover.png");
 	});
 
+	test("uses group v2 cover view for a project filename with no row file", () => {
+		const meta = {
+			type: "project",
+			media_type: "image",
+			group: {
+				kind: "group_v2",
+				items: [
+					{
+						cover: true,
+						pointer: { kind: "creation", creationId: 28006 },
+						view: {
+							mediaType: "image",
+							filePath: "/api/images/created/219_28006.png",
+							filename: "219_28006.png",
+						},
+					},
+				],
+			},
+		};
+		const media = resolveCreationDisplayMediaUrls({
+			row: { id: 99, filename: "project/219_x", file_path: "" },
+			meta,
+			creationId: 99,
+		});
+		expect(getGroupCoverSource(meta)?.id).toBe(28006);
+		expect(media.url).toContain("/api/images/created/219_28006.png");
+		expect(media.thumbnail_url).toContain("variant=thumbnail");
+	});
+
 	test("omits audio_url when there is no CDN object", () => {
 		const media = resolveCreationDisplayMediaUrls({
 			row: { id: 8, file_path: "/api/images/created/suno.png" },

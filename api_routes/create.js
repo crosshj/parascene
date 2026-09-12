@@ -50,6 +50,7 @@ import { invalidateFeedBetaCatalogSnapshot } from "./feedBeta/catalogSnapshot.js
 import { mapCreatedImageRowMediaFields } from "./utils/resolveCreationDisplayMedia.js";
 import {
 	applyCostumeToCreationPayload,
+	groupActionSupportedForMeta,
 	groupV2RejectMessage,
 	isGroupV2Meta,
 	isHiddenInGroupMeta,
@@ -59,6 +60,7 @@ import {
 } from "./utils/projectGroupV2.js";
 import {
 	appendCreationToOwnedGroupV2,
+	fillThinGroupV2ItemViews,
 	resolveOwnedGroupV2Id,
 } from "./utils/groupV2Ops.js";
 import { getWhoMetaForCreation } from "./utils/whoMeta.js";
@@ -3399,12 +3401,16 @@ export default function createCreateRoutes({ queries, storage }) {
 				challengeOnly
 			});
 
-			const imagesWithUrls = (Array.isArray(images) ? images : []).map((img) => {
+			const imagesWithUrls = [];
+			for (const img of Array.isArray(images) ? images : []) {
 				const status = img.status || "completed";
-				const meta = parseMeta(img.meta);
+				let meta = parseMeta(img.meta);
+				if (isGroupV2Meta(meta)) {
+					meta = await fillThinGroupV2ItemViews(queries, user.id, meta);
+				}
 				const mediaFields =
 					status === "completed"
-						? mapCreatedImageRowMediaFields(img, { storage, includeMeta: false })
+						? mapCreatedImageRowMediaFields({ ...img, meta }, { storage, includeMeta: false })
 						: {
 							url: null,
 							thumbnail_url: null,
@@ -3414,7 +3420,7 @@ export default function createCreateRoutes({ queries, storage }) {
 							media_type: typeof meta?.media_type === "string" ? meta.media_type : "image"
 						};
 
-				return {
+				imagesWithUrls.push({
 					id: img.id,
 					filename: img.filename,
 					url: mediaFields.url,
@@ -3435,8 +3441,8 @@ export default function createCreateRoutes({ queries, storage }) {
 					media_type: mediaFields.media_type,
 					video_url: mediaFields.video_url,
 					audio_url: mediaFields.audio_url
-				};
-			});
+				});
+			}
 
 			const rawGroup = wantsRawGroupV2(req);
 			const visible = imagesWithUrls.filter((img) => {
@@ -3750,9 +3756,12 @@ export default function createCreateRoutes({ queries, storage }) {
 
 			const status = image.status || 'completed';
 			const creationIdForMedia = Number(image.id);
+			if (isGroupV2Meta(meta)) {
+				meta = await fillThinGroupV2ItemViews(queries, image.user_id, meta);
+			}
 			const mediaFields =
 				status === "completed"
-					? mapCreatedImageRowMediaFields(image, { storage, includeMeta: false })
+					? mapCreatedImageRowMediaFields({ ...image, meta }, { storage, includeMeta: false })
 					: null;
 			let url = null;
 			if (status === "completed") {
@@ -5869,7 +5878,11 @@ export default function createCreateRoutes({ queries, storage }) {
 			}
 
 			const publishMeta = parseMeta(targetImage.meta) || {};
-			if (isProjectV2Meta(publishMeta) || publishMeta.publish_forbidden === true) {
+			if (
+				isProjectV2Meta(publishMeta) ||
+				publishMeta.publish_forbidden === true ||
+				groupActionSupportedForMeta(publishMeta, "publish") === false
+			) {
 				return res.status(400).json({ error: projectRejectMessage("publish") });
 			}
 			if (

@@ -3,6 +3,8 @@
  * without waiting on GET /api/create/images/:id.
  */
 
+import { groupActionSupported } from './creationGroupMedia.js';
+
 export const CREATION_DETAIL_SEED_KEY = 'prsn-creation-detail-seed';
 export const CREATOR_STRIP_CACHE_KEY = 'prsn-creator-detail-strip';
 export const VIEWER_COMPOSER_CACHE_KEY = 'prsn-viewer-comment-composer';
@@ -207,6 +209,9 @@ function seedGroupSectionHtml(seed) {
 	const subtitle = `${entries.length} ${noun}${entries.length === 1 ? '' : 's'}`;
 	const isOwner = seedIsOwner(seed);
 	const isPublished = seedIsPublished(seed);
+	const group = seed?.meta?.group && typeof seed.meta.group === 'object' ? seed.meta.group : null;
+	const showSetCover = isOwner && groupActionSupported(group, 'set_cover');
+	const showUngroup = isOwner && !isPublished && groupActionSupported(group, 'ungroup');
 	const slots = entries
 		.map((entry, index) => {
 			const active = index === 0 ? ' is-active' : '';
@@ -229,10 +234,12 @@ function seedGroupSectionHtml(seed) {
 					</div>`;
 		})
 		.join('');
-	const actions = isOwner
+	const actions = showSetCover || showUngroup
 		? `<div class="creation-detail-group-actions">
-						<button type="button" class="btn-secondary creation-detail-group-set-cover-btn" data-group-set-cover-btn disabled>Set as cover</button>
-						${!isPublished
+						${showSetCover
+							? `<button type="button" class="btn-secondary creation-detail-group-set-cover-btn" data-group-set-cover-btn disabled>Set as cover</button>`
+							: ''}
+						${showUngroup
 							? `<button type="button" class="btn-secondary creation-detail-ungroup-btn" data-ungroup-btn>Ungroup Creations</button>`
 							: ''}
 					</div>`

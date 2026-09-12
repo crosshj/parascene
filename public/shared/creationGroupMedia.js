@@ -23,8 +23,36 @@ export function isGroupCreationItem(item) {
 	return meta?.group?.kind === "group_creations";
 }
 
+/** Missing object/key means show (v1 groups). */
+export function groupActionSupported(group, key) {
+	if (!group || typeof group !== "object") return true;
+	const supported = group.supported;
+	if (!supported || typeof supported !== "object" || Array.isArray(supported)) {
+		if (key === "ungroup" && group.ungroup_supported === false) return false;
+		return true;
+	}
+	if (!Object.prototype.hasOwnProperty.call(supported, key)) return true;
+	return supported[key] !== false;
+}
+
 export function getGroupCoverSourceFromMeta(meta) {
 	const groupPayload = meta?.group && typeof meta.group === "object" ? meta.group : null;
+	if (groupPayload?.kind === "group_v2") {
+		const items = Array.isArray(groupPayload.items) ? groupPayload.items : [];
+		const cover = items.find((item) => item && item.cover) || items[0] || null;
+		const pointer = cover?.pointer;
+		const creationId = Number(pointer?.creationId ?? pointer?.creation_id);
+		if (!cover || pointer?.kind !== "creation" || !Number.isFinite(creationId) || creationId <= 0) {
+			return null;
+		}
+		const view = cover.view && typeof cover.view === "object" ? cover.view : {};
+		return {
+			id: creationId,
+			filename: view.filename || null,
+			file_path: view.filePath || view.file_path || view.url || null,
+			meta: { media_type: view.mediaType || view.media_type || "image" },
+		};
+	}
 	if (groupPayload?.kind !== "group_creations") return null;
 	const sourcesRaw = Array.isArray(groupPayload.source_creations) ? groupPayload.source_creations : [];
 	const coverId = Number(groupPayload.cover_source_id);
@@ -74,7 +102,23 @@ export function resolveGroupCoverDisplayUrl(item, preferThumbnail = false) {
 	return url;
 }
 
-export function groupCreationBadgeHtml() {
+export function isProjectGroupMark(item) {
+	const meta = parseCreationItemMeta(item) || (item && typeof item === "object" ? item : null);
+	const group = meta?.group && typeof meta.group === "object" ? meta.group : null;
+	if (String(group?.badge || "").trim() === "project") return true;
+	const type = String(meta?.type || meta?.creation_type || "").trim();
+	return type === "project";
+}
+
+export function groupCreationBadgeHtml(item) {
+	if (isProjectGroupMark(item)) {
+		return html`<span class="creation-group-badge creation-group-badge--project" aria-label="Project" title="Project">
+		<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"
+			stroke-linejoin="round" aria-hidden="true">
+			<path d="M3.5 8.5A2 2 0 0 1 5.5 6.5h3l1.7 1.8h8.3A2 2 0 0 1 20.5 10.3v7.2a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2v-9z"></path>
+		</svg>
+	</span>`;
+	}
 	return html`<span class="creation-group-badge" aria-label="Group creation" title="Group creation">
 		<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"
 			stroke-linejoin="round" aria-hidden="true">
@@ -85,7 +129,7 @@ export function groupCreationBadgeHtml() {
 }
 
 export function routeCardGroupBadgeHtml(item) {
-	return isGroupCreationItem(item) ? groupCreationBadgeHtml() : "";
+	return isGroupCreationItem(item) ? groupCreationBadgeHtml(item) : "";
 }
 
 /**

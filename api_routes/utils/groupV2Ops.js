@@ -4,18 +4,90 @@ import {
 	emptyGroupV2Meta,
 	groupV2Items,
 	groupV2RejectMessage,
+	hiddenGroupIdFromMeta,
 	isGroupV2Meta,
 	itemFromCreationRow,
 	normalizeItem,
 	parseMeta,
 	removeItems,
 	setCoverItem,
+	viewFromCreationRow,
 	wantsRawGroupV2,
 	withHiddenInGroup,
 	withoutHiddenInGroup,
 	withUpdatedItems,
 } from "./groupV2.js";
 import { emptyProjectV2Meta, wantsProjectGroupType } from "./projectGroupV2.js";
+
+function viewHasMedia(view) {
+	const url = typeof view?.url === "string" ? view.url.trim() : "";
+	const filePath = typeof view?.filePath === "string" ? view.filePath.trim() : "";
+	return Boolean(url || filePath);
+}
+
+async function loadCreationRowForView(queries, userId, creationId) {
+	if (typeof queries?.selectCreatedImageById?.get === "function") {
+		const owned = await queries.selectCreatedImageById.get(creationId, userId);
+		if (owned) return owned;
+	}
+	if (typeof queries?.selectCreatedImageByIdAnyUser?.get === "function") {
+		return queries.selectCreatedImageByIdAnyUser.get(creationId);
+	}
+	return null;
+}
+
+/** Refresh creation-pointer views that were snapshotted before the still had a file. */
+export async function fillThinGroupV2ItemViews(queries, userId, meta) {
+	if (!isGroupV2Meta(meta)) return meta;
+	const items = groupV2Items(meta);
+	let changed = false;
+	const next = [];
+	for (const item of items) {
+		if (item.pointer.kind !== "creation" || viewHasMedia(item.view)) {
+			next.push(item);
+			continue;
+		}
+		const row = await loadCreationRowForView(queries, userId, item.pointer.creationId);
+		if (!row || !viewHasMedia(viewFromCreationRow(row))) {
+			next.push(item);
+			continue;
+		}
+		changed = true;
+		next.push({ ...item, view: viewFromCreationRow(row) });
+	}
+	if (!changed) return meta;
+	return {
+		...meta,
+		group: {
+			...(meta.group || {}),
+			items: next,
+		},
+	};
+}
+
+/** @deprecated use fillThinGroupV2ItemViews — cover-only skip left members blank */
+export function fillThinGroupV2CoverViews(queries, userId, meta) {
+	return fillThinGroupV2ItemViews(queries, userId, meta);
+}
+
+export async function refreshGroupV2MemberView(queries, userId, createdRow) {
+	const groupId = hiddenGroupIdFromMeta(parseMeta(createdRow?.meta) || {});
+	if (!groupId) return false;
+	const loaded = await loadOwnedGroupV2(queries, groupId, userId);
+	if (!loaded) return false;
+	const creationId = Number(createdRow.id);
+	let changed = false;
+	const next = groupV2Items(loaded.meta).map((item) => {
+		if (item.pointer.kind !== "creation" || Number(item.pointer.creationId) !== creationId) {
+			return item;
+		}
+		changed = true;
+		return { ...item, view: viewFromCreationRow(createdRow) };
+	});
+	if (!changed) return false;
+	await persistGroupV2Meta(queries, loaded.row, userId, withUpdatedItems(loaded.meta, next));
+	return true;
+}
 
 export async function loadOwnedGroupV2(queries, id, userId) {
 	const n = Number(id);

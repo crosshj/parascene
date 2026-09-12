@@ -5,6 +5,90 @@ export const HIDDEN_IN_GROUP_META_KEY = "hidden_in_group";
 /** Read-only alias for rows written before the generic hide key. */
 export const HIDDEN_IN_PROJECT_META_KEY = "hidden_in_project";
 export const DESKTOP_HEADER = "x-parascene-desktop";
+const PROJECT_TYPE_STAMP = "project";
+
+export const GROUP_SUPPORTED_KEYS = [
+	"ungroup",
+	"reorder",
+	"set_cover",
+	"publish",
+	"delete",
+	"edit",
+	"share",
+	"remix",
+	"challenge_submit",
+	"challenge_assign",
+	"carousel",
+];
+
+/** Bare group v2: old group chrome cannot write this list. Missing keys stay on. */
+export const GROUP_V2_SUPPORTED = {
+	ungroup: false,
+	reorder: false,
+	set_cover: false,
+};
+
+/** Project container: www is a viewer. */
+export const PROJECT_GROUP_SUPPORTED = {
+	ungroup: false,
+	reorder: false,
+	set_cover: false,
+	publish: false,
+	delete: false,
+	edit: false,
+	share: false,
+	remix: false,
+	challenge_submit: false,
+	challenge_assign: false,
+	carousel: false,
+};
+
+export function normalizeGroupSupported(raw) {
+	if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+	const out = {};
+	let any = false;
+	for (const key of GROUP_SUPPORTED_KEYS) {
+		if (!Object.prototype.hasOwnProperty.call(raw, key)) continue;
+		out[key] = raw[key] !== false;
+		any = true;
+	}
+	return any ? out : null;
+}
+
+function isProjectTypeStamp(meta) {
+	return String(meta?.type || meta?.creation_type || "").trim() === PROJECT_TYPE_STAMP;
+}
+
+function defaultSupportedForMeta(meta) {
+	if (!isGroupV2Meta(meta)) return null;
+	return isProjectTypeStamp(meta) ? { ...PROJECT_GROUP_SUPPORTED } : { ...GROUP_V2_SUPPORTED };
+}
+
+export function resolveGroupSupported(meta) {
+	const stored = normalizeGroupSupported(meta?.group?.supported);
+	const defaults = defaultSupportedForMeta(meta);
+	if (!defaults && !stored) return null;
+	return { ...(defaults || {}), ...(stored || {}) };
+}
+
+/** www: missing object/key means show (v1 groups). */
+export function groupActionSupported(group, key) {
+	if (!group || typeof group !== "object") return true;
+	const supported = group.supported;
+	if (!supported || typeof supported !== "object" || Array.isArray(supported)) {
+		if (key === "ungroup" && group.ungroup_supported === false) return false;
+		return true;
+	}
+	if (!Object.prototype.hasOwnProperty.call(supported, key)) return true;
+	return supported[key] !== false;
+}
+
+export function groupActionSupportedForMeta(meta, key) {
+	const resolved = resolveGroupSupported(meta);
+	if (!resolved) return groupActionSupported(meta?.group, key);
+	if (!Object.prototype.hasOwnProperty.call(resolved, key)) return true;
+	return resolved[key] !== false;
+}
 
 const LOCAL_POINTER_RE = /^local:\/\/([^/]+)\/(.+)$/;
 
@@ -47,6 +131,11 @@ export function isGroupV2Row(row) {
 export function emptyGroupV2Meta(opts = {}) {
 	const createdAt = typeof opts.createdAt === "string" && opts.createdAt ? opts.createdAt : nowIso();
 	const items = normalizeItems(opts.items);
+	const supported = {
+		...GROUP_V2_SUPPORTED,
+		...(normalizeGroupSupported(opts.supported) || {}),
+	};
+	const badge = typeof opts.badge === "string" && opts.badge.trim() ? opts.badge.trim() : "";
 	return {
 		group: {
 			kind: GROUP_V2_KIND,
@@ -54,6 +143,8 @@ export function emptyGroupV2Meta(opts = {}) {
 			created_at: createdAt,
 			updated_at: createdAt,
 			items,
+			supported,
+			...(badge ? { badge } : {}),
 		},
 	};
 }
@@ -113,10 +204,28 @@ export function normalizeView(raw) {
 	copyStr("filePath");
 	copyStr("color");
 	copyStr("status");
+	copyStr("videoUrl");
+	copyStr("video_url", "videoUrl");
 	const width = Number(raw.width);
 	const height = Number(raw.height);
 	if (Number.isFinite(width) && width > 0) view.width = Math.round(width);
 	if (Number.isFinite(height) && height > 0) view.height = Math.round(height);
+	const audio = raw.audio;
+	if (audio && typeof audio === "object" && !Array.isArray(audio)) {
+		const cdnId = typeof audio.cdn_id === "string" ? audio.cdn_id.trim() : "";
+		if (cdnId) {
+			view.audio = {
+				cdn_id: cdnId,
+				...(typeof audio.filename === "string" && audio.filename.trim()
+					? { filename: audio.filename.trim() }
+					: {}),
+				...(typeof audio.content_type === "string" && audio.content_type.trim()
+					? { content_type: audio.content_type.trim() }
+					: {}),
+				...(Number(audio.duration) > 0 ? { duration: Number(audio.duration) } : {}),
+			};
+		}
+	}
 	return view;
 }
 
@@ -241,7 +350,7 @@ export function viewFromCreationRow(row, extra = {}) {
 		(typeof row?.filename === "string" && row.filename.trim()) ||
 		"";
 	const url = (typeof extra.url === "string" && extra.url.trim()) || filePath || "";
-	return normalizeView({
+	const view = normalizeView({
 		mediaType,
 		title,
 		url,
@@ -253,6 +362,29 @@ export function viewFromCreationRow(row, extra = {}) {
 		width: extra.width ?? row?.width,
 		height: extra.height ?? row?.height,
 	});
+	const videoPath =
+		(typeof extra.video?.file_path === "string" && extra.video.file_path.trim()) ||
+		(typeof extra.videoUrl === "string" && extra.videoUrl.trim()) ||
+		(typeof meta.video?.file_path === "string" && meta.video.file_path.trim()) ||
+		"";
+	if (videoPath) view.videoUrl = videoPath;
+	const audioIn = extra.audio && typeof extra.audio === "object" ? extra.audio : meta.audio;
+	if (audioIn && typeof audioIn === "object") {
+		const cdnId = typeof audioIn.cdn_id === "string" ? audioIn.cdn_id.trim() : "";
+		if (cdnId) {
+			view.audio = {
+				cdn_id: cdnId,
+				...(typeof audioIn.filename === "string" && audioIn.filename.trim()
+					? { filename: audioIn.filename.trim() }
+					: {}),
+				...(typeof audioIn.content_type === "string" && audioIn.content_type.trim()
+					? { content_type: audioIn.content_type.trim() }
+					: {}),
+				...(Number(audioIn.duration) > 0 ? { duration: Number(audioIn.duration) } : {}),
+			};
+		}
+	}
+	return view;
 }
 
 export function itemFromCreationRow(row, opts = {}) {
@@ -330,17 +462,20 @@ export function withUpdatedItems(meta, items, extra = {}) {
 	const current = meta && typeof meta === "object" ? { ...meta } : {};
 	const group = current.group && typeof current.group === "object" ? { ...current.group } : {};
 	const nextItems = normalizeItems(items);
+	const nextGroup = {
+		...group,
+		kind: GROUP_V2_KIND,
+		version: 2,
+		created_at: typeof group.created_at === "string" ? group.created_at : nowIso(),
+		updated_at: nowIso(),
+		items: nextItems,
+	};
+	const supported = resolveGroupSupported({ ...current, ...extra, group: nextGroup });
+	if (supported) nextGroup.supported = supported;
 	return {
 		...current,
 		...extra,
-		group: {
-			...group,
-			kind: GROUP_V2_KIND,
-			version: 2,
-			created_at: typeof group.created_at === "string" ? group.created_at : nowIso(),
-			updated_at: nowIso(),
-			items: nextItems,
-		},
+		group: nextGroup,
 	};
 }
 
@@ -350,6 +485,10 @@ export function costumeGroupV2Meta(meta, { title } = {}) {
 	for (const item of items) {
 		if (item.pointer.kind !== "creation") continue;
 		const view = item.view || {};
+		const mediaType = view.mediaType || "image";
+		const snapshotMeta = { media_type: mediaType };
+		if (view.videoUrl) snapshotMeta.video = { file_path: view.videoUrl };
+		if (view.audio && typeof view.audio === "object") snapshotMeta.audio = view.audio;
 		snapshots.push({
 			order: snapshots.length,
 			id: item.pointer.creationId,
@@ -360,13 +499,17 @@ export function costumeGroupV2Meta(meta, { title } = {}) {
 			color: view.color || null,
 			status: view.status || "completed",
 			title: view.title || title || null,
-			meta: { media_type: view.mediaType || "image" },
+			meta: snapshotMeta,
 		});
 	}
 	const cover = coverItem(items);
 	const coverId =
 		cover?.pointer?.kind === "creation" ? cover.pointer.creationId : snapshots[0]?.id ?? null;
 	const createdAt = meta?.group?.created_at || nowIso();
+	const supported = resolveGroupSupported(meta) || { ...GROUP_V2_SUPPORTED };
+	const badge =
+		(typeof meta?.group?.badge === "string" && meta.group.badge.trim()) ||
+		(isProjectTypeStamp(meta) ? "project" : "");
 	return {
 		...meta,
 		media_type: cover?.view?.mediaType || snapshots[0]?.meta?.media_type || meta?.media_type || "image",
@@ -375,7 +518,9 @@ export function costumeGroupV2Meta(meta, { title } = {}) {
 			version: 1,
 			grouped_at: createdAt,
 			updated_at: meta?.group?.updated_at || createdAt,
-			ungroup_supported: false,
+			ungroup_supported: supported.ungroup !== false,
+			supported,
+			...(badge ? { badge } : {}),
 			cover_source_id: coverId,
 			source_creation_ids: snapshots.map((row) => Number(row.id)),
 			source_creations: snapshots,
@@ -403,9 +548,20 @@ export function applyCostumeToCreationPayload(payload, { raw = false } = {}) {
 			},
 		};
 	}
+	const costumedMeta = costumeGroupV2Meta(meta, { title: payload.title });
+	const cover = coverItem(items);
+	const view = cover?.view || {};
+	const coverUrl = view.url || view.filePath || "";
+	const mediaType =
+		view.mediaType ||
+		(payload.media_type === "project" ? "image" : payload.media_type) ||
+		"image";
 	return {
 		...payload,
-		meta: costumeGroupV2Meta(meta, { title: payload.title }),
+		meta: costumedMeta,
+		media_type: mediaType,
+		url: payload.url || coverUrl || null,
+		thumbnail_url: payload.thumbnail_url || view.thumbnailUrl || coverUrl || null,
 	};
 }
 

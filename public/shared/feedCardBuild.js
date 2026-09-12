@@ -61,7 +61,7 @@ const { buildProfilePath } = profileLinksMod;
 const { getHelpHref } = helpUrlMod;
 const { creationMetaHasChallengeSubmission } = challengeSubmitMetaMod;
 const { challengeEnteredBadgeHtml, publishedBadgeHtml, musicBadgeHtml, videoImportBadgeHtml } = creationBadgesMod;
-const { groupCreationBadgeHtml, resolveGroupCoverDisplayUrl, appendThumbnailVariant } = creationGroupMediaMod;
+const { groupCreationBadgeHtml, groupActionSupported, resolveGroupCoverDisplayUrl, appendThumbnailVariant } = creationGroupMediaMod;
 const { creationTitleDisplay } = creationCardMod;
 const { primeMediaElementForAudioLeveling } = mediaAudioLevelingMod;
 const { openFeedBetaWhyModal } = feedBetaWhyModalMod;
@@ -281,6 +281,7 @@ export function getFeedItemGroupVideoSlides(item) {
 	const groupPayload =
 		parsedMeta?.group && typeof parsedMeta.group === 'object' ? parsedMeta.group : null;
 	if (groupPayload?.kind !== 'group_creations') return [];
+	if (!groupActionSupported(groupPayload, 'carousel')) return [];
 	const mediaTypeRaw =
 		typeof item?.media_type === 'string'
 			? item.media_type.trim().toLowerCase()
@@ -383,6 +384,7 @@ export function getFeedItemGroupCarouselSources(item, preferThumbnail = false) {
 	const groupPayload =
 		parsedMeta?.group && typeof parsedMeta.group === 'object' ? parsedMeta.group : null;
 	if (groupPayload?.kind !== 'group_creations') return [];
+	if (!groupActionSupported(groupPayload, 'carousel')) return [];
 	const sourcesRaw = Array.isArray(groupPayload?.source_creations) ? groupPayload.source_creations : [];
 	const seen = new Set();
 	const out = [];
@@ -911,7 +913,7 @@ function buildFeedCreationCard(
 		const isPublished = item.published === true || item.published === 1;
 		const publishedOverlay = isPublished ? publishedBadgeHtml() : '';
 		const isGroupCreation = parsedMeta?.group?.kind === 'group_creations';
-		const groupOverlay = isGroupCreation ? groupCreationBadgeHtml() : '';
+		const groupOverlay = isGroupCreation ? groupCreationBadgeHtml(item) : '';
 		const musicOverlay = mediaType === 'audio' ? musicBadgeHtml() : '';
 		const videoImportOverlay =
 			mediaType === 'video' &&

@@ -20,6 +20,7 @@ import {
 	persistGeneratedAudioToCdn,
 	extensionForAudioContentType,
 } from "./persistGeneratedAudio.js";
+import { refreshGroupV2MemberView } from "./groupV2Ops.js";
 
 const PROVIDER_TIMEOUT_MS = 50_000;
 /** When the provider returns finished video bytes (sync or async poll), allow long downloads. Override with CREATION_PROVIDER_VIDEO_FETCH_TIMEOUT_MS (ms, min 10000). */
@@ -478,6 +479,18 @@ async function finalizeCreationJob({
 		color,
 		meta: completedMetaWithClip,
 	});
+
+	try {
+		const completedRow = await queries.selectCreatedImageById.get(imageId, userId);
+		if (completedRow) {
+			await refreshGroupV2MemberView(queries, userId, completedRow);
+		}
+	} catch (err) {
+		logCreationError("group v2 member view refresh failed", {
+			imageId,
+			error: safeErrorMessage(err),
+		});
+	}
 
 	// Credit server owner (30% of what user was charged), best-effort.
 	const ownerCredits = Number(credit_cost || 0) * 0.3;

@@ -3,8 +3,23 @@ import {
 	extractFilenameFromCreatedImagePath
 } from "./resolveCreatedImageStorageFilename.js";
 import { appendCreationIdToMediaUrl, getFitThumbnailUrl, getThumbnailUrl } from "./url.js";
+import { coverItem, groupV2Items, isGroupV2Meta } from "./groupV2.js";
 
 export function getGroupCoverSource(meta) {
+	if (isGroupV2Meta(meta)) {
+		const cover = coverItem(groupV2Items(meta));
+		if (!cover || cover.pointer?.kind !== "creation") return null;
+		const view = cover.view || {};
+		return {
+			id: cover.pointer.creationId,
+			filename: view.filename || null,
+			file_path: view.filePath || view.url || null,
+			width: view.width ?? null,
+			height: view.height ?? null,
+			color: view.color || null,
+			meta: { media_type: view.mediaType || "image" },
+		};
+	}
 	const groupPayload = meta?.group && typeof meta.group === "object" ? meta.group : null;
 	if (groupPayload?.kind !== "group_creations") return null;
 	const sourcesRaw = Array.isArray(groupPayload.source_creations) ? groupPayload.source_creations : [];
@@ -42,12 +57,22 @@ function resolveRowFilePath(row, storage) {
 	return urlField || null;
 }
 
+function isSyntheticGroupFilename(name) {
+	const s = typeof name === "string" ? name.trim() : "";
+	return (
+		s.startsWith("group/") ||
+		s.startsWith("project/") ||
+		s.startsWith("group_v2/")
+	);
+}
+
 function isSyntheticGroupPath(value) {
 	const s = typeof value === "string" ? value.trim() : "";
 	if (!s) return false;
-	if (s.includes("/group/") || s.includes("group/")) return true;
+	if (s.includes("/group/") || s.includes("/project/") || s.includes("/group_v2/")) return true;
+	if (isSyntheticGroupFilename(s)) return true;
 	const fromPath = extractFilenameFromCreatedImagePath(s);
-	return Boolean(fromPath && fromPath.startsWith("group/"));
+	return isSyntheticGroupFilename(fromPath);
 }
 
 export function resolveCreationMediaType(meta, rowMediaType) {

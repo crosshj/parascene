@@ -8,6 +8,8 @@ export {
 	appendItems,
 	applyCostumeToCreationPayload,
 	costumeGroupV2Meta as costumeProjectV2Meta,
+	groupActionSupported,
+	groupActionSupportedForMeta,
 	coverItem,
 	creationPointer,
 	groupV2Items,
@@ -39,7 +41,9 @@ import {
 	groupV2RejectMessage,
 	isGroupV2Meta,
 	isHiddenInGroupMeta,
+	normalizeGroupSupported,
 	parseMeta,
+	PROJECT_GROUP_SUPPORTED,
 	withHiddenInGroup,
 	withoutHiddenInGroup,
 	withUpdatedItems,
@@ -63,10 +67,17 @@ export function isProjectV2Row(row) {
 
 export function emptyProjectV2Meta(opts = {}) {
 	return {
-		...emptyGroupV2Meta(opts),
+		...emptyGroupV2Meta({
+			...opts,
+			badge: typeof opts.badge === "string" && opts.badge.trim() ? opts.badge.trim() : "project",
+			supported: {
+				...PROJECT_GROUP_SUPPORTED,
+				...(normalizeGroupSupported(opts.supported) || {}),
+			},
+		}),
 		type: PROJECT_TYPE,
 		creation_type: PROJECT_TYPE,
-		media_type: PROJECT_TYPE,
+		media_type: "image",
 		publish_forbidden: true,
 	};
 }

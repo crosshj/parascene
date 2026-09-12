@@ -26,6 +26,20 @@ describe("projectGroupV2", () => {
 		expect(isProjectV2Meta(meta)).toBe(true);
 		expect(meta.group.items).toEqual([]);
 		expect(meta.publish_forbidden).toBe(true);
+		expect(meta.group.supported).toEqual({
+			ungroup: false,
+			reorder: false,
+			set_cover: false,
+			publish: false,
+			delete: false,
+			edit: false,
+			share: false,
+			remix: false,
+			challenge_submit: false,
+			challenge_assign: false,
+			carousel: false,
+		});
+		expect(meta.group.badge).toBe("project");
 	});
 
 	test("a bare group v2 is not a project", () => {
@@ -92,6 +106,11 @@ describe("projectGroupV2", () => {
 		const costumed = costumeProjectV2Meta(meta);
 		expect(costumed.group.kind).toBe("group_creations");
 		expect(costumed.group.ungroup_supported).toBe(false);
+		expect(costumed.group.supported.publish).toBe(false);
+		expect(costumed.group.supported.challenge_assign).toBe(false);
+		expect(costumed.group.supported.remix).toBe(false);
+		expect(costumed.group.supported.carousel).toBe(false);
+		expect(costumed.group.badge).toBe("project");
 		expect(costumed.group.source_creation_ids).toEqual([11]);
 		expect(costumed.group.source_creations).toHaveLength(1);
 	});

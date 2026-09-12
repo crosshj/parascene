@@ -30,6 +30,7 @@ import {
 import { invalidateAndRebuildChallengeFeedSnapshotCache } from "./feed/challengeFeedSnapshotCache.js";
 import { syncChallengeOrganizerCreationRefsOnConfigWrite } from "./utils/challengeOrganizerRefSync.js";
 import { persistSingleChallengeConfigMessage } from "./utils/challengeConfigMessage.js";
+import { groupActionSupportedForMeta, parseMeta } from "./utils/groupV2.js";
 import { loadEditorialPinPolicyDocument } from "./feed/editorialPinPolicy.js";
 import { collectChatMiscGenericKeysFromMessageBody,
 	isChatMiscGenericKeyOwnedByUser
@@ -2958,13 +2959,12 @@ function buildChannelInviteSystemBody({ inviterHandle, invitedHandles }) {
 						message: "Published creations can't be assigned as organizer media."
 					});
 				}
-				let creationMeta = creation.meta;
-				if (typeof creationMeta === "string") {
-					try {
-						creationMeta = JSON.parse(creationMeta);
-					} catch {
-						creationMeta = null;
-					}
+				const creationMeta = parseMeta(creation.meta);
+				if (groupActionSupportedForMeta(creationMeta, "challenge_assign") === false) {
+					return res.status(400).json({
+						error: "Bad request",
+						message: "This creation cannot be assigned as challenge media.",
+					});
 				}
 				const isEntry =
 					Array.isArray(creationMeta?.challenge_submissions) &&
