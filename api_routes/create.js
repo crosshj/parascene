@@ -48,6 +48,19 @@ import {
 } from "./utils/resolveCreatedImageStorageFilename.js";
 import { invalidateFeedBetaCatalogSnapshot } from "./feedBeta/catalogSnapshot.js";
 import { mapCreatedImageRowMediaFields } from "./utils/resolveCreationDisplayMedia.js";
+import {
+	applyCostumeToCreationPayload,
+	groupV2RejectMessage,
+	isGroupV2Meta,
+	isHiddenInGroupMeta,
+	isProjectV2Meta,
+	projectRejectMessage,
+	wantsRawGroupV2,
+} from "./utils/projectGroupV2.js";
+import {
+	appendCreationToOwnedGroupV2,
+	resolveOwnedGroupV2Id,
+} from "./utils/groupV2Ops.js";
 import { getWhoMetaForCreation } from "./utils/whoMeta.js";
 import {
 	canSetVideoPosterFromFirstFrame,
@@ -740,7 +753,7 @@ export default function createCreateRoutes({ queries, storage }) {
 			response.challenge_submit = { eligible: false, reason: "published" };
 			return;
 		}
-		if (group) {
+		if (group || isGroupV2Meta(meta)) {
 			response.challenge_submit = { eligible: false, reason: "group" };
 			return;
 		}
@@ -2458,6 +2471,12 @@ export default function createCreateRoutes({ queries, storage }) {
 			group_id: bodyGroupId,
 			group_of: bodyGroupOf
 		} = req.body;
+		const requestedGroupId = parsePositiveIntQuery(bodyGroupId ?? bodyGroupOf);
+		const resolvedGroup = await resolveOwnedGroupV2Id(queries, user.id, requestedGroupId);
+		if (resolvedGroup.error) {
+			return res.status(resolvedGroup.status || 404).json({ error: resolvedGroup.error });
+		}
+		const v2GroupId = resolvedGroup.groupId;
 		const safeArgs = args && typeof args === "object" ? { ...args } : {};
 		const hydrateMentions = hydrate_mentions === true || hydrate_mentions === "true" || hydrate_mentions === 1 || hydrate_mentions === "1";
 
@@ -3248,6 +3267,31 @@ export default function createCreateRoutes({ queries, storage }) {
 
 			const createdImageId = result.insertId;
 
+			if (v2GroupId) {
+				const appended = await appendCreationToOwnedGroupV2(queries, {
+					groupId: v2GroupId,
+					userId: user.id,
+					createdRow: {
+						id: createdImageId,
+						title: null,
+						filename: placeholderFilename,
+						file_path: "",
+						status: "creating",
+						width: 1024,
+						height: 1024,
+						color: null,
+						meta,
+					},
+					mediaType: typeof meta?.media_type === "string" ? meta.media_type : "image",
+				});
+				if (!appended.ok) {
+					return res.status(400).json({
+						error: appended.error || "Failed to add creation to group",
+						id: createdImageId,
+					});
+				}
+			}
+
 			await scheduleCreationJob({
 				payload: {
 					created_image_id: createdImageId,
@@ -3394,8 +3438,14 @@ export default function createCreateRoutes({ queries, storage }) {
 				};
 			});
 
-			const filtered = enableNsfw ? imagesWithUrls : imagesWithUrls.filter((img) => !img.nsfw);
+			const rawGroup = wantsRawGroupV2(req);
+			const visible = imagesWithUrls.filter((img) => {
+				if (!enableNsfw && img.nsfw) return false;
+				if (!rawGroup && isHiddenInGroupMeta(img.meta)) return false;
+				return true;
+			}).map((img) => applyCostumeToCreationPayload(img, { raw: rawGroup }));
 			const has_more = images.length === pageLimit;
+			const filtered = visible;
 
 			// Stamp organizer media refs (hero/results/theme-vote) so library trophies match detail.
 			try {
@@ -3998,7 +4048,7 @@ export default function createCreateRoutes({ queries, storage }) {
 				}
 			}
 
-			return res.json(response);
+			return res.json(applyCostumeToCreationPayload(response, { raw: wantsRawGroupV2(req) }));
 		} catch (error) {
 			// console.error("Error fetching image:", error);
 			return res.status(500).json({ error: "Failed to fetch image" });
@@ -5020,6 +5070,9 @@ export default function createCreateRoutes({ queries, storage }) {
 				meta: parseMeta(row.meta) || {},
 				isGroup: (parseMeta(row.meta) || {})?.group?.kind === "group_creations"
 			}));
+			if (selectedWithMeta.some((entry) => isGroupV2Meta(entry.meta))) {
+				return res.status(400).json({ error: groupV2RejectMessage("group") });
+			}
 			const selectedGroups = selectedWithMeta.filter((entry) => entry.isGroup);
 			if (selectedGroups.length > 1) {
 				return res.status(400).json({ error: "Select at most one existing group" });
@@ -5732,6 +5785,9 @@ export default function createCreateRoutes({ queries, storage }) {
 				return res.status(400).json({ error: "Published group creations cannot be ungrouped" });
 			}
 			const groupMeta = parseMeta(groupRow.meta) || {};
+			if (isGroupV2Meta(groupMeta)) {
+				return res.status(400).json({ error: groupV2RejectMessage("ungroup") });
+			}
 			const groupPayload = groupMeta?.group && typeof groupMeta.group === "object" ? groupMeta.group : null;
 			if (!groupPayload || groupPayload.kind !== "group_creations") {
 				return res.status(400).json({ error: "Creation is not a group creation" });
@@ -5813,6 +5869,9 @@ export default function createCreateRoutes({ queries, storage }) {
 			}
 
 			const publishMeta = parseMeta(targetImage.meta) || {};
+			if (isProjectV2Meta(publishMeta) || publishMeta.publish_forbidden === true) {
+				return res.status(400).json({ error: projectRejectMessage("publish") });
+			}
 			if (
 				Array.isArray(publishMeta.challenge_submissions) &&
 				publishMeta.challenge_submissions.length > 0
