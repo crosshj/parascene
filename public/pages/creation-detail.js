@@ -68,6 +68,7 @@ let creationMetaHasChallengeAnnotation;
 let challengeOrganizerRefRoleLabel;
 let listChallengeOrganizerRefsFromMeta;
 let creationNeedsAudioWaveformCover;
+let creationMediaType;
 let audioCoverWaveformHtml;
 let mountAudioCoverWaveform;
 let removeAudioCoverWaveform;
@@ -432,6 +433,7 @@ async function loadDeps() {
 		videoHeroDimensionsFromCreation = aspectRatioMod.videoHeroDimensionsFromCreation;
 
 		creationNeedsAudioWaveformCover = audioCoverWaveformMod.creationNeedsAudioWaveformCover;
+		creationMediaType = audioCoverWaveformMod.creationMediaType;
 		audioCoverWaveformHtml = audioCoverWaveformMod.audioCoverWaveformHtml;
 		mountAudioCoverWaveform = audioCoverWaveformMod.mountAudioCoverWaveform;
 		removeAudioCoverWaveform = audioCoverWaveformMod.removeAudioCoverWaveform;
@@ -4664,7 +4666,18 @@ async function loadCreation() {
 								width: Number(sourceObj.width),
 								height: Number(sourceObj.height),
 							};
-				const sourceMediaType = typeof sourceMeta?.media_type === 'string' ? sourceMeta.media_type : 'image';
+				const sourceMediaType =
+					typeof creationMediaType === 'function'
+						? creationMediaType({
+								id: sourceId,
+								media_type: sourceObj.media_type,
+								url: sourceFilePathRaw,
+								thumbnail_url: sourceFilePathRaw,
+								meta: sourceMeta,
+							})
+						: typeof sourceMeta?.media_type === 'string'
+							? sourceMeta.media_type.trim()
+							: 'image';
 				const sourceVideoUrlRaw = sourceMeta?.video?.file_path;
 				const sourceVideoUrl = sourceMediaType === 'video' && typeof sourceVideoUrlRaw === 'string' && sourceVideoUrlRaw.trim()
 					? appendCreationIdToMediaUrl(sourceVideoUrlRaw.trim(), creationId)
@@ -4830,19 +4843,18 @@ async function loadCreation() {
 						});
 					const waveThumb =
 						audioNeedsWave && typeof audioCoverWaveformHtml === 'function'
-							? audioCoverWaveformHtml('creation-detail-group-wave')
+							? audioCoverWaveformHtml('creation-audio-wave creation-detail-group-wave')
 							: '';
 					const kindMark =
 						source.mediaType === 'video'
 							? html`<span class="creation-detail-group-kind creation-detail-group-kind--video" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"></path></svg></span>`
-							: source.mediaType === 'audio'
+							: source.mediaType === 'audio' && !waveThumb
 								? html`<span class="creation-detail-group-kind creation-detail-group-kind--audio" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg></span>`
 								: '';
 					const thumbHtml = waveThumb
-						? html`<button type="button" class="creation-detail-group-item creation-detail-group-thumb creation-detail-group-thumb--audio${index === 0 ? ' is-active' : ''}"
+						? html`<button type="button" class="creation-detail-group-item creation-detail-group-thumb creation-detail-group-thumb--audio creation-audio-cover${index === 0 ? ' is-active' : ''}"
 									data-group-source-thumb="${source.id}" aria-label="View ${escapeHtml(source.title)}">
 									${waveThumb}
-									${kindMark}
 								</button>`
 						: source.filePath
 						? html`<button type="button" class="creation-detail-group-item creation-detail-group-thumb${index === 0 ? ' is-active' : ''}"

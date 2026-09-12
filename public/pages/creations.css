@@ -4573,11 +4573,18 @@ button.creation-detail-group-item {
 	color: var(--color-purple);
 }
 
-.creation-detail-group-wave {
-	width: 70%;
+.creation-detail-group-thumb--audio .creation-detail-group-wave,
+.creation-detail-group-thumb.creation-audio-cover .creation-audio-wave {
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	width: 62%;
 	height: auto;
+	max-width: 48px;
+	transform: translate(-50%, -50%);
 	color: inherit;
 	pointer-events: none;
+	z-index: 1;
 }
 
 .creation-detail-group-kind {
@@ -4593,6 +4600,7 @@ button.creation-detail-group-item {
 	align-items: center;
 	justify-content: center;
 	pointer-events: none;
+	z-index: 3;
 }
 
 .creation-detail-group-kind svg {
