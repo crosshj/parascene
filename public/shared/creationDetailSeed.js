@@ -3,7 +3,7 @@
  * without waiting on GET /api/create/images/:id.
  */
 
-import { groupActionSupported } from './creationGroupMedia.js';
+import { groupActionSupportedWhenKnown } from './creationGroupMedia.js';
 
 export const CREATION_DETAIL_SEED_KEY = 'prsn-creation-detail-seed';
 export const CREATOR_STRIP_CACHE_KEY = 'prsn-creator-detail-strip';
@@ -210,8 +210,8 @@ function seedGroupSectionHtml(seed) {
 	const isOwner = seedIsOwner(seed);
 	const isPublished = seedIsPublished(seed);
 	const group = seed?.meta?.group && typeof seed.meta.group === 'object' ? seed.meta.group : null;
-	const showSetCover = isOwner && groupActionSupported(group, 'set_cover');
-	const showUngroup = isOwner && !isPublished && groupActionSupported(group, 'ungroup');
+	const showSetCover = isOwner && groupActionSupportedWhenKnown(group, 'set_cover');
+	const showUngroup = isOwner && !isPublished && groupActionSupportedWhenKnown(group, 'ungroup');
 	const slots = entries
 		.map((entry, index) => {
 			const active = index === 0 ? ' is-active' : '';
@@ -964,7 +964,8 @@ function seedHasChallengeSubmissions(meta) {
 }
 
 function seedIsGroupCreation(meta) {
-	return meta?.group?.kind === 'group_creations';
+	const kind = meta?.group?.kind;
+	return kind === 'group_creations' || kind === 'group_v2';
 }
 
 function seedHideIdentifyChrome(seed) {
@@ -1110,8 +1111,13 @@ function seedChallengeSlotHtml(seed) {
 		!isPublished &&
 		!seedIsGroupCreation(meta) &&
 		!hasPin &&
-		!hasOrganizerRef;
-	const showAssign = isOwner && !isPublished && !hasPin;
+		!hasOrganizerRef &&
+		groupActionSupportedWhenKnown(meta?.group, 'challenge_submit');
+	const showAssign =
+		isOwner &&
+		!isPublished &&
+		!hasPin &&
+		groupActionSupportedWhenKnown(meta?.group, 'challenge_assign');
 	const challengesHref = '/chat/c/challenges';
 	let banners = '';
 	if (hasOrganizerRef && !hasPin) {
@@ -1328,12 +1334,12 @@ export function creationDetailChromeHtmlFromSeed(seed) {
 					${metaLine}
 				</div>`;
 
-	const showMutate = !isImportEmbed && completed;
-	const showShare = !isImportEmbed && completed;
+	const showMutate = !isImportEmbed && completed && groupActionSupportedWhenKnown(meta?.group, 'remix');
+	const showShare = !isImportEmbed && completed && groupActionSupportedWhenKnown(meta?.group, 'share');
 	const showLike = isPublished && completed;
 	const showTip = isPublished && !isOwner;
-	const showPublish = isOwner && !isPublished && completed;
-	const showEdit = isOwner && completed;
+	const showPublish = isOwner && !isPublished && completed && groupActionSupportedWhenKnown(meta?.group, 'publish');
+	const showEdit = isOwner && completed && groupActionSupportedWhenKnown(meta?.group, 'edit');
 	const actionStrip = hideIdentify
 		? ''
 		: `<div class="creation-detail-action-strip has-overflow-right">

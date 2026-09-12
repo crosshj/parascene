@@ -68,6 +68,7 @@ let creationMetaHasChallengeAnnotation;
 let challengeOrganizerRefRoleLabel;
 let listChallengeOrganizerRefsFromMeta;
 let creationNeedsAudioWaveformCover;
+let audioCoverWaveformHtml;
 let mountAudioCoverWaveform;
 let removeAudioCoverWaveform;
 
@@ -431,6 +432,7 @@ async function loadDeps() {
 		videoHeroDimensionsFromCreation = aspectRatioMod.videoHeroDimensionsFromCreation;
 
 		creationNeedsAudioWaveformCover = audioCoverWaveformMod.creationNeedsAudioWaveformCover;
+		audioCoverWaveformHtml = audioCoverWaveformMod.audioCoverWaveformHtml;
 		mountAudioCoverWaveform = audioCoverWaveformMod.mountAudioCoverWaveform;
 		removeAudioCoverWaveform = audioCoverWaveformMod.removeAudioCoverWaveform;
 	})();
@@ -4817,13 +4819,32 @@ async function loadCreation() {
 					</div>
 					<div class="creation-detail-group-grid">
 						${groupSources.map((source, index) => {
+					const audioNeedsWave =
+						source.mediaType === 'audio' &&
+						typeof creationNeedsAudioWaveformCover === 'function' &&
+						creationNeedsAudioWaveformCover({
+							id: source.id,
+							url: source.filePath || '',
+							media_type: 'audio',
+							meta: source.meta,
+						});
+					const waveThumb =
+						audioNeedsWave && typeof audioCoverWaveformHtml === 'function'
+							? audioCoverWaveformHtml('creation-detail-group-wave')
+							: '';
 					const kindMark =
 						source.mediaType === 'video'
 							? html`<span class="creation-detail-group-kind creation-detail-group-kind--video" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"></path></svg></span>`
 							: source.mediaType === 'audio'
 								? html`<span class="creation-detail-group-kind creation-detail-group-kind--audio" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg></span>`
 								: '';
-					const thumbHtml = source.filePath
+					const thumbHtml = waveThumb
+						? html`<button type="button" class="creation-detail-group-item creation-detail-group-thumb creation-detail-group-thumb--audio${index === 0 ? ' is-active' : ''}"
+									data-group-source-thumb="${source.id}" aria-label="View ${escapeHtml(source.title)}">
+									${waveThumb}
+									${kindMark}
+								</button>`
+						: source.filePath
 						? html`<button type="button" class="creation-detail-group-item creation-detail-group-thumb${index === 0 ? ' is-active' : ''}"
 									data-group-source-thumb="${source.id}" aria-label="View ${escapeHtml(source.title)}">
 									<img src="${escapeHtml(source.filePath)}" alt="${escapeHtml(source.title)}" loading="eager" />
@@ -7566,12 +7587,24 @@ async function loadCreation() {
 					} else if (source.mediaType === 'audio') {
 						teardownGroupHeroVideoPlayer();
 						clearGroupMemberAudio();
-						if (source.filePath) showHeroImage(source.filePath);
-						mountCreationDetailHostedAudio(
-							imageWrapper,
-							{ id: source.id, title: source.rawTitle || source.title, audio_url: source.audioUrl || '' },
-							source.meta
-						);
+						const memberCreation = {
+							id: source.id,
+							title: source.rawTitle || source.title,
+							audio_url: source.audioUrl || '',
+							url: source.filePath || '',
+							media_type: 'audio',
+							meta: source.meta,
+						};
+						const useWaveform =
+							typeof creationNeedsAudioWaveformCover === 'function' &&
+							creationNeedsAudioWaveformCover({ ...memberCreation, meta: source.meta });
+						if (useWaveform && imageWrapper && typeof mountAudioCoverWaveform === 'function') {
+							clearHeroImage();
+							mountAudioCoverWaveform(imageWrapper);
+						} else if (source.filePath) {
+							showHeroImage(source.filePath);
+						}
+						mountCreationDetailHostedAudio(imageWrapper, memberCreation, source.meta);
 						markHeroReady({ state: 'group-member-audio' });
 					} else if (source.filePath) {
 						teardownGroupHeroVideoPlayer();

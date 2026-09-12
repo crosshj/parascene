@@ -35,6 +35,21 @@ export function groupActionSupported(group, key) {
 	return supported[key] !== false;
 }
 
+/** True when seed/GET has enough group flags to decide chrome. */
+export function groupSupportedKnown(group) {
+	if (!group || typeof group !== "object") return true;
+	if (group.supported && typeof group.supported === "object" && !Array.isArray(group.supported)) {
+		return true;
+	}
+	return group.ungroup_supported === true;
+}
+
+/** Hide gated chrome until the bag exists, or v1 leftover ungroup_supported is true. */
+export function groupActionSupportedWhenKnown(group, key) {
+	if (!groupSupportedKnown(group)) return false;
+	return groupActionSupported(group, key);
+}
+
 export function getGroupCoverSourceFromMeta(meta) {
 	const groupPayload = meta?.group && typeof meta.group === "object" ? meta.group : null;
 	if (groupPayload?.kind === "group_v2") {

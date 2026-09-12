@@ -1,5 +1,11 @@
 import { describe, expect, test } from "@jest/globals";
-import { groupActionSupported, groupCreationBadgeHtml, isProjectGroupMark } from "../public/shared/creationGroupMedia.js";
+import {
+	groupActionSupported,
+	groupActionSupportedWhenKnown,
+	groupCreationBadgeHtml,
+	groupSupportedKnown,
+	isProjectGroupMark,
+} from "../public/shared/creationGroupMedia.js";
 
 describe("creationGroupMedia", () => {
 	test("project mark uses badge, then type", () => {
@@ -20,5 +26,18 @@ describe("creationGroupMedia", () => {
 	test("carousel missing means show", () => {
 		expect(groupActionSupported({ kind: "group_creations" }, "carousel")).toBe(true);
 		expect(groupActionSupported({ supported: { carousel: false } }, "carousel")).toBe(false);
+	});
+
+	test("unknown group seed hides gated chrome until supported is known", () => {
+		expect(groupSupportedKnown(null)).toBe(true);
+		expect(groupSupportedKnown({ kind: "group_creations" })).toBe(false);
+		expect(groupSupportedKnown({ kind: "group_creations", ungroup_supported: true })).toBe(true);
+		expect(groupSupportedKnown({ kind: "group_creations", ungroup_supported: false })).toBe(false);
+		expect(groupSupportedKnown({ kind: "group_v2", supported: { publish: false } })).toBe(true);
+		expect(groupActionSupportedWhenKnown({ kind: "group_creations" }, "publish")).toBe(false);
+		expect(groupActionSupportedWhenKnown({ kind: "group_creations", ungroup_supported: true }, "publish")).toBe(true);
+		expect(groupActionSupportedWhenKnown({ kind: "group_creations", ungroup_supported: false }, "publish")).toBe(false);
+		expect(groupActionSupportedWhenKnown({ supported: { publish: false } }, "publish")).toBe(false);
+		expect(groupActionSupportedWhenKnown(null, "publish")).toBe(true);
 	});
 });

@@ -4566,6 +4566,20 @@ button.creation-detail-group-item {
 	z-index: 2;
 }
 
+.creation-detail-group-thumb--audio {
+	background:
+		radial-gradient(ellipse at 50% 50%, color-mix(in srgb, var(--color-purple) 18%, transparent), transparent 55%),
+		#14141a;
+	color: var(--color-purple);
+}
+
+.creation-detail-group-wave {
+	width: 70%;
+	height: auto;
+	color: inherit;
+	pointer-events: none;
+}
+
 .creation-detail-group-kind {
 	position: absolute;
 	right: 4px;
