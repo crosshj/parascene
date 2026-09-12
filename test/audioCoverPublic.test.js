@@ -28,4 +28,17 @@ describe('publicAudioWaveformCoverPath', () => {
 	test('video is left alone', () => {
 		expect(publicAudioWaveformCoverPath('video', { media_type: 'video' }, '/poster.jpg')).toBeNull();
 	});
+
+	test('old waveform SVG and audio streams are not album art', () => {
+		expect(
+			publicAudioWaveformCoverPath(
+				'audio',
+				{ media_type: 'audio', import: { provider: 'file' } },
+				'https://www.parascene.com/static/audio-cover.svg'
+			)
+		).toBe(PUBLIC_AUDIO_WAVEFORM_COVER_PATH);
+		expect(
+			publicAudioWaveformCoverPath('audio', { media_type: 'audio' }, '/api/create/images/22/audio')
+		).toBe(PUBLIC_AUDIO_WAVEFORM_COVER_PATH);
+	});
 });

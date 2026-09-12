@@ -4566,11 +4566,17 @@ button.creation-detail-group-item {
 	z-index: 2;
 }
 
+.creation-detail-group-thumb-audio,
 .creation-detail-group-thumb--audio {
 	background:
 		radial-gradient(ellipse at 50% 50%, color-mix(in srgb, var(--color-purple) 18%, transparent), transparent 55%),
 		#14141a;
 	color: var(--color-purple);
+}
+
+.creation-detail-group-thumb img[src*="audio-cover"] {
+	object-fit: contain;
+	background: #14141a;
 }
 
 .creation-detail-group-thumb--audio .creation-detail-group-wave,

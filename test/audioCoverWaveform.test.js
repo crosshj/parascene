@@ -57,6 +57,23 @@ describe('creationNeedsAudioWaveformCover', () => {
 		).toBe('video');
 	});
 
+	test('placeholder file_path is not album art', () => {
+		expect(
+			creationNeedsAudioWaveformCover({
+				media_type: 'audio',
+				file_path: '/api/images/created/1.png',
+				meta: { media_type: 'audio', method: 'lyria' },
+			})
+		).toBe(true);
+		expect(
+			creationNeedsAudioWaveformCover({
+				media_type: 'audio',
+				url: '/images/audio-cover-waveform.svg',
+				meta: { media_type: 'audio', import: { provider: 'file' } },
+			})
+		).toBe(true);
+	});
+
 	test('images never get a waveform cover', () => {
 		expect(creationNeedsAudioWaveformCover({ media_type: 'image', url: '/x.png' })).toBe(false);
 		expect(creationMediaType({ meta: { media_type: 'audio' } })).toBe('audio');

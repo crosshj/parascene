@@ -80,11 +80,21 @@ export function resolveCreationAudioPlayUrl(data, opts = {}) {
 }
 
 function firstCoverUrl(item) {
-	for (const key of ['url', 'thumbnail_url', 'image_url', 'fit_thumbnail_url']) {
+	for (const key of ['url', 'thumbnail_url', 'image_url', 'fit_thumbnail_url', 'file_path']) {
 		const value = item?.[key];
 		if (typeof value === 'string' && value.trim()) return value.trim();
 	}
 	return '';
+}
+
+/** Transparent PNG / waveform SVG / audio stream — not album art. */
+export function isPlaceholderAudioCover(path) {
+	const trimmed = typeof path === 'string' ? path.trim() : '';
+	if (!trimmed) return false;
+	const file = (trimmed.split(/[?#]/)[0] || '').toLowerCase();
+	if (file.endsWith('.svg')) return true;
+	if (file.includes('audio-cover')) return true;
+	return /\/api\/create\/images\/\d+\/audio\/?$/.test(file);
 }
 
 function audioImportProvider(meta) {
@@ -92,13 +102,15 @@ function audioImportProvider(meta) {
 	return typeof provider === 'string' ? provider.trim().toLowerCase() : '';
 }
 
-/** Suno (and similar) album art — keep the bitmap. Generated speech/music uses a transparent PNG. */
+/** Suno (and similar) album art — keep the bitmap. Generated speech/music is not a cover. */
 export function creationHasRealAudioCover(item) {
 	if (creationMediaType(item) !== 'audio') return false;
 	const meta = parseCreationCoverMeta(item);
 	if (meta?.cover_placeholder === true) return false;
+	const cover = firstCoverUrl(item);
+	if (isPlaceholderAudioCover(cover)) return false;
 	const provider = audioImportProvider(meta);
-	if ((provider === 'suno' || provider === 'file') && firstCoverUrl(item)) return true;
+	if ((provider === 'suno' || provider === 'file') && cover) return true;
 	return false;
 }
 

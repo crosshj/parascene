@@ -6,6 +6,16 @@ function audioImportProvider(meta) {
 	return typeof provider === "string" ? provider.trim().toLowerCase() : "";
 }
 
+/** Transparent PNG / old waveform SVG / audio stream — not album art. */
+export function isPlaceholderAudioCover(path) {
+	const trimmed = typeof path === "string" ? path.trim() : "";
+	if (!trimmed) return false;
+	const file = (trimmed.split(/[?#]/)[0] || "").toLowerCase();
+	if (file.endsWith(".svg")) return true;
+	if (file.includes("audio-cover")) return true;
+	return /\/api\/create\/images\/\d+\/audio\/?$/.test(file);
+}
+
 /**
  * Video tiles work in chat because they have a poster URL that loads.
  * Generated audio stored a transparent PNG (or a private image URL that 404s in chat).
@@ -20,10 +30,13 @@ export function publicAudioWaveformCoverPath(mediaType, meta, existingUrl = "") 
 	if (String(mediaType || "").trim().toLowerCase() !== "audio") return null;
 	const provider = audioImportProvider(meta);
 	if (provider === "youtube") return null;
-	if ((provider === "suno" || provider === "file") && String(existingUrl || "").trim()) {
+	const existing = String(existingUrl || "").trim();
+	if ((provider === "suno" || provider === "file") && existing && !isPlaceholderAudioCover(existing)) {
 		return null;
 	}
-	if (meta?.cover_placeholder === true) return PUBLIC_AUDIO_WAVEFORM_COVER_PATH;
+	if (meta?.cover_placeholder === true || isPlaceholderAudioCover(existing)) {
+		return PUBLIC_AUDIO_WAVEFORM_COVER_PATH;
+	}
 	if (provider === "suno" || provider === "file") return null;
 	return PUBLIC_AUDIO_WAVEFORM_COVER_PATH;
 }

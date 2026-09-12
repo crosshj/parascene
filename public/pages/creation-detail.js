@@ -4838,6 +4838,7 @@ async function loadCreation() {
 						creationNeedsAudioWaveformCover({
 							id: source.id,
 							url: source.filePath || '',
+							file_path: source.filePath || '',
 							media_type: 'audio',
 							meta: source.meta,
 						});

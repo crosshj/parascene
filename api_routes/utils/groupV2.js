@@ -1,3 +1,5 @@
+import { publicAudioWaveformCoverPath } from "./audioCoverPublic.js";
+
 /** Generic group v2 list: 1-to-1 view+pointer rows. Not a project API. */
 
 export const GROUP_V2_KIND = "group_v2";
@@ -210,6 +212,14 @@ export function normalizeView(raw) {
 	const height = Number(raw.height);
 	if (Number.isFinite(width) && width > 0) view.width = Math.round(width);
 	if (Number.isFinite(height) && height > 0) view.height = Math.round(height);
+	if (raw.coverPlaceholder === true || raw.cover_placeholder === true) {
+		view.coverPlaceholder = true;
+	}
+	const importRaw = raw.import;
+	if (importRaw && typeof importRaw === "object" && !Array.isArray(importRaw)) {
+		const provider = typeof importRaw.provider === "string" ? importRaw.provider.trim() : "";
+		if (provider) view.import = { provider };
+	}
 	const audio = raw.audio;
 	if (audio && typeof audio === "object" && !Array.isArray(audio)) {
 		const cdnId = typeof audio.cdn_id === "string" ? audio.cdn_id.trim() : "";
@@ -384,6 +394,12 @@ export function viewFromCreationRow(row, extra = {}) {
 			};
 		}
 	}
+	if (meta.cover_placeholder === true) view.coverPlaceholder = true;
+	const importIn = extra.import && typeof extra.import === "object" ? extra.import : meta.import;
+	if (importIn && typeof importIn === "object") {
+		const provider = typeof importIn.provider === "string" ? importIn.provider.trim() : "";
+		if (provider) view.import = { provider };
+	}
 	return view;
 }
 
@@ -489,11 +505,16 @@ export function costumeGroupV2Meta(meta, { title } = {}) {
 		const snapshotMeta = { media_type: mediaType };
 		if (view.videoUrl) snapshotMeta.video = { file_path: view.videoUrl };
 		if (view.audio && typeof view.audio === "object") snapshotMeta.audio = view.audio;
+		if (view.coverPlaceholder) snapshotMeta.cover_placeholder = true;
+		if (view.import) snapshotMeta.import = view.import;
+		const rawPath = view.filePath || view.url || "";
+		const poster = publicAudioWaveformCoverPath(mediaType, snapshotMeta, rawPath);
+		if (poster) snapshotMeta.cover_placeholder = true;
 		snapshots.push({
 			order: snapshots.length,
 			id: item.pointer.creationId,
 			filename: view.filename || null,
-			file_path: view.filePath || view.url || null,
+			file_path: poster || rawPath || null,
 			width: view.width ?? null,
 			height: view.height ?? null,
 			color: view.color || null,

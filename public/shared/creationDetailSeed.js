@@ -4,6 +4,10 @@
  */
 
 import { groupActionSupportedWhenKnown } from './creationGroupMedia.js';
+import {
+	audioCoverWaveformHtml,
+	creationNeedsAudioWaveformCover,
+} from './audioCoverWaveform.js';
 
 export const CREATION_DETAIL_SEED_KEY = 'prsn-creation-detail-seed';
 export const CREATOR_STRIP_CACHE_KEY = 'prsn-creator-detail-strip';
@@ -172,9 +176,12 @@ function seedGroupSourceEntries(seed) {
 			const id = Number(row.id);
 			const url = typeof row.file_path === 'string' ? row.file_path.trim() : '';
 			if (!(Number.isFinite(id) && id > 0) && !url) continue;
+			const sourceMeta = row.meta && typeof row.meta === 'object' ? row.meta : null;
 			fromMeta.push({
 				id: Number.isFinite(id) && id > 0 ? id : 0,
 				url,
+				mediaType: String(sourceMeta?.media_type || row.media_type || '').trim().toLowerCase(),
+				meta: sourceMeta,
 			});
 		}
 	}
@@ -195,6 +202,8 @@ function seedGroupSourceEntries(seed) {
 		out.push({
 			id: fromRow?.id || 0,
 			url,
+			mediaType: fromRow?.mediaType || '',
+			meta: fromRow?.meta || null,
 		});
 	}
 	return out;
@@ -221,10 +230,22 @@ function seedGroupSectionHtml(seed) {
 			const aria = hasId
 				? ` aria-label="View source #${id}"`
 				: ' aria-label="Grouped creation"';
-			const inner = entry.url
-				? `<img src="${esc(entry.url)}" alt="" loading="eager" decoding="async">`
-				: `<span class="skeleton" style="display: block; width: 100%; height: 100%;" aria-hidden="true"></span>`;
-			const fallbackClass = entry.url ? '' : ' creation-detail-group-item-fallback';
+			const needsWave = creationNeedsAudioWaveformCover({
+				media_type: entry.mediaType,
+				url: entry.url,
+				file_path: entry.url,
+				meta: { ...(entry.meta || {}), media_type: entry.mediaType || entry.meta?.media_type },
+			});
+			const inner = needsWave
+				? audioCoverWaveformHtml('creation-audio-wave creation-detail-group-wave')
+				: entry.url
+					? `<img src="${esc(entry.url)}" alt="" loading="eager" decoding="async">`
+					: `<span class="skeleton" style="display: block; width: 100%; height: 100%;" aria-hidden="true"></span>`;
+			const fallbackClass = needsWave
+				? ' creation-detail-group-thumb--audio creation-audio-cover'
+				: entry.url
+					? ''
+					: ' creation-detail-group-item-fallback';
 			return `<div class="creation-detail-group-slot">
 						<div class="creation-detail-group-thumb-wrap">
 							<button type="button" class="creation-detail-group-item creation-detail-group-thumb${fallbackClass}${active}"${thumbAttr}${aria}>

@@ -232,4 +232,53 @@ describe("groupV2", () => {
 		expect(www.meta.group.source_creations[0].meta.video.file_path).toBe("/api/videos/created/v12.mp4");
 		expect(www.meta.group.source_creations[0].file_path).toBe("/api/images/created/219_12.png");
 	});
+
+	test("costume gives generated audio the public waveform poster, not the placeholder PNG", () => {
+		const view = viewFromCreationRow({
+			id: 22,
+			title: "Line",
+			filename: "219_22.png",
+			file_path: "/api/images/created/219_22.png",
+			status: "completed",
+			meta: {
+				media_type: "audio",
+				cover_placeholder: true,
+				audio: { cdn_id: "o_aaaaaaaaaaaaaaaaaaaaaaaa" },
+			},
+		});
+		expect(view.coverPlaceholder).toBe(true);
+		const www = applyCostumeToCreationPayload(
+			{
+				id: 7,
+				title: "List",
+				meta: emptyGroupV2Meta({
+					items: [{ pointer: { kind: "creation", creationId: 22 }, cover: true, view }],
+				}),
+			},
+			{ raw: false },
+		);
+		expect(www.meta.group.source_creations[0].meta.media_type).toBe("audio");
+		expect(www.meta.group.source_creations[0].meta.cover_placeholder).toBe(true);
+		expect(www.meta.group.source_creations[0].file_path).toBe("/images/audio-cover-waveform.svg");
+	});
+
+	test("costume keeps Suno album art", () => {
+		const view = viewFromCreationRow({
+			id: 33,
+			file_path: "https://cdn.example/suno-cover.jpg",
+			status: "completed",
+			meta: { media_type: "audio", import: { provider: "suno" } },
+		});
+		const www = applyCostumeToCreationPayload(
+			{
+				id: 7,
+				title: "List",
+				meta: emptyGroupV2Meta({
+					items: [{ pointer: { kind: "creation", creationId: 33 }, cover: true, view }],
+				}),
+			},
+			{ raw: false },
+		);
+		expect(www.meta.group.source_creations[0].file_path).toBe("https://cdn.example/suno-cover.jpg");
+	});
 });
