@@ -1,26 +1,54 @@
 /**
  * Group carousel / video playlist and cover thumbs for `.route-media` grids.
+ *
+ * Loaded via `import(\`.../routeCardGroupMedia.js${qs}\`)`. Direct siblings must
+ * use the same query; static `import './foo.js'` can resolve a stale cached copy.
  */
+const _qs = (() => {
+	try {
+		const fromModule = new URL(import.meta.url).search;
+		if (fromModule) return fromModule;
+	} catch {
+		/* ignore */
+	}
+	const v =
+		typeof document !== 'undefined'
+			? document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() || ''
+			: '';
+	return v ? `?v=${encodeURIComponent(v)}` : '';
+})();
 
-import { setRouteMediaBackgroundImage } from "./routeMedia.js";
-import {
+const [
+	routeMediaMod,
+	audioCoverWaveformMod,
+	creationGroupMediaMod,
+	feedCardBuildMod,
+] = await Promise.all([
+	import(`./routeMedia.js${_qs}`),
+	import(`./audioCoverWaveform.js${_qs}`),
+	import(`./creationGroupMedia.js${_qs}`),
+	import(`./feedCardBuild.js${_qs}`),
+]);
+const { setRouteMediaBackgroundImage } = routeMediaMod;
+const {
 	creationMediaType,
 	creationNeedsAudioWaveformCover,
 	mountAudioCoverWaveform,
-} from "./audioCoverWaveform.js";
-import {
+} = audioCoverWaveformMod;
+const {
 	normalizeRouteCardFeedItem,
 	parseCreationItemMeta,
 	resolveGroupCoverDisplayUrl,
-	isGroupCreationItem
-} from "./creationGroupMedia.js";
-import {
+	isGroupCreationItem,
+	routeCardGroupBadgeHtml,
+} = creationGroupMediaMod;
+const {
 	getFeedItemGroupCarouselSources,
 	getFeedItemGroupVideoSlides,
 	setupFeedCardGroupCarousel,
 	setupFeedCardGroupVideoPlaylist,
-	feedItemCardImageUrl
-} from "./feedCardBuild.js";
+	feedItemCardImageUrl,
+} = feedCardBuildMod;
 
 function resolveRouteCardThumbUrl(item, preferThumbnail, isVideo) {
 	const feedItem = normalizeRouteCardFeedItem(item);
@@ -112,4 +140,4 @@ export function hydrateRouteCardMedia(mediaEl, item, options = {}) {
 	return { kind: "single" };
 }
 
-export { isGroupCreationItem, routeCardGroupBadgeHtml } from "./creationGroupMedia.js";
+export { isGroupCreationItem, routeCardGroupBadgeHtml };

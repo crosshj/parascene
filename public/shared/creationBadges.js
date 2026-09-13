@@ -4,6 +4,12 @@
  */
 
 const _qs = (() => {
+	try {
+		const fromModule = new URL(import.meta.url).search;
+		if (fromModule) return fromModule;
+	} catch {
+		/* ignore */
+	}
 	const v =
 		typeof document !== 'undefined'
 			? document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() || ''

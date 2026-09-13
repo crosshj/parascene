@@ -1,12 +1,47 @@
-import { eyeHiddenIcon, linkIcon2 } from '/icons/svg-strings.js';
-import { isChatBroadcastMentionSlug } from './chatBroadcastMentions.js';
-import { SPECIAL_HASHTAG_HREFS } from './hashtagDestination.js';
-import {
-	attachMediaAudioLeveling,
-	primeMediaElementForAudioLeveling
-} from './mediaAudioLeveling.js';
-import { mountSequentialVideoPlayer } from './sequentialVideoPlayer.js';
-import { audioCoverWaveformHtml, creationNeedsAudioWaveformCover, creationMediaType, resolveCreationAudioPlayUrl } from './audioCoverWaveform.js';
+/**
+ * Loaded via `import(\`.../userText.js${qs}\`)`. Direct siblings must use the same
+ * query; static `import './foo.js'` can resolve a stale cached copy.
+ */
+const _qs = (() => {
+	try {
+		const fromModule = new URL(import.meta.url).search;
+		if (fromModule) return fromModule;
+	} catch {
+		/* ignore */
+	}
+	const v =
+		typeof document !== 'undefined'
+			? document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() || ''
+			: '';
+	return v ? `?v=${encodeURIComponent(v)}` : '';
+})();
+
+const [
+	svgMod,
+	chatBroadcastMentionsMod,
+	hashtagDestinationMod,
+	mediaAudioLevelingMod,
+	sequentialVideoPlayerMod,
+	audioCoverWaveformMod,
+] = await Promise.all([
+	import(`/icons/svg-strings.js${_qs}`),
+	import(`./chatBroadcastMentions.js${_qs}`),
+	import(`./hashtagDestination.js${_qs}`),
+	import(`./mediaAudioLeveling.js${_qs}`),
+	import(`./sequentialVideoPlayer.js${_qs}`),
+	import(`./audioCoverWaveform.js${_qs}`),
+]);
+const { eyeHiddenIcon, linkIcon2 } = svgMod;
+const { isChatBroadcastMentionSlug } = chatBroadcastMentionsMod;
+const { SPECIAL_HASHTAG_HREFS } = hashtagDestinationMod;
+const { attachMediaAudioLeveling, primeMediaElementForAudioLeveling } = mediaAudioLevelingMod;
+const { mountSequentialVideoPlayer } = sequentialVideoPlayerMod;
+const {
+	audioCoverWaveformHtml,
+	creationNeedsAudioWaveformCover,
+	creationMediaType,
+	resolveCreationAudioPlayUrl,
+} = audioCoverWaveformMod;
 
 /**
  * Escapes text for safe HTML insertion.

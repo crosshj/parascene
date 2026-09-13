@@ -6,6 +6,12 @@
  * chunks (missing exports). All direct siblings are loaded below with the same asset-version query.
  */
 const _qs = (() => {
+	try {
+		const fromModule = new URL(import.meta.url).search;
+		if (fromModule) return fromModule;
+	} catch {
+		/* ignore */
+	}
 	const v =
 		typeof document !== 'undefined'
 			? document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() || ''

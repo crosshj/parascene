@@ -1,10 +1,29 @@
 /**
  * Shared creation card shell: .route-card.route-card-image with .route-media, optional badges, .route-details.
  * Callers supply details content and handle click/observers. Used by explore, creations, creation-detail, user-profile.
+ *
+ * Loaded via `import(\`.../creationCard.js${qs}\`)`. Direct siblings must use the same query.
  */
+const _qs = (() => {
+	try {
+		const fromModule = new URL(import.meta.url).search;
+		if (fromModule) return fromModule;
+	} catch {
+		/* ignore */
+	}
+	const v =
+		typeof document !== 'undefined'
+			? document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() || ''
+			: '';
+	return v ? `?v=${encodeURIComponent(v)}` : '';
+})();
 
-import { challengeEnteredBadgeHtml } from './creationBadges.js';
-import { audioCoverWaveformHtml } from './audioCoverWaveform.js';
+const [creationBadgesMod, audioCoverWaveformMod] = await Promise.all([
+	import(`./creationBadges.js${_qs}`),
+	import(`./audioCoverWaveform.js${_qs}`),
+]);
+const { challengeEnteredBadgeHtml } = creationBadgesMod;
+const { audioCoverWaveformHtml } = audioCoverWaveformMod;
 
 const html = String.raw;
 

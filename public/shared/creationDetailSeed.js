@@ -1,13 +1,31 @@
 /**
  * Same-origin seed so creation detail (iframe or in-shell) can paint from a feed card
  * without waiting on GET /api/create/images/:id.
+ *
+ * Loaded via `import(\`.../creationDetailSeed.js${qs}\`)`. Direct siblings must use
+ * the same query; static `import './foo.js'` can resolve a stale cached copy
+ * (missing named exports).
  */
+const _qs = (() => {
+	try {
+		const fromModule = new URL(import.meta.url).search;
+		if (fromModule) return fromModule;
+	} catch {
+		/* ignore */
+	}
+	const v =
+		typeof document !== 'undefined'
+			? document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() || ''
+			: '';
+	return v ? `?v=${encodeURIComponent(v)}` : '';
+})();
 
-import { groupActionSupportedWhenKnown } from './creationGroupMedia.js';
-import {
-	audioCoverWaveformHtml,
-	creationNeedsAudioWaveformCover,
-} from './audioCoverWaveform.js';
+const [creationGroupMediaMod, audioCoverWaveformMod] = await Promise.all([
+	import(`./creationGroupMedia.js${_qs}`),
+	import(`./audioCoverWaveform.js${_qs}`),
+]);
+const { groupActionSupportedWhenKnown } = creationGroupMediaMod;
+const { audioCoverWaveformHtml, creationNeedsAudioWaveformCover } = audioCoverWaveformMod;
 
 export const CREATION_DETAIL_SEED_KEY = 'prsn-creation-detail-seed';
 export const CREATOR_STRIP_CACHE_KEY = 'prsn-creator-detail-strip';
