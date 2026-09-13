@@ -40,6 +40,7 @@ import { getReactionsForCommentIds } from "./comments.js";
 import { getClientIdFromRequest, mergePrsnCidsIntoProfileMeta, prsnCidFromMeta } from "./utils/prsnCids.js";
 import { appendPrsnCidsForUserId, tryRequestMetaFromRow } from "./utils/userPrsnCids.js";
 import { applySocialFieldUpdates, applySocialObjectUpdates } from "../public/shared/profileSocials.js";
+import { creationMetaHasChallengeSubmission } from "../public/shared/challengeSubmitMeta.js";
 
 export default function createProfileRoutes({ queries }) {
 	const router = express.Router();
@@ -1714,15 +1715,12 @@ export default function createProfileRoutes({ queries }) {
 		}
 	});
 
-	// Public-ish profile summary (auth required for now)
+	// Profile summary: logged-out viewers get the public fields; signed-in viewers keep follow/self data.
 	router.get(["/api/users/:id/profile", "/api/users/by-username/:username/profile"], async (req, res) => {
 		try {
-			if (!req.auth?.userId) {
-				return res.status(401).json({ error: "Unauthorized" });
-			}
-
-			const viewer = await queries.selectUserById.get(req.auth.userId);
-			if (!viewer) {
+			const viewerId = req.auth?.userId ? Number(req.auth.userId) : null;
+			const viewer = viewerId ? await queries.selectUserById.get(viewerId) : null;
+			if (viewerId && !viewer) {
 				return res.status(404).json({ error: "User not found" });
 			}
 
@@ -1741,7 +1739,7 @@ export default function createProfileRoutes({ queries }) {
 				return trimmed || null;
 			})();
 
-			const isSelf = Number(targetUserId) === Number(req.auth.userId);
+			const isSelf = Boolean(viewer && Number(targetUserId) === Number(viewer.id));
 			const profileRow = await queries.selectUserProfileByUserId?.get(targetUserId);
 			let profile = normalizeProfileRow(profileRow);
 			if (!isSelf && profile) {
@@ -1754,25 +1752,32 @@ export default function createProfileRoutes({ queries }) {
 			const publishedCountRow = await queries.selectPublishedCreatedImageCountForUser?.get(targetUserId);
 			const likesCountRow = await queries.selectLikesReceivedForUserPublished?.get(targetUserId);
 			const followerCountRow = await queries.selectFollowerCountForUser?.get(targetUserId);
+			const publishedCount = Number(publishedCountRow?.count ?? 0);
+			const allCount = Number(allCountRow?.count ?? 0);
 
 			const stats = {
-				creations_total: Number(allCountRow?.count ?? 0),
-				creations_published: Number(publishedCountRow?.count ?? 0),
+				creations_total: viewer ? allCount : publishedCount,
+				creations_published: publishedCount,
 				likes_received: Number(likesCountRow?.count ?? 0),
 				followers_count: Number(followerCountRow?.count ?? 0),
 				member_since: target.created_at ?? null
 			};
 
-			const viewerFollowsRow = isSelf
+			const viewerFollowsRow = (!viewer || isSelf)
 				? null
 				: queries.selectUserFollowStatus?.get
-					? await queries.selectUserFollowStatus.get(req.auth.userId, targetUserId)
+					? await queries.selectUserFollowStatus.get(viewer.id, targetUserId)
 					: null;
 			const viewerFollows = Boolean(viewerFollowsRow?.viewer_follows);
 
 			const publicUser = isSelf
 				? { id: target.id, email: target.email, role: target.role, created_at: target.created_at }
-				: { id: target.id, role: target.role, created_at: target.created_at, email_prefix: emailPrefix };
+				: {
+					id: target.id,
+					role: target.role,
+					created_at: target.created_at,
+					...(viewer ? { email_prefix: emailPrefix } : {})
+				};
 
 			const plan = target?.meta?.plan === "founder" ? "founder" : "free";
 			return res.json({
@@ -1789,15 +1794,12 @@ export default function createProfileRoutes({ queries }) {
 		}
 	});
 
-	// Created images for a user (published-only unless viewer is owner and include=all)
+	// Created images for a user (published-only unless viewer is owner/admin and include=all)
 	router.get(["/api/users/:id/created-images", "/api/users/by-username/:username/created-images"], async (req, res) => {
 		try {
-			if (!req.auth?.userId) {
-				return res.status(401).json({ error: "Unauthorized" });
-			}
-
-			const viewer = await queries.selectUserById.get(req.auth.userId);
-			if (!viewer) {
+			const viewerId = req.auth?.userId ? Number(req.auth.userId) : null;
+			const viewer = viewerId ? await queries.selectUserById.get(viewerId) : null;
+			if (viewerId && !viewer) {
 				return res.status(404).json({ error: "User not found" });
 			}
 
@@ -1807,7 +1809,7 @@ export default function createProfileRoutes({ queries }) {
 			}
 			const targetUserId = resolved.targetUserId;
 
-			const isSelf = Number(targetUserId) === Number(req.auth.userId);
+			const isSelf = Boolean(viewer && Number(targetUserId) === Number(viewer.id));
 			const isAdmin = viewer?.role === 'admin';
 			const include = String(req.query?.include || "").toLowerCase();
 			const wantAll = include === "all";
@@ -1883,7 +1885,12 @@ export default function createProfileRoutes({ queries }) {
 			});
 
 			let resultMapped = mapped;
-			if (!enableNsfw) {
+			if (!viewer) {
+				resultMapped = mapped.filter((img) => {
+					if (img.nsfw) return false;
+					return !creationMetaHasChallengeSubmission(img.meta);
+				});
+			} else if (!enableNsfw) {
 				resultMapped = mapped.filter((img) => !img.nsfw);
 			}
 			const has_more = mapped.length === limit;

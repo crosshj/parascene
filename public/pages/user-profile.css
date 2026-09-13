@@ -2,6 +2,59 @@
    User Profile Page Styles
    ============================================ */
 
+/* Guest profile: landing/try-style header, no app chrome or bottom nav. */
+body.user-profile-public-page header {
+	background: transparent !important;
+	border-bottom: 1px solid transparent;
+	backdrop-filter: none !important;
+	-webkit-backdrop-filter: none !important;
+	transition: background 0.3s ease, border-bottom-color 0.3s ease, backdrop-filter 0.3s ease;
+}
+
+body.user-profile-public-page header::before {
+	display: none !important;
+}
+
+body.user-profile-public-page .hamburger-button,
+body.user-profile-public-page .mobile-menu,
+body.user-profile-public-page .mobile-menu-backdrop {
+	display: none !important;
+}
+
+body.user-profile-public-page header.scrolled {
+	background: linear-gradient(to bottom,
+			rgba(246, 247, 251, 1) 0%,
+			rgba(246, 247, 251, 0.95) 20%,
+			rgba(246, 247, 251, 0.8) 50%,
+			rgba(246, 247, 251, 0.4) 100%) !important;
+	border-bottom: 1px solid rgba(226, 232, 240, 0.3);
+	backdrop-filter: blur(20px) saturate(180%) !important;
+	-webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+}
+
+body.user-profile-public-page header.scrolled::before {
+	display: block !important;
+}
+
+@media (prefers-color-scheme: dark) {
+	body.user-profile-public-page header.scrolled {
+		background: linear-gradient(to bottom,
+				rgba(26, 22, 40, 1) 0%,
+				rgba(26, 22, 40, 0.95) 20%,
+				rgba(26, 22, 40, 0.8) 50%,
+				rgba(26, 22, 40, 0.4) 100%) !important;
+		border-bottom: 1px solid rgba(61, 53, 82, 0.3);
+		backdrop-filter: blur(20px) saturate(180%) !important;
+		-webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+	}
+}
+
+@media (max-width: 768px) {
+	body.user-profile-public-page main {
+		padding-bottom: 48px;
+	}
+}
+
 /* Embed iframe: scrollbar hiding + layout (chrome clearance in global.css). */
 html.profile-page-embed-doc,
 body.profile-page-embed[data-entry="user-profile"] {

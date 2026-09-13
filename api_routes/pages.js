@@ -713,6 +713,32 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 		return res.redirect(`/auth.html?${qs.toString()}`);
 	}
 
+	function buildGuestHeaderHtml(returnPath) {
+		const returnUrl = normalizeReturnUrl(returnPath);
+		const qs = new URLSearchParams({ returnUrl });
+		const href = `/auth.html?${qs.toString()}`;
+		return `
+		<app-navigation>
+			<a href="${href}#login" class="header-auth-link">Login</a>
+			<a href="${href}#signup" class="header-auth-link btn-primary">Sign Up</a>
+		</app-navigation>
+	`.trim();
+	}
+
+	async function getLoggedInUserOrNull(req, res) {
+		const userId = req.auth?.userId;
+		if (!userId) return null;
+		const user = await queries.selectUserById.get(userId);
+		if (!user) {
+			if (req.cookies?.[COOKIE_NAME]) {
+				clearAuthCookie(res, req);
+			}
+			return null;
+		}
+		req.viewerFeedBetaEnabled = canAccessFeedBeta(user);
+		return user;
+	}
+
 	function isWelcomeTestMode(req) {
 		const testEmail = String(req?.query?.testEmail ?? "").trim();
 		if (testEmail.length > 0) return true;
@@ -821,10 +847,35 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 		return res.send(htmlContent);
 	});
 
+	async function sendPublicUserProfilePage(req, res, profileRouteContext) {
+		try {
+			const fs = await import("fs/promises");
+			const htmlPath = path.join(pagesDir, "user-profile-public.html");
+			let pageHtml = await fs.readFile(htmlPath, "utf-8");
+			pageHtml = pageHtml.replace("<!--APP_HEADER-->", buildGuestHeaderHtml(req.originalUrl || req.path || "/"));
+			const profileContextScript = `<script>window.__ps_profile_context=${serializeInlineScript(profileRouteContext)};</script>`;
+			pageHtml = pageHtml.replace(
+				/<script\s+type="module"\s+src="\/pages\/user-profile-public\.js\{\{V\}\}"><\/script>/i,
+				`${profileContextScript}\n\t<script type="module" src="/pages/user-profile-public.js{{V}}"></script>`
+			);
+			const handle = String(profileRouteContext?.resolved?.user_name || "").trim();
+			if (handle) {
+				pageHtml = pageHtml.replace(
+					"<title>parascene - profile</title>",
+					`<title>parascene - @${handle}</title>`
+				);
+			}
+			pageHtml = injectCommonHead(pageHtml, getPageTokens(req));
+			res.setHeader("Content-Type", "text/html");
+			return res.send(pageHtml);
+		} catch {
+			return res.status(500).send("Internal server error");
+		}
+	}
+
 	// User/profile discovery page - /user (me), /user/:id, /p/:personality, /t/:tag
 	router.get(["/user", "/user/:id", "/p/:personality", "/t/:tag"], async (req, res) => {
-		const user = await requireLoggedInUser(req, res);
-		if (!user) return;
+		const user = await getLoggedInUserOrNull(req, res);
 
 		// Resolve profile target context. We always serve the profile page shell
 		// and let the page decide how to render "not found / non-user" states.
@@ -912,6 +963,15 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 				user_name: null
 			};
 			profileRouteContext.target_kind = "tag";
+		}
+
+		if (!user) {
+			const wantsOwnProfile = !rawTargetId && !rawTargetUserName && !rawTargetTag;
+			if (wantsOwnProfile || rawTargetTag) {
+				redirectToAuth(req, res);
+				return;
+			}
+			return sendPublicUserProfilePage(req, res, profileRouteContext);
 		}
 
 		try {
@@ -1417,13 +1477,7 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 		return res.send(htmlContent);
 	});
 
-	// Guest header (same as landing / index): Login + Sign Up
-	const guestHeaderHtml = `
-		<app-navigation>
-			<a href="/auth#login" class="header-auth-link">Login</a>
-			<a href="/auth#signup" class="header-auth-link btn-primary">Sign Up</a>
-		</app-navigation>
-	`.trim();
+	const guestHeaderHtml = buildGuestHeaderHtml("/");
 
 	// Pricing page: when signed in use app header + mobile nav (like creation-detail); when not, use guest header.
 	router.get("/pricing", async (req, res) => {
@@ -1604,6 +1658,8 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 			req.path.startsWith("/audio-clips/") ||
 			req.path === "/user" ||
 			req.path.startsWith("/user/") ||
+			req.path.startsWith("/p/") ||
+			req.path.startsWith("/t/") ||
 			req.path === "/me" ||
 			req.path === "/signup" ||
 			req.path === "/login" ||
