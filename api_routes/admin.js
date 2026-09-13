@@ -46,6 +46,7 @@ import {
 	validateEditorialPinPolicyDocument
 } from "./feed/editorialPinPolicy.js";
 import { bumpFeedVersionCounter } from "./feed/feedVersion.js";
+import { applySocialFieldUpdates } from "../public/shared/profileSocials.js";
 
 /** Subscription ID stored in user.meta when admin grants founder status without payment. Not a Stripe ID. */
 const GIFTED_FOUNDER_SUBSCRIPTION_ID = "gifted_founder";
@@ -789,14 +790,11 @@ export default function createAdminRoutes({ queries, storage }) {
 		const oldAvatarKey = extractGenericKey(oldAvatarUrl);
 		const oldCoverKey = extractGenericKey(oldCoverUrl);
 
-		const nextSocials = {
-			...(typeof existingProfile.socials === "object" && existingProfile.socials ? existingProfile.socials : {})
-		};
-		if (typeof fields?.social_website === "string") {
-			const website = fields.social_website.trim();
-			if (website) nextSocials.website = website;
-			else delete nextSocials.website;
+		const nextSocialsResult = applySocialFieldUpdates(existingProfile.socials, fields);
+		if (!nextSocialsResult.ok) {
+			return res.status(400).json({ error: nextSocialsResult.error || "Invalid social link" });
 		}
+		const nextSocials = nextSocialsResult.socials;
 
 		const character_description = typeof fields?.character_description === "string" ? fields.character_description.trim() || null : (existingMeta.character_description ?? null);
 		const nextMeta = { ...existingMeta, character_description };

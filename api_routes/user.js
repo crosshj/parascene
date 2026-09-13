@@ -39,6 +39,7 @@ import {
 import { getReactionsForCommentIds } from "./comments.js";
 import { getClientIdFromRequest, mergePrsnCidsIntoProfileMeta, prsnCidFromMeta } from "./utils/prsnCids.js";
 import { appendPrsnCidsForUserId, tryRequestMetaFromRow } from "./utils/userPrsnCids.js";
+import { applySocialFieldUpdates, applySocialObjectUpdates } from "../public/shared/profileSocials.js";
 
 export default function createProfileRoutes({ queries }) {
 	const router = express.Router();
@@ -1108,11 +1109,22 @@ export default function createProfileRoutes({ queries }) {
 			}
 			nextMeta.character_description = typeof req.body?.character_description === "string" ? req.body.character_description.trim() || null : (existingProfile.meta?.character_description ?? null);
 
+			let nextSocials = typeof existingProfile.socials === "object" && existingProfile.socials
+				? existingProfile.socials
+				: {};
+			if (Object.prototype.hasOwnProperty.call(req.body || {}, "socials")) {
+				const applied = applySocialObjectUpdates(nextSocials, req.body.socials);
+				if (!applied.ok) {
+					return res.status(400).json({ error: applied.error || "Invalid social link" });
+				}
+				nextSocials = applied.socials;
+			}
+
 			const payload = {
 				user_name: finalUserName,
 				display_name: typeof req.body?.display_name === "string" ? req.body.display_name.trim() : null,
 				about: typeof req.body?.about === "string" ? req.body.about.trim() : null,
-				socials: typeof req.body?.socials === "object" && req.body.socials ? req.body.socials : {},
+				socials: nextSocials,
 				avatar_url: typeof req.body?.avatar_url === "string" ? req.body.avatar_url.trim() : null,
 				cover_image_url: typeof req.body?.cover_image_url === "string" ? req.body.cover_image_url.trim() : null,
 				badges: Array.isArray(req.body?.badges) ? req.body.badges : [],
@@ -1408,14 +1420,11 @@ export default function createProfileRoutes({ queries }) {
 			const oldAvatarKey = extractGenericKey(oldAvatarUrl);
 			const oldCoverKey = extractGenericKey(oldCoverUrl);
 
-			const nextSocials = {
-				...(typeof existingProfile.socials === "object" && existingProfile.socials ? existingProfile.socials : {})
-			};
-			if (typeof fields?.social_website === "string") {
-				const website = fields.social_website.trim();
-				if (website) nextSocials.website = website;
-				else delete nextSocials.website;
+			const nextSocialsResult = applySocialFieldUpdates(existingProfile.socials, fields);
+			if (!nextSocialsResult.ok) {
+				return res.status(400).json({ error: nextSocialsResult.error || "Invalid social link" });
 			}
+			const nextSocials = nextSocialsResult.socials;
 
 			const badges = parseJsonField(fields?.badges, existingProfile.badges || [], "Badges must be valid JSON.");
 			if (!Array.isArray(badges)) {
@@ -1632,6 +1641,8 @@ export default function createProfileRoutes({ queries }) {
 				}
 			}
 
+			const updatedRow = await queries.selectUserProfileByUserId?.get(req.auth.userId);
+			const profile = normalizeProfileRow(updatedRow);
 			return res.json({ ok: true, profile });
 		} catch (error) {
 			if (error?.code === "FILE_TOO_LARGE") {
@@ -1640,7 +1651,7 @@ export default function createProfileRoutes({ queries }) {
 			if (error?.code === "INVALID_JSON") {
 				return res.status(400).json({ error: error.message || "Invalid JSON" });
 			}
-			// console.error("Error updating profile (multipart):", error);
+			console.error("Error updating profile (multipart):", error);
 			return res.status(500).json({ error: "Internal server error" });
 		}
 	});

@@ -252,6 +252,91 @@ body.profile-page-embed[data-entry="user-profile"] main .user-profile-page {
 	text-decoration: underline;
 }
 
+.user-profile-socials {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px;
+	margin-top: 12px;
+}
+
+.user-profile-social-link {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	color: var(--text-muted);
+	border-radius: 6px;
+	text-decoration: none;
+}
+
+.user-profile-social-link:hover {
+	color: var(--text);
+	background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.user-profile-social-icon {
+	width: 18px;
+	height: 18px;
+	display: block;
+}
+
+.user-profile-social-icon--fill {
+	fill: currentcolor;
+}
+
+.user-profile-social-icon--stroke {
+	fill: none;
+	stroke: currentcolor;
+}
+
+.user-profile-social-field {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 0 12px;
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	background: var(--input-bg);
+}
+
+.user-profile-social-field-icon {
+	flex: 0 0 auto;
+	width: 18px;
+	height: 18px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--text-muted);
+}
+
+.user-profile-social-field-icon svg {
+	width: 18px;
+	height: 18px;
+	display: block;
+}
+
+.user-profile-edit-form .user-profile-social-field input {
+	flex: 1 1 auto;
+	min-width: 0;
+	padding: 12px 0;
+	border: none;
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
+}
+
+.user-profile-edit-form .user-profile-social-field input:focus-visible {
+	box-shadow: none;
+	border-color: transparent;
+}
+
+.user-profile-social-field:focus-within {
+	border-color: var(--focus);
+	box-shadow: 0 0 0 2px var(--focus);
+}
+
 .user-profile-content {
 	margin-top: 16px;
 }

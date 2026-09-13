@@ -29,6 +29,9 @@ let REACTION_ICONS;
 let setupReactionTooltipTap;
 let setupWhoTooltips;
 let setupFloatingWhoTooltips;
+let PROFILE_SOCIAL_NETWORKS = [];
+let validateSocialUrl;
+let socialIconFns = {};
 
 let navigateToCreation = (href) => {
 	window.location.assign(href);
@@ -108,6 +111,21 @@ async function loadDeps() {
 		const iconsMod = await import(`../icons/svg-strings.js${qs}`);
 		REACTION_ORDER = iconsMod.REACTION_ORDER;
 		REACTION_ICONS = iconsMod.REACTION_ICONS;
+		socialIconFns = {
+			website: iconsMod.globeIcon,
+			spotify: iconsMod.spotifyIcon,
+			instagram: iconsMod.instagramIcon,
+			tiktok: iconsMod.tiktokIcon,
+			soundcloud: iconsMod.soundcloudIcon,
+			youtube: iconsMod.youtubeIcon,
+			x: iconsMod.xIcon,
+			suno: iconsMod.sunoIcon,
+			nightcafe: iconsMod.nightcafeIcon
+		};
+
+		const socialsMod = await import(`../shared/profileSocials.js${qs}`);
+		PROFILE_SOCIAL_NETWORKS = socialsMod.PROFILE_SOCIAL_NETWORKS;
+		validateSocialUrl = socialsMod.validateSocialUrl;
 
 		const tooltipTapMod = await import(`../shared/reactionTooltipTap.js${qs}`);
 		const whoLabelsMod = await import(`../shared/whoLabels.js${qs}`);
@@ -402,20 +420,53 @@ function personalitySlugToDisplayTitle(slug) {
 	return parts.map((p) => (p.charAt(0).toUpperCase() + p.slice(1).toLowerCase())).join(' ');
 }
 
-function normalizeWebsite(raw) {
-	const value = typeof raw === 'string' ? raw.trim() : '';
-	if (!value) return null;
+function socialIconHtml(key, extraClass = '') {
+	const fn = socialIconFns[key];
+	if (typeof fn !== 'function') return '';
+	const kind = key === 'website' ? 'stroke' : 'fill';
+	const className = ['user-profile-social-icon', `user-profile-social-icon--${kind}`, extraClass]
+		.filter(Boolean)
+		.join(' ');
+	return fn(className);
+}
 
-	let href = value;
-	if (!/^https?:\/\//i.test(href)) href = `https://${href}`;
-
-	try {
-		const url = new URL(href);
-		const label = value.replace(/^https?:\/\//i, '').replace(/\/$/, '');
-		return { href: url.href, label: label || url.host || url.href };
-	} catch {
-		return { href, label: value };
+function renderProfileSocialsHtml(socials) {
+	if (typeof validateSocialUrl !== 'function') return '';
+	const links = [];
+	for (const network of PROFILE_SOCIAL_NETWORKS) {
+		const result = validateSocialUrl(network.key, socials?.[network.key]);
+		if (!result?.ok || !result.href) continue;
+		links.push(html`<a class="user-profile-social-link" href="${escapeHtml(result.href)}" target="_blank" rel="noopener noreferrer" aria-label="${escapeHtml(network.label)}">${socialIconHtml(network.key)}</a>`);
 	}
+	if (!links.length) return '';
+	return html`<div class="user-profile-socials" aria-label="Social links">${links.join('')}</div>`;
+}
+
+function renderSocialEditFieldsHtml(socials) {
+	const source = socials && typeof socials === 'object' ? socials : {};
+	const fields = PROFILE_SOCIAL_NETWORKS.map((network) => {
+		const stored = typeof source[network.key] === 'string' ? source[network.key] : '';
+		return html`
+							<div class="user-profile-social-field">
+								<span class="user-profile-social-field-icon" aria-hidden="true">${socialIconHtml(network.key)}</span>
+								<input name="social_${network.key}" type="text" inputmode="url" autocomplete="off" spellcheck="false"
+									aria-label="${escapeHtml(network.label)}"
+									placeholder="${escapeHtml(network.placeholder)}"
+									value="${escapeHtml(stored)}">
+							</div>`;
+	});
+	return fields.join('');
+}
+
+function validateProfileSocialForm(form) {
+	if (!form || typeof validateSocialUrl !== 'function') return { ok: true };
+	const fd = new FormData(form);
+	for (const network of PROFILE_SOCIAL_NETWORKS) {
+		const raw = fd.get(`social_${network.key}`);
+		const result = validateSocialUrl(network.key, typeof raw === 'string' ? raw : '');
+		if (!result.ok) return result;
+	}
+	return { ok: true };
 }
 
 function renderProfilePage(
@@ -434,7 +485,7 @@ function renderProfilePage(
 	const handle = guessHandle({ user, profile });
 	const about = typeof profile?.about === 'string' ? profile.about.trim() : '';
 	const characterDescription = typeof profile?.character_description === 'string' ? profile.character_description.trim() : '';
-	const website = normalizeWebsite(profile?.socials?.website);
+	const socialsHtml = renderProfileSocialsHtml(profile?.socials);
 	const avatarUrl = typeof profile?.avatar_url === 'string' ? profile.avatar_url.trim() : '';
 	const coverUrl = typeof profile?.cover_image_url === 'string' ? profile.cover_image_url.trim() : '';
 	const userNameValue = profile?.user_name && String(profile.user_name).trim() ? String(profile.user_name).trim() : '';
@@ -498,7 +549,7 @@ function renderProfilePage(
 					</div>
 					`;
 
-	const metaBlockHtml = (about || characterDescription || website)
+	const metaBlockHtml = (about || characterDescription)
 		? html`
 					<div class="user-profile-meta">
 						${about ? html`
@@ -511,13 +562,6 @@ function renderProfilePage(
 						<div class="user-profile-meta-row">
 							<span class="user-profile-meta-label">Character</span>
 							<span class="user-profile-meta-text">${processUserText(characterDescription)}</span>
-						</div>
-						` : ''}
-						${website ? html`
-						<div class="user-profile-meta-row">
-							<span class="user-profile-meta-label">Website</span>
-							<a class="user-profile-meta-link" href="${escapeHtml(website.href)}" target="_blank"
-								rel="noopener noreferrer">${escapeHtml(website.label)}</a>
 						</div>
 						` : ''}
 					</div>
@@ -533,7 +577,7 @@ function renderProfilePage(
 		handleExtraClass: isFounder ? ' founder-name' : '',
 		actionsInnerHtml,
 		statsBlockHtml,
-		metaBlockHtml
+		metaBlockHtml: `${metaBlockHtml}${socialsHtml}`
 	});
 
 	const usernameHint = '3–24 characters. Lowercase letters, numbers, and underscores only. This cannot be changed later.'
@@ -693,11 +737,9 @@ function renderProfilePage(
 						</div>
 		
 						<div class="user-profile-form-section">
-							<div class="field">
-								<label>Website</label>
-								<input name="social_website" placeholder="https://example.com"
-									value="${escapeHtml(profile?.socials?.website || '')}">
-							</div>
+							<h3 class="user-profile-form-section-title">Social networks</h3>
+							${renderSocialEditFieldsHtml(profile?.socials)}
+							<div class="user-profile-help">Add a full URL for each site. Only valid links are saved, and only filled links show as icons on your profile.</div>
 						</div>
 		
 						<div class="user-profile-form-section user-profile-account-section" data-account-email-section ${(isAdmin && !isSelf) ? 'style="display: none;"' : ''}>
@@ -2990,6 +3032,15 @@ async function init() {
 		if (errorBox) {
 			errorBox.style.display = 'none';
 			errorBox.textContent = '';
+		}
+
+		const socialCheck = validateProfileSocialForm(form);
+		if (!socialCheck.ok) {
+			if (errorBox) {
+				errorBox.style.display = 'block';
+				errorBox.textContent = socialCheck.error || 'Enter a valid URL for that site.';
+			}
+			return;
 		}
 
 		saveButton.disabled = true;
