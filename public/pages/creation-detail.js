@@ -2510,24 +2510,26 @@ function mountCreationDetailSunoPlayer(imageWrapper, meta) {
 				? `suno ${songId.slice(0, 8)}`
 				: 'Suno song';
 
-	let embedSrc = '';
-	if (embedUrlRaw) {
+	let id = songId;
+	if (!id && embedUrlRaw) {
 		try {
 			const parsed = new URL(embedUrlRaw);
+			const host = parsed.hostname.toLowerCase();
+			const match = parsed.pathname.match(/^\/embed\/([a-f0-9-]{36})\/?$/i);
 			if (
-				(parsed.hostname === 'suno.com' || parsed.hostname === 'www.suno.com') &&
-				parsed.pathname.startsWith('/embed/')
+				(host === 'suno.com' || host === 'www.suno.com') &&
+				match?.[1]
 			) {
-				embedSrc = parsed.toString();
+				id = match[1];
 			}
 		} catch {
-			embedSrc = '';
+			id = '';
 		}
 	}
-	if (!embedSrc && songId && /^[a-f0-9-]{36}$/i.test(songId)) {
-		embedSrc = `https://suno.com/embed/${encodeURIComponent(songId)}`;
-	}
-	if (!embedSrc) return;
+	if (!id || !/^[a-f0-9-]{36}$/i.test(id)) return;
+	const embedSrc = `/suno-card.html?id=${encodeURIComponent(id.toLowerCase())}${
+		title ? `&t=${encodeURIComponent(title)}` : ''
+	}`;
 
 	imageWrapper.classList.add('hero-audio-playing');
 

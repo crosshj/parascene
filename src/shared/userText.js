@@ -2363,7 +2363,9 @@ function mountSunoEmbed(a, songId, titleText) {
 	const safeTitle = titleText || `suno ${songId.slice(0, 8)}`;
 	const iframe = document.createElement('iframe');
 	iframe.className = 'connect-chat-suno-embed-iframe';
-	iframe.src = `https://suno.com/embed/${encodeURIComponent(songId)}`;
+	iframe.src = `/suno-card.html?id=${encodeURIComponent(songId)}${
+		safeTitle ? `&t=${encodeURIComponent(safeTitle)}` : ''
+	}`;
 	iframe.title = safeTitle;
 	iframe.setAttribute('allow', 'autoplay; encrypted-media; fullscreen');
 	iframe.setAttribute('allowfullscreen', '');

@@ -44,6 +44,14 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 				if (err) next();
 			});
 		});
+		router.get("/suno-card.html", (req, res, next) => {
+			const htmlPath = path.join(staticDir, "suno-card.html");
+			res.type("html");
+			res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
+			res.sendFile(htmlPath, (err) => {
+				if (err) next();
+			});
+		});
 	}
 
 	let cachedShareTemplate = null;
@@ -1600,6 +1608,7 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 			req.path === "/signup" ||
 			req.path === "/login" ||
 			req.path === "/logout" ||
+			req.path === "/suno-card.html" ||
 			req.path === "/index.html") {
 			return next(); // Let other routes handle it or 404
 		}

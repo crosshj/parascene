@@ -20,6 +20,7 @@ const ALLOWED_PATHS = [
 	{ pathPrefix: "/api/try/images/", method: "GET" },
 	{ path: "/api/qr", methods: ["GET"] },
 	{ pathPrefix: "/api/kiosk/", method: "GET" },
+	{ path: "/suno-card.html", method: "GET" },
 	{ path: "/logout", methods: ["POST"] },
 	{ path: "/auth.html", methods: ["GET"] },
 	{ path: "/me", methods: ["GET"] },
