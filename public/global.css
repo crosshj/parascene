@@ -4357,7 +4357,9 @@ body.view-nsfw .feed-card-image--group-carousel.nsfw::after {
 .occupancy-dialog-backdrop {
 	position: fixed;
 	inset: 0;
-	z-index: 4200;
+	/* Above the SPA create overlay (100000), command palette (100001) and
+	   reaction picker (100050) — this is a blocking confirm before spend. */
+	z-index: 100100;
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -4366,68 +4368,72 @@ body.view-nsfw .feed-card-image--group-carousel.nsfw::after {
 }
 
 .occupancy-dialog {
-	width: min(22.5rem, 100%);
+	width: min(24rem, 100%);
 	background: var(--surface);
 	border: 1px solid var(--border);
 	border-radius: 14px;
-	padding: 1.25rem 1.3rem 1.1rem;
+	padding: 1.35rem 1.35rem 1.25rem;
 	box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
 }
 
 .occupancy-dialog h2 {
-	margin: 0 0 0.4rem;
-	font-size: 1.05rem;
-	font-weight: 600;
+	margin: 0 0 0.45rem;
+	font-size: 1.08rem;
+	font-weight: 650;
 	letter-spacing: -0.02em;
 }
 
 .occupancy-dialog-lede {
-	margin: 0 0 1rem;
-	font-size: 0.9rem;
-	line-height: 1.45;
+	margin: 0 0 1.05rem;
+	font-size: 0.92rem;
+	line-height: 1.5;
 	color: var(--text-muted, var(--muted));
 }
 
 .occupancy-stats {
-	margin: 0;
-	display: grid;
-	grid-template-columns: 1fr 1fr;
-	gap: 0.55rem;
+	margin: 0 0 1.2rem;
+	border-top: 1px solid var(--border);
 }
 
 .occupancy-stat {
 	margin: 0;
-	padding: 0.55rem 0.65rem 0.5rem;
-	border: 1px solid var(--border);
-	border-radius: 10px;
-	background: color-mix(in srgb, var(--bg) 70%, var(--surface));
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 1rem;
+	padding: 0.6rem 0.1rem;
+	border-bottom: 1px solid var(--border);
 }
 
 .occupancy-stat dt {
 	margin: 0;
-	font-size: 0.68rem;
-	letter-spacing: 0.08em;
-	text-transform: uppercase;
+	font-size: 0.82rem;
 	color: var(--text-muted, var(--muted));
 }
 
 .occupancy-stat dd {
-	margin: 0.2rem 0 0;
+	margin: 0;
 	font-size: 0.92rem;
 	font-weight: 600;
-	line-height: 1.25;
+	line-height: 1.3;
+	text-align: right;
 }
 
 .occupancy-dialog-actions {
 	display: flex;
-	justify-content: flex-end;
-	gap: 0.5rem;
-	margin-top: 1.15rem;
+	gap: 0.6rem;
 }
 
 .occupancy-dialog-actions .btn-primary,
 .occupancy-dialog-actions .btn-secondary {
-	min-height: 2.15rem;
+	/* Equal twins regardless of host-page button context. */
+	flex: 1 1 0;
+	min-height: 2.6rem;
+	padding: 0.55rem 1rem;
+	border-radius: 10px;
+	font-size: 0.95rem;
+	font-weight: 600;
+	line-height: 1;
 }
 
 .comment-sticker-modal-overlay {

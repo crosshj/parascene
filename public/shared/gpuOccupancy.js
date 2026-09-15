@@ -81,14 +81,9 @@ export function occupancyDialogModel(occupancy, { lane = 'product' } = {}) {
 	const placeLine =
 		place <= 1 ? "You'll be next." : `You'll be ${ordinal(place)} in line.`;
 	const message = `${placeLine} ${wait[0].toUpperCase()}${wait.slice(1)} until generating starts.`;
-	const stats = [
-		{ label: 'Running', value: runningLabel(occupancy?.running) },
-		{
-			label: 'Ahead',
-			value: occupancy?.ahead ? String(occupancy.ahead) : 'None'
-		},
-		{ label: 'Wait', value: wait }
-	];
+	// Place and wait already live in the message — the rows only add what the
+	// sentence does not say (what is on the GPU now, what this will cost).
+	const stats = [{ label: 'Now running', value: runningLabel(occupancy?.running) }];
 	if (lane !== 'direct' && occupancy?.cost > 0) {
 		const c = occupancy.cost;
 		stats.push({
