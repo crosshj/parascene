@@ -793,7 +793,7 @@ export async function runCreationJob({ queries, storage, payload }) {
 					extra: lineExtraFromBody(asyncBody),
 				});
 
-				logCreation("Async provider ack received; scheduling first poll", {}
+				logCreation("Async provider ack received; scheduling first poll", {
 					imageId,
 					userId,
 					job_id: jobId,
