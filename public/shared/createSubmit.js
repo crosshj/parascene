@@ -1,5 +1,5 @@
 import { clearSharedCreatePrompt } from './createSettingsSync.js';
-import { confirmGpuOccupancyIfNeeded } from './gpuOccupancy.js';
+import { applyGpuBid, confirmGpuOccupancyIfNeeded } from './gpuOccupancy.js';
 
 export function generateCreationToken() {
 	const ts = Date.now().toString(36);
@@ -701,17 +701,22 @@ export async function submitCreationWithPending({
 }) {
 	if (!serverId || !methodKey) return null;
 
-	const occupancyOk = await confirmGpuOccupancyIfNeeded({
+	const occupancy = await confirmGpuOccupancyIfNeeded({
 		serverId,
 		method: methodKey,
 		args: args || {},
 		lane: 'product'
 	});
-	if (!occupancyOk) {
+	if (!occupancy.ok) {
 		const err = new Error('Cancelled');
 		err.code = 'occupancy_cancelled';
 		throw err;
 	}
+	args = applyGpuBid(args || {}, occupancy.bid, 'product');
+	const billedCost =
+		Number(occupancy.bid?.charge) > 0
+			? occupancy.bid.charge
+			: creditCost;
 
 	const creationToken = generateCreationToken();
 	const { pendingKey, pendingId } = addPendingCreation({ creationToken });
@@ -737,7 +742,7 @@ export async function submitCreationWithPending({
 		...(Number.isFinite(Number(mutateOfId)) && Number(mutateOfId) > 0 ? { mutate_of_id: Number(mutateOfId) } : {}),
 		...(Number.isFinite(Number(mutateGroupId)) && Number(mutateGroupId) > 0 ? { group_id: Number(mutateGroupId) } : {}),
 		...(parentIds.length > 0 ? { mutate_parent_ids: parentIds } : {}),
-		...(Number.isFinite(Number(creditCost)) && Number(creditCost) > 0 ? { credit_cost: Number(creditCost) } : {}),
+		...(Number.isFinite(Number(billedCost)) && Number(billedCost) > 0 ? { credit_cost: Number(billedCost) } : {}),
 		...(typeof hydrateMentions === 'boolean' ? { hydrate_mentions: hydrateMentions } : {}),
 		...(styleKey && typeof styleKey === 'string' && styleKey.trim() ? { style_key: styleKey.trim() } : {})
 	};

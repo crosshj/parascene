@@ -4422,6 +4422,7 @@ body.view-nsfw .feed-card-image--group-carousel.nsfw::after {
 .occupancy-dialog-actions {
 	display: flex;
 	gap: 0.6rem;
+	margin-top: 1.25rem;
 }
 
 .occupancy-dialog-actions .btn-primary,
@@ -4434,6 +4435,66 @@ body.view-nsfw .feed-card-image--group-carousel.nsfw::after {
 	font-size: 0.95rem;
 	font-weight: 600;
 	line-height: 1;
+}
+
+.occupancy-slider {
+	margin: 0.15rem 0 0;
+}
+
+.occupancy-slider-label {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 0.75rem;
+	margin: 0 0 0.35rem;
+	font-size: 0.82rem;
+	color: var(--text-muted, var(--muted));
+}
+
+.occupancy-slider-value {
+	font-variant-numeric: tabular-nums;
+	font-weight: 600;
+	color: var(--text);
+}
+
+.occupancy-slider input[type="range"] {
+	width: 100%;
+	margin: 0;
+	accent-color: var(--accent, #38bdf8);
+}
+
+.occupancy-slider-ends {
+	display: flex;
+	justify-content: space-between;
+	margin-top: 0.2rem;
+	font-size: 0.75rem;
+	color: var(--text-muted, var(--muted));
+}
+
+.occupancy-always-next {
+	display: flex;
+	align-items: flex-start;
+	gap: 0.55rem;
+	margin: 0.15rem 0 0;
+	font-size: 0.92rem;
+}
+
+.occupancy-always-next input {
+	margin-top: 0.2rem;
+}
+
+.occupancy-always-next-hint {
+	display: block;
+	margin-top: 0.2rem;
+	font-size: 0.78rem;
+	color: var(--text-muted, var(--muted));
+	line-height: 1.4;
+}
+
+.occupancy-line-moved {
+	margin: 0 0 0.75rem;
+	font-size: 0.82rem;
+	color: var(--text-muted, var(--muted));
 }
 
 .comment-sticker-modal-overlay {

@@ -8828,18 +8828,20 @@ async function handleRetry() {
 		retryBtn.disabled = true;
 	}
 
+	let retryArgs = args || {};
 	try {
 		const occMod = await import('../shared/gpuOccupancy.js');
-		const occupancyOk = await occMod.confirmGpuOccupancyIfNeeded({
+		const occupancy = await occMod.confirmGpuOccupancyIfNeeded({
 			serverId,
 			method,
 			args: args || {},
 			lane: 'product',
 		});
-		if (!occupancyOk) {
+		if (!occupancy.ok) {
 			if (retryBtn) retryBtn.disabled = false;
 			return;
 		}
+		retryArgs = occMod.applyGpuBid(args || {}, occupancy.bid, 'product');
 	} catch (err) {
 		if (err?.code === 'occupancy_cancelled') {
 			if (retryBtn) retryBtn.disabled = false;
@@ -8860,7 +8862,7 @@ async function handleRetry() {
 			body: JSON.stringify({
 				server_id: serverId,
 				method,
-				args: args || {},
+				args: retryArgs,
 				creation_token: creationToken,
 				retry_of_id: Number(creationId)
 			})

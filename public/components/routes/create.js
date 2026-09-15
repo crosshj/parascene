@@ -72,6 +72,7 @@ let formatMentionsFailureForDialog;
 let parseGpuOccupancy;
 let occupancyIsBusy;
 let showOccupancyConfirm;
+let applyGpuBid;
 let getMutateLineageForImageUrls;
 let getMutateQueuePrefillForProviderFields;
 let syncMutateQueueFromProviderFieldValues;
@@ -220,6 +221,7 @@ async function loadDeps() {
 		parseGpuOccupancy = gpuOccupancyMod.parseGpuOccupancy;
 		occupancyIsBusy = gpuOccupancyMod.occupancyIsBusy;
 		showOccupancyConfirm = gpuOccupancyMod.showOccupancyConfirm;
+		applyGpuBid = gpuOccupancyMod.applyGpuBid;
 
 		getMutateLineageForImageUrls = mutateQueueSyncMod.getMutateLineageForImageUrls;
 		getMutateQueuePrefillForProviderFields = mutateQueueSyncMod.getMutateQueuePrefillForProviderFields;
@@ -1431,9 +1433,27 @@ class AppRouteCreate extends HTMLElement {
 			const cost = typeof data?.cost === 'number' ? data.cost : Number(data?.cost);
 			const occupancy = parseGpuOccupancy?.(data);
 			if (occupancyIsBusy?.(occupancy)) {
-				const ok = await showOccupancyConfirm(occupancy, { lane: 'product' });
-				if (!ok) return;
-				this._advancedConfirm = { serverId, args, cost };
+				const bid = await showOccupancyConfirm(occupancy, {
+					lane: 'product',
+					method: 'advanced_generate',
+					peek: async () => {
+						const again = await fetch('/api/create/query', {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							credentials: 'include',
+							body: JSON.stringify({ server_id: serverId, args })
+						});
+						const body = await again.json().catch(() => null);
+						return parseGpuOccupancy?.(body);
+					}
+				});
+				if (!bid) return;
+				const named = Number(bid.charge) > 0 ? bid.charge : cost;
+				this._advancedConfirm = {
+					serverId,
+					args: applyGpuBid?.(args, bid, 'product') || args,
+					cost: named
+				};
 				this.submitAdvancedCreate();
 				return;
 			}

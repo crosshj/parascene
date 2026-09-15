@@ -32,7 +32,7 @@ const [
 		isCreationGpuInFlight,
 		isCreationInLine,
 	},
-	{ confirmGpuOccupancyIfNeeded },
+	{ applyGpuBid, confirmGpuOccupancyIfNeeded },
 ] = await Promise.all([
 	import(`../../shared/creationsInFlightPoller.js${_qs}`),
 	import(`../../shared/creationGpuWait.js${_qs}`),
@@ -1665,7 +1665,7 @@ class AppRouteCreations extends HTMLElement {
 		const meta = item.meta || parseMeta(item.meta);
 		const serverId = meta && typeof meta.server_id !== 'undefined' ? meta.server_id : null;
 		const method = meta && typeof meta.method === 'string' ? meta.method : null;
-		const args = meta && typeof meta.args === 'object' && meta.args ? meta.args : {};
+		let args = meta && typeof meta.args === 'object' && meta.args ? meta.args : {};
 
 		if (!serverId || !method) {
 			// console.warn('retryCreation: missing server_id or method in meta', meta);
@@ -1674,13 +1674,14 @@ class AppRouteCreations extends HTMLElement {
 		}
 
 		try {
-			const occupancyOk = await confirmGpuOccupancyIfNeeded({
+			const occupancy = await confirmGpuOccupancyIfNeeded({
 				serverId,
 				method,
 				args: args || {},
 				lane: 'product',
 			});
-			if (!occupancyOk) return;
+			if (!occupancy.ok) return;
+			args = applyGpuBid(args || {}, occupancy.bid, 'product');
 		} catch (err) {
 			if (err?.code === 'occupancy_cancelled') return;
 			throw err;

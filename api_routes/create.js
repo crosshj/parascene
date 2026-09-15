@@ -78,6 +78,8 @@ import {
 import { normalizeEditedUploadBuffer } from "./utils/editedImageUpload.js";
 import { ACTIVE_SHARE_VERSION, mintShareToken, verifyShareToken } from "./utils/shareLink.js";
 import { getStyleInfo } from "./utils/createStyles.js";
+import { PARASCENE_BLUE_SERVER_ID } from "../public/shared/generationDefaults.js";
+import { resolveProductNamedPrice } from "../public/shared/gpuOccupancy.js";
 import { importSunoCreation, previewSunoImport } from "./utils/importSunoCreation.js";
 import { importYoutubeCreation, previewYoutubeImport, refreshYoutubeImportCover } from "./utils/importYoutubeCreation.js";
 import { finalizeAudioFileImport, startAudioFileImport } from "./utils/importAudioFileCreation.js";
@@ -2798,6 +2800,20 @@ export default function createCreateRoutes({ queries, storage }) {
 						message: `${fieldName} must be at most ${max} characters.`
 					});
 				}
+			}
+
+			if (Number(server_id) === PARASCENE_BLUE_SERVER_ID) {
+				delete argsForProvider.always_next;
+				const boostRaw =
+					argsForProvider.credits_boost ?? argsForProvider.max_bid;
+				const named = resolveProductNamedPrice(boostRaw, CREATION_CREDIT_COST);
+				delete argsForProvider.credits_boost;
+				argsForProvider.max_bid = named.max_bid;
+				CREATION_CREDIT_COST = named.cost;
+			} else {
+				delete argsForProvider.max_bid;
+				delete argsForProvider.always_next;
+				delete argsForProvider.credits_boost;
 			}
 
 			// Check user's credit balance
