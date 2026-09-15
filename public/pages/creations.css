@@ -4646,6 +4646,25 @@ button.creation-detail-group-item {
 	color: var(--text-muted);
 }
 
+/* In-flight member (project video still on the GPU): compact wait overlay.
+   Icon only — the QUEUED / Generating… label is hidden at thumb size; the
+   place-in-line chip on the clock stays. */
+.creation-detail-group-thumb--waiting .route-media-wait {
+	gap: 0;
+	padding: 4px;
+}
+
+.creation-detail-group-thumb--waiting .route-media-wait-label {
+	display: none;
+}
+
+.creation-detail-group-thumb--waiting .creation-wait-icon,
+.creation-detail-group-thumb--waiting .creation-wait-gears,
+.creation-detail-group-thumb--waiting .creation-wait-timeout {
+	width: 32px;
+	height: 32px;
+}
+
 /* Group thumbnails inherit the item's NSFW blur: stay obscured (with a compact label)
    until the viewer reveals the item via the hero/carousel or by tapping a thumbnail. */
 .creation-detail-group-thumb-wrap.nsfw:not(.nsfw-revealed) {

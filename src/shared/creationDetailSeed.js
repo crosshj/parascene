@@ -8,6 +8,10 @@ import {
 	audioCoverWaveformHtml,
 	creationNeedsAudioWaveformCover,
 } from './audioCoverWaveform.js';
+import {
+	creationGpuWaitMarkup,
+	isCreationGpuInFlight,
+} from './creationGpuWait.js';
 
 export const CREATION_DETAIL_SEED_KEY = 'prsn-creation-detail-seed';
 export const CREATOR_STRIP_CACHE_KEY = 'prsn-creator-detail-strip';
@@ -181,6 +185,7 @@ function seedGroupSourceEntries(seed) {
 				id: Number.isFinite(id) && id > 0 ? id : 0,
 				url,
 				mediaType: String(sourceMeta?.media_type || row.media_type || '').trim().toLowerCase(),
+				status: typeof row.status === 'string' ? row.status.trim().toLowerCase() : '',
 				meta: sourceMeta,
 			});
 		}
@@ -194,15 +199,20 @@ function seedGroupSourceEntries(seed) {
 	const out = [];
 	for (let i = 0; i < count; i += 1) {
 		const fromRow = fromMeta[i];
-		const url =
-			(fromRow && fromRow.url) ||
-			(typeof thumbs[i] === 'string' ? thumbs[i].trim() : '') ||
-			(i === 0 && typeof seed?.image_url === 'string' ? seed.image_url.trim() : '') ||
-			(i === 0 && typeof seed?.thumbnail_url === 'string' ? seed.thumbnail_url.trim() : '');
+		// A member still generating has no media of its own — never borrow a
+		// thumb/cover fallback for it, or the slot shows another member's image.
+		const rowWaiting = Boolean(fromRow) && !fromRow.url && isCreationGpuInFlight(fromRow.status);
+		const url = rowWaiting
+			? ''
+			: (fromRow && fromRow.url) ||
+				(typeof thumbs[i] === 'string' ? thumbs[i].trim() : '') ||
+				(i === 0 && typeof seed?.image_url === 'string' ? seed.image_url.trim() : '') ||
+				(i === 0 && typeof seed?.thumbnail_url === 'string' ? seed.thumbnail_url.trim() : '');
 		out.push({
 			id: fromRow?.id || 0,
 			url,
 			mediaType: fromRow?.mediaType || '',
+			status: fromRow?.status || '',
 			meta: fromRow?.meta || null,
 		});
 	}
@@ -236,19 +246,30 @@ function seedGroupSectionHtml(seed) {
 				file_path: entry.url,
 				meta: { ...(entry.meta || {}), media_type: entry.mediaType || entry.meta?.media_type },
 			});
+			// In-flight member (still generating on the GPU): show the same
+			// queued / generating overlay as My Creations tiles, not a bare
+			// skeleton. The detail page polls these and swaps in the thumb.
+			const waiting = !needsWave && !entry.url && isCreationGpuInFlight(entry.status);
 			const inner = needsWave
 				? audioCoverWaveformHtml('creation-audio-wave creation-detail-group-wave')
 				: entry.url
 					? `<img src="${esc(entry.url)}" alt="" loading="eager" decoding="async">`
-					: `<span class="skeleton" style="display: block; width: 100%; height: 100%;" aria-hidden="true"></span>`;
+					: waiting
+						? creationGpuWaitMarkup(entry.status, null, { escapeHtml: esc })
+						: `<span class="skeleton" style="display: block; width: 100%; height: 100%;" aria-hidden="true"></span>`;
 			const fallbackClass = needsWave
 				? ' creation-detail-group-thumb--audio creation-audio-cover'
 				: entry.url
 					? ''
-					: ' creation-detail-group-item-fallback';
+					: waiting
+						? ' creation-detail-group-item-fallback creation-detail-group-thumb--waiting'
+						: ' creation-detail-group-item-fallback';
+			const statusAttr = waiting
+				? ` data-group-source-status="${esc(entry.status)}"`
+				: '';
 			return `<div class="creation-detail-group-slot">
 						<div class="creation-detail-group-thumb-wrap">
-							<button type="button" class="creation-detail-group-item creation-detail-group-thumb${fallbackClass}${active}"${thumbAttr}${aria}>
+							<button type="button" class="creation-detail-group-item creation-detail-group-thumb${fallbackClass}${active}"${thumbAttr}${statusAttr}${aria}>
 								${inner}
 							</button>
 						</div>

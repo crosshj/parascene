@@ -4,6 +4,7 @@ import {
 	readCreateEditorMode,
 } from '../public/shared/createWorkflow.js';
 import {
+	creationDetailChromeHtmlFromSeed,
 	feedItemToCreationDetailSeed,
 	seedToMutateCreation,
 } from '../public/shared/creationDetailSeed.js';
@@ -107,5 +108,57 @@ describe('seedToMutateCreation', () => {
 			status: 'completed',
 		});
 		expect(seed.image_url).toBe('https://example.test/full.png');
+	});
+});
+
+describe('creation detail group section: in-flight members', () => {
+	const groupSeed = (memberOverrides = {}) => ({
+		id: 29834,
+		title: 'Untitled project',
+		status: 'completed',
+		meta: {
+			group: {
+				kind: 'group_creations',
+				cover_source_id: 1,
+				source_creations: [
+					{
+						id: 1,
+						file_path: '/api/images/created/a.png',
+						status: 'completed',
+						meta: { media_type: 'image' },
+					},
+					{
+						id: 2,
+						file_path: null,
+						status: 'queued',
+						meta: { media_type: 'video' },
+						...memberOverrides,
+					},
+				],
+			},
+		},
+	});
+
+	test('queued member renders the GPU wait overlay, not a bare skeleton', () => {
+		const html = creationDetailChromeHtmlFromSeed(groupSeed());
+		expect(html).toContain('data-creation-gpu-wait');
+		expect(html).toContain('QUEUED');
+		expect(html).toContain('data-group-source-status="queued"');
+		expect(html).toContain('creation-detail-group-thumb--waiting');
+		expect(html).toContain('/api/images/created/a.png');
+	});
+
+	test('processing member shows Generating…', () => {
+		const html = creationDetailChromeHtmlFromSeed(groupSeed({ status: 'processing' }));
+		expect(html).toContain('Generating…');
+		expect(html).toContain('data-group-source-status="processing"');
+	});
+
+	test('member without a status keeps the plain skeleton fallback', () => {
+		const html = creationDetailChromeHtmlFromSeed(groupSeed({ status: undefined }));
+		expect(html).not.toContain('data-creation-gpu-wait');
+		expect(html).not.toContain('data-group-source-status');
+		expect(html).toContain('creation-detail-group-item-fallback');
+		expect(html).toContain('skeleton');
 	});
 });

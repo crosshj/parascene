@@ -707,6 +707,9 @@ function patchCreationDetailGroupSlot(stickySlot, nextSlot) {
 	if (thumbId) stickyBtn.setAttribute('data-group-source-thumb', thumbId);
 	const aria = nextBtn.getAttribute('aria-label');
 	if (aria) stickyBtn.setAttribute('aria-label', aria);
+	const nextStatus = nextBtn.getAttribute('data-group-source-status');
+	if (nextStatus) stickyBtn.setAttribute('data-group-source-status', nextStatus);
+	else stickyBtn.removeAttribute('data-group-source-status');
 	const stickyImg = stickyBtn.querySelector('img');
 	const nextImg = nextBtn.querySelector('img');
 	if (nextImg instanceof HTMLImageElement && stickyImg instanceof HTMLImageElement) {
@@ -714,6 +717,13 @@ function patchCreationDetailGroupSlot(stickySlot, nextSlot) {
 		if (nextAlt && stickyImg.getAttribute('alt') !== nextAlt) stickyImg.setAttribute('alt', nextAlt);
 	} else if (nextImg instanceof HTMLImageElement && !stickyImg) {
 		stickyBtn.replaceChildren(nextImg);
+	} else if (nextStatus && stickyImg) {
+		// Live render says this member is still generating; the sticky image is
+		// a stale seed fallback (e.g. borrowed cover thumb). Live data wins.
+		stickyBtn.replaceChildren(...nextBtn.childNodes);
+	} else if (!nextImg && !stickyImg && stickyBtn.innerHTML !== nextBtn.innerHTML) {
+		// GPU-wait overlay ↔ skeleton, or the wait label / place changed.
+		stickyBtn.replaceChildren(...nextBtn.childNodes);
 	}
 	const host = stickyWrap instanceof HTMLElement ? stickyWrap : stickySlot;
 	const stickyMove = host.querySelector('[data-group-move-left]');
@@ -3166,9 +3176,134 @@ function scheduleCreationDetailInFlightPoll(creationId) {
 	}, CREATION_DETAIL_IN_FLIGHT_POLL_MS);
 }
 
+// Group members still generating (a project video lands in its group before
+// the media exists). Poll each waiting slot and keep its overlay honest:
+// place updates, QUEUED → Generating…, then the real thumb on completion.
+const CREATION_DETAIL_GROUP_MEMBER_POLL_MS = 15_000;
+const CREATION_DETAIL_GROUP_MEMBER_POLL_MAX = 80;
+let creationDetailGroupMemberPollTimer = null;
+let creationDetailGroupMemberPollKey = '';
+let creationDetailGroupMemberPollCount = 0;
+// One full refresh per member per page view when it finishes while selected
+// (updates the hero); guards against reload loops if the group meta lags.
+const creationDetailGroupMemberReloadedIds = new Set();
+// Last live status/meta per waiting member (the group snapshot has neither
+// the current status nor line_place); the hero mounts from this when the
+// member is selected between polls.
+const creationDetailGroupMemberLiveState = new Map();
+
+function stopCreationDetailGroupMemberPoll() {
+	if (creationDetailGroupMemberPollTimer) {
+		clearTimeout(creationDetailGroupMemberPollTimer);
+		creationDetailGroupMemberPollTimer = null;
+	}
+}
+
+function creationDetailGroupWaitButtons() {
+	return Array.from(
+		document.querySelectorAll(
+			'[data-detail-content] [data-group-source-status][data-group-source-thumb]'
+		)
+	).filter((el) => el instanceof HTMLElement);
+}
+
+function scheduleCreationDetailGroupMemberPoll(creationId) {
+	const id = String(creationId ?? '');
+	if (!id) return;
+	if (creationDetailGroupMemberPollKey !== id) {
+		creationDetailGroupMemberPollKey = id;
+		creationDetailGroupMemberPollCount = 0;
+		creationDetailGroupMemberReloadedIds.clear();
+		creationDetailGroupMemberLiveState.clear();
+	}
+	stopCreationDetailGroupMemberPoll();
+	if (!creationDetailGroupWaitButtons().length) return;
+	if (creationDetailGroupMemberPollCount >= CREATION_DETAIL_GROUP_MEMBER_POLL_MAX) return;
+	// First poll fires fast so the place-in-line chip appears right away
+	// (the group snapshot doesn't carry it); later polls are relaxed.
+	const delay =
+		creationDetailGroupMemberPollCount === 0 ? 1000 : CREATION_DETAIL_GROUP_MEMBER_POLL_MS;
+	creationDetailGroupMemberPollTimer = window.setTimeout(() => {
+		creationDetailGroupMemberPollTimer = null;
+		creationDetailGroupMemberPollCount += 1;
+		void pollCreationDetailGroupMembersOnce(id);
+	}, delay);
+}
+
+async function pollCreationDetailGroupMembersOnce(creationId) {
+	const escapeAttr = (v) =>
+		String(v ?? '')
+			.replace(/&/g, '&amp;')
+			.replace(/</g, '&lt;')
+			.replace(/>/g, '&gt;')
+			.replace(/"/g, '&quot;');
+	for (const btn of creationDetailGroupWaitButtons()) {
+		const sourceId = Number(btn.getAttribute('data-group-source-thumb'));
+		if (!Number.isFinite(sourceId) || sourceId <= 0) continue;
+		let payload = null;
+		try {
+			const res = await fetch(`/api/create/images/${sourceId}`, { credentials: 'include' });
+			if (!res.ok) continue;
+			payload = await res.json();
+		} catch {
+			continue;
+		}
+		const row =
+			payload?.creation || payload?.image || payload?.data || payload || {};
+		const status = String(row.status || '').trim().toLowerCase();
+		const rowMeta = row.meta && typeof row.meta === 'object' ? row.meta : {};
+		if (isCreationGpuInFlight(status)) {
+			creationDetailGroupMemberLiveState.set(sourceId, { status, meta: rowMeta });
+			btn.setAttribute('data-group-source-status', status);
+			const nextWaitHtml = creationGpuWaitMarkup(status, creationLinePlace(rowMeta), {
+				meta: rowMeta,
+			});
+			const wait = btn.querySelector('[data-creation-gpu-wait]');
+			if (wait instanceof HTMLElement) wait.outerHTML = nextWaitHtml;
+			if (btn.classList.contains('is-active')) {
+				// This member is selected in the hero; keep that overlay live too.
+				const heroWait = document
+					.querySelector('.creation-detail-image-wrapper')
+					?.querySelector('[data-creation-gpu-wait]');
+				if (heroWait instanceof HTMLElement) heroWait.outerHTML = nextWaitHtml;
+			}
+			continue;
+		}
+		// Terminal. Swap in the thumb when we have one; otherwise leave the
+		// slot to the next full render (the group meta gets re-stamped when
+		// the finished member is filed).
+		const thumb =
+			(typeof row.thumbnail_url === 'string' && row.thumbnail_url.trim()) ||
+			(typeof row.url === 'string' && row.url.trim()) ||
+			(typeof row.file_path === 'string' && row.file_path.trim()) ||
+			'';
+		creationDetailGroupMemberLiveState.delete(sourceId);
+		btn.removeAttribute('data-group-source-status');
+		if (status === 'completed' && thumb) {
+			btn.classList.remove(
+				'creation-detail-group-item-fallback',
+				'creation-detail-group-thumb--waiting'
+			);
+			btn.innerHTML = `<img src="${escapeAttr(thumb)}" alt="" loading="eager" decoding="async">`;
+			if (
+				btn.classList.contains('is-active') &&
+				!creationDetailGroupMemberReloadedIds.has(sourceId)
+			) {
+				// Finished while selected: refresh once so the hero picks up
+				// the real media instead of the wait placeholder.
+				creationDetailGroupMemberReloadedIds.add(sourceId);
+				void loadCreation();
+				return;
+			}
+		}
+	}
+	scheduleCreationDetailGroupMemberPoll(creationId);
+}
+
 async function loadCreation() {
 	stopCreationDetailHeroPlayback();
 	stopCreationDetailInFlightPoll();
+	stopCreationDetailGroupMemberPoll();
 
 	const detailContent = document.querySelector('[data-detail-content]');
 	const imageEl = document.querySelector('[data-image]');
@@ -4787,6 +4922,7 @@ async function loadCreation() {
 					id: sourceId,
 					title: sourceRawTitle ? `${sourceRawTitle} (${sourceId})` : `${groupTitleForSourceLabels} (${sourceId})`,
 					rawTitle: sourceRawTitle,
+					status: typeof sourceObj.status === 'string' ? sourceObj.status.trim().toLowerCase() : '',
 					filePath: sourceFilePath,
 					videoUrl: sourceVideoUrl,
 					audioUrl: sourceAudioUrl,
@@ -4945,6 +5081,9 @@ async function loadCreation() {
 							: source.mediaType === 'audio' && !waveThumb
 								? html`<span class="creation-detail-group-kind creation-detail-group-kind--audio" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg></span>`
 								: '';
+					// Member still generating (project videos land in the group
+					// before the media exists): same overlay as My Creations tiles.
+					const sourceWaiting = !source.filePath && isCreationGpuInFlight(source.status);
 					const thumbHtml = waveThumb
 						? html`<button type="button" class="creation-detail-group-item creation-detail-group-thumb creation-detail-group-thumb--audio creation-audio-cover${index === 0 ? ' is-active' : ''}"
 									data-group-source-thumb="${source.id}" aria-label="View ${escapeHtml(source.title)}">
@@ -4956,6 +5095,9 @@ async function loadCreation() {
 									<img src="${escapeHtml(source.filePath)}" alt="${escapeHtml(source.title)}" loading="eager" />
 									${kindMark}
 								</button>`
+						: sourceWaiting
+						? html`<button type="button" class="creation-detail-group-item creation-detail-group-item-fallback creation-detail-group-thumb creation-detail-group-thumb--waiting${index === 0 ? ' is-active' : ''}"
+									data-group-source-thumb="${source.id}" data-group-source-status="${escapeHtml(source.status)}" aria-label="View source #${source.id}">${creationGpuWaitMarkup(source.status, creationLinePlace(source.meta), { meta: source.meta })}</button>`
 						: html`<button type="button" class="creation-detail-group-item creation-detail-group-item-fallback creation-detail-group-thumb${index === 0 ? ' is-active' : ''}"
 									data-group-source-thumb="${source.id}" aria-label="View source #${source.id}">#${source.id}${kindMark}</button>`;
 					const moveLeftHtml = canReorderGroupSources && index > 0
@@ -5758,6 +5900,9 @@ async function loadCreation() {
 		`);
 
 		perf.recordStep('contentAboveComments', 'renderDom', performance.now() - detailRenderStart);
+
+		// Group members still generating render a wait overlay; keep it live.
+		if (isGroupCreation) scheduleCreationDetailGroupMemberPoll(creationId);
 
 		/* When showing initial only (no avatar image), set --avatar-bg so the class uses it; with image, CSS uses var(--surface-strong) */
 		const founderFlairEl = detailContent.querySelector('[data-founder-flair-avatar-bg]');
@@ -7672,8 +7817,33 @@ async function loadCreation() {
 							removeAudioCoverWaveform(imageWrapper);
 						}
 					};
-					if (isGroupVideo && groupVideoPlaylistEnabled && source.videoUrl) {
+					clearHeroGpuWait();
+					const sourceWaiting =
+						!source.filePath && !source.videoUrl && isCreationGpuInFlight(source.status);
+					if (sourceWaiting) {
+						// Member still generating: gray hero + the same queued /
+						// generating icons as My Creations. Deactivate the carousel
+						// stack so the previous member's image doesn't show through
+						// the overlay; navigating back re-activates it.
+						if (isGroupVideo && groupVideoPlaylistEnabled) {
+							// Keep the playlist player mounted; just hide it.
+							imageWrapper?.classList.remove('group-video-playlist-active');
+						} else {
+							teardownGroupHeroVideoPlayer();
+						}
 						clearGroupMemberAudio();
+						for (const img of groupHeroImageBySourceId.values()) {
+							img.classList.remove('is-active');
+						}
+						showHeroLoadingPlaceholder();
+						const live = creationDetailGroupMemberLiveState.get(Number(source.id));
+						mountHeroGpuWait(live?.status || source.status, live?.meta || source.meta);
+						markHeroReady({ state: live?.status || source.status || 'creating' });
+					} else if (isGroupVideo && groupVideoPlaylistEnabled && source.videoUrl) {
+						clearGroupMemberAudio();
+						// Restore the playlist if a waiting member hid it.
+						imageWrapper?.classList.add('group-video-playlist-active');
+						imageWrapper?.classList.remove('image-loading');
 						const idx = orderedSourceIds.indexOf(Number(source.id));
 						if (idx >= 0 && creationDetailHeroVideoPlayer) {
 							void creationDetailHeroVideoPlayer.goToIndex(idx, { autoplay: true });
