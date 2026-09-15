@@ -25,6 +25,8 @@ import {
 	gpuWaitMetaPatch,
 	isCreationGpuInFlight,
 	gpuWaitFromProviderStatus,
+	isTerminalCompletedProviderStatus,
+	shouldKeepProviderPoll,
 } from "./creationGpuWait.js";
 
 const PROVIDER_TIMEOUT_MS = 50_000;
@@ -35,7 +37,6 @@ const PROVIDER_VIDEO_FETCH_TIMEOUT_MS = (() => {
 })();
 const DEFAULT_WIDTH = 1024;
 const DEFAULT_HEIGHT = 1024;
-const MAX_PROVIDER_POLL_ATTEMPTS = 60;
 const DEFAULT_PROVIDER_POLL_DELAY_SECONDS = 10;
 
 function logCreation(...args) {
@@ -113,6 +114,234 @@ function creationMethodNeedsLongFetch(method) {
 
 function isRemoteAsyncEnv() {
 	return !!process.env.VERCEL && !!process.env.UPSTASH_QSTASH_TOKEN;
+}
+
+function isTransientProviderPollError(err) {
+	if (!err) return false;
+	if (err.name === "AbortError") return true;
+	const status = Number(err.provider?.status);
+	if (err.code === "PROVIDER_NON_2XX" && [408, 429, 500, 502, 503, 504].includes(status)) {
+		return true;
+	}
+	const msg = String(err.message || "");
+	return /network|fetch|ECONNRESET|ETIMEDOUT|UND_ERR|socket/i.test(msg);
+}
+
+const localProviderPollQueued = new Set();
+
+async function enqueueProviderPollFollowUp({
+	queries,
+	storage,
+	imageId,
+	userId,
+	server_id,
+	credit_cost,
+	delaySeconds,
+}) {
+	const asyncEnv = isRemoteAsyncEnv();
+	const wait = Math.max(0, Number(delaySeconds) || 0);
+	if (asyncEnv) {
+		await scheduleProviderPollJob({
+			payload: {
+				job_type: "poll_provider",
+				created_image_id: imageId,
+				user_id: userId,
+				server_id,
+				credit_cost,
+			},
+			delaySeconds: wait,
+			log: console,
+		});
+		return { ok: true, reason: "async_poll_scheduled" };
+	}
+	const key = String(imageId);
+	if (localProviderPollQueued.has(key)) {
+		return { ok: true, reason: "async_poll_already_scheduled_local" };
+	}
+	localProviderPollQueued.add(key);
+	setTimeout(() => {
+		localProviderPollQueued.delete(key);
+		Promise.resolve(
+			runProviderPollJob({
+				queries,
+				storage,
+				payload: {
+					created_image_id: imageId,
+					user_id: userId,
+					server_id,
+					credit_cost,
+				},
+			}),
+		).catch((err) => {
+			void err;
+		});
+	}, wait * 1000);
+	return { ok: true, reason: "async_poll_scheduled_local" };
+}
+
+async function markProviderPollFailed({
+	queries,
+	imageId,
+	userId,
+	existingMeta,
+	credit_cost,
+	providerError,
+}) {
+	const startedAtMs = existingMeta && existingMeta.started_at ? Date.parse(existingMeta.started_at) : NaN;
+	const failedAtIso = new Date().toISOString();
+	const failedAtMs = Date.parse(failedAtIso);
+	const durationMs =
+		Number.isFinite(startedAtMs) && Number.isFinite(failedAtMs) && failedAtMs >= startedAtMs
+			? failedAtMs - startedAtMs
+			: null;
+
+	const errorCode = inferErrorCode(providerError);
+	const providerDetails =
+		providerError && typeof providerError === "object" && providerError.provider && typeof providerError.provider === "object"
+			? providerError.provider
+			: null;
+	const errorMsg = safeErrorMessage(providerError);
+	const providerMsg = providerDetails ? providerBodyToMessage(providerDetails.body) : "";
+
+	logCreationError(`Poll: marking job as failed`, {
+		imageId,
+		error_code: errorCode,
+		error: errorMsg,
+		duration_ms: durationMs,
+	});
+
+	const nextMetaBase = mergeMeta(existingMeta, {
+		failed_at: failedAtIso,
+		error_code: errorCode,
+		error: providerMsg || errorMsg,
+		...(providerDetails ? { provider_error: providerDetails } : {}),
+		...(Number.isFinite(durationMs) && durationMs >= 0 ? { duration_ms: durationMs } : {}),
+		provider_status: "failed",
+	});
+
+	await queries.updateCreatedImageJobFailed.run(imageId, userId, { meta: nextMetaBase });
+
+	if (credit_cost && !(nextMetaBase && nextMetaBase.credits_refunded)) {
+		logCreation(`Poll: refunding ${credit_cost} credits to user ${userId}`);
+		await queries.updateUserCreditsBalance.run(userId, Number(credit_cost));
+		await queries.updateCreatedImageJobFailed.run(imageId, userId, {
+			meta: mergeMeta(nextMetaBase, { credits_refunded: true }),
+		});
+	}
+
+	return { ok: false, reason: "provider_failed" };
+}
+
+async function continueOrTimeoutPoll({
+	queries,
+	storage,
+	imageId,
+	userId,
+	server_id,
+	credit_cost,
+	creationStatus,
+	meta,
+	delaySeconds = DEFAULT_PROVIDER_POLL_DELAY_SECONDS,
+}) {
+	if (shouldKeepProviderPoll(creationStatus, meta)) {
+		return enqueueProviderPollFollowUp({
+			queries,
+			storage,
+			imageId,
+			userId,
+			server_id,
+			credit_cost,
+			delaySeconds,
+		});
+	}
+	const timeoutErr = new Error("Timed out waiting for generation to finish.");
+	timeoutErr.name = "AbortError";
+	return markProviderPollFailed({
+		queries,
+		imageId,
+		userId,
+		existingMeta: meta,
+		credit_cost,
+		providerError: timeoutErr,
+	});
+}
+
+/** Resume or continue provider polling. Local uses in-process timers; Vercel uses QStash. */
+export async function kickStaleProviderPollIfNeeded({
+	queries,
+	storage,
+	image,
+	userId,
+	force = false,
+}) {
+	if (!image || !isCreationGpuInFlight(image.status)) return { kicked: false };
+	const meta = parseMeta(image.meta) || {};
+	if (!meta.provider_async) return { kicked: false };
+	const imageId = Number(image.id);
+	const uid = Number(userId ?? image.user_id);
+	const serverId = Number(meta.server_id);
+	if (!Number.isFinite(imageId) || imageId < 1) return { kicked: false };
+	if (!Number.isFinite(uid) || uid < 1) return { kicked: false };
+	if (!Number.isFinite(serverId) || serverId < 1) return { kicked: false };
+
+	const nextAt = Date.parse(meta.provider_next_poll_at);
+	const stale = !Number.isFinite(nextAt) || Date.now() > nextAt + 15_000;
+	if (!force && !stale) return { kicked: false };
+
+	const nextMeta = mergeMeta(meta, {
+		provider_next_poll_at: new Date(Date.now() + DEFAULT_PROVIDER_POLL_DELAY_SECONDS * 1000).toISOString(),
+	});
+	if (queries.updateCreatedImageMeta?.run) {
+		await queries.updateCreatedImageMeta.run(imageId, uid, nextMeta);
+	}
+
+	try {
+		await enqueueProviderPollFollowUp({
+			queries,
+			storage,
+			imageId,
+			userId: uid,
+			server_id: serverId,
+			credit_cost: Number(meta.credit_cost ?? 0) || 0,
+			delaySeconds: 0,
+		});
+		logCreation("Kicked stale provider poll", { imageId, userId: uid, local: !isRemoteAsyncEnv() });
+		return { kicked: true };
+	} catch (err) {
+		logCreationWarn("Kick stale provider poll failed", safeErrorMessage(err));
+		return { kicked: false };
+	}
+}
+
+/** Local nodemon/restart: DB rows still in-flight, in-process timers are gone. */
+export async function resumeLocalProviderPolls({ queries, storage }) {
+	if (isRemoteAsyncEnv() || process.env.VERCEL) return { resumed: 0 };
+	const listFn = queries.selectCreatedImagesGpuInFlight?.all;
+	if (typeof listFn !== "function") {
+		logCreationWarn("Local provider poll resume skipped: missing selectCreatedImagesGpuInFlight");
+		return { resumed: 0 };
+	}
+	let rows = [];
+	try {
+		rows = await listFn({ limit: 80 });
+	} catch (err) {
+		logCreationWarn("Local provider poll resume query failed", safeErrorMessage(err));
+		return { resumed: 0 };
+	}
+	const list = Array.isArray(rows) ? rows : [];
+	let resumed = 0;
+	for (const image of list) {
+		const result = await kickStaleProviderPollIfNeeded({
+			queries,
+			storage,
+			image,
+			userId: image.user_id,
+			force: true,
+		});
+		if (result.kicked) resumed += 1;
+	}
+	logCreation("Local provider poll resume", { resumed, candidates: list.length });
+	return { resumed };
 }
 
 function isAsyncAckBody(body, fallbackMethod) {
@@ -1201,8 +1430,6 @@ export async function runProviderPollJob({ queries, storage, payload }) {
 	let audioContentType = null;
 	let voiceId = null;
 
-	const pollAttempts = Number(existingMeta.provider_poll_attempts ?? 0) + 1;
-
 	try {
 		const pollMethod = existingMeta.provider_method || existingMeta.method || payload?.method;
 		const pollJobId =
@@ -1216,6 +1443,8 @@ export async function runProviderPollJob({ queries, storage, payload }) {
 			args: pollJobId ? { job_id: pollJobId } : {},
 		};
 
+		const maxFetches = 2;
+		for (let fetchAttempt = 1; fetchAttempt <= maxFetches; fetchAttempt += 1) {
 		const providerResponse = await fetch(server.server_url, {
 			method: "POST",
 			headers: buildProviderHeaders(
@@ -1255,27 +1484,51 @@ export async function runProviderPollJob({ queries, storage, payload }) {
 			}
 
 			if (isAsyncAckBody(body, existingMeta.method)) {
-				const asyncEnv = isRemoteAsyncEnv();
 				const asyncBody = body || {};
 				const jobId = asyncBody.job_id;
 				const status = asyncBody.status || "pending";
-				const statusLower = status.toLowerCase();
 
-				// If provider reports a terminal completed status in JSON, treat that as
-				// end-of-polling and do NOT schedule further polls. The image row will
-				// already have been finalized by the bytes response.
-				if (["completed", "succeeded", "done"].includes(statusLower)) {
+				if (isTerminalCompletedProviderStatus(status)) {
+					if (fetchAttempt < maxFetches) {
+						logCreation("Poll: provider JSON says done; fetching artifact bytes", {
+							imageId,
+							job_id: jobId,
+							status,
+						});
+						continue;
+					}
+
+					const jsonDonePolls = Number(existingMeta.provider_json_completed_polls ?? 0) + 1;
 					const nextMeta = mergeMeta(existingMeta, {
 						provider_job_id: jobId,
 						provider_status: status,
 						provider_last_payload: asyncBody,
+						provider_json_completed_at:
+							existingMeta.provider_json_completed_at || new Date().toISOString(),
+						provider_json_completed_polls: jsonDonePolls,
 					});
-
 					if (queries.updateCreatedImageMeta?.run) {
 						await queries.updateCreatedImageMeta.run(imageId, userId, nextMeta);
 					}
-
-					return { ok: true, reason: "async_poll_completed" };
+					if (jsonDonePolls > 30) {
+						const err = new Error("Provider finished but did not return media bytes.");
+						err.code = "PROVIDER_UNEXPECTED_JSON";
+						throw err;
+					}
+					logCreation("Poll: still JSON after done; scheduling another bytes fetch", {
+						imageId,
+						job_id: jobId,
+						json_completed_polls: jsonDonePolls,
+					});
+					return enqueueProviderPollFollowUp({
+						queries,
+						storage,
+						imageId,
+						userId,
+						server_id,
+						credit_cost,
+						delaySeconds: 1,
+					});
 				}
 
 				const generating =
@@ -1315,47 +1568,19 @@ export async function runProviderPollJob({ queries, storage, payload }) {
 					await queries.updateCreatedImageMeta.run(imageId, userId, nextMeta);
 				}
 
-				if (!generating || nextAttempts < MAX_PROVIDER_POLL_ATTEMPTS) {
-					if (asyncEnv) {
-						// Cloud: enqueue next poll via QStash worker.
-						await scheduleProviderPollJob({
-							payload: {
-								job_type: "poll_provider",
-								created_image_id: imageId,
-								user_id: userId,
-								server_id,
-								credit_cost,
-							},
-							delaySeconds,
-							log: console,
-						});
-					} else {
-						// Local: schedule next poll in-process with a delay to mirror QStash timing.
-						setTimeout(() => {
-							Promise.resolve(
-								runProviderPollJob({
-									queries,
-									storage,
-									payload: {
-										created_image_id: imageId,
-										user_id: userId,
-										server_id,
-										credit_cost,
-									},
-								}),
-							).catch((err) => {
-								void err;
-							});
-						}, delaySeconds * 1000);
-					}
-				} else {
-					logCreationWarn("Poll: reached max poll attempts without completion", {
-						imageId,
-						poll_attempts: pollAttempts,
-					});
-				}
-
-				return { ok: true, reason: asyncEnv ? "async_poll_scheduled" : "async_poll_scheduled_local" };
+				const waitStatus =
+					gpuWaitFromProviderStatus(status)?.creationStatus || image.status;
+				return continueOrTimeoutPoll({
+					queries,
+					storage,
+					imageId,
+					userId,
+					server_id,
+					credit_cost,
+					creationStatus: waitStatus,
+					meta: nextMeta,
+					delaySeconds,
+				});
 			}
 
 			if (isVoiceTrainSuccessBody(body)) {
@@ -1426,54 +1651,45 @@ export async function runProviderPollJob({ queries, storage, payload }) {
 			if (headerWidth) width = Number.parseInt(headerWidth, 10) || width;
 			if (headerHeight) height = Number.parseInt(headerHeight, 10) || height;
 		}
+		break;
+		}
 	} catch (err) {
 		providerError = err;
 	}
 
 	if (providerError) {
-		const startedAtMs = existingMeta && existingMeta.started_at ? Date.parse(existingMeta.started_at) : NaN;
-		const failedAtIso = new Date().toISOString();
-		const failedAtMs = Date.parse(failedAtIso);
-		const durationMs =
-			Number.isFinite(startedAtMs) && Number.isFinite(failedAtMs) && failedAtMs >= startedAtMs
-				? failedAtMs - startedAtMs
-				: null;
-
-		const errorCode = inferErrorCode(providerError);
-		const providerDetails =
-			providerError && typeof providerError === "object" && providerError.provider && typeof providerError.provider === "object"
-				? providerError.provider
-				: null;
-		const errorMsg = safeErrorMessage(providerError);
-		const providerMsg = providerDetails ? providerBodyToMessage(providerDetails.body) : "";
-
-		logCreationError(`Poll: marking job as failed`, {
-			imageId,
-			error_code: errorCode,
-			error: errorMsg,
-			duration_ms: durationMs,
-		});
-
-		const nextMetaBase = mergeMeta(existingMeta, {
-			failed_at: failedAtIso,
-			error_code: errorCode,
-			error: providerMsg || errorMsg,
-			...(providerDetails ? { provider_error: providerDetails } : {}),
-			...(Number.isFinite(durationMs) && durationMs >= 0 ? { duration_ms: durationMs } : {}),
-			provider_status: "failed",
-		});
-
-		await queries.updateCreatedImageJobFailed.run(imageId, userId, { meta: nextMetaBase });
-
-		if (credit_cost && !(nextMetaBase && nextMetaBase.credits_refunded)) {
-			logCreation(`Poll: refunding ${credit_cost} credits to user ${userId}`);
-			await queries.updateUserCreditsBalance.run(userId, Number(credit_cost));
-			await queries.updateCreatedImageJobFailed.run(imageId, userId, {
-				meta: mergeMeta(nextMetaBase, { credits_refunded: true }),
+		const waitStatus = image.status;
+		if (isTransientProviderPollError(providerError) && shouldKeepProviderPoll(waitStatus, existingMeta)) {
+			logCreationWarn("Poll: transient provider error; scheduling retry", {
+				imageId,
+				error: safeErrorMessage(providerError),
+				status: waitStatus,
+			});
+			const nextMeta = mergeMeta(existingMeta, {
+				provider_last_error: safeErrorMessage(providerError),
+				provider_last_error_at: new Date().toISOString(),
+			});
+			if (queries.updateCreatedImageMeta?.run) {
+				await queries.updateCreatedImageMeta.run(imageId, userId, nextMeta);
+			}
+			return enqueueProviderPollFollowUp({
+				queries,
+				storage,
+				imageId,
+				userId,
+				server_id,
+				credit_cost,
+				delaySeconds: DEFAULT_PROVIDER_POLL_DELAY_SECONDS,
 			});
 		}
-
-		return { ok: false, reason: "provider_failed" };
+		return markProviderPollFailed({
+			queries,
+			imageId,
+			userId,
+			existingMeta,
+			credit_cost,
+			providerError,
+		});
 	}
 
 	return await finalizeCreationJob({

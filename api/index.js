@@ -61,6 +61,7 @@ import { createUnauthorizedHandler } from "../api_routes/middleware/unauthorized
 import { createPrsnCidPersistMiddleware } from "../api_routes/middleware/prsnCidPersist.js";
 import { createRateLimitMiddleware } from "../api_routes/middleware/rateLimit.js";
 import { createVisitPulseMiddleware } from "../api_routes/middleware/visitPulse.js";
+import { resumeLocalProviderPolls } from "../api_routes/utils/creationJob.js";
 
 function shouldLogStartup() {
 	return process.env.ENABLE_STARTUP_LOGS === "true";
@@ -438,6 +439,9 @@ app.use(createUnauthorizedHandler(pagesDir));
 if (process.env.NODE_ENV !== "production") {
 	app.listen(port, () => {
 		console.log(`Parascene dev server running on http://localhost:${port}`);
+		void resumeLocalProviderPolls({ queries, storage }).catch((err) => {
+			console.warn("[Creation] Local provider poll resume failed:", err?.message || err);
+		});
 	});
 }
 

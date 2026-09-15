@@ -1,18 +1,39 @@
-import {
-	getPendingCreationsFromSession,
-	shouldContinueCreationsPoll,
-	hasPendingCreationsReloadHint,
-	computeCreationsPollHasListUpdates,
-	findCreationsPollStatusUpdates,
-	prunePendingCreationsSession,
-} from '../../shared/creationsInFlightPoller.js';
-import {
-	creationGpuWaitLabel,
-	creationLinePlace,
-	isCreationFinishTimedOut,
-	isCreationGpuInFlight,
-	isCreationInLine,
-} from '../../shared/creationGpuWait.js';
+const _qs = (() => {
+	try {
+		const fromModule = new URL(import.meta.url).search;
+		if (fromModule) return fromModule;
+	} catch {
+		/* ignore */
+	}
+	const v =
+		typeof document !== 'undefined'
+			? document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() || ''
+			: '';
+	return v ? `?v=${encodeURIComponent(v)}` : '';
+})();
+
+const [
+	{
+		getPendingCreationsFromSession,
+		shouldContinueCreationsPoll,
+		hasPendingCreationsReloadHint,
+		computeCreationsPollHasListUpdates,
+		findCreationsPollStatusUpdates,
+		prunePendingCreationsSession,
+	},
+	{
+		creationGpuWaitDetail,
+		creationGpuWaitLabel,
+		creationGpuWaitMarkup,
+		creationLinePlace,
+		isCreationFinishTimedOut,
+		isCreationGpuInFlight,
+		isCreationInLine,
+	},
+] = await Promise.all([
+	import(`../../shared/creationsInFlightPoller.js${_qs}`),
+	import(`../../shared/creationGpuWait.js${_qs}`),
+]);
 
 let formatDateTime;
 let formatRelativeTime;
@@ -1382,7 +1403,11 @@ class AppRouteCreations extends HTMLElement {
 		const status = timedOut && isCreationGpuInFlight(rawStatus) ? 'failed' : rawStatus;
 
 		const isPending = isCreationInLine(status);
-		const waitLabel = creationGpuWaitLabel(status, creationLinePlace(meta));
+		const linePlace = creationLinePlace(meta);
+		const waitLabel = creationGpuWaitLabel(status, linePlace);
+		const waitDetail = creationGpuWaitDetail(status, linePlace);
+		const linePlaceAttr = linePlace ? ` data-line-place="${escapeHtml(String(linePlace))}"` : '';
+		const waitInner = creationGpuWaitMarkup(status, linePlace, { escapeHtml });
 		const isFailed = status === 'failed';
 
 		const bulkOverlay = () => html`
@@ -1392,11 +1417,11 @@ class AppRouteCreations extends HTMLElement {
 
 		if (isPending) {
 			card.innerHTML = html`
-            <div class="route-media loading" data-image-id="${item.id}" data-status="${escapeHtml(status)}" aria-hidden="true"></div>
+            <div class="route-media loading" data-image-id="${item.id}" data-status="${escapeHtml(status)}"${linePlaceAttr} aria-hidden="true">${waitInner}</div>
             <div class="route-details">
               <div class="route-details-content">
-                <div class="route-title">${escapeHtml(waitLabel || 'In line')}</div>
-                <div class="route-summary">${waitLabel === 'Generating…' ? 'This may take a few minutes.' : 'Not generating yet — waiting in line.'}</div>
+                <div class="route-title">${escapeHtml(waitLabel || 'QUEUED')}</div>
+                <div class="route-summary">${escapeHtml(waitDetail || 'Waiting to generate.')}</div>
                 <div class="route-meta" title="${formatDateTime(item.created_at)}">${formatRelativeTime(item.created_at)}</div>
               </div>
             </div>
@@ -1404,7 +1429,7 @@ class AppRouteCreations extends HTMLElement {
 			if (this.isActiveRoute && !this.pollInterval) this.startPolling();
 		} else if (isCreationGpuInFlight(status)) {
 			card.innerHTML = html`
-            <div class="route-media loading" data-image-id="${item.id}" data-status="${escapeHtml(status)}" aria-hidden="true"></div>
+            <div class="route-media loading" data-image-id="${item.id}" data-status="${escapeHtml(status)}"${linePlaceAttr} aria-hidden="true">${waitInner}</div>
             <div class="route-details">
               <div class="route-details-content">
                 <div class="route-title">${escapeHtml(waitLabel || 'Generating…')}</div>
@@ -1637,4 +1662,6 @@ class AppRouteCreations extends HTMLElement {
 	}
 }
 
-customElements.define("app-route-creations", AppRouteCreations);
+if (!customElements.get("app-route-creations")) {
+	customElements.define("app-route-creations", AppRouteCreations);
+}

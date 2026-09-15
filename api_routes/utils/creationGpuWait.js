@@ -45,6 +45,18 @@ export function isCreationFinishTimedOut(status, meta, now = Date.now()) {
 	return Number.isFinite(timeoutAt) && now > timeoutAt;
 }
 
+export function isTerminalCompletedProviderStatus(status) {
+	const s = String(status ?? "").trim().toLowerCase();
+	return s === "completed" || s === "succeeded" || s === "done";
+}
+
+/** Keep QStash/local polls going while in line, or while generating before timeout_at. */
+export function shouldKeepProviderPoll(status, meta, now = Date.now()) {
+	if (!isCreationGpuInFlight(status)) return false;
+	if (isCreationInLine(status)) return true;
+	return !isCreationFinishTimedOut(status, meta, now);
+}
+
 export function gpuWaitMetaPatch(existingMeta, providerStatus, method, extra = {}) {
 	const mapped = gpuWaitFromProviderStatus(providerStatus);
 	if (!mapped) return null;

@@ -139,14 +139,29 @@ export function findCreationsPollStatusUpdates(creationsFromApi, root) {
 	const updates = [];
 	const seen = new Set();
 
-	const consider = (creationId, domStatus) => {
+	function linePlaceFromApiRow(row) {
+		const meta = parseCreationMeta(row?.meta);
+		const n = Number(meta?.line_place ?? meta?.provider_last_payload?.place);
+		return Number.isFinite(n) && n > 0 ? n : 0;
+	}
+
+	function linePlaceFromDom(el) {
+		if (!el || typeof el.getAttribute !== 'function') return 0;
+		const n = Number(el.getAttribute('data-line-place'));
+		return Number.isFinite(n) && n > 0 ? n : 0;
+	}
+
+	const consider = (creationId, domStatus, { comparePlace = false, domPlace = 0 } = {}) => {
 		if (!creationId || seen.has(creationId)) return;
 		const apiRow = byId.get(String(creationId));
 		if (!apiRow) return;
 		const apiStatus = normalizeCreationListStatus(apiRow.status);
 		const dom = normalizeCreationListStatus(domStatus);
 		if (!isInFlightCreationStatus(dom)) return;
-		if (apiStatus === dom) return;
+		if (apiStatus === dom) {
+			if (!comparePlace) return;
+			if (linePlaceFromApiRow(apiRow) === domPlace) return;
+		}
 		seen.add(creationId);
 		updates.push({ creationId: String(creationId), apiRow });
 	};
@@ -154,7 +169,10 @@ export function findCreationsPollStatusUpdates(creationsFromApi, root) {
 	for (const el of root.querySelectorAll(
 		'.route-media[data-image-id][data-status="creating"], .route-media[data-image-id][data-status="pending"], .route-media[data-image-id][data-status="queued"], .route-media[data-image-id][data-status="processing"]'
 	)) {
-		consider(el.getAttribute('data-image-id'), el.getAttribute('data-status'));
+		consider(el.getAttribute('data-image-id'), el.getAttribute('data-status'), {
+			comparePlace: true,
+			domPlace: linePlaceFromDom(el),
+		});
 	}
 	for (const el of root.querySelectorAll(
 		'.feed-card[data-creation-id][data-creation-status="creating"], .feed-card[data-creation-id][data-creation-status="pending"], .feed-card[data-creation-id][data-creation-status="queued"], .feed-card[data-creation-id][data-creation-status="processing"]'

@@ -2088,7 +2088,7 @@ export function hydrateChatCreationEmbeds(rootEl) {
 						'<div class="connect-chat-creation-embed-status-message connect-chat-creation-embed-status-message--pending" role="status">' +
 						(statusRaw === 'processing' || statusRaw === 'running'
 							? 'Generating…'
-							: 'In line') +
+							: 'QUEUED') +
 						'</div>' +
 						'<div class="connect-chat-creation-embed-skeleton connect-chat-creation-embed-skeleton--pending-fill" aria-hidden="true"></div>' +
 						'</div></div>';

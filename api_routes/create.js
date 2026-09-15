@@ -22,6 +22,7 @@ import { buildProviderHeaders } from "./utils/providerAuth.js";
 import {
 	runCreationJob,
 	runProviderPollJob,
+	kickStaleProviderPollIfNeeded,
 	PROVIDER_TIMEOUT_MS,
 	fetchImageBufferFromUrl,
 	createPlaceholderImageBuffer,
@@ -3399,6 +3400,14 @@ export default function createCreateRoutes({ queries, storage }) {
 			const imagesWithUrls = [];
 			for (const img of Array.isArray(images) ? images : []) {
 				const status = img.status || "completed";
+				if (isCreationGpuInFlight(status)) {
+					void kickStaleProviderPollIfNeeded({
+						queries,
+						storage,
+						image: img,
+						userId: user.id,
+					}).catch(() => {});
+				}
 				let meta = parseMeta(img.meta);
 				if (isGroupV2Meta(meta)) {
 					meta = await fillThinGroupV2ItemViews(queries, user.id, meta);
@@ -3750,6 +3759,14 @@ export default function createCreateRoutes({ queries, storage }) {
 			let meta = parseMeta(image.meta);
 
 			const status = image.status || 'completed';
+			if (isCreationGpuInFlight(status)) {
+				void kickStaleProviderPollIfNeeded({
+					queries,
+					storage,
+					image,
+					userId: image.user_id || user.id,
+				}).catch(() => {});
+			}
 			const creationIdForMedia = Number(image.id);
 			if (isGroupV2Meta(meta)) {
 				meta = await fillThinGroupV2ItemViews(queries, image.user_id, meta);

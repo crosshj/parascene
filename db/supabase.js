@@ -5497,6 +5497,20 @@ export function openDb() {
 				return { count: count ?? 0 };
 			}
 		},
+		selectCreatedImagesGpuInFlight: {
+			all: async ({ limit = 80 } = {}) => {
+				const cap = Math.min(200, Math.max(1, Number.parseInt(String(limit), 10) || 80));
+				const { data, error } = await serviceClient
+					.from(prefixedTable("created_images"))
+					.select("id, user_id, status, meta, created_at")
+					.in("status", ["creating", "queued", "pending", "processing", "running"])
+					.is("unavailable_at", null)
+					.order("created_at", { ascending: false })
+					.limit(cap);
+				if (error) throw error;
+				return data ?? [];
+			}
+		},
 		/** Published creations this user has liked (for profile Likes tab). */
 		selectCreatedImagesLikedByUser: {
 			all: async (userId, options = {}) => {

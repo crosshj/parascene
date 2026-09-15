@@ -38,6 +38,7 @@ const [
 	reactionTooltipTapMod,
 	videoFirstFramePosterMod,
 	audioCoverWaveformMod,
+	creationGpuWaitMod,
 ] = await Promise.all([
 	import(`./blogCampaignPath.js${_qs}`),
 	import(`./datetime.js${_qs}`),
@@ -57,6 +58,7 @@ const [
 	import(`./reactionTooltipTap.js${_qs}`),
 	import(`./videoFirstFramePoster.js${_qs}`),
 	import(`./audioCoverWaveform.js${_qs}`),
+	import(`./creationGpuWait.js${_qs}`),
 ]);
 
 const { buildBlogPostPublicPath, BLOG_CAMPAIGN_INTERNAL } = blogCampaignPathMod;
@@ -78,6 +80,7 @@ const { setupWhoTooltips } = reactionTooltipTapMod;
 const { applyVideoFirstFramePoster, feedItemNeedsVideoFramePoster, feedItemPlayableVideoUrl } =
 	videoFirstFramePosterMod;
 const { creationNeedsAudioWaveformCover, mountAudioCoverWaveform } = audioCoverWaveformMod;
+const { creationGpuWaitMarkup, creationLinePlace } = creationGpuWaitMod;
 
 const html = String.raw;
 
@@ -176,8 +179,8 @@ export function teardownFeedCardCreationProcessingUi(imageContainer) {
 	if (!imageContainer) return;
 	imageContainer.classList.remove('feed-card-image--creation-processing');
 	imageContainer.removeAttribute('aria-hidden');
-	const label = imageContainer.querySelector('.feed-card-creation-processing-label');
-	if (label) label.remove();
+	imageContainer.querySelector('.feed-card-creation-processing-label')?.remove();
+	imageContainer.querySelector('[data-creation-gpu-wait]')?.remove();
 	const videoEl = imageContainer.querySelector('.feed-card-video');
 	if (videoEl instanceof HTMLVideoElement) {
 		videoEl.style.removeProperty('opacity');
@@ -186,7 +189,7 @@ export function teardownFeedCardCreationProcessingUi(imageContainer) {
 }
 
 /**
- * Same visual language as `.route-media.loading` on the Creations page (shimmer + centered “Creating…”).
+ * Same GPU-wait overlay as My Creations tiles (icon + QUEUED / Generating…).
  * @param {HTMLElement|null} imageContainer - `.feed-card-image`
  * @param {HTMLImageElement|null} imageEl
  */
@@ -212,16 +215,13 @@ export function applyFeedCardCreationProcessingState(imageContainer, imageEl) {
 		videoEl.style.opacity = '0';
 		videoEl.style.visibility = 'hidden';
 	}
-	const st = (
-		imageContainer.closest('[data-creation-status]')?.getAttribute('data-creation-status') ||
-		''
-	).toLowerCase();
-	const label = document.createElement('span');
-	label.className = 'feed-card-creation-processing-label';
-	label.setAttribute('aria-hidden', 'true');
-	label.textContent =
-		st === 'processing' || st === 'running' ? 'Generating…' : 'In line';
-	imageContainer.appendChild(label);
+	const card = imageContainer.closest('[data-creation-status]');
+	const st = (card?.getAttribute('data-creation-status') || '').toLowerCase();
+	const place = Number(card?.getAttribute('data-line-place'));
+	imageContainer.insertAdjacentHTML(
+		'beforeend',
+		creationGpuWaitMarkup(st, Number.isFinite(place) && place > 0 ? place : null),
+	);
 }
 
 export function feedItemCardImageUrl(item, preferThumbnail = false) {
@@ -911,8 +911,12 @@ function buildFeedCreationCard(
 					: String(stRaw).trim().toLowerCase();
 		if (st === 'creating' || st === 'pending' || st === 'queued' || st === 'processing' || st === 'running') {
 			card.setAttribute('data-creation-status', st);
+			const place = creationLinePlace(parsedMeta);
+			if (place) card.setAttribute('data-line-place', String(place));
+			else card.removeAttribute('data-line-place');
 		} else {
 			card.removeAttribute('data-creation-status');
+			card.removeAttribute('data-line-place');
 		}
 	} else if (isFeedCreationImageProcessing(item) && item.id != null && item.id !== '') {
 		card.setAttribute('data-creation-id', String(item.id));
@@ -920,6 +924,9 @@ function buildFeedCreationCard(
 		const st =
 			typeof stRaw === 'string' ? stRaw.trim().toLowerCase() : 'creating';
 		card.setAttribute('data-creation-status', st || 'creating');
+		const place = creationLinePlace(parsedMeta);
+		if (place) card.setAttribute('data-line-place', String(place));
+		else card.removeAttribute('data-line-place');
 	}
 
 	if (hideFeedCardMetadata) {

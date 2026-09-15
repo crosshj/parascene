@@ -73,11 +73,6 @@ let audioCoverWaveformHtml;
 let mountAudioCoverWaveform;
 let removeAudioCoverWaveform;
 
-import {
-	isCreationFinishTimedOut,
-	isCreationGpuInFlight,
-} from '../shared/creationGpuWait.js';
-
 /** Set true locally when debugging creation-detail page load timing in the console. */
 const CREATION_DETAIL_LOG_PAGE_LOAD_TIMING = false;
 
@@ -110,6 +105,13 @@ const _creationDetailRuntimeQs = (() => {
 })();
 
 const hostedAudioPlayerModP = import(`/shared/hostedAudioPlayer.js${_creationDetailRuntimeQs}`);
+
+const {
+	creationGpuWaitMarkup,
+	creationLinePlace,
+	isCreationFinishTimedOut,
+	isCreationGpuInFlight,
+} = await import(`../shared/creationGpuWait.js${_creationDetailRuntimeQs}`);
 
 function isCreationDetailEmbed() {
 	return window.__ps_creation_detail_embed === true;
@@ -3169,6 +3171,7 @@ async function loadCreation() {
 		if (modIcon) modIcon.remove();
 		if (!heroVideoAwaitingReveal()) {
 			imageWrapper?.classList.remove('image-loading', 'image-error', 'image-error-moderated', 'hero-aspect-pending');
+			clearHeroGpuWait();
 		}
 		if (imageWrapper) delete imageWrapper.dataset.heroResolving;
 		const url = String(heroImageDisplayedUrl() || '').trim();
@@ -3760,11 +3763,27 @@ async function loadCreation() {
 		return true;
 	}
 
+	function clearHeroGpuWait() {
+		if (!(imageWrapper instanceof HTMLElement)) return;
+		imageWrapper.querySelectorAll('[data-creation-gpu-wait]').forEach((el) => el.remove());
+	}
+
 	function showHeroLoadingPlaceholder() {
 		resetHeroVideo();
 		clearHeroImage();
 		imageWrapper?.classList.remove('image-error', 'image-error-moderated', 'hero-video-pending', 'hero-video-revealed');
 		imageWrapper?.classList.add('image-loading');
+		clearHeroGpuWait();
+	}
+
+	function mountHeroGpuWait(status, creationMeta) {
+		if (!(imageWrapper instanceof HTMLElement)) return;
+		clearHeroGpuWait();
+		if (!isCreationGpuInFlight(status)) return;
+		imageWrapper.insertAdjacentHTML(
+			'beforeend',
+			creationGpuWaitMarkup(status, creationLinePlace(creationMeta)),
+		);
 	}
 
 	teardownGroupHeroCarousel();
@@ -3794,6 +3813,7 @@ async function loadCreation() {
 			});
 			// Show error placeholder; do not clear moderated state — loadCreation() may have already set it for a failed creation
 			imageWrapper?.classList.remove('image-loading');
+			clearHeroGpuWait();
 			imageWrapper?.classList.add('image-error');
 			setHeroBackgroundUrl('');
 			// Hide default browser broken-image UI
@@ -4386,6 +4406,7 @@ async function loadCreation() {
 			const modIcon = imageWrapper?.querySelector('.creation-detail-error-icon-moderated');
 			if (modIcon) modIcon.remove();
 			showHeroLoadingPlaceholder();
+			mountHeroGpuWait(status, meta);
 			markHeroReady({ state: isCreationGpuInFlight(status) ? status : 'creating' });
 		} else if (isFailed) {
 			resetHeroVideo();

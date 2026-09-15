@@ -3489,11 +3489,12 @@ app-route-feed {
 	animation: loading 4s linear infinite;
 }
 
-/* Matches `.route-media.loading` on the Creations page: shimmer + centered label (not used for generic img fetch `.loading`). */
+.feed-card-image.loading.feed-card-image--creation-processing,
 .feed-card-image--creation-processing {
-	background: linear-gradient(90deg, var(--surface-muted), var(--surface-strong), var(--surface-muted));
-	background-size: 200% 100%;
-	animation: loading 4s linear infinite;
+	background: var(--surface-muted);
+	background-size: auto;
+	animation: none;
+	color: var(--text);
 }
 
 /* Pull the empty <img> out of normal flow so a row flex layout cannot shove the label sideways. */
@@ -3513,39 +3514,15 @@ app-route-feed {
 }
 
 /* Real node (not ::after) so it does not clash with `.nsfw::after` blur on the same tile. */
-.feed-card-image--creation-processing .feed-card-creation-processing-label {
-	position: absolute;
-	inset: 0;
+.feed-card-image--creation-processing .feed-card-creation-processing-label,
+.feed-card-image--creation-processing [data-creation-gpu-wait] {
 	z-index: 5;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	text-align: center;
-	color: var(--text-muted);
-	font-size: 0.9rem;
-	pointer-events: none;
 }
 
 @media (prefers-color-scheme: light) {
-	.feed-card-image--creation-processing {
-		background: linear-gradient(90deg,
-				rgba(124, 58, 237, 0.2),
-				rgba(124, 58, 237, 0.4),
-				rgba(124, 58, 237, 0.2));
-		background-size: 200% 100%;
-	}
-
 	.feed-card-image--creation-processing .feed-card-creation-processing-label {
-		color: rgba(255, 255, 255, 0.9);
+		color: var(--text);
 		font-weight: 500;
-	}
-
-	.feed-card-image.loading {
-		background: linear-gradient(90deg,
-				rgba(124, 58, 237, 0.2),
-				rgba(124, 58, 237, 0.4),
-				rgba(124, 58, 237, 0.2));
-		background-size: 200% 100%;
 	}
 }
 
@@ -16988,9 +16965,8 @@ body.view-nsfw .connect-comment-thumb[data-media-type="video"].nsfw::after {
 }
 
 .route-media.loading {
-	background: linear-gradient(90deg, var(--surface-muted), var(--surface-strong), var(--surface-muted));
-	background-size: 200% 100%;
-	animation: loading 4s linear infinite;
+	background: var(--surface-muted);
+	animation: none;
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -16998,22 +16974,9 @@ body.view-nsfw .connect-comment-thumb[data-media-type="video"].nsfw::after {
 	inset: 0;
 	width: 100%;
 	height: 100%;
-	z-index: 0;
-}
-
-@media (prefers-color-scheme: light) {
-	.route-media.loading {
-		background: linear-gradient(90deg,
-				rgba(124, 58, 237, 0.2),
-				rgba(124, 58, 237, 0.4),
-				rgba(124, 58, 237, 0.2));
-		background-size: 200% 100%;
-	}
-
-	.route-media.loading::after {
-		color: rgba(255, 255, 255, 0.9);
-		font-weight: 500;
-	}
+	z-index: 1;
+	color: var(--text);
+	overflow: hidden;
 }
 
 @keyframes loading {
@@ -17061,16 +17024,130 @@ body.view-nsfw .connect-comment-thumb[data-media-type="video"].nsfw::after {
 }
 
 .route-media.loading::after {
-	content: 'In line';
-	position: relative;
-	z-index: 1;
-	color: var(--text-muted);
-	font-size: 0.9rem;
+	content: none;
 }
 
-.route-media.loading[data-status="processing"]::after,
-.route-media.loading[data-status="running"]::after {
-	content: 'Generating…';
+.route-media-wait {
+	position: absolute;
+	inset: 0;
+	z-index: 2;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	padding: 8px;
+	text-align: center;
+	color: var(--text);
+	font-size: 0.82rem;
+	pointer-events: none;
+}
+
+.route-media-wait-label {
+	font-weight: 600;
+	letter-spacing: 0.06em;
+}
+
+@container (max-width: 140px) {
+	.route-media-wait {
+		gap: 6px;
+		font-size: 0.72rem;
+	}
+
+	.creation-wait-icon,
+	.creation-wait-gears {
+		width: 36px;
+		height: 36px;
+	}
+}
+
+.creation-wait-gears {
+	position: relative;
+	display: block;
+	width: 48px;
+	height: 48px;
+	flex-shrink: 0;
+	opacity: 0.75;
+}
+
+.creation-wait-gear {
+	position: absolute;
+	overflow: visible;
+}
+
+.creation-wait-gear--lg {
+	width: 72%;
+	height: 72%;
+	left: 0;
+	top: 6%;
+	animation: creation-wait-spin 4.5s linear infinite;
+}
+
+.creation-wait-gear--sm {
+	width: 46%;
+	height: 46%;
+	right: 2%;
+	bottom: 4%;
+	animation: creation-wait-spin 3.15s linear infinite reverse;
+}
+
+.creation-wait-icon {
+	position: relative;
+	display: block;
+	width: 48px;
+	height: 48px;
+	flex-shrink: 0;
+	container-type: size;
+}
+
+.creation-wait-icon .creation-wait-watch {
+	width: 100%;
+	height: 100%;
+}
+
+.creation-wait-watch {
+	display: block;
+	width: 48px;
+	height: 48px;
+	flex-shrink: 0;
+	overflow: visible;
+	opacity: 0.75;
+}
+
+.creation-wait-place {
+	position: absolute;
+	right: -6%;
+	bottom: 2%;
+	z-index: 1;
+	box-sizing: border-box;
+	width: 44%;
+	height: 44%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border: 1.5px solid var(--text);
+	border-radius: 50%;
+	background: var(--surface-muted);
+	color: var(--text);
+	font-size: 0.62rem;
+	font-size: 22cqmin;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+	letter-spacing: 0;
+	line-height: 1;
+}
+
+@keyframes creation-wait-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.creation-wait-gear--lg,
+	.creation-wait-gear--sm {
+		animation: none;
+	}
 }
 
 .route-details {

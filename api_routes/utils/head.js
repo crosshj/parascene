@@ -22,9 +22,9 @@ function getPackageVersionFallback() {
 
 /**
  * Cache-bust id for {{V}} / asset-version / dynamic import ?v=.
- * Prefer CI/Vercel env; otherwise mtime of a local-only dev stamp file;
- * then mtime of public/global.css (works for local dev); if those files are missing
- * (some serverless layouts), fall back to package.json version.
+ * Prefer CI/Vercel env; otherwise the latest of the local-only dev stamp and
+ * public/global.css mtime (so CSS/JS edits bust ?v= without a bundle rebuild);
+ * if those files are missing (some serverless layouts), fall back to package.json version.
  */
 function getAssetVersion() {
 	const env =
@@ -33,20 +33,21 @@ function getAssetVersion() {
 		process.env.VERCEL_GIT_COMMIT_SHA ||
 		process.env.VERCEL_GIT_PREVIOUS_COMMIT_SHA;
 	if (env) return env;
+	const times = [];
 	try {
 		const devStampPath = path.join(_projectRoot, "public", ".asset-version-dev");
-		const st = fs.statSync(devStampPath);
-		return String(Math.floor(st.mtimeMs));
+		times.push(fs.statSync(devStampPath).mtimeMs);
 	} catch {
-		// Fall through to global.css mtime fallback.
+		// no local rollup stamp
 	}
 	try {
 		const cssPath = path.join(_projectRoot, "public", "global.css");
-		const st = fs.statSync(cssPath);
-		return String(Math.floor(st.mtimeMs));
+		times.push(fs.statSync(cssPath).mtimeMs);
 	} catch {
-		return getPackageVersionFallback();
+		// no css
 	}
+	if (times.length) return String(Math.floor(Math.max(...times)));
+	return getPackageVersionFallback();
 }
 
 function escapeHtmlUrl(url) {

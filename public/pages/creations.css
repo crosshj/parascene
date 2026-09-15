@@ -2213,14 +2213,13 @@ body.create-page:not(.creation-edit-page) .create-btn-generate:focus-visible,
 .creation-detail-image-wrapper.image-loading {
 	position: relative;
 	overflow: hidden;
-	background: linear-gradient(90deg,
-			color-mix(in srgb, var(--text) 6%, transparent),
-			color-mix(in srgb, var(--text) 12%, transparent),
-			color-mix(in srgb, var(--text) 6%, transparent));
-	background-size: 220% 100%;
-	animation: image-loading-shimmer 2.6s ease-in-out infinite;
-	/* Keep it calm initially, then shimmer */
-	animation-delay: 650ms;
+	background: var(--surface-muted);
+	animation: none;
+}
+
+.creation-detail-image-wrapper.image-loading:has([data-creation-gpu-wait]) {
+	background: var(--surface-muted);
+	animation: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2291,6 +2290,26 @@ body.create-page:not(.creation-edit-page) .create-btn-generate:focus-visible,
 .creation-detail-image-wrapper.image-loading .creation-detail-image,
 .creation-detail-image-wrapper.image-error .creation-detail-image {
 	display: none;
+}
+
+.creation-detail-image-wrapper [data-creation-gpu-wait] {
+	z-index: 2;
+	gap: 10px;
+}
+
+.creation-detail-image-wrapper [data-creation-gpu-wait] .creation-wait-gears,
+.creation-detail-image-wrapper [data-creation-gpu-wait] .creation-wait-icon {
+	width: 4.5rem;
+	height: 4.5rem;
+}
+
+.creation-detail-image-wrapper [data-creation-gpu-wait] .route-media-wait-label {
+	font-size: 1rem;
+}
+
+.creation-detail-image-wrapper [data-creation-gpu-wait] .creation-wait-place {
+	font-size: 0.85rem;
+	border-width: 2px;
 }
 
 /* Extended landscape loading: solid surface placeholder, no card chrome */
