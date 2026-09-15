@@ -17061,11 +17061,16 @@ body.view-nsfw .connect-comment-thumb[data-media-type="video"].nsfw::after {
 }
 
 .route-media.loading::after {
-	content: 'Creating...';
+	content: 'In line';
 	position: relative;
 	z-index: 1;
 	color: var(--text-muted);
 	font-size: 0.9rem;
+}
+
+.route-media.loading[data-status="processing"]::after,
+.route-media.loading[data-status="running"]::after {
+	content: 'Generating…';
 }
 
 .route-details {

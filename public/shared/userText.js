@@ -2021,7 +2021,8 @@ export function hydrateChatCreationEmbeds(rootEl) {
 				statusRaw === 'creating' ||
 				statusRaw === 'processing' ||
 				statusRaw === 'queued' ||
-				statusRaw === 'pending';
+				statusRaw === 'pending' ||
+				statusRaw === 'running';
 			const isFailed = statusRaw === 'failed' || statusRaw === 'error';
 
 			const mediaType = creationMediaType(data);
@@ -2084,7 +2085,11 @@ export function hydrateChatCreationEmbeds(rootEl) {
 					wrap.innerHTML =
 						'<div class="connect-chat-creation-embed-media">' +
 						'<div class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--pending">' +
-						'<div class="connect-chat-creation-embed-status-message connect-chat-creation-embed-status-message--pending" role="status">Still processing…</div>' +
+						'<div class="connect-chat-creation-embed-status-message connect-chat-creation-embed-status-message--pending" role="status">' +
+						(statusRaw === 'processing' || statusRaw === 'running'
+							? 'Generating…'
+							: 'In line') +
+						'</div>' +
 						'<div class="connect-chat-creation-embed-skeleton connect-chat-creation-embed-skeleton--pending-fill" aria-hidden="true"></div>' +
 						'</div></div>';
 					trimWhitespaceOnlyTextNodes(wrap);

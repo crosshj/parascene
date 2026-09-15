@@ -73,6 +73,11 @@ let audioCoverWaveformHtml;
 let mountAudioCoverWaveform;
 let removeAudioCoverWaveform;
 
+import {
+	isCreationFinishTimedOut,
+	isCreationGpuInFlight,
+} from '../shared/creationGpuWait.js';
+
 /** Set true locally when debugging creation-detail page load timing in the console. */
 const CREATION_DETAIL_LOG_PAGE_LOAD_TIMING = false;
 
@@ -4187,8 +4192,7 @@ async function loadCreation() {
 		const mediaType = typeof creation.media_type === 'string'
 			? creation.media_type
 			: (meta && typeof meta.media_type === 'string' ? meta.media_type : 'image');
-		const timeoutAt = meta && typeof meta.timeout_at === 'string' ? new Date(meta.timeout_at).getTime() : NaN;
-		const isTimedOut = status === 'creating' && Number.isFinite(timeoutAt) && Date.now() > timeoutAt;
+		const isTimedOut = isCreationFinishTimedOut(status, meta);
 		const isFailed = status === 'failed' || isTimedOut;
 		const shareMounted = isShareMountedView();
 
@@ -4378,11 +4382,11 @@ async function loadCreation() {
 			showHeroImage(creation.url);
 			mountCreationDetailYoutubePlayer(imageWrapper, meta);
 			markHeroReady({ state: 'youtube' });
-		} else if (status === 'creating' && !isTimedOut) {
+		} else if (isCreationGpuInFlight(status) && !isTimedOut) {
 			const modIcon = imageWrapper?.querySelector('.creation-detail-error-icon-moderated');
 			if (modIcon) modIcon.remove();
 			showHeroLoadingPlaceholder();
-			markHeroReady({ state: 'creating' });
+			markHeroReady({ state: isCreationGpuInFlight(status) ? status : 'creating' });
 		} else if (isFailed) {
 			resetHeroVideo();
 			clearHeroImage();

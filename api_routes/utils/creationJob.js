@@ -21,6 +21,11 @@ import {
 	extensionForAudioContentType,
 } from "./persistGeneratedAudio.js";
 import { refreshGroupV2MemberView } from "./groupV2Ops.js";
+import {
+	gpuWaitMetaPatch,
+	isCreationGpuInFlight,
+	gpuWaitFromProviderStatus,
+} from "./creationGpuWait.js";
 
 const PROVIDER_TIMEOUT_MS = 50_000;
 /** When the provider returns finished video bytes (sync or async poll), allow long downloads. Override with CREATION_PROVIDER_VIDEO_FETCH_TIMEOUT_MS (ms, min 10000). */
@@ -60,6 +65,41 @@ function mergeMeta(existing, patch) {
 	const base = existing && typeof existing === "object" ? existing : {};
 	const next = { ...base, ...(patch && typeof patch === "object" ? patch : {}) };
 	return next;
+}
+
+async function persistGpuWaitStatus({
+	queries,
+	imageId,
+	userId,
+	existingMeta,
+	providerStatus,
+	method,
+	extra,
+	anon = false,
+}) {
+	const built = gpuWaitMetaPatch(existingMeta, providerStatus, method, extra);
+	if (!built) return existingMeta;
+	const nextMeta = mergeMeta(existingMeta, built.patch);
+	if (anon) {
+		if (queries.updateCreatedImageAnonMeta?.run) {
+			await queries.updateCreatedImageAnonMeta.run(imageId, nextMeta);
+		}
+	} else if (queries.updateCreatedImageMeta?.run) {
+		await queries.updateCreatedImageMeta.run(imageId, userId, nextMeta);
+	}
+	if (!anon && queries.updateCreatedImageStatus?.run) {
+		await queries.updateCreatedImageStatus.run(imageId, userId, built.mapped.creationStatus);
+	}
+	return nextMeta;
+}
+
+function lineExtraFromBody(asyncBody) {
+	const extra = {};
+	const place = Number(asyncBody?.place);
+	const ahead = Number(asyncBody?.ahead);
+	if (Number.isFinite(place) && place > 0) extra.line_place = place;
+	if (Number.isFinite(ahead) && ahead >= 0) extra.line_ahead = ahead;
+	return extra;
 }
 
 function creationMethodMayReturnVideoBytes(method) {
@@ -561,7 +601,7 @@ export async function runCreationJob({ queries, storage, payload }) {
 
 	logCreation(`Image ${imageId} found, status: ${image.status || "null"}`);
 
-	// Idempotency: only transition when still creating.
+	// Idempotency: only start when still creating. queued/processing are poll.
 	if (image.status && image.status !== "creating") {
 		logCreation(`Skipping job - image ${imageId} already ${image.status}`);
 		return { ok: true, skipped: true, status: image.status };
@@ -720,7 +760,7 @@ export async function runCreationJob({ queries, storage, payload }) {
 				const asyncEnv = isRemoteAsyncEnv();
 				const asyncBody = body || {};
 				const jobId = asyncBody.job_id;
-				const status = asyncBody.status || "processing";
+				const status = asyncBody.status || "pending";
 				const startedAtMs = existingMeta && existingMeta.started_at ? Date.parse(existingMeta.started_at) : NaN;
 				const ackAtIso = new Date().toISOString();
 				const ackAtMs = Date.parse(ackAtIso);
@@ -733,7 +773,7 @@ export async function runCreationJob({ queries, storage, payload }) {
 				const delaySeconds = DEFAULT_PROVIDER_POLL_DELAY_SECONDS;
 				const nextPollAtIso = new Date(Date.now() + delaySeconds * 1000).toISOString();
 
-				const nextMeta = mergeMeta(existingMeta, {
+				let nextMeta = mergeMeta(existingMeta, {
 					provider_async: true,
 					provider_method: asyncBody.method || method,
 					provider_job_id: jobId,
@@ -743,8 +783,17 @@ export async function runCreationJob({ queries, storage, payload }) {
 					provider_last_payload: asyncBody,
 					...(Number.isFinite(durationMs) && durationMs >= 0 ? { duration_ms: durationMs } : {}),
 				});
+				nextMeta = await persistGpuWaitStatus({
+					queries,
+					imageId,
+					userId,
+					existingMeta: nextMeta,
+					providerStatus: status,
+					method: asyncBody.method || method,
+					extra: lineExtraFromBody(asyncBody),
+				});
 
-				logCreation("Async provider ack received; scheduling first poll", {
+				logCreation("Async provider ack received; scheduling first poll", {}
 					imageId,
 					userId,
 					job_id: jobId,
@@ -1098,7 +1147,7 @@ export async function runProviderPollJob({ queries, storage, payload }) {
 		return { ok: false, reason: "not_found" };
 	}
 
-	if (image.status && image.status !== "creating") {
+	if (image.status && !isCreationGpuInFlight(image.status)) {
 		logCreation(`Poll: skipping job - image ${imageId} already ${image.status}`);
 		return { ok: true, skipped: true, status: image.status };
 	}
@@ -1209,7 +1258,7 @@ export async function runProviderPollJob({ queries, storage, payload }) {
 				const asyncEnv = isRemoteAsyncEnv();
 				const asyncBody = body || {};
 				const jobId = asyncBody.job_id;
-				const status = asyncBody.status || "processing";
+				const status = asyncBody.status || "pending";
 				const statusLower = status.toLowerCase();
 
 				// If provider reports a terminal completed status in JSON, treat that as
@@ -1229,15 +1278,29 @@ export async function runProviderPollJob({ queries, storage, payload }) {
 					return { ok: true, reason: "async_poll_completed" };
 				}
 
+				const generating =
+					gpuWaitFromProviderStatus(status)?.phase === "generating";
+				const nextAttempts = generating
+					? Number(existingMeta.provider_poll_attempts ?? 0) + 1
+					: Number(existingMeta.provider_poll_attempts ?? 0);
 				const delaySeconds = DEFAULT_PROVIDER_POLL_DELAY_SECONDS;
 				const nextPollAtIso = new Date(Date.now() + delaySeconds * 1000).toISOString();
 
-				const nextMeta = mergeMeta(existingMeta, {
+				let nextMeta = mergeMeta(existingMeta, {
 					provider_job_id: jobId,
 					provider_status: status,
-					provider_poll_attempts: pollAttempts,
+					provider_poll_attempts: nextAttempts,
 					provider_next_poll_at: nextPollAtIso,
 					provider_last_payload: asyncBody,
+				});
+				nextMeta = await persistGpuWaitStatus({
+					queries,
+					imageId,
+					userId,
+					existingMeta: nextMeta,
+					providerStatus: status,
+					method: existingMeta.method,
+					extra: lineExtraFromBody(asyncBody),
 				});
 
 				logCreation("Poll: async provider still processing; scheduling another poll", {
@@ -1245,14 +1308,14 @@ export async function runProviderPollJob({ queries, storage, payload }) {
 					userId,
 					job_id: jobId,
 					status,
-					poll_attempts: pollAttempts,
+					poll_attempts: nextAttempts,
 				});
 
 				if (queries.updateCreatedImageMeta?.run) {
 					await queries.updateCreatedImageMeta.run(imageId, userId, nextMeta);
 				}
 
-				if (pollAttempts < MAX_PROVIDER_POLL_ATTEMPTS) {
+				if (!generating || nextAttempts < MAX_PROVIDER_POLL_ATTEMPTS) {
 					if (asyncEnv) {
 						// Cloud: enqueue next poll via QStash worker.
 						await scheduleProviderPollJob({

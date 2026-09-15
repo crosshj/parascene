@@ -6,6 +6,13 @@ import {
 	findCreationsPollStatusUpdates,
 	prunePendingCreationsSession,
 } from '../../shared/creationsInFlightPoller.js';
+import {
+	creationGpuWaitLabel,
+	creationLinePlace,
+	isCreationFinishTimedOut,
+	isCreationGpuInFlight,
+	isCreationInLine,
+} from '../../shared/creationGpuWait.js';
 
 let formatDateTime;
 let formatRelativeTime;
@@ -189,10 +196,7 @@ function creationIsChallengeLocked(meta) {
 }
 
 function isTimedOut(status, meta) {
-	if (status !== 'creating') return false;
-	const timeoutAt = meta && typeof meta.timeout_at === 'string' ? new Date(meta.timeout_at).getTime() : NaN;
-	if (!Number.isFinite(timeoutAt)) return false;
-	return Date.now() > timeoutAt;
+	return isCreationFinishTimedOut(status, meta);
 }
 
 const CREATIONS_PAGE_SIZE = 50;
@@ -986,7 +990,7 @@ class AppRouteCreations extends HTMLElement {
 		const pendingCreations = this.getPendingCreations();
 		const inFlight = pendingCreations.filter((item) => {
 			const status = item?.status || 'pending';
-			return status === 'pending' || status === 'creating';
+			return isCreationGpuInFlight(status);
 		});
 
 		for (const item of inFlight) {
@@ -1008,7 +1012,7 @@ class AppRouteCreations extends HTMLElement {
 				}
 			}
 			if (media) {
-				const wantStatus = status === 'pending' ? 'pending' : 'creating';
+				const wantStatus = isCreationGpuInFlight(status) ? status : 'creating';
 				if (media.getAttribute('data-status') !== wantStatus) {
 					media.setAttribute('data-status', wantStatus);
 				}
@@ -1185,7 +1189,7 @@ class AppRouteCreations extends HTMLElement {
 		const hasPending = this.getPendingCreations().length > 0;
 		const hasLoading =
 			this.querySelectorAll(
-				'.route-media[data-image-id][data-status="creating"], .route-media[data-image-id][data-status="pending"]'
+				'.route-media[data-image-id][data-status="creating"], .route-media[data-image-id][data-status="pending"], .route-media[data-image-id][data-status="queued"], .route-media[data-image-id][data-status="processing"]'
 			).length > 0;
 
 		if (!this.hasLoadedOnce) {
@@ -1375,10 +1379,10 @@ class AppRouteCreations extends HTMLElement {
 		const meta = parseMeta(item.meta);
 		const rawStatus = item.status || 'completed';
 		const timedOut = isTimedOut(rawStatus, meta);
-		const status = timedOut && rawStatus === 'creating' ? 'failed' : rawStatus;
+		const status = timedOut && isCreationGpuInFlight(rawStatus) ? 'failed' : rawStatus;
 
-		const isPending = status === 'pending';
-		const isCreating = status === 'creating';
+		const isPending = isCreationInLine(status);
+		const waitLabel = creationGpuWaitLabel(status, creationLinePlace(meta));
 		const isFailed = status === 'failed';
 
 		const bulkOverlay = () => html`
@@ -1388,23 +1392,23 @@ class AppRouteCreations extends HTMLElement {
 
 		if (isPending) {
 			card.innerHTML = html`
-            <div class="route-media loading" data-image-id="${item.id}" data-status="pending" aria-hidden="true"></div>
+            <div class="route-media loading" data-image-id="${item.id}" data-status="${escapeHtml(status)}" aria-hidden="true"></div>
             <div class="route-details">
               <div class="route-details-content">
-                <div class="route-title">Creating...</div>
-                <div class="route-summary">Your creation is being processed...</div>
+                <div class="route-title">${escapeHtml(waitLabel || 'In line')}</div>
+                <div class="route-summary">${waitLabel === 'Generating…' ? 'This may take a few minutes.' : 'Not generating yet — waiting in line.'}</div>
                 <div class="route-meta" title="${formatDateTime(item.created_at)}">${formatRelativeTime(item.created_at)}</div>
               </div>
             </div>
           `;
 			if (this.isActiveRoute && !this.pollInterval) this.startPolling();
-		} else if (isCreating) {
+		} else if (isCreationGpuInFlight(status)) {
 			card.innerHTML = html`
-            <div class="route-media loading" data-image-id="${item.id}" data-status="creating" aria-hidden="true"></div>
+            <div class="route-media loading" data-image-id="${item.id}" data-status="${escapeHtml(status)}" aria-hidden="true"></div>
             <div class="route-details">
               <div class="route-details-content">
-                <div class="route-title">Creating...</div>
-                <div class="route-summary">Your creation is being processed...</div>
+                <div class="route-title">${escapeHtml(waitLabel || 'Generating…')}</div>
+                <div class="route-summary">This may take a few minutes.</div>
                 <div class="route-meta" title="${formatDateTime(item.created_at)}">${formatRelativeTime(item.created_at)}</div>
               </div>
             </div>

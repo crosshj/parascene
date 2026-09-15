@@ -19,8 +19,12 @@ export function shouldContinueCreationsPoll(root) {
 	if (!root) return false;
 	if (root.querySelector('.route-media[data-image-id][data-status="creating"]')) return true;
 	if (root.querySelector('.route-media[data-image-id][data-status="pending"]')) return true;
+	if (root.querySelector('.route-media[data-image-id][data-status="queued"]')) return true;
+	if (root.querySelector('.route-media[data-image-id][data-status="processing"]')) return true;
 	if (root.querySelector('.feed-card[data-creation-id][data-creation-status="creating"]')) return true;
 	if (root.querySelector('.feed-card[data-creation-id][data-creation-status="pending"]')) return true;
+	if (root.querySelector('.feed-card[data-creation-id][data-creation-status="queued"]')) return true;
+	if (root.querySelector('.feed-card[data-creation-id][data-creation-status="processing"]')) return true;
 	return getPendingCreationsFromSession().length > 0;
 }
 
@@ -109,7 +113,13 @@ function normalizeCreationListStatus(status) {
 
 function isInFlightCreationStatus(status) {
 	const st = normalizeCreationListStatus(status);
-	return st === 'creating' || st === 'pending';
+	return (
+		st === 'creating' ||
+		st === 'pending' ||
+		st === 'queued' ||
+		st === 'processing' ||
+		st === 'running'
+	);
 }
 
 /**
@@ -137,18 +147,17 @@ export function findCreationsPollStatusUpdates(creationsFromApi, root) {
 		const dom = normalizeCreationListStatus(domStatus);
 		if (!isInFlightCreationStatus(dom)) return;
 		if (apiStatus === dom) return;
-		if (isInFlightCreationStatus(apiStatus)) return;
 		seen.add(creationId);
 		updates.push({ creationId: String(creationId), apiRow });
 	};
 
 	for (const el of root.querySelectorAll(
-		'.route-media[data-image-id][data-status="creating"], .route-media[data-image-id][data-status="pending"]'
+		'.route-media[data-image-id][data-status="creating"], .route-media[data-image-id][data-status="pending"], .route-media[data-image-id][data-status="queued"], .route-media[data-image-id][data-status="processing"]'
 	)) {
 		consider(el.getAttribute('data-image-id'), el.getAttribute('data-status'));
 	}
 	for (const el of root.querySelectorAll(
-		'.feed-card[data-creation-id][data-creation-status="creating"], .feed-card[data-creation-id][data-creation-status="pending"]'
+		'.feed-card[data-creation-id][data-creation-status="creating"], .feed-card[data-creation-id][data-creation-status="pending"], .feed-card[data-creation-id][data-creation-status="queued"], .feed-card[data-creation-id][data-creation-status="processing"]'
 	)) {
 		consider(el.getAttribute('data-creation-id'), el.getAttribute('data-creation-status'));
 	}

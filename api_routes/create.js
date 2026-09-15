@@ -26,6 +26,10 @@ import {
 	fetchImageBufferFromUrl,
 	createPlaceholderImageBuffer,
 } from "./utils/creationJob.js";
+import {
+	isCreationFinishTimedOut,
+	isCreationGpuInFlight,
+} from "./utils/creationGpuWait.js";
 import { runLandscapeJob } from "./utils/landscapeJob.js";
 import { scheduleCreationJob, scheduleLandscapeJob } from "./utils/scheduleCreationJob.js";
 import { scheduleEmbeddingJob } from "./utils/embeddingJob.js";
@@ -1620,11 +1624,8 @@ export default function createCreateRoutes({ queries, storage }) {
 		if (!image) return { ok: true, skipped: true };
 		const meta = parseMeta(image.meta);
 		const status = image.status || "completed";
-		if (status === "creating") {
-			const timeoutAt = meta?.timeout_at ? new Date(meta.timeout_at).getTime() : NaN;
-			if (!Number.isFinite(timeoutAt) || Date.now() <= timeoutAt) {
-				return { ok: false, error: "Cannot delete while a photo is still processing" };
-			}
+		if (isCreationGpuInFlight(status) && !isCreationFinishTimedOut(status, meta)) {
+			return { ok: false, error: "Cannot delete while a photo is still processing" };
 		}
 		const challengeBlock = await challengeArchiveBlockForCreation(id, meta, "deleting");
 		if (challengeBlock) {
@@ -2804,7 +2805,6 @@ export default function createCreateRoutes({ queries, storage }) {
 			}
 
 			const started_at = nowIso();
-			const timeout_at = new Date(Date.now() + PROVIDER_TIMEOUT_MS + 2000).toISOString();
 			const placeholderFilename = `creating_${user.id}_${Date.now()}.png`;
 			const meta = {
 				creation_token: creation_token.trim(),
@@ -2817,7 +2817,6 @@ export default function createCreateRoutes({ queries, storage }) {
 					: null,
 				args: argsForProvider,
 				started_at,
-				timeout_at,
 				credit_cost: CREATION_CREDIT_COST,
 				...(styleForMeta ? { style: styleForMeta } : {}),
 				...(originalPromptForMeta !== "" ? { user_prompt: originalPromptForMeta } : {}),
@@ -3136,15 +3135,11 @@ export default function createCreateRoutes({ queries, storage }) {
 						message: "Only failed or timed-out creations can be retried"
 					});
 				}
-				if (status === "creating") {
-					const existingMeta = parseMeta(image.meta) || {};
-					const timeoutAt = existingMeta.timeout_at ? new Date(existingMeta.timeout_at).getTime() : NaN;
-					if (!Number.isFinite(timeoutAt) || Date.now() <= timeoutAt) {
-						return res.status(400).json({
-							error: "Cannot retry",
-							message: "Creation is still in progress"
-						});
-					}
+				if (isCreationGpuInFlight(status) && !isCreationFinishTimedOut(status, parseMeta(image.meta) || {})) {
+					return res.status(400).json({
+						error: "Cannot retry",
+						message: "Creation is still in progress"
+					});
 				}
 				const existingMeta = parseMeta(image.meta) || {};
 				// Preserve existing history on retries (including mutated creations).
@@ -4647,29 +4642,28 @@ export default function createCreateRoutes({ queries, storage }) {
 
 			const meta = parseMeta(image.meta) || {};
 			const status = image.status || "completed";
-			const timeoutAt = meta?.timeout_at ? new Date(meta.timeout_at).getTime() : NaN;
-			const isPastTimeout = Number.isFinite(timeoutAt) && Date.now() > timeoutAt;
+			const isPastTimeout = isCreationFinishTimedOut(status, meta);
 
 			if (status === "completed") {
 				return res.status(400).json({ error: "Cannot retry a completed image" });
 			}
 
-			if (status === "creating" && !isPastTimeout) {
+			if (isCreationGpuInFlight(status) && !isPastTimeout) {
 				return res.status(400).json({ error: "Creation is still in progress" });
 			}
 
 			const nextMeta = {
 				...meta,
 				failed_at: nowIso(),
-				error_code: meta?.error_code || (status === "creating" ? "timeout" : "provider_error"),
-				error: meta?.error || (status === "creating" ? "Timed out" : "Failed"),
+				error_code: meta?.error_code || (isPastTimeout ? "timeout" : "provider_error"),
+				error: meta?.error || (isPastTimeout ? "Timed out" : "Failed"),
 			};
 
 			await queries.updateCreatedImageJobFailed.run(Number(req.params.id), user.id, { meta: nextMeta });
 
-			// If it was stuck creating and credits were never refunded, refund once.
+			// If it was stuck in-flight and credits were never refunded, refund once.
 			const creditCost = Number(nextMeta?.credit_cost ?? 0);
-			if (status === "creating" && creditCost > 0 && nextMeta.credits_refunded !== true) {
+			if (isCreationGpuInFlight(status) && creditCost > 0 && nextMeta.credits_refunded !== true) {
 				await queries.updateUserCreditsBalance.run(user.id, creditCost);
 				await queries.updateCreatedImageJobFailed.run(Number(req.params.id), user.id, {
 					meta: { ...nextMeta, credits_refunded: true }
@@ -6966,11 +6960,8 @@ export default function createCreateRoutes({ queries, storage }) {
 				return res.status(400).json({ error: challengeBlock });
 			}
 			const status = image.status || "completed";
-			if (status === "creating") {
-				const timeoutAt = meta?.timeout_at ? new Date(meta.timeout_at).getTime() : NaN;
-				if (!Number.isFinite(timeoutAt) || Date.now() <= timeoutAt) {
-					return res.status(400).json({ error: "Cannot delete an in-progress creation" });
-				}
+			if (isCreationGpuInFlight(status) && !isCreationFinishTimedOut(status, meta)) {
+				return res.status(400).json({ error: "Cannot delete an in-progress creation" });
 			}
 			const markResult = await queries.markCreatedImageUnavailable?.run(req.params.id, user.id);
 			if (!markResult || markResult.changes === 0) {

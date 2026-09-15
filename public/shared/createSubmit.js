@@ -507,7 +507,7 @@ export function navigateAfterCreateSubmit({
 function isAcceptedCreationResponse(data) {
 	const id = Number(data?.id);
 	const status = String(data?.status || '').trim().toLowerCase();
-	return Number.isFinite(id) && id > 0 && status === 'creating';
+	return Number.isFinite(id) && id > 0 && (status === 'creating' || status === 'queued' || status === 'processing');
 }
 
 /**

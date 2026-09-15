@@ -159,7 +159,13 @@ export function isFeedCreationImageProcessing(item) {
 	const raw = item?.status ?? item?.creation_status;
 	if (raw == null || raw === '') return false;
 	const st = String(raw).trim().toLowerCase();
-	return st === 'creating' || st === 'pending';
+	return (
+		st === 'creating' ||
+		st === 'pending' ||
+		st === 'queued' ||
+		st === 'processing' ||
+		st === 'running'
+	);
 }
 
 /**
@@ -206,10 +212,15 @@ export function applyFeedCardCreationProcessingState(imageContainer, imageEl) {
 		videoEl.style.opacity = '0';
 		videoEl.style.visibility = 'hidden';
 	}
+	const st = (
+		imageContainer.closest('[data-creation-status]')?.getAttribute('data-creation-status') ||
+		''
+	).toLowerCase();
 	const label = document.createElement('span');
 	label.className = 'feed-card-creation-processing-label';
 	label.setAttribute('aria-hidden', 'true');
-	label.textContent = 'Creating...';
+	label.textContent =
+		st === 'processing' || st === 'running' ? 'Generating…' : 'In line';
 	imageContainer.appendChild(label);
 }
 
@@ -898,7 +909,7 @@ function buildFeedCreationCard(
 				: typeof stRaw === 'string'
 					? stRaw.trim().toLowerCase()
 					: String(stRaw).trim().toLowerCase();
-		if (st === 'creating' || st === 'pending') {
+		if (st === 'creating' || st === 'pending' || st === 'queued' || st === 'processing' || st === 'running') {
 			card.setAttribute('data-creation-status', st);
 		} else {
 			card.removeAttribute('data-creation-status');
@@ -908,7 +919,7 @@ function buildFeedCreationCard(
 		const stRaw = item?.status;
 		const st =
 			typeof stRaw === 'string' ? stRaw.trim().toLowerCase() : 'creating';
-		card.setAttribute('data-creation-status', st === 'pending' ? 'pending' : 'creating');
+		card.setAttribute('data-creation-status', st || 'creating');
 	}
 
 	if (hideFeedCardMetadata) {
