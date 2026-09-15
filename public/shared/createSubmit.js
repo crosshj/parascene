@@ -1,5 +1,29 @@
-import { clearSharedCreatePrompt } from './createSettingsSync.js';
-import { applyGpuBid, confirmGpuOccupancyIfNeeded } from './gpuOccupancy.js';
+/**
+ * Loaded via `import(\`/shared/createSubmit.js${qs}\`)`. Direct siblings must use the
+ * same asset-version query; static `import './foo.js'` can resolve a stale cached copy
+ * (missing named exports).
+ */
+function getAssetQuery() {
+	try {
+		const fromModule = new URL(import.meta.url).search;
+		if (fromModule) return fromModule;
+	} catch {
+		/* ignore */
+	}
+	const v =
+		typeof document !== 'undefined'
+			? document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() || ''
+			: '';
+	return v ? `?v=${encodeURIComponent(v)}` : '';
+}
+
+function loadCreateSettingsSync() {
+	return import(`/shared/createSettingsSync.js${getAssetQuery()}`);
+}
+
+function loadGpuOccupancy() {
+	return import(`/shared/gpuOccupancy.js${getAssetQuery()}`);
+}
 
 export function generateCreationToken() {
 	const ts = Date.now().toString(36);
@@ -8,7 +32,8 @@ export function generateCreationToken() {
 }
 
 /** Clear composer prompt drafts (localStorage, session selections, synced surfaces). */
-export function clearComposerPromptDraftStorage() {
+export async function clearComposerPromptDraftStorage() {
+	const { clearSharedCreatePrompt } = await loadCreateSettingsSync();
 	clearSharedCreatePrompt({ notify: true });
 }
 
@@ -701,6 +726,7 @@ export async function submitCreationWithPending({
 }) {
 	if (!serverId || !methodKey) return null;
 
+	const { applyGpuBid, confirmGpuOccupancyIfNeeded } = await loadGpuOccupancy();
 	const occupancy = await confirmGpuOccupancyIfNeeded({
 		serverId,
 		method: methodKey,
@@ -796,7 +822,7 @@ export async function submitCreationWithPending({
 
 		await waitUntilCreationListed({ id: serverId, creationToken });
 		invalidateRelatedDataCaches();
-		clearComposerPromptDraftStorage();
+		await clearComposerPromptDraftStorage();
 
 		if (navigate !== 'none') {
 			navigateToCreations({
@@ -864,7 +890,7 @@ export async function importCreationWithPending({
 
 		await waitUntilCreationListed({ id: serverId, creationToken });
 		invalidateRelatedDataCaches();
-		clearComposerPromptDraftStorage();
+		await clearComposerPromptDraftStorage();
 
 		if (navigate !== 'none') {
 			navigateToCreations({

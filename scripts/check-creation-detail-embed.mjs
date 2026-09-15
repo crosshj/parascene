@@ -75,6 +75,8 @@ const CACHE_BUSTED_SHARED = [
 	'public/shared/creationGroupMedia.js',
 	'public/shared/creationBadges.js',
 	'public/shared/spaPageOverlay.js',
+	'public/shared/createSubmit.js',
+	'public/shared/createComposer.js',
 ];
 
 const STATIC_SIBLING = /\bfrom\s+['"](?:\.\/|\/shared\/|\/icons\/)/;
