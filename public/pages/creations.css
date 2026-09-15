@@ -2298,7 +2298,8 @@ body.create-page:not(.creation-edit-page) .create-btn-generate:focus-visible,
 }
 
 .creation-detail-image-wrapper [data-creation-gpu-wait] .creation-wait-gears,
-.creation-detail-image-wrapper [data-creation-gpu-wait] .creation-wait-icon {
+.creation-detail-image-wrapper [data-creation-gpu-wait] .creation-wait-icon,
+.creation-detail-image-wrapper [data-creation-gpu-wait] .creation-wait-timeout {
 	width: 4.5rem;
 	height: 4.5rem;
 }

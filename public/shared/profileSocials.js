@@ -20,6 +20,12 @@ export const PROFILE_SOCIAL_NETWORKS = [
 		hosts: ['instagram.com', 'www.instagram.com']
 	},
 	{
+		key: 'facebook',
+		label: 'Facebook',
+		placeholder: 'https://www.facebook.com/your-profile',
+		hosts: ['facebook.com', 'www.facebook.com', 'm.facebook.com', 'web.facebook.com', 'fb.com', 'www.fb.com']
+	},
+	{
 		key: 'tiktok',
 		label: 'TikTok',
 		placeholder: 'https://www.tiktok.com/@your-profile',

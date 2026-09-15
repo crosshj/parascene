@@ -25,6 +25,7 @@ import {
 	gpuWaitMetaPatch,
 	isCreationGpuInFlight,
 	gpuWaitFromProviderStatus,
+	isRecoverableTimedOutCreation,
 	isTerminalCompletedProviderStatus,
 	shouldKeepProviderPoll,
 } from "./creationGpuWait.js";
@@ -342,6 +343,149 @@ export async function resumeLocalProviderPolls({ queries, storage }) {
 	}
 	logCreation("Local provider poll resume", { resumed, candidates: list.length });
 	return { resumed };
+}
+
+async function reviveTimedOutProviderPollIfNeeded({
+	queries,
+	storage,
+	image,
+	userId,
+	force = false,
+	kick = true,
+}) {
+	const meta = parseMeta(image.meta) || {};
+	if (!isRecoverableTimedOutCreation(image.status, meta, Date.now(), { force })) {
+		return { revived: false, kicked: false };
+	}
+	const imageId = Number(image.id);
+	const uid = Number(userId ?? image.user_id);
+	if (!Number.isFinite(imageId) || imageId < 1 || !Number.isFinite(uid) || uid < 1) {
+		return { revived: false, kicked: false };
+	}
+
+	const nextMeta = mergeMeta(meta, {
+		error_code: null,
+		error: null,
+		failed_at: null,
+		provider_status:
+			meta.provider_status && meta.provider_status !== "failed"
+				? meta.provider_status
+				: "pending",
+		revived_from_timeout_at: new Date().toISOString(),
+	});
+	if (queries.updateCreatedImageStatus?.run) {
+		await queries.updateCreatedImageStatus.run(imageId, uid, "queued");
+	}
+	if (queries.updateCreatedImageMeta?.run) {
+		await queries.updateCreatedImageMeta.run(imageId, uid, nextMeta);
+	}
+	logCreation("Revived timed-out creation; resuming provider poll", { imageId, userId: uid });
+	if (!kick) return { revived: true, kicked: false };
+	const kicked = await kickStaleProviderPollIfNeeded({
+		queries,
+		storage,
+		image: { ...image, status: "queued", meta: nextMeta },
+		userId: uid,
+		force: true,
+	});
+	return { revived: true, kicked: Boolean(kicked.kicked) };
+}
+
+/** List/detail GET: keep a live poller, or un-fail a timeout if Blue still has the job. */
+export async function healProviderPollOnRead({
+	queries,
+	storage,
+	image,
+	userId,
+	force = false,
+}) {
+	if (!image) return { kicked: false, revived: false };
+	const meta = parseMeta(image.meta) || {};
+	if (isRecoverableTimedOutCreation(image.status, meta, Date.now(), { force })) {
+		return reviveTimedOutProviderPollIfNeeded({
+			queries,
+			storage,
+			image,
+			userId,
+			force,
+		});
+	}
+	if (!isCreationGpuInFlight(image.status)) return { kicked: false, revived: false };
+	const kicked = await kickStaleProviderPollIfNeeded({
+		queries,
+		storage,
+		image,
+		userId,
+	});
+	return { kicked: Boolean(kicked.kicked), revived: false };
+}
+
+/**
+ * Owner Check again: un-fail a timeout (no 120s cooldown) and await one Blue peek.
+ * Does not POST a new create.
+ */
+export async function recheckCreationProviderPoll({
+	queries,
+	storage,
+	image,
+	userId,
+}) {
+	if (!image) return { ok: false, reason: "not_found" };
+	const uid = Number(userId ?? image.user_id);
+	const imageId = Number(image.id);
+	if (!Number.isFinite(imageId) || imageId < 1 || !Number.isFinite(uid) || uid < 1) {
+		return { ok: false, reason: "invalid" };
+	}
+
+	const meta = parseMeta(image.meta) || {};
+	let row = image;
+	if (isRecoverableTimedOutCreation(image.status, meta, Date.now(), { force: true })) {
+		await reviveTimedOutProviderPollIfNeeded({
+			queries,
+			storage,
+			image,
+			userId: uid,
+			force: true,
+			kick: false,
+		});
+		row = (await queries.selectCreatedImageById.get(imageId, uid)) || image;
+	} else if (!isCreationGpuInFlight(image.status)) {
+		return {
+			ok: false,
+			reason: "not_recheckable",
+			status: image.status || null,
+			id: imageId,
+		};
+	}
+
+	const nextMeta = parseMeta(row.meta) || {};
+	const serverId = Number(nextMeta.server_id);
+	if (!Number.isFinite(serverId) || serverId < 1) {
+		return {
+			ok: false,
+			reason: "missing_server",
+			status: row.status || null,
+			id: imageId,
+		};
+	}
+
+	await runProviderPollJob({
+		queries,
+		storage,
+		payload: {
+			created_image_id: imageId,
+			user_id: uid,
+			server_id: serverId,
+			credit_cost: Number(nextMeta.credit_cost ?? 0) || 0,
+		},
+	});
+
+	const refreshed = await queries.selectCreatedImageById.get(imageId, uid);
+	return {
+		ok: true,
+		id: imageId,
+		status: refreshed?.status || row.status || null,
+	};
 }
 
 function isAsyncAckBody(body, fallbackMethod) {
@@ -709,8 +853,23 @@ async function finalizeCreationJob({
 			? completedAtMs - startedAtMs
 			: null;
 
+	const rechargeCredits =
+		existingMeta?.credits_refunded === true && Number(credit_cost) > 0;
+	if (rechargeCredits) {
+		try {
+			logCreation(`Re-charging ${credit_cost} credits after timeout recovery`, {
+				imageId,
+				userId,
+			});
+			await queries.updateUserCreditsBalance.run(userId, -Number(credit_cost));
+		} catch (err) {
+			logCreationWarn("Failed to re-charge credits after timeout recovery", safeErrorMessage(err));
+		}
+	}
+
 	const completedMeta = mergeMeta(existingMeta, {
 		completed_at: completedAtIso,
+		...(rechargeCredits ? { credits_refunded: false } : {}),
 		...(Number.isFinite(durationMs) && durationMs >= 0 ? { duration_ms: durationMs } : {}),
 		media_type: isAudio ? "audio" : isVideo ? "video" : "image",
 		...(isVideo && videoUrl

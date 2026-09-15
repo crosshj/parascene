@@ -109,7 +109,9 @@ const hostedAudioPlayerModP = import(`/shared/hostedAudioPlayer.js${_creationDet
 const {
 	creationGpuWaitMarkup,
 	creationLinePlace,
+	creationCanRecheckAfterTimeout,
 	isCreationFinishTimedOut,
+	isCreationTimedOutDisplay,
 	isCreationGpuInFlight,
 } = await import(`../shared/creationGpuWait.js${_creationDetailRuntimeQs}`);
 
@@ -588,6 +590,7 @@ function creationDetailStripChildKey(el) {
 	if (el.hasAttribute('data-edit-btn')) return 'edit';
 	if (el.hasAttribute('data-unpublish-btn')) return 'unpublish';
 	if (el.hasAttribute('data-retry-btn')) return 'retry';
+	if (el.hasAttribute('data-check-again-btn')) return 'check-again';
 	if (el.hasAttribute('data-more-info-btn')) return 'more-info';
 	if (el.hasAttribute('data-tip-creator-button')) return 'tip';
 	if (el.hasAttribute('data-delete-btn')) {
@@ -1116,6 +1119,21 @@ Un-publish`,
 Retry`,
 			show: (c) => c?.showRetry,
 			disabled: (c) => !c?.showRetry
+		},
+		{
+			key: 'check-again',
+			dataAttr: 'data-check-again-btn',
+			btnClass: 'btn-outlined',
+			inKebabMenu: false,
+			inner: html`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="margin-right: 6px; vertical-align: middle;">
+	<path d="M3 12a9 9 0 1 0 3-6.708" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+		stroke-linejoin="round" />
+	<polyline points="3 4 3 10 9 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+		stroke-linejoin="round" />
+</svg>
+Check again`,
+			show: (c) => c?.showCheckAgain,
+			disabled: (c) => !c?.showCheckAgain
 		},
 		{
 			key: 'more-info',
@@ -3119,8 +3137,38 @@ async function fillOrganizerAssignModalContent(bodyEl, creationId, { isChallenge
 	return 'ok';
 }
 
+const CREATION_DETAIL_IN_FLIGHT_POLL_MS = 15_000;
+const CREATION_DETAIL_IN_FLIGHT_POLL_MAX = 80;
+let creationDetailInFlightPollTimer = null;
+let creationDetailInFlightPollCount = 0;
+let creationDetailInFlightPollId = null;
+
+function stopCreationDetailInFlightPoll() {
+	if (creationDetailInFlightPollTimer) {
+		clearTimeout(creationDetailInFlightPollTimer);
+		creationDetailInFlightPollTimer = null;
+	}
+}
+
+function scheduleCreationDetailInFlightPoll(creationId) {
+	const id = String(creationId ?? '');
+	if (!id) return;
+	if (creationDetailInFlightPollId !== id) {
+		creationDetailInFlightPollId = id;
+		creationDetailInFlightPollCount = 0;
+	}
+	stopCreationDetailInFlightPoll();
+	if (creationDetailInFlightPollCount >= CREATION_DETAIL_IN_FLIGHT_POLL_MAX) return;
+	creationDetailInFlightPollTimer = window.setTimeout(() => {
+		creationDetailInFlightPollTimer = null;
+		creationDetailInFlightPollCount += 1;
+		void loadCreation();
+	}, CREATION_DETAIL_IN_FLIGHT_POLL_MS);
+}
+
 async function loadCreation() {
 	stopCreationDetailHeroPlayback();
+	stopCreationDetailInFlightPoll();
 
 	const detailContent = document.querySelector('[data-detail-content]');
 	const imageEl = document.querySelector('[data-image]');
@@ -3776,13 +3824,16 @@ async function loadCreation() {
 		clearHeroGpuWait();
 	}
 
-	function mountHeroGpuWait(status, creationMeta) {
+	function mountHeroGpuWait(status, creationMeta, { timedOut = false } = {}) {
 		if (!(imageWrapper instanceof HTMLElement)) return;
 		clearHeroGpuWait();
-		if (!isCreationGpuInFlight(status)) return;
+		if (!timedOut && !isCreationGpuInFlight(status)) return;
 		imageWrapper.insertAdjacentHTML(
 			'beforeend',
-			creationGpuWaitMarkup(status, creationLinePlace(creationMeta)),
+			creationGpuWaitMarkup(status, creationLinePlace(creationMeta), {
+				timedOut,
+				meta: creationMeta,
+			}),
 		);
 	}
 
@@ -4408,6 +4459,14 @@ async function loadCreation() {
 			showHeroLoadingPlaceholder();
 			mountHeroGpuWait(status, meta);
 			markHeroReady({ state: isCreationGpuInFlight(status) ? status : 'creating' });
+			scheduleCreationDetailInFlightPoll(creationId);
+		} else if (isCreationTimedOutDisplay(status, meta) && creation.is_moderated_error !== true) {
+			const modIcon = imageWrapper?.querySelector('.creation-detail-error-icon-moderated');
+			if (modIcon) modIcon.remove();
+			imageWrapper?.classList.remove('image-error-moderated');
+			showHeroLoadingPlaceholder();
+			mountHeroGpuWait(status, meta, { timedOut: true });
+			markHeroReady({ state: 'timed_out' });
 		} else if (isFailed) {
 			resetHeroVideo();
 			clearHeroImage();
@@ -4604,6 +4663,12 @@ async function loadCreation() {
 				!isFailed &&
 				(isOwner || isPublished || isAdmin),
 			showRetry: canEdit && isFailed && !adminViewingUserDeleted && !isImportEmbedCreation,
+			showCheckAgain:
+				isOwner &&
+				!adminViewingUserDeleted &&
+				!isImportEmbedCreation &&
+				(creationCanRecheckAfterTimeout(status, meta) ||
+					(isCreationGpuInFlight(status) && Boolean(meta?.revived_from_timeout_at))),
 			showMoreInfoPill: hasDetailsForFailed,
 			showDelete: canEdit && !isAdmin,
 			showQueueForLater,
@@ -4634,6 +4699,7 @@ async function loadCreation() {
 		const groupCan = (key) => groupActionSupported(groupMeta, key);
 		if (isGroupCreation) {
 			actionsContext.showRetry = false;
+			actionsContext.showCheckAgain = false;
 			actionsContext.showQueueFromFrame = false;
 			actionsContext.showSetVideoPoster = false;
 			actionsContext.showAdjustImage = false;
@@ -8164,6 +8230,15 @@ document.addEventListener('click', (e) => {
 	}
 });
 
+// Check again: peek Blue for a timed-out creation (not a new generate).
+document.addEventListener('click', (e) => {
+	const checkBtn = e.target.closest('[data-check-again-btn]');
+	if (checkBtn && !checkBtn.disabled) {
+		e.preventDefault();
+		handleCheckAgain();
+	}
+});
+
 // Retry button handler
 document.addEventListener('click', (e) => {
 	const retryBtn = e.target.closest('[data-retry-btn]');
@@ -8702,6 +8777,32 @@ async function handleDelete(isPermanent) {
 		if (deleteBtn) {
 			deleteBtn.disabled = false;
 		}
+	}
+}
+
+async function handleCheckAgain() {
+	const creationId = getCreationId();
+	if (!creationId) {
+		alert('Invalid creation ID');
+		return;
+	}
+
+	const checkBtn = document.querySelector('[data-check-again-btn]');
+	if (checkBtn) checkBtn.disabled = true;
+
+	try {
+		const response = await fetch(`/api/create/images/${encodeURIComponent(String(creationId))}/check`, {
+			method: 'POST',
+			credentials: 'include',
+		});
+		const data = await response.json().catch(() => ({}));
+		if (!response.ok || data?.ok !== true) {
+			throw new Error(data.error || 'Failed to check creation');
+		}
+		await loadCreation();
+	} catch (error) {
+		alert(error.message || 'Failed to check this creation. Please try again.');
+		if (checkBtn) checkBtn.disabled = false;
 	}
 }
 

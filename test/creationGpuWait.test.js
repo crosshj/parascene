@@ -5,6 +5,8 @@ import {
 	gpuWaitMetaPatch,
 	isCreationFinishTimedOut,
 	isCreationGpuInFlight,
+	isProviderJobInFlight,
+	isRecoverableTimedOutCreation,
 	isTerminalCompletedProviderStatus,
 	shouldKeepProviderPoll,
 } from "../api_routes/utils/creationGpuWait.js";
@@ -14,6 +16,7 @@ import {
 	creationGpuWaitMarkup,
 	isCreationGenerating,
 	isCreationInLine,
+	creationCanRecheckAfterTimeout,
 } from "../public/shared/creationGpuWait.js";
 import { findCreationsPollStatusUpdates } from "../public/shared/creationsInFlightPoller.js";
 
@@ -65,6 +68,14 @@ describe("creation finish clock", () => {
 		).toBe(true);
 	});
 
+	test("does not expire creating", () => {
+		expect(
+			isCreationFinishTimedOut("creating", {
+				timeout_at: "2000-01-01T00:00:00.000Z",
+			}),
+		).toBe(false);
+	});
+
 	test("sets running_at and timeout_at on first generating", () => {
 		const { mapped, patch } = gpuWaitMetaPatch({}, "running", "image2video");
 		expect(mapped.creationStatus).toBe("processing");
@@ -106,7 +117,7 @@ describe("provider poll continuation", () => {
 		).toBe(true);
 	});
 
-	test("stops polling generating after timeout_at", () => {
+	test("stops polling generating after timeout_at when Blue is no longer in-flight", () => {
 		expect(
 			shouldKeepProviderPoll(
 				"processing",
@@ -114,6 +125,65 @@ describe("provider poll continuation", () => {
 				Date.parse("2026-01-01T00:11:00.000Z"),
 			),
 		).toBe(false);
+	});
+
+	test("keeps polling generating past timeout_at while Blue still has the job", () => {
+		expect(
+			shouldKeepProviderPoll(
+				"processing",
+				{
+					timeout_at: "2026-01-01T00:10:00.000Z",
+					provider_status: "running",
+				},
+				Date.parse("2026-01-01T00:11:00.000Z"),
+			),
+		).toBe(true);
+		expect(isProviderJobInFlight({ provider_status: "pending" })).toBe(true);
+	});
+
+	test("revives a timed-out row that still has a Blue job", () => {
+		expect(
+			isRecoverableTimedOutCreation("failed", {
+				error_code: "timeout",
+				provider_async: true,
+				provider_job_id: "job_abc",
+			}),
+		).toBe(true);
+		expect(
+			isRecoverableTimedOutCreation("failed", {
+				error_code: "timeout",
+				provider_async: true,
+			}),
+		).toBe(false);
+		expect(
+			isRecoverableTimedOutCreation("queued", {
+				error_code: "timeout",
+				provider_async: true,
+				provider_job_id: "job_abc",
+			}),
+		).toBe(false);
+		const revivedAt = new Date().toISOString();
+		expect(
+			isRecoverableTimedOutCreation("failed", {
+				error_code: "timeout",
+				provider_async: true,
+				provider_job_id: "job_abc",
+				revived_from_timeout_at: revivedAt,
+			}),
+		).toBe(false);
+		expect(
+			isRecoverableTimedOutCreation(
+				"failed",
+				{
+					error_code: "timeout",
+					provider_async: true,
+					provider_job_id: "job_abc",
+					revived_from_timeout_at: revivedAt,
+				},
+				Date.now(),
+				{ force: true },
+			),
+		).toBe(true);
 	});
 });
 
@@ -132,6 +202,26 @@ describe("labels", () => {
 		expect(creationGpuWaitMarkup("queued", 2)).not.toContain("in line");
 		expect(creationGpuWaitMarkup("processing")).toContain("creation-wait-gears");
 		expect(creationGpuWaitMarkup("processing", 2)).not.toContain("creation-wait-place");
+		expect(creationGpuWaitLabel("timed_out")).toBe("TIMED OUT");
+		expect(
+			creationGpuWaitLabel("failed", null, { meta: { error_code: "timeout" } }),
+		).toBe("TIMED OUT");
+		expect(creationGpuWaitMarkup("timed_out")).toContain("is-timeout");
+		expect(creationGpuWaitMarkup("timed_out")).toContain("creation-wait-timeout");
+		expect(creationGpuWaitMarkup("timed_out")).toContain("TIMED OUT");
+		expect(
+			creationCanRecheckAfterTimeout("failed", {
+				error_code: "timeout",
+				provider_job_id: "job_abc",
+			}),
+		).toBe(true);
+		expect(
+			creationCanRecheckAfterTimeout("failed", {
+				error_code: "provider_error",
+				provider_job_id: "job_abc",
+			}),
+		).toBe(false);
+		expect(creationCanRecheckAfterTimeout("failed", { error_code: "timeout" })).toBe(false);
 	});
 });
 

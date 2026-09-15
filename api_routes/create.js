@@ -22,7 +22,8 @@ import { buildProviderHeaders } from "./utils/providerAuth.js";
 import {
 	runCreationJob,
 	runProviderPollJob,
-	kickStaleProviderPollIfNeeded,
+	healProviderPollOnRead,
+	recheckCreationProviderPoll,
 	PROVIDER_TIMEOUT_MS,
 	fetchImageBufferFromUrl,
 	createPlaceholderImageBuffer,
@@ -3400,8 +3401,8 @@ export default function createCreateRoutes({ queries, storage }) {
 			const imagesWithUrls = [];
 			for (const img of Array.isArray(images) ? images : []) {
 				const status = img.status || "completed";
-				if (isCreationGpuInFlight(status)) {
-					void kickStaleProviderPollIfNeeded({
+				if (isCreationGpuInFlight(status) || status === "failed") {
+					void healProviderPollOnRead({
 						queries,
 						storage,
 						image: img,
@@ -3758,14 +3759,28 @@ export default function createCreateRoutes({ queries, storage }) {
 			const description = typeof image.description === "string" ? image.description.trim() : "";
 			let meta = parseMeta(image.meta);
 
-			const status = image.status || 'completed';
-			if (isCreationGpuInFlight(status)) {
-				void kickStaleProviderPollIfNeeded({
-					queries,
-					storage,
-					image,
-					userId: image.user_id || user.id,
-				}).catch(() => {});
+			let status = image.status || 'completed';
+			if (isOwner && (isCreationGpuInFlight(status) || status === "failed")) {
+				try {
+					await healProviderPollOnRead({
+						queries,
+						storage,
+						image,
+						userId: image.user_id || user.id,
+						force: status === "failed",
+					});
+					const refreshed = await queries.selectCreatedImageById.get(
+						image.id,
+						image.user_id || user.id,
+					);
+					if (refreshed) {
+						image = refreshed;
+						meta = parseMeta(image.meta);
+						status = image.status || "completed";
+					}
+				} catch {
+					// keep the row we already loaded
+				}
 			}
 			const creationIdForMedia = Number(image.id);
 			if (isGroupV2Meta(meta)) {
@@ -4643,6 +4658,47 @@ export default function createCreateRoutes({ queries, storage }) {
 				return res.status(status).json({ error: msg });
 			}
 			return res.status(500).json({ error: "Failed to export watermarked image" });
+		}
+	});
+
+	// POST /api/create/images/:id/check — peek Blue for a timed-out or in-flight row (not a new create).
+	router.post("/api/create/images/:id/check", async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+
+		try {
+			const image = await queries.selectCreatedImageById.get(req.params.id, user.id);
+			if (!image) {
+				return res.status(404).json({ ok: false, error: "Image not found" });
+			}
+
+			const result = await recheckCreationProviderPoll({
+				queries,
+				storage,
+				image,
+				userId: user.id,
+			});
+			if (!result.ok) {
+				const statusCode = result.reason === "not_found" ? 404 : 400;
+				return res.status(statusCode).json({
+					ok: false,
+					error:
+						result.reason === "not_recheckable"
+							? "Nothing to check"
+							: result.reason === "missing_server"
+								? "Creation is missing server details"
+								: "Failed to check creation",
+					status: result.status ?? image.status ?? null,
+					id: Number(image.id),
+				});
+			}
+			return res.json({
+				ok: true,
+				id: result.id,
+				status: result.status,
+			});
+		} catch (error) {
+			return res.status(500).json({ ok: false, error: "Failed to check creation" });
 		}
 	});
 

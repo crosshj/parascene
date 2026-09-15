@@ -37,10 +37,45 @@ export function creationFinishTimeoutMs(method) {
 	return 10 * 60_000;
 }
 
+export function isProviderJobInFlight(meta) {
+	const s = String(meta?.provider_status ?? "").trim().toLowerCase();
+	return (
+		s === "pending" ||
+		s === "queued" ||
+		s === "waiting" ||
+		s === "created" ||
+		s === "running" ||
+		s === "processing" ||
+		s === "in_progress" ||
+		s === "starting"
+	);
+}
+
+export function providerJobIdFromMeta(meta) {
+	const fromMeta = typeof meta?.provider_job_id === "string" ? meta.provider_job_id.trim() : "";
+	if (fromMeta) return fromMeta;
+	const fromPayload =
+		typeof meta?.provider_last_payload?.job_id === "string"
+			? meta.provider_last_payload.job_id.trim()
+			: "";
+	return fromPayload || null;
+}
+
+/** Failed timeout that still has a Blue job — GET should resume the poller. */
+export function isRecoverableTimedOutCreation(status, meta, now = Date.now(), opts = {}) {
+	if (String(status ?? "").trim().toLowerCase() !== "failed") return false;
+	if (String(meta?.error_code ?? "").trim().toLowerCase() !== "timeout") return false;
+	if (!meta?.provider_async) return false;
+	if (!providerJobIdFromMeta(meta)) return false;
+	if (opts.force) return true;
+	const revivedAt = meta?.revived_from_timeout_at ? Date.parse(meta.revived_from_timeout_at) : NaN;
+	return !(Number.isFinite(revivedAt) && now - revivedAt < 120_000);
+}
+
 export function isCreationFinishTimedOut(status, meta, now = Date.now()) {
+	if (isCreationInLine(status)) return false;
 	const s = String(status ?? "").trim().toLowerCase();
-	if (s === "queued" || s === "pending") return false;
-	if (s !== "processing" && s !== "running" && s !== "creating") return false;
+	if (s !== "processing" && s !== "running") return false;
 	const timeoutAt = meta?.timeout_at ? Date.parse(meta.timeout_at) : NaN;
 	return Number.isFinite(timeoutAt) && now > timeoutAt;
 }
@@ -50,8 +85,9 @@ export function isTerminalCompletedProviderStatus(status) {
 	return s === "completed" || s === "succeeded" || s === "done";
 }
 
-/** Keep QStash/local polls going while in line, or while generating before timeout_at. */
+/** Keep polls going while Blue still has the job, even past the finish clock. */
 export function shouldKeepProviderPoll(status, meta, now = Date.now()) {
+	if (isProviderJobInFlight(meta)) return true;
 	if (!isCreationGpuInFlight(status)) return false;
 	if (isCreationInLine(status)) return true;
 	return !isCreationFinishTimedOut(status, meta, now);

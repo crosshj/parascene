@@ -115,6 +115,7 @@ async function loadDeps() {
 			website: iconsMod.globeIcon,
 			spotify: iconsMod.spotifyIcon,
 			instagram: iconsMod.instagramIcon,
+			facebook: iconsMod.facebookIcon,
 			tiktok: iconsMod.tiktokIcon,
 			soundcloud: iconsMod.soundcloudIcon,
 			youtube: iconsMod.youtubeIcon,

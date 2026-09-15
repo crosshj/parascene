@@ -26,7 +26,9 @@ const [
 		creationGpuWaitLabel,
 		creationGpuWaitMarkup,
 		creationLinePlace,
+		creationCanRecheckAfterTimeout,
 		isCreationFinishTimedOut,
+		isCreationTimedOutDisplay,
 		isCreationGpuInFlight,
 		isCreationInLine,
 	},
@@ -1224,10 +1226,12 @@ class AppRouteCreations extends HTMLElement {
 				void this.fetchAndApplyCreationsPollResult();
 			}
 			if (!this.pollInterval) this.startPolling();
+			void this.recheckTimedOutCreations();
 			return;
 		}
 
-		// Already loaded and nothing pending: ensure lazy loads keep flowing.
+		// Already loaded and nothing pending: peek a few timed-out Blue jobs, then keep lazy loads flowing.
+		void this.recheckTimedOutCreations();
 		this.resumeImageLazyLoading();
 	}
 
@@ -1377,6 +1381,7 @@ class AppRouteCreations extends HTMLElement {
 			this.isLoading = false;
 			this.updateLoadMoreFallback();
 		}
+		void this.recheckTimedOutCreations();
 	}
 
 	appendCreationCards(cont, items, startEagerIndex) {
@@ -1440,17 +1445,37 @@ class AppRouteCreations extends HTMLElement {
           `;
 			if (this.isActiveRoute && !this.pollInterval) this.startPolling();
 		} else if (isFailed) {
+			const isTimeout = !item.is_moderated_error && isCreationTimedOutDisplay(status, meta);
 			const reason =
 				(meta && typeof meta.error === 'string' && meta.error) ||
-				(meta && meta.error_code === 'timeout' ? 'This creation timed out.' : 'This creation failed.');
+				(isTimeout ? 'This creation timed out.' : 'This creation failed.');
 			const isModerated = item.is_moderated_error === true;
+			const canRecheck = creationCanRecheckAfterTimeout(status, meta);
 			card.style.cursor = 'pointer';
 			card.dataset.imageId = String(item.id);
 			card.addEventListener('click', (e) => {
 				if (this.querySelector('.creations-route')?.classList.contains('is-bulk-mode')) return;
+				if (e.target.closest('[data-creations-check-again]')) return;
 				navigateToCreation(`/creations/${item.id}`, e);
 			});
-			card.innerHTML = html`
+			if (isTimeout) {
+				const timeoutInner = creationGpuWaitMarkup(status, null, { escapeHtml, timedOut: true, meta });
+				const timeoutLabel = creationGpuWaitLabel(status, null, { timedOut: true, meta });
+				const timeoutDetail = creationGpuWaitDetail(status, null, { timedOut: true, meta });
+				card.innerHTML = html`
+					<div class="route-media loading" data-image-id="${item.id}" data-status="failed"${canRecheck ? ' data-timeout-recheck="1"' : ''} aria-hidden="true">${timeoutInner}</div>
+					<div class="route-details">
+					<div class="route-details-content">
+						<div class="route-title">${escapeHtml(timeoutLabel || 'TIMED OUT')}</div>
+						<div class="route-summary">${escapeHtml(timeoutDetail || reason)}</div>
+						<div class="route-meta" title="${formatDateTime(item.created_at)}">Created ${formatRelativeTime(item.created_at)}</div>
+						${canRecheck ? html`<button type="button" class="btn-outlined creations-card-check-again" data-creations-check-again="${item.id}">Check again</button>` : ''}
+					</div>
+					</div>
+					${bulkOverlay()}
+				`;
+			} else {
+				card.innerHTML = html`
 					<div class="route-media route-media-error${isModerated ? ' route-media-error-moderated' : ''}" data-image-id="${item.id}" data-status="failed" aria-hidden="true">${isModerated ? html`<span class="route-media-error-moderated-icon" role="img" aria-label="Content moderated">${eyeHiddenIcon()}</span>` : ''}</div>
 					<div class="route-details">
 					<div class="route-details-content">
@@ -1461,6 +1486,15 @@ class AppRouteCreations extends HTMLElement {
 					</div>
 					${bulkOverlay()}
 				`;
+			}
+			if (canRecheck) {
+				const checkBtn = card.querySelector('[data-creations-check-again]');
+				checkBtn?.addEventListener('click', (e) => {
+					e.preventDefault();
+					e.stopPropagation();
+					void this.checkTimedOutCreation(item.id, checkBtn);
+				});
+			}
 		} else {
 			card.style.cursor = 'pointer';
 			card.addEventListener('click', (e) => {
@@ -1563,6 +1597,65 @@ class AppRouteCreations extends HTMLElement {
 		} finally {
 			this.isLoadingMore = false;
 			this.updateLoadMoreFallback();
+		}
+	}
+
+	async postCreationCheck(id) {
+		const res = await fetch(`/api/create/images/${encodeURIComponent(String(id))}/check`, {
+			method: 'POST',
+			credentials: 'include',
+		});
+		const data = await res.json().catch(() => ({}));
+		return { ok: Boolean(res.ok && data?.ok), status: data?.status, data };
+	}
+
+	async checkTimedOutCreation(id, buttonEl) {
+		if (buttonEl) {
+			buttonEl.disabled = true;
+			buttonEl.textContent = 'Checking…';
+		}
+		try {
+			const result = await this.postCreationCheck(id);
+			if (!result.ok) {
+				if (buttonEl) {
+					buttonEl.disabled = false;
+					buttonEl.textContent = 'Check again';
+				}
+				return;
+			}
+			await this.loadCreations({ force: true });
+		} catch {
+			if (buttonEl) {
+				buttonEl.disabled = false;
+				buttonEl.textContent = 'Check again';
+			}
+		}
+	}
+
+	async recheckTimedOutCreations() {
+		if (this._recheckInFlight) return;
+		const now = Date.now();
+		if (this._lastRecheckAt && now - this._lastRecheckAt < 15_000) return;
+		const ids = [...this.querySelectorAll('[data-creations-check-again]')]
+			.map((el) => el.getAttribute('data-creations-check-again'))
+			.filter(Boolean)
+			.slice(0, 3);
+		if (!ids.length) return;
+		this._recheckInFlight = true;
+		this._lastRecheckAt = now;
+		try {
+			let changed = false;
+			for (const id of ids) {
+				const result = await this.postCreationCheck(id);
+				if (result.ok && result.status && String(result.status).toLowerCase() !== 'failed') {
+					changed = true;
+				}
+			}
+			if (changed) await this.loadCreations({ force: true });
+		} catch {
+			// ignore
+		} finally {
+			this._recheckInFlight = false;
 		}
 	}
 

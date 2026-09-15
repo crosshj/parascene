@@ -30,6 +30,11 @@ describe("profileSocials", () => {
 		expect(validateSocialUrl("suno", "https://suno.com/@ocean").ok).toBe(true);
 		expect(validateSocialUrl("nightcafe", "https://creator.nightcafe.studio/u/ocean").ok).toBe(true);
 		expect(validateSocialUrl("spotify", "https://open.spotify.com/user/abc").ok).toBe(true);
+		expect(validateSocialUrl("facebook", "facebook.com/parascene").ok).toBe(true);
+		expect(validateSocialUrl("facebook", "https://www.facebook.com/parascene").ok).toBe(true);
+		expect(validateSocialUrl("facebook", "https://fb.com/parascene").ok).toBe(true);
+		expect(validateSocialUrl("facebook", "https://m.facebook.com/parascene").ok).toBe(true);
+		expect(validateSocialUrl("facebook", "https://example.com/parascene").ok).toBe(false);
 	});
 
 	it("merges form fields and fails the whole update when one link is invalid", () => {
@@ -66,9 +71,11 @@ describe("profileSocials", () => {
 		expect(listVisibleSocials({
 			instagram: "https://instagram.com/keep",
 			youtube: "https://example.com/nope",
-			tiktok: ""
+			tiktok: "",
+			facebook: "https://www.facebook.com/parascene"
 		})).toEqual([
-			{ key: "instagram", label: "Instagram", href: "https://instagram.com/keep" }
+			{ key: "instagram", label: "Instagram", href: "https://instagram.com/keep" },
+			{ key: "facebook", label: "Facebook", href: "https://www.facebook.com/parascene" }
 		]);
 	});
 });
