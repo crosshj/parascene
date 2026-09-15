@@ -32,9 +32,11 @@ const [
 		isCreationGpuInFlight,
 		isCreationInLine,
 	},
+	{ confirmGpuOccupancyIfNeeded },
 ] = await Promise.all([
 	import(`../../shared/creationsInFlightPoller.js${_qs}`),
 	import(`../../shared/creationGpuWait.js${_qs}`),
+	import(`../../shared/gpuOccupancy.js${_qs}`),
 ]);
 
 let formatDateTime;
@@ -1669,6 +1671,19 @@ class AppRouteCreations extends HTMLElement {
 			// console.warn('retryCreation: missing server_id or method in meta', meta);
 			alert('Cannot retry this creation because its details are missing.');
 			return;
+		}
+
+		try {
+			const occupancyOk = await confirmGpuOccupancyIfNeeded({
+				serverId,
+				method,
+				args: args || {},
+				lane: 'product',
+			});
+			if (!occupancyOk) return;
+		} catch (err) {
+			if (err?.code === 'occupancy_cancelled') return;
+			throw err;
 		}
 
 		const creationToken = `crt_retry_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;

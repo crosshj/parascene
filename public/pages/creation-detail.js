@@ -8828,6 +8828,26 @@ async function handleRetry() {
 		retryBtn.disabled = true;
 	}
 
+	try {
+		const occMod = await import('../shared/gpuOccupancy.js');
+		const occupancyOk = await occMod.confirmGpuOccupancyIfNeeded({
+			serverId,
+			method,
+			args: args || {},
+			lane: 'product',
+		});
+		if (!occupancyOk) {
+			if (retryBtn) retryBtn.disabled = false;
+			return;
+		}
+	} catch (err) {
+		if (err?.code === 'occupancy_cancelled') {
+			if (retryBtn) retryBtn.disabled = false;
+			return;
+		}
+		throw err;
+	}
+
 	const creationToken = `crt_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`;
 
 	try {

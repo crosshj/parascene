@@ -69,6 +69,9 @@ let uploadImageFile;
 let readRasterFileDimensions;
 let readImageUrlDimensions;
 let formatMentionsFailureForDialog;
+let parseGpuOccupancy;
+let occupancyIsBusy;
+let showOccupancyConfirm;
 let getMutateLineageForImageUrls;
 let getMutateQueuePrefillForProviderFields;
 let syncMutateQueueFromProviderFieldValues;
@@ -192,6 +195,7 @@ async function loadDeps() {
 		const [
 			apiMod,
 			createSubmitMod,
+			gpuOccupancyMod,
 			mutateQueueSyncMod,
 			promptFieldClearMod,
 			autogrowMod,
@@ -199,6 +203,7 @@ async function loadDeps() {
 		] = await Promise.all([
 			import(`../../shared/api.js${qs}`),
 			import(`../../shared/createSubmit.js${qs}`),
+			import(`../../shared/gpuOccupancy.js${qs}`),
 			import(`../../shared/mutateQueueSync.js${qs}`),
 			import(`../../shared/promptFieldClear.js${qs}`),
 			import(`../../shared/autogrow.js${qs}`),
@@ -212,6 +217,9 @@ async function loadDeps() {
 		readRasterFileDimensions = createSubmitMod.readRasterFileDimensions;
 		readImageUrlDimensions = createSubmitMod.readImageUrlDimensions;
 		formatMentionsFailureForDialog = createSubmitMod.formatMentionsFailureForDialog;
+		parseGpuOccupancy = gpuOccupancyMod.parseGpuOccupancy;
+		occupancyIsBusy = gpuOccupancyMod.occupancyIsBusy;
+		showOccupancyConfirm = gpuOccupancyMod.showOccupancyConfirm;
 
 		getMutateLineageForImageUrls = mutateQueueSyncMod.getMutateLineageForImageUrls;
 		getMutateQueuePrefillForProviderFields = mutateQueueSyncMod.getMutateQueuePrefillForProviderFields;
@@ -1421,6 +1429,14 @@ class AppRouteCreate extends HTMLElement {
 			}
 			const supported = data?.supported === true || data?.supported === 'true';
 			const cost = typeof data?.cost === 'number' ? data.cost : Number(data?.cost);
+			const occupancy = parseGpuOccupancy?.(data);
+			if (occupancyIsBusy?.(occupancy)) {
+				const ok = await showOccupancyConfirm(occupancy, { lane: 'product' });
+				if (!ok) return;
+				this._advancedConfirm = { serverId, args, cost };
+				this.submitAdvancedCreate();
+				return;
+			}
 			if (supported && Number.isFinite(cost) && cost > 0) {
 				this._advancedConfirm = { serverId, args, cost };
 				this.showAdvancedConfirm(

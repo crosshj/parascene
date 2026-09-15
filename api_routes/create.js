@@ -2036,13 +2036,16 @@ export default function createCreateRoutes({ queries, storage }) {
 		}
 	});
 
-	// POST /api/create/query - Query server for advanced create support and cost (no charge, no DB write)
+	// POST /api/create/query - no charge, no DB write.
+	// With `method`: occupancy peek (Blue query passthrough).
+	// Without: advanced create support + cost (`advanced_query`). Occupancy passes through when the provider sends it.
 	router.post("/api/create/query", async (req, res) => {
 		const user = await requireUser(req, res);
 		if (!user) return;
 
-		const { server_id, args } = req.body;
+		const { server_id, args, method } = req.body;
 		const safeArgs = args && typeof args === "object" ? { ...args } : {};
+		const methodKey = typeof method === "string" ? method.trim() : "";
 
 		if (!server_id) {
 			return res.status(400).json({ error: "Missing required fields", message: "server_id is required" });
@@ -2053,33 +2056,43 @@ export default function createCreateRoutes({ queries, storage }) {
 			if (!server) return res.status(404).json({ error: "Server not found" });
 			if (server.status !== "active") return res.status(400).json({ error: "Server is not active" });
 
-			// Backend builds items from boolean args and sends that to the provider; include extra args (e.g. prompt)
-			const items = await buildAdvancedItems(user.id, safeArgs);
-			const extraArgs = getAdvancedExtraArgs(safeArgs);
-			if (typeof extraArgs.prompt === "string") {
-				const expanded = await expandStyleSigilsForProvider(queries, user.id, extraArgs.prompt);
-				if (!expanded.ok) {
-					return res.status(400).json({
-						error: "Invalid style references",
-						failed_styles: expanded.failed_styles
+			let providerPayload;
+			if (methodKey) {
+				providerPayload = {
+					method: "query",
+					args: { method: methodKey, ...safeArgs }
+				};
+			} else {
+				const items = await buildAdvancedItems(user.id, safeArgs);
+				const extraArgs = getAdvancedExtraArgs(safeArgs);
+				if (typeof extraArgs.prompt === "string") {
+					const expanded = await expandStyleSigilsForProvider(queries, user.id, extraArgs.prompt);
+					if (!expanded.ok) {
+						return res.status(400).json({
+							error: "Invalid style references",
+							failed_styles: expanded.failed_styles
+						});
+					}
+					extraArgs.prompt = expanded.providerPrompt;
+				}
+				const clipResolved = await resolveAudioProviderArgs(
+					queries,
+					user.id,
+					extraArgs,
+					getShareBaseUrl()
+				);
+				if (!clipResolved.ok) {
+					return res.status(clipResolved.status).json({
+						error: clipResolved.error,
+						message: clipResolved.error,
+						code: clipResolved.code || "audio_resolve_failed"
 					});
 				}
-				extraArgs.prompt = expanded.providerPrompt;
+				providerPayload = {
+					method: "advanced_query",
+					args: { items, ...clipResolved.args }
+				};
 			}
-			const clipResolved = await resolveAudioProviderArgs(
-				queries,
-				user.id,
-				extraArgs,
-				getShareBaseUrl()
-			);
-			if (!clipResolved.ok) {
-				return res.status(clipResolved.status).json({
-					error: clipResolved.error,
-					message: clipResolved.error,
-					code: clipResolved.code || "audio_resolve_failed"
-				});
-			}
-			const providerArgs = { items, ...clipResolved.args };
 
 			const providerResponse = await fetch(server.server_url, {
 				method: "POST",
@@ -2088,7 +2101,7 @@ export default function createCreateRoutes({ queries, storage }) {
 					server.auth_token,
 					server.server_config?.custom_headers
 				),
-				body: JSON.stringify({ method: "advanced_query", args: providerArgs }),
+				body: JSON.stringify(providerPayload),
 				signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS)
 			});
 

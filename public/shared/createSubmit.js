@@ -1,4 +1,5 @@
 import { clearSharedCreatePrompt } from './createSettingsSync.js';
+import { confirmGpuOccupancyIfNeeded } from './gpuOccupancy.js';
 
 export function generateCreationToken() {
 	const ts = Date.now().toString(36);
@@ -699,6 +700,18 @@ export async function submitCreationWithPending({
 	onError
 }) {
 	if (!serverId || !methodKey) return null;
+
+	const occupancyOk = await confirmGpuOccupancyIfNeeded({
+		serverId,
+		method: methodKey,
+		args: args || {},
+		lane: 'product'
+	});
+	if (!occupancyOk) {
+		const err = new Error('Cancelled');
+		err.code = 'occupancy_cancelled';
+		throw err;
+	}
 
 	const creationToken = generateCreationToken();
 	const { pendingKey, pendingId } = addPendingCreation({ creationToken });

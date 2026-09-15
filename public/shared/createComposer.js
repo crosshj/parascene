@@ -2005,6 +2005,7 @@ export function mountCreateComposer(host, opts = {}) {
 				...payload,
 				navigate,
 				onError: async (err) => {
+					if (err && typeof err === 'object' && err.code === 'occupancy_cancelled') return;
 					const message =
 						err && typeof err === 'object' && 'message' in err
 							? String(/** @type {{ message?: unknown }} */ (err).message || '')

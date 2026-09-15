@@ -4354,6 +4354,82 @@ body.view-nsfw .feed-card-image--group-carousel.nsfw::after {
 	color: var(--danger, #c33);
 }
 
+.occupancy-dialog-backdrop {
+	position: fixed;
+	inset: 0;
+	z-index: 4200;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 1.25rem;
+	background: rgba(0, 0, 0, 0.62);
+}
+
+.occupancy-dialog {
+	width: min(22.5rem, 100%);
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: 14px;
+	padding: 1.25rem 1.3rem 1.1rem;
+	box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+}
+
+.occupancy-dialog h2 {
+	margin: 0 0 0.4rem;
+	font-size: 1.05rem;
+	font-weight: 600;
+	letter-spacing: -0.02em;
+}
+
+.occupancy-dialog-lede {
+	margin: 0 0 1rem;
+	font-size: 0.9rem;
+	line-height: 1.45;
+	color: var(--text-muted, var(--muted));
+}
+
+.occupancy-stats {
+	margin: 0;
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 0.55rem;
+}
+
+.occupancy-stat {
+	margin: 0;
+	padding: 0.55rem 0.65rem 0.5rem;
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	background: color-mix(in srgb, var(--bg) 70%, var(--surface));
+}
+
+.occupancy-stat dt {
+	margin: 0;
+	font-size: 0.68rem;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--text-muted, var(--muted));
+}
+
+.occupancy-stat dd {
+	margin: 0.2rem 0 0;
+	font-size: 0.92rem;
+	font-weight: 600;
+	line-height: 1.25;
+}
+
+.occupancy-dialog-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 0.5rem;
+	margin-top: 1.15rem;
+}
+
+.occupancy-dialog-actions .btn-primary,
+.occupancy-dialog-actions .btn-secondary {
+	min-height: 2.15rem;
+}
+
 .comment-sticker-modal-overlay {
 	position: fixed;
 	inset: 0;
