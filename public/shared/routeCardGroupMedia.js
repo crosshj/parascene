@@ -48,6 +48,7 @@ const {
 	setupFeedCardGroupCarousel,
 	setupFeedCardGroupVideoPlaylist,
 	feedItemCardImageUrl,
+	isFeedCreationImageProcessing,
 } = feedCardBuildMod;
 
 function resolveRouteCardThumbUrl(item, preferThumbnail, isVideo) {
@@ -97,6 +98,9 @@ export function hydrateRouteCardMedia(mediaEl, item, options = {}) {
 
 	if (mediaType === "audio") {
 		mediaEl.setAttribute("data-media-type", "audio");
+		if (isFeedCreationImageProcessing(feedItem)) {
+			return { kind: "none" };
+		}
 		if (creationNeedsAudioWaveformCover(feedItem)) {
 			mountAudioCoverWaveform(mediaEl);
 			return { kind: "audio-wave" };

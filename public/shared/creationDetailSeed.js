@@ -923,6 +923,18 @@ function seedPromptText(meta) {
 	return argsPrompt;
 }
 
+function seedLyricsText(meta) {
+	const args = meta?.args;
+	if (!args || typeof args !== 'object' || Array.isArray(args)) return '';
+	if (typeof args.lyrics === 'string' && args.lyrics.trim()) return args.lyrics.trim();
+	for (const [key, val] of Object.entries(args)) {
+		if (!/lyrics/i.test(key) || typeof val !== 'string') continue;
+		const trimmed = val.trim();
+		if (trimmed) return trimmed;
+	}
+	return '';
+}
+
 function seedDisplayModel(meta) {
 	const args = meta?.args;
 	if (!args || typeof args !== 'object' || Array.isArray(args)) return '';
@@ -1296,6 +1308,7 @@ export function creationDetailChromeHtmlFromSeed(seed) {
 
 	const meta = seedMetaObject(seed);
 	const prompt = seedPromptText(meta);
+	const lyrics = seedLyricsText(meta);
 	const caption = typeof seed.summary === 'string' ? seed.summary.trim() : '';
 	const showCaption = caption && caption !== prompt;
 	const serverName =
@@ -1374,9 +1387,17 @@ export function creationDetailChromeHtmlFromSeed(seed) {
 	<button type="button" class="creation-detail-copy-prompt" data-copy-prompt-btn aria-label="Copy prompt" title="Copy prompt">${SEED_COPY_SVG}</button>
 </div>${esc(prompt)}`
 			: '';
+	const lyricsBlock = hideIdentify
+		? ''
+		: lyrics
+			? `<div class="creation-detail-prompt-label-row">
+	<span class="creation-detail-prompt-label">Lyrics</span>
+	<button type="button" class="creation-detail-copy-prompt" data-copy-lyrics-btn aria-label="Copy lyrics" title="Copy lyrics">${SEED_COPY_SVG}</button>
+</div>${esc(lyrics)}`
+			: '';
 	const descriptionInner = hideIdentify
 		? ''
-		: [showCaption ? esc(caption) : '', promptBlock].filter(Boolean).join('<br><br>');
+		: [showCaption ? esc(caption) : '', promptBlock, lyricsBlock].filter(Boolean).join('<br><br>');
 	const descriptionPlain = descriptionInner.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 	const collapseDescription = descriptionPlain.length > 140;
 	const descriptionHtml =

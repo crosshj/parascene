@@ -64,6 +64,7 @@ import {
 import {
 	creationNeedsAudioWaveformCover,
 	mountAudioCoverWaveform,
+	removeAudioCoverWaveform,
 } from './audioCoverWaveform.js';
 import { applyWhoTooltipAttr } from './whoLabels.js';
 import { setupWhoTooltips } from './reactionTooltipTap.js';
@@ -145,6 +146,11 @@ export function isFeedCreationImageProcessing(item) {
 	);
 }
 
+function feedCardAudioBadgeHtml(mediaType, item) {
+	if (mediaType !== 'audio' || isFeedCreationImageProcessing(item)) return '';
+	return musicBadgeHtml();
+}
+
 /**
  * Clears Creations-style in-progress tile chrome (class + label node).
  * @param {HTMLElement|null} imageContainer - `.feed-card-image`
@@ -170,6 +176,8 @@ export function teardownFeedCardCreationProcessingUi(imageContainer) {
 export function applyFeedCardCreationProcessingState(imageContainer, imageEl) {
 	if (!imageContainer) return;
 	teardownFeedCardCreationProcessingUi(imageContainer);
+	removeAudioCoverWaveform(imageContainer);
+	imageContainer.querySelectorAll('.creation-music-badge:not(.creation-video-import-badge)').forEach((el) => el.remove());
 	imageContainer.classList.remove('loaded', 'error', 'loading');
 	imageContainer.classList.add('feed-card-image--creation-processing');
 	imageContainer.removeAttribute('data-feed-img-state');
@@ -521,7 +529,7 @@ export function markFeedCardImageUnavailable(imageContainer, imageEl, attrs = {}
  * @param {object} item
  */
 function applyFeedAudioWaveformCover(imageContainer, imageEl, item) {
-	if (!imageContainer || !creationNeedsAudioWaveformCover(item)) return false;
+	if (!imageContainer || isFeedCreationImageProcessing(item) || !creationNeedsAudioWaveformCover(item)) return false;
 	mountAudioCoverWaveform(imageContainer);
 	imageContainer.classList.remove('loading', 'error');
 	imageContainer.classList.add('loaded');
@@ -544,14 +552,14 @@ function applyFeedAudioWaveformCover(imageContainer, imageEl, item) {
  * @param {boolean} preferThumbnail
  */
 export function attachFeedCardImage(imageEl, imageContainer, item, itemIndex, preferThumbnail = false) {
-	if (applyFeedAudioWaveformCover(imageContainer, imageEl, item)) return;
-	const urls = feedItemCardImageUrlCandidates(item, preferThumbnail);
-	const moderated = item?.is_moderated_error === true;
 	if (!imageEl || !imageContainer) return;
 	if (isFeedCreationImageProcessing(item)) {
 		applyFeedCardCreationProcessingState(imageContainer, imageEl);
 		return;
 	}
+	if (applyFeedAudioWaveformCover(imageContainer, imageEl, item)) return;
+	const urls = feedItemCardImageUrlCandidates(item, preferThumbnail);
+	const moderated = item?.is_moderated_error === true;
 	const useVideoFramePoster = feedItemNeedsVideoFramePoster(item);
 	if (urls.length === 0 && !useVideoFramePoster) {
 		markFeedCardImageUnavailable(imageContainer, imageEl, {
@@ -1591,7 +1599,7 @@ function buildFeedCreationCard(
 		const publishedOverlay = isPublished ? publishedBadgeHtml() : '';
 		const isGroupCreation = parsedMeta?.group?.kind === 'group_creations';
 		const groupOverlay = isGroupCreation ? groupCreationBadgeHtml(item) : '';
-		const musicOverlay = mediaType === 'audio' ? musicBadgeHtml() : '';
+		const musicOverlay = feedCardAudioBadgeHtml(mediaType, item);
 		const videoImportOverlay =
 			mediaType === 'video' &&
 			!isVideo &&
@@ -1685,7 +1693,7 @@ function buildFeedCreationCard(
       <div class="feed-card-image${item.nsfw ? ' nsfw' : ''}${isVideo ? ' feed-card-image-video' : ''}${challengeBlurClass}">
         <img class="feed-card-img" alt="${item.title || 'Feed image'}" loading="lazy" decoding="async">
         ${isVideo ? html`<video class="feed-card-video" playsinline muted></video>` : ''}
-        ${mediaType === 'audio' ? musicBadgeHtml() : ''}
+        ${feedCardAudioBadgeHtml(mediaType, item)}
         ${
 					mediaType === 'video' &&
 					!isVideo &&

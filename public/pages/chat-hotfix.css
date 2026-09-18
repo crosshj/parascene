@@ -2583,6 +2583,19 @@ body.chat-page .creation-audio-cover .creation-audio-wave {
 	z-index: 2;
 }
 
+body.chat-page .feed-card-image--creation-processing .creation-audio-wave,
+body.chat-page .feed-card-image--creation-processing .creation-music-badge,
+body.chat-page .route-media.loading .creation-audio-wave,
+body.chat-page .route-media.loading .creation-music-badge {
+	display: none !important;
+}
+
+body.chat-page .feed-card-image--creation-processing.creation-audio-cover,
+body.chat-page .feed-card-image--creation-processing.creation-audio-cover:has(.creation-audio-wave) {
+	background: var(--surface-muted);
+	color: var(--text);
+}
+
 body.chat-page .connect-chat-msg-bubble .connect-chat-creation-embed:has(.connect-chat-creation-embed-inner--audio),
 body.chat-page .connect-chat-msg-bubble .connect-chat-creation-embed[data-prsn-audio-embed="1"] {
 	width: 260px !important;

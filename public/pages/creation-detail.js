@@ -1312,6 +1312,32 @@ function userPromptFromRecreateMeta(meta) {
 	return argsPrompt;
 }
 
+function lyricsTextFromArgs(args) {
+	if (!args || typeof args !== 'object' || Array.isArray(args)) return '';
+	if (typeof args.lyrics === 'string' && args.lyrics.trim()) return args.lyrics.trim();
+	for (const [key, val] of Object.entries(args)) {
+		if (!/lyrics/i.test(key) || typeof val !== 'string') continue;
+		const trimmed = val.trim();
+		if (trimmed) return trimmed;
+	}
+	return '';
+}
+
+function creationDetailCopyLabelRowHtml(label, dataAttr) {
+	const lower = String(label).toLowerCase();
+	return html`<div class="creation-detail-prompt-label-row">
+	<span class="creation-detail-prompt-label">${label}</span>
+	<button type="button" class="creation-detail-copy-prompt" ${dataAttr} aria-label="Copy ${lower}"
+		title="Copy ${lower}">
+		<svg class="creation-detail-copy-prompt-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+			stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+			<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+			<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+		</svg>
+	</button>
+</div>`;
+}
+
 async function handleRecreateInAdvanced() {
 	await loadDeps();
 	const creation = lastCreationMeta;
@@ -4811,7 +4837,7 @@ async function loadCreation() {
 			showSetVideoPoster,
 			showAdjustImage,
 			showSetAvatar: isOwner && !isImportEmbedCreation && status === 'completed' && !isFailed,
-			showCopyLink: !isImportEmbedCreation,
+			showCopyLink: mediaType === 'audio' || !isImportEmbedCreation,
 			showDownloadVideo: false,
 			showDownloadAudio: false,
 			showRecreate: false,
@@ -4858,6 +4884,7 @@ async function loadCreation() {
 				const sourceStoredPrompt = typeof sourceMeta?.user_prompt === 'string' ? sourceMeta.user_prompt.trim() : '';
 				const sourceArgsPrompt = typeof sourceArgs?.prompt === 'string' ? sourceArgs.prompt.trim() : '';
 				const sourcePrompt = promptTextForMainUi(sourceStoredPrompt, sourceArgsPrompt);
+				const sourceLyrics = lyricsTextFromArgs(sourceArgs);
 				const sourceServerName = typeof sourceMeta?.server_name === 'string' && sourceMeta.server_name.trim()
 					? sourceMeta.server_name.trim()
 					: (sourceMeta?.server_id != null ? String(sourceMeta.server_id) : '');
@@ -4934,6 +4961,7 @@ async function loadCreation() {
 					description: sourceDescription,
 					createdAt: sourceCreatedAt,
 					prompt: sourcePrompt,
+					lyrics: sourceLyrics,
 					generationInfo: sourceGenerationInfo,
 					metaParts: sourceMetaParts,
 					meta: sourceMeta
@@ -5187,6 +5215,8 @@ async function loadCreation() {
 				: '';
 		const promptText = promptTextForMainUi(storedUserPrompt, rawArgsPrompt);
 		const hasPrompt = promptText.length > 0;
+		const lyricsText = lyricsTextFromArgs(args);
+		const hasLyrics = lyricsText.length > 0;
 		const legacyHydratedPromptOnly = !hasPrompt && isHydratedProviderPromptJson(rawArgsPrompt);
 		const hasPromptSection = hasPrompt || legacyHydratedPromptOnly;
 		const serverName = typeof meta?.server_name === 'string' && meta.server_name.trim()
@@ -5281,6 +5311,7 @@ async function loadCreation() {
 			!hideIdentifyActionChrome &&
 			(descriptionText ||
 				hasPromptSection ||
+				hasLyrics ||
 				hasStyle ||
 				hasAudioClip ||
 				lineageSectionHtml ||
@@ -5301,17 +5332,7 @@ async function loadCreation() {
 				if (renderDescriptionInMainBlock) {
 					descriptionParts.push('<br><br>');
 				}
-				descriptionParts.push(html`<div class="creation-detail-prompt-label-row">
-	<span class="creation-detail-prompt-label">Prompt</span>
-	<button type="button" class="creation-detail-copy-prompt" data-copy-prompt-btn aria-label="Copy prompt"
-		title="Copy prompt">
-		<svg class="creation-detail-copy-prompt-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-			stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-			<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-			<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-		</svg>
-	</button>
-</div>`);
+				descriptionParts.push(creationDetailCopyLabelRowHtml('Prompt', 'data-copy-prompt-btn'));
 				descriptionParts.push(processUserText(promptText));
 			} else if (legacyHydratedPromptOnly) {
 				if (renderDescriptionInMainBlock) {
@@ -5321,6 +5342,12 @@ async function loadCreation() {
 				descriptionParts.push(
 					`<p class="creation-detail-prompt-legacy">The original prompt was not stored for this creation. Open <strong>More Info</strong> for the full provider payload (hydrated mentions and style).</p>`
 				);
+			}
+
+			if (hasLyrics) {
+				if (descriptionParts.length) descriptionParts.push('<br><br>');
+				descriptionParts.push(creationDetailCopyLabelRowHtml('Lyrics', 'data-copy-lyrics-btn'));
+				descriptionParts.push(processUserText(lyricsText));
 			}
 
 			if (hasStyle) {
@@ -5948,6 +5975,14 @@ async function loadCreation() {
 				await copyTextToClipboard(promptText);
 			});
 		}
+		const copyLyricsBtn = detailContent.querySelector('[data-copy-lyrics-btn]');
+		if (copyLyricsBtn instanceof HTMLButtonElement) {
+			copyLyricsBtn.addEventListener('click', async (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				await copyTextToClipboard(lyricsText);
+			});
+		}
 
 		const lineageModalOverlay = detailContent.querySelector('[data-lineage-modal]');
 		const lineageModalDismissers = detailContent.querySelectorAll('[data-lineage-modal-dismiss]');
@@ -6252,6 +6287,10 @@ async function loadCreation() {
 			const promptSection = pText
 				? `<div class="creation-detail-lineage-modal-copy"><div class="creation-detail-prompt-label-row"><span class="creation-detail-prompt-label">Prompt</span></div><div class="creation-detail-description creation-detail-lineage-modal-prose creation-detail-lineage-modal-prose--prompt">${processUserText(pText)}</div></div>`
 				: '';
+			const lyricsText = lyricsTextFromArgs(isPo ? args : null);
+			const lyricsSection = lyricsText
+				? `<div class="creation-detail-lineage-modal-copy"><div class="creation-detail-prompt-label-row"><span class="creation-detail-prompt-label">Lyrics</span></div><div class="creation-detail-description creation-detail-lineage-modal-prose">${processUserText(lyricsText)}</div></div>`
+				: '';
 			const serverName =
 				typeof m.server_name === 'string' && m.server_name.trim()
 					? m.server_name.trim()
@@ -6350,6 +6389,7 @@ async function loadCreation() {
 					${currentBadge}
 					${descSection}
 					${promptSection}
+					${lyricsSection}
 				${styleSection}
 				${serverMethodMetaLine}
 				</div>
@@ -7784,6 +7824,11 @@ async function loadCreation() {
 						if (descriptionParts.length > 0) descriptionParts.push('<br><br>');
 						descriptionParts.push('<div class="creation-detail-prompt-label">Prompt</div>');
 						descriptionParts.push(processUserText(source.prompt));
+					}
+					if (source.lyrics) {
+						if (descriptionParts.length > 0) descriptionParts.push('<br><br>');
+						descriptionParts.push('<div class="creation-detail-prompt-label">Lyrics</div>');
+						descriptionParts.push(processUserText(source.lyrics));
 					}
 					mainDescriptionEl.innerHTML = descriptionParts.join('');
 					if (typeof hydrateRichUserTextEmbeds === 'function') {

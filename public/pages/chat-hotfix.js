@@ -715,6 +715,15 @@ function cardLooksLikeGeneratedAudio(card) {
 	return Boolean(card.querySelector('.creation-music-badge:not(.creation-video-import-badge)'));
 }
 
+function cardIsCreationProcessing(card) {
+	if (!(card instanceof HTMLElement)) return false;
+	const st = String(card.getAttribute('data-creation-status') || '').trim().toLowerCase();
+	if (st === 'creating' || st === 'pending' || st === 'queued' || st === 'processing' || st === 'running') {
+		return true;
+	}
+	return Boolean(card.querySelector('.feed-card-image--creation-processing, .route-media.loading, [data-creation-gpu-wait]'));
+}
+
 function cardHasRealAudioCover(card) {
 	if (!(card instanceof HTMLElement)) return false;
 	const provider = String(card.getAttribute('data-import-provider') || '').trim().toLowerCase();
@@ -745,6 +754,7 @@ function restoreFeedCardImageAfterWaveform(card, removeAudioCoverWaveform) {
 
 function applyWaveformToFeedCard(card, mountAudioCoverWaveform) {
 	if (!(card instanceof HTMLElement)) return;
+	if (cardIsCreationProcessing(card)) return;
 	if (!cardLooksLikeGeneratedAudio(card) || cardHasRealAudioCover(card)) return;
 	const imageContainer = card.querySelector('.feed-card-image');
 	if (!(imageContainer instanceof HTMLElement)) return;
@@ -771,8 +781,9 @@ function scanFeedAudioWaveformCovers(mountAudioCoverWaveform, removeAudioCoverWa
 	});
 	document.querySelectorAll('.route-media[data-media-type="audio"]').forEach((mediaEl) => {
 		if (!(mediaEl instanceof HTMLElement)) return;
+		if (mediaEl.classList.contains('loading')) return;
 		const card = mediaEl.closest('.route-card, .feed-card');
-		if (card instanceof HTMLElement && cardHasRealAudioCover(card)) return;
+		if (card instanceof HTMLElement && (cardHasRealAudioCover(card) || cardIsCreationProcessing(card))) return;
 		if (mediaEl.closest('.feed-card')?.querySelector('.creation-video-import-badge')) return;
 		mountAudioCoverWaveform(mediaEl);
 	});

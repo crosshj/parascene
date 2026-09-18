@@ -3519,6 +3519,13 @@ app-route-feed {
 	z-index: 5;
 }
 
+.feed-card-image--creation-processing .creation-music-badge,
+.feed-card-image--creation-processing .creation-audio-wave,
+.route-media.loading .creation-music-badge,
+.route-media.loading .creation-audio-wave {
+	display: none;
+}
+
 @media (prefers-color-scheme: light) {
 	.feed-card-image--creation-processing .feed-card-creation-processing-label {
 		color: var(--text);

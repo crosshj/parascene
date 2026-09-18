@@ -65,12 +65,22 @@ export function isPromptLikeField(fieldKey, field) {
 	return /prompt/i.test(key) || /prompt/i.test(label);
 }
 
+export function isLyricsLikeField(fieldKey, field) {
+	const key = String(fieldKey || '');
+	const label = String(field?.label || '');
+	return /lyrics/i.test(key) || /lyrics/i.test(label);
+}
+
+export function isPromptEditorField(fieldKey, field) {
+	return isPromptLikeField(fieldKey, field) || isLyricsLikeField(fieldKey, field);
+}
+
 export function isMultilineField(fieldKey, field) {
 	const type = typeof field?.type === 'string' ? field.type.toLowerCase() : '';
 	if (type === 'textarea' || type === 'multiline') return true;
 	if (field?.multiline === true) return true;
 	if (type === '' || type === 'text' || type === 'string') {
-		return isPromptLikeField(fieldKey, field);
+		return isPromptEditorField(fieldKey, field);
 	}
 	return false;
 }
@@ -118,7 +128,7 @@ function createTextareaField(fieldKey, field, context) {
 	const input = document.createElement('textarea');
 	input.id = `${fieldIdPrefix}${fieldKey}`;
 	input.name = fieldKey;
-	input.className = isPromptLikeField(fieldKey, field) ? `${inputClassName} prompt-editor` : inputClassName;
+	input.className = isPromptEditorField(fieldKey, field) ? `${inputClassName} prompt-editor` : inputClassName;
 	input.placeholder = field.label || fieldKey;
 	input.rows = typeof field.rows === 'number' && field.rows > 0 ? field.rows : 3;
 	if (field.required) input.required = true;
@@ -986,7 +996,7 @@ export function renderFields(container, fields, options = {}) {
 		fieldGroup.appendChild(label);
 		if (
 			input instanceof HTMLTextAreaElement &&
-			isPromptLikeField(fieldKey, field)
+			isPromptEditorField(fieldKey, field)
 		) {
 			const wrap = document.createElement('div');
 			wrap.className = 'create-prompt-wrap';
