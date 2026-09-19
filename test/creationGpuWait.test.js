@@ -159,12 +159,15 @@ describe("provider poll continuation", () => {
 		).toBe(false);
 	});
 
-	test("backs off poll delays exponentially up to 5 minutes", () => {
-		expect(providerPollBackoffSeconds(0)).toBe(10);
-		expect(providerPollBackoffSeconds(1)).toBe(20);
-		expect(providerPollBackoffSeconds(2)).toBe(40);
-		expect(providerPollBackoffSeconds(5)).toBe(5 * 60);
-		expect(providerPollBackoffSeconds(12)).toBe(5 * 60);
+	test("polls every 10s the first minute, 20s the second, then coarsens", () => {
+		const started = Date.parse("2026-01-01T00:00:00.000Z");
+		const meta = { started_at: "2026-01-01T00:00:00.000Z" };
+		expect(providerPollBackoffSeconds(meta, started + 30_000)).toBe(10);
+		expect(providerPollBackoffSeconds(meta, started + 59_000)).toBe(10);
+		expect(providerPollBackoffSeconds(meta, started + 60_000)).toBe(20);
+		expect(providerPollBackoffSeconds(meta, started + 119_000)).toBe(20);
+		expect(providerPollBackoffSeconds(meta, started + 2 * 60_000)).toBe(40);
+		expect(providerPollBackoffSeconds(meta, started + 20 * 60_000)).toBe(5 * 60);
 	});
 
 	test("keeps polling generating until timeout_at", () => {

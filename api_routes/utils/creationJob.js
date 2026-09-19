@@ -206,19 +206,15 @@ async function enqueueProviderPollFollowUp({
 		logCreation("Provider poll already scheduled; skip enqueue", { imageId, userId });
 		return { ok: true, reason: "async_poll_already_scheduled" };
 	}
-	const pollCount = Math.max(0, Math.floor(Number(latestMeta?.provider_poll_count ?? 0)));
 	const wait = useBackoff
-		? providerPollBackoffSeconds(pollCount)
+		? providerPollBackoffSeconds(latestMeta)
 		: Math.max(0, Number(delaySeconds) || 0);
 	if (queries?.updateCreatedImageMeta?.run && latestMeta && typeof latestMeta === "object") {
 		const nextPollAtIso = new Date(Date.now() + wait * 1000).toISOString();
 		await queries.updateCreatedImageMeta.run(
 			imageId,
 			userId,
-			mergeMeta(latestMeta, {
-				provider_next_poll_at: nextPollAtIso,
-				provider_poll_count: pollCount + 1,
-			}),
+			mergeMeta(latestMeta, { provider_next_poll_at: nextPollAtIso }),
 		);
 	}
 	if (asyncEnv) {

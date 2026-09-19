@@ -82,7 +82,6 @@ export function isCreationFinishTimedOut(status, meta, now = Date.now()) {
 
 /** QStash may keep polling for hours; UI finish clock (`timeout_at`) is separate. */
 export const PROVIDER_POLL_HARD_CAP_MS = 4 * 60 * 60 * 1000;
-export const PROVIDER_POLL_INITIAL_DELAY_SECONDS = 10;
 export const PROVIDER_POLL_MAX_DELAY_SECONDS = 5 * 60;
 
 /** Wall-clock deadline for QStash provider polls. Independent of client GET polling. */
@@ -94,13 +93,16 @@ export function providerPollHardCapAtMs(meta) {
 	return origin + PROVIDER_POLL_HARD_CAP_MS;
 }
 
-/** 10s, 20s, 40s, … capped at 5 minutes. `pollCount` is how many follow-ups already scheduled. */
-export function providerPollBackoffSeconds(pollCount = 0) {
-	const n = Math.max(0, Math.min(8, Math.floor(Number(pollCount) || 0)));
-	return Math.min(
-		PROVIDER_POLL_MAX_DELAY_SECONDS,
-		PROVIDER_POLL_INITIAL_DELAY_SECONDS * 2 ** n,
-	);
+/** Next QStash poll delay from job age. Tight at first, then coarse. */
+export function providerPollBackoffSeconds(meta, now = Date.now()) {
+	const startedAt = meta?.started_at ? Date.parse(meta.started_at) : NaN;
+	const runningAt = meta?.running_at ? Date.parse(meta.running_at) : NaN;
+	const origin = Number.isFinite(startedAt) ? startedAt : Number.isFinite(runningAt) ? runningAt : now;
+	const elapsed = Math.max(0, now - origin);
+	if (elapsed < 60_000) return 10;
+	if (elapsed < 120_000) return 20;
+	if (elapsed < 4 * 60_000) return 40;
+	return PROVIDER_POLL_MAX_DELAY_SECONDS;
 }
 
 export function isProviderPollHardCapped(meta, now = Date.now()) {
