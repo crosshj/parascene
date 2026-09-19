@@ -6116,6 +6116,86 @@ dialog.creation-detail-dialog:not([open]) {
 	}
 }
 
+.creation-detail-dialog.audio-cover-modal[open] {
+	width: calc(100vw - 24px);
+	max-width: 480px;
+	border-radius: 14px;
+	padding: 24px;
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+	background: var(--surface);
+	border: 1px solid var(--border);
+	box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+}
+
+.audio-cover-modal .dialog-title {
+	margin: 0;
+	font-size: 1.25rem;
+	font-weight: 600;
+	color: var(--text);
+}
+
+.audio-cover-modal .modal-close {
+	position: absolute;
+	top: 12px;
+	right: 12px;
+}
+
+.audio-cover-methods {
+	display: flex;
+	gap: 8px;
+}
+
+.audio-cover-method.is-active {
+	border-color: var(--accent);
+	color: var(--accent);
+}
+
+.audio-cover-panel {
+	display: none;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.audio-cover-panel.is-active {
+	display: flex;
+}
+
+.audio-cover-help,
+.audio-cover-cost {
+	margin: 0;
+	color: var(--text-muted);
+	font-size: 0.9rem;
+}
+
+.audio-cover-label {
+	font-size: 0.85rem;
+	color: var(--text-muted);
+}
+
+.audio-cover-prompt {
+	width: 100%;
+	min-height: 88px;
+	resize: vertical;
+	border-radius: 6px;
+	border: 1px solid var(--border);
+	background: var(--input-bg);
+	color: var(--text);
+	padding: 10px;
+	font: inherit;
+}
+
+.audio-cover-error {
+	margin: 0;
+	color: var(--error-text);
+	font-size: 0.9rem;
+}
+
+.audio-cover-reset {
+	align-self: flex-start;
+}
+
 @keyframes spin {
 	to {
 		transform: rotate(360deg);

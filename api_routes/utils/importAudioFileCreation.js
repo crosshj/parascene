@@ -2,6 +2,7 @@ import crypto from "crypto";
 import path from "path";
 import sharp from "sharp";
 import { createPlaceholderImageBuffer } from "./creationJob.js";
+import { buildProceduralAudioCoverBuffer, seedAudioCover } from "./audioCoverProcedural.js";
 import {
 	CDN_OBJECT_ID_RE,
 	fetchCdnCoverJpeg,
@@ -196,9 +197,28 @@ export async function finalizeAudioFileImport({
 	} catch {
 		coverBuffer = null;
 	}
+	let coverSource = "";
+	if (coverBuffer) {
+		coverSource = "embedded";
+	}
 	if (!coverBuffer) {
-		coverBuffer = await createPlaceholderImageBuffer();
-		usedPlaceholder = true;
+		try {
+			const built = await buildProceduralAudioCoverBuffer({
+				seed: seedAudioCover({
+					userId: uid,
+					title: titleFromAudioFilename(claimed.filename),
+					extra: claimed.objectId,
+				}),
+				title: titleFromAudioFilename(claimed.filename),
+				kind: "music",
+			});
+			coverBuffer = built.buffer;
+			coverSource = "procedural";
+		} catch {
+			coverBuffer = await createPlaceholderImageBuffer();
+			usedPlaceholder = true;
+			coverSource = "";
+		}
 	}
 
 	let pngBuffer = coverBuffer;
@@ -245,6 +265,7 @@ export async function finalizeAudioFileImport({
 			filename: claimed.filename
 		},
 		completed_at: new Date().toISOString(),
+		...(coverSource ? { cover_source: coverSource } : {}),
 		...(usedPlaceholder ? { cover_placeholder: true } : {}),
 		...(typeof creationToken === "string" && creationToken.trim()
 			? { creation_token: creationToken.trim() }

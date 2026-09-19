@@ -103,7 +103,8 @@ export async function persistGeneratedAudioToCdn({
 	audioBuffer,
 	contentType,
 	filename,
-	createPlaceholder
+	createPlaceholder,
+	createFallbackCover
 }) {
 	if (!audioBuffer || !Buffer.isBuffer(audioBuffer) || audioBuffer.length === 0) {
 		const err = new Error("No audio bytes were available to store.");
@@ -139,9 +140,25 @@ export async function persistGeneratedAudioToCdn({
 
 	let coverBuffer = null;
 	let usedPlaceholder = false;
+	let coverSource = "";
 	if (fetchLink?.url) {
 		try {
 			coverBuffer = await fetchCdnCoverJpeg(fetchLink.url);
+			if (coverBuffer) coverSource = "embedded";
+		} catch {
+			coverBuffer = null;
+		}
+	}
+	if (!coverBuffer && typeof createFallbackCover === "function") {
+		try {
+			const built = await createFallbackCover();
+			if (Buffer.isBuffer(built) && built.length > 0) {
+				coverBuffer = built;
+				coverSource = "procedural";
+			} else if (built?.buffer && Buffer.isBuffer(built.buffer) && built.buffer.length > 0) {
+				coverBuffer = built.buffer;
+				coverSource = "procedural";
+			}
 		} catch {
 			coverBuffer = null;
 		}
@@ -149,6 +166,7 @@ export async function persistGeneratedAudioToCdn({
 	if (!coverBuffer && typeof createPlaceholder === "function") {
 		coverBuffer = await createPlaceholder();
 		usedPlaceholder = true;
+		coverSource = "";
 	}
 	if (!coverBuffer) {
 		const err = new Error("Could not build a cover for generated audio.");
@@ -174,6 +192,7 @@ export async function persistGeneratedAudioToCdn({
 		width,
 		height,
 		usedPlaceholder,
+		coverSource,
 		audio: {
 			cdn_id: minted.object_id,
 			content_type: ct,

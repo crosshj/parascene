@@ -4989,6 +4989,25 @@ export function openDb() {
 				return { items: data ?? [], total: typeof count === "number" ? count : (data ?? []).length };
 			}
 		},
+		/** Completed audio creations — for cover backfill script only. */
+		selectCompletedAudioCreationsForCoverBackfill: {
+			page: async (options = {}) => {
+				const lim = Math.min(Math.max(1, Number(options.limit) || 50), 200);
+				const beforeId = Number(options.beforeId);
+				let query = serviceClient
+					.from(prefixedTable("created_images"))
+					.select("id, user_id, title, filename, file_path, width, height, status, color, meta")
+					.eq("status", "completed")
+					.is("unavailable_at", null)
+					.or("meta->>media_type.eq.audio,meta->audio->>cdn_id.not.is.null")
+					.order("id", { ascending: false })
+					.limit(lim);
+				if (Number.isFinite(beforeId) && beforeId > 0) query = query.lt("id", beforeId);
+				const { data, error } = await query;
+				if (error) throw error;
+				return { items: data ?? [] };
+			}
+		},
 		/** Creations with meta.share_audio.key — for backfill script only. */
 		selectCreatedImagesWithShareAudioForBackfill: {
 			page: async (options = {}) => {

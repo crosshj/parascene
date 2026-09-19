@@ -6,6 +6,19 @@ function audioImportProvider(meta) {
 	return typeof provider === "string" ? provider.trim().toLowerCase() : "";
 }
 
+export const REAL_AUDIO_COVER_SOURCES = new Set([
+	"procedural",
+	"upload",
+	"generate",
+	"import",
+	"embedded",
+]);
+
+export function audioCoverSourceIsReal(meta) {
+	const src = typeof meta?.cover_source === "string" ? meta.cover_source.trim() : "";
+	return REAL_AUDIO_COVER_SOURCES.has(src);
+}
+
 /** Transparent PNG / old waveform SVG / audio stream — not album art. */
 export function isPlaceholderAudioCover(path) {
 	const trimmed = typeof path === "string" ? path.trim() : "";
@@ -31,6 +44,9 @@ export function publicAudioWaveformCoverPath(mediaType, meta, existingUrl = "") 
 	const provider = audioImportProvider(meta);
 	if (provider === "youtube") return null;
 	const existing = String(existingUrl || "").trim();
+	if (audioCoverSourceIsReal(meta) && existing && !isPlaceholderAudioCover(existing) && meta?.cover_placeholder !== true) {
+		return null;
+	}
 	if ((provider === "suno" || provider === "file") && existing && !isPlaceholderAudioCover(existing)) {
 		return null;
 	}

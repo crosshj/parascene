@@ -8,6 +8,7 @@ import { openDb } from "../../db/index.js";
 import { verifyQStashRequest } from "../../api_routes/utils/qstashVerification.js";
 import { runCreationJob, runProviderPollJob } from "../../api_routes/utils/creationJob.js";
 import { runLandscapeJob } from "../../api_routes/utils/landscapeJob.js";
+import { runAudioCoverJob } from "../../api_routes/utils/audioCoverGenerate.js";
 
 // Log immediately when module loads to verify function is being deployed
 console.log("[Worker] Module loaded at", new Date().toISOString());
@@ -70,6 +71,10 @@ export default async function handler(req, res) {
 			logCreation("QStash signature verified, running landscape job");
 			await runLandscapeJob({ queries, storage, payload: req.body });
 			logCreation("Landscape job completed successfully");
+		} else if (jobType === "audio_cover" || jobType === "audio_cover_poll") {
+			logCreation("QStash signature verified, running audio cover job");
+			await runAudioCoverJob({ queries, storage, payload: req.body });
+			logCreation("Audio cover job completed successfully");
 		} else if (jobType === "poll_provider") {
 			logCreation("QStash signature verified, running provider poll job");
 			await runProviderPollJob({ queries, storage, payload: req.body });

@@ -34,6 +34,7 @@ const {
 	creationMediaType,
 	creationNeedsAudioWaveformCover,
 	mountAudioCoverWaveform,
+	removeAudioCoverWaveform,
 } = audioCoverWaveformMod;
 const {
 	normalizeRouteCardFeedItem,
@@ -105,6 +106,8 @@ export function hydrateRouteCardMedia(mediaEl, item, options = {}) {
 			mountAudioCoverWaveform(mediaEl);
 			return { kind: "audio-wave" };
 		}
+		removeAudioCoverWaveform(mediaEl);
+		mediaEl.classList.add("route-media-audio-real-cover");
 	}
 
 	const groupVideoSlides = getFeedItemGroupVideoSlides(feedItem);

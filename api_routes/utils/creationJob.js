@@ -20,6 +20,11 @@ import {
 	persistGeneratedAudioToCdn,
 	extensionForAudioContentType,
 } from "./persistGeneratedAudio.js";
+import {
+	buildProceduralAudioCoverBuffer,
+	resolveAudioCoverKind,
+	seedAudioCover,
+} from "./audioCoverProcedural.js";
 import { refreshGroupV2MemberView } from "./groupV2Ops.js";
 import {
 	gpuWaitMetaPatch,
@@ -812,6 +817,7 @@ async function finalizeCreationJob({
 
 	let audioMeta = null;
 	let audioCoverPlaceholder = false;
+	let audioCoverSource = "";
 	const trimmedVoiceId = typeof voiceId === "string" && voiceId.trim() ? voiceId.trim() : "";
 	if (isAudio) {
 		if (audioBuffer) {
@@ -821,22 +827,59 @@ async function finalizeCreationJob({
 				contentType: audioContentType || "audio/mpeg",
 				filename: `generated.${extensionForAudioContentType(audioContentType)}`,
 				createPlaceholder: () => createPlaceholderImageBuffer(),
+				createFallbackCover: async () => {
+					const args = existingMeta?.args && typeof existingMeta.args === "object" ? existingMeta.args : {};
+					const prompt = typeof args.prompt === "string" ? args.prompt : "";
+					const built = await buildProceduralAudioCoverBuffer({
+						seed: seedAudioCover({
+							creationId: imageId,
+							userId,
+							title: prompt,
+							prompt,
+						}),
+						title: prompt,
+						kind: resolveAudioCoverKind(existingMeta?.method || method),
+					});
+					return built.buffer;
+				},
 			});
 			imageBuffer = persisted.coverBuffer;
 			width = persisted.width;
 			height = persisted.height;
 			audioCoverPlaceholder = persisted.usedPlaceholder === true;
+			audioCoverSource = typeof persisted.coverSource === "string" ? persisted.coverSource : "";
 			audioMeta = {
 				...persisted.audio,
 				...(trimmedVoiceId ? { voice_id: trimmedVoiceId } : {}),
 			};
 		} else if (trimmedVoiceId) {
-			if (!imageBuffer) {
-				imageBuffer = await createPlaceholderImageBuffer();
-				width = DEFAULT_WIDTH;
-				height = DEFAULT_HEIGHT;
+			try {
+				const args = existingMeta?.args && typeof existingMeta.args === "object" ? existingMeta.args : {};
+				const prompt = typeof args.prompt === "string" ? args.prompt : "";
+				const built = await buildProceduralAudioCoverBuffer({
+					seed: seedAudioCover({
+						creationId: imageId,
+						userId,
+						title: prompt,
+						prompt,
+						extra: trimmedVoiceId,
+					}),
+					title: prompt,
+					kind: resolveAudioCoverKind(existingMeta?.method || method || "speech"),
+				});
+				imageBuffer = built.buffer;
+				width = built.width;
+				height = built.height;
+				audioCoverSource = "procedural";
+				audioCoverPlaceholder = false;
+			} catch {
+				if (!imageBuffer) {
+					imageBuffer = await createPlaceholderImageBuffer();
+					width = DEFAULT_WIDTH;
+					height = DEFAULT_HEIGHT;
+				}
+				audioCoverPlaceholder = true;
 			}
-			audioCoverPlaceholder = true;
 			audioMeta = { voice_id: trimmedVoiceId };
 		} else {
 			const err = new Error("Audio completion requested but no audio bytes or voice_id were available.");
@@ -883,6 +926,7 @@ async function finalizeCreationJob({
 			}
 			: {}),
 		...(isAudio && audioMeta ? { audio: audioMeta } : {}),
+		...(isAudio && audioCoverSource ? { cover_source: audioCoverSource } : {}),
 		...(isAudio && audioCoverPlaceholder ? { cover_placeholder: true } : {}),
 	});
 

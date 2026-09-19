@@ -31,6 +31,16 @@ describe('creationNeedsAudioWaveformCover', () => {
 		expect(creationNeedsAudioWaveformCover({ media_type: 'audio', meta: { media_type: 'audio' } })).toBe(true);
 	});
 
+	test('procedural cover is treated as real album art', () => {
+		expect(
+			creationNeedsAudioWaveformCover({
+				media_type: 'audio',
+				url: '/api/images/created/9.png',
+				meta: { media_type: 'audio', cover_source: 'procedural' },
+			})
+		).toBe(false);
+	});
+
 	test('Suno / real cover keeps the image', () => {
 		expect(
 			creationNeedsAudioWaveformCover({

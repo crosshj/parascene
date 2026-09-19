@@ -129,6 +129,63 @@ export async function scheduleLandscapeJob({ payload, runLandscapeJob, log = con
 	return { enqueued: false };
 }
 
+/** Schedule audio cover generate/poll: same callback as creation job; worker branches on job_type. */
+export async function scheduleAudioCoverJob({ payload, runAudioCoverJob, delaySeconds = 0, log = console }) {
+	const qstashToken = process.env.UPSTASH_QSTASH_TOKEN;
+	const isVercel = !!process.env.VERCEL;
+	const body = { ...payload, job_type: payload?.job_type || "audio_cover" };
+	const delay = Math.max(0, Math.floor(delaySeconds || 0));
+
+	logCreation("scheduleAudioCoverJob called", {
+		isVercel,
+		has_qstash_token: !!qstashToken,
+		created_image_id: payload?.created_image_id,
+		user_id: payload?.user_id,
+		job_type: body.job_type,
+		delaySeconds: delay,
+	});
+
+	if (isVercel && !hasNonEmpty(qstashToken)) {
+		const error = new Error("QStash token is required on Vercel. Set UPSTASH_QSTASH_TOKEN environment variable.");
+		logCreationError("QStash token missing on Vercel (audio cover)");
+		throw error;
+	}
+	if (isVercel && hasNonEmpty(qstashToken)) {
+		const callbackUrl = new URL("/api/worker/create", getQStashCallbackBaseUrl()).toString();
+		const qstashBaseUrl = process.env.UPSTASH_QSTASH_URL;
+		const publishUrl = `${qstashBaseUrl}/v2/publish/${callbackUrl}`;
+		const headers = {
+			Authorization: `Bearer ${qstashToken}`,
+			"Content-Type": "application/json",
+		};
+		if (delay > 0) headers["Upstash-Delay"] = `${delay}s`;
+		const res = await fetch(publishUrl, {
+			method: "POST",
+			headers,
+			body: JSON.stringify(body),
+		});
+		if (!res.ok) {
+			const text = await res.text().catch(() => "");
+			const error = new Error(`Failed to publish QStash audio cover job: ${res.status} ${res.statusText} ${text}`.trim());
+			logCreationError("QStash audio cover publish failed", { status: res.status, response: text.substring(0, 200) });
+			throw error;
+		}
+		logCreation("Audio cover job successfully enqueued to QStash");
+		return { enqueued: true };
+	}
+
+	logCreation("Running audio cover job locally (fire-and-forget)");
+	const start = () => {
+		Promise.resolve(runAudioCoverJob({ payload: body })).catch((err) => {
+			logCreationError("runAudioCoverJob failed in local mode:", err);
+			log.error("runAudioCoverJob failed:", err);
+		});
+	};
+	if (delay > 0) setTimeout(start, delay * 1000);
+	else queueMicrotask(start);
+	return { enqueued: false };
+}
+
 /** Schedule anonymous (try) creation job: QStash on Vercel, in-process locally. */
 export async function scheduleAnonCreationJob({ payload, runAnonCreationJob, log = console }) {
 	const qstashToken = process.env.UPSTASH_QSTASH_TOKEN;

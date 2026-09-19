@@ -109,6 +109,17 @@ export function creationHasRealAudioCover(item) {
 	if (meta?.cover_placeholder === true) return false;
 	const cover = firstCoverUrl(item);
 	if (isPlaceholderAudioCover(cover)) return false;
+	const source = typeof meta?.cover_source === 'string' ? meta.cover_source.trim() : '';
+	if (
+		(source === 'procedural' ||
+			source === 'upload' ||
+			source === 'generate' ||
+			source === 'import' ||
+			source === 'embedded') &&
+		cover
+	) {
+		return true;
+	}
 	const provider = audioImportProvider(meta);
 	if ((provider === 'suno' || provider === 'file') && cover) return true;
 	return false;

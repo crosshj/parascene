@@ -33,7 +33,13 @@ import {
 	isCreationGpuInFlight,
 } from "./utils/creationGpuWait.js";
 import { runLandscapeJob } from "./utils/landscapeJob.js";
-import { scheduleCreationJob, scheduleLandscapeJob } from "./utils/scheduleCreationJob.js";
+import { scheduleCreationJob, scheduleLandscapeJob, scheduleAudioCoverJob } from "./utils/scheduleCreationJob.js";
+import { applyAudioCoverBuffer, canResetAudioCover, isAudioCreationRow, resetAudioCoverToOriginal } from "./utils/audioCoverApply.js";
+import {
+	albumCoverPromptFromCreation,
+	resolveAudioCoverGenerateTarget,
+	runAudioCoverJob,
+} from "./utils/audioCoverGenerate.js";
 import { scheduleEmbeddingJob } from "./utils/embeddingJob.js";
 import { deleteCreationEmbedding } from "./utils/embeddings.js";
 import {
@@ -3388,6 +3394,10 @@ export default function createCreateRoutes({ queries, storage }) {
 				logCreation("QStash signature verified, running landscape job");
 				await runLandscapeJob({ queries, storage, payload: req.body });
 				logCreation("Landscape job completed successfully");
+			} else if (jobType === "audio_cover" || jobType === "audio_cover_poll") {
+				logCreation("QStash signature verified, running audio cover job");
+				await runAudioCoverJob({ queries, storage, payload: req.body });
+				logCreation("Audio cover job completed successfully");
 			} else if (jobType === "poll_provider") {
 				logCreation("QStash signature verified, running provider poll job");
 				await runProviderPollJob({ queries, storage, payload: req.body });
@@ -6605,6 +6615,180 @@ export default function createCreateRoutes({ queries, storage }) {
 			const message = err?.message && typeof err.message === "string" ? err.message : "Failed to set poster";
 			return res.status(500).json({ error: "Failed to set poster", message });
 		}
+	});
+
+	// POST /api/create/images/:id/cover/query — owner: cost for generating an audio cover.
+	router.post("/api/create/images/:id/cover/query", async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+		const id = Number(req.params.id);
+		if (!Number.isFinite(id) || id <= 0) {
+			return res.status(400).json({ error: "Invalid creation id" });
+		}
+		const image = await queries.selectCreatedImageById.get(id, user.id);
+		if (!image) return res.status(404).json({ error: "Creation not found" });
+		if ((image.status || "") !== "completed") {
+			return res.status(400).json({ error: "Only completed audio creations can change cover" });
+		}
+		const meta = parseMeta(image.meta) || {};
+		if (!isAudioCreationRow(image, meta)) {
+			return res.status(400).json({ error: "Cover is only available for audio creations" });
+		}
+		const servers = (await queries.selectServers?.all?.()) ?? [];
+		const prompt = albumCoverPromptFromCreation(image, meta, req.body?.prompt);
+		const target = resolveAudioCoverGenerateTarget(servers, prompt);
+		if (!target) {
+			return res.json({ supported: false, message: "No image server is available for cover generation." });
+		}
+		return res.json({
+			supported: true,
+			credits: target.credits,
+			method: target.method,
+			server_id: target.server_id,
+			prompt,
+			can_reset: canResetAudioCover(meta),
+		});
+	});
+
+	// POST /api/create/images/:id/cover — owner: upload or generate audio cover in place.
+	router.post("/api/create/images/:id/cover", async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+		const id = Number(req.params.id);
+		if (!Number.isFinite(id) || id <= 0) {
+			return res.status(400).json({ error: "Invalid creation id" });
+		}
+		const image = await queries.selectCreatedImageById.get(id, user.id);
+		if (!image) return res.status(404).json({ error: "Creation not found" });
+		if ((image.status || "") !== "completed") {
+			return res.status(400).json({ error: "Only completed audio creations can change cover" });
+		}
+		const existingMeta = parseMeta(image.meta) || {};
+		if (!isAudioCreationRow(image, existingMeta)) {
+			return res.status(400).json({ error: "Cover is only available for audio creations" });
+		}
+
+		const isMultipart = req.is("multipart/form-data");
+		if (isMultipart) {
+			try {
+				const maxBytes = 20 * 1024 * 1024;
+				const { files } = await parseMultipartCreate(req, { maxFileBytes: maxBytes });
+				const imageFile = files?.image;
+				if (!imageFile || !Buffer.isBuffer(imageFile.buffer) || imageFile.buffer.length === 0) {
+					return res.status(400).json({ error: "No image file provided; use form field name 'image'" });
+				}
+				const applied = await applyAudioCoverBuffer({
+					queries,
+					storage,
+					image,
+					buffer: imageFile.buffer,
+					coverSource: "upload",
+				});
+				await bumpFeedVersionCounter();
+				void invalidateFeedBetaCatalogSnapshot().catch(() => {});
+				return res.json({
+					ok: true,
+					url: applied.file_path,
+					width: applied.width,
+					height: applied.height,
+					cover_source: "upload",
+				});
+			} catch (err) {
+				const message = err?.message && typeof err.message === "string" ? err.message : "Failed to update cover";
+				return res.status(err.status || 500).json({ error: "Failed to update cover", message });
+			}
+		}
+
+		const mode = typeof req.body?.mode === "string" ? req.body.mode.trim() : "generate";
+		if (mode === "reset") {
+			try {
+				const applied = await resetAudioCoverToOriginal({ queries, storage, image });
+				await bumpFeedVersionCounter();
+				void invalidateFeedBetaCatalogSnapshot().catch(() => {});
+				return res.json({
+					ok: true,
+					url: applied.file_path,
+					width: applied.width,
+					height: applied.height,
+					cover_source: applied.meta?.cover_source || "procedural",
+					reset: true,
+				});
+			} catch (err) {
+				const message = err?.message && typeof err.message === "string" ? err.message : "Failed to reset cover";
+				return res.status(err.status || 500).json({ error: "Failed to reset cover", message });
+			}
+		}
+		if (mode !== "generate") {
+			return res.status(400).json({ error: "mode must be generate, reset, or send a multipart image upload" });
+		}
+		if (existingMeta.cover_generate?.status === "loading") {
+			return res.status(409).json({ error: "Cover generation already in progress" });
+		}
+		const servers = (await queries.selectServers?.all?.()) ?? [];
+		const prompt = albumCoverPromptFromCreation(image, existingMeta, req.body?.prompt);
+		const target = resolveAudioCoverGenerateTarget(servers, prompt);
+		if (!target) {
+			return res.status(400).json({ error: "No image server is available for cover generation." });
+		}
+
+		let credits = await queries.selectUserCredits.get(user.id);
+		if (!credits) {
+			await queries.insertUserCredits.run(user.id, 100, null);
+			credits = await queries.selectUserCredits.get(user.id);
+		}
+		if (!credits || credits.balance < target.credits) {
+			return res.status(402).json({
+				error: "Insufficient credits",
+				message: `Cover generation requires ${target.credits} credits. You have ${credits?.balance ?? 0} credits.`,
+				required: target.credits,
+				current: credits?.balance ?? 0,
+			});
+		}
+
+		const nextMeta = {
+			...existingMeta,
+			cover_generate: {
+				status: "loading",
+				started_at: new Date().toISOString(),
+				server_id: target.server_id,
+				method: target.method,
+				credit_cost: target.credits,
+			},
+		};
+		await queries.updateCreatedImageMeta.run(id, user.id, nextMeta);
+		await queries.updateUserCreditsBalance.run(user.id, -target.credits);
+
+		try {
+			await scheduleAudioCoverJob({
+				payload: {
+					job_type: "audio_cover",
+					created_image_id: id,
+					user_id: user.id,
+					server_id: target.server_id,
+					method: target.method,
+					args: { ...target.args, prompt },
+					credit_cost: target.credits,
+					async: target.async === true,
+				},
+				runAudioCoverJob: ({ payload }) => runAudioCoverJob({ queries, storage, payload }),
+			});
+		} catch (err) {
+			await queries.updateCreatedImageMeta.run(id, user.id, {
+				...existingMeta,
+				cover_generate: { status: "error", message: err?.message || "Failed to start cover generation" },
+			});
+			await queries.updateUserCreditsBalance.run(user.id, target.credits);
+			return res.status(500).json({ error: "Failed to start cover generation", message: err?.message });
+		}
+
+		const updatedCredits = await queries.selectUserCredits.get(user.id);
+		return res.json({
+			ok: true,
+			pending: true,
+			credits_remaining: updatedCredits?.balance ?? credits.balance,
+			credits: target.credits,
+			method: target.method,
+		});
 	});
 
 	// POST /api/create/images/:id/adjust — Signed-in user: save client-side brightness/contrast/saturation

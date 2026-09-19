@@ -85,4 +85,42 @@ describe("persistGeneratedAudioToCdn", () => {
 			global.fetch = origFetch;
 		}
 	});
+
+	test("uses createFallbackCover when there is no embedded art", async () => {
+		const fallback = Buffer.from("proc-png");
+		const queries = { selectServerById: { get: async () => ({ server_url: "https://blue.test/api", auth_token: "t" }) } };
+		const origFetch = global.fetch;
+		global.fetch = jest.fn(async (url, opts) => {
+			const href = String(url);
+			if (href.endsWith("/cdn/uploads") && opts?.method === "POST") {
+				return {
+					status: 201,
+					headers: { get: () => "application/json" },
+					json: async () => ({ object_id: "o_aaaaaaaaaaaaaaaaaaaaaaaa", upload_url: "https://blue.test/upload" }),
+				};
+			}
+			if (href === "https://blue.test/upload") return { ok: true, status: 200, headers: { get: () => "" } };
+			if (href.includes("/pin")) {
+				return { status: 200, headers: { get: () => "application/json" }, json: async () => ({}) };
+			}
+			if (href.includes("/links")) {
+				return { status: 201, headers: { get: () => "application/json" }, json: async () => ({ url: "https://blue.test/fetch" }) };
+			}
+			return { ok: false, status: 404, headers: { get: () => "" }, json: async () => null };
+		});
+		try {
+			const result = await persistGeneratedAudioToCdn({
+				queries,
+				audioBuffer: Buffer.from("audio-bytes"),
+				contentType: "audio/mpeg",
+				filename: "line.mp3",
+				createPlaceholder: async () => Buffer.from("png"),
+				createFallbackCover: async () => fallback,
+			});
+			expect(result.usedPlaceholder).toBe(false);
+			expect(result.coverSource).toBe("procedural");
+		} finally {
+			global.fetch = origFetch;
+		}
+	});
 });

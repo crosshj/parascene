@@ -1479,6 +1479,17 @@ function getCreationDetailMoreMenuItemDefs() {
 		label: 'Share Audio'
 	},
 	{
+		action: 'change-cover',
+		show: (d) => d.actionsContext?.showChangeCover,
+		icon: html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+	stroke-linejoin="round" aria-hidden="true">
+	<rect x="3" y="3" width="18" height="18" rx="2"></rect>
+	<circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" stroke="none"></circle>
+	<path d="M21 15l-5-5L5 19"></path>
+</svg>`,
+		label: 'Change cover'
+	},
+	{
 		action: 'set-avatar',
 		show: (d) => d.actionsContext?.showSetAvatar,
 		icon: html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
@@ -4836,6 +4847,12 @@ async function loadCreation() {
 			showQueueFromFrame,
 			showSetVideoPoster,
 			showAdjustImage,
+			showChangeCover:
+				isOwner &&
+				!isAdmin &&
+				status === 'completed' &&
+				!isFailed &&
+				mediaType === 'audio',
 			showSetAvatar: isOwner && !isImportEmbedCreation && status === 'completed' && !isFailed,
 			showCopyLink: mediaType === 'audio' || !isImportEmbedCreation,
 			showDownloadVideo: false,
@@ -4864,6 +4881,7 @@ async function loadCreation() {
 			actionsContext.showQueueFromFrame = false;
 			actionsContext.showSetVideoPoster = false;
 			actionsContext.showAdjustImage = false;
+			actionsContext.showChangeCover = false;
 		}
 		const groupSourcesRaw = Array.isArray(groupMeta?.source_creations) ? groupMeta.source_creations : [];
 		const groupSourcesMapped = groupSourcesRaw
@@ -7674,6 +7692,10 @@ async function loadCreation() {
 							showToast(err?.message || 'Could not set poster');
 						}
 					},
+					'change-cover': () => {
+						closeMobileMoreMenu();
+						openAudioCoverModal();
+					},
 					'share-audio': async () => {
 						if (!showShareAudio || !creation.video_url) return;
 						closeMobileMoreMenu();
@@ -8527,6 +8549,206 @@ document.addEventListener('click', async (e) => {
 		}));
 	}
 });
+
+function defaultAudioCoverPrompt(creation) {
+	const title = typeof creation?.title === 'string' ? creation.title.trim() : '';
+	const meta = creation?.meta && typeof creation.meta === 'object' ? creation.meta : {};
+	const args = meta.args && typeof meta.args === 'object' ? meta.args : {};
+	const prompt = typeof args.prompt === 'string' ? args.prompt.trim() : '';
+	const importTitle = typeof meta.import?.title === 'string' ? meta.import.title.trim() : '';
+	const base = title || importTitle || prompt || 'abstract atmospheric music';
+	return `${base}. Square album cover, atmospheric, no text, no letters, no watermark.`;
+}
+
+function openAudioCoverModal() {
+	const modal = document.querySelector('[data-audio-cover-modal]');
+	if (!(modal instanceof HTMLDialogElement)) return;
+	const promptEl = modal.querySelector('[data-audio-cover-prompt]');
+	const costEl = modal.querySelector('[data-audio-cover-cost]');
+	const errorEl = modal.querySelector('[data-audio-cover-error]');
+	if (promptEl) promptEl.value = defaultAudioCoverPrompt(lastCreationMeta);
+	if (costEl) costEl.textContent = '';
+	if (errorEl) {
+		errorEl.hidden = true;
+		errorEl.textContent = '';
+	}
+	setAudioCoverTab('upload');
+	syncAudioCoverResetButton(modal);
+	void refreshAudioCoverCost();
+	if (typeof modal.showModal === 'function') modal.showModal();
+}
+
+function canResetCurrentAudioCover() {
+	const meta = lastCreationMeta?.meta && typeof lastCreationMeta.meta === 'object' ? lastCreationMeta.meta : {};
+	const source = typeof meta.cover_source === 'string' ? meta.cover_source.trim() : '';
+	if (source === 'upload' || source === 'generate') return true;
+	return Boolean(meta.cover_original?.file_path);
+}
+
+function syncAudioCoverResetButton(modal) {
+	const resetBtn = modal?.querySelector('[data-audio-cover-reset]');
+	if (!(resetBtn instanceof HTMLElement)) return;
+	resetBtn.hidden = !canResetCurrentAudioCover();
+}
+
+function setAudioCoverTab(tab) {
+	const modal = document.querySelector('[data-audio-cover-modal]');
+	if (!modal) return;
+	modal.querySelectorAll('[data-audio-cover-tab]').forEach((btn) => {
+		btn.classList.toggle('is-active', btn.getAttribute('data-audio-cover-tab') === tab);
+	});
+	modal.querySelectorAll('[data-audio-cover-panel]').forEach((panel) => {
+		panel.classList.toggle('is-active', panel.getAttribute('data-audio-cover-panel') === tab);
+	});
+}
+
+async function refreshAudioCoverCost() {
+	const modal = document.querySelector('[data-audio-cover-modal]');
+	const costEl = modal?.querySelector('[data-audio-cover-cost]');
+	const creationId = getCreationId();
+	if (!costEl || !creationId) return;
+	costEl.textContent = 'Checking cost…';
+	try {
+		const prompt = modal.querySelector('[data-audio-cover-prompt]')?.value || '';
+		const res = await fetch(`/api/create/images/${encodeURIComponent(creationId)}/cover/query`, {
+			method: 'POST',
+			credentials: 'include',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ prompt }),
+		});
+		const data = await res.json().catch(() => ({}));
+		if (!res.ok || data?.supported === false) {
+			costEl.textContent = data?.message || 'Generate is not available right now.';
+			return;
+		}
+		costEl.textContent = `This uses ${data.credits} credit${Number(data.credits) === 1 ? '' : 's'}.`;
+	} catch {
+		costEl.textContent = 'Could not check generate cost.';
+	}
+}
+
+async function uploadAudioCoverFile(file) {
+	const creationId = getCreationId();
+	if (!creationId || !file) return;
+	const formData = new FormData();
+	formData.append('image', file);
+	const res = await fetch(`/api/create/images/${encodeURIComponent(creationId)}/cover`, {
+		method: 'POST',
+		credentials: 'include',
+		body: formData,
+	});
+	const data = await res.json().catch(() => ({}));
+	if (!res.ok) throw new Error(data?.message || data?.error || 'Could not update cover');
+	document.querySelector('[data-audio-cover-modal]')?.close?.();
+	if (typeof showToast === 'function') showToast('Cover updated');
+	await refreshAfterMutation('status-changed', { creationId });
+}
+
+async function generateAudioCover() {
+	const modal = document.querySelector('[data-audio-cover-modal]');
+	const creationId = getCreationId();
+	const errorEl = modal?.querySelector('[data-audio-cover-error]');
+	const generateBtn = modal?.querySelector('[data-audio-cover-generate]');
+	if (!creationId) return;
+	if (errorEl) {
+		errorEl.hidden = true;
+		errorEl.textContent = '';
+	}
+	if (generateBtn) generateBtn.disabled = true;
+	try {
+		const prompt = modal?.querySelector('[data-audio-cover-prompt]')?.value || '';
+		const res = await fetch(`/api/create/images/${encodeURIComponent(creationId)}/cover`, {
+			method: 'POST',
+			credentials: 'include',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ mode: 'generate', prompt }),
+		});
+		const data = await res.json().catch(() => ({}));
+		if (!res.ok) throw new Error(data?.message || data?.error || 'Could not generate cover');
+		if (typeof showToast === 'function') showToast('Generating cover…');
+		await waitForAudioCoverJob(creationId);
+		modal?.close?.();
+		if (typeof showToast === 'function') showToast('Cover updated');
+		await refreshAfterMutation('status-changed', { creationId });
+	} catch (err) {
+		if (errorEl) {
+			errorEl.hidden = false;
+			errorEl.textContent = err?.message || 'Could not generate cover';
+		} else if (typeof showToast === 'function') {
+			showToast(err?.message || 'Could not generate cover');
+		}
+	} finally {
+		if (generateBtn) generateBtn.disabled = false;
+	}
+}
+
+async function waitForAudioCoverJob(creationId) {
+	const started = Date.now();
+	while (Date.now() - started < 120000) {
+		await new Promise((resolve) => setTimeout(resolve, 2000));
+		const res = await fetch(`/api/create/images/${encodeURIComponent(creationId)}`, { credentials: 'include' });
+		const data = await res.json().catch(() => ({}));
+		const status = data?.meta?.cover_generate?.status;
+		if (status === 'error') throw new Error(data.meta.cover_generate.message || 'Cover generation failed');
+		if (status !== 'loading') return;
+	}
+	throw new Error('Cover generation is taking longer than expected. Refresh in a moment.');
+}
+
+function bindAudioCoverModal() {
+	const modal = document.querySelector('[data-audio-cover-modal]');
+	if (!(modal instanceof HTMLDialogElement) || modal.dataset.bound === '1') return;
+	modal.dataset.bound = '1';
+	modal.querySelector('[data-audio-cover-close]')?.addEventListener('click', () => modal.close());
+	modal.querySelectorAll('[data-audio-cover-tab]').forEach((btn) => {
+		btn.addEventListener('click', () => setAudioCoverTab(btn.getAttribute('data-audio-cover-tab')));
+	});
+	const fileInput = modal.querySelector('[data-audio-cover-file]');
+	modal.querySelector('[data-audio-cover-pick]')?.addEventListener('click', () => fileInput?.click());
+	fileInput?.addEventListener('change', async () => {
+		const file = fileInput.files?.[0];
+		fileInput.value = '';
+		if (!file) return;
+		try {
+			await uploadAudioCoverFile(file);
+		} catch (err) {
+			if (typeof showToast === 'function') showToast(err?.message || 'Could not update cover');
+		}
+	});
+	modal.querySelector('[data-audio-cover-generate]')?.addEventListener('click', () => {
+		void generateAudioCover();
+	});
+	modal.querySelector('[data-audio-cover-reset]')?.addEventListener('click', () => {
+		void resetAudioCover();
+	});
+}
+
+async function resetAudioCover() {
+	const creationId = getCreationId();
+	const modal = document.querySelector('[data-audio-cover-modal]');
+	const resetBtn = modal?.querySelector('[data-audio-cover-reset]');
+	if (!creationId) return;
+	if (resetBtn) resetBtn.disabled = true;
+	try {
+		const res = await fetch(`/api/create/images/${encodeURIComponent(creationId)}/cover`, {
+			method: 'POST',
+			credentials: 'include',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ mode: 'reset' }),
+		});
+		const data = await res.json().catch(() => ({}));
+		if (!res.ok) throw new Error(data?.message || data?.error || 'Could not restore cover');
+		modal?.close?.();
+		if (typeof showToast === 'function') showToast('Original cover restored');
+		await refreshAfterMutation('status-changed', { creationId });
+	} catch (err) {
+		if (typeof showToast === 'function') showToast(err?.message || 'Could not restore cover');
+	} finally {
+		if (resetBtn) resetBtn.disabled = false;
+	}
+}
+
+bindAudioCoverModal();
 
 // Landscape: single modal — opens with placeholder or image; cost query only when user clicks Generate/Re-generate
 const landscapeModal = document.querySelector('[data-landscape-modal]');

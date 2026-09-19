@@ -235,6 +235,36 @@
 		</div>
 	</main>
 
+	<dialog class="creation-detail-dialog audio-cover-modal" data-audio-cover-modal aria-labelledby="audio-cover-modal-title">
+		<h2 id="audio-cover-modal-title" class="dialog-title">Change cover</h2>
+		<button class="modal-close" type="button" aria-label="Close" data-audio-cover-close>
+			<svg class="modal-close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+				stroke-linecap="round" stroke-linejoin="round">
+				<line x1="18" y1="6" x2="6" y2="18"></line>
+				<line x1="6" y1="6" x2="18" y2="18"></line>
+			</svg>
+		</button>
+		<div class="audio-cover-methods" role="tablist">
+			<button type="button" class="btn-secondary audio-cover-method is-active" data-audio-cover-tab="upload">Upload</button>
+			<button type="button" class="btn-secondary audio-cover-method" data-audio-cover-tab="generate">Generate</button>
+		</div>
+		<div class="audio-cover-panel is-active" data-audio-cover-panel="upload">
+			<p class="audio-cover-help">Upload a square image to use as this track's cover.</p>
+			<input type="file" accept="image/*" hidden data-audio-cover-file />
+			<button type="button" class="btn-primary" data-audio-cover-pick>Choose image</button>
+		</div>
+		<div class="audio-cover-panel" data-audio-cover-panel="generate">
+			<label class="audio-cover-label" for="audio-cover-prompt">Prompt</label>
+			<textarea id="audio-cover-prompt" class="audio-cover-prompt" data-audio-cover-prompt rows="4" maxlength="800" placeholder="Album cover, atmospheric, no text"></textarea>
+			<p class="audio-cover-cost" data-audio-cover-cost></p>
+			<p class="audio-cover-error" data-audio-cover-error hidden></p>
+			<button type="button" class="btn-primary" data-audio-cover-generate>
+				<span data-audio-cover-generate-label>Generate</span>
+			</button>
+		</div>
+		<button type="button" class="btn-secondary audio-cover-reset" data-audio-cover-reset hidden>Use original cover</button>
+	</dialog>
+
 	<script type="module" src="/pages/creation-detail.js{{V}}"></script>
 </body>
 

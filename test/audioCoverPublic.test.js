@@ -25,6 +25,23 @@ describe('publicAudioWaveformCoverPath', () => {
 		).toBeNull();
 	});
 
+	test('procedural and generated covers keep the stored still', () => {
+		expect(
+			publicAudioWaveformCoverPath(
+				'audio',
+				{ media_type: 'audio', cover_source: 'procedural' },
+				'/api/images/created/9.png'
+			)
+		).toBeNull();
+		expect(
+			publicAudioWaveformCoverPath(
+				'audio',
+				{ media_type: 'audio', cover_source: 'generate' },
+				'/api/images/created/9.png'
+			)
+		).toBeNull();
+	});
+
 	test('video is left alone', () => {
 		expect(publicAudioWaveformCoverPath('video', { media_type: 'video' }, '/poster.jpg')).toBeNull();
 	});

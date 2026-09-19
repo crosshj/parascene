@@ -7,6 +7,7 @@ import {
 	createPlaceholderImageBuffer,
 } from "./creationJob.js";
 import { fetchImportCoverImageBuffer } from "./importCoverImage.js";
+import { buildProceduralAudioCoverBuffer, seedAudioCover } from "./audioCoverProcedural.js";
 import { getSupabaseServiceClient } from "./supabaseService.js";
 
 async function findExistingSunoImportId(userId, songId) {
@@ -132,9 +133,28 @@ export async function importSunoCreation({ userId, url, creationToken, queries, 
 			coverBuffer = null;
 		}
 	}
+	let coverSource = "";
+	if (coverBuffer) {
+		coverSource = "import";
+	}
 	if (!coverBuffer) {
-		coverBuffer = await createPlaceholderImageBuffer();
-		usedPlaceholder = true;
+		try {
+			const built = await buildProceduralAudioCoverBuffer({
+				seed: seedAudioCover({
+					userId: uid,
+					title: resolved.title,
+					extra: resolved.songId,
+				}),
+				title: resolved.title || "",
+				kind: "music",
+			});
+			coverBuffer = built.buffer;
+			coverSource = "procedural";
+		} catch {
+			coverBuffer = await createPlaceholderImageBuffer();
+			usedPlaceholder = true;
+			coverSource = "";
+		}
 	}
 
 	let width = 1024;
@@ -168,6 +188,7 @@ export async function importSunoCreation({ userId, url, creationToken, queries, 
 			creator: resolved.creator || "",
 		},
 		completed_at: new Date().toISOString(),
+		...(coverSource ? { cover_source: coverSource } : {}),
 		...(usedPlaceholder ? { cover_placeholder: true } : {}),
 		...(typeof creationToken === "string" && creationToken.trim()
 			? { creation_token: creationToken.trim() }
