@@ -557,10 +557,10 @@ class AppModalCredits extends HTMLElement {
 
             <div class="credits-section">
               <h3>Get more credits</h3>
-              <p>Explore subscription options and plans.</p>
+              <p>Buy a credit pack or subscribe on the pricing page.</p>
               <a class="btn-outlined" href="/pricing">
                 ${creditIcon('icon')}
-                View Plans
+                View pricing
               </a>
             </div>
 

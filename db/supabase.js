@@ -1276,6 +1276,57 @@ export function openDb() {
 				return { changes: 1 };
 			}
 		},
+		claimGrantedCheckoutSession: {
+			run: async (userId, sessionId) => {
+				const sid = typeof sessionId === "string" ? sessionId.trim() : "";
+				if (!sid) return { granted: false };
+				const { data: current, error: selectError } = await serviceClient
+					.from(prefixedTable("users"))
+					.select("meta")
+					.eq("id", userId)
+					.maybeSingle();
+				if (selectError) throw selectError;
+				const existing = current?.meta ?? null;
+				const meta = typeof existing === "object" && existing !== null ? { ...existing } : {};
+				const list = Array.isArray(meta.grantedStripeCheckoutSessionIds)
+					? meta.grantedStripeCheckoutSessionIds.map(String)
+					: [];
+				if (list.includes(sid)) return { granted: false };
+				const MAX = 40;
+				meta.grantedStripeCheckoutSessionIds = [...list, sid].slice(-MAX);
+				const { error } = await serviceClient
+					.from(prefixedTable("users"))
+					.update({ meta })
+					.eq("id", userId);
+				if (error) throw error;
+				return { granted: true };
+			}
+		},
+		releaseGrantedCheckoutSession: {
+			run: async (userId, sessionId) => {
+				const sid = typeof sessionId === "string" ? sessionId.trim() : "";
+				if (!sid) return { changes: 0 };
+				const { data: current, error: selectError } = await serviceClient
+					.from(prefixedTable("users"))
+					.select("meta")
+					.eq("id", userId)
+					.maybeSingle();
+				if (selectError) throw selectError;
+				const existing = current?.meta ?? null;
+				const meta = typeof existing === "object" && existing !== null ? { ...existing } : {};
+				const list = Array.isArray(meta.grantedStripeCheckoutSessionIds)
+					? meta.grantedStripeCheckoutSessionIds.map(String).filter((id) => id !== sid)
+					: [];
+				if (list.length) meta.grantedStripeCheckoutSessionIds = list;
+				else delete meta.grantedStripeCheckoutSessionIds;
+				const { error } = await serviceClient
+					.from(prefixedTable("users"))
+					.update({ meta })
+					.eq("id", userId);
+				if (error) throw error;
+				return { changes: 1 };
+			}
+		},
 		updateUserStripeSubscriptionId: {
 			run: async (userId, subscriptionId) => {
 				const { data: current, error: selectError } = await serviceClient

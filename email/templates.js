@@ -1045,6 +1045,75 @@ export function renderSupportReport({
 	return { subject, html: emailHtml, text };
 }
 
+export function renderCreditTopup({ recipientName = "there", credits = 0 } = {}) {
+	const safeName = escapeHtml(recipientName);
+	const amount = Math.round(Number(credits) || 0);
+	const subject = `${amount} credits added`;
+	const preheader = `Your ${amount}-credit pack is in your account.`;
+	const bodyHtml = html`
+		<p style="margin:0 0 12px; font-family:Arial, Helvetica, sans-serif;">Hi ${safeName},</p>
+		<p style="margin:0 0 12px; font-family:Arial, Helvetica, sans-serif;">
+			Your payment went through. <strong>${amount} credits</strong> have been added to your account.
+		</p>
+		<p style="margin:0; font-family:Arial, Helvetica, sans-serif;">— The parascene team</p>
+	`;
+	const emailHtml = baseEmailLayout({
+		preheader,
+		title: subject,
+		bodyHtml,
+		ctaText: "View your credits",
+		ctaUrl: `${getBaseAppUrlForEmail()}/pricing`,
+		footerText: "You're receiving this because you bought credits on parascene."
+	});
+	const text = [
+		`Hi ${recipientName},`,
+		"",
+		`Your payment went through. ${amount} credits have been added to your account.`,
+		"",
+		"— The parascene team",
+		"",
+		`View your credits: ${getBaseAppUrlForEmail()}/pricing`
+	].join("\n");
+	return { subject, html: emailHtml, text };
+}
+
+export function renderFounderWelcome({ recipientName = "there", credits = 700 } = {}) {
+	const safeName = escapeHtml(recipientName);
+	const amount = Math.round(Number(credits) || 700);
+	const subject = "Welcome to Founder";
+	const preheader = `${amount} credits are in your account. Thank you for helping shape parascene.`;
+	const bodyHtml = html`
+		<p style="margin:0 0 12px; font-family:Arial, Helvetica, sans-serif;">Hi ${safeName},</p>
+		<p style="margin:0 0 12px; font-family:Arial, Helvetica, sans-serif;">
+			Welcome to Founder. Thank you for supporting parascene while it is still taking shape.
+		</p>
+		<p style="margin:0 0 12px; font-family:Arial, Helvetica, sans-serif;">
+			<strong>${amount} credits</strong> have been added to your account. You also get priority support, early feature consideration, and Founder flair.
+		</p>
+		<p style="margin:0; font-family:Arial, Helvetica, sans-serif;">— The parascene team</p>
+	`;
+	const emailHtml = baseEmailLayout({
+		preheader,
+		title: subject,
+		bodyHtml,
+		ctaText: "Go to parascene",
+		ctaUrl: getBaseAppUrlForEmail(),
+		footerText: "You're receiving this because you subscribed to Founder."
+	});
+	const text = [
+		`Hi ${recipientName},`,
+		"",
+		"Welcome to Founder. Thank you for supporting parascene while it is still taking shape.",
+		"",
+		`${amount} credits have been added to your account. You also get priority support, early feature consideration, and Founder flair.`,
+		"",
+		"— The parascene team",
+		"",
+		`Go to parascene: ${getBaseAppUrlForEmail()}`
+	].join("\n");
+	return { subject, html: emailHtml, text };
+}
+
 export const templates = {
 	helloFromParascene: renderHelloFromParascene,
 	commentReceived: renderCommentReceived,
@@ -1057,5 +1126,7 @@ export const templates = {
 	reengagement: renderReengagement,
 	creationHighlight: renderCreationHighlight,
 	supportReport: renderSupportReport,
-	adminBroadcast: renderAdminBroadcast
+	adminBroadcast: renderAdminBroadcast,
+	creditTopup: renderCreditTopup,
+	founderWelcome: renderFounderWelcome
 };

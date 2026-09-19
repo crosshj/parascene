@@ -6985,7 +6985,7 @@ export async function initChatPage(root, options = {}) {
 					if (navigateNotificationPrimaryHref(notification)) {
 						return;
 					}
-					if (notification.type === 'tip') {
+					if (notification.type === 'tip' || notification.type === 'credits') {
 						document.dispatchEvent(
 							new CustomEvent('open-notifications', {
 								detail: { notificationId: notification.id }

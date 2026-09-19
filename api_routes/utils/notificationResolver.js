@@ -22,6 +22,32 @@ function parseJson(value) {
  */
 export async function resolveNotificationDisplay(row, queries) {
 	const type = typeof row?.type === "string" ? row.type.trim() : null;
+	if (type === "credits") {
+		const meta = parseJson(row?.meta);
+		const credits = meta?.credits != null && Number.isFinite(Number(meta.credits))
+			? Math.round(Number(meta.credits))
+			: 0;
+		const kind = typeof meta?.kind === "string" ? meta.kind : "";
+		if (kind === "founder") {
+			return {
+				title: "Welcome to Founder",
+				message: `You're a Founder. ${credits} credits have been added to your account.`,
+				link: "/pricing"
+			};
+		}
+		if (kind === "founder_renewal") {
+			return {
+				title: "Credits added",
+				message: `Your ${credits} monthly Founder credits have been added.`,
+				link: "/pricing"
+			};
+		}
+		return {
+			title: "Credits added",
+			message: `You received ${credits} credits.`,
+			link: "/pricing"
+		};
+	}
 	const actorUserId = row?.actor_user_id != null && Number.isFinite(Number(row.actor_user_id)) ? Number(row.actor_user_id) : null;
 	if (!type || !actorUserId) return null;
 

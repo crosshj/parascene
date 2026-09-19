@@ -19,16 +19,15 @@
 	<main data-pricing-main>
 		<div class="route-header" data-pricing-header>
 			<h3 data-pricing-header-title>Pricing</h3>
-			<p data-pricing-header-subtitle>Start free, or unlock Founder.</p>
-			<p class="pricing-intro">Parascene offers a free tier for everyone and an optional Founder subscription for more credits and perks. Choose the plan that fits you.</p>
+			<p data-pricing-header-subtitle>Start free, unlock Founder, or buy credits.</p>
+			<p class="pricing-intro">Parascene is free to use. Founder is a monthly subscription for more credits and perks. Credit packs are a one-time top-up when you just need more balance.</p>
 		</div>
 
 		<div class="pricing-success-state-content" data-pricing-success-state-content hidden>
 			<div class="pricing-success-message" data-pricing-success-message role="status" aria-live="polite">
 				<p class="pricing-success-message-title">Payment successful</p>
-				<p>Thank you for subscribing. Your Founder plan is being activated — you’ll have 700 credits per month,
-					priority support, and Founder flair on your profile.</p>
-				<p>Refresh in a moment to see your plan update, or continue exploring.</p>
+				<p>Thank you for subscribing. Your first 700 credits are being added now, along with priority support and Founder flair.</p>
+				<p>Watch for a welcome notification and email. Refresh in a moment to see your plan update, or continue exploring.</p>
 				<p>You can switch back to Free anytime from the pricing page.</p>
 				<div class="pricing-success-actions">
 					<a href="/pricing" class="pricing-success-btn pricing-success-btn-primary">Refresh</a>
@@ -38,9 +37,10 @@
 		<script>
 			(function () {
 				var q = window.location.search;
-				var hasSuccess = q.indexOf('success=1') !== -1 || q.indexOf('session_id=') !== -1;
+				var hasTopup = q.indexOf('topup=1') !== -1;
+				var hasSuccess = !hasTopup && (q.indexOf('success=1') !== -1 || q.indexOf('session_id=') !== -1);
 				var switchedFree = q.indexOf('switched=free') !== -1;
-				if (!hasSuccess && !switchedFree) return;
+				if (!hasSuccess && !switchedFree && !hasTopup) return;
 				var main = document.querySelector('[data-pricing-main]');
 				var title = document.querySelector('[data-pricing-header-title]');
 				var subtitle = document.querySelector('[data-pricing-header-subtitle]');
@@ -51,9 +51,17 @@
 					main.classList.add('pricing-ready');
 				}
 				if (title) title.textContent = 'Pricing';
-				if (subtitle) subtitle.textContent = switchedFree ? 'You\'re now on the Free plan.' : 'Thank you. Your Founder plan is being activated.';
+				if (subtitle) {
+					subtitle.textContent = switchedFree
+						? 'You\'re now on the Free plan.'
+						: hasTopup
+							? 'Credits are being added to your account.'
+							: 'Thank you. Your Founder plan is being activated.';
+				}
 				if (messageEl && switchedFree) {
 					messageEl.innerHTML = '<p class="pricing-success-message-title">Plan updated</p><p>You\'re now on the Free plan. You can resubscribe to Founder anytime.</p><div class="pricing-success-actions"><a href="/pricing" class="pricing-success-btn pricing-success-btn-primary">Continue</a></div>';
+				} else if (messageEl && hasTopup) {
+					messageEl.innerHTML = '<p class="pricing-success-message-title">Payment successful</p><p>Your credit pack is being added. You\'ll get a notification and email when the credits land. Refresh in a moment to see your updated balance, or continue exploring.</p><div class="pricing-success-actions"><a href="/pricing" class="pricing-success-btn pricing-success-btn-primary">Refresh</a></div>';
 				}
 				if (content) content.hidden = false;
 			})();
@@ -114,6 +122,31 @@
 				</div>
 			</div>
 
+			<section class="pricing-packs" data-pricing-packs>
+				<h3 class="pricing-packs-title">Credit packs</h3>
+				<p class="pricing-packs-intro">One-time purchase. Credits are added to your balance after payment. Founder is still the better monthly rate if you create often.</p>
+				<div class="pricing-packs-grid">
+					<div class="pricing-card" data-pricing-pack="100">
+						<h3>100 credits</h3>
+						<p class="pricing-price">$3 <span>one time</span></p>
+						<p class="pricing-pack-note" aria-hidden="true"></p>
+						<a href="/auth?returnUrl=/pricing" class="btn-outlined" data-pricing-cta-pack="100">Buy 100 credits</a>
+					</div>
+					<div class="pricing-card" data-pricing-pack="300">
+						<h3>300 credits</h3>
+						<p class="pricing-price">$7 <span>one time</span></p>
+						<p class="pricing-pack-note" aria-hidden="true"></p>
+						<a href="/auth?returnUrl=/pricing" class="btn-outlined" data-pricing-cta-pack="300">Buy 300 credits</a>
+					</div>
+					<div class="pricing-card" data-pricing-pack="700">
+						<h3>700 credits</h3>
+						<p class="pricing-price">$15 <span>one time</span></p>
+						<p class="pricing-pack-note">Best deal</p>
+						<a href="/auth?returnUrl=/pricing" class="btn-outlined" data-pricing-cta-pack="700">Buy 700 credits</a>
+					</div>
+				</div>
+			</section>
+
 			<div class="pricing-team-message">
 				<h4 class="pricing-team-message-title">A special note for early users</h4>
 				<p>Parascene is early and evolving. Founder members help define what it becomes.</p>
@@ -172,12 +205,16 @@
 			if (headerSubtitle) {
 				headerSubtitle.textContent = variant === 'deactivation'
 					? 'You\'re now on the Free plan.'
-					: 'Thank you. Your Founder plan is being activated.';
+					: variant === 'topup'
+						? 'Credits are being added to your account.'
+						: 'Thank you. Your Founder plan is being activated.';
 			}
 			if (successMessage) {
 				successMessage.innerHTML = variant === 'deactivation'
 					? '<p class="pricing-success-message-title">Plan updated</p><p>You\'re now on the Free plan. You can resubscribe to Founder anytime.</p><div class="pricing-success-actions"><a href="/pricing" class="pricing-success-btn pricing-success-btn-primary">Continue</a></div>'
-					: '<p class="pricing-success-message-title">Payment successful</p><p>Thank you for subscribing. Your Founder plan is being activated — you\'ll have 700 credits per month, priority support, and Founder flair on your profile.</p><p>Refresh in a moment to see your plan update, or continue exploring.</p><p>You can switch back to Free anytime from the pricing page.</p><div class="pricing-success-actions"><a href="/pricing" class="pricing-success-btn pricing-success-btn-primary">Refresh</a></div>';
+					: variant === 'topup'
+						? '<p class="pricing-success-message-title">Payment successful</p><p>Your credit pack is being added. You\'ll get a notification and email when the credits land. Refresh in a moment to see your updated balance, or continue exploring.</p><div class="pricing-success-actions"><a href="/pricing" class="pricing-success-btn pricing-success-btn-primary">Refresh</a></div>'
+						: '<p class="pricing-success-message-title">Payment successful</p><p>Thank you for subscribing. Your first 700 credits are being added now, along with priority support and Founder flair.</p><p>Watch for a welcome notification and email. Refresh in a moment to see your plan update, or continue exploring.</p><p>You can switch back to Free anytime from the pricing page.</p><div class="pricing-success-actions"><a href="/pricing" class="pricing-success-btn pricing-success-btn-primary">Refresh</a></div>';
 			}
 			if (successStateContent) successStateContent.hidden = false;
 		}
@@ -185,6 +222,45 @@
 		function showContent() {
 			clearSpinnerTimeout();
 			if (main) main.classList.add('pricing-ready');
+		}
+
+		function bindPackCheckout() {
+			const packLinks = document.querySelectorAll('[data-pricing-cta-pack]');
+			packLinks.forEach(function (link) {
+				link.addEventListener('click', function (e) {
+					e.preventDefault();
+					if (link.getAttribute('aria-busy') === 'true') return;
+					const pack = link.getAttribute('data-pricing-cta-pack');
+					if (!pack) return;
+					const originalText = link.textContent;
+					link.setAttribute('aria-busy', 'true');
+					link.textContent = 'Redirecting…';
+					fetch('/api/credits/checkout', {
+						method: 'POST',
+						credentials: 'include',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ pack: pack })
+					}).then(function (r) {
+						return r.json().then(function (json) {
+							if (r.status === 401) {
+								window.location.href = '/auth?returnUrl=/pricing';
+								return;
+							}
+							if (r.ok && json && json.url) {
+								window.location.href = json.url;
+								return;
+							}
+							link.removeAttribute('aria-busy');
+							link.textContent = originalText;
+							alert(json && (json.message || json.error) ? (json.message || json.error) : 'Could not start checkout.');
+						});
+					}).catch(function () {
+						link.removeAttribute('aria-busy');
+						link.textContent = originalText;
+						alert('Could not start checkout.');
+					});
+				});
+			});
 		}
 
 		function injectPlaceholderIcon() {
@@ -229,10 +305,14 @@
 				// If user just returned from Stripe or has pending activation, show success-only view (hide grid/CTAs)
 				const urlParams = new URLSearchParams(window.location.search);
 				const successParam = urlParams.get('success') === '1';
+				const topupParam = urlParams.get('topup') === '1';
 				const sessionIdParam = urlParams.get('session_id') || '';
 				const switchedFreeParam = urlParams.get('switched') === 'free';
 				if (switchedFreeParam && plan === 'free') {
 					showSuccessState('deactivation');
+					history.replaceState(null, '', window.location.pathname);
+				} else if (topupParam) {
+					showSuccessState('topup');
 					history.replaceState(null, '', window.location.pathname);
 				} else if (successParam && sessionIdParam) {
 					showSuccessState('activation');
@@ -325,6 +405,7 @@
 						});
 					});
 				}
+				bindPackCheckout();
 				showContent();
 			})
 			.catch(function () {
@@ -346,6 +427,7 @@
 					window.addEventListener('scroll', handleScroll, { passive: true });
 				}
 				setupGuestHeaderScroll();
+				bindPackCheckout();
 				showContent();
 			});
 	</script>

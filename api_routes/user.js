@@ -22,6 +22,11 @@ import {
 	shouldLogSession
 } from "./auth.js";
 import { getBaseAppUrl, getBaseAppUrlForEmail, getThumbnailUrl } from "./utils/url.js";
+import {
+	getCreditTopupPack,
+	getCreditTopupPriceId,
+	listConfiguredCreditTopupPacks
+} from "./utils/creditPacks.js";
 import { mapCreatedImageRowMediaFields } from "./utils/resolveCreationDisplayMedia.js";
 import { parseCreationMeta } from "./utils/resolveCreatedImageStorageFilename.js";
 import { computeWelcome, WELCOME_VERSION } from "./utils/welcome.js";
@@ -921,6 +926,47 @@ export default function createProfileRoutes({ queries }) {
 		} catch (err) {
 			console.error("[POST /api/subscription/checkout-return]", err);
 			return res.status(500).json({ error: "Failed to record", message: err?.message || "Could not record checkout return." });
+		}
+	});
+
+	// Start Stripe Checkout for a one-time credit pack
+	router.post("/api/credits/checkout", async (req, res) => {
+		if (!req.auth?.userId) {
+			return res.status(401).json({ error: "Unauthorized" });
+		}
+		const pack = getCreditTopupPack(req.body?.pack);
+		const secretKey = process.env.STRIPE_SECRET_KEY;
+		const priceId = pack ? getCreditTopupPriceId(pack) : "";
+		if (!pack) {
+			return res.status(400).json({ error: "Invalid pack", message: "Choose a credit pack." });
+		}
+		if (!secretKey || !priceId) {
+			return res.status(503).json({
+				error: "STRIPE_NOT_CONFIGURED",
+				message: "Credit checkout is not set up yet."
+			});
+		}
+		try {
+			const stripe = new Stripe(secretKey);
+			const baseUrl = getBaseAppUrl();
+			const user = await queries.selectUserById.get(req.auth.userId);
+			const customerEmail = typeof user?.email === "string" && user.email.includes("@") ? user.email : undefined;
+			const session = await stripe.checkout.sessions.create({
+				mode: "payment",
+				line_items: [{ price: priceId, quantity: 1 }],
+				client_reference_id: String(req.auth.userId),
+				metadata: { type: "credit_topup", pack: pack.id },
+				success_url: `${baseUrl}/pricing?topup=1&session_id={CHECKOUT_SESSION_ID}`,
+				cancel_url: `${baseUrl}/pricing?canceled=1`,
+				...(customerEmail ? { customer_email: customerEmail } : {})
+			});
+			return res.json({ url: session.url });
+		} catch (err) {
+			console.error("[POST /api/credits/checkout]", err);
+			return res.status(500).json({
+				error: "Checkout failed",
+				message: err?.message || "Could not start checkout."
+			});
 		}
 	});
 
@@ -2195,7 +2241,8 @@ export default function createProfileRoutes({ queries }) {
 					return res.json({
 						balance: newCredits.balance,
 						canClaim: isAdmin ? false : true,
-						lastClaimDate: null
+						lastClaimDate: null,
+						topupPacks: listConfiguredCreditTopupPacks()
 					});
 				} catch (error) {
 					// console.error("Error initializing credits:", error);
@@ -2217,7 +2264,8 @@ export default function createProfileRoutes({ queries }) {
 			return res.json({
 				balance: credits.balance,
 				canClaim,
-				lastClaimDate: credits.last_daily_claim_at
+				lastClaimDate: credits.last_daily_claim_at,
+				topupPacks: listConfiguredCreditTopupPacks()
 			});
 		} catch (error) {
 			// console.error("Error loading credits:", error);

@@ -1,6 +1,8 @@
 import "dotenv/config";
 import Stripe from "stripe";
 import { openDb } from "../../db/index.js";
+import { getCreditTopupPack } from "../../api_routes/utils/creditPacks.js";
+import { notifyCreditPurchase } from "../../api_routes/utils/purchaseNotify.js";
 
 const FOUNDER_CREDITS_GRANT = 700;
 
@@ -33,7 +35,7 @@ async function getRawBody(req) {
 /**
  * Grant Founder credits: ensure user has a credits row, then add FOUNDER_CREDITS_GRANT.
  */
-async function grantFounderCredits(queries, userId) {
+async function ensureCreditsRow(queries, userId) {
 	const credits = await queries.selectUserCredits?.get(userId);
 	if (!credits) {
 		try {
@@ -42,9 +44,52 @@ async function grantFounderCredits(queries, userId) {
 			// Row may already exist from race
 		}
 	}
+}
+
+async function grantFounderCredits(queries, userId) {
+	await ensureCreditsRow(queries, userId);
 	if (queries.updateUserCreditsBalance?.run) {
 		await queries.updateUserCreditsBalance.run(userId, FOUNDER_CREDITS_GRANT);
 	}
+}
+
+async function grantTopupCredits(queries, userId, amount) {
+	await ensureCreditsRow(queries, userId);
+	if (queries.updateUserCreditsBalance?.run) {
+		await queries.updateUserCreditsBalance.run(userId, amount);
+	}
+}
+
+async function handleCreditTopup(queries, session) {
+	const sessionId = typeof session?.id === "string" ? session.id.trim() : "";
+	const paymentStatus = session?.payment_status;
+	if (paymentStatus && paymentStatus !== "paid" && paymentStatus !== "no_payment_required") {
+		return;
+	}
+	const userId = session?.client_reference_id ? String(session.client_reference_id).trim() : "";
+	const pack = getCreditTopupPack(session?.metadata?.pack);
+	if (!sessionId || !userId || !pack) {
+		console.error("[Stripe Webhook] credit_topup session missing session, user, or pack");
+		return;
+	}
+	if (!queries.claimGrantedCheckoutSession?.run) {
+		await grantTopupCredits(queries, userId, pack.credits);
+		await notifyCreditPurchase(queries, { userId, kind: "topup", credits: pack.credits });
+		return;
+	}
+	const claim = await queries.claimGrantedCheckoutSession.run(userId, sessionId);
+	if (!claim?.granted) {
+		return;
+	}
+	try {
+		await grantTopupCredits(queries, userId, pack.credits);
+	} catch (err) {
+		if (queries.releaseGrantedCheckoutSession?.run) {
+			await queries.releaseGrantedCheckoutSession.run(userId, sessionId);
+		}
+		throw err;
+	}
+	await notifyCreditPurchase(queries, { userId, kind: "topup", credits: pack.credits });
 }
 
 export default async function handler(req, res) {
@@ -95,23 +140,48 @@ export default async function handler(req, res) {
 
 		if (event.type === "checkout.session.completed") {
 			const session = event.data?.object;
-			const userId = session?.client_reference_id ? String(session.client_reference_id).trim() : null;
-			if (!userId) {
-				console.error("[Stripe Webhook] checkout.session.completed missing client_reference_id");
-				return res.status(200).json({ received: true });
-			}
+			if (session?.mode === "payment" || session?.metadata?.type === "credit_topup") {
+				await handleCreditTopup(queries, session);
+				processedEventIds.add(event.id);
+			} else {
+				const userId = session?.client_reference_id ? String(session.client_reference_id).trim() : null;
+				if (!userId) {
+					console.error("[Stripe Webhook] checkout.session.completed missing client_reference_id");
+					return res.status(200).json({ received: true });
+				}
 
-			if (queries.updateUserPlan?.run) {
-				await queries.updateUserPlan.run(userId, "founder");
+				if (queries.updateUserPlan?.run) {
+					await queries.updateUserPlan.run(userId, "founder");
+				}
+				const subId = session?.subscription
+					? (typeof session.subscription === "string" ? session.subscription : session.subscription?.id)
+					: null;
+				if (subId && queries.updateUserStripeSubscriptionId?.run) {
+					await queries.updateUserStripeSubscriptionId.run(userId, subId);
+				}
+				const sessionId = typeof session?.id === "string" ? session.id.trim() : "";
+				let shouldGrant = true;
+				if (sessionId && queries.claimGrantedCheckoutSession?.run) {
+					const claim = await queries.claimGrantedCheckoutSession.run(userId, sessionId);
+					shouldGrant = !!claim?.granted;
+				}
+				if (shouldGrant) {
+					try {
+						await grantFounderCredits(queries, userId);
+						await notifyCreditPurchase(queries, {
+							userId,
+							kind: "founder",
+							credits: FOUNDER_CREDITS_GRANT
+						});
+					} catch (err) {
+						if (sessionId && queries.releaseGrantedCheckoutSession?.run) {
+							await queries.releaseGrantedCheckoutSession.run(userId, sessionId);
+						}
+						throw err;
+					}
+				}
+				processedEventIds.add(event.id);
 			}
-			const subId = session?.subscription
-				? (typeof session.subscription === "string" ? session.subscription : session.subscription?.id)
-				: null;
-			if (subId && queries.updateUserStripeSubscriptionId?.run) {
-				await queries.updateUserStripeSubscriptionId.run(userId, subId);
-			}
-			await grantFounderCredits(queries, userId);
-			processedEventIds.add(event.id);
 		}
 
 		if (event.type === "customer.subscription.deleted") {
@@ -151,6 +221,11 @@ export default async function handler(req, res) {
 			}
 			const userId = String(user.id);
 			await grantFounderCredits(queries, userId);
+			await notifyCreditPurchase(queries, {
+				userId,
+				kind: "founder_renewal",
+				credits: FOUNDER_CREDITS_GRANT
+			});
 			processedEventIds.add(event.id);
 		}
 

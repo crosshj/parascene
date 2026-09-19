@@ -48,7 +48,7 @@ const CREATION_CLICK_TYPES = new Set([
 /** @param {{ type?: string | null, link?: string | null, creation_id?: number | null }} n */
 export function notificationPrimaryClickable(n) {
 	if (!n) return false;
-	if (n.type === "tip") return true;
+	if (n.type === "tip" || n.type === "credits") return true;
 	if (n.type === "chat_mention" && notificationChatHref(n)) return true;
 	const href = notificationCreationHref(n);
 	return !!href && n.type != null && CREATION_CLICK_TYPES.has(n.type);

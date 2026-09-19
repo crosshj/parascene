@@ -312,7 +312,7 @@ class AppModalNotifications extends HTMLElement {
 						navigateNotificationPrimaryHref(notification);
 						return;
 					}
-					if (notification?.type === 'tip') {
+					if (notification?.type === 'tip' || notification?.type === 'credits') {
 						this.openDetail(notification.id);
 						item.classList.remove('is-loading');
 						item.removeAttribute('aria-busy');
@@ -359,7 +359,7 @@ class AppModalNotifications extends HTMLElement {
 		const timeTitle = formatDateTime(notification.created_at);
 		const openRelatedHref = notificationPrimaryHref(notification);
 		const isTipWithoutCreation =
-			notification.type === 'tip' && !openRelatedHref;
+			(notification.type === 'tip' || notification.type === 'credits') && !openRelatedHref;
 
 		content.innerHTML = html`
 	<div class="notification-detail">

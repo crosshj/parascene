@@ -2,7 +2,7 @@
 
 /* Narrower content width for pricing (global main is 1400px) */
 body.pricing-page main {
-	max-width: 720px;
+	max-width: 900px;
 }
 
 /* Guest header: same look as /try (transparent until scroll) */
@@ -207,6 +207,54 @@ main.pricing-success-state .pricing-success-state-content {
 	margin: 24px 0 32px;
 }
 
+.pricing-packs {
+	margin: 8px 0 8px;
+	padding-top: 8px;
+}
+
+.pricing-packs-title {
+	margin: 0 0 8px;
+	font-size: 1.15rem;
+	font-weight: 600;
+	color: var(--text);
+}
+
+.pricing-packs-intro {
+	margin: 0 0 16px;
+	font-size: 0.95rem;
+	line-height: 1.6;
+	color: var(--text-muted);
+	max-width: 560px;
+}
+
+.pricing-packs-grid {
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: 16px;
+	align-items: stretch;
+}
+
+.pricing-packs-grid .pricing-card {
+	height: 100%;
+}
+
+.pricing-packs-grid .pricing-card .pricing-price {
+	margin-bottom: 8px;
+}
+
+.pricing-pack-note {
+	min-height: 1.4em;
+	margin: 0 0 16px;
+	font-size: 0.9rem;
+	font-weight: 500;
+	line-height: 1.4;
+	color: var(--text-muted);
+}
+
+.pricing-packs-grid .pricing-card .btn-outlined {
+	margin-top: auto;
+}
+
 /* Team message below tiers – use fixed values so mobile doesn’t get huge gaps (avoid vw/em for this block) */
 .pricing-team-message {
 	margin-top: 32px;
@@ -327,7 +375,8 @@ main.pricing-success-state .pricing-success-state-content {
 }
 
 .pricing-card .btn-primary,
-.pricing-card .btn-secondary {
+.pricing-card .btn-secondary,
+.pricing-card .btn-outlined {
 	width: 100%;
 	justify-content: center;
 	margin-top: 8px;
@@ -348,7 +397,8 @@ main.pricing-success-state .pricing-success-state-content {
 }
 
 /* Unlock Founder: use global .btn-primary style; only make the link look like a button (same padding as global button) */
-.pricing-card a.btn-primary {
+.pricing-card a.btn-primary,
+.pricing-card a.btn-outlined {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -493,7 +543,8 @@ main.pricing-success-state .pricing-success-state-content {
 		padding-right: 16px;
 	}
 
-	.pricing-grid {
+	.pricing-grid,
+	.pricing-packs-grid {
 		grid-template-columns: 1fr;
 	}
 }

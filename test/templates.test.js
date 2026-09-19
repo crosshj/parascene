@@ -1,4 +1,4 @@
-import { renderHelloFromParascene, renderCommentReceived } from "../email/templates.js";
+import { renderHelloFromParascene, renderCommentReceived, renderCreditTopup, renderFounderWelcome } from "../email/templates.js";
 
 describe("Email Templates", () => {
 	describe("renderHelloFromParascene", () => {
@@ -297,6 +297,26 @@ describe("Email Templates", () => {
 			// Find the main content (title/body) - should be inside the white card, after the card starts
 			const mainContentIndex = html.indexOf('padding:32px');
 			expect(mainContentIndex).toBeGreaterThan(mainEmailTableIndex);
+		});
+	});
+
+	describe("renderCreditTopup", () => {
+		it("names the credit amount in subject and body", () => {
+			const result = renderCreditTopup({ recipientName: "Ada", credits: 300 });
+			expect(result.subject).toBe("300 credits added");
+			expect(result.html).toContain("Ada");
+			expect(result.html).toContain("300 credits");
+			expect(result.text).toContain("300 credits have been added");
+		});
+	});
+
+	describe("renderFounderWelcome", () => {
+		it("welcomes the subscriber and names the first payout", () => {
+			const result = renderFounderWelcome({ recipientName: "Ada", credits: 700 });
+			expect(result.subject).toBe("Welcome to Founder");
+			expect(result.html).toContain("Welcome to Founder");
+			expect(result.html).toContain("700 credits");
+			expect(result.text).toContain("700 credits have been added");
 		});
 	});
 });
