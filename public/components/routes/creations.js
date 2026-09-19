@@ -1531,6 +1531,9 @@ class AppRouteCreations extends HTMLElement {
 				typeof itemMeta.import === 'object' &&
 				typeof itemMeta.import.provider === 'string';
 			if (isImportEmbed) card.dataset.importProvider = String(itemMeta.import.provider).trim().toLowerCase();
+			const coverSource =
+				itemMeta && typeof itemMeta.cover_source === 'string' ? itemMeta.cover_source.trim().toLowerCase() : '';
+			if (coverSource) card.dataset.coverSource = coverSource;
 			const isNativeVideo = mediaTypeNorm === 'video' && !isImportEmbed;
 			const mediaAttrs = {
 				'data-image-id': String(item.id),

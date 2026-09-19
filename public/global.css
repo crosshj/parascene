@@ -315,10 +315,19 @@ body.view-nsfw .route-media[data-media-type="video"]:not(.route-media-error).nsf
 	opacity: 0;
 }
 
-.feed-card-image.creation-audio-cover .feed-card-img,
-.feed-card-image.creation-audio-cover.loaded .feed-card-img {
+.feed-card-image.creation-audio-cover:not(.feed-card-audio-real-cover) .feed-card-img,
+.feed-card-image.creation-audio-cover.loaded:not(.feed-card-audio-real-cover) .feed-card-img {
 	opacity: 0 !important;
 	visibility: hidden;
+}
+
+.feed-card-image.feed-card-audio-real-cover .creation-audio-wave {
+	display: none;
+}
+
+.feed-card-image.feed-card-audio-real-cover.creation-audio-cover {
+	background: none;
+	color: inherit;
 }
 
 /* Keep the waveform above a placeholder PNG; only hide it for a real bitmap cover. */
@@ -328,6 +337,11 @@ body.view-nsfw .route-media[data-media-type="video"]:not(.route-media-error).nsf
 
 .route-media.route-media-audio-real-cover .creation-audio-wave {
 	display: none;
+}
+
+.route-media.route-media-audio-real-cover.creation-audio-cover {
+	background: none;
+	color: inherit;
 }
 
 /* Hide content until page is fully loaded */
@@ -3478,6 +3492,7 @@ app-route-feed {
 	position: relative;
 	width: 100%;
 	aspect-ratio: 1 / 1;
+	flex-shrink: 0;
 	border-radius: 0;
 	overflow: hidden;
 	background: var(--surface-muted);
@@ -3538,6 +3553,8 @@ app-route-feed {
 }
 
 .feed-card-image .feed-card-img {
+	position: absolute;
+	inset: 0;
 	width: 100%;
 	height: 100%;
 	display: block;
@@ -5979,15 +5996,19 @@ body.view-nsfw .feed-card-image--group-carousel.nsfw::after {
 .comment-body .comment-text .connect-chat-youtube-embed,
 .comment-body .comment-text .connect-chat-suno-embed,
 .comment-body .comment-text .connect-chat-suno-preview,
+.comment-body .comment-text .connect-chat-audio-embed,
 .connect-comment .comment-text .connect-chat-youtube-embed,
 .connect-comment .comment-text .connect-chat-suno-embed,
 .connect-comment .comment-text .connect-chat-suno-preview,
+.connect-comment .comment-text .connect-chat-audio-embed,
 .creation-detail-description .connect-chat-youtube-embed,
 .creation-detail-description .connect-chat-suno-embed,
 .creation-detail-description .connect-chat-suno-preview,
+.creation-detail-description .connect-chat-audio-embed,
 .creation-detail-lineage-modal-prose .connect-chat-youtube-embed,
 .creation-detail-lineage-modal-prose .connect-chat-suno-embed,
-.creation-detail-lineage-modal-prose .connect-chat-suno-preview {
+.creation-detail-lineage-modal-prose .connect-chat-suno-preview,
+.creation-detail-lineage-modal-prose .connect-chat-audio-embed {
 	margin-top: 6px;
 }
 
@@ -10538,6 +10559,8 @@ body.chat-page.chat-page--pseudo-browse-view .chat-page-messages .feed-route.cha
 .chat-page-messages .feed-route.chat-feed-channel-route.chat-feed-channel-route--browse-view .feed-card.feed-card--image-only {
 	padding: 0;
 	margin: 0;
+	width: 100%;
+	min-width: 0;
 }
 
 .chat-page-messages .feed-route.chat-feed-channel-route.chat-feed-channel-route--browse-view .feed-card.feed-card--image-only + .feed-card.feed-card--image-only {
@@ -14651,7 +14674,9 @@ body:has(.chat-hashtag-nav-overlay) {
 	background-color: var(--image-placeholder);
 }
 
-.connect-chat-suno-embed {
+.connect-chat-suno-embed,
+.connect-chat-audio-embed,
+.connect-chat-creation-embed--audio-card {
 	margin-top: 0;
 	padding-block: 0;
 	width: 100%;
@@ -14663,7 +14688,8 @@ body:has(.chat-hashtag-nav-overlay) {
 	background-color: var(--image-placeholder);
 }
 
-.connect-chat-suno-embed-iframe {
+.connect-chat-suno-embed-iframe,
+.connect-chat-audio-embed-iframe {
 	display: block;
 	width: 100%;
 	max-width: 100%;

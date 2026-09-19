@@ -34,7 +34,13 @@ import {
 } from "./utils/creationGpuWait.js";
 import { runLandscapeJob } from "./utils/landscapeJob.js";
 import { scheduleCreationJob, scheduleLandscapeJob, scheduleAudioCoverJob } from "./utils/scheduleCreationJob.js";
-import { applyAudioCoverBuffer, canResetAudioCover, isAudioCreationRow, resetAudioCoverToOriginal } from "./utils/audioCoverApply.js";
+import {
+	applyAudioCoverBuffer,
+	bufferForAudioCoverSource,
+	canResetAudioCover,
+	isAudioCreationRow,
+	resetAudioCoverToOriginal,
+} from "./utils/audioCoverApply.js";
 import {
 	albumCoverPromptFromCreation,
 	resolveAudioCoverGenerateTarget,
@@ -130,6 +136,10 @@ import {
 } from "../src/chat/challenges/model/tracks.js";
 import { canViewUnpublishedCreationViaEditorialPin, getCreationFeedPinStatus } from "./feed/editorialPin.js";
 import { canViewUnpublishedChallengeResultsCreation } from "./utils/challengeResultsAccess.js";
+import {
+	canViewUnpublishedCreationViaPostedRef,
+	readPostedCreationProofFromRequest,
+} from "./utils/postedCreationAccess.js";
 import { loadChallengeFeedSnapshotSharedCached } from "./feed/challengeFeedSnapshotCache.js";
 import {
 	creationMetaHasActiveChallengeFeedPin,
@@ -3467,6 +3477,7 @@ export default function createCreateRoutes({ queries, storage }) {
 				imagesWithUrls.push({
 					id: img.id,
 					filename: img.filename,
+					file_path: typeof img.file_path === "string" ? img.file_path : null,
 					url: mediaFields.url,
 					thumbnail_url: mediaFields.thumbnail_url,
 					fit_thumbnail_url: mediaFields.fit_thumbnail_url ?? null,
@@ -3724,6 +3735,39 @@ export default function createCreateRoutes({ queries, storage }) {
 							});
 							if (delegationOk) {
 								image = anyImage;
+							}
+						}
+						if (!image && !isUnavailable) {
+							try {
+								const proof = readPostedCreationProofFromRequest(req);
+								const posted = await canViewUnpublishedCreationViaPostedRef({
+									queries,
+									sb: getSupabaseServiceClient(),
+									image: anyImage,
+									userId: user.id,
+									...proof,
+								});
+								if (posted.ok) {
+									image = anyImage;
+									if (posted.shareAccess) {
+										shareAccess = posted.shareAccess;
+									} else {
+										try {
+											shareAccess = {
+												version: ACTIVE_SHARE_VERSION,
+												token: mintShareToken({
+													version: ACTIVE_SHARE_VERSION,
+													imageId: Number(anyImage.id),
+													sharedByUserId: Number(anyImage.user_id),
+												}),
+											};
+										} catch {
+											// keep image access even if mint fails
+										}
+									}
+								}
+							} catch {
+								// deny
 							}
 						}
 						if (!image) {
@@ -4130,7 +4174,7 @@ export default function createCreateRoutes({ queries, storage }) {
 		}
 	});
 
-	async function loadViewableCreationForAudio(user, creationId) {
+	async function loadViewableCreationForAudio(user, creationId, req) {
 		let image = await queries.selectCreatedImageById.get(creationId, user.id);
 		if (image) return image;
 		const anyImage = await queries.selectCreatedImageByIdAnyUser?.get(creationId);
@@ -4139,8 +4183,21 @@ export default function createCreateRoutes({ queries, storage }) {
 		const isAdmin = user.role === "admin";
 		const isUnavailable = anyImage.unavailable_at != null && anyImage.unavailable_at !== "";
 		if (isUnavailable && !isAdmin) return null;
-		if (!isPublished && !isAdmin) return null;
-		return anyImage;
+		if (isPublished || isAdmin) return anyImage;
+		try {
+			const proof = readPostedCreationProofFromRequest(req);
+			const posted = await canViewUnpublishedCreationViaPostedRef({
+				queries,
+				sb: getSupabaseServiceClient(),
+				image: anyImage,
+				userId: user.id,
+				...proof,
+			});
+			if (posted.ok) return anyImage;
+		} catch {
+			return null;
+		}
+		return null;
 	}
 
 	// GET /api/create/images/:id/audio — 302 to a short-lived Blue CDN fetch URL (bytes never through Vercel).
@@ -4154,7 +4211,7 @@ export default function createCreateRoutes({ queries, storage }) {
 		}
 
 		try {
-			const image = await loadViewableCreationForAudio(user, creationId);
+			const image = await loadViewableCreationForAudio(user, creationId, req);
 			if (!image) {
 				return res.status(404).json({ error: "Audio not found" });
 			}
@@ -6700,6 +6757,36 @@ export default function createCreateRoutes({ queries, storage }) {
 		}
 
 		const mode = typeof req.body?.mode === "string" ? req.body.mode.trim() : "generate";
+		if (mode === "url") {
+			try {
+				const buffer = await bufferForAudioCoverSource({
+					queries,
+					storage,
+					user,
+					raw: req.body?.url,
+					fetchBuffer: fetchImageBufferFromUrl,
+				});
+				const applied = await applyAudioCoverBuffer({
+					queries,
+					storage,
+					image,
+					buffer,
+					coverSource: "upload",
+				});
+				await bumpFeedVersionCounter();
+				void invalidateFeedBetaCatalogSnapshot().catch(() => {});
+				return res.json({
+					ok: true,
+					url: applied.file_path,
+					width: applied.width,
+					height: applied.height,
+					cover_source: "upload",
+				});
+			} catch (err) {
+				const message = err?.message && typeof err.message === "string" ? err.message : "Failed to update cover";
+				return res.status(err.status || 500).json({ error: "Failed to update cover", message });
+			}
+		}
 		if (mode === "reset") {
 			try {
 				const applied = await resetAudioCoverToOriginal({ queries, storage, image });
@@ -6719,7 +6806,7 @@ export default function createCreateRoutes({ queries, storage }) {
 			}
 		}
 		if (mode !== "generate") {
-			return res.status(400).json({ error: "mode must be generate, reset, or send a multipart image upload" });
+			return res.status(400).json({ error: "mode must be generate, reset, url, or send a multipart image upload" });
 		}
 		if (existingMeta.cover_generate?.status === "loading") {
 			return res.status(409).json({ error: "Cover generation already in progress" });

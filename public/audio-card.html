@@ -1,0 +1,606 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="robots" content="noindex" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>Audio</title>
+	<style>
+		html,
+		body {
+			height: 100%;
+			margin: 0;
+			overflow: hidden;
+			background: #000;
+		}
+
+		.card {
+			position: relative;
+			box-sizing: border-box;
+			display: flex;
+			align-items: center;
+			gap: 16px;
+			width: 100%;
+			height: 100%;
+			padding: 8px 10px 8px 8px;
+			overflow: hidden;
+			color: #f7f4ef;
+			font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+			user-select: none;
+			-webkit-tap-highlight-color: transparent;
+			container-type: size;
+		}
+
+		.bg {
+			position: absolute;
+			inset: -30%;
+			z-index: 0;
+			width: 160%;
+			height: 160%;
+			object-fit: cover;
+			filter: blur(48px) saturate(1.15);
+			opacity: 0.55;
+			pointer-events: none;
+		}
+
+		.bg[hidden] {
+			display: none;
+		}
+
+		.card::before {
+			content: '';
+			position: absolute;
+			inset: 0;
+			z-index: 1;
+			pointer-events: none;
+			background: linear-gradient(105deg, rgba(8, 14, 28, 0.42) 0%, rgba(16, 28, 52, 0.38) 55%, rgba(10, 18, 40, 0.55) 100%);
+		}
+
+		.art,
+		.main,
+		.out {
+			position: relative;
+			z-index: 2;
+		}
+
+		.art {
+			flex: 0 0 auto;
+			height: 100%;
+			aspect-ratio: 1 / 1;
+			border-radius: 6px;
+			overflow: hidden;
+			background: rgba(255, 255, 255, 0.06);
+			box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+		}
+
+		.art img {
+			display: block;
+			width: 100%;
+			height: 100%;
+			object-fit: cover;
+		}
+
+		.art img[hidden] {
+			display: none;
+		}
+
+		.main {
+			flex: 1 1 auto;
+			min-width: 0;
+			display: flex;
+			flex-direction: column;
+			justify-content: center;
+			gap: 12px;
+			padding-right: 36px;
+		}
+
+		.title {
+			overflow: hidden;
+			font-size: clamp(14px, 12cqh, 18px);
+			font-weight: 700;
+			line-height: 1.2;
+			letter-spacing: -0.01em;
+			white-space: nowrap;
+			text-overflow: ellipsis;
+		}
+
+		.title.is-untitled {
+			font-style: italic;
+			font-weight: 200;
+			letter-spacing: 0;
+			color: rgba(247, 244, 239, 0.72);
+		}
+
+		.controls {
+			display: flex;
+			align-items: center;
+			gap: 10px;
+		}
+
+		.play {
+			flex: 0 0 auto;
+			display: grid;
+			place-items: center;
+			width: clamp(40px, 34cqh, 56px);
+			height: clamp(40px, 34cqh, 56px);
+			margin: 0;
+			padding: 0;
+			border: 0;
+			border-radius: 50%;
+			background: #f3efe6;
+			color: #161616;
+			cursor: pointer;
+			appearance: none;
+			-webkit-appearance: none;
+		}
+
+		.play:focus-visible {
+			outline: 2px solid #f7f4ef;
+			outline-offset: 2px;
+		}
+
+		.play svg {
+			display: block;
+			width: 38%;
+			height: 42%;
+			fill: currentColor;
+		}
+
+		.play-tri {
+			margin-left: 6%;
+		}
+
+		.play.is-playing .play-tri {
+			display: none;
+		}
+
+		.play-bars {
+			display: none;
+			align-items: flex-end;
+			justify-content: center;
+			gap: 2px;
+			width: 38%;
+			height: 38%;
+		}
+
+		.play.is-playing .play-bars {
+			display: inline-flex;
+		}
+
+		.play-bars span {
+			display: block;
+			width: 22%;
+			border-radius: 999px;
+			background: currentColor;
+			transform-origin: center bottom;
+			animation: hosted-audio-eq 0.9s ease-in-out infinite;
+		}
+
+		.play-bars span:nth-child(1) {
+			height: 55%;
+			animation-delay: -0.45s;
+		}
+
+		.play-bars span:nth-child(2) {
+			height: 100%;
+			animation-delay: -0.15s;
+		}
+
+		.play-bars span:nth-child(3) {
+			height: 72%;
+			animation-delay: -0.7s;
+		}
+
+		@keyframes hosted-audio-eq {
+			0%,
+			100% {
+				transform: scaleY(0.45);
+			}
+			50% {
+				transform: scaleY(1);
+			}
+		}
+
+		.time {
+			flex: 0 0 auto;
+			font-size: clamp(10px, 8cqh, 12px);
+			font-variant-numeric: tabular-nums;
+			letter-spacing: 0.02em;
+			color: rgba(247, 244, 239, 0.55);
+		}
+
+		.slider {
+			position: relative;
+			flex: 1 1 auto;
+			min-width: 0;
+			height: 16px;
+			display: flex;
+			align-items: center;
+			cursor: pointer;
+			touch-action: none;
+		}
+
+		.slider-track {
+			position: relative;
+			width: 100%;
+			height: 3px;
+			border-radius: 999px;
+			background: rgba(247, 244, 239, 0.28);
+		}
+
+		.slider-fill {
+			position: absolute;
+			left: 0;
+			top: 0;
+			bottom: 0;
+			width: 0;
+			border-radius: inherit;
+			background: rgba(247, 244, 239, 0.78);
+		}
+
+		.slider-thumb {
+			position: absolute;
+			top: 50%;
+			left: 0;
+			width: 12px;
+			height: 12px;
+			border-radius: 50%;
+			background: #a8b0bc;
+			transform: translate(-50%, -50%);
+			pointer-events: none;
+		}
+
+		.out {
+			position: absolute;
+			top: 10px;
+			right: 12px;
+			display: grid;
+			place-items: center;
+			width: 16px;
+			height: 16px;
+			color: rgba(247, 244, 239, 0.55);
+			cursor: pointer;
+			text-decoration: none;
+		}
+
+		.out[hidden] {
+			display: none;
+		}
+
+		.out svg {
+			display: block;
+			width: 16px;
+			height: 16px;
+			stroke: currentColor;
+			fill: none;
+			stroke-width: 1.8;
+			stroke-linecap: round;
+			stroke-linejoin: round;
+		}
+
+		.via {
+			position: absolute;
+			right: 12px;
+			bottom: 8px;
+			z-index: 2;
+			max-width: calc(100% - 132px);
+			overflow: hidden;
+			color: rgba(247, 244, 239, 0.4);
+			font-size: clamp(9px, 7.5cqh, 11px);
+			font-weight: 500;
+			letter-spacing: 0.03em;
+			line-height: 1;
+			white-space: nowrap;
+			text-overflow: ellipsis;
+			pointer-events: none;
+		}
+
+		.via[hidden] {
+			display: none;
+		}
+
+		audio {
+			display: none;
+		}
+
+		@media (max-height: 110px) {
+			.card {
+				gap: 0;
+				padding: 8px;
+				-webkit-font-smoothing: antialiased;
+			}
+
+			.card::before {
+				background: linear-gradient(to bottom, rgb(30, 41, 96), rgb(28, 28, 28));
+				background: linear-gradient(in oklab, rgb(30, 41, 96) 0%, rgb(28, 28, 28) 100%);
+			}
+
+			.bg,
+			.art {
+				display: none;
+			}
+
+			.main {
+				gap: 8px;
+				height: 100%;
+				padding-right: 28px;
+				justify-content: center;
+			}
+
+			.title {
+				height: 24px;
+				font-size: 16px;
+				font-weight: 700;
+				line-height: 24px;
+				letter-spacing: 0;
+				color: #f7f4ef;
+			}
+
+			.title.is-untitled {
+				font-weight: 200;
+				color: rgba(247, 244, 239, 0.72);
+			}
+
+			.controls {
+				gap: 16px;
+				height: 52px;
+				align-items: center;
+			}
+
+			.play {
+				width: 52px;
+				height: 52px;
+				background: #f7f4ef;
+				color: #1c1c1f;
+			}
+
+			.time {
+				font-size: 12px;
+				line-height: 16px;
+				color: #c2c2c1;
+			}
+
+			.slider-track {
+				height: 4px;
+				background: #6a6a72;
+			}
+
+			.slider-thumb {
+				width: 14px;
+				height: 14px;
+				background: #a3a3a3;
+			}
+
+			.out {
+				top: 8px;
+				right: 8px;
+			}
+
+			.via {
+				right: 8px;
+				bottom: 8px;
+				max-width: calc(100% - 24px);
+				font-size: 10px;
+				color: rgba(247, 244, 239, 0.36);
+			}
+		}
+	</style>
+</head>
+<body>
+	<div class="card">
+		<img class="bg" id="bg" alt="" hidden />
+		<span class="art">
+			<img id="cover" alt="" hidden />
+		</span>
+		<span class="main">
+			<span class="title is-untitled" id="title">Untitled</span>
+			<span class="controls">
+				<button type="button" class="play" id="play" aria-label="Play">
+					<svg class="play-tri" id="playTri" viewBox="0 0 12 14"><path d="M1 1.15 11.2 7 1 12.85z"></path></svg>
+					<span class="play-bars" id="playBars" aria-hidden="true">
+						<span></span><span></span><span></span>
+					</span>
+				</button>
+				<span class="time" id="current">0:00</span>
+				<span class="slider" id="seek" role="slider" aria-label="Seek" aria-valuemin="0" tabindex="0">
+					<span class="slider-track">
+						<span class="slider-fill" id="fill"></span>
+						<span class="slider-thumb" id="thumb"></span>
+					</span>
+				</span>
+				<span class="time" id="duration">0:00</span>
+			</span>
+		</span>
+		<a class="out" id="open" hidden aria-label="View creation">
+			<svg viewBox="0 0 24 24">
+				<rect x="8" y="3" width="13" height="13" rx="2"></rect>
+				<rect x="3" y="8" width="13" height="13" rx="2"></rect>
+			</svg>
+		</a>
+		<span class="via" id="via" hidden></span>
+		<audio id="audio" preload="metadata" playsinline controlslist="nodownload noplaybackrate"></audio>
+	</div>
+	<script>
+		(function () {
+			var params = new URLSearchParams(window.location.search);
+			var titleEl = document.getElementById('title');
+			var coverEl = document.getElementById('cover');
+			var bgEl = document.getElementById('bg');
+			var openEl = document.getElementById('open');
+			var audio = document.getElementById('audio');
+			var playBtn = document.getElementById('play');
+			var currentEl = document.getElementById('current');
+			var durationEl = document.getElementById('duration');
+			var seek = document.getElementById('seek');
+			var fill = document.getElementById('fill');
+			var thumb = document.getElementById('thumb');
+			if (!audio || !playBtn) return;
+
+			function clock(seconds) {
+				var n = Number(seconds);
+				if (!isFinite(n) || n < 0) return '0:00';
+				var s = Math.floor(n);
+				var m = Math.floor(s / 60);
+				return m + ':' + String(s % 60).padStart(2, '0');
+			}
+
+			var fallbackDur = Number(params.get('dur'));
+			function duration() {
+				var fromEl = Number(audio.duration);
+				if (isFinite(fromEl) && fromEl > 0) return fromEl;
+				if (isFinite(fallbackDur) && fallbackDur > 0) return fallbackDur;
+				return 0;
+			}
+
+			function setProgress(ratio) {
+				var r = Math.min(1, Math.max(0, ratio));
+				var pct = r * 100 + '%';
+				fill.style.width = pct;
+				thumb.style.left = pct;
+				var dur = duration();
+				var t = r * dur;
+				currentEl.textContent = clock(t);
+				seek.setAttribute('aria-valuenow', String(Math.floor(t)));
+				seek.setAttribute('aria-valuemax', String(Math.floor(dur) || 0));
+			}
+
+			function sync() {
+				var dur = duration();
+				durationEl.textContent = clock(dur);
+				if (!(dur > 0)) {
+					setProgress(0);
+					return;
+				}
+				setProgress(audio.currentTime / dur);
+			}
+
+			function setPlaying(playing) {
+				playBtn.classList.toggle('is-playing', playing);
+				playBtn.setAttribute('aria-label', playing ? 'Pause' : 'Play');
+			}
+
+			var title = String(params.get('t') || '').trim();
+			if (title) {
+				titleEl.textContent = title;
+				titleEl.classList.remove('is-untitled');
+				document.title = title;
+			} else {
+				titleEl.textContent = 'Untitled';
+				titleEl.classList.add('is-untitled');
+				document.title = 'Untitled';
+			}
+
+			var img = String(params.get('img') || '').trim();
+			if (img && !/^javascript:/i.test(img)) {
+				coverEl.src = img;
+				coverEl.hidden = false;
+				bgEl.src = img;
+				bgEl.hidden = false;
+			}
+
+			function creationIdFromHref(raw) {
+				var m = String(raw || '').match(/\/creations\/(\d+)/i);
+				if (!m) return 0;
+				var n = parseInt(m[1], 10);
+				return n > 0 ? n : 0;
+			}
+
+			var via = String(params.get('via') || '').trim();
+			var viaEl = document.getElementById('via');
+			if (via && viaEl && !/^javascript:/i.test(via)) {
+				viaEl.textContent = via;
+				viaEl.hidden = false;
+			}
+
+			var href = String(params.get('href') || '').trim();
+			if (href && /^(https?:\/\/|\/)/i.test(href) && !/^javascript:/i.test(href)) {
+				openEl.href = href;
+				openEl.hidden = false;
+				if (title) openEl.setAttribute('aria-label', 'View ' + title);
+				openEl.addEventListener('click', function (e) {
+					if (!audio.paused) audio.pause();
+					var creationId = creationIdFromHref(openEl.getAttribute('href') || href);
+					if (!creationId) return;
+					e.preventDefault();
+					e.stopPropagation();
+					var path = '/creations/' + creationId;
+					if (window.parent && window.parent !== window) {
+						window.parent.postMessage(
+							{ type: 'prsn-creation-detail-overlay-navigate', creationId: creationId, href: path },
+							window.location.origin
+						);
+						return;
+					}
+					window.location.assign(path);
+				});
+			}
+
+			var src = String(params.get('src') || '').trim();
+			if (src && !/^javascript:/i.test(src)) audio.src = src;
+
+			playBtn.addEventListener('click', function (e) {
+				e.preventDefault();
+				e.stopPropagation();
+				if (!audio.src) return;
+				if (audio.paused) {
+					audio.play().catch(function () {
+						setPlaying(false);
+					});
+				} else {
+					audio.pause();
+				}
+			});
+
+			audio.addEventListener('play', function () { setPlaying(true); });
+			audio.addEventListener('pause', function () { setPlaying(false); });
+			audio.addEventListener('ended', function () {
+				setPlaying(false);
+				setProgress(0);
+			});
+			var dragging = false;
+			audio.addEventListener('timeupdate', function () {
+				if (!dragging) sync();
+			});
+			audio.addEventListener('loadedmetadata', sync);
+			audio.addEventListener('durationchange', sync);
+
+			function ratioFromX(clientX) {
+				var track = seek.querySelector('.slider-track');
+				var rect = (track || seek).getBoundingClientRect();
+				if (!(rect.width > 0)) return 0;
+				return (clientX - rect.left) / rect.width;
+			}
+
+			function seekTo(ratio) {
+				var dur = duration();
+				if (!(dur > 0)) return;
+				audio.currentTime = Math.min(dur, Math.max(0, ratio * dur));
+				sync();
+			}
+
+			seek.addEventListener('pointerdown', function (e) {
+				if (e.button != null && e.button !== 0) return;
+				dragging = true;
+				if (seek.setPointerCapture) seek.setPointerCapture(e.pointerId);
+				seekTo(ratioFromX(e.clientX));
+				e.preventDefault();
+			});
+			seek.addEventListener('pointermove', function (e) {
+				if (!dragging) return;
+				seekTo(ratioFromX(e.clientX));
+			});
+			function endDrag(e) {
+				if (!dragging) return;
+				dragging = false;
+				if (e && e.pointerId != null && seek.releasePointerCapture) {
+					try { seek.releasePointerCapture(e.pointerId); } catch (err) {}
+				}
+			}
+			seek.addEventListener('pointerup', endDrag);
+			seek.addEventListener('pointercancel', endDrag);
+
+			sync();
+		})();
+	</script>
+</body>
+</html>

@@ -10,6 +10,9 @@ import {
 	canResetAudioCover,
 	inferAudioCoverSource,
 	isAudioCreationRow,
+	isUsableStillCoverBuffer,
+	parseAudioCoverSourceRef,
+	bufferForAudioCoverSource,
 	snapshotCoverOriginal,
 } from "../api_routes/utils/audioCoverApply.js";
 
@@ -94,6 +97,18 @@ describe("audioCoverGenerate helpers", () => {
 				{ media_type: "audio", import: { provider: "suno" } }
 			)
 		).toBe(true);
+		expect(
+			audioCreationNeedsCoverBackfill(
+				{ file_path: "/api/images/created/grey.png" },
+				{ media_type: "audio", cover_source: "embedded" }
+			)
+		).toBe(true);
+		expect(
+			audioCreationNeedsCoverBackfill(
+				{ file_path: "/api/images/created/file.png" },
+				{ media_type: "audio", cover_source: "embedded", import: { provider: "file" } }
+			)
+		).toBe(false);
 		expect(inferAudioCoverSource({ import: { provider: "suno" } })).toBe("import");
 		expect(inferAudioCoverSource({ import: { provider: "file" } })).toBe("embedded");
 		expect(
@@ -102,6 +117,34 @@ describe("audioCoverGenerate helpers", () => {
 				{ media_type: "audio", import: { provider: "suno" } }
 			)
 		).toMatchObject({ cover_source: "import" });
+	});
+
+	test("rejects flat grey stills that Blue returns as ?cover=1 stubs", async () => {
+		const sharp = (await import("sharp")).default;
+		const grey = await sharp({
+			create: { width: 128, height: 128, channels: 3, background: { r: 72, g: 72, b: 72 } },
+		})
+			.jpeg()
+			.toBuffer();
+		const art = await sharp({
+			create: { width: 128, height: 128, channels: 3, background: { r: 5, g: 199, b: 111 } },
+		})
+			.composite([
+				{
+					input: await sharp({
+						create: { width: 48, height: 48, channels: 3, background: { r: 124, g: 58, b: 237 } },
+					})
+						.png()
+						.toBuffer(),
+					left: 12,
+					top: 20,
+				},
+			])
+			.png()
+			.toBuffer();
+		expect(await isUsableStillCoverBuffer(grey)).toBe(false);
+		expect(await isUsableStillCoverBuffer(art)).toBe(true);
+		expect(await isUsableStillCoverBuffer(Buffer.from("nope"))).toBe(false);
 	});
 });
 
@@ -242,5 +285,112 @@ describe("runAudioCoverJob", () => {
 		} finally {
 			global.fetch = origFetch;
 		}
+	});
+});
+
+describe("parseAudioCoverSourceRef", () => {
+	test("accepts creation ids, paths, and full links", () => {
+		expect(parseAudioCoverSourceRef("30718")).toEqual({ kind: "creation", creationId: 30718 });
+		expect(parseAudioCoverSourceRef("/creations/30718")).toEqual({ kind: "creation", creationId: 30718 });
+		expect(parseAudioCoverSourceRef("https://www.parascene.com/creations/9?x=1")).toEqual({
+			kind: "creation",
+			creationId: 9,
+		});
+	});
+
+	test("accepts http image urls and rejects junk", () => {
+		expect(parseAudioCoverSourceRef("https://cdn.example.com/cover.png")).toEqual({
+			kind: "url",
+			url: "https://cdn.example.com/cover.png",
+		});
+		expect(parseAudioCoverSourceRef("")).toBeNull();
+		expect(parseAudioCoverSourceRef("not a url")).toBeNull();
+		expect(parseAudioCoverSourceRef("ftp://x/a.png")).toBeNull();
+	});
+});
+
+describe("bufferForAudioCoverSource", () => {
+	const png = Buffer.from("cover-bytes");
+
+	test("loads a published creation image from storage", async () => {
+		const queries = {
+			selectCreatedImageByIdAnyUser: {
+				get: async () => ({
+					id: 12,
+					user_id: 8,
+					published: 1,
+					filename: "art.png",
+					file_path: "/api/images/created/art.png",
+				}),
+			},
+		};
+		const storage = {
+			getImageBuffer: jest.fn(async () => png),
+		};
+		const buf = await bufferForAudioCoverSource({
+			queries,
+			storage,
+			user: { id: 3 },
+			raw: "/creations/12",
+		});
+		expect(buf).toBe(png);
+		expect(storage.getImageBuffer).toHaveBeenCalledWith("art.png");
+	});
+
+	test("hides unpublished creations from other users", async () => {
+		const queries = {
+			selectCreatedImageByIdAnyUser: {
+				get: async () => ({
+					id: 12,
+					user_id: 8,
+					published: 0,
+					filename: "art.png",
+					file_path: "/api/images/created/art.png",
+				}),
+			},
+		};
+		await expect(
+			bufferForAudioCoverSource({
+				queries,
+				storage: { getImageBuffer: async () => png },
+				user: { id: 3 },
+				raw: "12",
+			})
+		).rejects.toMatchObject({ status: 404, message: "Creation not found" });
+	});
+
+	test("rejects placeholder audio covers", async () => {
+		const queries = {
+			selectCreatedImageByIdAnyUser: {
+				get: async () => ({
+					id: 12,
+					user_id: 3,
+					published: 0,
+					filename: "wave.svg",
+					file_path: "/images/audio-cover-waveform.svg",
+				}),
+			},
+		};
+		await expect(
+			bufferForAudioCoverSource({
+				queries,
+				storage: { getImageBuffer: async () => png },
+				user: { id: 3 },
+				raw: "12",
+			})
+		).rejects.toMatchObject({ status: 400 });
+	});
+
+	test("fetches a remote image url", async () => {
+		const fetchBuffer = jest.fn(async () => png);
+		const buf = await bufferForAudioCoverSource({
+			queries: {},
+			storage: {},
+			user: { id: 3 },
+			raw: "https://cdn.example.com/art.png",
+			fetchBuffer,
+		});
+		expect(buf).toBe(png);
+		expect(fetchBuffer).toHaveBeenCalledWith("https://cdn.example.com/art.png");
 	});
 });

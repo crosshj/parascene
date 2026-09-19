@@ -52,7 +52,12 @@ export function createConnectCommentRowElement(comment, opts = {}) {
 	const extraRootClass = typeof opts.extraRootClass === 'string' ? opts.extraRootClass.trim() : '';
 
 	const createdImageId = Number(comment?.created_image_id);
-	const href = (Number.isFinite(createdImageId) && createdImageId > 0) ? `/creations/${createdImageId}` : null;
+	const commentId = Number(comment?.id);
+	const href = (Number.isFinite(createdImageId) && createdImageId > 0)
+		? (Number.isFinite(commentId) && commentId > 0
+			? `/creations/${createdImageId}?comment_id=${encodeURIComponent(String(commentId))}`
+			: `/creations/${createdImageId}`)
+		: null;
 	const thumbUrl = typeof comment?.created_image_thumbnail_url === 'string' ? comment.created_image_thumbnail_url.trim() : '';
 	const imageUrl = typeof comment?.created_image_url === 'string' ? comment.created_image_url.trim() : '';
 	const resolvedThumb = thumbUrl || imageUrl || '';
@@ -103,6 +108,7 @@ export function createConnectCommentRowElement(comment, opts = {}) {
 		row.tabIndex = 0;
 		row.dataset.href = href;
 		row.dataset.creationId = String(createdImageId);
+		if (Number.isFinite(commentId) && commentId > 0) row.dataset.commentId = String(commentId);
 		const creatorUid = Number(comment?.created_image_user_id);
 		if (Number.isFinite(creatorUid) && creatorUid > 0) row.dataset.userId = String(creatorUid);
 		const pub = comment?.created_image_published;

@@ -79,12 +79,97 @@ export function resolveCreationAudioPlayUrl(data, opts = {}) {
 	return '';
 }
 
+const SUNO_SONG_ID_RE = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+
+export function sunoSongIdFromImportMeta(meta) {
+	const importMeta = meta?.import && typeof meta.import === 'object' ? meta.import : null;
+	const songId = typeof importMeta?.song_id === 'string' ? importMeta.song_id.trim() : '';
+	return SUNO_SONG_ID_RE.test(songId) ? songId : '';
+}
+
+export function buildSunoCardEmbedSrc(songId, title) {
+	const id = String(songId || '').trim().toLowerCase();
+	if (!SUNO_SONG_ID_RE.test(id)) return '';
+	const t = typeof title === 'string' ? title.trim() : '';
+	return `/suno-card.html?id=${encodeURIComponent(id)}${t ? `&t=${encodeURIComponent(t)}` : ''}`;
+}
+
+/** Quiet "BLUE · lyria" mark for the hosted player (same corner as the Suno wordmark). */
+export function audioCardViaLabel(meta) {
+	const rawServer = typeof meta?.server_name === 'string' ? meta.server_name.trim() : '';
+	const server = rawServer.replace(/^parascene\s+/i, '').trim().toUpperCase();
+	const args = meta?.args && typeof meta.args === 'object' && !Array.isArray(meta.args) ? meta.args : null;
+	const rawModel =
+		args && args.model != null
+			? typeof args.model === 'string'
+				? args.model.trim()
+				: String(args.model).trim()
+			: '';
+	let model = '';
+	if (rawModel) {
+		const beforeColon = rawModel.includes(':') ? rawModel.split(':')[0] : rawModel;
+		const base = beforeColon.split(/[/\\]/).pop() || beforeColon;
+		model = base.replace(/\.(safetensors|ckpt|pt|bin)$/i, '');
+	}
+	const parts = [server, model].filter(Boolean);
+	if (!parts.length) return '';
+	const label = parts.join(' · ');
+	return label.length > 48 ? `${label.slice(0, 47)}…` : label;
+}
+
+/**
+ * Same 19:6 Suno player chrome, without the Suno wordmark.
+ * @param {{ title?: string, coverUrl?: string, audioUrl?: string, href?: string, durationSec?: number, via?: string }} [opts]
+ */
+export function buildAudioCardEmbedSrc(opts = {}) {
+	const params = new URLSearchParams();
+	const title = typeof opts.title === 'string' ? opts.title.trim() : '';
+	const coverUrl = typeof opts.coverUrl === 'string' ? opts.coverUrl.trim() : '';
+	const audioUrl = typeof opts.audioUrl === 'string' ? opts.audioUrl.trim() : '';
+	const href = typeof opts.href === 'string' ? opts.href.trim() : '';
+	const via = typeof opts.via === 'string' ? opts.via.trim() : '';
+	const durationSec = Number(opts.durationSec);
+	if (title) params.set('t', title);
+	if (coverUrl && !isPlaceholderAudioCover(coverUrl)) params.set('img', coverUrl);
+	if (audioUrl) params.set('src', audioUrl);
+	if (href) params.set('href', href);
+	if (via) params.set('via', via.slice(0, 64));
+	if (Number.isFinite(durationSec) && durationSec > 0) params.set('dur', String(Math.round(durationSec)));
+	const qs = params.toString();
+	return qs ? `/audio-card.html?${qs}` : '/audio-card.html';
+}
+
+export function resolveChatAudioPlayerSrc({
+	meta,
+	title,
+	coverUrl,
+	audioUrl,
+	href,
+	durationSec,
+} = {}) {
+	const provider = audioImportProvider(meta);
+	const songId = sunoSongIdFromImportMeta(meta);
+	if (provider === 'suno' && songId) return buildSunoCardEmbedSrc(songId, title);
+	return buildAudioCardEmbedSrc({
+		title,
+		coverUrl,
+		audioUrl,
+		href,
+		durationSec,
+		via: audioCardViaLabel(meta),
+	});
+}
+
 function firstCoverUrl(item) {
+	let placeholder = '';
 	for (const key of ['url', 'thumbnail_url', 'image_url', 'fit_thumbnail_url', 'file_path']) {
 		const value = item?.[key];
-		if (typeof value === 'string' && value.trim()) return value.trim();
+		if (typeof value !== 'string' || !value.trim()) continue;
+		const trimmed = value.trim();
+		if (!isPlaceholderAudioCover(trimmed)) return trimmed;
+		if (!placeholder) placeholder = trimmed;
 	}
-	return '';
+	return placeholder;
 }
 
 /** Transparent PNG / waveform SVG / audio stream — not album art. */
@@ -102,27 +187,14 @@ function audioImportProvider(meta) {
 	return typeof provider === 'string' ? provider.trim().toLowerCase() : '';
 }
 
-/** Suno (and similar) album art — keep the bitmap. Generated speech/music is not a cover. */
+/** Any stored still that is not a waveform / audio-stream placeholder. */
 export function creationHasRealAudioCover(item) {
 	if (creationMediaType(item) !== 'audio') return false;
 	const meta = parseCreationCoverMeta(item);
 	if (meta?.cover_placeholder === true) return false;
 	const cover = firstCoverUrl(item);
-	if (isPlaceholderAudioCover(cover)) return false;
-	const source = typeof meta?.cover_source === 'string' ? meta.cover_source.trim() : '';
-	if (
-		(source === 'procedural' ||
-			source === 'upload' ||
-			source === 'generate' ||
-			source === 'import' ||
-			source === 'embedded') &&
-		cover
-	) {
-		return true;
-	}
-	const provider = audioImportProvider(meta);
-	if ((provider === 'suno' || provider === 'file') && cover) return true;
-	return false;
+	if (!cover || isPlaceholderAudioCover(cover)) return false;
+	return true;
 }
 
 /** Speech / music / voice-train (or any audio) with no real cover art. */
@@ -143,7 +215,7 @@ export function audioCoverWaveformHtml(className = 'creation-audio-wave') {
 		const y = midY - height / 2;
 		return `<rect x="${x}" y="${y}" width="${barW}" height="${height}" rx="1.25" fill="currentColor"></rect>`;
 	}).join('');
-	return `<svg class="${className}" viewBox="0 0 100 100" width="100" height="100" preserveAspectRatio="xMidYMid meet" aria-hidden="true">${rects}</svg>`;
+	return `<svg class="${className}" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" aria-hidden="true">${rects}</svg>`;
 }
 
 export function mountAudioCoverWaveform(container) {

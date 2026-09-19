@@ -972,7 +972,9 @@ body.chat-page .chat-page-messages .comments-channel-plain-msg.connect-comment .
 
 /* Same embed pattern as pre-Suno YouTube (62aed868) — duplicate here when chat.bundle.css is stale. */
 body.chat-page .chat-page-messages .connect-chat-youtube-embed,
-body.chat-page .chat-page-messages .connect-chat-suno-embed {
+body.chat-page .chat-page-messages .connect-chat-suno-embed,
+body.chat-page .chat-page-messages .connect-chat-audio-embed,
+body.chat-page .chat-page-messages .connect-chat-creation-embed--audio-card {
 	margin-top: 0;
 	padding-block: 0;
 	width: 100%;
@@ -994,7 +996,8 @@ body.chat-page .chat-page-messages .connect-chat-youtube-embed-iframe {
 	background-color: var(--image-placeholder);
 }
 
-body.chat-page .chat-page-messages .connect-chat-suno-embed-iframe {
+body.chat-page .chat-page-messages .connect-chat-suno-embed-iframe,
+body.chat-page .chat-page-messages .connect-chat-audio-embed-iframe {
 	display: block;
 	width: 100%;
 	max-width: 100%;
@@ -2254,6 +2257,20 @@ body.chat-page .chat-page-messages img.challenge-pane-hero-image {
 	object-position: center !important;
 }
 
+/* Keep My Creations / explore tiles at 1:1 while audio covers load. An in-flow
+   <img> with no src (or a 100×100 waveform) was shrinking the cell, then popping. */
+body.chat-page .chat-page-messages .feed-card-image {
+	flex-shrink: 0;
+	width: 100%;
+	max-width: none;
+	aspect-ratio: 1 / 1;
+}
+
+body.chat-page .chat-page-messages .feed-card-image .feed-card-img {
+	position: absolute !important;
+	inset: 0 !important;
+}
+
 body.chat-page #chat-doom-scroll-overlay img.chat-doom-avatar {
 	max-width: none !important;
 }
@@ -2564,10 +2581,26 @@ body.chat-page .feed-card-image.creation-audio-cover:has(.creation-audio-wave) {
 	color: var(--color-purple);
 }
 
-body.chat-page .chat-page-messages .feed-card-image.creation-audio-cover:has(.creation-audio-wave) img.feed-card-img,
-body.chat-page .feed-card-image.creation-audio-cover.loaded:has(.creation-audio-wave) .feed-card-img {
+body.chat-page .chat-page-messages .feed-card-image.creation-audio-cover:has(.creation-audio-wave):not(.feed-card-audio-real-cover) img.feed-card-img,
+body.chat-page .feed-card-image.creation-audio-cover.loaded:has(.creation-audio-wave):not(.feed-card-audio-real-cover) .feed-card-img {
 	opacity: 0 !important;
 	visibility: hidden !important;
+}
+
+body.chat-page .feed-card-image.feed-card-audio-real-cover .creation-audio-wave {
+	display: none !important;
+}
+
+body.chat-page .feed-card-image.feed-card-audio-real-cover.creation-audio-cover:has(.creation-audio-wave),
+body.chat-page .feed-card-image.feed-card-audio-real-cover {
+	background: none;
+	color: inherit;
+}
+
+body.chat-page .chat-page-messages .feed-card-image.feed-card-audio-real-cover img.feed-card-img,
+body.chat-page .feed-card-image.feed-card-audio-real-cover .feed-card-img {
+	opacity: 1 !important;
+	visibility: visible !important;
 }
 
 body.chat-page .creation-audio-cover .creation-audio-wave {
@@ -2596,7 +2629,7 @@ body.chat-page .feed-card-image--creation-processing.creation-audio-cover:has(.c
 	color: var(--text);
 }
 
-body.chat-page .connect-chat-msg-bubble .connect-chat-creation-embed:has(.connect-chat-creation-embed-inner--audio),
+body.chat-page .connect-chat-msg-bubble .connect-chat-creation-embed:has(.connect-chat-creation-embed-inner--audio):not(.connect-chat-creation-embed--audio-card):not([data-prsn-audio-embed="card"]),
 body.chat-page .connect-chat-msg-bubble .connect-chat-creation-embed[data-prsn-audio-embed="1"] {
 	width: 260px !important;
 	max-width: 100% !important;
@@ -2605,7 +2638,17 @@ body.chat-page .connect-chat-msg-bubble .connect-chat-creation-embed[data-prsn-a
 	border-radius: 12px;
 }
 
-body.chat-page .connect-chat-msg-bubble .connect-chat-creation-embed:has(.connect-chat-creation-embed-inner--audio) > .connect-chat-creation-embed-media,
+body.chat-page .connect-chat-msg-bubble .connect-chat-creation-embed--audio-card,
+body.chat-page .connect-chat-msg-bubble .connect-chat-creation-embed[data-prsn-audio-embed="card"],
+body.chat-page .connect-chat-msg-bubble .connect-chat-creation-embed.connect-chat-audio-embed {
+	width: 100% !important;
+	max-width: 100% !important;
+	height: auto !important;
+	min-height: 0 !important;
+	max-height: none !important;
+}
+
+body.chat-page .connect-chat-msg-bubble .connect-chat-creation-embed:has(.connect-chat-creation-embed-inner--audio):not(.connect-chat-creation-embed--audio-card) > .connect-chat-creation-embed-media,
 body.chat-page .connect-chat-msg-bubble .connect-chat-creation-embed[data-prsn-audio-embed="1"] > .connect-chat-creation-embed-media {
 	width: 100% !important;
 	max-width: 260px !important;

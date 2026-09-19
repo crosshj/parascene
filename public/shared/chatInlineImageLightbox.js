@@ -24,6 +24,7 @@ const [
 	mediaAudioLevelingMod,
 	audioCoverWaveformMod,
 	hostedAudioPlayerMod,
+	postedCreationAccessMod,
 ] = await Promise.all([
 	import(`/icons/svg-strings.js${_qs}`),
 	import(`./userText.js${_qs}`),
@@ -32,6 +33,7 @@ const [
 	import(`./mediaAudioLeveling.js${_qs}`),
 	import(`./audioCoverWaveform.js${_qs}`),
 	import(`./hostedAudioPlayer.js${_qs}`),
+	import(`./postedCreationAccess.js${_qs}`),
 ]);
 const { copyIcon, linkIcon2 } = svgMod;
 const { DEFAULT_APP_ORIGIN, collectInlineMediaGroupGallery } = userTextMod;
@@ -49,6 +51,7 @@ const {
 } = mediaAudioLevelingMod;
 const { audioCoverWaveformHtml } = audioCoverWaveformMod;
 const { mountHostedAudioPlayer } = hostedAudioPlayerMod;
+const { appendPostedCreationProofToHref, postedCreationProofFromElement } = postedCreationAccessMod;
 
 /** @type {HTMLElement | null} */
 let chatInlineImageLightboxEl = null;
@@ -331,11 +334,16 @@ export function closeChatInlineImageLightboxFromPopstateIfOpen() {
 function mountInlineImageLightboxCreationFooter(overlay, creationIdRaw) {
 	const cidRaw = String(creationIdRaw ?? '').trim();
 	if (!cidRaw) return;
-	const detailPath = `/creations/${encodeURIComponent(cidRaw)}`;
+	const wrap = document.querySelector(
+		`.connect-chat-creation-embed[data-creation-id="${CSS.escape(cidRaw)}"], .connect-comment[data-creation-id="${CSS.escape(cidRaw)}"]`
+	);
+	const proof = wrap instanceof Element ? postedCreationProofFromElement(wrap) : null;
+	const cleanPath = `/creations/${encodeURIComponent(cidRaw)}`;
+	const detailPath = appendPostedCreationProofToHref(cleanPath, proof);
 	const shareOrigin = String(DEFAULT_APP_ORIGIN || 'https://www.parascene.com').replace(/\/+$/, '');
 	let absoluteUrl = '';
 	try {
-		absoluteUrl = new URL(detailPath, shareOrigin).href;
+		absoluteUrl = new URL(cleanPath, shareOrigin).href;
 	} catch {
 		absoluteUrl = `${shareOrigin}${detailPath}`;
 	}

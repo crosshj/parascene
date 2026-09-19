@@ -1,5 +1,7 @@
 import sharp from "sharp";
 import { isPlaceholderAudioCover } from "./audioCoverPublic.js";
+import { parseCreationIdFromLink } from "./audioClips.js";
+import { extractFilenameFromCreatedImagePath } from "./resolveCreatedImageStorageFilename.js";
 import { buildProceduralAudioCoverBuffer, resolveAudioCoverKind, seedAudioCover } from "./audioCoverProcedural.js";
 
 export const REAL_AUDIO_COVER_SOURCES = new Set([
@@ -79,8 +81,37 @@ export function audioCreationNeedsCoverBackfill(image, meta) {
 	if (!isAudioCreationRow(image, meta)) return false;
 	if (meta?.cover_placeholder === true) return true;
 	const filePath = typeof image?.file_path === "string" ? image.file_path.trim() : "";
-	if (filePath && !isPlaceholderAudioCover(filePath)) return false;
+	if (!filePath || isPlaceholderAudioCover(filePath)) return true;
+	if (audioImportProvider(meta)) return false;
+	const source = typeof meta?.cover_source === "string" ? meta.cover_source.trim() : "";
+	if (source === "upload" || source === "generate" || source === "procedural") return false;
+	// Generated Blue audio has no ID3 art. A CDN `?cover=1` stub was stored as
+	// "embedded" (or source was never set) and shows as a grey square.
 	return true;
+}
+
+/** Reject flat / tiny / empty stills so we generate a real cover instead. */
+export async function isUsableStillCoverBuffer(buffer) {
+	if (!Buffer.isBuffer(buffer) || buffer.length < 32) return false;
+	try {
+		const image = sharp(buffer, { failOn: "none" });
+		const meta = await image.metadata();
+		const width = Number(meta.width) || 0;
+		const height = Number(meta.height) || 0;
+		if (width < 64 || height < 64) return false;
+		const stats = await sharp(buffer, { failOn: "none" }).stats();
+		const channels = Array.isArray(stats.channels) ? stats.channels : [];
+		if (channels.length >= 4) {
+			const alpha = channels[3];
+			if (Number(alpha?.mean) < 16) return false;
+		}
+		const rgb = channels.slice(0, 3);
+		if (!rgb.length) return false;
+		const maxStdev = Math.max(...rgb.map((c) => Number(c.stdev) || 0));
+		return maxStdev >= 12;
+	} catch {
+		return false;
+	}
 }
 
 export function isAudioCreationRow(image, meta) {
@@ -189,6 +220,111 @@ async function bufferFromOriginalCover(storage, original) {
 	if (!res.ok) return null;
 	const buf = Buffer.from(await res.arrayBuffer());
 	return buf.length ? buf : null;
+}
+
+export function parseAudioCoverSourceRef(raw) {
+	const s = typeof raw === "string" ? raw.trim() : "";
+	if (!s) return null;
+	const creationId = parseCreationIdFromLink(s);
+	if (creationId) return { kind: "creation", creationId };
+	try {
+		const parsed = new URL(s);
+		if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+			return { kind: "url", url: parsed.toString() };
+		}
+	} catch {
+		return null;
+	}
+	return null;
+}
+
+async function bufferFromStoredCreation(storage, row, fetchBuffer) {
+	const filename = typeof row?.filename === "string" ? row.filename.trim() : "";
+	if (filename && !filename.includes("..") && !filename.includes("/") && typeof storage?.getImageBuffer === "function") {
+		try {
+			const buf = await storage.getImageBuffer(filename);
+			if (Buffer.isBuffer(buf) && buf.length) return buf;
+		} catch {
+			// fall through
+		}
+	}
+	const fromPath = extractFilenameFromCreatedImagePath(row?.file_path);
+	if (fromPath && typeof storage?.getImageBuffer === "function") {
+		try {
+			const buf = await storage.getImageBuffer(fromPath);
+			if (Buffer.isBuffer(buf) && buf.length) return buf;
+		} catch {
+			// fall through to URL fetch
+		}
+	}
+	const filePath = typeof row?.file_path === "string" ? row.file_path.trim() : "";
+	if (filePath && typeof fetchBuffer === "function") {
+		try {
+			const parsed = new URL(filePath);
+			if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+				return await fetchBuffer(filePath);
+			}
+		} catch {
+			return null;
+		}
+	}
+	return null;
+}
+
+/**
+ * Resolve a pasted image URL or /creations/:id link into cover bytes.
+ * @param {{ queries: object, storage: object, user: object, raw: string, fetchBuffer?: (url: string) => Promise<Buffer> }} params
+ */
+export async function bufferForAudioCoverSource({ queries, storage, user, raw, fetchBuffer }) {
+	const ref = parseAudioCoverSourceRef(raw);
+	if (!ref) {
+		const err = new Error("Paste an image URL or a creation link");
+		err.status = 400;
+		throw err;
+	}
+	if (ref.kind === "creation") {
+		const row = await queries.selectCreatedImageByIdAnyUser?.get(ref.creationId);
+		if (!row) {
+			const err = new Error("Creation not found");
+			err.status = 404;
+			throw err;
+		}
+		const isOwner = Number(row.user_id) === Number(user?.id);
+		const published = row.published === true || row.published === 1;
+		if (!isOwner && user?.role !== "admin" && !published) {
+			const err = new Error("Creation not found");
+			err.status = 404;
+			throw err;
+		}
+		if (row.unavailable_at && !isOwner && user?.role !== "admin") {
+			const err = new Error("Creation not found");
+			err.status = 404;
+			throw err;
+		}
+		const filePath = typeof row.file_path === "string" ? row.file_path.trim() : "";
+		if (isPlaceholderAudioCover(filePath)) {
+			const err = new Error("That creation does not have an image we can use as a cover");
+			err.status = 400;
+			throw err;
+		}
+		const stored = await bufferFromStoredCreation(storage, row, fetchBuffer);
+		if (stored) return stored;
+		const err = new Error("That creation does not have an image we can use as a cover");
+		err.status = 400;
+		throw err;
+	}
+	if (typeof fetchBuffer !== "function") {
+		const err = new Error("Could not load that image URL");
+		err.status = 400;
+		throw err;
+	}
+	try {
+		return await fetchBuffer(ref.url);
+	} catch (cause) {
+		const err = new Error(cause?.message || "Could not load that image URL");
+		err.status = 400;
+		throw err;
+	}
 }
 
 export async function resetAudioCoverToOriginal({ queries, storage, image }) {

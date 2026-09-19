@@ -44,15 +44,13 @@ export function publicAudioWaveformCoverPath(mediaType, meta, existingUrl = "") 
 	const provider = audioImportProvider(meta);
 	if (provider === "youtube") return null;
 	const existing = String(existingUrl || "").trim();
-	if (audioCoverSourceIsReal(meta) && existing && !isPlaceholderAudioCover(existing) && meta?.cover_placeholder !== true) {
-		return null;
-	}
-	if ((provider === "suno" || provider === "file") && existing && !isPlaceholderAudioCover(existing)) {
+	if (existing && !isPlaceholderAudioCover(existing) && meta?.cover_placeholder !== true) {
 		return null;
 	}
 	if (meta?.cover_placeholder === true || isPlaceholderAudioCover(existing)) {
 		return PUBLIC_AUDIO_WAVEFORM_COVER_PATH;
 	}
+	if (audioCoverSourceIsReal(meta)) return null;
 	if (provider === "suno" || provider === "file") return null;
 	return PUBLIC_AUDIO_WAVEFORM_COVER_PATH;
 }

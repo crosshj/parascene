@@ -6143,13 +6143,51 @@ dialog.creation-detail-dialog:not([open]) {
 }
 
 .audio-cover-methods {
-	display: flex;
-	gap: 8px;
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 3px;
+	padding: 3px;
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	background: var(--input-bg);
 }
 
-.audio-cover-method.is-active {
-	border-color: var(--accent);
-	color: var(--accent);
+.audio-cover-method,
+.audio-cover-method:hover,
+.audio-cover-method:active {
+	appearance: none;
+	align-self: stretch;
+	width: 100%;
+	border: none;
+	border-radius: 8px;
+	background: transparent;
+	color: var(--text-muted);
+	font: inherit;
+	font-size: 0.9375rem;
+	font-weight: 600;
+	line-height: 1.2;
+	padding: 10px 12px;
+	cursor: pointer;
+	filter: none;
+	transform: none;
+	box-shadow: none;
+}
+
+.audio-cover-method.is-active,
+.audio-cover-method.is-active:hover,
+.audio-cover-method.is-active:active {
+	background: var(--surface);
+	color: var(--text);
+	box-shadow: 0 1px 2px color-mix(in srgb, #000 20%, transparent);
+}
+
+.audio-cover-method:hover:not(.is-active) {
+	color: var(--text);
+}
+
+.audio-cover-method:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 1px;
 }
 
 .audio-cover-panel {
@@ -6194,6 +6232,12 @@ dialog.creation-detail-dialog:not([open]) {
 
 .audio-cover-reset {
 	align-self: flex-start;
+}
+
+.creation-detail-comments-disabled {
+	margin: 8px 0 0;
+	color: var(--text-muted);
+	font-size: 0.9rem;
 }
 
 @keyframes spin {

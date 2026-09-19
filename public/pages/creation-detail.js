@@ -4151,10 +4151,28 @@ async function loadCreation() {
 				headers['x-share-token'] = shareToken;
 			}
 		}
+		let postedProofQs = '';
+		try {
+			const proofMod = await import(`/shared/postedCreationAccess.js${getImportQuery(getAssetVersionParam())}`);
+			const fromShare =
+				headers['x-share-version'] && headers['x-share-token']
+					? { shareVersion: headers['x-share-version'], shareToken: headers['x-share-token'] }
+					: null;
+			const proof = proofMod.postedCreationProofFromSearch(window.location.search) || fromShare;
+			if (proof) {
+				if (proof.shareVersion && proof.shareToken && !headers['x-share-version']) {
+					headers['x-share-version'] = proof.shareVersion;
+					headers['x-share-token'] = proof.shareToken;
+				}
+				postedProofQs = proofMod.postedCreationProofQueryString(proof);
+			}
+		} catch {
+			// ignore
+		}
 
 		const lineageFetchInit = { credentials: 'include', headers: { ...headers } };
 
-		let challengeSubmitQs = '';
+		const apiQuery = new URLSearchParams(postedProofQs);
 		if (!isShareMountedView()) {
 			try {
 				const v = getAssetVersionParam();
@@ -4162,12 +4180,13 @@ async function loadCreation() {
 				const ctxMod = await import(`/shared/challengeSubmitContext.js${qs}`);
 				const ctx = ctxMod.readChallengeSubmitContext?.();
 				if (ctx?.threadId) {
-					challengeSubmitQs = `?challenge_submit_thread=${encodeURIComponent(String(ctx.threadId))}`;
+					apiQuery.set('challenge_submit_thread', String(ctx.threadId));
 				}
 			} catch {
 				// ignore
 			}
 		}
+		const challengeSubmitQs = apiQuery.toString() ? `?${apiQuery.toString()}` : '';
 
 		const response = await perf.timeAsync('creationApi', 'fetch', () =>
 			fetch(`/api/create/images/${creationId}${challengeSubmitQs}`, {
@@ -5860,6 +5879,9 @@ async function loadCreation() {
 				</button>
 			</div>
 			
+			${!isPublished && !showCommentsWithoutPublish && !isFailed ? html`
+			<p class="creation-detail-comments-disabled">Comments are not enabled on unpublished creations.</p>
+			` : ''}
 			${(isPublished || showCommentsWithoutPublish) && !isFailed ? html`
 			<div data-creation-comments-host></div>
 
@@ -8560,22 +8582,56 @@ function defaultAudioCoverPrompt(creation) {
 	return `${base}. Square album cover, atmospheric, no text, no letters, no watermark.`;
 }
 
+function setAudioCoverError(message) {
+	const errorEl = document.querySelector('[data-audio-cover-error]');
+	if (!(errorEl instanceof HTMLElement)) return;
+	const text = typeof message === 'string' ? message.trim() : '';
+	errorEl.textContent = text;
+	errorEl.hidden = !text;
+}
+
+function isAudioCoverSourceValue(value) {
+	const raw = typeof value === 'string' ? value.trim() : '';
+	if (!raw) return false;
+	if (/^\d+$/.test(raw) && Number(raw) > 0) return true;
+	if (/\/creations\/\d+/.test(raw)) return true;
+	try {
+		const parsed = new URL(raw);
+		return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+	} catch {
+		return false;
+	}
+}
+
+function syncAudioCoverUrlSubmit(modal) {
+	const input = modal?.querySelector('[data-audio-cover-url]');
+	const submit = modal?.querySelector('[data-audio-cover-url-submit]');
+	const hint = modal?.querySelector('[data-audio-cover-url-hint]');
+	if (!(input instanceof HTMLInputElement) || !(submit instanceof HTMLButtonElement)) return;
+	const raw = input.value.trim();
+	const hasText = raw.length > 0;
+	const valid = isAudioCoverSourceValue(raw);
+	submit.hidden = !hasText;
+	submit.disabled = !valid;
+	if (hint instanceof HTMLElement) hint.classList.toggle('is-visible', hasText && !valid);
+}
+
 function openAudioCoverModal() {
 	const modal = document.querySelector('[data-audio-cover-modal]');
 	if (!(modal instanceof HTMLDialogElement)) return;
 	const promptEl = modal.querySelector('[data-audio-cover-prompt]');
 	const costEl = modal.querySelector('[data-audio-cover-cost]');
-	const errorEl = modal.querySelector('[data-audio-cover-error]');
+	const urlEl = modal.querySelector('[data-audio-cover-url]');
 	if (promptEl) promptEl.value = defaultAudioCoverPrompt(lastCreationMeta);
 	if (costEl) costEl.textContent = '';
-	if (errorEl) {
-		errorEl.hidden = true;
-		errorEl.textContent = '';
-	}
+	if (urlEl instanceof HTMLInputElement) urlEl.value = '';
+	setAudioCoverError('');
 	setAudioCoverTab('upload');
+	syncAudioCoverUrlSubmit(modal);
 	syncAudioCoverResetButton(modal);
 	void refreshAudioCoverCost();
 	if (typeof modal.showModal === 'function') modal.showModal();
+	queueMicrotask(() => urlEl?.focus?.());
 }
 
 function canResetCurrentAudioCover() {
@@ -8595,7 +8651,9 @@ function setAudioCoverTab(tab) {
 	const modal = document.querySelector('[data-audio-cover-modal]');
 	if (!modal) return;
 	modal.querySelectorAll('[data-audio-cover-tab]').forEach((btn) => {
-		btn.classList.toggle('is-active', btn.getAttribute('data-audio-cover-tab') === tab);
+		const on = btn.getAttribute('data-audio-cover-tab') === tab;
+		btn.classList.toggle('is-active', on);
+		btn.setAttribute('aria-selected', on ? 'true' : 'false');
 	});
 	modal.querySelectorAll('[data-audio-cover-panel]').forEach((panel) => {
 		panel.classList.toggle('is-active', panel.getAttribute('data-audio-cover-panel') === tab);
@@ -8644,16 +8702,36 @@ async function uploadAudioCoverFile(file) {
 	await refreshAfterMutation('status-changed', { creationId });
 }
 
+async function applyAudioCoverFromUrl(rawUrl) {
+	const creationId = getCreationId();
+	const url = typeof rawUrl === 'string' ? rawUrl.trim() : '';
+	if (!creationId || !url) return;
+	const modal = document.querySelector('[data-audio-cover-modal]');
+	const submit = modal?.querySelector('[data-audio-cover-url-submit]');
+	if (submit instanceof HTMLButtonElement) submit.disabled = true;
+	try {
+		const res = await fetch(`/api/create/images/${encodeURIComponent(creationId)}/cover`, {
+			method: 'POST',
+			credentials: 'include',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ mode: 'url', url }),
+		});
+		const data = await res.json().catch(() => ({}));
+		if (!res.ok) throw new Error(data?.message || data?.error || 'Could not update cover');
+		modal?.close?.();
+		if (typeof showToast === 'function') showToast('Cover updated');
+		await refreshAfterMutation('status-changed', { creationId });
+	} finally {
+		if (submit instanceof HTMLButtonElement) syncAudioCoverUrlSubmit(modal);
+	}
+}
+
 async function generateAudioCover() {
 	const modal = document.querySelector('[data-audio-cover-modal]');
 	const creationId = getCreationId();
-	const errorEl = modal?.querySelector('[data-audio-cover-error]');
 	const generateBtn = modal?.querySelector('[data-audio-cover-generate]');
 	if (!creationId) return;
-	if (errorEl) {
-		errorEl.hidden = true;
-		errorEl.textContent = '';
-	}
+	setAudioCoverError('');
 	if (generateBtn) generateBtn.disabled = true;
 	try {
 		const prompt = modal?.querySelector('[data-audio-cover-prompt]')?.value || '';
@@ -8671,12 +8749,7 @@ async function generateAudioCover() {
 		if (typeof showToast === 'function') showToast('Cover updated');
 		await refreshAfterMutation('status-changed', { creationId });
 	} catch (err) {
-		if (errorEl) {
-			errorEl.hidden = false;
-			errorEl.textContent = err?.message || 'Could not generate cover';
-		} else if (typeof showToast === 'function') {
-			showToast(err?.message || 'Could not generate cover');
-		}
+		setAudioCoverError(err?.message || 'Could not generate cover');
 	} finally {
 		if (generateBtn) generateBtn.disabled = false;
 	}
@@ -8704,16 +8777,62 @@ function bindAudioCoverModal() {
 		btn.addEventListener('click', () => setAudioCoverTab(btn.getAttribute('data-audio-cover-tab')));
 	});
 	const fileInput = modal.querySelector('[data-audio-cover-file]');
+	const urlInput = modal.querySelector('[data-audio-cover-url]');
+	const urlSubmit = modal.querySelector('[data-audio-cover-url-submit]');
 	modal.querySelector('[data-audio-cover-pick]')?.addEventListener('click', () => fileInput?.click());
 	fileInput?.addEventListener('change', async () => {
 		const file = fileInput.files?.[0];
 		fileInput.value = '';
 		if (!file) return;
+		setAudioCoverError('');
 		try {
 			await uploadAudioCoverFile(file);
 		} catch (err) {
-			if (typeof showToast === 'function') showToast(err?.message || 'Could not update cover');
+			setAudioCoverError(err?.message || 'Could not update cover');
 		}
+	});
+	urlInput?.addEventListener('input', () => {
+		setAudioCoverError('');
+		syncAudioCoverUrlSubmit(modal);
+	});
+	urlInput?.addEventListener('paste', (e) => {
+		const items = e.clipboardData?.items;
+		if (items) {
+			for (const item of items) {
+				if (!item.type.startsWith('image/')) continue;
+				e.preventDefault();
+				const file = item.getAsFile();
+				if (!file) return;
+				setAudioCoverError('');
+				void uploadAudioCoverFile(file).catch((err) => {
+					setAudioCoverError(err?.message || 'Could not update cover');
+				});
+				return;
+			}
+		}
+		const text = e.clipboardData?.getData?.('text/plain');
+		const next = typeof text === 'string' ? text.trim() : '';
+		if (next) {
+			e.preventDefault();
+			urlInput.value = next;
+			syncAudioCoverUrlSubmit(modal);
+		}
+	});
+	urlInput?.addEventListener('keydown', (e) => {
+		if (e.key !== 'Enter') return;
+		const v = (urlInput.value || '').trim();
+		if (!isAudioCoverSourceValue(v)) return;
+		e.preventDefault();
+		void applyAudioCoverFromUrl(v).catch((err) => {
+			setAudioCoverError(err?.message || 'Could not update cover');
+		});
+	});
+	urlSubmit?.addEventListener('click', () => {
+		const v = (urlInput?.value || '').trim();
+		if (!isAudioCoverSourceValue(v)) return;
+		void applyAudioCoverFromUrl(v).catch((err) => {
+			setAudioCoverError(err?.message || 'Could not update cover');
+		});
 	});
 	modal.querySelector('[data-audio-cover-generate]')?.addEventListener('click', () => {
 		void generateAudioCover();

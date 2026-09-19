@@ -356,8 +356,13 @@ export function parseSpaOverlayTarget(href, options = {}) {
 	const kind = matchSpaOverlayKind(path);
 	if (!kind) return null;
 
-	const canonicalUrl = url.pathname + url.search + url.hash;
 	const embedParams = new URLSearchParams(url.search);
+	const canonicalParams = new URLSearchParams(url.search);
+	for (const key of ['share_version', 'share_token', 'chat_message_id', 'comment_id']) {
+		canonicalParams.delete(key);
+	}
+	const canonicalQuery = canonicalParams.toString();
+	const canonicalUrl = `${url.pathname}${canonicalQuery ? `?${canonicalQuery}` : ''}${url.hash}`;
 	embedParams.set('embed', '1');
 	const shellBg = getParentShellBackgroundColor();
 	if (shellBg) {
@@ -1192,7 +1197,7 @@ function ensureOverlayMessageListener() {
 		if (data.type === 'prsn-creation-detail-overlay-navigate') {
 			const id = Number(data.creationId);
 			if (Number.isFinite(id) && id > 0) {
-				openSpaPageOverlayFromHref(`/creations/${id}`);
+				navigateToCreationDetailFromSpa(`/creations/${id}`);
 			}
 			return;
 		}
@@ -1452,6 +1457,15 @@ export function openSpaPageOverlayFromHref(href, options = {}) {
 	if (target.kind === 'creation-detail') rememberCreationDetailSeed(href, options.event);
 
 	const store = getOverlayStore();
+	if (
+		!options.forceReload &&
+		store.overlayOpeningUrl === target.canonicalUrl &&
+		Date.now() - (store.overlayOpeningAt || 0) < 400
+	) {
+		return;
+	}
+	store.overlayOpeningUrl = target.canonicalUrl;
+	store.overlayOpeningAt = Date.now();
 
 	ensureOverlayMessageListener();
 	ensureOverlayPopstateListener();

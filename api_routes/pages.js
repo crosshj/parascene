@@ -20,6 +20,11 @@ import { findPublicChannelBySlug, mintKioskToken } from "./kiosk.js";
 import { normalizeTag } from "./utils/tag.js";
 import { canViewUnpublishedCreationViaEditorialPin } from "./feed/editorialPin.js";
 import { canViewUnpublishedChallengeResultsCreation } from "./utils/challengeResultsAccess.js";
+import { getSupabaseServiceClient } from "./utils/supabaseService.js";
+import {
+	canViewUnpublishedCreationViaPostedRef,
+	readPostedCreationProofFromRequest,
+} from "./utils/postedCreationAccess.js";
 
 function getPageForUser(user) {
 	const roleToPage = {
@@ -46,6 +51,14 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 		});
 		router.get("/suno-card.html", (req, res, next) => {
 			const htmlPath = path.join(staticDir, "suno-card.html");
+			res.type("html");
+			res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
+			res.sendFile(htmlPath, (err) => {
+				if (err) next();
+			});
+		});
+		router.get("/audio-card.html", (req, res, next) => {
+			const htmlPath = path.join(staticDir, "audio-card.html");
 			res.type("html");
 			res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
 			res.sendFile(htmlPath, (err) => {
@@ -1412,7 +1425,25 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 						if (editorialPinOk || challengeResultsOk) {
 							image = anyImage;
 						} else {
-							return serveNotFoundPage(req, res, user);
+							let postedOk = false;
+							try {
+								const proof = readPostedCreationProofFromRequest(req);
+								const posted = await canViewUnpublishedCreationViaPostedRef({
+									queries,
+									sb: getSupabaseServiceClient(),
+									image: anyImage,
+									userId: user.id,
+									...proof,
+								});
+								postedOk = posted.ok === true;
+							} catch {
+								postedOk = false;
+							}
+							if (postedOk) {
+								image = anyImage;
+							} else {
+								return serveNotFoundPage(req, res, user);
+							}
 						}
 					}
 				} else {
@@ -1665,6 +1696,7 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 			req.path === "/login" ||
 			req.path === "/logout" ||
 			req.path === "/suno-card.html" ||
+			req.path === "/audio-card.html" ||
 			req.path === "/index.html") {
 			return next(); // Let other routes handle it or 404
 		}

@@ -33,6 +33,7 @@ const { setRouteMediaBackgroundImage } = routeMediaMod;
 const {
 	creationMediaType,
 	creationNeedsAudioWaveformCover,
+	isPlaceholderAudioCover,
 	mountAudioCoverWaveform,
 	removeAudioCoverWaveform,
 } = audioCoverWaveformMod;
@@ -102,12 +103,6 @@ export function hydrateRouteCardMedia(mediaEl, item, options = {}) {
 		if (isFeedCreationImageProcessing(feedItem)) {
 			return { kind: "none" };
 		}
-		if (creationNeedsAudioWaveformCover(feedItem)) {
-			mountAudioCoverWaveform(mediaEl);
-			return { kind: "audio-wave" };
-		}
-		removeAudioCoverWaveform(mediaEl);
-		mediaEl.classList.add("route-media-audio-real-cover");
 	}
 
 	const groupVideoSlides = getFeedItemGroupVideoSlides(feedItem);
@@ -132,7 +127,23 @@ export function hydrateRouteCardMedia(mediaEl, item, options = {}) {
 		}
 	}
 
-	const url = resolveRouteCardThumbUrl(feedItem, options.preferThumbnail !== false, isVideo);
+	const preferThumbnail = mediaType === "audio" ? false : options.preferThumbnail !== false;
+	const url = resolveRouteCardThumbUrl(feedItem, preferThumbnail, isVideo);
+	if (mediaType === "audio") {
+		const hasRealStill =
+			Boolean(url) &&
+			!isPlaceholderAudioCover(url) &&
+			meta?.cover_placeholder !== true;
+		if (hasRealStill) {
+			removeAudioCoverWaveform(mediaEl);
+			mediaEl.classList.add("route-media-audio-real-cover");
+		} else if (creationNeedsAudioWaveformCover(feedItem)) {
+			mountAudioCoverWaveform(mediaEl);
+			if (!url || isPlaceholderAudioCover(url)) {
+				return { kind: "audio-wave" };
+			}
+		}
+	}
 	if (!url) return { kind: "none" };
 
 	const { eager = false, observer = null, lowPriority = false } = options;

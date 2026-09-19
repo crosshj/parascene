@@ -402,44 +402,10 @@ function loadLightboxMod() {
 	return lightboxModPromise;
 }
 
-const HOTFIX_WAVE_BARS = [10, 18, 28, 40, 52, 40, 28, 18, 10, 16, 26, 38, 50, 38, 26, 16, 10];
-
 /** In-flow sizer that always loads, so stale hydrate `error` handlers never wipe the tile. */
 const AUDIO_TILE_SIZER_SRC =
 	'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 
-const AUDIO_PLAY_OVERLAY_HTML =
-	`<div class="chat-doom-play-overlay" aria-hidden="true" style="position:absolute;inset:0;z-index:3;display:flex;align-items:center;justify-content:center;pointer-events:none">` +
-	`<div class="chat-doom-play-overlay-inner" style="width:72px;height:72px;border-radius:50%;background:rgba(0,0,0,0.5);color:#fff;display:flex;align-items:center;justify-content:center">` +
-	`<svg class="chat-doom-play-glyph" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="width:36px;height:36px;margin-left:5px"><path d="M8 5v14l11-7z"></path></svg>` +
-	`</div></div>`;
-
-/** Same bars as feed `audioCoverWaveformHtml()`, sized by the feed CSS (58% / 140px). */
-function hotfixWaveformSvgHtml() {
-	const midY = 50;
-	const gap = 5;
-	const barW = 3.5;
-	const span = HOTFIX_WAVE_BARS.length * gap - (gap - barW);
-	const startX = (100 - span) / 2;
-	const rects = HOTFIX_WAVE_BARS.map((h, i) => {
-		const height = (h / 52) * 44;
-		const x = startX + i * gap;
-		const y = midY - height / 2;
-		return `<rect x="${x}" y="${y}" width="${barW}" height="${height}" rx="1.25" fill="currentColor"></rect>`;
-	}).join('');
-	return (
-		`<svg class="creation-audio-wave" viewBox="0 0 100 100" width="100" height="100" preserveAspectRatio="xMidYMid meet" aria-hidden="true" ` +
-		`style="position:absolute;left:50%;top:50%;width:58%;max-width:140px;height:auto;transform:translate(-50%,-50%);z-index:2;pointer-events:none;color:var(--color-purple,#a78bfa)">${rects}</svg>`
-	);
-}
-
-function chatAudioTileInnerHtml() {
-	return (
-		`<img class="connect-chat-creation-embed-img" src="${AUDIO_TILE_SIZER_SRC}" alt="" width="260" height="260" decoding="async" />` +
-		hotfixWaveformSvgHtml() +
-		AUDIO_PLAY_OVERLAY_HTML
-	);
-}
 
 /** @type {Promise<{ mountAudioCoverWaveform: Function }> | null} */
 let audioCoverModPromise = null;
@@ -455,30 +421,19 @@ function loadAudioCoverMod() {
 	return audioCoverModPromise;
 }
 
-function innerIsUsableAudioHost(inner) {
-	if (!(inner instanceof HTMLElement)) return false;
-	if (inner.classList.contains('connect-chat-creation-embed-inner--error-layout')) return false;
-	if (inner.classList.contains('connect-chat-creation-embed-inner--loading-shell')) return false;
-	if (inner.classList.contains('connect-chat-creation-embed-inner--video')) return false;
-	if (inner.classList.contains('connect-chat-creation-embed-inner--group-carousel')) return false;
-	return true;
-}
-
-function lockChatAudioTileSize(wrap, inner) {
-	const lockBox = (el, width) => {
-		if (!(el instanceof HTMLElement)) return;
-		el.style.setProperty('width', width, 'important');
-		el.style.setProperty('max-width', '100%', 'important');
-		el.style.setProperty('min-width', '0', 'important');
-	};
-	lockBox(wrap, '260px');
-	lockBox(wrap.querySelector('.connect-chat-creation-embed-media'), '100%');
-	if (inner instanceof HTMLElement) {
-		lockBox(inner, '260px');
-		inner.style.setProperty('height', '260px', 'important');
-		inner.style.setProperty('min-height', '260px', 'important');
-		inner.style.setProperty('max-height', '260px', 'important');
-		inner.style.setProperty('display', 'block', 'important');
+function unlockChatAudioTileSize(wrap) {
+	if (!(wrap instanceof HTMLElement)) return;
+	wrap.style.removeProperty('width');
+	wrap.style.removeProperty('max-width');
+	wrap.style.removeProperty('min-width');
+	wrap.style.removeProperty('height');
+	wrap.style.removeProperty('min-height');
+	wrap.style.removeProperty('max-height');
+	const media = wrap.querySelector('.connect-chat-creation-embed-media');
+	if (media instanceof HTMLElement) {
+		media.style.removeProperty('width');
+		media.style.removeProperty('max-width');
+		media.style.removeProperty('min-width');
 	}
 }
 
@@ -589,6 +544,69 @@ function findShareHrefInText(text) {
 	return rel ? rel[0] : '';
 }
 
+function stripPostedCreationProofFromAddressBar() {
+	try {
+		const url = new URL(window.location.href);
+		let changed = false;
+		for (const key of ['share_version', 'share_token', 'chat_message_id', 'comment_id']) {
+			if (!url.searchParams.has(key)) continue;
+			url.searchParams.delete(key);
+			changed = true;
+		}
+		if (!changed) return;
+		window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+	} catch {
+		// ignore
+	}
+}
+
+function stampPostedCreationProofOnChat() {
+	const scope = document.querySelector('[data-chat-page]') || document;
+	scope.querySelectorAll('.connect-chat-creation-embed[data-creation-id]').forEach((wrap) => {
+		if (!(wrap instanceof HTMLElement)) return;
+		const msg = wrap.closest('.connect-chat-msg[data-chat-message-id]');
+		const mid = String(msg?.getAttribute('data-chat-message-id') || '').trim();
+		if (mid) wrap.setAttribute('data-chat-message-id', mid);
+		const share = shareOptsFromCreationEmbed(wrap);
+		if (share?.shareVersion && share?.shareToken) {
+			wrap.setAttribute('data-share-version', share.shareVersion);
+			wrap.setAttribute('data-share-token', share.shareToken);
+		}
+	});
+	scope.querySelectorAll('a[href*="/creations/"]').forEach((link) => {
+		if (!(link instanceof HTMLAnchorElement)) return;
+		if (link.dataset.postedProof === '1') return;
+		const href = (link.getAttribute('href') || '').trim();
+		if (!href || !/\/creations\/\d+/.test(href)) return;
+		const msg = link.closest('.connect-chat-msg[data-chat-message-id], .connect-chat-creation-embed');
+		const mid = String(msg?.getAttribute('data-chat-message-id') || '').trim();
+		const share = shareOptsFromLink(link) || (msg instanceof HTMLElement ? shareOptsFromCreationEmbed(msg) : null);
+		const next = new URL(href, window.location.origin);
+		if (mid && !next.searchParams.has('chat_message_id')) next.searchParams.set('chat_message_id', mid);
+		if (share?.shareVersion && share?.shareToken && !next.searchParams.has('share_token')) {
+			next.searchParams.set('share_version', share.shareVersion);
+			next.searchParams.set('share_token', share.shareToken);
+		}
+		if (next.search !== new URL(href, window.location.origin).search) {
+			link.setAttribute('href', `${next.pathname}${next.search}${next.hash}`);
+		}
+		link.dataset.postedProof = '1';
+	});
+	scope.querySelectorAll('.connect-comment[data-href][data-creation-id]').forEach((row) => {
+		if (!(row instanceof HTMLElement) || row.dataset.postedProof === '1') return;
+		const href = String(row.dataset.href || '').trim();
+		const commentId = String(row.getAttribute('data-comment-id') || '').trim();
+		if (!href || !commentId) {
+			row.dataset.postedProof = '1';
+			return;
+		}
+		const next = new URL(href, window.location.origin);
+		if (!next.searchParams.has('comment_id')) next.searchParams.set('comment_id', commentId);
+		row.dataset.href = `${next.pathname}${next.search}${next.hash}`;
+		row.dataset.postedProof = '1';
+	});
+}
+
 function payloadLooksLikeAudio(data) {
 	if (!data || typeof data !== 'object' || data._error) return false;
 	const top = String(data.media_type || '').trim().toLowerCase();
@@ -619,19 +637,6 @@ function payloadLooksLikeAudio(data) {
 	);
 }
 
-function payloadWantsChatAudioWaveform(data) {
-	if (!payloadLooksLikeAudio(data)) return false;
-	const meta = data.meta && typeof data.meta === 'object' ? data.meta : null;
-	if (meta?.cover_placeholder === true) return true;
-	const provider =
-		meta?.import && typeof meta.import === 'object'
-			? String(meta.import.provider || '').trim().toLowerCase()
-			: '';
-	const url = typeof data.url === 'string' ? data.url.trim() : '';
-	if ((provider === 'suno' || provider === 'file') && url) return false;
-	return true;
-}
-
 function wrapLooksLikeRealVideo(wrap) {
 	if (!(wrap instanceof HTMLElement)) return false;
 	if (!wrap.querySelector('.connect-chat-creation-embed-inner--video')) return false;
@@ -653,8 +658,54 @@ function chatEmbedCoverImgIsBroken(wrap) {
 }
 
 function chatAudioCoverIsPainted(wrap) {
-	const inner = wrap?.querySelector?.('.connect-chat-creation-embed-inner--audio, .connect-chat-creation-embed-inner');
+	if (!(wrap instanceof HTMLElement)) return false;
+	if (wrap.querySelector('.connect-chat-audio-embed-iframe, .connect-chat-suno-embed-iframe')) return true;
+	if (wrap.getAttribute('data-prsn-audio-embed') === 'card') return true;
+	const inner = wrap.querySelector('.connect-chat-creation-embed-inner--audio, .connect-chat-creation-embed-inner');
 	return Boolean(inner instanceof HTMLElement && inner.querySelector('.creation-audio-wave'));
+}
+
+function sunoSongIdFromHotfixMeta(meta) {
+	const songId =
+		meta?.import && typeof meta.import === 'object' ? String(meta.import.song_id || '').trim() : '';
+	return /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(songId)
+		? songId
+		: '';
+}
+
+function hotfixAudioCardViaLabel(meta) {
+	const fn = audioCoverModCached?.audioCardViaLabel;
+	if (typeof fn === 'function') return String(fn(meta) || '').trim();
+	const rawServer = typeof meta?.server_name === 'string' ? meta.server_name.trim() : '';
+	const server = rawServer.replace(/^parascene\s+/i, '').trim().toUpperCase();
+	const raw =
+		meta?.args && typeof meta.args === 'object' && meta.args.model != null
+			? String(meta.args.model).trim()
+			: '';
+	const model = raw ? raw.split(':')[0].split(/[/\\]/).pop().replace(/\.(safetensors|ckpt|pt|bin)$/i, '') : '';
+	return [server, model].filter(Boolean).join(' · ').slice(0, 48);
+}
+
+function buildHotfixAudioCardSrc({ title, coverUrl, audioUrl, href, durationSec, sunoSongId, via } = {}) {
+	const songId = String(sunoSongId || '').trim();
+	const t = typeof title === 'string' ? title.trim() : '';
+	if (songId) {
+		return `/suno-card.html?id=${encodeURIComponent(songId.toLowerCase())}${
+			t ? `&t=${encodeURIComponent(t)}` : ''
+		}`;
+	}
+	const params = new URLSearchParams();
+	if (t) params.set('t', t);
+	const cover = typeof coverUrl === 'string' ? coverUrl.trim() : '';
+	if (cover && !cover.includes('audio-cover') && !cover.endsWith('.svg')) params.set('img', cover);
+	if (audioUrl) params.set('src', String(audioUrl).trim());
+	if (href) params.set('href', String(href).trim());
+	const mark = typeof via === 'string' ? via.trim() : '';
+	if (mark) params.set('via', mark.slice(0, 64));
+	const dur = Number(durationSec);
+	if (Number.isFinite(dur) && dur > 0) params.set('dur', String(Math.round(dur)));
+	const qs = params.toString();
+	return qs ? `/audio-card.html?${qs}` : '/audio-card.html';
 }
 
 function audioSrcForShareOrPayload(creationId, shareOpts, data) {
@@ -724,10 +775,60 @@ function cardIsCreationProcessing(card) {
 	return Boolean(card.querySelector('.feed-card-image--creation-processing, .route-media.loading, [data-creation-gpu-wait]'));
 }
 
+function feedCardCoverUrl(card) {
+	if (!(card instanceof HTMLElement)) return '';
+	const img = card.querySelector('.feed-card-img');
+	const fromImg =
+		img instanceof HTMLImageElement
+			? String(img.getAttribute('src') || img.dataset.feedImageUrl || '').trim()
+			: '';
+	if (fromImg && fromImg !== AUDIO_TILE_SIZER_SRC && !fromImg.startsWith('data:')) return fromImg;
+	return String(card.dataset.imageUrlFull || card.dataset.imageUrl || '').trim();
+}
+
+function coverUrlLooksLikePlaceholder(url) {
+	const fn = audioCoverModCached?.isPlaceholderAudioCover;
+	if (typeof fn === 'function') return fn(url);
+	const file = String(url || '').split(/[?#]/)[0].toLowerCase();
+	if (!file) return true;
+	if (file.endsWith('.svg')) return true;
+	if (file.includes('audio-cover')) return true;
+	return /\/api\/create\/images\/\d+\/audio\/?$/.test(file);
+}
+
 function cardHasRealAudioCover(card) {
 	if (!(card instanceof HTMLElement)) return false;
+	if (card.querySelector('.route-media-audio-real-cover, .feed-card-audio-real-cover')) return true;
+	const source = String(card.getAttribute('data-cover-source') || '').trim().toLowerCase();
+	if (
+		source === 'procedural' ||
+		source === 'upload' ||
+		source === 'generate' ||
+		source === 'import' ||
+		source === 'embedded'
+	) {
+		return true;
+	}
 	const provider = String(card.getAttribute('data-import-provider') || '').trim().toLowerCase();
-	return provider === 'suno' || provider === 'file' || provider === 'youtube';
+	if (provider === 'suno' || provider === 'file' || provider === 'youtube') return true;
+	const url = feedCardCoverUrl(card);
+	return Boolean(url) && !coverUrlLooksLikePlaceholder(url);
+}
+
+function revealFeedCardRealAudioCover(card, removeAudioCoverWaveform) {
+	if (!(card instanceof HTMLElement)) return;
+	const imageContainer = card.querySelector('.feed-card-image');
+	if (imageContainer instanceof HTMLElement) {
+		if (typeof removeAudioCoverWaveform === 'function') removeAudioCoverWaveform(imageContainer);
+		imageContainer.classList.add('feed-card-audio-real-cover');
+	}
+	const img = card.querySelector('.feed-card-img');
+	const url = feedCardCoverUrl(card);
+	if (img instanceof HTMLImageElement) {
+		if (url && !img.getAttribute('src')) img.src = url;
+		img.style.removeProperty('opacity');
+		img.style.removeProperty('visibility');
+	}
 }
 
 function restoreFeedCardImageAfterWaveform(card, removeAudioCoverWaveform) {
@@ -769,10 +870,19 @@ function applyWaveformToFeedCard(card, mountAudioCoverWaveform) {
 
 function scanFeedAudioWaveformCovers(mountAudioCoverWaveform, removeAudioCoverWaveform) {
 	document.querySelectorAll('.feed-card[data-media-type="audio"]').forEach((card) => {
+		if (cardHasRealAudioCover(card)) {
+			revealFeedCardRealAudioCover(card, removeAudioCoverWaveform);
+			return;
+		}
 		applyWaveformToFeedCard(card, mountAudioCoverWaveform);
 	});
 	document.querySelectorAll('.creation-music-badge:not(.creation-video-import-badge)').forEach((badge) => {
 		const card = badge.closest('.feed-card');
+		if (!(card instanceof HTMLElement)) return;
+		if (cardHasRealAudioCover(card)) {
+			revealFeedCardRealAudioCover(card, removeAudioCoverWaveform);
+			return;
+		}
 		applyWaveformToFeedCard(card, mountAudioCoverWaveform);
 	});
 	document.querySelectorAll('.feed-card .creation-video-import-badge, .feed-card[data-media-type="video"]').forEach((el) => {
@@ -782,6 +892,8 @@ function scanFeedAudioWaveformCovers(mountAudioCoverWaveform, removeAudioCoverWa
 	document.querySelectorAll('.route-media[data-media-type="audio"]').forEach((mediaEl) => {
 		if (!(mediaEl instanceof HTMLElement)) return;
 		if (mediaEl.classList.contains('loading')) return;
+		if (mediaEl.classList.contains('route-media-audio-real-cover')) return;
+		if (mediaEl.classList.contains('route-media-has-image')) return;
 		const card = mediaEl.closest('.route-card, .feed-card');
 		if (card instanceof HTMLElement && (cardHasRealAudioCover(card) || cardIsCreationProcessing(card))) return;
 		if (mediaEl.closest('.feed-card')?.querySelector('.creation-video-import-badge')) return;
@@ -799,7 +911,7 @@ function watchAudioEmbed(wrap) {
 			obs.disconnect();
 			return;
 		}
-		if (wrap.getAttribute('data-prsn-audio-embed') !== '1') return;
+		if (wrap.getAttribute('data-prsn-audio-embed') !== '1' && wrap.getAttribute('data-prsn-audio-embed') !== 'card') return;
 		if (wrap.dataset.prsnAudioPainting === '1') return;
 		if (chatAudioCoverIsPainted(wrap)) return;
 		const creationId = String(wrap.getAttribute('data-creation-id') || '').trim();
@@ -809,54 +921,52 @@ function watchAudioEmbed(wrap) {
 	obs.observe(wrap, { childList: true, subtree: true });
 }
 
-function paintChatAudioCover(wrap, audioUrl) {
+function paintChatAudioCover(wrap, audioUrl, data) {
 	if (!(wrap instanceof HTMLElement)) return;
 	if (wrap.dataset.prsnAudioPainting === '1') return;
 	const src = String(audioUrl || '').trim();
-	if (chatAudioCoverIsPainted(wrap)) {
-		wrap.setAttribute('data-prsn-audio-embed', '1');
-		if (src) {
-			wrap.setAttribute('data-audio-url', src);
-			wrap.querySelector('.connect-chat-creation-embed-inner--audio')?.setAttribute('data-audio-url', src);
-		}
-		lockChatAudioTileSize(wrap, wrap.querySelector('.connect-chat-creation-embed-inner--audio'));
+	if (chatAudioCoverIsPainted(wrap) && wrap.querySelector('.connect-chat-audio-embed-iframe, .connect-chat-suno-embed-iframe')) {
+		wrap.setAttribute('data-prsn-audio-embed', 'card');
+		if (src) wrap.setAttribute('data-audio-url', src);
 		watchAudioEmbed(wrap);
 		return;
 	}
 	wrap.dataset.prsnAudioPainting = '1';
 	try {
+		const creationId = String(wrap.getAttribute('data-creation-id') || '').trim();
+		const meta = data?.meta && typeof data.meta === 'object' ? data.meta : null;
+		const title =
+			(typeof data?.title === 'string' && data.title.trim()) ||
+			(typeof meta?.import?.title === 'string' && meta.import.title.trim()) ||
+			'';
+		const coverUrl = typeof data?.url === 'string' ? data.url.trim() : '';
+		const href = creationId ? `/creations/${encodeURIComponent(creationId)}` : '';
+		const durationSec = Number(meta?.audio?.duration);
+		const iframeSrc = buildHotfixAudioCardSrc({
+			title,
+			coverUrl,
+			audioUrl: src,
+			href,
+			durationSec,
+			sunoSongId: sunoSongIdFromHotfixMeta(meta),
+			via: hotfixAudioCardViaLabel(meta),
+		});
 		wrap.classList.remove(
 			'connect-chat-creation-embed--loading',
 			'connect-chat-creation-embed--error',
+			'connect-chat-creation-embed--square',
 			'is-loading'
 		);
-		wrap.setAttribute('data-prsn-audio-embed', '1');
+		wrap.classList.add(
+			'connect-chat-creation-embed--audio-card',
+			'connect-chat-suno-embed',
+			'connect-chat-audio-embed'
+		);
+		wrap.setAttribute('data-prsn-audio-embed', 'card');
 		if (src) wrap.setAttribute('data-audio-url', src);
-
-		const tileAttrs =
-			` class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--audio creation-audio-cover"` +
-			` role="button" tabindex="0" aria-label="Play audio" title="Play audio"` +
-			(src ? ` data-audio-url="${escapeHotfixHtml(src)}"` : '');
-		const tileHtml = `<div${tileAttrs}>${chatAudioTileInnerHtml()}</div>`;
-
-		let inner = wrap.querySelector('.connect-chat-creation-embed-inner');
-		if (innerIsUsableAudioHost(inner)) {
-			inner.className = 'connect-chat-creation-embed-inner connect-chat-creation-embed-inner--audio creation-audio-cover';
-			inner.setAttribute('role', 'button');
-			inner.setAttribute('tabindex', '0');
-			inner.setAttribute('aria-label', 'Play audio');
-			inner.setAttribute('title', 'Play audio');
-			if (src) inner.setAttribute('data-audio-url', src);
-			else inner.removeAttribute('data-audio-url');
-			inner.innerHTML = chatAudioTileInnerHtml();
-		} else if (inner instanceof HTMLElement) {
-			inner.outerHTML = tileHtml;
-		} else {
-			const media = wrap.querySelector('.connect-chat-creation-embed-media');
-			if (media instanceof HTMLElement) media.insertAdjacentHTML('afterbegin', tileHtml);
-			else wrap.insertAdjacentHTML('afterbegin', `<div class="connect-chat-creation-embed-media">${tileHtml}</div>`);
-		}
-		lockChatAudioTileSize(wrap, wrap.querySelector('.connect-chat-creation-embed-inner--audio'));
+		unlockChatAudioTileSize(wrap);
+		wrap.innerHTML =
+			`<iframe class="connect-chat-suno-embed-iframe connect-chat-audio-embed-iframe" src="${escapeHotfixHtml(iframeSrc)}" title="${escapeHotfixHtml(title || 'Untitled')}" allow="autoplay; encrypted-media" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>`;
 		watchAudioEmbed(wrap);
 	} finally {
 		delete wrap.dataset.prsnAudioPainting;
@@ -876,22 +986,11 @@ async function upgradeChatAudioEmbed(wrap) {
 	const creationId = String(wrap.getAttribute('data-creation-id') || '').trim();
 	if (!creationId) return 'skip';
 	const shareOpts = shareOptsFromCreationEmbed(wrap);
-	if (wrap.getAttribute('data-prsn-audio-embed') === '1') {
-		paintChatAudioCover(wrap, audioSrcForShareOrPayload(creationId, shareOpts, null));
-		return 'audio';
-	}
-	const existingAudio = wrap.querySelector('.connect-chat-creation-embed-inner--audio');
-	if (existingAudio instanceof HTMLElement) {
-		const img = existingAudio.querySelector('img');
-		const imgSrc = img instanceof HTMLImageElement
-			? String(img.getAttribute('src') || img.currentSrc || '')
-			: '';
-		const hasWave = Boolean(existingAudio.querySelector('.creation-audio-wave'));
-		const posterIsWaveform = imgSrc.includes('audio-cover-waveform');
-		if (hasWave || !img || posterIsWaveform || chatEmbedCoverImgIsBroken(wrap)) {
+	if (wrap.getAttribute('data-prsn-audio-embed') === '1' || wrap.getAttribute('data-prsn-audio-embed') === 'card') {
+		if (!chatAudioCoverIsPainted(wrap)) {
 			paintChatAudioCover(wrap, audioSrcForShareOrPayload(creationId, shareOpts, null));
-			return 'audio';
 		}
+		return 'audio';
 	}
 	if (wrap.dataset.prsnAudioEmbedChecking === '1') {
 		return chatAudioCoverIsPainted(wrap) ? 'audio' : 'skip';
@@ -905,15 +1004,7 @@ async function upgradeChatAudioEmbed(wrap) {
 			wrap.setAttribute('data-prsn-audio-embed', '0');
 			return 'image';
 		}
-		if (!payloadWantsChatAudioWaveform(data)) {
-			const src = audioSrcForShareOrPayload(creationId, shareOpts, data);
-			wrap.setAttribute('data-prsn-audio-embed', 'art');
-			if (src) wrap.setAttribute('data-audio-url', src);
-			const inner = wrap.querySelector('.connect-chat-creation-embed-inner--audio');
-			if (inner instanceof HTMLElement && src) inner.setAttribute('data-audio-url', src);
-			return 'audio';
-		}
-		paintChatAudioCover(wrap, audioSrcForShareOrPayload(creationId, shareOpts, data));
+		paintChatAudioCover(wrap, audioSrcForShareOrPayload(creationId, shareOpts, data), data);
 		return 'audio';
 	} catch {
 		return chatAudioCoverIsPainted(wrap) ? 'audio' : 'skip';
@@ -932,6 +1023,9 @@ async function openChatCreationEmbedAfterAudioCheck(wrap) {
 			audioSrcForShareOrPayload(creationId, shareOpts, null)
 	).trim();
 	if (kind === 'audio' || (kind === 'skip' && audioSrc && wrap.getAttribute('data-prsn-audio-embed') !== '0')) {
+		if (wrap.getAttribute('data-prsn-audio-embed') === 'card' || wrap.querySelector('.connect-chat-audio-embed-iframe')) {
+			return;
+		}
 		if (audioSrc) openHotfixAudioLightbox(audioSrc, creationId);
 		return;
 	}
@@ -953,8 +1047,12 @@ function scanChatAudioCreationEmbeds() {
 	document.querySelectorAll('.connect-chat-creation-embed[data-creation-id]').forEach((wrap) => {
 		if (!(wrap instanceof HTMLElement)) return;
 		if (wrap.getAttribute('data-prsn-audio-embed') === '0') return;
-		if (wrap.getAttribute('data-prsn-audio-embed') === 'art') return;
-		if (wrap.getAttribute('data-prsn-audio-embed') === '1' && !chatAudioCoverIsPainted(wrap)) {
+		if (wrap.getAttribute('data-prsn-audio-embed') === 'card' && chatAudioCoverIsPainted(wrap)) return;
+		if (
+			(wrap.getAttribute('data-prsn-audio-embed') === '1' ||
+				wrap.getAttribute('data-prsn-audio-embed') === 'card') &&
+			!chatAudioCoverIsPainted(wrap)
+		) {
 			const creationId = String(wrap.getAttribute('data-creation-id') || '').trim();
 			const shareOpts = shareOptsFromCreationEmbed(wrap);
 			paintChatAudioCover(wrap, audioSrcForShareOrPayload(creationId, shareOpts, null));
@@ -966,7 +1064,7 @@ function scanChatAudioCreationEmbeds() {
 
 function applyHotfixCreationEmbedFailure(wrap) {
 	if (!(wrap instanceof HTMLElement)) return;
-	if (wrap.getAttribute('data-prsn-audio-embed') === '1') {
+	if (wrap.getAttribute('data-prsn-audio-embed') === '1' || wrap.getAttribute('data-prsn-audio-embed') === 'card') {
 		const creationId = String(wrap.getAttribute('data-creation-id') || '').trim();
 		paintChatAudioCover(wrap, audioSrcForShareOrPayload(creationId, shareOptsFromCreationEmbed(wrap), null));
 		return;
@@ -995,6 +1093,7 @@ function bindChatAudioEmbedMediaErrorCapture() {
 			if (!(wrap instanceof HTMLElement)) return;
 			if (wrap.getAttribute('data-prsn-audio-embed') === '0') return;
 			if (wrap.getAttribute('data-prsn-audio-embed') === 'art') return;
+			if (wrap.getAttribute('data-prsn-audio-embed') === 'card') return;
 			if (wrapLooksLikeRealVideo(wrap)) return;
 			if (t instanceof HTMLImageElement && !String(t.getAttribute('src') || '').startsWith('data:')) {
 				t.src = AUDIO_TILE_SIZER_SRC;
@@ -1019,6 +1118,8 @@ function initAudioCoversAndPlaybackHotfix() {
 			})
 			.catch(() => {});
 		scanChatAudioCreationEmbeds();
+		stampPostedCreationProofOnChat();
+		stripPostedCreationProofFromAddressBar();
 	};
 	run();
 	document.addEventListener('DOMContentLoaded', run);
@@ -1045,10 +1146,15 @@ document.addEventListener(
 		);
 		if (!scope) return;
 
+		if (e.target.closest('.connect-chat-audio-embed-iframe, .connect-chat-creation-embed--audio-card')) {
+			return;
+		}
+
 		const audioInner = e.target.closest('.connect-chat-creation-embed-inner--audio');
 		if (audioInner instanceof HTMLElement && scope.contains(audioInner)) {
 			if (e.target.closest('.connect-chat-creation-embed-detail-link')) return;
 			const wrap = audioInner.closest('.connect-chat-creation-embed');
+			if (wrap?.getAttribute('data-prsn-audio-embed') === 'card') return;
 			const creationId =
 				wrap instanceof HTMLElement
 					? String(wrap.getAttribute('data-creation-id') || '').trim()
@@ -1075,6 +1181,9 @@ document.addEventListener(
 			!e.target.closest('.connect-chat-creation-embed-group-nav')
 		) {
 			const known = creationEmbed.getAttribute('data-prsn-audio-embed');
+			if (known === 'card' || creationEmbed.querySelector('.connect-chat-audio-embed-iframe')) {
+				return;
+			}
 			if (known !== '0') {
 				const pendingAudioUrl = String(
 					creationEmbed.querySelector('.connect-chat-creation-embed-inner--audio')?.getAttribute('data-audio-url') ||
@@ -1244,11 +1353,31 @@ async function handleChatOverlayEmbedDmNavigation(href) {
  * Creation-detail embed #tag click: dismiss overlay first, then run channel-vs-tag chooser
  * on the chat shell (same UX as in-bubble hashtags).
  */
+function creationIdFromAudioCardMessage(data) {
+	const id = Number(data?.creationId);
+	if (Number.isFinite(id) && id > 0) return id;
+	const href = typeof data?.href === 'string' ? data.href : '';
+	const m = href.match(/\/creations\/(\d+)/i);
+	if (!m) return 0;
+	const n = Number(m[1]);
+	return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
 function initChatOverlayEmbedHashtagIntent() {
 	window.addEventListener('message', (event) => {
 		if (event.origin !== window.location.origin) return;
 		const data = event.data;
 		if (!data || typeof data !== 'object') return;
+		if (data.type === 'prsn-creation-detail-overlay-navigate') {
+			const creationId = creationIdFromAudioCardMessage(data);
+			if (!creationId) return;
+			const frame = [...document.querySelectorAll('iframe.connect-chat-audio-embed-iframe')].find(
+				(el) => el.contentWindow === event.source
+			);
+			const wrap = frame instanceof HTMLElement ? frame.closest('.connect-chat-creation-embed') : null;
+			void handleChatAudioCardOpenCreation(creationId, wrap);
+			return;
+		}
 		if (data.type !== 'prsn-chat-hashtag-intent') return;
 		const slug = String(data.slug || '')
 			.trim()
@@ -1256,6 +1385,27 @@ function initChatOverlayEmbedHashtagIntent() {
 		if (!slug) return;
 		void handleChatOverlayEmbedHashtagIntent(slug);
 	});
+}
+
+async function handleChatAudioCardOpenCreation(creationId, wrap) {
+	let href = `/creations/${creationId}`;
+	try {
+		const proofMod = await import(`/shared/postedCreationAccess.js${assetQuery()}`);
+		const proof = wrap instanceof Element ? proofMod.postedCreationProofFromElement(wrap) : null;
+		if (proof) href = proofMod.appendPostedCreationProofToHref(href, proof);
+	} catch {
+		// keep bare href
+	}
+	try {
+		const overlayMod = await import(`/shared/spaPageOverlay.js${assetQuery()}`);
+		if (typeof overlayMod.navigateToCreationDetailFromSpa === 'function') {
+			overlayMod.navigateToCreationDetailFromSpa(href);
+			return;
+		}
+	} catch {
+		// fall through
+	}
+	window.location.assign(href);
 }
 
 async function handleChatOverlayEmbedHashtagIntent(slug) {

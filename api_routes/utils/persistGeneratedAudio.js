@@ -6,6 +6,7 @@ import {
 	mintCdnUpload,
 	pinCdnObject
 } from "./blueCdn.js";
+import { isUsableStillCoverBuffer } from "./audioCoverApply.js";
 function normalizeAudioContentType(value) {
 	const raw = typeof value === "string" ? value.trim().toLowerCase() : "";
 	if (!raw) return "";
@@ -143,8 +144,11 @@ export async function persistGeneratedAudioToCdn({
 	let coverSource = "";
 	if (fetchLink?.url) {
 		try {
-			coverBuffer = await fetchCdnCoverJpeg(fetchLink.url);
-			if (coverBuffer) coverSource = "embedded";
+			const embedded = await fetchCdnCoverJpeg(fetchLink.url);
+			if (embedded && (await isUsableStillCoverBuffer(embedded))) {
+				coverBuffer = embedded;
+				coverSource = "embedded";
+			}
 		} catch {
 			coverBuffer = null;
 		}
@@ -159,7 +163,12 @@ export async function persistGeneratedAudioToCdn({
 				coverBuffer = built.buffer;
 				coverSource = "procedural";
 			}
-		} catch {
+			if (coverBuffer && !(await isUsableStillCoverBuffer(coverBuffer))) {
+				coverBuffer = null;
+				coverSource = "";
+			}
+		} catch (err) {
+			console.warn("[Creation] procedural audio cover failed", err?.message || err);
 			coverBuffer = null;
 		}
 	}

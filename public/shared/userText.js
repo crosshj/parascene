@@ -37,9 +37,8 @@ const { SPECIAL_HASHTAG_HREFS } = hashtagDestinationMod;
 const { attachMediaAudioLeveling, primeMediaElementForAudioLeveling } = mediaAudioLevelingMod;
 const { mountSequentialVideoPlayer } = sequentialVideoPlayerMod;
 const {
-	audioCoverWaveformHtml,
-	creationNeedsAudioWaveformCover,
 	creationMediaType,
+	resolveChatAudioPlayerSrc,
 	resolveCreationAudioPlayUrl,
 } = audioCoverWaveformMod;
 
@@ -1730,8 +1729,10 @@ function bindChatCreationEmbedMediaLoadError(wrap, mediaEl) {
 		const onFail = () => {
 		if (!wrap.parentNode) return;
 		if (wrap.querySelector('.connect-chat-creation-embed-inner--audio')) return;
+		if (wrap.querySelector('.connect-chat-audio-embed-iframe')) return;
 		if (wrap.querySelector('.creation-audio-wave')) return;
 		if (wrap.getAttribute('data-prsn-audio-embed') === '1') return;
+		if (wrap.getAttribute('data-prsn-audio-embed') === 'card') return;
 		wrap.classList.remove('connect-chat-creation-embed--loading', 'connect-chat-creation-embed--pending');
 		wrap.classList.add('connect-chat-creation-embed--error');
 		const titleEl =
@@ -2212,24 +2213,28 @@ export function hydrateChatCreationEmbeds(rootEl) {
 					shareVersion: shareOpts?.shareVersion,
 					shareToken: shareOpts?.shareToken,
 				});
-				const useWaveform = creationNeedsAudioWaveformCover({
-					media_type: 'audio',
-					url,
+				const durationSec = Number(parsedEmbedMeta?.audio?.duration);
+				const href = `/creations/${encodeURIComponent(String(creationId))}`;
+				const iframeSrc = resolveChatAudioPlayerSrc({
 					meta: parsedEmbedMeta,
+					title: titleRaw,
+					coverUrl: url,
+					audioUrl: resolvedAudioUrl,
+					href,
+					durationSec,
 				});
-				const coverHtml = useWaveform
-					? audioCoverWaveformHtml()
-					: url
-						? `<img class="connect-chat-creation-embed-img" src="${escapeHtml(url)}" alt="" width="260" height="260" loading="eager" decoding="async" />`
-						: audioCoverWaveformHtml();
+				const safeTitle = escapeHtml(titleRaw || 'Untitled');
+				wrap.classList.remove('connect-chat-creation-embed--square');
+				wrap.classList.add(
+					'connect-chat-creation-embed--audio-card',
+					'connect-chat-suno-embed',
+					'connect-chat-audio-embed'
+				);
+				wrap.setAttribute('data-prsn-audio-embed', 'card');
+				if (resolvedAudioUrl) wrap.setAttribute('data-audio-url', resolvedAudioUrl);
 				wrap.innerHTML =
-					`<div class="connect-chat-creation-embed-media">` +
-					`<div class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--audio${useWaveform || !url ? ' creation-audio-cover' : ''}${nsfwClass}"${nsfwDataAttr} role="button" tabindex="0" aria-label="Play audio" title="Play audio"${resolvedAudioUrl ? ` data-audio-url="${escapeHtml(resolvedAudioUrl)}"` : ''}>` +
-					`${coverHtml}` +
-					`${INLINE_CHAT_VIDEO_PLAY_OVERLAY_HTML}` +
-					`</div></div>`;
+					`<iframe class="connect-chat-suno-embed-iframe connect-chat-audio-embed-iframe" src="${escapeHtml(iframeSrc)}" title="${safeTitle}" allow="autoplay; encrypted-media" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>`;
 				trimWhitespaceOnlyTextNodes(wrap);
-				attachChatCreationEmbedDetailLinkReveal(wrap);
 				return;
 			}
 

@@ -244,24 +244,29 @@
 				<line x1="6" y1="6" x2="18" y2="18"></line>
 			</svg>
 		</button>
-		<div class="audio-cover-methods" role="tablist">
-			<button type="button" class="btn-secondary audio-cover-method is-active" data-audio-cover-tab="upload">Upload</button>
-			<button type="button" class="btn-secondary audio-cover-method" data-audio-cover-tab="generate">Generate</button>
+		<div class="audio-cover-methods" role="tablist" aria-label="How to set the cover">
+			<button type="button" class="audio-cover-method is-active" role="tab" aria-selected="true" aria-controls="audio-cover-panel-upload" id="audio-cover-tab-upload" data-audio-cover-tab="upload">Use an image</button>
+			<button type="button" class="audio-cover-method" role="tab" aria-selected="false" aria-controls="audio-cover-panel-generate" id="audio-cover-tab-generate" data-audio-cover-tab="generate">Generate one</button>
 		</div>
-		<div class="audio-cover-panel is-active" data-audio-cover-panel="upload">
-			<p class="audio-cover-help">Upload a square image to use as this track's cover.</p>
+		<div class="audio-cover-panel is-active" id="audio-cover-panel-upload" role="tabpanel" aria-labelledby="audio-cover-tab-upload" data-audio-cover-panel="upload">
+			<p class="audio-cover-help">Use + to upload. Paste an image, or enter an image URL or creation link.</p>
+			<p class="image-picker-url-hint" data-audio-cover-url-hint>Enter an image URL (http:// or https://) or a creation link.</p>
+			<div class="image-picker-composer-row">
+				<button type="button" class="image-picker-composer-add" data-audio-cover-pick aria-label="Choose image file">+</button>
+				<input type="text" inputmode="url" class="image-url-input image-picker-composer-input" data-audio-cover-url placeholder="Paste image or enter URL" aria-label="Paste image or enter image URL" autocomplete="off" />
+				<button type="button" class="image-picker-composer-send" data-audio-cover-url-submit hidden disabled aria-label="Use this image URL">&#10148;</button>
+			</div>
 			<input type="file" accept="image/*" hidden data-audio-cover-file />
-			<button type="button" class="btn-primary" data-audio-cover-pick>Choose image</button>
 		</div>
-		<div class="audio-cover-panel" data-audio-cover-panel="generate">
+		<div class="audio-cover-panel" id="audio-cover-panel-generate" role="tabpanel" aria-labelledby="audio-cover-tab-generate" data-audio-cover-panel="generate">
 			<label class="audio-cover-label" for="audio-cover-prompt">Prompt</label>
 			<textarea id="audio-cover-prompt" class="audio-cover-prompt" data-audio-cover-prompt rows="4" maxlength="800" placeholder="Album cover, atmospheric, no text"></textarea>
 			<p class="audio-cover-cost" data-audio-cover-cost></p>
-			<p class="audio-cover-error" data-audio-cover-error hidden></p>
 			<button type="button" class="btn-primary" data-audio-cover-generate>
 				<span data-audio-cover-generate-label>Generate</span>
 			</button>
 		</div>
+		<p class="audio-cover-error" data-audio-cover-error hidden></p>
 		<button type="button" class="btn-secondary audio-cover-reset" data-audio-cover-reset hidden>Use original cover</button>
 	</dialog>
 

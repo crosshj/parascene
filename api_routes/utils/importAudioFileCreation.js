@@ -2,6 +2,7 @@ import crypto from "crypto";
 import path from "path";
 import sharp from "sharp";
 import { createPlaceholderImageBuffer } from "./creationJob.js";
+import { isUsableStillCoverBuffer } from "./audioCoverApply.js";
 import { buildProceduralAudioCoverBuffer, seedAudioCover } from "./audioCoverProcedural.js";
 import {
 	CDN_OBJECT_ID_RE,
@@ -198,6 +199,9 @@ export async function finalizeAudioFileImport({
 		coverBuffer = null;
 	}
 	let coverSource = "";
+	if (coverBuffer && !(await isUsableStillCoverBuffer(coverBuffer))) {
+		coverBuffer = null;
+	}
 	if (coverBuffer) {
 		coverSource = "embedded";
 	}

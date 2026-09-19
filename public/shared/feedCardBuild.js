@@ -564,6 +564,10 @@ export function attachFeedCardImage(imageEl, imageContainer, item, itemIndex, pr
 		return;
 	}
 	if (applyFeedAudioWaveformCover(imageContainer, imageEl, item)) return;
+	if (!creationNeedsAudioWaveformCover(item) && String(item?.media_type || '').trim().toLowerCase() === 'audio') {
+		removeAudioCoverWaveform(imageContainer);
+		imageContainer.classList.add('feed-card-audio-real-cover');
+	}
 	const urls = feedItemCardImageUrlCandidates(item, preferThumbnail);
 	const useVideoFramePoster = feedItemNeedsVideoFramePoster(item);
 	if (urls.length === 0 && !useVideoFramePoster) {
@@ -893,6 +897,9 @@ function buildFeedCreationCard(
 			? parsedMeta.import.provider.trim().toLowerCase()
 			: "";
 	if (importProvider) card.dataset.importProvider = importProvider;
+	const coverSource =
+		parsedMeta && typeof parsedMeta.cover_source === 'string' ? parsedMeta.cover_source.trim().toLowerCase() : '';
+	if (coverSource) card.dataset.coverSource = coverSource;
 	const isGroupCreationCard = parsedMeta?.group?.kind === 'group_creations';
 	card.dataset.groupCreation = isGroupCreationCard ? '1' : '0';
 	const groupSourceCount = Array.isArray(parsedMeta?.group?.source_creations)

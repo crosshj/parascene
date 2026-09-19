@@ -25,6 +25,16 @@ describe('publicAudioWaveformCoverPath', () => {
 		).toBeNull();
 	});
 
+	test('a stored still without cover_source is kept', () => {
+		expect(
+			publicAudioWaveformCoverPath(
+				'audio',
+				{ media_type: 'audio', method: 'lyria' },
+				'/api/images/created/26_30718_cover.png?creation_id=30718'
+			)
+		).toBeNull();
+	});
+
 	test('procedural and generated covers keep the stored still', () => {
 		expect(
 			publicAudioWaveformCoverPath(
