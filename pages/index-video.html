@@ -103,15 +103,57 @@
 			cursor: pointer;
 		}
 
+		.vl-video-poster,
 		.vl-video-media,
 		.vl-video-overlay {
 			position: absolute;
 		}
 
+		.vl-video-poster,
 		.vl-video-overlay {
 			inset: 0;
 			width: 100%;
 			height: 100%;
+		}
+
+		.vl-video-poster {
+			object-fit: cover;
+			object-position: center;
+			transform: scale(1.06);
+			opacity: 0;
+			animation: vl-poster-drift 24s ease-in-out infinite alternate;
+			transition: opacity 0.7s ease;
+		}
+
+		.vl-video-poster.is-shown {
+			opacity: 1;
+		}
+
+		.vl-video.has-started .vl-video-poster {
+			opacity: 0;
+			pointer-events: none;
+			animation: none;
+		}
+
+		@keyframes vl-poster-drift {
+			from {
+				transform: scale(1.06) translate(0, 0);
+			}
+
+			to {
+				transform: scale(1.14) translate(-1.4%, 1.2%);
+			}
+		}
+
+		@media (prefers-reduced-motion: reduce) {
+			.vl-video-poster {
+				animation: none;
+				transform: none;
+			}
+
+			.vl-video-play.is-attention::before {
+				animation: none;
+			}
 		}
 
 		.vl-video-media {
@@ -136,7 +178,8 @@
 		.vl-video-overlay {
 			display: grid;
 			place-items: center;
-			transition: opacity 0.25s ease;
+			background: rgba(0, 0, 0, 0.22);
+			transition: opacity 0.25s ease, background 0.25s ease;
 		}
 
 		.vl-video.is-playing .vl-video-overlay {
@@ -153,6 +196,7 @@
 		}
 
 		.vl-video-play {
+			position: relative;
 			display: grid;
 			place-items: center;
 			width: 56px;
@@ -160,6 +204,7 @@
 			padding: 0;
 			border: none;
 			border-radius: 50%;
+			overflow: hidden;
 			cursor: pointer;
 			color: #fff;
 			background: rgba(139, 92, 246, 0.42);
@@ -168,6 +213,37 @@
 			box-shadow: 0 2px 16px rgba(124, 58, 237, 0.25);
 			transition: background 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
 			-webkit-tap-highlight-color: transparent;
+		}
+
+		@keyframes vl-play-shimmer {
+			0% {
+				transform: translateX(-160%);
+				opacity: 0;
+			}
+
+			16% {
+				opacity: 1;
+			}
+
+			100% {
+				transform: translateX(160%);
+				opacity: 0;
+			}
+		}
+
+		.vl-video-play::before {
+			content: '';
+			position: absolute;
+			inset: 0;
+			border-radius: inherit;
+			background: linear-gradient(115deg, transparent 28%, rgba(255, 255, 255, 0.2) 42%, rgba(255, 255, 255, 0.9) 50%, rgba(255, 255, 255, 0.2) 58%, transparent 72%);
+			transform: translateX(-160%);
+			opacity: 0;
+			pointer-events: none;
+		}
+
+		.vl-video-play.is-attention::before {
+			animation: vl-play-shimmer 0.9s ease-out forwards;
 		}
 
 		.vl-video-play:focus,
@@ -194,6 +270,8 @@
 		}
 
 		.vl-video-play svg {
+			position: relative;
+			z-index: 1;
 			width: 22px;
 			height: 22px;
 		}
@@ -393,7 +471,21 @@
 					</g>
 				</svg>
 			</a>
-			<div class="vl-video">
+			<div class="vl-video" data-posters="/assets/splash-poster-alley.jpg,/assets/splash-poster-crystal.jpg,/assets/splash-poster-tv.jpg,/assets/splash-poster-city.jpg,/assets/splash-poster-cliff.jpg">
+				<img class="vl-video-poster" alt="" decoding="async">
+				<script>
+					(function () {
+						var img = document.currentScript.previousElementSibling;
+						if (!img || !img.parentElement) return;
+						var posters = (img.parentElement.getAttribute("data-posters") || "").split(",");
+						if (!posters[0]) return;
+						var i = Math.floor(Math.random() * posters.length);
+						img.src = posters[i];
+						img.classList.add("is-shown");
+						img.dataset.posterIndex = String(i);
+					})();
+				</script>
+				<img class="vl-video-poster" alt="" decoding="async">
 				<video class="vl-video-media" playsinline preload="none"></video>
 				<div class="vl-video-overlay">
 					<button type="button" class="vl-video-play" aria-label="Play video">
@@ -431,6 +523,72 @@
 			var landingVariant = "video";
 			var trackedPlay = false;
 			var trackedComplete = false;
+			var idleHints = true;
+			var playShimmerTimer = null;
+			var posterTimer = null;
+			var posters = (frame.getAttribute("data-posters") || "").split(",").filter(Boolean);
+			var posterIndex = 0;
+			var posterLayers = frame.querySelectorAll(".vl-video-poster");
+			var shownPoster = frame.querySelector(".vl-video-poster.is-shown") || posterLayers[0];
+			if (shownPoster && shownPoster.dataset.posterIndex) {
+				posterIndex = parseInt(shownPoster.dataset.posterIndex, 10) || 0;
+			}
+
+			function reduceMotion() {
+				return window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+			}
+
+			function stopIdleHints() {
+				if (!idleHints) return;
+				idleHints = false;
+				clearTimeout(playShimmerTimer);
+				clearTimeout(posterTimer);
+				if (playBtn) playBtn.classList.remove("is-attention");
+			}
+
+			function schedulePlayShimmer(delay) {
+				if (!idleHints || !playBtn || reduceMotion()) return;
+				playShimmerTimer = setTimeout(function () {
+					if (!idleHints || !playBtn) return;
+					playBtn.classList.add("is-attention");
+					function onShimmerEnd(e) {
+						if (e.animationName !== "vl-play-shimmer") return;
+						playBtn.removeEventListener("animationend", onShimmerEnd);
+						playBtn.classList.remove("is-attention");
+						schedulePlayShimmer(4800);
+					}
+					playBtn.addEventListener("animationend", onShimmerEnd);
+				}, delay);
+			}
+
+			function schedulePosterSwap(delay) {
+				if (!idleHints || posters.length < 2 || posterLayers.length < 2) return;
+				posterTimer = setTimeout(function () {
+					if (!idleHints) return;
+					posterIndex = (posterIndex + 1) % posters.length;
+					var incoming = posterLayers[0] === shownPoster ? posterLayers[1] : posterLayers[0];
+					var revealed = false;
+					function reveal() {
+						incoming.removeEventListener("load", reveal);
+						if (revealed || !idleHints) return;
+						revealed = true;
+						incoming.classList.add("is-shown");
+						if (shownPoster) shownPoster.classList.remove("is-shown");
+						shownPoster = incoming;
+						schedulePosterSwap(7500);
+					}
+					incoming.addEventListener("load", reveal);
+					incoming.src = posters[posterIndex];
+					if (incoming.complete && incoming.getAttribute("src") === posters[posterIndex]) reveal();
+				}, delay);
+			}
+
+			posters.forEach(function (src) {
+				var preload = new Image();
+				preload.src = src;
+			});
+			schedulePlayShimmer(1400);
+			schedulePosterSwap(7500);
 
 			var landingUtm = (function () {
 				var params = new URLSearchParams(window.location.search);
@@ -531,6 +689,7 @@
 			}
 
 			function playVideo() {
+				stopIdleHints();
 				if (!video.paused && frame.classList.contains("is-playing")) return;
 				video.muted = false;
 				ensureVideoLoaded()
