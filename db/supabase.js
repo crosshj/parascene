@@ -5341,6 +5341,22 @@ export function openDb() {
 				return { changes: data?.length ?? 0 };
 			}
 		},
+		/** CAS: take the provider-poll run lock only if it is missing or expired. */
+		claimCreatedImageProviderPollLock: {
+			run: async (id, userId, meta, nowMs) => {
+				const now = Number(nowMs);
+				const nowToken = Number.isFinite(now) ? String(Math.floor(now)) : String(Date.now());
+				const { data, error } = await serviceClient
+					.from(prefixedTable("created_images"))
+					.update({ meta })
+					.eq("id", id)
+					.eq("user_id", userId)
+					.or(`meta->>provider_poll_lock_until_ms.is.null,meta->>provider_poll_lock_until_ms.lt.${nowToken}`)
+					.select("id");
+				if (error) throw error;
+				return { changes: data?.length ?? 0 };
+			}
+		},
 		selectCreatedImagesForUser: {
 			all: async (userId, options = {}) => {
 				const includeUnavailable = options?.includeUnavailable === true;

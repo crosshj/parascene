@@ -275,9 +275,17 @@ export async function scheduleProviderPollJob({ payload, delaySeconds = 10, log 
 	const headers = {
 		Authorization: `Bearer ${qstashToken}`,
 		"Content-Type": "application/json",
+		// App already reschedules the next poll. QStash retries of the same
+		// message multiply in-flight chains for one creation.
+		"Upstash-Retries": "0",
 	};
 	if (delayHeaderSeconds > 0) {
 		headers["Upstash-Delay"] = `${delayHeaderSeconds}s`;
+	}
+	const imageId = body?.created_image_id;
+	if (imageId != null && String(imageId).trim()) {
+		const bucket = Math.floor(Date.now() / 10_000);
+		headers["Upstash-Deduplication-Id"] = `poll-provider-${String(imageId).trim()}-${bucket}`;
 	}
 
 	const res = await fetch(publishUrl, {

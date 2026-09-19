@@ -44,6 +44,8 @@ const PROVIDER_VIDEO_FETCH_TIMEOUT_MS = (() => {
 const DEFAULT_WIDTH = 1024;
 const DEFAULT_HEIGHT = 1024;
 const DEFAULT_PROVIDER_POLL_DELAY_SECONDS = 10;
+const PROVIDER_POLL_LOCK_MS = 45_000;
+const PROVIDER_POLL_SCHEDULED_GRACE_MS = 2_000;
 
 function logCreation(...args) {
 	console.log("[Creation]", ...args);
@@ -135,6 +137,42 @@ function isTransientProviderPollError(err) {
 
 const localProviderPollQueued = new Set();
 
+export function isProviderPollRunLocked(meta, now = Date.now()) {
+	const until = Number(meta?.provider_poll_lock_until_ms);
+	return Number.isFinite(until) && until > now;
+}
+
+export function isProviderPollAlreadyScheduled(meta, now = Date.now(), graceMs = PROVIDER_POLL_SCHEDULED_GRACE_MS) {
+	const nextAt = Date.parse(meta?.provider_next_poll_at);
+	return Number.isFinite(nextAt) && nextAt > now + graceMs;
+}
+
+async function claimProviderPollRunLock({ queries, imageId, userId, existingMeta }) {
+	if (isProviderPollRunLocked(existingMeta)) {
+		return { claimed: false, meta: existingMeta };
+	}
+	const now = Date.now();
+	const nextMeta = mergeMeta(existingMeta, {
+		provider_poll_lock_until_ms: now + PROVIDER_POLL_LOCK_MS,
+	});
+	const claimFn = queries.claimCreatedImageProviderPollLock?.run;
+	if (typeof claimFn === "function") {
+		try {
+			const result = await claimFn(imageId, userId, nextMeta, now);
+			if (!result?.changes) {
+				return { claimed: false, meta: existingMeta };
+			}
+			return { claimed: true, meta: nextMeta };
+		} catch (err) {
+			logCreationWarn("Provider poll lock claim failed; falling back", safeErrorMessage(err));
+		}
+	}
+	if (queries.updateCreatedImageMeta?.run) {
+		await queries.updateCreatedImageMeta.run(imageId, userId, nextMeta);
+	}
+	return { claimed: true, meta: nextMeta };
+}
+
 async function enqueueProviderPollFollowUp({
 	queries,
 	storage,
@@ -146,6 +184,27 @@ async function enqueueProviderPollFollowUp({
 }) {
 	const asyncEnv = isRemoteAsyncEnv();
 	const wait = Math.max(0, Number(delaySeconds) || 0);
+	let latestMeta = null;
+	if (queries?.selectCreatedImageById?.get) {
+		try {
+			const row = await queries.selectCreatedImageById.get(imageId, userId);
+			latestMeta = parseMeta(row?.meta);
+		} catch {
+			latestMeta = null;
+		}
+	}
+	if (isProviderPollAlreadyScheduled(latestMeta)) {
+		logCreation("Provider poll already scheduled; skip enqueue", { imageId, userId });
+		return { ok: true, reason: "async_poll_already_scheduled" };
+	}
+	if (queries?.updateCreatedImageMeta?.run && latestMeta && typeof latestMeta === "object") {
+		const nextPollAtIso = new Date(Date.now() + wait * 1000).toISOString();
+		await queries.updateCreatedImageMeta.run(
+			imageId,
+			userId,
+			mergeMeta(latestMeta, { provider_next_poll_at: nextPollAtIso }),
+		);
+	}
 	if (asyncEnv) {
 		await scheduleProviderPollJob({
 			payload: {
@@ -290,16 +349,12 @@ export async function kickStaleProviderPollIfNeeded({
 	if (!Number.isFinite(uid) || uid < 1) return { kicked: false };
 	if (!Number.isFinite(serverId) || serverId < 1) return { kicked: false };
 
+	if (isProviderPollRunLocked(meta)) return { kicked: false };
+	if (isProviderPollAlreadyScheduled(meta)) return { kicked: false };
+
 	const nextAt = Date.parse(meta.provider_next_poll_at);
 	const stale = !Number.isFinite(nextAt) || Date.now() > nextAt + 15_000;
 	if (!force && !stale) return { kicked: false };
-
-	const nextMeta = mergeMeta(meta, {
-		provider_next_poll_at: new Date(Date.now() + DEFAULT_PROVIDER_POLL_DELAY_SECONDS * 1000).toISOString(),
-	});
-	if (queries.updateCreatedImageMeta?.run) {
-		await queries.updateCreatedImageMeta.run(imageId, uid, nextMeta);
-	}
 
 	try {
 		await enqueueProviderPollFollowUp({
@@ -1204,7 +1259,6 @@ export async function runCreationJob({ queries, storage, payload }) {
 
 				const priorAttempts = Number(existingMeta?.provider_poll_attempts ?? 0);
 				const delaySeconds = DEFAULT_PROVIDER_POLL_DELAY_SECONDS;
-				const nextPollAtIso = new Date(Date.now() + delaySeconds * 1000).toISOString();
 
 				let nextMeta = mergeMeta(existingMeta, {
 					provider_async: true,
@@ -1212,7 +1266,6 @@ export async function runCreationJob({ queries, storage, payload }) {
 					provider_job_id: jobId,
 					provider_status: status,
 					provider_poll_attempts: priorAttempts,
-					provider_next_poll_at: nextPollAtIso,
 					provider_last_payload: asyncBody,
 					...(Number.isFinite(durationMs) && durationMs >= 0 ? { duration_ms: durationMs } : {}),
 				});
@@ -1238,16 +1291,14 @@ export async function runCreationJob({ queries, storage, payload }) {
 
 				if (asyncEnv) {
 					// Cloud: schedule polling via QStash worker.
-					await scheduleProviderPollJob({
-						payload: {
-							job_type: "poll_provider",
-							created_image_id: imageId,
-							user_id: userId,
-							server_id,
-							credit_cost,
-						},
+					await enqueueProviderPollFollowUp({
+						queries,
+						storage,
+						imageId,
+						userId,
+						server_id,
+						credit_cost,
 						delaySeconds,
-						log: console,
 					});
 
 					return { ok: true, reason: "async_queued" };
@@ -1591,6 +1642,18 @@ export async function runProviderPollJob({ queries, storage, payload }) {
 		return { ok: false, reason: "not_async" };
 	}
 
+	const lock = await claimProviderPollRunLock({
+		queries,
+		imageId,
+		userId,
+		existingMeta,
+	});
+	if (!lock.claimed) {
+		logCreation("Poll: skip, another poll is already running", { imageId, userId });
+		return { ok: true, skipped: true, reason: "poll_already_running" };
+	}
+	const lockedMeta = lock.meta || existingMeta;
+
 	const server = await queries.selectServerById.get(server_id);
 	if (!server || server.status !== "active") {
 		const errorMsg = !server ? "Server not found" : "Server is not active";
@@ -1619,7 +1682,7 @@ export async function runProviderPollJob({ queries, storage, payload }) {
 		return { ok: false, reason: "invalid_server" };
 	}
 
-	const argsPayload = existingMeta.provider_last_payload;
+	const argsPayload = lockedMeta.provider_last_payload;
 	let imageBuffer;
 	let color = null;
 	let width = DEFAULT_WIDTH;
@@ -1635,10 +1698,10 @@ export async function runProviderPollJob({ queries, storage, payload }) {
 	let voiceId = null;
 
 	try {
-		const pollMethod = existingMeta.provider_method || existingMeta.method || payload?.method;
+		const pollMethod = lockedMeta.provider_method || lockedMeta.method || payload?.method;
 		const pollJobId =
 			(argsPayload && typeof argsPayload.job_id === "string" && argsPayload.job_id) ||
-			(existingMeta && typeof existingMeta.provider_job_id === "string" && existingMeta.provider_job_id) ||
+			(lockedMeta && typeof lockedMeta.provider_job_id === "string" && lockedMeta.provider_job_id) ||
 			null;
 
 		const pollBody = {
@@ -1687,7 +1750,7 @@ export async function runProviderPollJob({ queries, storage, payload }) {
 				body = null;
 			}
 
-			if (isAsyncAckBody(body, existingMeta.method)) {
+			if (isAsyncAckBody(body, lockedMeta.method)) {
 				const asyncBody = body || {};
 				const jobId = asyncBody.job_id;
 				const status = asyncBody.status || "pending";
@@ -1702,13 +1765,13 @@ export async function runProviderPollJob({ queries, storage, payload }) {
 						continue;
 					}
 
-					const jsonDonePolls = Number(existingMeta.provider_json_completed_polls ?? 0) + 1;
-					const nextMeta = mergeMeta(existingMeta, {
+					const jsonDonePolls = Number(lockedMeta.provider_json_completed_polls ?? 0) + 1;
+					const nextMeta = mergeMeta(lockedMeta, {
 						provider_job_id: jobId,
 						provider_status: status,
 						provider_last_payload: asyncBody,
 						provider_json_completed_at:
-							existingMeta.provider_json_completed_at || new Date().toISOString(),
+							lockedMeta.provider_json_completed_at || new Date().toISOString(),
 						provider_json_completed_polls: jsonDonePolls,
 					});
 					if (queries.updateCreatedImageMeta?.run) {
@@ -1738,16 +1801,14 @@ export async function runProviderPollJob({ queries, storage, payload }) {
 				const generating =
 					gpuWaitFromProviderStatus(status)?.phase === "generating";
 				const nextAttempts = generating
-					? Number(existingMeta.provider_poll_attempts ?? 0) + 1
-					: Number(existingMeta.provider_poll_attempts ?? 0);
+					? Number(lockedMeta.provider_poll_attempts ?? 0) + 1
+					: Number(lockedMeta.provider_poll_attempts ?? 0);
 				const delaySeconds = DEFAULT_PROVIDER_POLL_DELAY_SECONDS;
-				const nextPollAtIso = new Date(Date.now() + delaySeconds * 1000).toISOString();
 
-				let nextMeta = mergeMeta(existingMeta, {
+				let nextMeta = mergeMeta(lockedMeta, {
 					provider_job_id: jobId,
 					provider_status: status,
 					provider_poll_attempts: nextAttempts,
-					provider_next_poll_at: nextPollAtIso,
 					provider_last_payload: asyncBody,
 				});
 				nextMeta = await persistGpuWaitStatus({
@@ -1756,7 +1817,7 @@ export async function runProviderPollJob({ queries, storage, payload }) {
 					userId,
 					existingMeta: nextMeta,
 					providerStatus: status,
-					method: existingMeta.method,
+					method: lockedMeta.method,
 					extra: lineExtraFromBody(asyncBody),
 				});
 
