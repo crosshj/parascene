@@ -32,6 +32,9 @@ import {
 	gpuWaitFromProviderStatus,
 	isRecoverableTimedOutCreation,
 	isTerminalCompletedProviderStatus,
+	isTerminalFailedProviderStatus,
+	isProviderPollHardCapped,
+	providerPollBackoffSeconds,
 	shouldKeepProviderPoll,
 } from "./creationGpuWait.js";
 
@@ -43,7 +46,6 @@ const PROVIDER_VIDEO_FETCH_TIMEOUT_MS = (() => {
 })();
 const DEFAULT_WIDTH = 1024;
 const DEFAULT_HEIGHT = 1024;
-const DEFAULT_PROVIDER_POLL_DELAY_SECONDS = 10;
 const PROVIDER_POLL_LOCK_MS = 45_000;
 const PROVIDER_POLL_SCHEDULED_GRACE_MS = 2_000;
 
@@ -124,8 +126,15 @@ function isRemoteAsyncEnv() {
 	return !!process.env.VERCEL && !!process.env.UPSTASH_QSTASH_TOKEN;
 }
 
+function isProviderJobGoneMessage(message) {
+	return /job not found|unknown job|no such job|job does not exist/i.test(String(message || ""));
+}
+
 function isTransientProviderPollError(err) {
 	if (!err) return false;
+	if (err.code === "PROVIDER_JOB_FAILED" || err.code === "PROVIDER_UNEXPECTED_JSON") {
+		return false;
+	}
 	if (err.name === "AbortError") return true;
 	const status = Number(err.provider?.status);
 	if (err.code === "PROVIDER_NON_2XX" && [408, 429, 500, 502, 503, 504].includes(status)) {
@@ -181,9 +190,9 @@ async function enqueueProviderPollFollowUp({
 	server_id,
 	credit_cost,
 	delaySeconds,
+	useBackoff = delaySeconds == null,
 }) {
 	const asyncEnv = isRemoteAsyncEnv();
-	const wait = Math.max(0, Number(delaySeconds) || 0);
 	let latestMeta = null;
 	if (queries?.selectCreatedImageById?.get) {
 		try {
@@ -197,12 +206,19 @@ async function enqueueProviderPollFollowUp({
 		logCreation("Provider poll already scheduled; skip enqueue", { imageId, userId });
 		return { ok: true, reason: "async_poll_already_scheduled" };
 	}
+	const pollCount = Math.max(0, Math.floor(Number(latestMeta?.provider_poll_count ?? 0)));
+	const wait = useBackoff
+		? providerPollBackoffSeconds(pollCount)
+		: Math.max(0, Number(delaySeconds) || 0);
 	if (queries?.updateCreatedImageMeta?.run && latestMeta && typeof latestMeta === "object") {
 		const nextPollAtIso = new Date(Date.now() + wait * 1000).toISOString();
 		await queries.updateCreatedImageMeta.run(
 			imageId,
 			userId,
-			mergeMeta(latestMeta, { provider_next_poll_at: nextPollAtIso }),
+			mergeMeta(latestMeta, {
+				provider_next_poll_at: nextPollAtIso,
+				provider_poll_count: pollCount + 1,
+			}),
 		);
 	}
 	if (asyncEnv) {
@@ -306,7 +322,6 @@ async function continueOrTimeoutPoll({
 	credit_cost,
 	creationStatus,
 	meta,
-	delaySeconds = DEFAULT_PROVIDER_POLL_DELAY_SECONDS,
 }) {
 	if (shouldKeepProviderPoll(creationStatus, meta)) {
 		return enqueueProviderPollFollowUp({
@@ -316,7 +331,6 @@ async function continueOrTimeoutPoll({
 			userId,
 			server_id,
 			credit_cost,
-			delaySeconds,
 		});
 	}
 	const timeoutErr = new Error("Timed out waiting for generation to finish.");
@@ -349,6 +363,7 @@ export async function kickStaleProviderPollIfNeeded({
 	if (!Number.isFinite(uid) || uid < 1) return { kicked: false };
 	if (!Number.isFinite(serverId) || serverId < 1) return { kicked: false };
 
+	if (isProviderPollHardCapped(meta)) return { kicked: false };
 	if (isProviderPollRunLocked(meta)) return { kicked: false };
 	if (isProviderPollAlreadyScheduled(meta)) return { kicked: false };
 
@@ -640,6 +655,11 @@ function providerBodyToMessage(body) {
 	if (typeof body === "object") {
 		const err = typeof body.error === "string" ? body.error.trim() : "";
 		if (err) return err;
+		const nestedErr =
+			body.result && typeof body.result === "object" && typeof body.result.error === "string"
+				? body.result.error.trim()
+				: "";
+		if (nestedErr) return nestedErr;
 		const msg = typeof body.message === "string" ? body.message.trim() : "";
 		if (msg) return msg;
 		try {
@@ -1258,7 +1278,6 @@ export async function runCreationJob({ queries, storage, payload }) {
 						: null;
 
 				const priorAttempts = Number(existingMeta?.provider_poll_attempts ?? 0);
-				const delaySeconds = DEFAULT_PROVIDER_POLL_DELAY_SECONDS;
 
 				let nextMeta = mergeMeta(existingMeta, {
 					provider_async: true,
@@ -1298,7 +1317,6 @@ export async function runCreationJob({ queries, storage, payload }) {
 						userId,
 						server_id,
 						credit_cost,
-						delaySeconds,
 					});
 
 					return { ok: true, reason: "async_queued" };
@@ -1642,6 +1660,26 @@ export async function runProviderPollJob({ queries, storage, payload }) {
 		return { ok: false, reason: "not_async" };
 	}
 
+	if (!shouldKeepProviderPoll(image.status, existingMeta)) {
+		logCreation("Poll: hard cap reached; marking failed", {
+			imageId,
+			userId,
+			status: image.status,
+			timeout_at: existingMeta.timeout_at || null,
+			started_at: existingMeta.started_at || null,
+		});
+		const timeoutErr = new Error("Timed out waiting for generation to finish.");
+		timeoutErr.name = "AbortError";
+		return markProviderPollFailed({
+			queries,
+			imageId,
+			userId,
+			existingMeta,
+			credit_cost,
+			providerError: timeoutErr,
+		});
+	}
+
 	const lock = await claimProviderPollRunLock({
 		queries,
 		imageId,
@@ -1750,6 +1788,26 @@ export async function runProviderPollJob({ queries, storage, payload }) {
 				body = null;
 			}
 
+			if (body && body.async === true && isTerminalFailedProviderStatus(body.status)) {
+				const providerMessage = providerBodyToMessage(body);
+				const err = new Error(providerMessage || "Provider job failed.");
+				err.code = "PROVIDER_JOB_FAILED";
+				err.provider = {
+					status: providerResponse.status,
+					statusText: providerResponse.statusText,
+					contentType: providerContentType,
+					body,
+				};
+				return markProviderPollFailed({
+					queries,
+					imageId,
+					userId,
+					existingMeta: lockedMeta,
+					credit_cost,
+					providerError: err,
+				});
+			}
+
 			if (isAsyncAckBody(body, lockedMeta.method)) {
 				const asyncBody = body || {};
 				const jobId = asyncBody.job_id;
@@ -1803,7 +1861,6 @@ export async function runProviderPollJob({ queries, storage, payload }) {
 				const nextAttempts = generating
 					? Number(lockedMeta.provider_poll_attempts ?? 0) + 1
 					: Number(lockedMeta.provider_poll_attempts ?? 0);
-				const delaySeconds = DEFAULT_PROVIDER_POLL_DELAY_SECONDS;
 
 				let nextMeta = mergeMeta(lockedMeta, {
 					provider_job_id: jobId,
@@ -1844,7 +1901,6 @@ export async function runProviderPollJob({ queries, storage, payload }) {
 					credit_cost,
 					creationStatus: waitStatus,
 					meta: nextMeta,
-					delaySeconds,
 				});
 			}
 
@@ -1853,6 +1909,24 @@ export async function runProviderPollJob({ queries, storage, payload }) {
 				voiceId = String(body.voice_id).trim();
 			} else {
 				const providerMessage = providerBodyToMessage(body);
+				if (isProviderJobGoneMessage(providerMessage)) {
+					const err = new Error(providerMessage || "Provider job is gone.");
+					err.code = "PROVIDER_JOB_FAILED";
+					err.provider = {
+						status: providerResponse.status,
+						statusText: providerResponse.statusText,
+						contentType: providerContentType,
+						body,
+					};
+					return markProviderPollFailed({
+						queries,
+						imageId,
+						userId,
+						existingMeta: lockedMeta,
+						credit_cost,
+						providerError: err,
+					});
+				}
 				const err = new Error(providerMessage || "Provider returned unexpected JSON during poll.");
 				err.code = "PROVIDER_UNEXPECTED_JSON";
 				err.provider = {
@@ -1944,7 +2018,6 @@ export async function runProviderPollJob({ queries, storage, payload }) {
 				userId,
 				server_id,
 				credit_cost,
-				delaySeconds: DEFAULT_PROVIDER_POLL_DELAY_SECONDS,
 			});
 		}
 		return markProviderPollFailed({

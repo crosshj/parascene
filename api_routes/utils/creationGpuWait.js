@@ -80,13 +80,47 @@ export function isCreationFinishTimedOut(status, meta, now = Date.now()) {
 	return Number.isFinite(timeoutAt) && now > timeoutAt;
 }
 
+/** QStash may keep polling for hours; UI finish clock (`timeout_at`) is separate. */
+export const PROVIDER_POLL_HARD_CAP_MS = 4 * 60 * 60 * 1000;
+export const PROVIDER_POLL_INITIAL_DELAY_SECONDS = 10;
+export const PROVIDER_POLL_MAX_DELAY_SECONDS = 5 * 60;
+
+/** Wall-clock deadline for QStash provider polls. Independent of client GET polling. */
+export function providerPollHardCapAtMs(meta) {
+	const startedAt = meta?.started_at ? Date.parse(meta.started_at) : NaN;
+	const runningAt = meta?.running_at ? Date.parse(meta.running_at) : NaN;
+	const origin = Number.isFinite(startedAt) ? startedAt : Number.isFinite(runningAt) ? runningAt : NaN;
+	if (!Number.isFinite(origin)) return NaN;
+	return origin + PROVIDER_POLL_HARD_CAP_MS;
+}
+
+/** 10s, 20s, 40s, … capped at 5 minutes. `pollCount` is how many follow-ups already scheduled. */
+export function providerPollBackoffSeconds(pollCount = 0) {
+	const n = Math.max(0, Math.min(8, Math.floor(Number(pollCount) || 0)));
+	return Math.min(
+		PROVIDER_POLL_MAX_DELAY_SECONDS,
+		PROVIDER_POLL_INITIAL_DELAY_SECONDS * 2 ** n,
+	);
+}
+
+export function isProviderPollHardCapped(meta, now = Date.now()) {
+	const deadline = providerPollHardCapAtMs(meta);
+	return Number.isFinite(deadline) && now > deadline;
+}
+
 export function isTerminalCompletedProviderStatus(status) {
 	const s = String(status ?? "").trim().toLowerCase();
 	return s === "completed" || s === "succeeded" || s === "done";
 }
 
-/** Keep polls going while Blue still has the job, even past the finish clock. */
+export function isTerminalFailedProviderStatus(status) {
+	const s = String(status ?? "").trim().toLowerCase();
+	return s === "failed" || s === "error";
+}
+
+/** QStash follow-up: keep polling only before the hard cap. Stale Blue "running" does not extend it. */
 export function shouldKeepProviderPoll(status, meta, now = Date.now()) {
+	if (isProviderPollHardCapped(meta, now)) return false;
 	if (isProviderJobInFlight(meta)) return true;
 	if (!isCreationGpuInFlight(status)) return false;
 	if (isCreationInLine(status)) return true;

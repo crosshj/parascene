@@ -8,6 +8,10 @@ import {
 	isProviderJobInFlight,
 	isRecoverableTimedOutCreation,
 	isTerminalCompletedProviderStatus,
+	isTerminalFailedProviderStatus,
+	isProviderPollHardCapped,
+	providerPollBackoffSeconds,
+	PROVIDER_POLL_HARD_CAP_MS,
 	shouldKeepProviderPoll,
 } from "../api_routes/utils/creationGpuWait.js";
 import {
@@ -99,12 +103,68 @@ describe("provider poll continuation", () => {
 		expect(isTerminalCompletedProviderStatus("running")).toBe(false);
 	});
 
-	test("keeps polling queued with no finish clock", () => {
+	test("treats failed/error JSON as terminal failed", () => {
+		expect(isTerminalFailedProviderStatus("failed")).toBe(true);
+		expect(isTerminalFailedProviderStatus("error")).toBe(true);
+		expect(isTerminalFailedProviderStatus("running")).toBe(false);
+	});
+
+	test("keeps polling queued before the started_at finish clock", () => {
 		expect(
-			shouldKeepProviderPoll("queued", {
-				timeout_at: "2000-01-01T00:00:00.000Z",
-			}),
+			shouldKeepProviderPoll(
+				"queued",
+				{
+					method: "text2image",
+					started_at: "2026-01-01T00:00:00.000Z",
+				},
+				Date.parse("2026-01-01T00:05:00.000Z"),
+			),
 		).toBe(true);
+	});
+
+	test("keeps QStash polling for hours past the UI finish clock while Blue is in-flight", () => {
+		expect(
+			shouldKeepProviderPoll(
+				"queued",
+				{
+					timeout_at: "2026-01-01T00:10:00.000Z",
+					provider_status: "running",
+					started_at: "2026-01-01T00:00:00.000Z",
+				},
+				Date.parse("2026-01-01T00:11:00.000Z"),
+			),
+		).toBe(true);
+	});
+
+	test("stops QStash polling after the hours-scale hard cap", () => {
+		const started = Date.parse("2026-01-01T00:00:00.000Z");
+		expect(
+			isProviderPollHardCapped(
+				{
+					started_at: "2026-01-01T00:00:00.000Z",
+					provider_status: "running",
+				},
+				started + PROVIDER_POLL_HARD_CAP_MS + 1,
+			),
+		).toBe(true);
+		expect(
+			shouldKeepProviderPoll(
+				"queued",
+				{
+					started_at: "2026-01-01T00:00:00.000Z",
+					provider_status: "running",
+				},
+				started + PROVIDER_POLL_HARD_CAP_MS + 1,
+			),
+		).toBe(false);
+	});
+
+	test("backs off poll delays exponentially up to 5 minutes", () => {
+		expect(providerPollBackoffSeconds(0)).toBe(10);
+		expect(providerPollBackoffSeconds(1)).toBe(20);
+		expect(providerPollBackoffSeconds(2)).toBe(40);
+		expect(providerPollBackoffSeconds(5)).toBe(5 * 60);
+		expect(providerPollBackoffSeconds(12)).toBe(5 * 60);
 	});
 
 	test("keeps polling generating until timeout_at", () => {
@@ -127,18 +187,20 @@ describe("provider poll continuation", () => {
 		).toBe(false);
 	});
 
-	test("keeps polling generating past timeout_at while Blue still has the job", () => {
+	test("does not let a stale Blue in-flight status bypass the hours-scale QStash hard cap", () => {
+		expect(isProviderJobInFlight({ provider_status: "pending" })).toBe(true);
+		const started = Date.parse("2026-01-01T00:00:00.000Z");
 		expect(
 			shouldKeepProviderPoll(
 				"processing",
 				{
+					started_at: "2026-01-01T00:00:00.000Z",
 					timeout_at: "2026-01-01T00:10:00.000Z",
 					provider_status: "running",
 				},
-				Date.parse("2026-01-01T00:11:00.000Z"),
+				started + PROVIDER_POLL_HARD_CAP_MS + 1,
 			),
-		).toBe(true);
-		expect(isProviderJobInFlight({ provider_status: "pending" })).toBe(true);
+		).toBe(false);
 	});
 
 	test("revives a timed-out row that still has a Blue job", () => {
