@@ -14,6 +14,7 @@ import {
 	probeProviderAsyncJob,
 	repairProviderAsyncVideoJob,
 } from "./utils/creationJob.js";
+import { isReferenceToVideoMethod } from "../public/shared/aspectRatio.js";
 import { scheduleAnonCreationJob } from "./utils/scheduleCreationJob.js";
 import {
 	buildAdminBroadcastEmailData,
@@ -2604,8 +2605,11 @@ export default function createAdminRoutes({ queries, storage }) {
 		const hasThumbnail = creation.file_path && String(creation.file_path).trim() !== "";
 		if (!hasThumbnail && typeof storage.uploadImage === "function") {
 			let thumbBuffer;
+			const useSourceAsThumb =
+				sourceImageUrl &&
+				!isReferenceToVideoMethod(existingMeta.method || existingMeta.provider_method, existingMeta.args?.model);
 			try {
-				thumbBuffer = sourceImageUrl
+				thumbBuffer = useSourceAsThumb
 					? await fetchImageBufferFromUrl(sourceImageUrl)
 					: await createPlaceholderImageBuffer();
 			} catch (err) {

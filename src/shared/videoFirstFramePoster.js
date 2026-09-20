@@ -1,6 +1,7 @@
 /**
  * Text-to-video (and Blue t2v) rows keep a transparent PNG until a first-frame poster is saved.
- * Feed / doom should show the video's first frame instead of that empty placeholder.
+ * Reference-to-video has a source image, but it is a character sheet — not a start frame.
+ * Feed / doom should show the video's first frame instead of that empty or sheet poster.
  */
 
 /**
@@ -53,8 +54,21 @@ function hasSourceImage(item, meta) {
 	return false;
 }
 
+/** Keep in sync with isReferenceToVideoMethod in public/shared/aspectRatio.js. */
+function isReferenceToVideoMeta(meta) {
+	if (!meta || typeof meta !== 'object') return false;
+	const method = String(meta.method || meta.provider_method || '').trim().toLowerCase().replace(/[_-]+/g, '');
+	if (method === 'reference2video' || method === 'ref2video' || method === 'r2v') return true;
+	const model = String(meta.args?.model || '').trim().toLowerCase();
+	if (!model) return false;
+	if (/(^|[^a-z0-9])r2v([^a-z0-9]|$)/i.test(model)) return true;
+	const compact = model.replace(/[_-]+/g, '');
+	return compact.includes('ref2video') || compact.includes('reference2video');
+}
+
 /**
  * True when the stored poster is still the auto-generated transparent placeholder.
+ * Reference-to-video also needs a frame poster: the source image is a character sheet.
  * @param {object|null|undefined} item
  * @returns {boolean}
  */
@@ -63,7 +77,7 @@ export function feedItemNeedsVideoFramePoster(item) {
 	const meta = parseMeta(item);
 	if (meta?.video_placeholder_manual === true) return false;
 	if (!feedItemPlayableVideoUrl(item)) return false;
-	if (hasSourceImage(item, meta)) return false;
+	if (hasSourceImage(item, meta) && !isReferenceToVideoMeta(meta)) return false;
 	const mediaTypeRaw =
 		typeof item.media_type === 'string' && item.media_type.trim()
 			? item.media_type

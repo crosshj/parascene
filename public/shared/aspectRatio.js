@@ -491,6 +491,35 @@ export function isText2VideoCreation(creation) {
 }
 
 /**
+ * Reference-to-video: submitted images are character/style sheets, not a start frame.
+ * Keep in sync with videoFirstFramePoster.js.
+ * @param {unknown} method
+ * @param {unknown} model
+ * @returns {boolean}
+ */
+export function isReferenceToVideoMethod(method, model) {
+	const methodKey = String(method || '').trim().toLowerCase().replace(/[_-]+/g, '');
+	if (methodKey === 'reference2video' || methodKey === 'ref2video' || methodKey === 'r2v') {
+		return true;
+	}
+	const modelKey = String(model || '').trim().toLowerCase();
+	if (!modelKey) return false;
+	if (/(^|[^a-z0-9])r2v([^a-z0-9]|$)/i.test(modelKey)) return true;
+	const compact = modelKey.replace(/[_-]+/g, '');
+	return compact.includes('ref2video') || compact.includes('reference2video');
+}
+
+/**
+ * @param {{ meta?: unknown, media_type?: unknown, video_url?: unknown } | null | undefined} creation
+ * @returns {boolean}
+ */
+export function isReferenceToVideoCreation(creation) {
+	if (!creationHasVideo(creation)) return false;
+	const meta = normalizeCreationMeta(creation?.meta);
+	return isReferenceToVideoMethod(meta?.method || meta?.provider_method, meta?.args?.model);
+}
+
+/**
  * Stored poster dimensions match the job aspect_ratio (or no ratio was requested).
  * @param {{ width?: unknown, height?: unknown, meta?: unknown } | null | undefined} creation
  * @returns {boolean}
@@ -519,28 +548,36 @@ export function hasProperVideoPlaceholderDimensions(creation) {
 export const TEMP_ALLOW_REPEAT_VIDEO_POSTER = true;
 
 /**
- * Completed text-to-video rows that still use an auto-generated placeholder (not a saved frame).
+ * Completed videos whose stored poster is not a start frame (t2v placeholder or r2v character sheet).
  * @param {{ status?: unknown, width?: unknown, height?: unknown, meta?: unknown, media_type?: unknown, video_url?: unknown } | null | undefined} creation
  * @returns {boolean}
  */
 export function canSetVideoPosterFromFirstFrame(creation) {
 	if (!creation || typeof creation !== 'object') return false;
 	if (String(creation.status || '').toLowerCase() !== 'completed') return false;
-	if (!isText2VideoCreation(creation)) return false;
+	if (!isText2VideoCreation(creation) && !isReferenceToVideoCreation(creation)) return false;
 	const meta = normalizeCreationMeta(creation?.meta);
 	if (!TEMP_ALLOW_REPEAT_VIDEO_POSTER && meta?.video_placeholder_manual === true) return false;
 	return true;
 }
 
 /**
- * Text-to-video publish flow: capture first frame when still on auto placeholder.
+ * Publish / complete: capture first frame when still on auto placeholder / character-sheet poster.
  * @param {{ status?: unknown, width?: unknown, height?: unknown, meta?: unknown, media_type?: unknown, video_url?: unknown } | null | undefined} creation
  * @returns {boolean}
  */
-export function shouldAutoSetVideoPosterOnPublish(creation) {
+export function shouldAutoSetVideoPosterFromFirstFrame(creation) {
 	if (!canSetVideoPosterFromFirstFrame(creation)) return false;
 	const meta = normalizeCreationMeta(creation?.meta);
+	if (meta?.group && typeof meta.group === 'object' && meta.group.kind === 'group_creations') {
+		return false;
+	}
 	return meta?.video_placeholder_manual !== true;
+}
+
+/** @deprecated Use shouldAutoSetVideoPosterFromFirstFrame */
+export function shouldAutoSetVideoPosterOnPublish(creation) {
+	return shouldAutoSetVideoPosterFromFirstFrame(creation);
 }
 
 /** @deprecated Use canSetVideoPosterFromFirstFrame */

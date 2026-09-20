@@ -5040,6 +5040,25 @@ export function openDb() {
 				return { items: data ?? [], total: typeof count === "number" ? count : (data ?? []).length };
 			}
 		},
+		/** Completed video creations — for first-frame poster backfill script only. */
+		selectCompletedVideoCreationsForPosterBackfill: {
+			page: async (options = {}) => {
+				const lim = Math.min(Math.max(1, Number(options.limit) || 50), 200);
+				const beforeId = Number(options.beforeId);
+				let query = serviceClient
+					.from(prefixedTable("created_images"))
+					.select("id, user_id, title, filename, file_path, width, height, status, color, meta")
+					.eq("status", "completed")
+					.is("unavailable_at", null)
+					.eq("meta->>media_type", "video")
+					.order("id", { ascending: false })
+					.limit(lim);
+				if (Number.isFinite(beforeId) && beforeId > 0) query = query.lt("id", beforeId);
+				const { data, error } = await query;
+				if (error) throw error;
+				return { items: data ?? [] };
+			}
+		},
 		/** Completed audio creations — for cover backfill script only. */
 		selectCompletedAudioCreationsForCoverBackfill: {
 			page: async (options = {}) => {

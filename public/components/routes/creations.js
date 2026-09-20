@@ -353,6 +353,10 @@ class AppRouteCreations extends HTMLElement {
 			this.handleCreationDetailShellSync(e?.detail);
 		};
 		document.addEventListener('prsn-creation-detail-overlay-shell-sync', this.shellSyncHandler);
+		this.videoPosterHandler = (e) => {
+			this.applySavedVideoPosterToCard(e?.detail);
+		};
+		document.addEventListener('creation-video-placeholder-updated', this.videoPosterHandler);
 		this.setupImageLazyLoading();
 
 		const initialRoute = window.__CURRENT_ROUTE__ || null;
@@ -1002,6 +1006,7 @@ class AppRouteCreations extends HTMLElement {
 
 			this.prependCreationCards(container, [item]);
 			this.hasLoadedOnce = true;
+			void this.maybePersistCompletedVideoPoster(item);
 		} catch {
 			// ignore
 		}
@@ -1086,13 +1091,44 @@ class AppRouteCreations extends HTMLElement {
 		return true;
 	}
 
+	async maybePersistCompletedVideoPoster(item) {
+		const status = String(item?.status || '').trim().toLowerCase();
+		if (status && status !== 'completed') return;
+		try {
+			const qs = getImportQuery(getAssetVersionParam());
+			const { maybeSaveVideoFirstFramePoster } = await import(
+				`../../shared/saveVideoFirstFramePoster.js${qs}`
+			);
+			if (typeof maybeSaveVideoFirstFramePoster !== 'function') return;
+			await maybeSaveVideoFirstFramePoster(item);
+		} catch {
+			// best-effort; owner can still set poster from detail
+		}
+	}
+
+	applySavedVideoPosterToCard(detail) {
+		const id = Number(detail?.creationId);
+		const url = typeof detail?.url === 'string' ? detail.url.trim() : '';
+		if (!Number.isFinite(id) || id <= 0 || !url) return;
+		const media = this.querySelector(`.route-media[data-image-id="${id}"]`);
+		if (!(media instanceof HTMLElement)) return;
+		const card = media.closest('.route-card');
+		if (card instanceof HTMLElement) card.dataset.imageUrl = url;
+		if (typeof setRouteMediaBackgroundImage === 'function') {
+			void setRouteMediaBackgroundImage(media, url, { lowPriority: !this.isRouteActive() });
+		}
+	}
+
 	applyPolledCreationUpdates(creationsFromApi) {
 		const container = this.querySelector('[data-creations-container]');
 		if (!container) return false;
 		const updates = findCreationsPollStatusUpdates(creationsFromApi, container);
 		let any = false;
 		for (const { apiRow } of updates) {
-			if (this.replaceCreationCard(container, apiRow)) any = true;
+			if (this.replaceCreationCard(container, apiRow)) {
+				any = true;
+				void this.maybePersistCompletedVideoPoster(apiRow);
+			}
 		}
 		return any;
 	}
@@ -1146,6 +1182,9 @@ class AppRouteCreations extends HTMLElement {
 		}
 		if (this.shellSyncHandler) {
 			document.removeEventListener('prsn-creation-detail-overlay-shell-sync', this.shellSyncHandler);
+		}
+		if (this.videoPosterHandler) {
+			document.removeEventListener('creation-video-placeholder-updated', this.videoPosterHandler);
 		}
 		if (this.intersectionObserver) {
 			this.intersectionObserver.disconnect();

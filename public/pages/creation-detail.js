@@ -4901,6 +4901,18 @@ async function loadCreation() {
 			actionsContext.showSetVideoPoster = false;
 			actionsContext.showAdjustImage = false;
 			actionsContext.showChangeCover = false;
+		} else if (canEdit && !adminViewingUserDeleted) {
+			const qs = getImportQuery(getAssetVersionParam());
+			void import(`/shared/saveVideoFirstFramePoster.js${qs}`).then((mod) => {
+				if (!isCurrentLoad()) return;
+				if (typeof mod.maybeSaveVideoFirstFramePoster !== 'function') return;
+				const heroVideo = document.querySelector('video[data-video]');
+				const existingVideo =
+					heroVideo instanceof HTMLVideoElement && heroVideo.videoWidth > 0
+						? heroVideo
+						: null;
+				return mod.maybeSaveVideoFirstFramePoster(creation, { existingVideo });
+			});
 		}
 		const groupSourcesRaw = Array.isArray(groupMeta?.source_creations) ? groupMeta.source_creations : [];
 		const groupSourcesMapped = groupSourcesRaw

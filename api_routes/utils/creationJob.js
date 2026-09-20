@@ -2,6 +2,7 @@ import { buildProviderHeaders } from "./providerAuth.js";
 import { scheduleProviderPollJob } from "./scheduleCreationJob.js";
 import {
 	dimensionsForAspectRatioLongEdge,
+	isReferenceToVideoMethod,
 	parseAspectRatioString,
 } from "../../public/shared/aspectRatio.js";
 import { letterboxImageBuffer } from "./editedImageUpload.js";
@@ -699,6 +700,22 @@ async function createPlaceholderImageBuffer(width = DEFAULT_WIDTH, height = DEFA
 	return await createPlaceholderImageBufferInternal(width, height);
 }
 
+function firstInputImageUrlFromArgs(args) {
+	if (!args || typeof args !== "object") return null;
+	if (typeof args.image_url === "string" && args.image_url) return args.image_url;
+	if (typeof args.image === "string" && args.image) return args.image;
+	if (Array.isArray(args.input_images) && typeof args.input_images[0] === "string") {
+		return args.input_images[0];
+	}
+	return null;
+}
+
+/** Character sheets are not start frames — r2v stores a placeholder until a first-frame poster is saved. */
+function videoPosterSourceImageUrl(method, args, extraCandidate = null) {
+	if (isReferenceToVideoMethod(method, args?.model)) return null;
+	return firstInputImageUrlFromArgs(args) || extraCandidate || null;
+}
+
 /** Transparent PNG sized for video pending poster (aspect_ratio from job args when set). */
 async function createVideoPlaceholderImageBuffer(aspectRatioRaw) {
 	const { width, height } = dimensionsForAspectRatioLongEdge(aspectRatioRaw, DEFAULT_WIDTH);
@@ -1363,18 +1380,11 @@ export async function runCreationJob({ queries, storage, payload }) {
 			const arrayBuffer = await providerResponse.arrayBuffer();
 			videoBuffer = Buffer.from(arrayBuffer);
 
-			let sourceImageUrl =
-				(typeof argsForProvider.image_url === "string" && argsForProvider.image_url) ||
-				(typeof argsForProvider.image === "string" && argsForProvider.image) ||
-				(Array.isArray(argsForProvider.input_images) &&
-					typeof argsForProvider.input_images[0] === "string" &&
-					argsForProvider.input_images[0]) ||
-				null;
-			sourceImageUrlForMeta = sourceImageUrl || null;
+			sourceImageUrlForMeta = firstInputImageUrlFromArgs(argsForProvider);
 
 			const posterResolved = await resolveVideoJobPosterAndDimensions({
 				args: argsForProvider,
-				sourceImageUrl,
+				sourceImageUrl: videoPosterSourceImageUrl(method, argsForProvider),
 				fetchBuffer: fetchImageBufferFromUrl,
 			});
 			imageBuffer = posterResolved.imageBuffer;
@@ -1941,20 +1951,16 @@ export async function runProviderPollJob({ queries, storage, payload }) {
 
 			// Use original request args (existingMeta.args) for thumbnail; argsPayload is the provider ack (job_id, status), not the request.
 			const originalArgs = existingMeta.args && typeof existingMeta.args === "object" ? existingMeta.args : {};
-			let sourceImageUrl =
-				(typeof originalArgs.image_url === "string" && originalArgs.image_url) ||
-				(typeof originalArgs.image === "string" && originalArgs.image) ||
-				(Array.isArray(originalArgs.input_images) &&
-					typeof originalArgs.input_images[0] === "string" &&
-					originalArgs.input_images[0]) ||
-				(typeof argsPayload.image_url === "string" && argsPayload.image_url) ||
-				(typeof argsPayload.image === "string" && argsPayload.image) ||
-				null;
-			sourceImageUrlForMeta = sourceImageUrl || null;
+			sourceImageUrlForMeta =
+				firstInputImageUrlFromArgs(originalArgs) || firstInputImageUrlFromArgs(argsPayload);
 
 			const posterResolved = await resolveVideoJobPosterAndDimensions({
 				args: originalArgs,
-				sourceImageUrl,
+				sourceImageUrl: videoPosterSourceImageUrl(
+					lockedMeta.method || existingMeta.method,
+					originalArgs,
+					firstInputImageUrlFromArgs(argsPayload)
+				),
 				logWarn: (msg, detail) =>
 					logCreationWarn(
 						detail ? `Poll: ${msg}: ${detail}` : `Poll: ${msg}`

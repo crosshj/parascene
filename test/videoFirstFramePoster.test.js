@@ -36,6 +36,23 @@ describe('feedItemNeedsVideoFramePoster', () => {
 		).toBe(false);
 	});
 
+	test('reference-to-video uses a first-frame poster instead of the character sheet', () => {
+		expect(
+			feedItemNeedsVideoFramePoster({
+				created_image_id: 25001,
+				media_type: 'video',
+				video_url: '/api/videos/created/video/19_25001.mp4',
+				meta: {
+					media_type: 'video',
+					method: 'reference2video',
+					source_image_url: '/api/images/created/sheet.png',
+					args: { model: 'minimax_r2v', input_images: ['/api/images/created/sheet.png'] },
+					video: { file_path: '/api/videos/created/video/19_25001.mp4' }
+				}
+			})
+		).toBe(true);
+	});
+
 	test('saved first-frame poster is not replaced', () => {
 		expect(
 			feedItemNeedsVideoFramePoster({

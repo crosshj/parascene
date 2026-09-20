@@ -85,6 +85,7 @@ import { getWhoMetaForCreation } from "./utils/whoMeta.js";
 import {
 	canSetVideoPosterFromFirstFrame,
 	getLandscapeOutpaintEligibility,
+	isReferenceToVideoMethod,
 	parseAspectRatioString,
 } from "../public/shared/aspectRatio.js";
 import { normalizeEditedUploadBuffer } from "./utils/editedImageUpload.js";
@@ -6505,8 +6506,11 @@ export default function createCreateRoutes({ queries, storage }) {
 			const hasThumbnail = image.file_path && String(image.file_path).trim() !== "";
 			if (!hasThumbnail && typeof storage.uploadImage === "function") {
 				let thumbBuffer;
+				const useSourceAsThumb =
+					sourceFromArgs &&
+					!isReferenceToVideoMethod(existingMeta.method || existingMeta.provider_method, argsObj.model);
 				try {
-					thumbBuffer = sourceFromArgs
+					thumbBuffer = useSourceAsThumb
 						? await fetchImageBufferFromUrl(String(sourceFromArgs).trim())
 						: await createPlaceholderImageBuffer();
 				} catch {

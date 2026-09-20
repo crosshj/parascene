@@ -8999,6 +8999,39 @@ export async function initChatPage(root, options = {}) {
 		maybeStartChatCreationsPseudoChannelPoll();
 	}
 
+	async function maybePersistChatCreationsVideoPoster(item) {
+		const status = String(item?.status || '').trim().toLowerCase();
+		if (status && status !== 'completed') return;
+		try {
+			const mod = await import(`/shared/saveVideoFirstFramePoster.js${getImportQuery(getAssetVersionParam())}`);
+			if (typeof mod.maybeSaveVideoFirstFramePoster !== 'function') return;
+			await mod.maybeSaveVideoFirstFramePoster(item);
+		} catch {
+			// best-effort; owner can still set poster from detail
+		}
+	}
+
+	function applySavedVideoPosterToChatCreationsCard(detail) {
+		const id = Number(detail?.creationId);
+		const url = typeof detail?.url === 'string' ? detail.url.trim() : '';
+		if (!Number.isFinite(id) || id <= 0 || !url) return;
+		const cards = resolveChatCreationsCardsHost();
+		if (!(cards instanceof HTMLElement)) return;
+		const card = cards.querySelector(`.feed-card[data-creation-id="${id}"]`);
+		if (!(card instanceof HTMLElement)) return;
+		const img = card.querySelector('img');
+		if (img instanceof HTMLImageElement) {
+			img.src = url;
+			img.dataset.feedImageUrl = url;
+		}
+		const video = card.querySelector('video');
+		if (video instanceof HTMLVideoElement) video.setAttribute('poster', url);
+	}
+
+	document.addEventListener('creation-video-placeholder-updated', (event) => {
+		applySavedVideoPosterToChatCreationsCard(event?.detail);
+	});
+
 	function applyChatCreationsPolledUpdates(creationsFromApi) {
 		const messagesEl = root.querySelector('[data-chat-messages]');
 		const cards = resolveChatCreationsCardsHost();
@@ -9019,6 +9052,7 @@ export async function initChatPage(root, options = {}) {
 			const feedItem = mapUserCreatedImageApiRowToFeedItem(apiRow, viewerId, hints);
 			card.replaceWith(createFeedItemCard(feedItem, idx >= 0 ? idx : 0, opts));
 			any = true;
+			void maybePersistChatCreationsVideoPoster(apiRow);
 		}
 		return any;
 	}

@@ -10,9 +10,12 @@ import {
 	TEMP_ALLOW_REPEAT_VIDEO_POSTER,
 	canSetVideoPosterFromFirstFrame,
 	shouldAutoSetVideoPosterOnPublish,
+	shouldAutoSetVideoPosterFromFirstFrame,
 	hasProperVideoPlaceholderDimensions,
 	heroLayoutMode,
 	isText2VideoCreation,
+	isReferenceToVideoCreation,
+	isReferenceToVideoMethod,
 	needsManualVideoPlaceholder,
 	parseAspectRatioString,
 	isPortrait916Aspect,
@@ -266,10 +269,20 @@ describe('video poster from first frame eligibility', () => {
 
 	test('shouldAutoSetVideoPosterOnPublish skips manual posters', () => {
 		expect(shouldAutoSetVideoPosterOnPublish({ ...t2vBase, width: 576, height: 1024 })).toBe(true);
+		expect(shouldAutoSetVideoPosterFromFirstFrame({ ...t2vBase, width: 576, height: 1024 })).toBe(true);
 		expect(
 			shouldAutoSetVideoPosterOnPublish({
 				...t2vBase,
 				meta: { ...t2vBase.meta, video_placeholder_manual: true },
+			})
+		).toBe(false);
+	});
+
+	test('skips grouped creations for auto first-frame poster', () => {
+		expect(
+			shouldAutoSetVideoPosterFromFirstFrame({
+				...t2vBase,
+				meta: { ...t2vBase.meta, group: { kind: 'group_creations' } },
 			})
 		).toBe(false);
 	});
@@ -294,5 +307,27 @@ describe('video poster from first frame eligibility', () => {
 				meta: { method: 'image2video', args: {} },
 			})
 		).toBe(false);
+	});
+
+	test('offers poster action for reference-to-video even with a character sheet', () => {
+		const r2v = {
+			...t2vBase,
+			meta: {
+				method: 'reference2video',
+				media_type: 'video',
+				source_image_url: '/api/images/created/sheet.png',
+				args: {
+					aspect_ratio: '9:16',
+					model: 'minimax_r2v',
+					input_images: ['https://example.com/sheet.png'],
+				},
+			},
+		};
+		expect(isReferenceToVideoCreation(r2v)).toBe(true);
+		expect(isText2VideoCreation(r2v)).toBe(false);
+		expect(canSetVideoPosterFromFirstFrame(r2v)).toBe(true);
+		expect(shouldAutoSetVideoPosterOnPublish(r2v)).toBe(true);
+		expect(isReferenceToVideoMethod('image2video', 'minimax_r2v')).toBe(true);
+		expect(isReferenceToVideoMethod('image2video', 'ltx_i2v')).toBe(false);
 	});
 });
