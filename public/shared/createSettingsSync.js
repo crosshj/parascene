@@ -20,8 +20,18 @@ export const CREATE_SETTINGS_STORAGE_KEYS = {
 	/** Composer-only; does not overwrite /create basic+advanced model route. */
 	composerModel: 'create_page_composer_model',
 	composerVideoModel: 'create_page_composer_video_model',
+	composerAudioModel: 'create_page_composer_audio_model',
 	composerModelLabel: 'create_page_composer_model_label',
 };
+
+/**
+ * @param {unknown} raw
+ * @returns {'image' | 'video' | 'audio'}
+ */
+export function normalizeCreateOutputMode(raw) {
+	if (raw === 'video' || raw === 'audio') return raw;
+	return 'image';
+}
 
 export const CREATE_PAGE_SELECTIONS_SESSION_KEY = 'create-page-selections';
 
@@ -68,11 +78,13 @@ export function readSharedCreateSettings() {
 	const ls = getLocalStorage();
 	if (!ls) return {};
 	const outputModeRaw = readString(ls, CREATE_SETTINGS_STORAGE_KEYS.outputMode);
-	const outputMode = outputModeRaw === 'video' ? 'video' : 'image';
+	const outputMode = normalizeCreateOutputMode(outputModeRaw);
 	const modelKey =
 		outputMode === 'video'
 			? CREATE_SETTINGS_STORAGE_KEYS.videoModel
-			: CREATE_SETTINGS_STORAGE_KEYS.model;
+			: outputMode === 'audio'
+				? CREATE_SETTINGS_STORAGE_KEYS.composerAudioModel
+				: CREATE_SETTINGS_STORAGE_KEYS.model;
 	return {
 		prompt: readString(ls, CREATE_SETTINGS_STORAGE_KEYS.prompt),
 		promptText: readString(ls, CREATE_SETTINGS_STORAGE_KEYS.promptText),
@@ -201,15 +213,18 @@ export function persistSharedAspectRatio(aspectRatio, { notify = true } = {}) {
 
 /**
  * @param {string} routeKey
- * @param {{ outputMode?: 'image' | 'video', notify?: boolean }} [options]
+ * @param {{ outputMode?: 'image' | 'video' | 'audio', notify?: boolean }} [options]
  */
 export function persistSharedModelRoute(routeKey, { outputMode = 'image', notify = true } = {}) {
 	const ls = getLocalStorage();
 	if (!ls) return;
+	const mode = normalizeCreateOutputMode(outputMode);
 	const key =
-		outputMode === 'video'
+		mode === 'video'
 			? CREATE_SETTINGS_STORAGE_KEYS.videoModel
-			: CREATE_SETTINGS_STORAGE_KEYS.model;
+			: mode === 'audio'
+				? CREATE_SETTINGS_STORAGE_KEYS.composerAudioModel
+				: CREATE_SETTINGS_STORAGE_KEYS.model;
 	try {
 		ls.setItem(key, String(routeKey ?? ''));
 	} catch {
@@ -234,13 +249,13 @@ export function persistSharedStyleSelected(styleSelected, { notify = true } = {}
 }
 
 /**
- * @param {'image' | 'video'} outputMode
+ * @param {'image' | 'video' | 'audio'} outputMode
  * @param {{ notify?: boolean }} [options]
  */
 export function persistSharedOutputMode(outputMode, { notify = true } = {}) {
 	const ls = getLocalStorage();
 	if (!ls) return;
-	const mode = outputMode === 'video' ? 'video' : 'image';
+	const mode = normalizeCreateOutputMode(outputMode);
 	try {
 		ls.setItem(CREATE_SETTINGS_STORAGE_KEYS.outputMode, mode);
 	} catch {
@@ -298,7 +313,7 @@ export function isSharedModelRouteComposerRepresentable(routeKey, representableR
  * @param {{
  *   prompt?: string,
  *   aspectRatio?: string,
- *   outputMode?: 'image' | 'video',
+ *   outputMode?: 'image' | 'video' | 'audio',
  *   modelRoute?: string,
  *   styleSelected?: string,
  *   notify?: boolean,
@@ -312,12 +327,16 @@ export function writeSharedCreateSettingsFromComposerSnapshot(snapshot = {}) {
 	if (typeof snapshot.aspectRatio === 'string') {
 		persistSharedAspectRatio(snapshot.aspectRatio, { notify: false });
 	}
-	if (snapshot.outputMode === 'image' || snapshot.outputMode === 'video') {
+	if (
+		snapshot.outputMode === 'image' ||
+		snapshot.outputMode === 'video' ||
+		snapshot.outputMode === 'audio'
+	) {
 		persistSharedOutputMode(snapshot.outputMode, { notify: false });
 	}
 	if (typeof snapshot.modelRoute === 'string') {
 		persistSharedModelRoute(snapshot.modelRoute, {
-			outputMode: snapshot.outputMode === 'video' ? 'video' : 'image',
+			outputMode: normalizeCreateOutputMode(snapshot.outputMode),
 			notify: false,
 		});
 		const parsed = parseSharedModelRoute(snapshot.modelRoute);

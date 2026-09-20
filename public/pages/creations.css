@@ -194,6 +194,7 @@ html.chat-page--use-app-mobile-header body.chat-page .chat-route:has(> .chat-pag
 	--create-composer-accent-i2i: var(--create-generate-btn-2, #ab3eff);
 	--create-composer-accent-i2v: #e879f9;
 	--create-composer-accent-t2v: #38bdf8;
+	--create-composer-accent-t2a: var(--color-amber);
 	--create-composer-accent: var(--create-composer-accent-t2i);
 	position: relative;
 	width: 100%;
@@ -213,6 +214,10 @@ html.chat-page--use-app-mobile-header body.chat-page .chat-route:has(> .chat-pag
 
 .create-composer[data-composer-flow='t2v'] {
 	--create-composer-accent: var(--create-composer-accent-t2v);
+}
+
+.create-composer[data-composer-flow='t2a'] {
+	--create-composer-accent: var(--create-composer-accent-t2a);
 }
 
 .create-composer .create-composer-input-shell {
@@ -299,9 +304,9 @@ body.prsn-creation-composer-drag-active .create-composer:not(.is-drop-target) .c
 
 .create-composer-mode {
 	display: grid;
-	grid-template-columns: repeat(2, minmax(0, 1fr));
+	grid-template-columns: repeat(3, minmax(0, 1fr));
 	width: max-content;
-	min-width: 7.25rem;
+	min-width: 10.5rem;
 	height: var(--create-composer-chip-h);
 	padding: 0;
 	gap: 0;
@@ -345,6 +350,15 @@ body.prsn-creation-composer-drag-active .create-composer:not(.is-drop-target) .c
 .create-composer-mode-btn:disabled {
 	opacity: 0.45;
 	cursor: not-allowed;
+}
+
+.create-composer[data-composer-flow='t2a'] .create-composer-attach-add,
+.create-composer[data-composer-flow='t2a'] .create-composer-attachment {
+	display: none;
+}
+
+.create-composer[data-composer-flow='t2a'] .create-composer-attachments--has-media .create-composer-attachments-row {
+	padding-bottom: 4px;
 }
 
 .create-composer .create-composer-input-shell {
@@ -643,7 +657,7 @@ body.prsn-creation-composer-drag-active .create-composer:not(.is-drop-target) .c
 }
 
 .create-composer.is-submitting .create-composer-input,
-.create-composer.is-submitting .create-composer-model-select,
+.create-composer.is-submitting .create-composer-model-btn,
 .create-composer.is-submitting .create-composer-mode-btn,
 .create-composer.is-submitting .create-composer-toolbar-chip,
 .create-composer.is-submitting .create-composer-attach-add {
@@ -692,55 +706,54 @@ body.prsn-creation-composer-drag-active .create-composer:not(.is-drop-target) .c
 }
 
 .create-composer-model-label {
+	display: block;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	pointer-events: none;
+}
+
+.create-composer button.create-composer-model-btn {
 	display: inline-flex;
 	align-items: center;
+	min-width: 0;
+	max-width: 100%;
 	min-height: 24px;
+	margin: 0;
 	padding: 0.15rem 0.3rem;
+	border: none;
 	border-radius: 4px;
+	background: transparent;
 	color: var(--text-muted);
 	font-size: 0.75rem;
 	font-weight: 500;
 	font-family: inherit;
 	line-height: 1;
 	letter-spacing: 0.01em;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	pointer-events: none;
-	transition: color 0.15s ease, background 0.15s ease;
-}
-
-.create-composer-model-select {
-	position: absolute;
-	inset: 0;
-	width: 100%;
-	height: 100%;
-	margin: 0;
-	padding: 0;
-	border: none;
-	border-radius: 4px;
-	background: transparent;
-	opacity: 0;
 	cursor: pointer;
-	appearance: none;
-	-webkit-appearance: none;
-	-moz-appearance: none;
+	filter: none;
+	transform: none;
+	transition: color 0.15s ease, background 0.15s ease;
 	-webkit-tap-highlight-color: transparent;
 }
 
-.create-composer-model-select::-ms-expand {
-	display: none;
-}
-
-.create-composer-model-wrap:hover .create-composer-model-label {
-	color: var(--text);
-	background: color-mix(in srgb, var(--text) 6%, transparent);
-}
-
-.create-composer-model-wrap:focus-within .create-composer-model-label {
+.create-composer button.create-composer-model-btn:hover,
+.create-composer button.create-composer-model-btn:focus-visible,
+.create-composer button.create-composer-model-btn[aria-expanded='true'] {
 	color: var(--text);
 	background: color-mix(in srgb, var(--text) 8%, transparent);
+	filter: none;
+	transform: none;
+}
+
+.create-composer button.create-composer-model-btn:focus-visible {
+	outline: none;
 	box-shadow: 0 0 0 1px color-mix(in srgb, var(--focus) 35%, transparent);
+}
+
+.create-composer button.create-composer-model-btn:disabled {
+	cursor: default;
 }
 
 .create-composer-toolbar-divider {
@@ -851,7 +864,13 @@ body.prsn-creation-composer-drag-active .create-composer:not(.is-drop-target) .c
 	opacity: 0.65;
 }
 
-.create-composer-aspect-popover {
+.create-composer-aspect-popover[hidden],
+.create-composer-model-popover[hidden] {
+	display: none;
+}
+
+.create-composer-aspect-popover,
+.create-composer-model-popover {
 	position: fixed;
 	left: 0;
 	top: 0;
@@ -861,10 +880,79 @@ body.prsn-creation-composer-drag-active .create-composer:not(.is-drop-target) .c
 	border-radius: 10px;
 	border: 1px solid color-mix(in srgb, var(--text) 14%, var(--border));
 	background: var(--surface-strong);
+	color: var(--text);
 	box-shadow: 0 8px 28px color-mix(in srgb, black 35%, transparent);
-	overflow: hidden;
 	transform: translateY(calc(-100% - 0.45rem));
 	pointer-events: auto;
+}
+
+.create-composer-aspect-popover {
+	overflow: hidden;
+}
+
+.create-composer-model-popover {
+	min-width: 15rem;
+	max-width: min(22rem, calc(100vw - 16px));
+	max-height: min(32rem, 56vh);
+	padding: 0.3rem 0;
+	overflow-x: hidden;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	scrollbar-width: thin;
+	outline: none;
+}
+
+.create-composer-model-group + .create-composer-model-group {
+	margin-top: 0.2rem;
+	padding-top: 0.2rem;
+	border-top: 1px solid color-mix(in srgb, var(--text-muted) 12%, transparent);
+}
+
+.create-composer-model-group-label {
+	padding: 0.35rem 0.7rem 0.15rem;
+	color: var(--text-muted);
+	font-size: 0.65rem;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+}
+
+.create-composer button.create-composer-model-option {
+	display: block;
+	width: 100%;
+	margin: 0;
+	padding: 0.4rem 0.7rem 0.4rem 1rem;
+	border: none;
+	border-radius: 0;
+	background: transparent;
+	color: var(--text);
+	font-size: 0.8125rem;
+	font-weight: 500;
+	font-family: inherit;
+	line-height: 1.3;
+	text-align: left;
+	cursor: pointer;
+	filter: none;
+	transform: none;
+}
+
+.create-composer button.create-composer-model-option:hover,
+.create-composer button.create-composer-model-option.is-active,
+.create-composer button.create-composer-model-option:focus-visible {
+	background: color-mix(in srgb, var(--text) 8%, transparent);
+	filter: none;
+	transform: none;
+	outline: none;
+}
+
+.create-composer button.create-composer-model-option.is-selected {
+	background: color-mix(in srgb, var(--focus) 18%, transparent);
+	color: var(--text);
+}
+
+.create-composer button.create-composer-model-option.is-selected.is-active,
+.create-composer button.create-composer-model-option.is-selected:hover {
+	background: color-mix(in srgb, var(--focus) 26%, transparent);
 }
 
 .create-composer-aspect-popover-header {

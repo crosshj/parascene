@@ -21,6 +21,11 @@ export const MUTATE_VIDEO_LTX_SERVER_ID = PARASCENE_BLUE_SERVER_ID;
 export const MUTATE_VIDEO_LTX_METHOD_KEY = "image2video";
 export const MUTATE_VIDEO_LTX_MODEL = "ltx_i2v";
 
+export const REPLICATE_SPEECH_METHOD_KEY = "replicateSpeech";
+export const REPLICATE_MUSIC_METHOD_KEY = "replicateMusic";
+export const BASIC_AUDIO_DEFAULT_METHOD_KEY = REPLICATE_MUSIC_METHOD_KEY;
+export const BASIC_AUDIO_DEFAULT_MODEL = "google/lyria-3";
+
 /** System + Parascene Blue: generation config visible without server membership. */
 export function isPublicGenerationServerId(serverId) {
 	const id = Number(serverId);

@@ -51,6 +51,8 @@ export const NESTED_ESCAPE_LAYER_SELECTORS = [
 	'[data-import-suno-modal]',
 	'.comment-sticker-modal-overlay',
 	'.comment-attach-popover',
+	'[data-create-model-popover]',
+	'[data-create-aspect-popover]',
 	'[data-creation-more-menu]',
 	'.create-route-advanced-confirm',
 	'[data-advanced-confirm-dialog]',

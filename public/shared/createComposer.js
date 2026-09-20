@@ -60,6 +60,10 @@ const {
 	MUTATE_VIDEO_LTX_METHOD_KEY,
 	MUTATE_VIDEO_LTX_MODEL,
 	PARASCENE_BLUE_SERVER_ID,
+	REPLICATE_SPEECH_METHOD_KEY,
+	REPLICATE_MUSIC_METHOD_KEY,
+	BASIC_AUDIO_DEFAULT_METHOD_KEY,
+	BASIC_AUDIO_DEFAULT_MODEL,
 } = generationDefaultsMod;
 const {
 	formatMentionsFailureForDialog,
@@ -141,6 +145,7 @@ const STORAGE_KEYS = {
 	imageEditCarryover: 'create_page_image_edit_carryover',
 	outputMode: 'create_page_output_mode',
 	videoModel: CREATE_SETTINGS_STORAGE_KEYS.composerVideoModel,
+	audioModel: CREATE_SETTINGS_STORAGE_KEYS.composerAudioModel,
 	methodCredits: 'create_page_method_credits',
 };
 
@@ -149,6 +154,89 @@ const STORAGE_KEYS = {
 /** @typedef {ComposerModelRouteOption} VideoModelOption */
 
 /** @typedef {ComposerModelRouteOption} ImageModelOption */
+
+/** @typedef {ComposerModelRouteOption} AudioModelOption */
+
+function isComposerVideoMethodKey(methodKey) {
+	return methodKey === MUTATE_VIDEO_DEFAULT_METHOD_KEY || methodKey === MUTATE_VIDEO_LTX_METHOD_KEY;
+}
+
+/**
+ * @param {string} methodKey
+ * @param {unknown} [methodDef]
+ * @returns {boolean}
+ */
+function isComposerAudioMethod(methodKey, methodDef) {
+	const key = String(methodKey || '');
+	if (key === REPLICATE_SPEECH_METHOD_KEY || key === REPLICATE_MUSIC_METHOD_KEY) return true;
+	const intent =
+		methodDef && typeof methodDef === 'object'
+			? String(/** @type {{ intent?: unknown }} */ (methodDef).intent || '')
+			: '';
+	if (intent === 'audio_generate') return true;
+	if (intent === 'voice_train') return false;
+	const lower = key.toLowerCase();
+	return lower.includes('speech') || lower.includes('music');
+}
+
+function isComposerAudioInputField(fieldKey, field) {
+	const type = String(field?.type || '').toLowerCase();
+	if (
+		type === 'audio_url' ||
+		type === 'audio_url_array' ||
+		type === 'audio' ||
+		type === 'audio_file'
+	) {
+		return true;
+	}
+	const key = String(fieldKey || '').toLowerCase();
+	return /^(voice_file|audio_url|audio_file|input_audio|source_audio|reference_audio)/.test(key);
+}
+
+/**
+ * Composer audio mode is prompt-only — skip methods/models that need a source clip.
+ * @param {Record<string, unknown> | null | undefined} fields
+ */
+function fieldsRequireAudioInput(fields) {
+	if (!fields || typeof fields !== 'object') return false;
+	for (const [key, field] of Object.entries(fields)) {
+		if (key === 'model' || key === 'prompt') continue;
+		if (!field || typeof field !== 'object') continue;
+		if (isComposerAudioInputField(key, field)) return true;
+	}
+	return false;
+}
+
+function composerAudioMethodNeedsSource(methodDef) {
+	if (!methodDef || typeof methodDef !== 'object') return false;
+	return fieldsRequireAudioInput(/** @type {{ fields?: Record<string, unknown> }} */ (methodDef).fields);
+}
+
+function composerAudioOptionNeedsSource(rawOpt, methodKey, methodDef) {
+	if (!rawOpt || typeof rawOpt !== 'object') return false;
+	const rec = /** @type {{ label?: unknown, name?: unknown, value?: unknown, id?: unknown, fields?: unknown }} */ (
+		rawOpt
+	);
+	if (fieldsRequireAudioInput(rec.fields && typeof rec.fields === 'object' ? rec.fields : null)) {
+		return true;
+	}
+	const optText = `${rec.label || ''} ${rec.name || ''} ${rec.value || ''} ${rec.id || ''}`.toLowerCase();
+	const methodText = `${methodKey || ''} ${
+		methodDef && typeof methodDef === 'object'
+			? /** @type {{ name?: unknown }} */ (methodDef).name || ''
+			: ''
+	}`.toLowerCase();
+	if (/\byue\b/.test(optText) && /cover/.test(optText)) return true;
+	if (/\byue\b/.test(methodText) && /cover/.test(optText)) return true;
+	if (/\byue\b/.test(methodText) && /cover/.test(methodText)) return true;
+	if (/ltx\s*2\.5/.test(optText)) return true;
+	if (/ltx\s*2\.5/.test(methodText) && /(text\s*to\s*audio|text2audio)/.test(methodText)) return true;
+	return false;
+}
+
+function toAudioModelOption(serverId, methodKey, model, label, methodLabel) {
+	return toImageModelOption(serverId, methodKey, model, label, methodLabel);
+}
 
 function encodeComposerRouteKey(serverId, methodKey, model) {
 	return `${serverId}\x1e${methodKey}\x1e${model}`;
@@ -228,10 +316,9 @@ function formatMethodKeyLabel(methodKey) {
 
 /**
  * @param {ComposerModelRouteOption[]} routeOptions
- * @param {(opt: ComposerModelRouteOption) => string} labelForOption
- * @param {HTMLSelectElement} selectEl
+ * @returns {{ groupLabel: string, options: ComposerModelRouteOption[] }[]}
  */
-function appendGroupedRouteOptionsToSelect(selectEl, routeOptions, labelForOption) {
+function groupComposerRouteOptions(routeOptions) {
 	/** @type {Map<string, { groupLabel: string, options: ComposerModelRouteOption[] }>} */
 	const groups = new Map();
 	/** @type {string[]} */
@@ -247,25 +334,16 @@ function appendGroupedRouteOptionsToSelect(selectEl, routeOptions, labelForOptio
 		}
 		groups.get(groupKey).options.push(opt);
 	}
-	for (const groupKey of order) {
-		const group = groups.get(groupKey);
-		if (!group?.options.length) continue;
-		const optgroup = document.createElement('optgroup');
-		optgroup.label = group.groupLabel;
-		for (const opt of group.options) {
-			const option = document.createElement('option');
-			option.value = opt.selectValue;
-			option.textContent = labelForOption(opt) || opt.label || opt.value;
-			optgroup.appendChild(option);
-		}
-		selectEl.appendChild(optgroup);
-	}
+	return order
+		.map((key) => groups.get(key))
+		.filter((group) => Boolean(group?.options.length));
 }
 
 function readStoredOutputMode() {
 	try {
 		const v = localStorage.getItem(STORAGE_KEYS.outputMode);
-		return v === 'video' ? 'video' : 'image';
+		if (v === 'video' || v === 'audio') return v;
+		return 'image';
 	} catch {
 		return 'image';
 	}
@@ -443,10 +521,7 @@ function collectImageModelOptionsFromServer(server) {
 	/** @type {ImageModelOption[]} */
 	const out = [];
 	for (const [methodKey, methodDef] of Object.entries(methods)) {
-		if (
-			methodKey === MUTATE_VIDEO_DEFAULT_METHOD_KEY ||
-			methodKey === MUTATE_VIDEO_LTX_METHOD_KEY
-		) {
+		if (isComposerVideoMethodKey(methodKey) || isComposerAudioMethod(methodKey, methodDef)) {
 			continue;
 		}
 		const field = methodDef?.fields?.model;
@@ -619,6 +694,72 @@ function collectVideoModelOptionsFromServers(servers) {
 	return sortVideoModelOptions(options.length > 0 ? options : [ltxFallback]);
 }
 
+/**
+ * @param {unknown} server
+ * @returns {AudioModelOption[]}
+ */
+function collectAudioModelOptionsFromServer(server) {
+	const cfg = parseServerConfig(server);
+	const methods =
+		cfg?.methods && typeof cfg.methods === 'object'
+			? /** @type {Record<string, { fields?: Record<string, { options?: unknown, choices?: unknown, enum?: unknown }> }>} */ (
+					cfg.methods
+				)
+			: null;
+	if (!methods || !server) return [];
+	const serverId = Number(/** @type {{ id?: unknown }} */ (server).id);
+	if (!Number.isFinite(serverId) || serverId < 1) return [];
+	const seen = new Set();
+	/** @type {AudioModelOption[]} */
+	const out = [];
+	for (const [methodKey, methodDef] of Object.entries(methods)) {
+		if (!isComposerAudioMethod(methodKey, methodDef)) continue;
+		if (composerAudioMethodNeedsSource(methodDef)) continue;
+		const field = methodDef?.fields?.model;
+		if (!field) continue;
+		const methodLabel = getComposerMethodGroupLabel(methodDef, methodKey);
+		const rawList = field.options ?? field.choices ?? field.enum;
+		const opts = normalizeModelOptions(rawList);
+		const rawOpts = Array.isArray(rawList) ? rawList : [];
+		for (const opt of opts) {
+			if (!opt.value) continue;
+			const raw =
+				rawOpts.find((item) => {
+					if (typeof item === 'string') return item === opt.value;
+					if (!item || typeof item !== 'object') return false;
+					const rec = /** @type {{ value?: unknown, id?: unknown, name?: unknown, label?: unknown }} */ (
+						item
+					);
+					const value = String(rec.value ?? rec.id ?? rec.name ?? rec.label ?? '').trim();
+					return value === opt.value;
+				}) || opt;
+			if (composerAudioOptionNeedsSource(raw, methodKey, methodDef)) continue;
+			const row = toAudioModelOption(serverId, methodKey, opt.value, opt.label, methodLabel);
+			if (seen.has(row.selectValue)) continue;
+			seen.add(row.selectValue);
+			out.push(row);
+		}
+	}
+	return out;
+}
+
+/**
+ * @param {AudioModelOption[]} options
+ * @returns {AudioModelOption[]}
+ */
+function sortAudioModelOptions(options) {
+	return [...options].sort((a, b) => {
+		const rank = (o) => {
+			if (o.methodKey === REPLICATE_MUSIC_METHOD_KEY) return 0;
+			if (o.methodKey === REPLICATE_SPEECH_METHOD_KEY) return 1;
+			return 2;
+		};
+		const diff = rank(a) - rank(b);
+		if (diff !== 0) return diff;
+		return String(a.label || '').localeCompare(String(b.label || ''));
+	});
+}
+
 async function fetchComposerServers() {
 	try {
 		const result = await fetchServersForComposer();
@@ -713,6 +854,40 @@ async function fetchVideoModelOptions() {
 		return collectVideoModelOptionsFromServers(servers);
 	} catch {
 		return [ltxFallback];
+	}
+}
+
+function buildFallbackAudioOption() {
+	return toAudioModelOption(
+		BASIC_CREATE_DEFAULT_SERVER_ID,
+		BASIC_AUDIO_DEFAULT_METHOD_KEY,
+		BASIC_AUDIO_DEFAULT_MODEL,
+		'Lyria 3'
+	);
+}
+
+/**
+ * @returns {Promise<AudioModelOption[]>}
+ */
+async function fetchAudioModelOptions() {
+	const fallback = [buildFallbackAudioOption()];
+	try {
+		const result = await fetchServersForComposer();
+		if (!result?.ok) return fallback;
+		const servers = Array.isArray(result.data?.servers) ? result.data.servers : [];
+		const seen = new Set();
+		/** @type {AudioModelOption[]} */
+		const out = [];
+		for (const server of servers) {
+			for (const row of collectAudioModelOptionsFromServer(server)) {
+				if (seen.has(row.selectValue)) continue;
+				seen.add(row.selectValue);
+				out.push(row);
+			}
+		}
+		return out.length > 0 ? sortAudioModelOptions(out) : fallback;
+	} catch {
+		return fallback;
 	}
 }
 
@@ -835,6 +1010,8 @@ export function mountCreateComposer(host, opts = {}) {
 										data-create-mode="image" role="tab" aria-selected="true">Image</button>
 									<button type="button" class="create-composer-mode-btn" data-create-mode="video"
 										role="tab" aria-selected="false">Video</button>
+									<button type="button" class="create-composer-mode-btn" data-create-mode="audio"
+										role="tab" aria-selected="false">Audio</button>
 								</div>
 							</div>
 						</div>
@@ -856,22 +1033,12 @@ export function mountCreateComposer(host, opts = {}) {
 					<div class="create-composer-toolbar" role="toolbar" aria-label="Create options">
 						<div class="create-composer-toolbar-primary">
 							<div class="create-composer-model-wrap">
-								<span class="create-composer-model-label" data-create-model-label
-									aria-hidden="true">${initialModelLabel}</span>
-								<select class="create-composer-model-select" data-create-model-select
-									aria-label="Model"></select>
+								<button type="button" class="create-composer-model-btn" data-create-model-btn
+									aria-haspopup="listbox" aria-expanded="false" aria-label="Model">
+									<span class="create-composer-model-label" data-create-model-label
+										aria-hidden="true">${initialModelLabel}</span>
+								</button>
 							</div>
-							<span class="create-composer-toolbar-divider" aria-hidden="true"></span>
-							<a href="/create" class="create-composer-toolbar-chip create-composer-advanced"
-								data-create-composer-advanced>
-								<svg class="create-composer-toolbar-chip-icon" xmlns="http://www.w3.org/2000/svg"
-									viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-									stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-									<path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .962 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.964 0z"/>
-									<path d="M20 3v4M22 5h-4M4 17v4M2 19h4"/>
-								</svg>
-								<span>Advanced</span>
-							</a>
 							<span class="create-composer-toolbar-divider" aria-hidden="true"></span>
 							<div class="create-composer-aspect-wrap" data-create-aspect-wrap>
 								<button type="button" class="create-composer-toolbar-chip create-composer-aspect-btn"
@@ -885,6 +1052,17 @@ export function mountCreateComposer(host, opts = {}) {
 									<span data-create-aspect-label>1:1</span>
 								</button>
 							</div>
+							<span class="create-composer-toolbar-divider" aria-hidden="true"></span>
+							<a href="/create" class="create-composer-toolbar-chip create-composer-advanced"
+								data-create-composer-advanced>
+								<svg class="create-composer-toolbar-chip-icon" xmlns="http://www.w3.org/2000/svg"
+									viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+									stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+									<path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .962 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.964 0z"/>
+									<path d="M20 3v4M22 5h-4M4 17v4M2 19h4"/>
+								</svg>
+								<span>Advanced</span>
+							</a>
 						</div>
 						<div class="create-composer-toolbar-trail">
 							<p class="create-composer-cost" data-create-composer-cost aria-live="polite"></p>
@@ -897,6 +1075,8 @@ export function mountCreateComposer(host, opts = {}) {
 							</button>
 						</div>
 					</div>
+					<div class="create-composer-model-popover" data-create-model-popover hidden
+						role="listbox" tabindex="-1" aria-label="Model"></div>
 					<div class="create-composer-aspect-popover" data-create-aspect-popover hidden
 						role="dialog" aria-label="Aspect ratio">
 						<div class="create-composer-aspect-popover-header">
@@ -918,7 +1098,8 @@ export function mountCreateComposer(host, opts = {}) {
 	const submitBtn = host.querySelector('[data-create-composer-submit]');
 	const advancedLink = host.querySelector('[data-create-composer-advanced]');
 	const modelLabel = host.querySelector('[data-create-model-label]');
-	const modelSelect = host.querySelector('[data-create-model-select]');
+	const modelBtn = host.querySelector('[data-create-model-btn]');
+	const modelPopover = host.querySelector('[data-create-model-popover]');
 	const aspectWrap = host.querySelector('[data-create-aspect-wrap]');
 	const aspectBtn = host.querySelector('[data-create-aspect-btn]');
 	const aspectPopover = host.querySelector('[data-create-aspect-popover]');
@@ -943,7 +1124,7 @@ export function mountCreateComposer(host, opts = {}) {
 	const attachmentBlobUrls = new Map();
 	let attachmentUploadingCount = 0;
 	let selectedAspect = '1:1';
-	/** @type {'image' | 'video'} */
+	/** @type {'image' | 'video' | 'audio'} */
 	let outputMode = readStoredOutputMode();
 	/** @type {ImageModelOption[]} */
 	let imageModelOptions = [
@@ -956,6 +1137,8 @@ export function mountCreateComposer(host, opts = {}) {
 	];
 	/** @type {VideoModelOption[]} */
 	let videoModelOptions = [];
+	/** @type {AudioModelOption[]} */
+	let audioModelOptions = [buildFallbackAudioOption()];
 	/** @type {{ value: string, label: string }[]} */
 	let modelOptions = imageModelOptions.map((o) => ({ value: o.selectValue, label: o.label }));
 	let selectedModel = initialModelValue;
@@ -972,12 +1155,27 @@ export function mountCreateComposer(host, opts = {}) {
 	let creditsBalance = null;
 	let promptSaveTimer;
 	let syncPromptClearVisibility = () => {};
-	let aspectPopoverIgnoreDocClose = false;
+	let toolbarPopoverIgnoreDocClose = false;
 	let submitInFlight = false;
 	const teardownFns = [];
+	const modelPopoverId = `create-composer-model-${Math.random().toString(36).slice(2, 9)}`;
+	if (aspectPopover instanceof HTMLElement) {
+		aspectPopover.setAttribute('aria-hidden', aspectPopover.hidden ? 'true' : 'false');
+	}
+	if (modelPopover instanceof HTMLElement) {
+		modelPopover.id = modelPopoverId;
+		modelPopover.setAttribute('aria-hidden', 'true');
+	}
+	if (modelBtn instanceof HTMLButtonElement) {
+		modelBtn.setAttribute('aria-controls', modelPopoverId);
+	}
 
 	function isVideoMode() {
 		return outputMode === 'video';
+	}
+
+	function isAudioMode() {
+		return outputMode === 'audio';
 	}
 
 	function normalizeAttachmentUrlForQueueMatch(raw) {
@@ -1088,6 +1286,17 @@ export function mountCreateComposer(host, opts = {}) {
 					: null,
 			};
 		}
+		if (isAudioMode()) {
+			const route = getSelectedAudioRoute();
+			return {
+				serverId: route?.serverId ?? BASIC_CREATE_DEFAULT_SERVER_ID,
+				methodKey: route?.methodKey ?? BASIC_AUDIO_DEFAULT_METHOD_KEY,
+				modelValue: route?.value ?? '',
+				fields: route
+					? resolveMethodFieldsFromServers(composerServers, route.serverId, route.methodKey)
+					: null,
+			};
+		}
 		const route = getSelectedImageRoute();
 		const serverId = route?.serverId ?? BASIC_CREATE_DEFAULT_SERVER_ID;
 		const methodKey = route?.methodKey ?? BASIC_CREATE_DEFAULT_METHOD_KEY;
@@ -1108,6 +1317,7 @@ export function mountCreateComposer(host, opts = {}) {
 	}
 
 	function shouldShowAspectSelector() {
+		if (isAudioMode()) return false;
 		if (isVideoMode()) {
 			return isLtxVideoRoute(getSelectedVideoRoute());
 		}
@@ -1140,17 +1350,24 @@ export function mountCreateComposer(host, opts = {}) {
 		if (isVideoMode()) {
 			return videoModelOptions.map((o) => ({ value: o.selectValue, label: o.label }));
 		}
+		if (isAudioMode()) {
+			return audioModelOptions.map((o) => ({ value: o.selectValue, label: o.label }));
+		}
 		return imageModelOptions.map((o) => ({ value: o.selectValue, label: o.label }));
 	}
 
 	function getActiveRouteOptions() {
-		return isVideoMode() ? videoModelOptions : imageModelOptions;
+		if (isVideoMode()) return videoModelOptions;
+		if (isAudioMode()) return audioModelOptions;
+		return imageModelOptions;
 	}
 
 	function saveModelSelection(value) {
 		try {
 			if (isVideoMode()) {
 				localStorage.setItem(STORAGE_KEYS.videoModel, value);
+			} else if (isAudioMode()) {
+				localStorage.setItem(STORAGE_KEYS.audioModel, value);
 			} else {
 				localStorage.setItem(STORAGE_KEYS.model, value);
 				const match =
@@ -1178,6 +1395,26 @@ export function mountCreateComposer(host, opts = {}) {
 		if (match) return match;
 		const fallbackKey = getDefaultVideoSelectValue();
 		return videoModelOptions.find((o) => o.selectValue === fallbackKey) || videoModelOptions[0];
+	}
+
+	function getDefaultAudioSelectValue() {
+		const preferred =
+			audioModelOptions.find(
+				(o) =>
+					o.serverId === BASIC_CREATE_DEFAULT_SERVER_ID &&
+					o.methodKey === BASIC_AUDIO_DEFAULT_METHOD_KEY &&
+					o.value === BASIC_AUDIO_DEFAULT_MODEL
+			) ||
+			audioModelOptions.find((o) => o.methodKey === REPLICATE_MUSIC_METHOD_KEY) ||
+			audioModelOptions[0];
+		return preferred?.selectValue || '';
+	}
+
+	function getSelectedAudioRoute() {
+		const match = audioModelOptions.find((o) => o.selectValue === selectedModel);
+		if (match) return match;
+		const fallbackKey = getDefaultAudioSelectValue();
+		return audioModelOptions.find((o) => o.selectValue === fallbackKey) || audioModelOptions[0];
 	}
 
 	function getDefaultImageSelectValue() {
@@ -1215,12 +1452,14 @@ export function mountCreateComposer(host, opts = {}) {
 		let text = match?.label || '';
 		if (isVideoMode()) {
 			text = getVideoOptionLabel(getSelectedVideoRoute()) || text || 'LTX Self-hosted';
+		} else if (isAudioMode()) {
+			text = getSelectedAudioRoute()?.label || text || 'Lyria 3';
 		} else {
 			text = getSelectedImageRoute()?.label || text || selectedModel || BASIC_MODEL_DISPLAY;
 		}
 		if (modelLabel) modelLabel.textContent = text;
-		if (modelSelect instanceof HTMLSelectElement) {
-			modelSelect.setAttribute('aria-label', `Model: ${text}`);
+		if (modelBtn instanceof HTMLButtonElement) {
+			modelBtn.setAttribute('aria-label', `Model: ${text}`);
 		}
 		try {
 			if (match?.label) localStorage.setItem(STORAGE_KEYS.modelLabel, match.label);
@@ -1228,14 +1467,8 @@ export function mountCreateComposer(host, opts = {}) {
 	}
 
 	function populateModelSelect() {
-		if (!(modelSelect instanceof HTMLSelectElement)) return;
 		const prev = selectedModel;
 		const list = getActiveModelList();
-		modelSelect.innerHTML = '';
-		const routeOptions = isVideoMode() ? videoModelOptions : imageModelOptions;
-		appendGroupedRouteOptionsToSelect(modelSelect, routeOptions, (opt) =>
-			isVideoMode() ? getVideoOptionLabel(opt) || opt.label || opt.value : opt.label || opt.value
-		);
 		let next;
 		if (isVideoMode()) {
 			try {
@@ -1250,6 +1483,15 @@ export function mountCreateComposer(host, opts = {}) {
 				}
 			} catch {
 				next = getDefaultVideoSelectValue();
+			}
+		} else if (isAudioMode()) {
+			try {
+				const composerSaved = localStorage.getItem(STORAGE_KEYS.audioModel);
+				next = resolveComposerRouteFromStorage(audioModelOptions, [composerSaved]);
+				if (!next && list.some((o) => o.value === prev)) next = prev;
+				if (!next) next = getDefaultAudioSelectValue();
+			} catch {
+				next = getDefaultAudioSelectValue();
 			}
 		} else {
 			try {
@@ -1272,26 +1514,27 @@ export function mountCreateComposer(host, opts = {}) {
 			if (!next && list.some((o) => o.value === prev)) next = prev;
 			if (!next) next = getDefaultImageSelectValue() || list[0]?.value || '';
 		}
-		modelSelect.value = next;
 		selectedModel = next;
 		syncModelLabel();
+		if (modelPopover instanceof HTMLElement && !modelPopover.hidden) buildModelPopover();
 	}
 
 	function applySelectedModel(value) {
 		const list = getActiveModelList();
 		if (!value || !list.some((o) => o.value === value)) return;
 		selectedModel = value;
-		if (modelSelect instanceof HTMLSelectElement) modelSelect.value = value;
 		syncModelLabel();
 		saveModelSelection(value);
 		syncModeChrome();
 		buildAspectPopover();
+		if (modelPopover instanceof HTMLElement && !modelPopover.hidden) buildModelPopover();
 	}
 
 	async function refreshModelOptions() {
-		const [imageOpts, videoOpts, servers] = await Promise.all([
+		const [imageOpts, videoOpts, audioOpts, servers] = await Promise.all([
 			fetchBasicModelOptions(),
 			fetchVideoModelOptions(),
+			fetchAudioModelOptions(),
 			fetchComposerServers(),
 		]);
 		composerServers = servers;
@@ -1309,7 +1552,17 @@ export function mountCreateComposer(host, opts = {}) {
 		videoModelOptions = sortVideoModelOptions(
 			Array.isArray(videoOpts) && videoOpts.length > 0 ? videoOpts : [buildBootstrapVideoOption()]
 		);
-		if (!isVideoMode()) {
+		audioModelOptions =
+			Array.isArray(audioOpts) && audioOpts.length > 0 ? audioOpts : [buildFallbackAudioOption()];
+		if (isVideoMode()) {
+			const stillValid = videoModelOptions.some((o) => o.selectValue === selectedModel);
+			if (!stillValid) selectedModel = getDefaultVideoSelectValue();
+		} else if (isAudioMode()) {
+			const stillValid =
+				audioModelOptions.some((o) => o.selectValue === selectedModel) ||
+				audioModelOptions.some((o) => o.value === selectedModel);
+			if (!stillValid) selectedModel = getDefaultAudioSelectValue();
+		} else {
 			const stillValid =
 				imageModelOptions.some((o) => o.selectValue === selectedModel) ||
 				imageModelOptions.some((o) => o.value === selectedModel) ||
@@ -1343,8 +1596,9 @@ export function mountCreateComposer(host, opts = {}) {
 		return attachmentItems.length > 0 || attachmentUploadingCount > 0;
 	}
 
-	/** @returns {'t2i' | 'i2i' | 'i2v' | 't2v'} */
+	/** @returns {'t2i' | 'i2i' | 'i2v' | 't2v' | 't2a'} */
 	function getComposerFlow() {
+		if (isAudioMode()) return 't2a';
 		if (isVideoMode()) {
 			return hasAttachment() ? 'i2v' : 't2v';
 		}
@@ -1362,6 +1616,11 @@ export function mountCreateComposer(host, opts = {}) {
 	function getComposerSubmitRoute() {
 		if (isVideoMode()) {
 			const route = getSelectedVideoRoute();
+			if (!route) return null;
+			return { serverId: route.serverId, methodKey: route.methodKey };
+		}
+		if (isAudioMode()) {
+			const route = getSelectedAudioRoute();
 			if (!route) return null;
 			return { serverId: route.serverId, methodKey: route.methodKey };
 		}
@@ -1577,14 +1836,31 @@ export function mountCreateComposer(host, opts = {}) {
 				'aria-label',
 				selectable
 					? `Aspect ratio: ${displayRatio}`
-					: isVideoMode()
-						? 'Aspect ratio not configurable for this video model'
-						: 'Aspect ratio: 1:1 (square only for this model)'
+					: isAudioMode()
+						? 'Aspect ratio not used for audio'
+						: isVideoMode()
+							? 'Aspect ratio not configurable for this video model'
+							: 'Aspect ratio: 1:1 (square only for this model)'
 			);
 		}
 	}
 
+	function syncAudioToolbarChrome() {
+		const audio = isAudioMode();
+		if (aspectWrap instanceof HTMLElement) {
+			aspectWrap.hidden = audio;
+			const prev = aspectWrap.previousElementSibling;
+			if (prev instanceof HTMLElement && prev.classList.contains('create-composer-toolbar-divider')) {
+				prev.hidden = audio;
+			}
+		}
+		if (audio) setAspectPopoverOpen(false);
+	}
+
 	function getPromptPlaceholder() {
+		if (isAudioMode()) {
+			return 'Describe the music, song, or speech…';
+		}
 		if (isVideoMode()) {
 			return hasAttachment()
 				? 'Describe the motion or camera movement…'
@@ -1609,13 +1885,14 @@ export function mountCreateComposer(host, opts = {}) {
 	}
 
 	function setOutputMode(mode) {
-		if (mode !== 'image' && mode !== 'video') return;
+		if (mode !== 'image' && mode !== 'video' && mode !== 'audio') return;
 		if (outputMode === mode) return;
 		outputMode = mode;
 		try {
 			localStorage.setItem(STORAGE_KEYS.outputMode, mode);
 		} catch (_) {}
 		setAspectPopoverOpen(false);
+		setModelPopoverOpen(false);
 		modelOptions = getActiveModelList();
 		populateModelSelect();
 		syncModeToggleUi();
@@ -1629,11 +1906,14 @@ export function mountCreateComposer(host, opts = {}) {
 		if (submitBtn) {
 			if (isVideoMode()) {
 				submitBtn.setAttribute('aria-label', 'Animate');
+			} else if (isAudioMode()) {
+				submitBtn.setAttribute('aria-label', 'Create audio');
 			} else {
 				submitBtn.setAttribute('aria-label', attached ? 'Edit image' : 'Create');
 			}
 		}
 		syncAspectFooterState();
+		syncAudioToolbarChrome();
 		updateSubmitButtonState();
 		syncComposerAccentFlow();
 		updateComposerCostDisplay();
@@ -1680,7 +1960,10 @@ export function mountCreateComposer(host, opts = {}) {
 				buildAspectPopover();
 			}
 			const storedMode = settings.outputMode;
-			if ((storedMode === 'video' || storedMode === 'image') && storedMode !== outputMode) {
+			if (
+				(storedMode === 'video' || storedMode === 'image' || storedMode === 'audio') &&
+				storedMode !== outputMode
+			) {
 				setOutputMode(storedMode);
 			}
 			const modelRoute = settings.modelRoute?.trim();
@@ -1951,7 +2234,7 @@ export function mountCreateComposer(host, opts = {}) {
 				submitBtn.setAttribute('aria-label', 'Creating…');
 			} else {
 				submitBtn.removeAttribute('aria-busy');
-				submitBtn.setAttribute('aria-label', isVideoMode() ? 'Animate' : hasAttachment() ? 'Edit image' : 'Create');
+				submitBtn.setAttribute('aria-label', isVideoMode() ? 'Animate' : isAudioMode() ? 'Create audio' : hasAttachment() ? 'Edit image' : 'Create');
 			}
 		}
 		if (promptInput instanceof HTMLTextAreaElement) {
@@ -1965,9 +2248,10 @@ export function mountCreateComposer(host, opts = {}) {
 		if (addBtn instanceof HTMLButtonElement) {
 			addBtn.disabled = submitInFlight || attachmentUploadingCount > 0;
 		}
-		if (modelSelect instanceof HTMLSelectElement) {
-			modelSelect.disabled = submitInFlight;
+		if (modelBtn instanceof HTMLButtonElement) {
+			modelBtn.disabled = submitInFlight;
 		}
+		if (submitInFlight) setModelPopoverOpen(false);
 		modeBtns.forEach((btn) => {
 			if (btn instanceof HTMLButtonElement) btn.disabled = submitInFlight;
 		});
@@ -2046,6 +2330,10 @@ export function mountCreateComposer(host, opts = {}) {
 			submitBtn.disabled = !hasAttachment();
 			return;
 		}
+		if (isAudioMode()) {
+			submitBtn.disabled = promptText.length === 0;
+			return;
+		}
 		const hasPrompt = promptText.length > 0;
 		if (hasAttachment()) {
 			const hasMutate = Boolean(mutateOptions.serverId && mutateOptions.methodKey);
@@ -2065,11 +2353,142 @@ export function mountCreateComposer(host, opts = {}) {
 	function setAspectPopoverOpen(open) {
 		if (!aspectPopover || !aspectBtn) return;
 		const on = Boolean(open);
+		if (on) setModelPopoverOpen(false);
 		aspectPopover.hidden = !on;
+		aspectPopover.setAttribute('aria-hidden', on ? 'false' : 'true');
 		aspectBtn.setAttribute('aria-expanded', on ? 'true' : 'false');
 		if (on) {
 			buildAspectPopover();
 			positionAspectPopover();
+		}
+	}
+
+	function getModelOptionLabel(opt) {
+		if (isVideoMode()) return getVideoOptionLabel(opt) || opt.label || opt.value;
+		return opt.label || opt.value;
+	}
+
+	function getModelPopoverOptions() {
+		if (!(modelPopover instanceof HTMLElement)) return [];
+		return [...modelPopover.querySelectorAll('[data-create-model-option]')];
+	}
+
+	function setModelPopoverActive(value, { scroll = true } = {}) {
+		const options = getModelPopoverOptions();
+		let active = null;
+		for (const el of options) {
+			const on = el.getAttribute('data-value') === value;
+			el.classList.toggle('is-active', on);
+			if (on) active = el;
+		}
+		if (active instanceof HTMLElement && modelPopover instanceof HTMLElement) {
+			modelPopover.setAttribute('aria-activedescendant', active.id);
+			if (scroll) {
+				const popRect = modelPopover.getBoundingClientRect();
+				const optRect = active.getBoundingClientRect();
+				if (optRect.top < popRect.top) {
+					modelPopover.scrollTop -= popRect.top - optRect.top;
+				} else if (optRect.bottom > popRect.bottom) {
+					modelPopover.scrollTop += optRect.bottom - popRect.bottom;
+				}
+			}
+		}
+	}
+
+	function moveModelPopoverActive(key) {
+		const options = getModelPopoverOptions();
+		if (options.length === 0) return;
+		const current = options.findIndex((el) => el.classList.contains('is-active'));
+		let next = current;
+		if (key === 'Home') next = 0;
+		else if (key === 'End') next = options.length - 1;
+		else if (key === 'ArrowDown') next = current < 0 ? 0 : Math.min(options.length - 1, current + 1);
+		else if (key === 'ArrowUp') next = current < 0 ? options.length - 1 : Math.max(0, current - 1);
+		const el = options[next];
+		const value = el?.getAttribute('data-value');
+		if (value) setModelPopoverActive(value);
+	}
+
+	function commitModelPopoverActive() {
+		const active = getModelPopoverOptions().find((el) => el.classList.contains('is-active'));
+		const value = active?.getAttribute('data-value');
+		if (value) applySelectedModel(value);
+		setModelPopoverOpen(false);
+		if (modelBtn instanceof HTMLButtonElement) modelBtn.focus();
+	}
+
+	function positionModelPopover() {
+		if (!modelPopover || !modelBtn || modelPopover.hidden) return;
+		const rect = modelBtn.getBoundingClientRect();
+		const gap = 8;
+		const spaceAbove = Math.max(8, Math.floor(rect.top - gap - 8));
+		modelPopover.style.maxHeight = `min(32rem, 56vh, ${spaceAbove}px)`;
+		modelPopover.style.top = `${Math.round(rect.top)}px`;
+		modelPopover.style.left = `${Math.round(rect.left)}px`;
+		const popWidth = modelPopover.offsetWidth;
+		const left = Math.min(rect.left, window.innerWidth - popWidth - 8);
+		modelPopover.style.left = `${Math.max(8, Math.round(left))}px`;
+	}
+
+	function setModelPopoverOpen(open) {
+		if (!modelPopover || !modelBtn) return;
+		const on = Boolean(open);
+		if (on) setAspectPopoverOpen(false);
+		modelPopover.hidden = !on;
+		modelPopover.setAttribute('aria-hidden', on ? 'false' : 'true');
+		modelBtn.setAttribute('aria-expanded', on ? 'true' : 'false');
+		if (on) {
+			buildModelPopover();
+			positionModelPopover();
+			setModelPopoverActive(selectedModel);
+			modelPopover.focus({ preventScroll: true });
+		} else {
+			modelPopover.removeAttribute('aria-activedescendant');
+		}
+	}
+
+	function buildModelPopover() {
+		if (!(modelPopover instanceof HTMLElement)) return;
+		const routeOptions = getActiveRouteOptions();
+		const groups = groupComposerRouteOptions(routeOptions);
+		modelPopover.innerHTML = '';
+		let optionIndex = 0;
+		for (const group of groups) {
+			if (!group?.options.length) continue;
+			const groupEl = document.createElement('div');
+			groupEl.className = 'create-composer-model-group';
+			groupEl.setAttribute('role', 'group');
+			groupEl.setAttribute('aria-label', group.groupLabel);
+
+			const labelEl = document.createElement('div');
+			labelEl.className = 'create-composer-model-group-label';
+			labelEl.setAttribute('aria-hidden', 'true');
+			labelEl.textContent = group.groupLabel;
+			groupEl.appendChild(labelEl);
+
+			for (const opt of group.options) {
+				const value = opt.selectValue;
+				const label = getModelOptionLabel(opt);
+				const isSelected = value === selectedModel;
+				const btn = document.createElement('button');
+				btn.type = 'button';
+				btn.id = `${modelPopoverId}-opt-${optionIndex++}`;
+				btn.className = 'create-composer-model-option';
+				btn.setAttribute('role', 'option');
+				btn.setAttribute('data-create-model-option', '');
+				btn.setAttribute('data-value', value);
+				btn.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+				if (isSelected) btn.classList.add('is-selected');
+				btn.textContent = label;
+				btn.addEventListener('click', () => {
+					applySelectedModel(value);
+					setModelPopoverOpen(false);
+					if (modelBtn instanceof HTMLButtonElement) modelBtn.focus();
+				});
+				btn.addEventListener('pointerenter', () => setModelPopoverActive(value, { scroll: false }));
+				groupEl.appendChild(btn);
+			}
+			modelPopover.appendChild(groupEl);
 		}
 	}
 
@@ -2316,6 +2735,49 @@ export function mountCreateComposer(host, opts = {}) {
 					args,
 					hydrateMentions: false,
 					...mutateLineage,
+				});
+				return;
+			}
+			setComposerSubmitting(false);
+			return;
+		}
+
+		if (isAudioMode()) {
+			if (!userPrompt) return;
+			const route = getSelectedAudioRoute();
+			if (!route) return;
+			setComposerSubmitting(true);
+			const args = {
+				prompt: userPrompt,
+				model: route.value,
+			};
+			const mentions = extractMentions(userPrompt);
+			if (mentions.length === 0) {
+				dispatchCreationSubmit({
+					serverId: route.serverId,
+					methodKey: route.methodKey,
+					args,
+					hydrateMentions: false,
+				});
+				return;
+			}
+			const validateResult = await validateMentionsSimple({ args });
+			if (validateResult.ok) {
+				dispatchCreationSubmit({
+					serverId: route.serverId,
+					methodKey: route.methodKey,
+					args,
+					hydrateMentions: true,
+				});
+				return;
+			}
+			const message = formatMentionsFailureForDialog(validateResult.data);
+			if (window.confirm(message + '\n\nSubmit anyway?')) {
+				dispatchCreationSubmit({
+					serverId: route.serverId,
+					methodKey: route.methodKey,
+					args,
+					hydrateMentions: false,
 				});
 				return;
 			}
@@ -2675,23 +3137,48 @@ export function mountCreateComposer(host, opts = {}) {
 		teardownFns.push(() => advancedLink.removeEventListener('click', onAdvanced));
 	}
 
-	if (modelSelect instanceof HTMLSelectElement) {
-		const onModelChange = () => applySelectedModel(modelSelect.value);
-		modelSelect.addEventListener('change', onModelChange);
-		teardownFns.push(() => modelSelect.removeEventListener('change', onModelChange));
+	if (modelBtn instanceof HTMLButtonElement) {
+		const onModelClick = (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			if (modelBtn.disabled) return;
+			const willOpen = Boolean(modelPopover?.hidden);
+			toolbarPopoverIgnoreDocClose = true;
+			setModelPopoverOpen(willOpen);
+			requestAnimationFrame(() => {
+				toolbarPopoverIgnoreDocClose = false;
+			});
+		};
+		modelBtn.addEventListener('click', onModelClick);
+		const onModelKeydown = (e) => {
+			if (modelBtn.disabled) return;
+			if (modelPopover && !modelPopover.hidden) return;
+			if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+			e.preventDefault();
+			toolbarPopoverIgnoreDocClose = true;
+			setModelPopoverOpen(true);
+			requestAnimationFrame(() => {
+				toolbarPopoverIgnoreDocClose = false;
+			});
+		};
+		modelBtn.addEventListener('keydown', onModelKeydown);
+		teardownFns.push(() => {
+			modelBtn.removeEventListener('click', onModelClick);
+			modelBtn.removeEventListener('keydown', onModelKeydown);
+		});
 	}
 
 	modeBtns.forEach((btn) => {
 		if (!(btn instanceof HTMLButtonElement)) return;
 		const onMode = () => {
 			const mode = btn.getAttribute('data-create-mode');
-			if (mode === 'image' || mode === 'video') setOutputMode(mode);
+			if (mode === 'image' || mode === 'video' || mode === 'audio') setOutputMode(mode);
 		};
 		btn.addEventListener('click', onMode);
 		teardownFns.push(() => btn.removeEventListener('click', onMode));
 	});
 
-	if (outputMode === 'video') {
+	if (outputMode === 'video' || outputMode === 'audio') {
 		modelOptions = getActiveModelList();
 		populateModelSelect();
 	}
@@ -2701,10 +3188,10 @@ export function mountCreateComposer(host, opts = {}) {
 			e.preventDefault();
 			e.stopPropagation();
 			const willOpen = Boolean(aspectPopover?.hidden);
-			aspectPopoverIgnoreDocClose = true;
+			toolbarPopoverIgnoreDocClose = true;
 			setAspectPopoverOpen(willOpen);
 			requestAnimationFrame(() => {
-				aspectPopoverIgnoreDocClose = false;
+				toolbarPopoverIgnoreDocClose = false;
 			});
 		};
 		aspectBtn.addEventListener('click', onAspectClick);
@@ -2717,8 +3204,16 @@ export function mountCreateComposer(host, opts = {}) {
 	}
 
 	const onDocClickCloseToolbarPopovers = (e) => {
-		if (aspectPopoverIgnoreDocClose) return;
+		if (toolbarPopoverIgnoreDocClose) return;
 		const target = e.target instanceof Node ? e.target : null;
+		if (modelPopover && !modelPopover.hidden) {
+			if (
+				!target ||
+				(!modelPopover.contains(target) && !modelBtn?.contains(target))
+			) {
+				setModelPopoverOpen(false);
+			}
+		}
 		if (aspectPopover && !aspectPopover.hidden) {
 			if (
 				!target ||
@@ -2733,7 +3228,60 @@ export function mountCreateComposer(host, opts = {}) {
 	document.addEventListener('click', onDocClickCloseToolbarPopovers);
 	teardownFns.push(() => document.removeEventListener('click', onDocClickCloseToolbarPopovers));
 
+	const onDocFocusCloseToolbarPopovers = (e) => {
+		const target = e.target instanceof Node ? e.target : null;
+		if (modelPopover && !modelPopover.hidden) {
+			if (!target || (!modelPopover.contains(target) && !modelBtn?.contains(target))) {
+				setModelPopoverOpen(false);
+			}
+		}
+		if (aspectPopover && !aspectPopover.hidden) {
+			if (
+				!target ||
+				(!aspectPopover.contains(target) && !aspectBtn?.contains(target) && !aspectWrap?.contains(target))
+			) {
+				setAspectPopoverOpen(false);
+			}
+		}
+	};
+	document.addEventListener('focusin', onDocFocusCloseToolbarPopovers);
+	teardownFns.push(() => document.removeEventListener('focusin', onDocFocusCloseToolbarPopovers));
+
+	const onToolbarPopoverKeydown = (e) => {
+		if (modelPopover && !modelPopover.hidden) {
+			if (e.key === 'Escape') {
+				e.preventDefault();
+				e.stopPropagation();
+				setModelPopoverOpen(false);
+				if (modelBtn instanceof HTMLButtonElement) modelBtn.focus();
+				return;
+			}
+			if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Home' || e.key === 'End') {
+				e.preventDefault();
+				moveModelPopoverActive(e.key);
+				return;
+			}
+			if (e.key === 'Enter') {
+				const target = e.target instanceof Node ? e.target : null;
+				if (target && !modelPopover.contains(target) && !modelBtn?.contains(target)) return;
+				e.preventDefault();
+				e.stopPropagation();
+				commitModelPopoverActive();
+			}
+			return;
+		}
+		if (aspectPopover && !aspectPopover.hidden && e.key === 'Escape') {
+			e.preventDefault();
+			e.stopPropagation();
+			setAspectPopoverOpen(false);
+			if (aspectBtn instanceof HTMLButtonElement) aspectBtn.focus();
+		}
+	};
+	document.addEventListener('keydown', onToolbarPopoverKeydown, true);
+	teardownFns.push(() => document.removeEventListener('keydown', onToolbarPopoverKeydown, true));
+
 	const onRepositionToolbarPopovers = () => {
+		if (modelPopover && !modelPopover.hidden) positionModelPopover();
 		if (aspectPopover && !aspectPopover.hidden) positionAspectPopover();
 	};
 	window.addEventListener('resize', onRepositionToolbarPopovers);
@@ -2755,6 +3303,7 @@ export function mountCreateComposer(host, opts = {}) {
 		syncFromSharedSettings,
 		destroy() {
 			clearTimeout(promptSaveTimer);
+			setModelPopoverOpen(false);
 			setAspectPopoverOpen(false);
 			for (const fn of teardownFns) {
 				try {
