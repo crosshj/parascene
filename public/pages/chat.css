@@ -3701,8 +3701,9 @@ body.chat-page.modal-open .chat-page-sidebar-scroll {
 	display: none;
 }
 
-/* Exclude doom fullscreen media, challenges hero strip, and fixed-aspect feed/avatar imgs — `height:auto` squashes them into thin strips. */
-body.chat-page .chat-page-messages img:not(.chat-doom-poster):not(.chat-doom-avatar):not(.feed-card-img):not(.feed-card-group-img):not(.connect-chat-creation-embed-img):not(.connect-chat-creation-embed-group-img):not(.comment-avatar-img):not(.challenge-pane-hero-image),
+/* Exclude doom fullscreen media, challenges hero strip, fixed-aspect feed tiles, and avatar
+ * photos — `height:auto` restores intrinsic ratios (e.g. 9:16 set-as-avatar) and breaks crop. */
+body.chat-page .chat-page-messages img:not(.chat-doom-poster):not(.chat-doom-avatar):not(.feed-card-img):not(.feed-card-group-img):not(.connect-chat-creation-embed-img):not(.connect-chat-creation-embed-group-img):not(.comment-avatar-img):not(.feed-card-avatar-img):not([class*="avatar"]):not(.challenge-pane-hero-image):not(.connect-chat-suno-preview-img),
 body.chat-page .chat-page-messages video:not(.chat-doom-video):not(.feed-card-video) {
 	max-width: 100%;
 	height: auto;

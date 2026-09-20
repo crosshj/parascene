@@ -1640,8 +1640,10 @@ header .action-item.profile-button.is-avatar-loading {
 header .profile-button .profile-avatar {
 	width: 34px;
 	height: 34px;
+	aspect-ratio: 1 / 1;
 	border-radius: 50%;
 	object-fit: cover;
+	object-position: center;
 	display: none;
 }
 
@@ -2916,6 +2918,7 @@ app-route-feed {
 .avatar-with-founder-flair .founder-flair-avatar-inner {
 	width: var(--founder-flair-size);
 	height: var(--founder-flair-size);
+	aspect-ratio: 1 / 1;
 	border-radius: 50%;
 	overflow: hidden;
 	display: flex;
@@ -2931,9 +2934,12 @@ app-route-feed {
 }
 
 .avatar-with-founder-flair .founder-flair-avatar-inner img {
+	position: absolute;
+	inset: 0;
 	width: 100%;
 	height: 100%;
 	object-fit: cover;
+	object-position: center;
 	display: block;
 }
 
@@ -3010,9 +3016,12 @@ app-route-feed {
 }
 
 .feed-card-avatar {
+	position: relative;
 	width: 36px;
 	height: 36px;
+	aspect-ratio: 1 / 1;
 	border-radius: 50%;
+	overflow: hidden;
 	background: var(--feed-card-avatar-bg, #6b7280);
 	color: #ffffff;
 	display: flex;
@@ -3024,11 +3033,26 @@ app-route-feed {
 }
 
 .feed-card-avatar-img {
+	/* Absolute fill beats chat `height:auto` so 9:16 set-as-avatar sources crop to the circle. */
+	position: absolute;
+	inset: 0;
 	width: 100%;
 	height: 100%;
+	max-width: none;
 	display: block;
 	border-radius: 50%;
 	object-fit: cover;
+	object-position: center;
+}
+
+/* Crop non-1:1 avatar sources inside circular slots (do not put aspect-ratio on chat message imgs). */
+img[class*="avatar"],
+.founder-flair-avatar-inner > img,
+.user-avatar > img,
+.welcome-avatar-preview-wrap > img,
+.welcome-review-avatar-wrap > img {
+	object-fit: cover;
+	object-position: center;
 }
 
 .user-link {
@@ -4170,6 +4194,7 @@ body.view-nsfw .feed-card-image--group-carousel.nsfw::after {
 .comment-avatar {
 	width: 32px;
 	height: 32px;
+	aspect-ratio: 1 / 1;
 	margin-top: 0.25em;
 	border-radius: 50%;
 	display: flex;
@@ -4179,6 +4204,7 @@ body.view-nsfw .feed-card-image--group-carousel.nsfw::after {
 	color: var(--text);
 	overflow: hidden;
 	flex: 0 0 auto;
+	position: relative;
 }
 
 .comment-avatar:has(.avatar-with-founder-flair) {
@@ -4204,10 +4230,13 @@ body.view-nsfw .feed-card-image--group-carousel.nsfw::after {
 }
 
 .comment-avatar-img {
+	position: absolute;
+	inset: 0;
 	width: 100%;
 	height: 100%;
 	display: block;
 	object-fit: cover;
+	object-position: center;
 }
 
 .comment-input-body {
@@ -8386,11 +8415,23 @@ body.chat-page .chat-page-canvas-panel-body {
 }
 
 /* Defensive: media and long tokens cannot extend past the message column (page scroll stays vertical-only).
- * Exclude fixed-aspect tiles (doom, feed cards, challenges hero strip). */
-body.chat-page .chat-page-messages img:not(.chat-doom-poster):not(.chat-doom-avatar):not(.feed-card-img):not(.feed-card-group-img):not(.connect-chat-creation-embed-img):not(.connect-chat-creation-embed-group-img):not(.comment-avatar-img):not(.challenge-pane-hero-image):not(.connect-chat-suno-preview-img),
+ * Exclude fixed-aspect tiles (doom, feed cards, challenges hero strip) and avatar photos
+ * (height:auto would restore intrinsic 9:16 and break circular crop). */
+body.chat-page .chat-page-messages img:not(.chat-doom-poster):not(.chat-doom-avatar):not(.feed-card-img):not(.feed-card-group-img):not(.connect-chat-creation-embed-img):not(.connect-chat-creation-embed-group-img):not(.comment-avatar-img):not(.feed-card-avatar-img):not([class*="avatar"]):not(.challenge-pane-hero-image):not(.connect-chat-suno-preview-img),
 body.chat-page .chat-page-messages video:not(.chat-doom-video):not(.feed-card-video) {
 	max-width: 100%;
 	height: auto;
+}
+
+/* Unclassed photos inside avatar slots: restore fill crop if height:auto still matched. */
+body.chat-page .chat-page-messages .founder-flair-avatar-inner > img,
+body.chat-page .chat-page-messages .feed-card-avatar > img,
+body.chat-page .chat-page-messages .comment-avatar > img {
+	max-width: none;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	object-position: center;
 }
 
 /* Inline pasted generic images: stay inside the 260px-tall wrap (letterboxing lives on `.user-text-inline-image-wrap`). */
@@ -20659,7 +20700,9 @@ app-modal-creation-details .creation-details-args-hint code {
 .server-owner-avatar {
 	width: 32px;
 	height: 32px;
+	aspect-ratio: 1 / 1;
 	border-radius: 50%;
+	overflow: hidden;
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -20667,13 +20710,17 @@ app-modal-creation-details .creation-details-args-hint code {
 	color: #ffffff;
 	font-weight: 600;
 	flex-shrink: 0;
+	position: relative;
 }
 
 .server-owner-avatar-img {
+	position: absolute;
+	inset: 0;
 	width: 100%;
 	height: 100%;
 	border-radius: 50%;
 	object-fit: cover;
+	object-position: center;
 	display: block;
 }
 

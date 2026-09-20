@@ -2238,7 +2238,17 @@ body.chat-page #chat-doom-scroll-overlay .chat-doom-topbar button.creation-detai
  * Bundled chat.css applies `height:auto` to message imgs except several fixed-aspect tiles; without that,
  * challenges hero strip + doom avatars + feed card media squash into thin strips. Hotfix until
  * chat.bundle.css is rebuilt with the same exclusions in source global.css / chat.css.
+ *
+ * Avatar slots: also pin square crop here — chat does not load live global.css, only the bundle + this sheet.
  */
+body.chat-page .chat-page-messages .feed-card-avatar,
+body.chat-page .chat-page-messages .comment-avatar:not(:has(.avatar-with-founder-flair)),
+body.chat-page .chat-page-messages .founder-flair-avatar-inner {
+	overflow: hidden !important;
+	position: relative !important;
+	aspect-ratio: 1 / 1;
+}
+
 body.chat-page .chat-page-messages img.chat-doom-avatar,
 body.chat-page .chat-page-messages img.chat-doom-poster,
 body.chat-page .chat-page-messages img.feed-card-img,
@@ -2247,7 +2257,12 @@ body.chat-page .chat-page-messages video.feed-card-video,
 body.chat-page .chat-page-messages img.connect-chat-creation-embed-img,
 body.chat-page .chat-page-messages img.connect-chat-creation-embed-group-img,
 body.chat-page .chat-page-messages img.comment-avatar-img,
-body.chat-page .chat-page-messages img.challenge-pane-hero-image {
+body.chat-page .chat-page-messages img.feed-card-avatar-img,
+body.chat-page .chat-page-messages img[class*="avatar"],
+body.chat-page .chat-page-messages img.challenge-pane-hero-image,
+body.chat-page .chat-page-messages .founder-flair-avatar-inner > img,
+body.chat-page .chat-page-messages .feed-card-avatar > img,
+body.chat-page .chat-page-messages .comment-avatar > img {
 	display: block !important;
 	max-width: none !important;
 	width: 100% !important;
@@ -2255,6 +2270,15 @@ body.chat-page .chat-page-messages img.challenge-pane-hero-image {
 	min-height: 0 !important;
 	object-fit: cover !important;
 	object-position: center !important;
+}
+
+body.chat-page .chat-page-messages .feed-card-avatar-img,
+body.chat-page .chat-page-messages .comment-avatar-img,
+body.chat-page .chat-page-messages .founder-flair-avatar-inner > img,
+body.chat-page .chat-page-messages .feed-card-avatar > img,
+body.chat-page .chat-page-messages .comment-avatar > img {
+	position: absolute !important;
+	inset: 0 !important;
 }
 
 /* Keep My Creations / explore tiles at 1:1 while audio covers load. An in-flow
