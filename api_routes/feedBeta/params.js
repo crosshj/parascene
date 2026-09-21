@@ -25,7 +25,7 @@ export const FEED_BETA_DEFAULT_PARAMS = {
 	slotPackOtherCap: 9,
 
 	newPublishMaxHours: 72,
-	newcomerAccountDays: 14,
+	newcomerAccountDays: 5,
 
 	freshnessWeight: 40,
 	engagementWeight: 35,
