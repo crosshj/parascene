@@ -10,7 +10,8 @@
     "test": "NODE_OPTIONS=--experimental-vm-modules jest",
     "test:int": "RUN_INTEGRATION_TESTS=true NODE_OPTIONS=--experimental-vm-modules jest --config jest.integration.config.js",
     "check:creation-detail-embed": "node scripts/check-creation-detail-embed.mjs",
-    "check:workflow-embed": "node scripts/check-workflow-embed.mjs"
+    "check:workflow-embed": "node scripts/check-workflow-embed.mjs",
+    "finance": "node scripts/finance/server.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",

@@ -20,6 +20,7 @@
  * @property {string} launchDay                Earliest day with signup or activity (YYYY-MM-DD).
  * @property {string} lastCompleteDay          Last complete US-East day at refresh (yesterday).
  * @property {string} lastRefresh              ISO timestamp of the refresh run.
+ * @property {string} rankedFeedDefaultAt      Rollout timestamp for ranked feed default behavior.
  * @property {string[]} coreActionTypes        Action types counted as "core".
  *
  * @typedef {Object} StoreUser
@@ -119,6 +120,7 @@
  */
 
 export const SCHEMA_VERSION = 1;
+export const RANKED_FEED_DEFAULT_ROLLOUT_AT = "2026-09-21T11:58:36-04:00";
 export const CORE_ACTION_TYPES = ["creation", "publish", "comment", "like", "reaction", "tip_sent"];
 
 /** Product milestone targets ("stable small room"). Shared by ETL and app. */
@@ -529,7 +531,7 @@ export function funnelTotals(store, from, to) {
 }
 
 /* -------------------------------------------------------------- */
-/* Feed engagement (feed-beta impressions: dwell + click).        */
+/* Feed engagement (ranked-feed impressions: dwell + click).      */
 /* -------------------------------------------------------------- */
 
 /** Zero-filled per-day feed-impression series over the range. */
@@ -673,7 +675,7 @@ const CHART_FONT = 16;
 const CHART_RENDER_H = 320;
 
 export function sparkline(rows, valueKey, labelKey, color = "#0f766e", opts = {}) {
-	const { showTrend = false, trendColor = "#ef4444" } = opts;
+	const { showTrend = false, trendColor = "#ef4444", markerDay = null, markerLabel = "Rollout" } = opts;
 	const w = CHART_W, h = CHART_H, p = CHART_PAD;
 	if (!rows || !rows.length) return '<p class="small">No data.</p>';
 	const values = rows.map((r) => Number(r[valueKey]) || 0);
@@ -697,10 +699,19 @@ export function sparkline(rows, valueKey, labelKey, color = "#0f766e", opts = {}
 		const slopeText = lr.slope > 0 ? `+${lr.slope.toFixed(3)}` : lr.slope.toFixed(3);
 		trendHtml = `<line x1="${x(0).toFixed(1)}" y1="${y(y0).toFixed(1)}" x2="${x(rows.length - 1).toFixed(1)}" y2="${y(yN).toFixed(1)}" stroke="${trendColor}" stroke-width="2" stroke-dasharray="6 5"><title>slope ${slopeText}/period</title></line>`;
 	}
+	let markerHtml = "";
+	if (markerDay) {
+		const markerIndex = rows.findIndex((r) => String(r[labelKey] ?? "") === String(markerDay));
+		if (markerIndex >= 0) {
+			const markerX = x(markerIndex).toFixed(1);
+			markerHtml = `<line x1="${markerX}" y1="${p}" x2="${markerX}" y2="${h - p}" stroke="#64748b" stroke-width="2" stroke-dasharray="3 6"><title>${escSvg(markerLabel)}</title></line>`;
+		}
+	}
 	return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${CHART_RENDER_H}" preserveAspectRatio="xMidYMid meet" aria-label="${escSvg(valueKey)} trend">
 		<line x1="${p}" y1="${h - p}" x2="${w - p}" y2="${h - p}" stroke="#e2e8f0"/>
 		<line x1="${p}" y1="${p}" x2="${p}" y2="${h - p}" stroke="#e2e8f0"/>
 		${trendHtml}
+		${markerHtml}
 		<polyline fill="none" stroke="${color}" stroke-width="3" points="${points}"/>
 		${circles}
 		<text x="${p}" y="${h - 12}" font-size="${CHART_FONT}" fill="#64748b">${escSvg(rows[0][labelKey])}</text>

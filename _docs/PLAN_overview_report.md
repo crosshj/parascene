@@ -85,7 +85,7 @@ Store additions (typedefs in `metrics.js`, filled by `overview-refresh.js`):
 
 Feed engagement (already in the store via visit pulse `details.feed_impressions`, now surfaced):
 
-- `feedImpressionSeries` / `feedImpressionTotals` in `metrics.js`; "Feed engagement" card (chart-first, stats below) on Today (compact) + Week/Month/Inception, inline beside Related browsing. Logged-in feed-beta only; unique impressors/creations are per-day peaks; aggregate-only so ignore-users doesn't subtract. Empty range shows a minimal placeholder.
+- `feedImpressionSeries` / `feedImpressionTotals` in `metrics.js`; "Feed engagement" card (chart-first, stats below) on Today (compact) + Week/Month/Inception, inline beside Related browsing. Ranked-feed impressions are for all users by default; unique impressors/creations are per-day peaks; aggregate-only so ignore-users doesn't subtract. The ranked-feed default rollout is recorded in store metadata and marked on the feed trend chart. Empty range shows a minimal placeholder.
 
 Rendering (metric fns in `metrics.js`, cards in `app.js`):
 

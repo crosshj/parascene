@@ -26,7 +26,7 @@ import {
 	usEastDayStartMs,
 	yesterdayUsEastDayKey
 } from "../../api_routes/utils/visitPulseCore.js";
-import { SCHEMA_VERSION, CORE_ACTION_TYPES } from "./overview/metrics.js";
+import { SCHEMA_VERSION, CORE_ACTION_TYPES, RANKED_FEED_DEFAULT_ROLLOUT_AT } from "./overview/metrics.js";
 import { findChallengesChannelThreadId } from "../../api_routes/utils/challengeSubmitShared.js";
 import { extractChallengeEvents } from "../../src/chat/challenges/model/extractEvents.js";
 import { summarizeLatestChallengeConfigs } from "../../src/chat/challenges/model/organizerSummaries.js";
@@ -606,6 +606,7 @@ async function main() {
 			launchDay,
 			lastCompleteDay: yesterdayUsEastDayKey(),
 			lastRefresh: new Date().toISOString(),
+			rankedFeedDefaultAt: RANKED_FEED_DEFAULT_ROLLOUT_AT,
 			coreActionTypes: CORE_ACTION_TYPES
 		},
 		users,

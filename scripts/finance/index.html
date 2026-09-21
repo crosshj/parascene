@@ -1,0 +1,89 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Parascene finances</title>
+<style>
+	body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+	main { max-width: 700px; margin: 2em auto; padding: 0 1em; }
+	button { appearance: none; border: 1px solid #888; border-radius: 4px; background: #fafafa; font: inherit; font-size: .9em; line-height: 1; padding: 2px 7px; }
+	button:hover { background: #f1f1f1; }
+	section { margin-top: 1.5em; }
+	fieldset { margin: 1em 0; }
+	label { display: block; margin: .75em 0; }
+	label input, label select { display: block; margin-top: .25em; }
+	textarea { width: 100%; box-sizing: border-box; }
+	.scroll { overflow-x: auto; }
+	table { min-width: 100%; }
+	.aligned-table { width: 100%; table-layout: fixed; }
+	caption { text-align: left; font-weight: bold; margin-bottom: .5em; }
+	th, td { padding: .4em .75em .4em 0; text-align: left; vertical-align: top; }
+	.tag-column { width: 10rem; text-align: right; white-space: nowrap; padding-right: .5em; }
+	.amount-column { white-space: nowrap; }
+	.actions-column { white-space: nowrap; }
+	.numeric { text-align: right; padding-right: .75em; }
+	tbody tr:not(.ghost-row) td { padding-top: .55em; padding-bottom: .55em; }
+	.ghost-row td { padding-top: .9em; }
+	dialog { width: min(32rem, calc(100vw - 2rem)); }
+	.income { color: green; }
+	.expense { color: firebrick; }
+	.estimate { font-size: .9em; }
+	.entry-tag { color: #6b7280; font-size: .85em; white-space: nowrap; }
+	#status:empty { display: none; }
+</style>
+<main>
+	<output id="status" aria-live="polite"></output>
+
+	<section>
+		<table class="aligned-table"><colgroup><col><col class="tag-column"><col style="width: 7rem"><col style="width: 5rem"></colgroup>
+			<tbody><tr><th scope="row" colspan="2">Monthly net</th><td id="monthlyNet" class="amount-column numeric">—</td><td></td></tr></tbody>
+		</table>
+	</section>
+
+	<section>
+		<div class="scroll"><table class="aligned-table" aria-label="Ledger"><colgroup><col><col class="tag-column"><col style="width: 7rem"><col style="width: 5rem"></colgroup><tbody id="entries"></tbody></table></div>
+	</section>
+</main>
+<dialog id="transactionDialog">
+	<h2 id="transactionDialogTitle">Add entry</h2>
+	<form id="txForm" method="dialog">
+		<fieldset><legend>Transaction</legend>
+			<label>Type <select name="type"><option value="expense">Expense</option><option value="income">Income</option></select></label>
+			<label>Amount <input name="amount" type="number" min="0" step="0.01" required></label>
+			<label><span id="entryNameLabel">Vendor / source</span> <input name="vendor" placeholder="Replicate, Stripe, ..."></label>
+			<label id="cadenceField">Cadence <select name="cadence"><option value="one-time">One-time</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="yearly">Yearly</option></select></label>
+			<label id="activeField"><input name="active" type="checkbox"> Active</label>
+		</fieldset>
+		<button id="deleteEntry" type="button" hidden>Delete</button>
+		<button value="cancel" formnovalidate>Cancel</button>
+		<button id="transactionSubmit" value="default">Add entry</button>
+	</form>
+</dialog>
+<script>
+let ledger;
+let editingEntryId = null;
+let editingEntryKind = null;
+const money = n => new Intl.NumberFormat(undefined,{style:'currency',currency:ledger?.currency||'USD'}).format(Number(n)||0);
+const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const status = s => document.querySelector('#status').textContent=s;
+function render(){
+	const recurring=ledger.recurring.filter(x=>x.active);
+	const recurringMonthly=recurring.reduce((sum,item)=>{const amount=Number(item.amount||0)*(item.cadence==='yearly'?1/12:item.cadence==='quarterly'?1/3:item.cadence==='weekly'?52/12:1);return sum+(item.type==='income'?amount:-amount);},0);
+	const irregularNet=ledger.transactions.reduce((sum,item)=>sum+(item.type==='income'?1:-1)*Number(item.amount||0),0);
+	const monthlyNet=recurringMonthly+(irregularNet/12);
+	document.querySelector('#monthlyNet').textContent=money(monthlyNet);
+	const entries=orderedEntries();
+	document.querySelector('#entries').innerHTML=entries.map(({kind,entry,name,cadence,estimate},index)=>{const monthlyAmount=kind==='transaction'?Number(entry.amount||0)/12:Number(entry.amount||0)*(entry.cadence==='yearly'?1/12:entry.cadence==='quarterly'?1/3:entry.cadence==='weekly'?52/12:1);const tag=kind==='transaction'?`irregular ${entry.type==='income'?'asset':'debt'}`:entry.type==='income'?'income':'expense';return `<tr><td>${esc(name)}</td><td class="tag-column"><span class="entry-tag">[${tag}]</span>${estimate?' <span class="estimate">estimate</span>':''}</td><td class="amount-column numeric">${money(monthlyAmount)}</td><td class="actions-column"><button type="button" data-edit-kind="${kind}" data-edit-id="${esc(entry.id)}">Edit</button>${index>0?` <button type="button" data-move-up-kind="${kind}" data-move-up-id="${esc(entry.id)}" aria-label="Move up" title="Move up">↑</button>`:''}</td></tr>`;}).join('')+`<tr class="ghost-row"><td colspan="4"><button type="button" data-add-entry>Add entry</button></td></tr>`;
+}
+function orderedEntries(){return [...ledger.transactions.map(x=>({kind:'transaction',entry:x,date:x.date,name:x.vendor,cadence:'one-time'})),...ledger.recurring.map(x=>({kind:'recurring',entry:x,date:x.nextDue||'',name:x.name,cadence:x.cadence,estimate:x.estimate}))].sort((a,b)=>Number(a.entry.sortOrder||999)-Number(b.entry.sortOrder||999));}
+async function load(){ const r=await fetch('/api/ledger'); if(!r.ok) throw new Error((await r.json()).error); ledger=await r.json(); render(); }
+async function persist() { try { const r=await fetch('/api/ledger',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(ledger)}); if(!r.ok)throw new Error((await r.json()).error); ledger=await r.json(); render(); } catch(e) { status(`Save failed: ${e.message}`); } }
+const transactionDialog=document.querySelector('#transactionDialog');
+const txForm=document.querySelector('#txForm');
+const updateEntryMode=()=>{const recurring=txForm.elements.cadence.value!=='one-time';document.querySelector('#entryNameLabel').textContent=recurring?'Name':'Vendor / source';document.querySelector('#activeField').hidden=!recurring;};
+const openEntry=(kind='transaction',entry=null)=>{editingEntryKind=kind;editingEntryId=entry?.id||null;const cadence=entry?.cadence|| (kind==='recurring'?'monthly':'one-time');const recurring=cadence!=='one-time';document.querySelector('#transactionDialogTitle').textContent=editingEntryId?'Edit entry':'Add entry';document.querySelector('#transactionSubmit').textContent=editingEntryId?'Save changes':'Add entry';document.querySelector('#deleteEntry').hidden=!editingEntryId;txForm.elements.type.value=entry?.type||'expense';txForm.elements.amount.value=entry?.amount??'';txForm.elements.vendor.value=entry?.vendor||entry?.name||'';txForm.elements.cadence.value=cadence;txForm.elements.active.checked=entry?.active!==false;updateEntryMode();transactionDialog.showModal();};
+document.querySelector('#entries').addEventListener('click',e=>{const add=e.target.closest('[data-add-entry]');if(add){openEntry();return;}const move=e.target.closest('[data-move-up-kind]');if(move){const entries=orderedEntries();const index=entries.findIndex(row=>row.kind===move.dataset.moveUpKind&&String(row.entry.id)===move.dataset.moveUpId);if(index>0){[entries[index-1],entries[index]]=[entries[index],entries[index-1]];entries.forEach((row,i)=>{row.entry.sortOrder=i+1;});ledger.transactions=entries.filter(row=>row.kind==='transaction').map(row=>row.entry);ledger.recurring=entries.filter(row=>row.kind==='recurring').map(row=>row.entry);render();persist();}return;}const edit=e.target.closest('[data-edit-kind]');if(edit){const collection=edit.dataset.editKind==='recurring'?ledger.recurring:ledger.transactions;const entry=collection.find(x=>String(x.id)===edit.dataset.editId);if(entry)openEntry(edit.dataset.editKind,entry);}});
+txForm.elements.cadence.addEventListener('change',updateEntryMode);
+document.querySelector('#deleteEntry').addEventListener('click',()=>{if(!editingEntryId||!confirm('Delete this item?'))return;const collection=editingEntryKind==='recurring'?ledger.recurring:ledger.transactions;const index=collection.findIndex(x=>String(x.id)===String(editingEntryId));if(index>=0)collection.splice(index,1);editingEntryId=null;editingEntryKind=null;transactionDialog.close();render();persist();});
+txForm.addEventListener('submit',e=>{if(e.submitter?.value==='cancel')return;e.preventDefault();const f=new FormData(e.target);const recurring=f.get('cadence')!=='one-time';const next=recurring?{id:editingEntryId||crypto.randomUUID(),name:f.get('vendor'),type:f.get('type'),amount:Number(f.get('amount')),cadence:f.get('cadence'),active:f.get('active')==='on'}:{id:editingEntryId||crypto.randomUUID(),type:f.get('type'),amount:Number(f.get('amount')),vendor:f.get('vendor'),status:'actual'};if(editingEntryId){const oldCollection=editingEntryKind==='recurring'?ledger.recurring:ledger.transactions;const oldIndex=oldCollection.findIndex(x=>String(x.id)===String(editingEntryId));const oldEntry=oldIndex>=0?oldCollection.splice(oldIndex,1)[0]:null;(recurring?ledger.recurring:ledger.transactions).push(oldEntry?{...oldEntry,...next}:next);}else (recurring?ledger.recurring:ledger.transactions).push(next);editingEntryId=null;editingEntryKind=null;transactionDialog.close();render();persist();});
+load().catch(e=>status(e.message));
+</script>

@@ -365,7 +365,7 @@ import * as M from "./metrics.js";
 			{ value: int(totals.peakCreations), label: "Peak creations/day" }
 		]);
 		if (compact) {
-			return `<div class="block"><div class="block-title">Feed engagement</div>${stats}<p class="small block-note">Logged-in feed-beta impressions (dwell = scrolled into view, click = tapped).</p></div>`;
+			return `<div class="block"><div class="block-title">Feed engagement</div>${stats}<p class="small block-note">Ranked-feed impressions (dwell = scrolled into view, click = tapped). Ranked feed became the default for all users: ${esc(fmtWhen(store.meta.rankedFeedDefaultAt))} ET. Pre-rollout data reflects the earlier limited rollout.</p></div>`;
 		}
 		const series = M.feedImpressionSeries(store, from, to);
 		let slopeNote = "";
@@ -375,8 +375,8 @@ import * as M from "./metrics.js";
 		}
 		const trend = chart(
 			"Feed engagement",
-			M.sparkline(series, "total", "day", "#7c3aed", { showTrend: true }),
-			`${slopeNote}Logged-in feed-beta impressions only (dwell = scrolled into view, click = tapped). Unique impressors/creations are per-day peaks, not range-distinct. Aggregate-only, so ignored users aren't subtracted.`
+			M.sparkline(series, "total", "day", "#7c3aed", { showTrend: true, markerDay: String(store.meta.rankedFeedDefaultAt || "").slice(0, 10), markerLabel: "Ranked feed became the default" }),
+			`${slopeNote}Ranked-feed impressions (dwell = scrolled into view, click = tapped). Ranked feed became the default for all users: ${esc(fmtWhen(store.meta.rankedFeedDefaultAt))} ET. Pre-rollout data reflects the earlier limited rollout. Unique impressors/creations are per-day peaks, not range-distinct. Aggregate-only, so ignored users aren't subtracted.`
 		);
 		return `${trend}<div class="block">${stats}</div>`;
 	}
@@ -926,7 +926,7 @@ import * as M from "./metrics.js";
 	}
 
 	function pushFeedMd(L, f) {
-		L.push("## Feed engagement (logged-in feed-beta)");
+		L.push("## Feed engagement (ranked feed)");
 		L.push(`- Impressions: ${f.impressions} (dwell ${f.dwell} / click ${f.click}, ${(f.clickRate * 100).toFixed(1)}% click rate)`);
 		L.push(`- Peak impressors/day: ${f.peakImpressorsPerDay} · peak creations/day: ${f.peakCreationsPerDay}`);
 		L.push("");
@@ -1016,7 +1016,7 @@ import * as M from "./metrics.js";
 		L.push("- Action DAU/WAU counts distinct users with a core action (creation, publish, comment, like, reaction, tip_sent) in the period.");
 		L.push("- Visit-active = distinct logged-in visitors; traffic-active = all visitors (authed + anonymous).");
 		L.push("- Related browsing is a proxy (source stores lifetime counts + last-click day); logged-in only; not reduced by ignored users.");
-		L.push("- Feed impressions are logged-in feed-beta only; unique impressors/creations are per-day peaks; not reduced by ignored users.");
+		L.push(`- Feed impressions are ranked-feed impressions; the ranked feed became the default for all users at ${baseStore.meta.rankedFeedDefaultAt || "an unrecorded time"}. Pre-rollout data reflects the earlier limited rollout. Unique impressors/creations are per-day peaks; not reduced by ignored users.`);
 		L.push("- Challenge vote totals are lifetime (vote timestamps are not stored); only submissions bucket by day.");
 		L.push("- All day-keys use the US-East partition (fixed UTC-5, no DST).");
 		return L.join("\n") + "\n";
