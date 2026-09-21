@@ -1,5 +1,5 @@
 /**
- * Feed [beta] batched viewport impressions → sessionStorage queue → POST /api/feed/impressions.
+ * Ranked-feed batched viewport impressions → sessionStorage queue → POST /api/feed/impressions.
  *
  * Dwell: ≥50% visible for 3s. Click-through enqueues immediately and flushes (keepalive).
  */

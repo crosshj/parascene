@@ -258,10 +258,10 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 
 	/** Served HTML tokens for `pages/chat.html` (sidebar strip + Rollup chat bundle entry). */
 	function buildChatPageTokens(req, sidebarStripPath) {
-		const feedBetaEnabled = req?.viewerFeedBetaEnabled === true;
+		const rankedFeedEnabled = req?.viewerFeedBetaEnabled === true;
 		const t = getPageTokens(req);
 		t.CHAT_SIDEBAR_PSEUDO_STRIP_LIST = buildSidebarPseudoStripListStaticHtml(sidebarStripPath, {
-			feedBetaEnabled
+			rankedFeedEnabled
 		});
 		t.ENTRY_MODULE_SRC = `/build/chat.bundle.js${t.V}`;
 		// chat.html loads `/build/chat.bundle.css` (global + chat.css); omit duplicate `/global.css` from injectCommonHead.

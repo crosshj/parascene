@@ -5,7 +5,7 @@
 import { getAvatarColor } from './avatar.js';
 import { serverChannelTagFromServerName } from './serverChatTag.js';
 import { readDmPinKeysOrdered } from './chatDmPins.js';
-import { feedNavLabel, readFeedBetaEnabledSync } from './feedBetaNav.js';
+import { feedNavLabel } from './feedBetaNav.js';
 import * as Icons from '/icons/svg-strings.js';
 
 function escapeHtmlPseudoStrip(str) {
@@ -115,10 +115,7 @@ function pseudoStripTitleForSlug(slug, opts = {}) {
 	const key = String(slug || '').trim().toLowerCase();
 	const base = SIDEBAR_PSEUDO_STRIP_TITLES[key] || `#${key}`;
 	if (key !== 'feed') return base;
-	const enabled =
-		opts.feedBetaEnabled === true ||
-		(opts.feedBetaEnabled !== false && readFeedBetaEnabledSync());
-	return feedNavLabel(base, enabled);
+	return feedNavLabel(base);
 }
 
 /**
@@ -453,10 +450,9 @@ export function buildSidebarPseudoStripListStaticHtml(requestPath = '', opts = {
 		const avatarHtml = iconAvatarHtml || `<div class="comment-avatar connect-chat-thread-row-channel-avatar chat-page-sidebar-channel-avatar" style="background: ${escapeHtmlPseudoStrip(bg)};" aria-hidden="true">#</div>`;
 		const navCls = sidebarPseudoStripPrimaryNavClasses(slug);
 		const activeCls = activeSlug === slug ? ' is-active' : '';
-		const feedBetaCls = slug === 'feed' && title.includes('[beta]') ? ' chat-page-sidebar-row--feed-beta' : '';
 		const notesHtml = slug === 'creations' ? buildSidebarNotesStripAnchorHtml(requestPath) : '';
 		const feedNavAttr = slug === 'feed' ? ' data-feed-nav="feed"' : '';
-		return `<a class="chat-page-sidebar-row${navCls}${activeCls}${feedBetaCls}" href="${escapeHtmlPseudoStrip(href)}" data-chat-pseudo-slug="${escapeHtmlPseudoStrip(slug)}">
+		return `<a class="chat-page-sidebar-row${navCls}${activeCls}" href="${escapeHtmlPseudoStrip(href)}" data-chat-pseudo-slug="${escapeHtmlPseudoStrip(slug)}">
 				${avatarHtml}
 				<div class="chat-page-sidebar-row-body">
 					<div class="chat-page-sidebar-row-title-line">

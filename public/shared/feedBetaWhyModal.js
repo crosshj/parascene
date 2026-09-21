@@ -1,5 +1,5 @@
 /**
- * Feed [beta] "Why am I seeing this?" modal — displays server-stamped `feed_beta_why` only.
+ * Ranked-feed "Why am I seeing this?" modal — displays server-stamped `feed_beta_why` only.
  */
 
 let activeOverlay = null;
@@ -22,7 +22,7 @@ export function openFeedBetaWhyModal(why) {
 	const label =
 		typeof why.label === 'string' && why.label.trim() ? why.label.trim() : '';
 	const summary =
-		typeof why.summary === 'string' && why.summary.trim() ? why.summary.trim() : 'Shown in Feed [beta].';
+		typeof why.summary === 'string' && why.summary.trim() ? why.summary.trim() : 'Shown in Feed.';
 	const details = Array.isArray(why.details)
 		? why.details.filter((d) => typeof d === 'string' && d.trim())
 		: [];

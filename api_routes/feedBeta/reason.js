@@ -1,5 +1,5 @@
 /**
- * Feed [beta] placement reasons — stamped when rows are chosen during pull/merge, not inferred later.
+ * Ranked-feed placement reasons — stamped when rows are chosen during pull/merge, not inferred later.
  *
  * Newcomer pool: authors are only flagged as newcomers when they appear in the current
  * request catalog batch and their account is younger than `newcomerAccountDays`. Authors
@@ -34,7 +34,7 @@ const POOL_USER = {
 	recent_comment: 'People have been commenting on it recently.',
 	own_activity: 'Your creation picked up likes or comments.',
 	catalog_unseen:
-		'It is from the back catalog — not on your recent Feed [beta] pages and not something you have liked.',
+		'It is from the back catalog — not on your recent Feed pages and not something you have liked.',
 	catalog_relaxed:
 		'You are deep in the feed — ranked from the catalog with relaxed seen filters so scroll can keep going.',
 	follow_sprinkle: 'You follow this creator — a small sprinkle from people you follow.',
@@ -72,7 +72,7 @@ export function feedBetaPoolLabel(pool) {
  * @returns {string}
  */
 export function feedBetaPoolUserLine(pool) {
-	return POOL_USER[pool] ?? 'It matched the Feed [beta] ranking mix for this page.';
+	return POOL_USER[pool] ?? 'It matched the Feed ranking mix for this page.';
 }
 
 /**
@@ -135,7 +135,7 @@ export function buildFeedBetaWhy(stamp, entry = null) {
 	const pool = stamp.pool ?? null;
 	const thread = stamp.thread ?? null;
 	const label = feedBetaPoolLabel(pool);
-	const summary = pool ? feedBetaPoolUserLine(pool) : 'Shown in Feed [beta].';
+	const summary = pool ? feedBetaPoolUserLine(pool) : 'Shown in Feed.';
 	const details = [];
 
 	if (thread === 'video') {
@@ -160,7 +160,7 @@ export function buildFeedBetaWhy(stamp, entry = null) {
 		details.push('Spotlight video head (not filtered by your seen list).');
 	}
 	if (stamp.relax_filters === true) {
-		details.push('Relaxed page — prior Feed [beta] pages and likes were not used to filter this draw.');
+		details.push('Relaxed page — prior Feed pages and likes were not used to filter this draw.');
 	}
 	if (stamp.source === 'db_random_fallback') {
 		details.push('Random catalog backfill after ranked pools under-filled this page.');

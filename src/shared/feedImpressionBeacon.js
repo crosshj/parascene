@@ -1,5 +1,5 @@
 /**
- * Feed [beta] batched viewport impressions → sessionStorage queue → POST /api/feed/impressions.
+ * Ranked-feed batched viewport impressions → sessionStorage queue → POST /api/feed/impressions.
  */
 
 import { readFeedBetaEnabledSync } from './feedBetaNav.js';

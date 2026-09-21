@@ -1,5 +1,5 @@
 /**
- * Sitewide feed_items queries for Feed [beta] ranking (no follow exclusion).
+ * Sitewide feed_items queries for ranked feed selection (no follow exclusion).
  * @param {import('@supabase/supabase-js').SupabaseClient} serviceClient
  * @param {{ prefixedTable: (name: string) => string, resolveFeedRowTitle: Function, getThumbnailUrl: Function }} deps
  */

@@ -1,7 +1,7 @@
 import { isFeedBetaPageCursor } from '../feedBeta/cursor.js';
 
 /**
- * Feed [beta] page 1 for assembly (challenge card + blog merge on app Home).
+ * Ranked feed page 1 for assembly (challenge card + blog merge on app Home).
  * @param {object} opts
  * @returns {boolean}
  */

@@ -1,5 +1,5 @@
 /**
- * Lightweight request timing for GET /api/feed (Feed [beta] debugging).
+ * Lightweight request timing for GET /api/feed debugging.
  */
 
 /**

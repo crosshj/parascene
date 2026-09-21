@@ -1,10 +1,10 @@
-# Plan: Feed [beta]
+# Plan: Ranked Feed
 
 Status: course-corrected — Redis hot path for seen + shared catalog snapshot. No Postgres seen table.
 
 Goal: fast first pages that feel alive; short memory (seen TTL ~30d); no long analytics history on the feed path.
 
-Opt-in via `user.meta.feedBetaEnabled`. `GET /api/feed` uses `pullFeedBetaRows` when `canAccessFeedBeta`.
+All authenticated users receive the ranked feed by default. `meta.forceLegacyFeed` opts a user out and restores the classic follow feed.
 
 ## Architecture
 

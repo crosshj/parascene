@@ -1,27 +1,14 @@
 import { describe, expect, test } from '@jest/globals';
-import {
-	feedNavLabel,
-	isFeedBetaOptedInFromProfile
-} from '../public/shared/feedBetaNav.js';
+import { feedNavLabel, feedBetaActiveFromProfile } from '../public/shared/feedBetaNav.js';
 
 describe('feedBetaNav', () => {
-	test('feedNavLabel appends [beta] when enabled', () => {
-		expect(feedNavLabel('Feed', true)).toBe('Feed [beta]');
-		expect(feedNavLabel('Home', true)).toBe('Home [beta]');
+	test('feedNavLabel always returns the normal label', () => {
+		expect(feedNavLabel('Feed', true)).toBe('Feed');
+		expect(feedNavLabel('Home', false)).toBe('Home');
 	});
 
-	test('feedNavLabel leaves label unchanged when disabled', () => {
-		expect(feedNavLabel('Feed', false)).toBe('Feed');
-	});
-
-	test('feedNavLabel does not double-append', () => {
-		expect(feedNavLabel('Feed [beta]', true)).toBe('Feed [beta]');
-	});
-
-	test('isFeedBetaOptedInFromProfile is true only when feedBetaEnabled is set', () => {
-		expect(isFeedBetaOptedInFromProfile(null)).toBe(false);
-		expect(isFeedBetaOptedInFromProfile({ feedBetaEnabled: false })).toBe(false);
-		expect(isFeedBetaOptedInFromProfile({ feedBetaEnabled: true })).toBe(true);
-		expect(isFeedBetaOptedInFromProfile({ meta: { feedBetaEnabled: true } })).toBe(true);
+	test('ranked feed is active unless legacy feed is forced', () => {
+		expect(feedBetaActiveFromProfile({ meta: {} })).toBe(true);
+		expect(feedBetaActiveFromProfile({ meta: { forceLegacyFeed: true } })).toBe(false);
 	});
 });

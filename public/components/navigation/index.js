@@ -655,7 +655,7 @@ class AppNavigation extends HTMLElement {
 				const betaActive =
 					typeof feedBetaActiveFromProfile === 'function'
 						? feedBetaActiveFromProfile(user)
-						: user?.feedBetaEnabled === true || user?.meta?.feedBetaEnabled === true;
+						: user?.forceLegacyFeed !== true && user?.meta?.forceLegacyFeed !== true;
 				setFeedBetaEnabledClient(betaActive);
 				this.feedBetaEnabled = betaActive;
 			}

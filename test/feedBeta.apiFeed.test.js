@@ -79,7 +79,7 @@ describe('GET /api/feed beta integration', () => {
 		const [legacy, beta] = await Promise.all([
 			buildGetFeedJsonResponse({
 				queries: legacyQueries,
-				user: { id: 42, role: 'consumer', meta: {} },
+				user: { id: 42, role: 'consumer', meta: { forceLegacyFeed: true } },
 				query: { limit: 20 }
 			}),
 			buildGetFeedJsonResponse({

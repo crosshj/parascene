@@ -20,7 +20,7 @@ export function getFeedBetaSeenSet(user) {
 }
 
 /**
- * Prior Feed [beta] API responses (`user.meta.feedBetaSeen`).
+ * Prior ranked-feed API responses (`user.meta.feedBetaSeen`).
  * @param {object|null|undefined} row
  * @param {Set<string>} servedSeen
  * @returns {boolean}
@@ -50,7 +50,7 @@ export function isFeedBetaRelaxedPage(pageIndex, params) {
 }
 
 /**
- * Skip in pool draws: already served in Feed [beta] or already liked.
+ * Skip in pool draws: already served in the ranked feed or already liked.
  * @param {object|null|undefined} row
  * @param {Set<string>} servedSeen
  * @param {{ ignoreSeen?: boolean, relaxed?: boolean }} [opts]

@@ -1,6 +1,6 @@
 /**
  * Fill `author_plan` from `users.meta.plan` when a feed row never joined it.
- * Classic SQL feed already sets this; Feed [beta] catalog hydration did not.
+ * Classic SQL feed already sets this; catalog hydration did not.
  *
  * @param {object} queries
  * @param {object[]} rows

@@ -13,7 +13,6 @@ let setChatAudibleNotificationsEnabled;
 let clearChatAudibleNotificationsStorage;
 let setFeedBetaEnabledClient;
 let feedBetaActiveFromProfile;
-let isFeedBetaOptedInFromProfile;
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -50,7 +49,6 @@ async function loadDeps() {
 		const feedBetaNavMod = await import(`../../shared/feedBetaNav.js${qs}`);
 		setFeedBetaEnabledClient = feedBetaNavMod.setFeedBetaEnabledClient;
 		feedBetaActiveFromProfile = feedBetaNavMod.feedBetaActiveFromProfile;
-		isFeedBetaOptedInFromProfile = feedBetaNavMod.isFeedBetaOptedInFromProfile;
 	})();
 	return _depsPromise;
 }
@@ -291,14 +289,7 @@ class AppModalProfile extends HTMLElement {
 	syncForceLegacyFeedVisibility() {
 		const wrap = this.shadowRoot.querySelector('[data-force-legacy-wrap]');
 		if (!wrap) return;
-		if (
-			typeof isFeedBetaOptedInFromProfile === 'function' &&
-			isFeedBetaOptedInFromProfile(this.profileData)
-		) {
-			wrap.removeAttribute('hidden');
-		} else {
-			wrap.setAttribute('hidden', '');
-		}
+		wrap.removeAttribute('hidden');
 	}
 
 	setupForceLegacyFeedToggle() {
@@ -445,10 +436,10 @@ class AppModalProfile extends HTMLElement {
 
 			const user = result.data;
 			const nextKey = user
-				? `${user.id}|${user.hasApiKey ? '1' : '0'}|${user.apiKeyPrefix || ''}|${user.hasVynlyToken ? '1' : '0'}|${user.vynlyTokenPrefix || ''}|${user.enableNsfw ? '1' : '0'}|${user.showOwnPostsInFeed ? '1' : '0'}|${user.audibleNotifications !== false ? '1' : '0'}|${user.appear_offline ? '1' : '0'}|${user.feedBetaEnabled ? '1' : '0'}|${user.forceLegacyFeed ? '1' : '0'}`
+				? `${user.id}|${user.hasApiKey ? '1' : '0'}|${user.apiKeyPrefix || ''}|${user.hasVynlyToken ? '1' : '0'}|${user.vynlyTokenPrefix || ''}|${user.enableNsfw ? '1' : '0'}|${user.showOwnPostsInFeed ? '1' : '0'}|${user.audibleNotifications !== false ? '1' : '0'}|${user.appear_offline ? '1' : '0'}|${user.forceLegacyFeed ? '1' : '0'}`
 				: '';
 			const currentKey = this.profileData
-				? `${this.profileData.id}|${this.profileData.hasApiKey ? '1' : '0'}|${this.profileData.apiKeyPrefix || ''}|${this.profileData.hasVynlyToken ? '1' : '0'}|${this.profileData.vynlyTokenPrefix || ''}|${this.profileData.enableNsfw ? '1' : '0'}|${this.profileData.showOwnPostsInFeed ? '1' : '0'}|${this.profileData.audibleNotifications !== false ? '1' : '0'}|${this.profileData.appear_offline ? '1' : '0'}|${this.profileData.feedBetaEnabled ? '1' : '0'}|${this.profileData.forceLegacyFeed ? '1' : '0'}`
+				? `${this.profileData.id}|${this.profileData.hasApiKey ? '1' : '0'}|${this.profileData.apiKeyPrefix || ''}|${this.profileData.hasVynlyToken ? '1' : '0'}|${this.profileData.vynlyTokenPrefix || ''}|${this.profileData.enableNsfw ? '1' : '0'}|${this.profileData.showOwnPostsInFeed ? '1' : '0'}|${this.profileData.audibleNotifications !== false ? '1' : '0'}|${this.profileData.appear_offline ? '1' : '0'}|${this.profileData.forceLegacyFeed ? '1' : '0'}`
 				: '';
 
 			if (nextKey !== currentKey) {

@@ -645,25 +645,6 @@ export function openDb() {
 				return { changes: 1 };
 			}
 		},
-		updateUserFeedBetaEnabled: {
-			run: async (userId, feedBetaEnabled) => {
-				const { data: current, error: selectError } = await serviceClient
-					.from(prefixedTable("users"))
-					.select("meta")
-					.eq("id", userId)
-					.maybeSingle();
-				if (selectError) throw selectError;
-				const existing = current?.meta ?? null;
-				const meta = typeof existing === "object" && existing !== null ? { ...existing } : {};
-				meta.feedBetaEnabled = Boolean(feedBetaEnabled);
-				const { error } = await serviceClient
-					.from(prefixedTable("users"))
-					.update({ meta })
-					.eq("id", userId);
-				if (error) throw error;
-				return { changes: 1 };
-			}
-		},
 		updateUserFeedBetaSeen: {
 			run: async (userId, seenIds) => {
 				const cap = 400;
@@ -3859,7 +3840,7 @@ export function openDb() {
 				paginated: explorePaginated
 			};
 		})(),
-		/** Sitewide published feed rows for Feed [beta] ranking (no follow/viewer exclusion). */
+		/** Sitewide published feed rows for ranked feed selection (no follow/viewer exclusion). */
 		selectFeedBetaSitewideCatalog: createSelectFeedBetaSitewideCatalog(serviceClient, {
 			prefixedTable,
 			resolveFeedRowTitle,

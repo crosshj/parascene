@@ -92,10 +92,8 @@ export function getPageTokens(req, extra = {}) {
 	}
 	const authed = !!(req?.auth?.userId);
 	tokens.PRSN_SUPABASE_BOOT = authed ? getSupabaseBootHtml() : "";
-	const feedBetaEnabled =
-		extra?.feedBetaEnabled === true ||
-		(req?.viewerFeedBetaEnabled === true && extra?.feedBetaEnabled !== false);
-	tokens.PRSN_FEED_BETA_BOOT = getFeedBetaBootHtml(feedBetaEnabled);
+	const rankedFeedEnabled = req?.viewerFeedBetaEnabled === true;
+	tokens.PRSN_FEED_BETA_BOOT = getFeedBetaBootHtml(rankedFeedEnabled);
 	return tokens;
 }
 
@@ -103,7 +101,7 @@ function getFeedBetaBootHtml(enabled) {
 	const flag = enabled === true ? "true" : "false";
 	return (
 		`<script>window.__PRSN_FEED_BETA_ENABLED__=${flag};` +
-		`try{localStorage.setItem('prsn-feed-beta-enabled',${flag}?'1':'0');` +
+		`try{` +
 		`document.documentElement.classList.toggle('feed-beta-enabled',${flag});}` +
 		`catch(e){}</script>`
 	);

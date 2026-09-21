@@ -238,12 +238,10 @@ export default function createAdminRoutes({ queries, storage }) {
 		}
 
 		const suspended = req.body?.suspended;
-		const feedBetaEnabled = req.body?.feedBetaEnabled;
 		const hasSuspended = typeof suspended === "boolean";
-		const hasFeedBeta = typeof feedBetaEnabled === "boolean";
-		if (!hasSuspended && !hasFeedBeta) {
+		if (!hasSuspended) {
 			return res.status(400).json({
-				error: "Provide suspended and/or feedBetaEnabled as booleans"
+				error: "Provide suspended as a boolean"
 			});
 		}
 
@@ -253,13 +251,6 @@ export default function createAdminRoutes({ queries, storage }) {
 			}
 			await queries.updateUserSuspended.run(targetUserId, suspended);
 		}
-		if (hasFeedBeta) {
-			if (!queries.updateUserFeedBetaEnabled?.run) {
-				return res.status(500).json({ error: "Feed beta update not available" });
-			}
-			await queries.updateUserFeedBetaEnabled.run(targetUserId, feedBetaEnabled);
-		}
-
 		const updated = await queries.selectUserById.get(targetUserId);
 		const meta =
 			updated?.meta != null && typeof updated.meta === "object" ? updated.meta : {};
@@ -275,7 +266,6 @@ export default function createAdminRoutes({ queries, storage }) {
 			user: {
 				...updated,
 				suspended: meta.suspended === true,
-				feedBetaEnabled: meta.feedBetaEnabled === true,
 				credits: creditsBalance
 			}
 		});

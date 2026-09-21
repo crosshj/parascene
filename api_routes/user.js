@@ -655,7 +655,6 @@ export default function createProfileRoutes({ queries }) {
 				? user.meta.vynlyTokenPrefix.trim()
 				: null;
 		const appearOffline = user.appear_offline === true;
-		const feedBetaEnabled = user.meta?.feedBetaEnabled === true;
 		const forceLegacyFeed = user.meta?.forceLegacyFeed === true;
 		const metaPublic = sanitizeUserMetaForClient(user.meta);
 		return res.json({
@@ -669,8 +668,7 @@ export default function createProfileRoutes({ queries }) {
 			enableNsfw,
 			showOwnPostsInFeed,
 			audibleNotifications,
-			feedBetaEnabled,
-			forceLegacyFeed: feedBetaEnabled ? forceLegacyFeed : false,
+			forceLegacyFeed,
 			hasApiKey,
 			apiKeyPrefix,
 			hasVynlyToken,
@@ -884,12 +882,6 @@ export default function createProfileRoutes({ queries }) {
 			}
 			if (wantsForceLegacy) {
 				const user = await queries.selectUserById.get(req.auth.userId);
-				if (!user?.meta?.feedBetaEnabled) {
-					return res.status(403).json({
-						error: "Forbidden",
-						message: "Force legacy feed is only available for feed beta participants."
-					});
-				}
 				if (!queries.updateUserForceLegacyFeed?.run) {
 					return res.status(500).json({ error: "Not available", message: "Profile update is not available." });
 				}

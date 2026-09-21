@@ -1,15 +1,6 @@
-/**
- * Feed [beta] nav chrome — sync read from head boot / localStorage; DOM label helpers.
- */
-
-const STORAGE_KEY = 'prsn-feed-beta-enabled';
-
-/** @param {string} base @param {boolean} [enabled] */
-export function feedNavLabel(base, enabled = readFeedBetaEnabledSync()) {
-	const text = String(base ?? '').trim();
-	if (!enabled) return text;
-	if (!text || /\[beta\]/i.test(text)) return text;
-	return `${text} [beta]`;
+/** Feed navigation helpers retained for shared callers; the ranked feed is now the default. */
+export function feedNavLabel(base) {
+	return String(base ?? '').trim();
 }
 
 /** @returns {boolean} */
@@ -17,46 +8,22 @@ export function readFeedBetaEnabledSync() {
 	if (typeof window === 'undefined') return false;
 	if (window.__PRSN_FEED_BETA_ENABLED__ === true) return true;
 	if (window.__PRSN_FEED_BETA_ENABLED__ === false) return false;
-	try {
-		const stored = window.localStorage?.getItem(STORAGE_KEY);
-		if (stored === '1') return true;
-		if (stored === '0') return false;
-	} catch {
-		// ignore
-	}
-	return false;
+	return true;
 }
 
-/** Feed [beta] participant (opt-in only; not the same as effective beta feed). */
-export function isFeedBetaOptedInFromProfile(user) {
-	if (!user || typeof user !== 'object') return false;
-	return user.feedBetaEnabled === true || user.meta?.feedBetaEnabled === true;
-}
-
-/** Effective beta feed chrome + API path: opted in and not forcing legacy. */
 export function feedBetaActiveFromProfile(user) {
-	if (!user || typeof user !== 'object') return false;
-	if (!isFeedBetaOptedInFromProfile(user)) return false;
+	if (!user || typeof user !== 'object') return true;
 	return user.forceLegacyFeed !== true && user.meta?.forceLegacyFeed !== true;
 }
 
 /** @param {boolean} enabled */
 export function setFeedBetaEnabledClient(enabled) {
 	if (typeof window === 'undefined') return;
-	const on = enabled === true;
+	const on = enabled !== false;
 	window.__PRSN_FEED_BETA_ENABLED__ = on;
-	try {
-		window.localStorage?.setItem(STORAGE_KEY, on ? '1' : '0');
-	} catch {
-		// ignore
-	}
 	applyFeedBetaDocumentClass(on);
 	applyFeedBetaNavLabelsToDom(on);
-	try {
-		document.dispatchEvent(new CustomEvent('feed-beta-changed', { detail: { enabled: on } }));
-	} catch {
-		// ignore
-	}
+	try { document.dispatchEvent(new CustomEvent('feed-beta-changed', { detail: { enabled: on } })); } catch { /* ignore */ }
 }
 
 /** @param {boolean} [enabled] */
@@ -68,12 +35,8 @@ export function applyFeedBetaDocumentClass(enabled = readFeedBetaEnabledSync()) 
 /** @param {boolean} [enabled] */
 export function applyFeedBetaNavLabelsToDom(enabled = readFeedBetaEnabledSync()) {
 	if (typeof document === 'undefined') return;
-	document.querySelectorAll('[data-feed-nav="feed"]').forEach((el) => {
-		el.textContent = feedNavLabel('Feed', enabled);
-	});
-	document.querySelectorAll('[data-feed-nav="home"]').forEach((el) => {
-		el.textContent = feedNavLabel('Home', enabled);
-	});
+	document.querySelectorAll('[data-feed-nav="feed"]').forEach((el) => { el.textContent = 'Feed'; });
+	document.querySelectorAll('[data-feed-nav="home"]').forEach((el) => { el.textContent = 'Home'; });
 	applyFeedBetaDocumentClass(enabled);
 }
 

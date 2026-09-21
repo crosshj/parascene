@@ -1800,7 +1800,7 @@ async function renderFeedEditorialPinsForm(container, doc) {
 	intro.className = "admin-detail";
 	intro.style.gridColumn = "1 / -1";
 	intro.textContent =
-		"Inject published creations on feed page 1 for all users (not Feed [beta] only). Pins are removed from organic positions first so they never appear back-to-back with themselves.";
+		"Inject published creations on feed page 1 for all users. Pins are removed from organic positions first so they never appear back-to-back with themselves.";
 	container.appendChild(intro);
 
 	const defaultsTitle = document.createElement("span");

@@ -16,7 +16,6 @@ export function createGoldenPathUser(id = GOLDEN_VIEWER_ID, seenIds = []) {
 	return {
 		id,
 		meta: {
-			feedBetaEnabled: true,
 			feedBetaSeen: mergeFeedBetaSeenIds({ meta: {} }, seenIds)
 		}
 	};
