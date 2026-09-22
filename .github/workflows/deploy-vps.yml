@@ -63,18 +63,31 @@ jobs:
             docker run --detach \
               --name parascene \
               --restart unless-stopped \
-              --publish 80:3000 \
+              --publish 127.0.0.1:3000:3000 \
               parascene:vps
           REMOTE
 
-      - name: Verify deployment
+      - name: Verify nginx to Docker path
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
         run: |
           for attempt in {1..30}; do
-            if curl --fail --silent --show-error --max-time 10 "http://$VPS_HOST/"; then
+            if ssh \
+              -i "$RUNNER_TEMP/vps-ssh/id_ed25519" \
+              -o UserKnownHostsFile="$RUNNER_TEMP/vps-ssh/known_hosts" \
+              -o StrictHostKeyChecking=yes \
+              "$VPS_USER@$VPS_HOST" \
+              "curl --fail --silent --show-error --insecure https://localhost/ -H 'Host: beta.parascene.com'"; then
               exit 0
             fi
             sleep 2
           done
+
+          ssh \
+            -i "$RUNNER_TEMP/vps-ssh/id_ed25519" \
+            -o UserKnownHostsFile="$RUNNER_TEMP/vps-ssh/known_hosts" \
+            -o StrictHostKeyChecking=yes \
+            "$VPS_USER@$VPS_HOST" \
+            'docker ps -a --filter name=parascene; docker logs --tail=200 parascene'
           exit 1
