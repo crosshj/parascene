@@ -1,6 +1,9 @@
 name: Deploy to VPS
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 concurrency:
@@ -51,11 +54,11 @@ jobs:
             -o StrictHostKeyChecking=yes \
             "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
             set -euo pipefail
-            install -d -m 755 /opt/parascene-vps
-            tar -xzf /tmp/vps.tar.gz -C /opt/parascene-vps
+            install -d -m 755 "$HOME/parascene-vps"
+            tar -xzf /tmp/vps.tar.gz -C "$HOME/parascene-vps"
             rm -f /tmp/vps.tar.gz
 
-            docker build --tag parascene:vps /opt/parascene-vps
+            docker build --tag parascene:vps "$HOME/parascene-vps"
             docker rm --force parascene 2>/dev/null || true
             docker run --detach \
               --name parascene \
