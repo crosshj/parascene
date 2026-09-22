@@ -1,0 +1,77 @@
+name: Deploy to VPS
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-vps
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          install -m 700 -d "$RUNNER_TEMP/vps-ssh"
+          printf '%s\n' "$VPS_SSH_KEY" > "$RUNNER_TEMP/vps-ssh/id_ed25519"
+          chmod 600 "$RUNNER_TEMP/vps-ssh/id_ed25519"
+          ssh-keyscan -H "$VPS_HOST" > "$RUNNER_TEMP/vps-ssh/known_hosts"
+
+      - name: Package VPS app
+        run: tar -czf "$RUNNER_TEMP/vps.tar.gz" -C vps .
+
+      - name: Copy VPS app
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          scp \
+            -i "$RUNNER_TEMP/vps-ssh/id_ed25519" \
+            -o UserKnownHostsFile="$RUNNER_TEMP/vps-ssh/known_hosts" \
+            -o StrictHostKeyChecking=yes \
+            "$RUNNER_TEMP/vps.tar.gz" \
+            "$VPS_USER@$VPS_HOST:/tmp/vps.tar.gz"
+
+      - name: Build and restart container
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          ssh \
+            -i "$RUNNER_TEMP/vps-ssh/id_ed25519" \
+            -o UserKnownHostsFile="$RUNNER_TEMP/vps-ssh/known_hosts" \
+            -o StrictHostKeyChecking=yes \
+            "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
+            set -euo pipefail
+            install -d -m 755 /opt/parascene-vps
+            tar -xzf /tmp/vps.tar.gz -C /opt/parascene-vps
+            rm -f /tmp/vps.tar.gz
+
+            docker build --tag parascene:vps /opt/parascene-vps
+            docker rm --force parascene 2>/dev/null || true
+            docker run --detach \
+              --name parascene \
+              --restart unless-stopped \
+              --publish 80:3000 \
+              parascene:vps
+          REMOTE
+
+      - name: Verify deployment
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          for attempt in {1..30}; do
+            if curl --fail --silent --show-error --max-time 10 "http://$VPS_HOST/"; then
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
