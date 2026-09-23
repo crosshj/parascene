@@ -22,7 +22,7 @@ if [[ "${1:-}" == "remote" ]]; then
 
 	# Verify the public nginx-to-Docker path. Keep retrying while the container starts.
 	for attempt in {1..30}; do
-		if curl --fail --silent --show-error --output /dev/null \
+		if curl --fail --silent --output /dev/null \
 			--insecure https://localhost/ \
 			-H 'Host: beta.parascene.com'; then
 			exit 0
