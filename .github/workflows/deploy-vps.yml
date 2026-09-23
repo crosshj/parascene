@@ -88,12 +88,12 @@ jobs:
           VPS_USER: ${{ secrets.VPS_USER }}
         run: |
           for attempt in {1..30}; do
-            if ssh \
-              -i "$RUNNER_TEMP/vps-ssh/id_ed25519" \
-              -o UserKnownHostsFile="$RUNNER_TEMP/vps-ssh/known_hosts" \
-              -o StrictHostKeyChecking=yes \
-              "$VPS_USER@$VPS_HOST" \
-              "curl --fail --silent --show-error --insecure https://localhost/ -H 'Host: beta.parascene.com'"; then
+			if ssh \
+				-i "$RUNNER_TEMP/vps-ssh/id_ed25519" \
+				-o UserKnownHostsFile="$RUNNER_TEMP/vps-ssh/known_hosts" \
+				-o StrictHostKeyChecking=yes \
+				"$VPS_USER@$VPS_HOST" \
+				"curl --fail --silent --show-error --output /dev/null --insecure https://localhost/ -H 'Host: beta.parascene.com'"; then
               exit 0
             fi
             sleep 2
