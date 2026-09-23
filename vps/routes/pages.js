@@ -42,7 +42,10 @@ export default function createPageRoutes({ pagesDir }) {
 
 	for (const [route, relativePath] of Object.entries(PAGE_ROUTES)) {
 		router.get(route, (req, res, next) => {
-			sendPage(req, res, next, path.join(pagesDir, relativePath));
+			const pagePath = (route === "/" || route === "/index.html") && req.auth?.userId
+				? path.join(pagesDir, "app/app.html")
+				: path.join(pagesDir, relativePath);
+			sendPage(req, res, next, pagePath);
 		});
 	}
 
