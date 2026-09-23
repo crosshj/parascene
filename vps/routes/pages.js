@@ -2,6 +2,7 @@ import express from "express";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { createSpaFallback } from "./middleware/spa.js";
+import { getAppAssetNames } from "./utils/appAssets.js";
 
 const PAGE_ROUTES = {
 	"/": "index/index.html",
@@ -35,7 +36,7 @@ function serializeBootstrap(value) {
 		.replaceAll("/", "\\u002f");
 }
 
-async function sendPage(req, res, next, filePath, db) {
+async function sendPage(req, res, next, filePath, db, buildDir) {
 	try {
 		let html = await fs.readFile(filePath, "utf8");
 		html = html.replace("{{CANONICAL_LINK}}", `<link rel="canonical" href="${escapeHtml(canonicalUrlForRequest(req))}" />`);
@@ -48,6 +49,10 @@ async function sendPage(req, res, next, filePath, db) {
 			};
 			html = html.replace("{{APP_BOOTSTRAP}}", `<script>window.__PARASCENE_BOOTSTRAP__=${serializeBootstrap(bootstrap)};</script>`);
 		}
+		if (html.includes("{{APP_JS}}") || html.includes("{{APP_CSS}}")) {
+			const assets = await getAppAssetNames(buildDir);
+			html = html.replaceAll("{{APP_JS}}", assets.js).replaceAll("{{APP_CSS}}", assets.css);
+		}
 		res.type("html").send(html);
 	} catch (error) {
 		next(error);
@@ -57,20 +62,21 @@ async function sendPage(req, res, next, filePath, db) {
 /** Serve page modules and their CSS/JS/assets from pages/<page>/. */
 export default function createPageRoutes({ pagesDir, db }) {
 	const router = express.Router();
+	const buildDir = path.join(pagesDir, "..", "build");
 
 	for (const [route, relativePath] of Object.entries(PAGE_ROUTES)) {
 		router.get(route, (req, res, next) => {
 			const pagePath = (route === "/" || route === "/index.html") && req.auth?.userId
 				? path.join(pagesDir, "app/app.html")
 				: path.join(pagesDir, relativePath);
-			sendPage(req, res, next, pagePath, db);
+			sendPage(req, res, next, pagePath, db, buildDir);
 		});
 	}
 
 	// Keep the on-disk page-module layout private; expose assets at page-relative URLs.
 	router.use(express.static(pagesDir, { index: false }));
 	router.use("/build", express.static(path.join(pagesDir, "..", "build"), { index: false }));
-	router.use(createSpaFallback({ appPagePath: path.join(pagesDir, "app/app.html"), db }));
+	router.use(createSpaFallback({ appPagePath: path.join(pagesDir, "app/app.html"), db, buildDir }));
 
 	return router;
 }

@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import { getAppAssetNames } from "../utils/appAssets.js";
 
 function serializeBootstrap(value) {
 	return JSON.stringify(value)
@@ -31,7 +32,7 @@ function loginUrlFor(req) {
 }
 
 /** Fall back authenticated document navigations to the client-side app shell. */
-export function createSpaFallback({ appPagePath, db }) {
+export function createSpaFallback({ appPagePath, db, buildDir }) {
 	return async function spaFallback(req, res, next) {
 		if (!isDocumentRequest(req)) return next();
 		if (!req.auth?.userId) return res.redirect(loginUrlFor(req));
@@ -39,6 +40,10 @@ export function createSpaFallback({ appPagePath, db }) {
 			let html = await fs.readFile(appPagePath, "utf8");
 			if (html.includes("{{APP_BOOTSTRAP}}")) {
 				html = html.replace("{{APP_BOOTSTRAP}}", `<script>window.__PARASCENE_BOOTSTRAP__=${serializeBootstrap(await bootstrapForRequest(req, db))};</script>`);
+			}
+			if (html.includes("{{APP_JS}}") || html.includes("{{APP_CSS}}")) {
+				const assets = await getAppAssetNames(buildDir);
+				html = html.replaceAll("{{APP_JS}}", assets.js).replaceAll("{{APP_CSS}}", assets.css);
 			}
 			return res.type("html").send(html);
 		} catch (error) {
