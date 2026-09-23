@@ -27,10 +27,8 @@ function cookieOptions(req) {
 }
 export function setSessionCookie(res, token, req) {
 	const options = cookieOptions(req);
-	if (options.domain) res.clearCookie(COOKIE_NAME, { ...options, domain: undefined });
 	res.cookie(COOKIE_NAME, token, options);
 }
 export function clearSessionCookie(res, req) {
 	res.clearCookie(COOKIE_NAME, cookieOptions(req));
-	if (process.env.NODE_ENV === "production" || String(req?.hostname || "").endsWith(".parascene.com")) res.clearCookie(COOKIE_NAME, { ...cookieOptions(req), domain: undefined });
 }
