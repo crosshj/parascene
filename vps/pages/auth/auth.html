@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>parascene - auth</title>
+	<link rel="stylesheet" href="/auth/auth.css" />
+</head>
+<body data-entry="auth">
+	<main>
+		<div class="auth-logo"><a href="/" class="auth-logo-link">parascene</a></div>
+
+		<section id="signup">
+			<h1>Create account</h1>
+			<div id="signup-error" class="alert error" hidden></div>
+			<form data-auth-form="signup" autocomplete="on">
+				<label>Email<input type="email" name="email" autocomplete="username" required /></label>
+				<label>Password<input type="password" name="password" autocomplete="new-password" minlength="8" required /></label>
+				<button type="submit">Create account</button>
+			</form>
+			<p>Already have an account? <a href="#login">Login</a></p>
+		</section>
+
+		<section id="login">
+			<h1>Login</h1>
+			<div id="login-error" class="alert error" hidden></div>
+			<form data-auth-form="login" autocomplete="on">
+				<label>Email or username<input type="text" name="email" autocomplete="username" required /></label>
+				<label>Password<input type="password" name="password" autocomplete="current-password" required /></label>
+				<button type="submit">Login</button>
+			</form>
+			<p>Don't have an account? <a href="#signup">Signup</a></p>
+			<p class="auth-note">Password reset will use the current Parascene flow while beta auth is being completed.</p>
+		</section>
+
+		<section id="account">
+			<h1>You are logged in</h1>
+			<p id="account-summary"></p>
+			<button type="button" id="logout">Log out</button>
+			<p><a href="/">Return to beta</a></p>
+		</section>
+	</main>
+	<script type="module" src="/auth/auth.js"></script>
+</body>
+</html>

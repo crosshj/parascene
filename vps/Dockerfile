@@ -1,10 +1,11 @@
 FROM node:22-alpine
 
 WORKDIR /app
-ENV PORT=3000
+ENV PORT=3000 NODE_ENV=production
 
-COPY server.js ./server.js
-COPY index.html ./index.html
+COPY package.json ./package.json
+RUN npm install --omit=dev
+COPY . .
 
 EXPOSE 3000
 

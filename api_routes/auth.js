@@ -333,11 +333,12 @@ function isSecureRequest(req) {
 	return process.env.NODE_ENV === "production";
 }
 
-/** Cookie domain so session is shared across www and sh. Omit for host-only cookie (e.g. localhost). */
+/** Cookie domain so session is shared across www, beta, and sh. Omit for host-only cookie (e.g. localhost). */
 function getCookieDomain(req) {
 	const hostname = req?.hostname || req?.host?.split(":")[0] || "";
 	if (
 		hostname === "www.parascene.com" ||
+		hostname === "beta.parascene.com" ||
 		hostname === "sh.parascene.com" ||
 		hostname === "parascene.com"
 	) {

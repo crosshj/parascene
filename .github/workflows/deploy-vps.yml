@@ -13,6 +13,7 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    environment: beta
 
     steps:
       - name: Check out repository
@@ -47,7 +48,20 @@ jobs:
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
         run: |
+          printf '%s\n' \
+            "SUPABASE_URL=$SUPABASE_URL" \
+            "SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_SERVICE_ROLE_KEY" \
+            "SESSION_SECRET=$SESSION_SECRET" | \
+          ssh \
+            -i "$RUNNER_TEMP/vps-ssh/id_ed25519" \
+            -o UserKnownHostsFile="$RUNNER_TEMP/vps-ssh/known_hosts" \
+            -o StrictHostKeyChecking=yes \
+            "$VPS_USER@$VPS_HOST" 'set -euo pipefail; install -d -m 755 "$HOME/parascene-vps"; umask 077; cat > "$HOME/parascene-vps/.env"; chmod 600 "$HOME/parascene-vps/.env"'
+
           ssh \
             -i "$RUNNER_TEMP/vps-ssh/id_ed25519" \
             -o UserKnownHostsFile="$RUNNER_TEMP/vps-ssh/known_hosts" \
@@ -63,6 +77,7 @@ jobs:
             docker run --detach \
               --name parascene \
               --restart unless-stopped \
+              --env-file "$HOME/parascene-vps/.env" \
               --publish 127.0.0.1:3000:3000 \
               parascene:vps
           REMOTE

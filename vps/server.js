@@ -1,17 +1,30 @@
-import http from "node:http";
-import fs from "node:fs";
+import "dotenv/config";
+import cookieParser from "cookie-parser";
+import express from "express";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createAuthRoutes } from "./routes/auth.js";
+import { createAuthMiddleware } from "./routes/middleware/auth.js";
+import createPageRoutes from "./routes/pages.js";
+import { createDb } from "./db/index.js";
 
 const port = Number(process.env.PORT || 3000);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const homepage = fs.readFileSync(path.join(__dirname, "index.html"));
+const pagesDir = path.join(__dirname, "pages");
+const app = express();
+const db = createDb();
 
-const server = http.createServer((request, response) => {
-	response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-	response.end(homepage);
+app.set("trust proxy", true);
+app.use(express.json({ limit: "1mb" }));
+app.use(cookieParser());
+app.use(createAuthMiddleware(db));
+app.use(createAuthRoutes(db));
+app.use(createPageRoutes({ pagesDir }));
+app.use(express.static(path.join(__dirname, "public")));
+app.use((error, req, res, next) => {
+	console.error("[beta] request failed", error);
+	if (res.headersSent) return next(error);
+	res.status(500).json({ error: "Internal server error" });
 });
 
-server.listen(port, "0.0.0.0", () => {
-	console.log(`VPS hello-world server listening on port ${port}`);
-});
+app.listen(port, "0.0.0.0", () => console.log(`Parascene beta listening on port ${port}`));
