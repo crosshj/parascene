@@ -14,8 +14,7 @@ async function session() {
 	const response = await fetch('/api/auth/session', { credentials: 'include' });
 	const data = await response.json();
 	if (data.user) {
-		document.getElementById('account-summary').textContent = `Signed in as ${data.user.email} (user #${data.user.id}).`;
-		show('account');
+		location.replace('/');
 	} else {
 		show(location.hash === '#signup' ? 'signup' : 'login');
 	}
@@ -33,8 +32,7 @@ document.querySelectorAll('[data-auth-form]').forEach((form) => form.addEventLis
 	const data = await response.json();
 	if (!response.ok) return errorFor(name, data.message || 'Unable to complete request.');
 	if (data.user) {
-		document.getElementById('account-summary').textContent = `Signed in as ${data.user.email} (user #${data.user.id}).`;
-		show('account');
+		location.replace('/');
 	}
 }));
 
