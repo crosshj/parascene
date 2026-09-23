@@ -9,6 +9,8 @@ const show = (id) => sections.forEach((name) => {
 	document.getElementById(name).hidden = name !== id;
 });
 
+const showHashSection = () => show(location.hash === '#signup' ? 'signup' : 'login');
+
 const errorFor = (name, message) => {
 	const node = document.getElementById(`${name}-error`);
 	node.textContent = message;
@@ -21,9 +23,11 @@ async function session() {
 	if (data.user) {
 		location.replace(returnUrl());
 	} else {
-		show(location.hash === '#signup' ? 'signup' : 'login');
+		showHashSection();
 	}
 }
+
+window.addEventListener('hashchange', showHashSection);
 
 document.querySelectorAll('[data-auth-form]').forEach((form) => form.addEventListener('submit', async (event) => {
 	event.preventDefault();

@@ -21,6 +21,8 @@ main { width: 100%; max-width: 420px; padding: 24px 20px; }
 .auth-logo { display: flex; justify-content: center; margin: -70px 0 24px; }
 .auth-logo-link { color: var(--text); font-size: 2.45rem; font-weight: 700; font-style: italic; letter-spacing: -0.06em; text-decoration: none; }
 section[hidden] { display: none; }
+html[data-auth-view="signup"] #login { display: none; }
+html[data-auth-view="signup"] #signup { display: block; }
 h1 { margin: 0 0 32px; font-size: 1.75rem; letter-spacing: -0.01em; }
 form { display: grid; gap: 18px; }
 label { display: grid; gap: 7px; color: var(--text-muted); font-size: .8125rem; letter-spacing: .5px; text-transform: uppercase; }

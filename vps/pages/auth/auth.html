@@ -6,12 +6,13 @@
 	<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
 	<title>parascene - auth</title>
 	<link rel="stylesheet" href="/auth/auth.css" />
+	<script>document.documentElement.dataset.authView = location.hash === '#signup' ? 'signup' : 'login';</script>
 </head>
 <body data-entry="auth">
 	<main>
 		<div class="auth-logo"><a href="/" class="auth-logo-link">parascene</a></div>
 
-		<section id="signup">
+		<section id="signup" hidden>
 			<h1>Create account</h1>
 			<div id="signup-error" class="alert error" hidden></div>
 			<form data-auth-form="signup" autocomplete="on">
@@ -34,7 +35,7 @@
 			<p class="auth-note">Password reset will use the current Parascene flow while beta auth is being completed.</p>
 		</section>
 
-		<section id="account">
+		<section id="account" hidden>
 			<h1>You are logged in</h1>
 			<p id="account-summary"></p>
 			<button type="button" id="logout">Log out</button>
