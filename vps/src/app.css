@@ -35,6 +35,17 @@ main {
 	font-weight: 700;
 	text-decoration: none;
 }
+.www-link {
+	display: inline-flex;
+	align-items: center;
+	min-height: 44px;
+	padding: 0 14px;
+	border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+	border-radius: 999px;
+	color: inherit;
+	font-weight: 600;
+	text-decoration: none;
+}
 button {
 	border: 0;
 	border-radius: 8px;

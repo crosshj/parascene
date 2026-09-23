@@ -75,7 +75,11 @@ export default function createPageRoutes({ pagesDir, db }) {
 
 	// Keep the on-disk page-module layout private; expose assets at page-relative URLs.
 	router.use(express.static(pagesDir, { index: false }));
-	router.use("/build", express.static(path.join(pagesDir, "..", "build"), { index: false }));
+	router.use("/build", express.static(path.join(pagesDir, "..", "build"), {
+		index: false,
+		maxAge: "1y",
+		immutable: true
+	}));
 	router.use(createSpaFallback({ appPagePath: path.join(pagesDir, "app/app.html"), db, buildDir }));
 
 	return router;
