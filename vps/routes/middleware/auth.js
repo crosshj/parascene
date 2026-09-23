@@ -7,7 +7,10 @@ export function createAuthMiddleware(db) {
 		if (!token || !userId) return next();
 		try {
 			const session = await db.sessionByToken(hashToken(token), userId);
-			if (!session || new Date(session.expires_at).getTime() <= Date.now()) { clearSessionCookie(res); return next(); }
+			// Match the current app: a valid JWT remains usable if the session row
+			// is missing (for example, if session persistence failed during login).
+			// JWT expiry still limits the fallback's lifetime.
+			if (session && new Date(session.expires_at).getTime() <= Date.now()) { clearSessionCookie(res); return next(); }
 			req.auth = { userId, token };
 			return next();
 		} catch (error) { return next(error); }
