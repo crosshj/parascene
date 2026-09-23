@@ -1,5 +1,22 @@
 import fs from "node:fs/promises";
 
+function serializeBootstrap(value) {
+	return JSON.stringify(value)
+		.replaceAll("<", "\\u003c")
+		.replaceAll(">", "\\u003e")
+		.replaceAll("&", "\\u0026")
+		.replaceAll("/", "\\u002f");
+}
+
+async function bootstrapForRequest(req, db) {
+	const user = req.auth?.userId ? await db?.userById(req.auth.userId) : null;
+	const profile = req.auth?.userId ? await db?.profileByUserId(req.auth.userId) : null;
+	return {
+		user: user ? { ...user, profile: profile || null } : null,
+		clientRoute: req.originalUrl || req.path || "/"
+	};
+}
+
 function isDocumentRequest(req) {
 	if (req.method !== "GET") return false;
 	if (!String(req.headers.accept || "").includes("text/html")) return false;
@@ -14,12 +31,15 @@ function loginUrlFor(req) {
 }
 
 /** Fall back authenticated document navigations to the client-side app shell. */
-export function createSpaFallback({ appPagePath }) {
+export function createSpaFallback({ appPagePath, db }) {
 	return async function spaFallback(req, res, next) {
 		if (!isDocumentRequest(req)) return next();
 		if (!req.auth?.userId) return res.redirect(loginUrlFor(req));
 		try {
-			const html = await fs.readFile(appPagePath, "utf8");
+			let html = await fs.readFile(appPagePath, "utf8");
+			if (html.includes("{{APP_BOOTSTRAP}}")) {
+				html = html.replace("{{APP_BOOTSTRAP}}", `<script>window.__PARASCENE_BOOTSTRAP__=${serializeBootstrap(await bootstrapForRequest(req, db))};</script>`);
+			}
 			return res.type("html").send(html);
 		} catch (error) {
 			return next(error);

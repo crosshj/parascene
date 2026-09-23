@@ -19,7 +19,7 @@ app.use(express.json({ limit: "1mb" }));
 app.use(cookieParser());
 app.use(createAuthMiddleware(db));
 app.use(createAuthRoutes(db));
-app.use(createPageRoutes({ pagesDir }));
+	app.use(createPageRoutes({ pagesDir, db }));
 app.use(express.static(path.join(__dirname, "public")));
 app.use((error, req, res, next) => {
 	console.error("[beta] request failed", error);

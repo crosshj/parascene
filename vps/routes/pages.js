@@ -27,10 +27,27 @@ function canonicalUrlForRequest(req) {
 	return `${origin}${pathOnly.startsWith("/") ? pathOnly : `/${pathOnly}`}`;
 }
 
-async function sendPage(req, res, next, filePath) {
+function serializeBootstrap(value) {
+	return JSON.stringify(value)
+		.replaceAll("<", "\\u003c")
+		.replaceAll(">", "\\u003e")
+		.replaceAll("&", "\\u0026")
+		.replaceAll("/", "\\u002f");
+}
+
+async function sendPage(req, res, next, filePath, db) {
 	try {
 		let html = await fs.readFile(filePath, "utf8");
 		html = html.replace("{{CANONICAL_LINK}}", `<link rel="canonical" href="${escapeHtml(canonicalUrlForRequest(req))}" />`);
+		if (html.includes("{{APP_BOOTSTRAP}}")) {
+			const user = req.auth?.userId ? await db?.userById(req.auth.userId) : null;
+			const profile = req.auth?.userId ? await db?.profileByUserId(req.auth.userId) : null;
+			const bootstrap = {
+				user: user ? { ...user, profile: profile || null } : null,
+				clientRoute: req.originalUrl || req.path || "/"
+			};
+			html = html.replace("{{APP_BOOTSTRAP}}", `<script>window.__PARASCENE_BOOTSTRAP__=${serializeBootstrap(bootstrap)};</script>`);
+		}
 		res.type("html").send(html);
 	} catch (error) {
 		next(error);
@@ -38,7 +55,7 @@ async function sendPage(req, res, next, filePath) {
 }
 
 /** Serve page modules and their CSS/JS/assets from pages/<page>/. */
-export default function createPageRoutes({ pagesDir }) {
+export default function createPageRoutes({ pagesDir, db }) {
 	const router = express.Router();
 
 	for (const [route, relativePath] of Object.entries(PAGE_ROUTES)) {
@@ -46,13 +63,14 @@ export default function createPageRoutes({ pagesDir }) {
 			const pagePath = (route === "/" || route === "/index.html") && req.auth?.userId
 				? path.join(pagesDir, "app/app.html")
 				: path.join(pagesDir, relativePath);
-			sendPage(req, res, next, pagePath);
+			sendPage(req, res, next, pagePath, db);
 		});
 	}
 
 	// Keep the on-disk page-module layout private; expose assets at page-relative URLs.
 	router.use(express.static(pagesDir, { index: false }));
-	router.use(createSpaFallback({ appPagePath: path.join(pagesDir, "app/app.html") }));
+	router.use("/build", express.static(path.join(pagesDir, "..", "build"), { index: false }));
+	router.use(createSpaFallback({ appPagePath: path.join(pagesDir, "app/app.html"), db }));
 
 	return router;
 }
