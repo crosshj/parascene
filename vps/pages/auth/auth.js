@@ -1,4 +1,4 @@
-const sections = ['login', 'signup', 'account'];
+const sections = ['login', 'signup', 'forgot', 'account'];
 
 const returnUrl = () => {
 	const value = new URLSearchParams(location.search).get('returnUrl');
@@ -9,7 +9,10 @@ const show = (id) => sections.forEach((name) => {
 	document.getElementById(name).hidden = name !== id;
 });
 
-const showHashSection = () => show(location.hash === '#signup' ? 'signup' : 'login');
+const showHashSection = () => {
+	const hash = location.hash;
+	show(hash === '#signup' ? 'signup' : hash === '#forgot' ? 'forgot' : 'login');
+};
 
 const errorFor = (name, message) => {
 	const node = document.getElementById(`${name}-error`);
