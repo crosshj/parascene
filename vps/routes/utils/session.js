@@ -19,11 +19,18 @@ export function readToken(token) {
 		return Number.isInteger(userId) && userId > 0 ? userId : null;
 	} catch { return null; }
 }
-function cookieOptions() {
-	return { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: process.env.NODE_ENV === "production" ? "none" : "lax", ...(process.env.NODE_ENV === "production" ? { domain: ".parascene.com" } : {}), maxAge: SESSION_MS, path: "/" };
+function cookieOptions(req) {
+	const hostname = String(req?.hostname || req?.get?.("host") || "").split(":")[0].toLowerCase();
+	const productionHost = hostname === "parascene.com" || hostname.endsWith(".parascene.com");
+	const production = process.env.NODE_ENV === "production" || productionHost;
+	return { httpOnly: true, secure: production, sameSite: production ? "none" : "lax", ...(productionHost ? { domain: ".parascene.com" } : {}), maxAge: SESSION_MS, path: "/" };
 }
-export function setSessionCookie(res, token) { res.cookie(COOKIE_NAME, token, cookieOptions()); }
-export function clearSessionCookie(res) {
-	res.clearCookie(COOKIE_NAME, cookieOptions());
-	if (process.env.NODE_ENV === "production") res.clearCookie(COOKIE_NAME, { ...cookieOptions(), domain: undefined });
+export function setSessionCookie(res, token, req) {
+	const options = cookieOptions(req);
+	if (options.domain) res.clearCookie(COOKIE_NAME, { ...options, domain: undefined });
+	res.cookie(COOKIE_NAME, token, options);
+}
+export function clearSessionCookie(res, req) {
+	res.clearCookie(COOKIE_NAME, cookieOptions(req));
+	if (process.env.NODE_ENV === "production" || String(req?.hostname || "").endsWith(".parascene.com")) res.clearCookie(COOKIE_NAME, { ...cookieOptions(req), domain: undefined });
 }
