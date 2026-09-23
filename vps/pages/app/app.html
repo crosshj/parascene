@@ -26,10 +26,12 @@
 		<section class="card">
 			<h1>Welcome back</h1>
 			<p id="account" class="muted">Loading your account…</p>
+			<p class="muted">Client route: <code id="client-route"></code></p>
 		</section>
 	</main>
 	<script type="module">
 		const account = document.getElementById("account");
+		document.getElementById("client-route").textContent = location.pathname + location.search + location.hash;
 		const response = await fetch("/api/me", { credentials: "include" });
 		if (!response.ok) {
 			location.href = "/auth#login";

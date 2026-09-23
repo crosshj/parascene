@@ -1,5 +1,10 @@
 const sections = ['login', 'signup', 'account'];
 
+const returnUrl = () => {
+	const value = new URLSearchParams(location.search).get('returnUrl');
+	return value && value.startsWith('/') && !value.startsWith('//') ? value : '/';
+};
+
 const show = (id) => sections.forEach((name) => {
 	document.getElementById(name).hidden = name !== id;
 });
@@ -14,7 +19,7 @@ async function session() {
 	const response = await fetch('/api/auth/session', { credentials: 'include' });
 	const data = await response.json();
 	if (data.user) {
-		location.replace('/');
+		location.replace(returnUrl());
 	} else {
 		show(location.hash === '#signup' ? 'signup' : 'login');
 	}
@@ -32,7 +37,7 @@ document.querySelectorAll('[data-auth-form]').forEach((form) => form.addEventLis
 	const data = await response.json();
 	if (!response.ok) return errorFor(name, data.message || 'Unable to complete request.');
 	if (data.user) {
-		location.replace('/');
+		location.replace(returnUrl());
 	}
 }));
 

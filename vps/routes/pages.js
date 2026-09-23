@@ -1,6 +1,7 @@
 import express from "express";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { createSpaFallback } from "./middleware/spa.js";
 
 const PAGE_ROUTES = {
 	"/": "index/index.html",
@@ -51,6 +52,7 @@ export default function createPageRoutes({ pagesDir }) {
 
 	// Keep the on-disk page-module layout private; expose assets at page-relative URLs.
 	router.use(express.static(pagesDir, { index: false }));
+	router.use(createSpaFallback({ appPagePath: path.join(pagesDir, "app/app.html") }));
 
 	return router;
 }
