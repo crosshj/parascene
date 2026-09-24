@@ -126,18 +126,33 @@ h1 { margin: 0; font-size: clamp(2rem, 5vw, 3.25rem); letter-spacing: -.045em; l
 }
 .refresh-button:disabled,
 .load-more-button:disabled { cursor: wait; opacity: .5; }
-.upload-status {
-	display: grid;
-	grid-template-columns: minmax(0, 1fr) minmax(120px, 240px);
-	align-items: center;
-	gap: 16px;
-	padding: 14px 18px;
+.upload-dialog {
+	width: min(460px, calc(100% - 48px));
+	padding: 26px;
 	border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
-	border-radius: 12px;
+	border-radius: 18px;
+	color: inherit;
+	background: Canvas;
+	box-shadow: 0 24px 80px #0f172a55;
 }
-.upload-status[hidden] { display: none; }
-.upload-status.is-error { color: #b91c1c; }
-.upload-status progress { width: 100%; }
+.upload-dialog::backdrop { background: #0f172a88; }
+.upload-dialog h2 { margin: 0; font-size: 1.35rem; }
+.upload-dialog .upload-message { min-height: 1.5em; line-height: 1.5; overflow-wrap: anywhere; }
+.upload-dialog progress { width: 100%; }
+.upload-dialog.is-error .upload-message { color: #b91c1c; }
+.upload-dismiss {
+	float: right;
+	min-height: 40px;
+	margin-top: 20px;
+	padding: 0 16px;
+	border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
+	border-radius: 999px;
+	color: inherit;
+	background: transparent;
+	font: inherit;
+	font-weight: 700;
+	cursor: pointer;
+}
 .files-status {
 	padding: 32px;
 	border: 1px dashed color-mix(in srgb, currentColor 24%, transparent);
@@ -222,14 +237,13 @@ h1 { margin: 0; font-size: clamp(2rem, 5vw, 3.25rem); letter-spacing: -.045em; l
 
 @media (prefers-color-scheme: dark) {
 	.files-status.is-error,
-	.upload-status.is-error,
 	.file-delete { color: #fda4af; }
+	.upload-dialog.is-error .upload-message { color: #fda4af; }
 }
 
 @media (max-width: 760px) {
 	header { align-items: flex-start; gap: 12px; padding-top: 12px; padding-bottom: 12px; }
 	.app-header-actions { flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 	.page-heading { align-items: flex-start; flex-direction: column; }
-	.upload-status { grid-template-columns: 1fr; }
 	.header-account { display: none; }
 }

@@ -114,10 +114,12 @@ export async function renderFilesPage({ outlet, filesApi, onUnauthorized }) {
 					<button class="refresh-button" type="button">Refresh</button>
 				</div>
 			</div>
-			<div class="upload-status" role="status" hidden>
-				<span></span>
+			<dialog class="upload-dialog" aria-labelledby="upload-dialog-title">
+				<h2 id="upload-dialog-title">Uploading file</h2>
+				<p class="upload-message" role="status" aria-live="polite"></p>
 				<progress max="100" value="0"></progress>
-			</div>
+				<button class="upload-dismiss" type="button" hidden>Dismiss</button>
+			</dialog>
 			<div class="files-status" role="status">Loading your files…</div>
 			<div class="files-grid" hidden></div>
 			<button class="load-more-button" type="button" hidden>Load more</button>
@@ -130,17 +132,34 @@ export async function renderFilesPage({ outlet, filesApi, onUnauthorized }) {
 	const loadMore = outlet.querySelector('.load-more-button');
 	const fileInput = outlet.querySelector('.file-input');
 	const uploadButton = outlet.querySelector('.upload-button');
-	const uploadStatus = outlet.querySelector('.upload-status');
-	const uploadMessage = uploadStatus.querySelector('span');
-	const uploadProgress = uploadStatus.querySelector('progress');
+	const uploadDialog = outlet.querySelector('.upload-dialog');
+	const uploadMessage = uploadDialog.querySelector('.upload-message');
+	const uploadProgress = uploadDialog.querySelector('progress');
+	const uploadDismiss = uploadDialog.querySelector('.upload-dismiss');
 	let nextOffset = null;
+	let uploadInProgress = false;
+	const uploadedNames = new Map();
 
 	function setUploadBusy(busy) {
+		uploadInProgress = busy;
 		fileInput.disabled = busy;
 		uploadButton.classList.toggle('is-disabled', busy);
 	}
 
-	async function load({ append = false } = {}) {
+	function showUploadDialog() {
+		if (!uploadDialog.open) uploadDialog.showModal();
+	}
+
+	function showUploadError(message) {
+		uploadDialog.classList.add('is-error');
+		uploadDialog.querySelector('h2').textContent = 'Upload failed';
+		uploadMessage.textContent = message;
+		uploadProgress.hidden = true;
+		uploadDismiss.hidden = false;
+		showUploadDialog();
+	}
+
+	async function load({ append = false, uploadedFile = null } = {}) {
 		refresh.disabled = true;
 		loadMore.disabled = true;
 		status.hidden = false;
@@ -154,12 +173,21 @@ export async function renderFilesPage({ outlet, filesApi, onUnauthorized }) {
 		}
 		try {
 			const data = await filesApi.list({ offset: append ? nextOffset : 0, signal: controller.signal });
-			const files = Array.isArray(data.files) ? data.files : [];
+			let files = Array.isArray(data.files) ? data.files : [];
+			if (!append && uploadedFile?.id && !files.some((file) => file.id === uploadedFile.id)) {
+				files = [uploadedFile, ...files];
+			}
 			if (!append && files.length === 0) {
 				status.textContent = 'No files are stored in your personal folder yet.';
 				return;
 			}
-			for (const file of files) grid.append(createFileCard(file, filesApi, deleteFile));
+			for (const file of files) {
+				const uploadedName = uploadedNames.get(file.id);
+				const displayFile = !file.display_name && uploadedName
+					? { ...file, display_name: uploadedName }
+					: file;
+				grid.append(createFileCard(displayFile, filesApi, deleteFile));
+			}
 			nextOffset = Number.isInteger(data?.pagination?.next_offset) ? data.pagination.next_offset : null;
 			status.hidden = true;
 			grid.hidden = false;
@@ -194,35 +222,37 @@ export async function renderFilesPage({ outlet, filesApi, onUnauthorized }) {
 	}
 
 	async function uploadFile(file) {
-		uploadStatus.hidden = false;
-		uploadStatus.classList.remove('is-error');
 		if (file.size > MAX_UPLOAD_BYTES) {
-			uploadMessage.textContent = 'This file exceeds the 50 MB upload limit.';
-			uploadStatus.classList.add('is-error');
-			uploadProgress.hidden = true;
+			showUploadError('This file exceeds the 50 MB upload limit.');
 			fileInput.value = '';
 			return;
 		}
 		setUploadBusy(true);
+		uploadDialog.classList.remove('is-error');
+		uploadDialog.querySelector('h2').textContent = 'Uploading file';
+		uploadDismiss.hidden = true;
 		uploadProgress.hidden = false;
 		uploadProgress.value = 0;
 		uploadMessage.textContent = `Uploading ${file.name}…`;
+		showUploadDialog();
 		try {
-			await filesApi.upload(file, {
+			const result = await filesApi.upload(file, {
 				signal: controller.signal,
 				onProgress(loaded, total) {
 					uploadProgress.value = total ? Math.round((loaded / total) * 100) : 0;
 					uploadMessage.textContent = `Uploading ${file.name} — ${formatFileSize(loaded)} of ${formatFileSize(total)}`;
 				}
 			});
+			if (result?.file?.id) uploadedNames.set(result.file.id, file.name);
 			uploadProgress.value = 100;
-			uploadMessage.textContent = `${file.name} uploaded.`;
-			await load();
+			uploadDialog.querySelector('h2').textContent = 'Upload complete';
+			uploadMessage.textContent = `${file.name} uploaded successfully.`;
+			uploadDismiss.hidden = false;
+			await load({ uploadedFile: result?.file || null });
 		} catch (error) {
 			if (error?.name === 'AbortError') return;
 			if (error?.status === 401) return onUnauthorized();
-			uploadStatus.classList.add('is-error');
-			uploadMessage.textContent = error?.message || 'Unable to upload the file.';
+			showUploadError(error?.message || 'Unable to upload the file.');
 		} finally {
 			setUploadBusy(false);
 			fileInput.value = '';
@@ -231,6 +261,10 @@ export async function renderFilesPage({ outlet, filesApi, onUnauthorized }) {
 
 	refresh.addEventListener('click', () => load());
 	loadMore.addEventListener('click', () => load({ append: true }));
+	uploadDismiss.addEventListener('click', () => uploadDialog.close());
+	uploadDialog.addEventListener('cancel', (event) => {
+		if (uploadInProgress) event.preventDefault();
+	});
 	fileInput.addEventListener('change', () => {
 		const file = fileInput.files?.[0];
 		if (file) void uploadFile(file);
