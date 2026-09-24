@@ -41,6 +41,7 @@ function createPreview(file, contentUrl) {
 		frame.append(image);
 	} else if (kind === 'video') {
 		const video = document.createElement('video');
+		video.crossOrigin = 'anonymous';
 		video.src = contentUrl;
 		video.controls = true;
 		video.preload = 'metadata';
