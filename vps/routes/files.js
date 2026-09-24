@@ -28,6 +28,14 @@ function upstreamErrorStatus(status) {
 	return status >= 400 && status < 600 ? status : 502;
 }
 
+function setFileContentPolicy(res, inline) {
+	if (inline) {
+		res.set("Content-Security-Policy", "default-src 'none'; img-src 'self' data:; media-src 'self'");
+	} else {
+		res.set("Content-Security-Policy", "default-src 'none'; sandbox");
+	}
+}
+
 function publicFileUrl(req, userId, file, secret) {
 	const filename = file.display_name || file.id;
 	const token = createPublicFileToken(userId, file.id, filename, secret);
@@ -138,8 +146,8 @@ export function createFilesRoutes(profileFiles, { publicLinkSecret = process.env
 			res.set("Content-Type", contentType);
 			res.set("Cache-Control", "private, no-store");
 			res.set("X-Content-Type-Options", "nosniff");
-			res.set("Content-Security-Policy", "default-src 'none'; sandbox");
 			const mode = mayDisplayInline(contentType) ? "inline" : "attachment";
+			setFileContentPolicy(res, mode === "inline");
 			res.set("Content-Disposition", `${mode}; filename="${safeDispositionFilename(fileId)}"`);
 			if (req.method === "HEAD" || !upstream.body) return res.end();
 			Readable.fromWeb(upstream.body).on("error", (error) => res.destroy(error)).pipe(res);
@@ -186,8 +194,8 @@ export function createPublicFileRoutes(profileFiles, { publicLinkSecret = proces
 			res.set("Content-Type", contentType);
 			res.set("Cache-Control", "private, no-store");
 			res.set("X-Content-Type-Options", "nosniff");
-			res.set("Content-Security-Policy", "default-src 'none'; sandbox");
 			const mode = mayDisplayInline(contentType) ? "inline" : "attachment";
+			setFileContentPolicy(res, mode === "inline");
 			res.set("Content-Disposition", contentDisposition(mode, grant.filename));
 			if (req.method === "HEAD" || !upstream.body) return res.end();
 			Readable.fromWeb(upstream.body).on("error", (error) => res.destroy(error)).pipe(res);
