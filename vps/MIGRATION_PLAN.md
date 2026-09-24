@@ -63,10 +63,10 @@ path is stable.
 
 ## Follow-up: server-side media inspection and chat presentation
 
-After the CDN transport is verified, add `ffmpeg`/`ffprobe` to the VPS media
-runtime. Use them to inspect uploaded video/audio and generate reliable media
-metadata and video posters server-side rather than depending on browser first-
-frame behavior.
+The VPS image now installs `ffmpeg`/`ffprobe`. Video uploads are inspected and
+normalized to browser-streamable H.264/AAC MP4 with fast-start metadata while
+retaining the user's original filename. Reliable video posters and richer
+audio/video metadata remain follow-up work.
 
 Then improve chat attachments using the existing creation video/audio player
 patterns while keeping the semantics explicit:

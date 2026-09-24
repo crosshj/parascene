@@ -21,9 +21,10 @@ by default. A temporary `legacyGenericUploads=1` URL flag or
 browser back to the www path. Remaining production validation and server-side
 media-helper work is summarized in `MIGRATION_PLAN.md`.
 
-Server-side `ffmpeg`/`ffprobe` inspection, reliable video posters, and richer
-file-versus-creation presentation in chat are intentionally deferred until
-the CDN transport has been verified.
+The VPS image includes `ffmpeg`/`ffprobe`; video uploads are normalized to
+browser-streamable H.264/AAC MP4 with fast-start metadata while retaining the
+original filename. Reliable video posters and richer file-versus-creation
+presentation in chat remain follow-up work.
 
 The authenticated beta SPA includes a client-side `/files` page. It calls the
 owner-scoped `https://cdn.parascene.com/api/files` API to upload, enumerate,

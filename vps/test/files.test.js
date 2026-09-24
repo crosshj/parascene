@@ -133,22 +133,22 @@ test("streams an upload to the authenticated user's generated object", async () 
 		}
 	};
 	await withServer(filesApp(profileFiles), async (base) => {
-		const response = await fetch(`${base}/api/files?filename=${encodeURIComponent("My clip.mp4")}`, {
+		const response = await fetch(`${base}/api/files?filename=${encodeURIComponent("My note.txt")}`, {
 			method: "POST",
-			headers: { "Content-Type": "video/mp4" },
-			body: "video bytes"
+			headers: { "Content-Type": "text/plain" },
+			body: "text bytes"
 		});
 		assert.equal(response.status, 201);
 		const body = await response.json();
-		assert.equal(body.file.display_name, "My clip.mp4");
-		assert.equal(body.file.content_type, "video/mp4");
-		assert.equal(body.file.size, 11);
-		assert.match(body.file.id, /^misc_\d+_[A-Za-z0-9_-]{8}_fn_[A-Za-z0-9_-]+\.mp4$/);
+		assert.equal(body.file.display_name, "My note.txt");
+		assert.equal(body.file.content_type, "text/plain");
+		assert.equal(body.file.size, 10);
+		assert.match(body.file.id, /^misc_\d+_[A-Za-z0-9_-]{8}_fn_[A-Za-z0-9_-]+\.txt$/);
 		assert.deepEqual(call, {
 			userId: 42,
 			fileId: body.file.id,
-			bytes: "video bytes",
-			options: { contentType: "video/mp4", originalName: "My clip.mp4" }
+			bytes: "text bytes",
+			options: { contentType: "text/plain", originalName: "My note.txt" }
 		});
 	});
 });

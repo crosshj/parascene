@@ -5,6 +5,7 @@ import { contentDisposition, mayDisplayInline, normalizeFileId, safeDispositionF
 import { filesOriginForRequest } from "./utils/origins.js";
 import { createPublicFileToken, verifyPublicFileToken } from "./utils/publicFileLinks.js";
 import { createFilesCors } from "./middleware/filesCors.js";
+import { isVideoUpload, normalizeUploadedVideo } from "./utils/media.js";
 import {
 	createFileId,
 	createSizeLimitedStream,
@@ -63,10 +64,18 @@ export function createFilesRoutes(profileFiles, { publicLinkSecret = process.env
 		}
 
 		const fileId = createFileId(originalName);
-		const contentType = uploadContentType(originalName, req.get("content-type"));
+		let contentType = uploadContentType(originalName, req.get("content-type"));
 		const upload = createSizeLimitedStream(req);
 		try {
-			await profileFiles.upload(req.auth.userId, fileId, upload.stream, { contentType, originalName });
+			let body = upload.stream;
+			if (isVideoUpload(originalName, contentType)) {
+				const chunks = [];
+				for await (const chunk of upload.stream) chunks.push(chunk);
+				const normalized = await normalizeUploadedVideo(Buffer.concat(chunks));
+				body = normalized.buffer;
+				contentType = normalized.contentType;
+			}
+			await profileFiles.upload(req.auth.userId, fileId, body, { contentType, originalName });
 			if (upload.bytesRead === 0) {
 				await profileFiles.delete(req.auth.userId, fileId).catch(() => undefined);
 				return res.status(400).json({ error: "Bad request", message: "The file is empty" });
@@ -83,6 +92,8 @@ export function createFilesRoutes(profileFiles, { publicLinkSecret = process.env
 			if (upload.exceeded) {
 				return res.status(413).json({ error: "File too large", max_bytes: MAX_UPLOAD_BYTES });
 			}
+			if (error?.code === "MEDIA_TOO_LARGE") return res.status(413).json({ error: "File too large", max_bytes: MAX_UPLOAD_BYTES });
+			if (error?.code === "MEDIA_INVALID") return res.status(400).json({ error: "Invalid video", message: error.message });
 			if (req.aborted) return undefined;
 			return next(error);
 		}
