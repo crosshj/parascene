@@ -1,8 +1,12 @@
 import express from "express";
 import { createFilesRoutes, createPublicFileRoutes } from "./files.js";
+import { createGenericRoutes } from "./generic.js";
 import { createFilesCors } from "./middleware/filesCors.js";
 
-export function createCdnRoutes(profileFiles) {
+export function createCdnRoutes(input) {
+	const { profileFiles, genericFiles, users } = input && input.profileFiles
+		? input
+		: { profileFiles: input, genericFiles: null, users: null };
 	const router = express.Router();
 
 	router.get("/healthz", (_req, res) => {
@@ -12,6 +16,7 @@ export function createCdnRoutes(profileFiles) {
 
 	router.use("/s", createPublicFileRoutes(profileFiles));
 	router.use("/api/files", createFilesCors(), createFilesRoutes(profileFiles));
+	if (genericFiles && users) router.use("/api/images/generic", createFilesCors(), createGenericRoutes(genericFiles, users));
 
 	router.use((req, res) => {
 		res.set("Cache-Control", "no-store");

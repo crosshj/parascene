@@ -1,3 +1,20 @@
+const CDN_GENERIC_UPLOAD_ORIGIN = 'https://cdn.parascene.com';
+
+function useCdnGenericUploads() {
+	if (typeof window === 'undefined') return false;
+	if (new URLSearchParams(window.location.search).get('legacyGenericUploads') === '1') return false;
+	try {
+		if (window.localStorage?.getItem('parascene:generic-upload-transport') === 'legacy') return false;
+	} catch {}
+	return true;
+}
+
+function genericUploadEndpoint() {
+	return useCdnGenericUploads()
+		? `${CDN_GENERIC_UPLOAD_ORIGIN}/api/images/generic`
+		: '/api/images/generic';
+}
+
 /**
  * Loaded via `import(\`/shared/createSubmit.js${qs}\`)`. Direct siblings must use the
  * same asset-version query; static `import './foo.js'` can resolve a stale cached copy
@@ -601,7 +618,7 @@ export async function uploadImageFile(file, options = {}) {
 		uploadKind === 'edited' && typeof options.aspectRatio === 'string'
 			? options.aspectRatio.trim()
 			: '';
-	const res = await fetch('/api/images/generic', {
+	const res = await fetch(genericUploadEndpoint(), {
 		method: 'POST',
 		headers: {
 			'Content-Type': prepared.type || file.type || 'image/png',
@@ -622,8 +639,9 @@ export async function uploadImageFile(file, options = {}) {
 }
 
 /**
- * Upload any file to chat misc endpoint namespace (`/api/images/generic`).
- * Server stores image/video as `generic_*` and other files as `misc_*`.
+ * Upload any file to the CDN Files endpoint and return its signed share URL.
+ * Chat stores that URL in the message; the renderer treats pasted share URLs
+ * and freshly uploaded files the same way.
  * Raster images are shrunk client-side when needed so uploads clear edge body limits.
  * @param {File} file
  * @returns {Promise<{ url: string, displayAsFile: boolean }>}
@@ -634,7 +652,26 @@ export async function uploadChatFile(file) {
 	const prepared =
 		mime.startsWith('image/') ? await shrinkRasterImageFileForGenericUpload(file) : file;
 	const safeName = safeUploadHeaderFilename(prepared.name || file.name, 'upload.bin');
-	const res = await fetch('/api/images/generic', {
+	if (!useCdnGenericUploads()) {
+		const legacy = await fetch(genericUploadEndpoint(), {
+			method: 'POST',
+			headers: {
+				'Content-Type': prepared.type || file.type || 'application/octet-stream',
+				'X-upload-kind': 'generic',
+				'X-upload-name': safeName
+			},
+			body: prepared,
+			credentials: 'include'
+		});
+		if (!legacy.ok) {
+			const err = await legacy.json().catch(() => ({}));
+			throw new Error(err.message || err.error || `Upload failed (${legacy.status})`);
+		}
+		const legacyData = await legacy.json();
+		if (!legacyData?.url) throw new Error('No URL in response');
+		return { url: legacyData.url, displayAsFile: legacyData.display_as_file === true };
+	}
+	const res = await fetch(`${CDN_GENERIC_UPLOAD_ORIGIN}/api/files?filename=${encodeURIComponent(safeName)}`, {
 		method: 'POST',
 		headers: {
 			'Content-Type': prepared.type || file.type || 'application/octet-stream',
@@ -649,10 +686,12 @@ export async function uploadChatFile(file) {
 		throw new Error(err.message || err.error || `Upload failed (${res.status})`);
 	}
 	const data = await res.json();
-	if (!data?.url) throw new Error('No URL in response');
+	const url = String(data?.file?.public_url || '').trim();
+	if (!url) throw new Error('No share URL in response');
+	const contentType = String(data?.file?.content_type || prepared.type || file.type || '').toLowerCase();
 	return {
-		url: data.url,
-		displayAsFile: data.display_as_file === true
+		url,
+		displayAsFile: !/^(?:image|video|audio)\//.test(contentType)
 	};
 }
 
@@ -921,4 +960,3 @@ export async function importCreationWithPending({
 		throw err;
 	}
 }
-

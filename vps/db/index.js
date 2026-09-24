@@ -1,4 +1,5 @@
 import { createProfileFilesStore } from "./profileFiles.js";
+import { createGenericFilesStore } from "./genericFiles.js";
 import { createSessionsStore } from "./sessions.js";
 import { createSupabaseContext } from "./supabase.js";
 import { createUsersStore } from "./users.js";
@@ -9,6 +10,7 @@ export function createDb() {
 	return {
 		users: createUsersStore(context.client),
 		sessions: createSessionsStore(context.client),
-		profileFiles: createProfileFilesStore(context)
+		profileFiles: createProfileFilesStore(context),
+		genericFiles: createGenericFilesStore(context)
 	};
 }

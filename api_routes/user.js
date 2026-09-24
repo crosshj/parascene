@@ -680,11 +680,18 @@ export default function createProfileRoutes({ queries }) {
 	function normalizeCommentStickerUrl(raw) {
 		const value = typeof raw === "string" ? raw.trim() : "";
 		if (!value) return null;
-		// Restrict to generic image routes so sticker references stay on our storage namespace.
-		if (!value.startsWith("/api/images/generic/")) return null;
-		if (value.includes("..")) return null;
 		if (value.length > 1024) return null;
-		return value;
+		if (value.startsWith("/api/images/generic/")) {
+			return value.includes("..") ? null : value;
+		}
+		try {
+			const parsed = new URL(value);
+			if (parsed.hostname.toLowerCase() !== "cdn.parascene.com") return null;
+			if (!parsed.pathname.startsWith("/api/images/generic/") || parsed.pathname.includes("..")) return null;
+			return `${parsed.origin}${parsed.pathname}${parsed.search}`;
+		} catch {
+			return null;
+		}
 	}
 
 	function normalizeCommentStickerList(rawList) {

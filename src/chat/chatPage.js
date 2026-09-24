@@ -2722,7 +2722,10 @@ export async function initChatPage(root, options = {}) {
 		const reqPath =
 			'/api/images/generic/' + key.split('/').map((seg) => encodeURIComponent(seg)).join('/');
 		try {
-			await fetch(reqPath, { method: 'DELETE', credentials: 'include' });
+			const origin = /^https:\/\/cdn\.parascene\.com\//i.test(String(urlPath || ''))
+				? 'https://cdn.parascene.com'
+				: '';
+			await fetch(origin + reqPath, { method: 'DELETE', credentials: 'include' });
 		} catch {
 			// ignore
 		}

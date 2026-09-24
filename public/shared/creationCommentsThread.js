@@ -2059,7 +2059,7 @@ export async function mountCreationCommentsThread(container, options) {
 		} else {
 			await submitCommentText(url);
 		}
-		if (url.startsWith('/api/images/generic/')) {
+		if (url.startsWith('/api/images/generic/') || url.startsWith('https://cdn.parascene.com/api/images/generic/')) {
 			const existing = normalizeCommentStickerSlotList(commentStickerUrls);
 			const next = [url, ...existing.filter((x) => x !== url)].slice(0, COMMENT_STICKER_SLOT_LIMIT);
 			commentStickerUrls = next;

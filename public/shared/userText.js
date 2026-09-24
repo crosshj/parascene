@@ -255,8 +255,31 @@ function isSafeGenericApiPath(relativePath) {
 	return /^\/api\/images\/generic\/(?:edited\/[^/]+\/[^/?#]+|profile\/[^/]+\/(?:generic|misc)_[^/?#]+)$/i.test(p);
 }
 
+function genericPathForValidation(value) {
+	const raw = String(value || '');
+	try {
+		const parsed = new URL(raw, DEFAULT_APP_ORIGIN);
+		if (parsed.hostname.toLowerCase() === 'cdn.parascene.com') return parsed.pathname + parsed.search + parsed.hash;
+	} catch {}
+	return raw;
+}
+
+function isSafeCdnSharePath(value) {
+	const p = genericPathForValidation(value);
+	if (!p.startsWith('/s/') || p.includes('..')) return false;
+	const segments = p.split('/').filter(Boolean);
+	return segments.length >= 3 && segments[0] === 's' && segments[1].length > 0 && segments[2].length > 0;
+}
+
+function isSafeAttachmentPath(value) {
+	return isSafeGenericApiPath(value) || isSafeCdnSharePath(value);
+}
+
 function isInlineEligibleGenericImagePath(relativePath) {
-	const p = String(relativePath || '');
+	const p = genericPathForValidation(relativePath);
+	if (isSafeCdnSharePath(p)) {
+		return ['avif', 'gif', 'jpeg', 'jpg', 'png', 'webp'].includes(extFromPathOrName(p));
+	}
 	if (!isSafeGenericApiPath(p)) return false;
 	if (p.startsWith('/api/images/generic/edited/')) {
 		return /^\/api\/images\/generic\/edited\/[^/]+\/[^/?#]+$/i.test(p);
@@ -327,8 +350,8 @@ function renderInlineGenericAttachmentCard(relativePath, originalUrl) {
 }
 
 function isInlineEligibleGenericVideoPath(relativePath) {
-	const basePath = stripQueryAndHash(relativePath);
-	if (!isSafeGenericApiPath(basePath)) return false;
+	const basePath = stripQueryAndHash(genericPathForValidation(relativePath));
+	if (!isSafeAttachmentPath(basePath)) return false;
 	let queryName = "";
 	try {
 		const u = new URL(String(relativePath || ""), DEFAULT_APP_ORIGIN);
@@ -341,8 +364,8 @@ function isInlineEligibleGenericVideoPath(relativePath) {
 }
 
 function isInlineEligibleGenericHtmlPath(relativePath) {
-	const basePath = stripQueryAndHash(relativePath);
-	if (!isSafeGenericApiPath(basePath)) return false;
+	const basePath = stripQueryAndHash(genericPathForValidation(relativePath));
+	if (!isSafeAttachmentPath(basePath)) return false;
 	let queryName = "";
 	try {
 		const u = new URL(String(relativePath || ""), DEFAULT_APP_ORIGIN);
@@ -432,7 +455,8 @@ function expandBareInlineGenericImageApiPaths(text) {
 
 const PARASCENE_HOSTS = [
 	new URL(DEFAULT_APP_ORIGIN).hostname,
-	'parascene.com'
+	'parascene.com',
+	'cdn.parascene.com'
 ];
 
 /**
@@ -454,6 +478,7 @@ function getParasceneRelativePath(url) {
 			parsed.origin === window.location.origin;
 		const isParasceneHost = PARASCENE_HOSTS.includes(host);
 		if (!isSameOrigin && !isParasceneHost) return null;
+		if (host === 'cdn.parascene.com') return parsed.href;
 		const path = parsed.pathname || '/';
 		const search = parsed.search || '';
 		const hash = parsed.hash || '';
@@ -729,7 +754,7 @@ function textWithCreationLinksCore(text, { inlineMarkdown = false } = {}) {
 		const { url, trailing } = splitUrlTrailingPunctuation(rawUrl);
 		const relativePath = getParasceneRelativePath(url);
 		if (relativePath) {
-			const basePath = stripQueryAndHash(relativePath);
+			const basePath = stripQueryAndHash(genericPathForValidation(relativePath));
 			if (isInlineEligibleGenericImagePath(basePath)) {
 				const rp = escapeHtml(relativePath);
 				out += `<span class="user-text-inline-image-wrap is-loading"><a href="${rp}" class="user-link creation-link user-text-inline-image-link" aria-label="View full image" data-creation-link-original="${escapeHtml(url)}"><img class="user-text-inline-image" src="${rp}" alt="" width="260" height="260" loading="lazy" decoding="async" data-inline-image-loading="1" /></a></span>`;
@@ -737,7 +762,7 @@ function textWithCreationLinksCore(text, { inlineMarkdown = false } = {}) {
 				out += renderInlineGenericVideo(relativePath, url);
 			} else if (isInlineEligibleGenericHtmlPath(relativePath)) {
 				out += renderInlineGenericHtml(relativePath, url);
-			} else if (isSafeGenericApiPath(basePath)) {
+			} else if (isSafeAttachmentPath(basePath)) {
 				out += renderInlineGenericAttachmentCard(relativePath, url);
 			} else {
 				out += `<a href="${escapeHtml(relativePath)}" class="user-link creation-link" data-creation-link-original="${escapeHtml(url)}">${escapeHtml(relativePath)}</a>`;

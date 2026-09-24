@@ -20,7 +20,7 @@ app.set("trust proxy", true);
 app.use("/api/auth", express.json({ limit: "1mb" }));
 app.use(cookieParser());
 app.use(createAuthMiddleware(db.sessions));
-app.use(createCdnHostBoundary(createCdnRoutes(db.profileFiles)));
+app.use(createCdnHostBoundary(createCdnRoutes({ profileFiles: db.profileFiles, genericFiles: db.genericFiles, users: db.users })));
 app.use(createAuthRoutes({ users: db.users, sessions: db.sessions }));
 app.use(createPageRoutes({ pagesDir, users: db.users }));
 app.use(express.static(path.join(__dirname, "public")));

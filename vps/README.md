@@ -14,8 +14,16 @@ through a `/pages` URL namespace.
 
 The beta/CDN proof is accepted. The Files tool streams raw request bodies of up
 to 50 MiB to Supabase Storage, supports owner-scoped hard deletion, and keeps
-storage credentials server-side. It does not yet replace the existing www
-upload helpers; the remaining cutover work is summarized in `MIGRATION_PLAN.md`.
+storage credentials server-side. The CDN also exposes the www-compatible
+`/api/images/generic` contract, and browser generic/edited/chat uploads use it
+by default. A temporary `legacyGenericUploads=1` URL flag or
+`parascene:generic-upload-transport=legacy` local-storage value rolls a
+browser back to the www path. Remaining production validation and server-side
+media-helper work is summarized in `MIGRATION_PLAN.md`.
+
+Server-side `ffmpeg`/`ffprobe` inspection, reliable video posters, and richer
+file-versus-creation presentation in chat are intentionally deferred until
+the CDN transport has been verified.
 
 The authenticated beta SPA includes a client-side `/files` page. It calls the
 owner-scoped `https://cdn.parascene.com/api/files` API to upload, enumerate,

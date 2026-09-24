@@ -3,7 +3,7 @@ function allowedOrigins() {
 		.split(",")
 		.map((value) => value.trim().replace(/\/$/, ""))
 		.filter(Boolean);
-	return new Set(configured.length ? configured : ["https://beta.parascene.com"]);
+	return new Set(configured.length ? configured : ["https://beta.parascene.com", "https://www.parascene.com"]);
 }
 
 export function createFilesCors() {
@@ -20,7 +20,7 @@ export function createFilesCors() {
 		}
 		if (req.method === "OPTIONS") {
 			res.set("Access-Control-Allow-Methods", "GET, HEAD, POST, DELETE, OPTIONS");
-			res.set("Access-Control-Allow-Headers", "Content-Type, Range");
+			res.set("Access-Control-Allow-Headers", "Content-Type, Range, X-upload-kind, X-upload-name, X-upload-aspect-ratio");
 			res.set("Access-Control-Max-Age", "600");
 			return res.sendStatus(204);
 		}

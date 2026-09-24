@@ -6,6 +6,7 @@ import { createProfileFilesStore } from "../db/profileFiles.js";
 import express from "express";
 import { createCdnRoutes } from "../routes/cdn.js";
 import { createFilesRoutes } from "../routes/files.js";
+import { createGenericRoutes } from "../routes/generic.js";
 import { createCdnHostBoundary } from "../routes/middleware/cdnHost.js";
 import { createFilesCors } from "../routes/middleware/filesCors.js";
 import { mayDisplayInline, normalizeFileId, serializeFile } from "../routes/utils/files.js";
@@ -240,6 +241,9 @@ test("allows credentialed beta CORS and rejects other origins", async () => {
 
 		const denied = await fetch(`${base}/api/files`, { headers: { Origin: "https://evil.example" } });
 		assert.equal(denied.status, 403);
+		const www = await fetch(`${base}/api/files`, { headers: { Origin: "https://www.parascene.com" } });
+		assert.equal(www.status, 200);
+		assert.equal(www.headers.get("access-control-allow-origin"), "https://www.parascene.com");
 	});
 });
 
@@ -269,5 +273,63 @@ test("cdn host exposes CDN routes but never falls through to the beta app", asyn
 		const beta = await requestWithHost(base, "/files", "beta.parascene.com");
 		assert.equal(beta.status, 200);
 		assert.equal(beta.text, "beta app");
+	});
+});
+
+test("compatibility generic route preserves upload URL shape and owner delete", async () => {
+	const calls = [];
+	const genericFiles = {
+		async upload(key, body, options) {
+			const bytes = Buffer.isBuffer(body) ? body : Buffer.from(body);
+			calls.push({ operation: "upload", key, bytes: bytes.toString(), options });
+		},
+		async remove(key) { calls.push({ operation: "remove", key }); },
+		async fetch() { return new Response(new TextEncoder().encode("image"), { status: 200 }); }
+	};
+	const users = { async byId() { return { role: "consumer", meta: {} }; } };
+	const app = express();
+	app.use((req, _res, next) => { req.auth = { userId: 42 }; next(); });
+	app.use("/api/images/generic", createGenericRoutes(genericFiles, users));
+
+	await withServer(app, async (base) => {
+		const response = await fetch(`${base}/api/images/generic`, {
+			method: "POST",
+			headers: {
+				"Content-Type": "image/png",
+				"X-upload-kind": "generic",
+				"X-upload-name": "avatar.png"
+			},
+			body: "image bytes"
+		});
+		assert.equal(response.status, 200);
+		const body = await response.json();
+		assert.match(body.key, /^profile\/42\/generic_\d+_[A-Za-z0-9_-]+\.png$/);
+		assert.match(body.url, new RegExp(`^https://cdn\\.parascene\\.com/api/images/generic/profile/42/${body.key.split("/").at(-1)}$`));
+		assert.equal(calls[0].bytes, "image bytes");
+		assert.equal(calls[0].options.contentType, "image/png");
+
+		const deleted = await fetch(`${base}/api/images/generic/${body.key.split("/").map(encodeURIComponent).join("/")}`, { method: "DELETE" });
+		assert.equal(deleted.status, 200);
+		assert.deepEqual(calls[1], { operation: "remove", key: body.key });
+	});
+});
+
+test("compatibility generic route allows public profile reads and requires auth for other keys", async () => {
+	const genericFiles = {
+		async upload() {},
+		async remove() {},
+		async fetch(key) {
+			return new Response(new TextEncoder().encode(key), { status: 200, headers: { "Content-Type": "image/png" } });
+		}
+	};
+	const users = { async byId() { return { role: "consumer", meta: {} }; } };
+	const app = express();
+	app.use("/api/images/generic", createGenericRoutes(genericFiles, users));
+	await withServer(app, async (base) => {
+		const profile = await fetch(`${base}/api/images/generic/profile/42/avatar.png`);
+		assert.equal(profile.status, 200);
+		assert.equal(await profile.text(), "profile/42/avatar.png");
+		const privateRead = await fetch(`${base}/api/images/generic/share-audio/private.mp3`);
+		assert.equal(privateRead.status, 401);
 	});
 });
