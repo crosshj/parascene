@@ -223,7 +223,7 @@ export function createPublicFileRoutes(profileFiles, { publicLinkSecret = proces
 			res.set("Content-Type", contentType);
 			res.set("Cache-Control", "private, no-store");
 			res.set("X-Content-Type-Options", "nosniff");
-			const mode = mayDisplayInline(contentType) ? "inline" : "attachment";
+			const mode = req.query.download === "1" ? "attachment" : (mayDisplayInline(contentType) ? "inline" : "attachment");
 			setFileContentPolicy(res, mode === "inline");
 			res.set("Content-Disposition", contentDisposition(mode, grant.filename));
 			if (req.method === "HEAD" || !upstream.body) return res.end();

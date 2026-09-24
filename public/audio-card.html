@@ -278,6 +278,18 @@
 			stroke-linejoin: round;
 		}
 
+		.out .download-icon {
+			display: none;
+		}
+
+		.out.is-download .external-icon {
+			display: none;
+		}
+
+		.out.is-download .download-icon {
+			display: block;
+		}
+
 		.via {
 			position: absolute;
 			right: 12px;
@@ -412,9 +424,14 @@
 			</span>
 		</span>
 		<a class="out" id="open" hidden aria-label="View creation">
-			<svg viewBox="0 0 24 24">
+			<svg class="external-icon" viewBox="0 0 24 24">
 				<rect x="8" y="3" width="13" height="13" rx="2"></rect>
 				<rect x="3" y="8" width="13" height="13" rx="2"></rect>
+			</svg>
+			<svg class="download-icon" viewBox="0 0 24 24">
+				<path d="M12 3v12"></path>
+				<path d="m7 10 5 5 5-5"></path>
+				<path d="M5 20h14"></path>
 			</svg>
 		</a>
 		<span class="via" id="via" hidden></span>
@@ -526,6 +543,24 @@
 				return n > 0 ? n : 0;
 			}
 
+			function sharedFilePath(raw) {
+				try {
+					return new URL(raw, window.location.href).pathname.match(/^\/s\/[^/]+\/.+$/i) ? true : false;
+				} catch (_) {
+					return false;
+				}
+			}
+
+			function downloadHref(raw) {
+				try {
+					var url = new URL(raw, window.location.href);
+					url.searchParams.set('download', '1');
+					return url.href;
+				} catch (_) {
+					return raw;
+				}
+			}
+
 			var via = String(params.get('via') || '').trim();
 			var viaEl = document.getElementById('via');
 			if (via && viaEl && !/^javascript:/i.test(via)) {
@@ -533,13 +568,21 @@
 				viaEl.hidden = false;
 			}
 
+			var src = String(params.get('src') || '').trim();
+			var isSharedFile = sharedFilePath(src || String(params.get('href') || '').trim());
 			var href = String(params.get('href') || '').trim();
 			if (href && /^(https?:\/\/|\/)/i.test(href) && !/^javascript:/i.test(href)) {
-				openEl.href = href;
+				openEl.href = isSharedFile ? downloadHref(href) : href;
+				if (isSharedFile) {
+					openEl.classList.add('is-download');
+					openEl.setAttribute('download', title || 'audio');
+					openEl.setAttribute('aria-label', 'Download ' + (title || 'audio'));
+				}
 				openEl.hidden = false;
-				if (title) openEl.setAttribute('aria-label', 'View ' + title);
+				if (!isSharedFile && title) openEl.setAttribute('aria-label', 'View ' + title);
 				openEl.addEventListener('click', function (e) {
 					if (!audio.paused) audio.pause();
+					if (isSharedFile) return;
 					var creationId = creationIdFromHref(openEl.getAttribute('href') || href);
 					if (!creationId) return;
 					e.preventDefault();
@@ -556,7 +599,6 @@
 				});
 			}
 
-			var src = String(params.get('src') || '').trim();
 			if (src && !/^javascript:/i.test(src)) audio.src = src;
 
 			playBtn.addEventListener('click', function (e) {

@@ -382,7 +382,6 @@ function isInlineEligibleGenericAudioPath(relativePath) {
 
 function renderInlineGenericAudio(relativePath, originalUrl) {
 	const rp = escapeHtml(relativePath);
-	const original = escapeHtml(originalUrl);
 	const nameText = attachmentNameFromPath(relativePath) || "Audio";
 	const name = escapeHtml(nameText);
 	const iframeSrc = escapeHtml(
@@ -393,11 +392,9 @@ function renderInlineGenericAudio(relativePath, originalUrl) {
 		})
 	);
 	return (
-		`<span class="user-text-inline-audio-wrap">` +
 		`<div class="connect-chat-creation-embed connect-chat-creation-embed--audio-card connect-chat-suno-embed connect-chat-audio-embed user-text-inline-audio-card" data-prsn-audio-embed="card" data-audio-url="${rp}">` +
 		`<iframe class="connect-chat-suno-embed-iframe connect-chat-audio-embed-iframe" src="${iframeSrc}" title="${name}" allow="autoplay; encrypted-media" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>` +
-		`<a class="user-text-inline-audio-open user-link creation-link" href="${rp}" target="_blank" rel="noopener noreferrer" data-creation-link-original="${original}">Open file</a>` +
-		`</div></span>`
+		`</div>`
 	);
 }
 
