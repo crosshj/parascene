@@ -14,7 +14,7 @@ function emitAppCss() {
 			await fs.rm(buildDir, { recursive: true, force: true });
 		},
 		async generateBundle() {
-			const source = path.join(vpsDir, "src", "app.css");
+			const source = path.join(vpsDir, "client", "app.css");
 			const css = await fs.readFile(source, "utf8");
 			const minified = new CleanCSS({ level: 1 }).minify(css);
 			if (minified.errors.length) throw new Error(minified.errors.join("\n"));
@@ -30,7 +30,7 @@ function emitAppCss() {
 }
 
 export default {
-	input: path.join(vpsDir, "src", "app.js"),
+	input: path.join(vpsDir, "client", "app.js"),
 	output: {
 		dir: buildDir,
 		format: "es",

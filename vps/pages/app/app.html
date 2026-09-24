@@ -173,41 +173,16 @@
 					</g>
 				</svg>
 			</a>
-			<button
-				id="logout"
-				type="button"
-			>
-				Log out
-			</button>
+			<div class="app-header-actions">
+				<nav class="app-nav" aria-label="Beta navigation">
+					<a href="/" data-spa-link>Home</a>
+					<a href="/files" data-spa-link>Files</a>
+				</nav>
+				<span id="header-account" class="header-account"></span>
+				<button id="logout" type="button">Log out</button>
+			</div>
 		</header>
-		<main>
-			<section class="card">
-				<p class="eyebrow">Parascene beta</p>
-				<h1>Welcome back.</h1>
-				<p
-					id="app-state"
-					class="state"
-				>
-					Your beta app is getting ready.
-				</p>
-				<p
-					id="account"
-					class="account"
-				>
-					Signed in.
-				</p>
-				<div class="actions">
-					<a
-						class="www-link"
-						href="https://www.parascene.com"
-						>Go to the current app</a
-					>
-				</div>
-				<p class="route-note muted">
-					You are viewing the beta app at <code id="client-route"></code>.
-				</p>
-			</section>
-		</main>
+		<main id="app-outlet" class="app-main"></main>
 		<script
 			type="module"
 			src="/build/{{APP_JS}}"

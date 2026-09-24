@@ -1,159 +1,420 @@
-# VPS / Beta Migration Plan
+# VPS Media Upload Migration Plan
 
 ## Goal
 
-Introduce a VPS-backed beta alongside the current Vercel deployment without
-duplicating the full application. The work is intentionally split into two
-separate scopes.
+Move browser media uploads off the Vercel application and onto the VPS behind
+`cdn.parascene.com`, while preserving the upload contract already used by the
+current frontend.
 
-## Scope 1: Beta authentication and shared state
-
-This scope establishes beta as a real, authenticated companion to the current
-site without moving uploads or the broader application yet.
-
-Acceptance criteria:
-
-- users can log in, sign up, log out, and reset passwords on beta;
-- logging in on current leaves the user logged in on beta;
-- logging in on beta leaves the user logged in on current;
-- logging out or expiring a session on either host is reflected on the other;
-- beta can show basic safe information about the authenticated user;
-- current remains the owner of normal application traffic and uploads.
-
-Out of scope for Scope 1:
-
-- large-file handling;
-- changing the current frontend upload path;
-- moving workers or QStash;
-- migrating the full application to the VPS.
-
-## Scope 2: Canonical media and upload boundary
-
-Only after Scope 1 is working do we transfer upload responsibility fully to
-beta. This is not a dual-path experiment: `cdn.parascene.com` becomes the one
-active upload path for both current and beta.
-
-Acceptance criteria:
-
-- current and beta both upload through `cdn.parascene.com`;
-- uploads never pass through the Vercel application;
-- the VPS streams uploads to Supabase Storage;
-- the existing upload response contract remains usable by all current upload
-  producers;
-- image, edited-image, chat-file, and other upload paths are covered;
-- share/media delivery can use the same canonical `cdn` boundary.
-
-The old Vercel upload route may remain available as a rollback mechanism, but
-it is not a second active product path after the Scope 2 cutover.
-
-## Hosting boundaries
+There will be one active upload path after cutover:
 
 ```text
-www.parascene.com   Current application (Vercel during migration)
-beta.parascene.com  Focused beta auth/demo application (VPS)
-cdn.parascene.com   Canonical share, media, and upload boundary
-                    (Cloudflare-proxied initially)
+www.parascene.com ──┐
+                    ├─> https://cdn.parascene.com/api/images/generic
+beta.parascene.com ─┘                         │
+                                              ▼
+                                     VPS streaming gateway
+                                              │
+                                              ▼
+                                     Supabase Storage
 ```
 
-The beta is not initially a second copy of the entire Parascene application.
-It should expose only the smallest useful surface: auth, session/profile
-visibility, share/media routes, and the upload demonstration.
+Uploads must not pass through the Vercel application after cutover. The old
+Vercel route may remain temporarily as a rollback target, but it is not a
+second active upload path.
 
-`sh.parascene.com` remains a legacy compatibility hostname while existing
-share links are transitioned to `cdn.parascene.com/s/...`. New links should
-use the canonical `cdn` hostname.
+## Existing upload contract
 
-## Authentication
+The current browser helpers already centralize the main interactive upload
+flows on `POST /api/images/generic`:
 
-Parascene's existing `ps_session` cookie remains the canonical browser
-session. Current and beta must share:
+- `uploadImageFile()` covers generic and edited-image uploads;
+- `uploadChatFile()` covers chat images, videos, and permitted miscellaneous
+  files;
+- callers send the file as the raw request body;
+- `Content-Type`, `X-Upload-Kind`, `X-Upload-Name`, and optional
+  `X-Upload-Aspect-Ratio` headers describe the upload;
+- the success response contains `ok`, `key`, `max_bytes`, and `url`, with an
+  optional `display_as_file` flag.
 
-- the same `SESSION_SECRET`;
-- the same session database;
-- the same cookie name and JWT format;
-- a cookie domain of `.parascene.com`;
-- the same login, logout, expiry-refresh, and password-reset behavior.
+The first VPS implementation should preserve this request and response shape.
+Changing the hostname in the centralized client should be the only required
+change for existing upload producers.
 
-The beta should reuse the current auth/session implementation patterns rather
-than inventing a second identity system. Supabase Auth/Realtime session
-hydration is a separate browser concern because local storage is origin
-specific; the first beta milestone can validate the shared Parascene session
-directly.
+The current maximum body size is 50 MiB. This fits within the initial
+Cloudflare 100 MB request-body ceiling and should remain the initial VPS limit.
 
-## Canonical upload path
+## VPS responsibilities
 
-There is one active upload path after the upload scope lands:
+The VPS owns the complete upload transaction:
 
-```text
-current frontend ─┐
-                   ├─> https://cdn.parascene.com/upload/*
-beta frontend ────┘                         │
-                                           ▼
-                                  VPS streaming gateway
-                                           │
-                                           ▼
-                                  Supabase Storage
-```
+- authorize the request using the existing request identity;
+- enforce account permissions, upload kinds, quotas, and size limits;
+- validate content type and the supplied filename;
+- generate safe, collision-resistant storage keys;
+- stream the request body without buffering the entire file in memory;
+- write the object to the appropriate Supabase Storage bucket;
+- perform only transforms that are explicitly part of the existing contract;
+- return a response compatible with current callers;
+- emit structured logs and useful failure responses without exposing storage
+  credentials or internals.
 
-The frontend must not know or call Supabase directly. The VPS owns
-authentication, authorization, quotas, file naming, streaming, storage writes,
-and the response contract used by the existing upload helpers.
+Supabase service credentials remain server-side. Browser clients must never
+upload directly with service-role credentials.
 
-Cloudflare proxying is acceptable for the initial rollout. The current app
-limit is approximately 50 MiB, so the initial beta can live within the
-Cloudflare Free/Pro 100 MB request-body limit. Larger files can later move to
-resumable/multipart upload rather than changing the public hostname or API
-contract.
+## Streaming boundary
 
-The VPS must stream request bodies; it must not use the current buffered
-`express.raw()` approach for large-file handling.
+The current Vercel handler uses `express.raw()`, which buffers the complete body
+before the route runs. The VPS route must instead consume the request as a
+stream and apply backpressure through the storage write.
 
-## Suggested `vps/` structure
+Any upload kind that requires a whole-file transform, such as edited-image
+normalization or HEIC/TIFF/JXL conversion, needs an explicit strategy:
+
+1. stream to bounded temporary storage, validate and transform, then upload;
+2. move the transform to a separate post-upload step; or
+3. keep that upload kind on the rollback route until its VPS implementation is
+   ready.
+
+The normal pass-through path must not be downgraded to whole-body buffering for
+the convenience of the transform paths.
+
+## Routing and CORS
+
+Cloudflare and nginx route `cdn.parascene.com` to the VPS container. The upload
+endpoint must:
+
+- accept credentialed requests only from the approved Parascene origins;
+- return the exact requesting approved origin, never `*`, with credentialed
+  CORS responses;
+- handle preflight requests for the custom upload headers;
+- keep proxy and application body limits aligned at 50 MiB;
+- use timeouts long enough for slow uploads without leaving unbounded idle
+  connections;
+- preserve streaming at every proxy layer by disabling request buffering where
+  needed.
+
+Media URLs returned by the endpoint should use the canonical CDN hostname or a
+stable path that callers can safely resolve against it.
+
+## Suggested implementation shape
 
 ```text
 vps/
-├── routes/                  Auth, profile, share, media, upload routes
-│   ├── middleware/          Cookie auth, CORS, limits, request context
-│   └── utils/                URL, storage, upload, and response helpers
-├── db/                      Focused database adapter(s)
-├── pages/                   Self-contained beta page modules
-│   ├── index/               index.html and landing-page assets
-│   └── auth/                auth.html, auth.css, auth.js
-├── public/                  Browser/static assets
-└── server.js                Beta process entry point
-├── config/                  Deployment/runtime configuration templates
-├── Dockerfile               Beta image definition
-├── nginx/                   Host routing and upload timeout examples
-├── scripts/                 Health checks, migrations, and local helpers
-└── README.md                VPS development and deployment notes
+├── routes/
+│   ├── uploads.js             Upload HTTP contract and orchestration
+│   ├── media.js               Canonical media reads, if moved in this phase
+│   ├── middleware/
+│   │   ├── uploadCors.js      Approved origins and preflight behavior
+│   │   └── uploadLimits.js    Size, timeout, and request guards
+│   └── utils/
+│       ├── storage.js         Supabase streaming/storage adapter
+│       ├── uploadKeys.js      Safe object-key construction
+│       └── uploadResponse.js  Compatibility response builder
+├── nginx/                     Host, buffering, body-size, and timeout config
+└── scripts/                   Upload smoke tests and deployment checks
 ```
 
-The structure should follow the current app's patterns where useful:
-small route factories, shared utilities, explicit environment configuration,
-and separate server startup from route behavior. It should not import the
-entire `api/index.js` just to serve beta.
-
-The initial Scope 1 implementation uses this structure for the shared-session
-auth slice. Password reset/email delivery and the authenticated beta profile
-surface remain follow-on work before Scope 1 is considered complete.
+Keep the implementation focused. Do not import the full Vercel application or
+duplicate unrelated route trees to obtain upload behavior.
 
 ## Migration sequence
 
-### Scope 1
+1. Freeze the current `/api/images/generic` request, response, permission, key,
+   and error contracts with focused tests.
+2. Inventory every caller of `uploadImageFile()` and `uploadChatFile()`, plus
+   any raw upload routes that need to join this boundary.
+3. Add the VPS storage adapter and streaming pass-through upload route.
+4. Add limits, authorization, upload-kind handling, CORS, and structured
+   logging.
+5. Implement or explicitly defer the upload kinds that require transforms.
+6. Add an end-to-end smoke test that uploads through the public
+   `cdn.parascene.com` path and verifies the returned media URL.
+7. Change the centralized frontend upload client to target the CDN hostname.
+8. Verify generic images, edited images, chat images, video/file attachments,
+   and all other inventoried producers.
+9. Observe errors, latency, memory, bandwidth, and storage results during a
+   limited rollout, then make the CDN route canonical.
 
-1. Build beta's shared-cookie auth surface.
-2. Verify login and logout in both directions between current and beta.
-3. Add the basic authenticated profile/session view.
+## Acceptance criteria
 
-### Scope 2
+- all inventoried browser upload producers use `cdn.parascene.com`;
+- no active browser upload sends its body through Vercel;
+- ordinary uploads are streamed end to end without whole-file memory buffers;
+- the 50 MiB limit is enforced consistently by Cloudflare, nginx, and the app;
+- current clients continue to understand successful and failed responses;
+- permissions and storage-key ownership match current behavior;
+- credentialed cross-origin requests work from approved Parascene hosts only;
+- uploaded objects can be retrieved through their returned canonical URLs;
+- logs make failed uploads diagnosable without recording secrets or file
+  contents;
+- rollback to the old endpoint is documented and tested before cutover.
 
-4. Establish Cloudflare routing for `cdn.parascene.com`.
-5. Implement the VPS streaming upload gateway.
-6. Change the current frontend's centralized upload client to use `cdn`.
-7. Verify image, edited-image, chat-file, and other upload producers through
-   the single canonical path.
+## Deferred work
 
-### Later scopes
+- resumable or multipart uploads above the initial proxy limit;
+- background workers and durable media-processing jobs;
+- migration of unrelated application routes to the VPS;
+- broader CDN/share-host consolidation that is not required for upload
+  correctness.
 
-8. Add VPS workers and durable job processing later.
-9. Migrate broader application traffic only after beta proves stable.
+## Beta-first rollout
+
+The rollout has two deliberate stages:
+
+1. Build an authenticated upload workbench at
+   `beta.parascene.com/upload-lab`.
+2. Have that page upload directly to `https://cdn.parascene.com`, not to a
+   beta-relative endpoint. This proves the real DNS, TLS, nginx, CORS, shared
+   request identity, VPS streaming, Supabase Storage, retrieval, and deletion
+   path.
+3. Prove that an unchanged file larger than Vercel's request limit can complete
+   through the CDN path.
+4. Only after the beta path passes its cutover gates, repoint the centralized
+   upload helpers used by `www.parascene.com`.
+
+The beta workbench is not a disposable mock. Its upload request should exercise
+the same public contract that `www` will eventually use.
+
+## Upload discoverability and ownership
+
+Generic uploads are currently storage objects plus returned URLs, not
+first-class user-library records. Ownership is inferred from object keys such
+as `profile/{userId}/generic_*`, and the object normally becomes discoverable
+only when another record retains its URL. Examples include chat messages,
+creation inputs, comments, and profile fields.
+
+There is no application endpoint that lists all generic uploads belonging to a
+user. Supabase can list objects under a prefix, but an object listing does not
+provide the product metadata needed to answer whether an upload is ready,
+attached, abandoned, retained, or safe to delete. Generic images and
+miscellaneous files may also live in different buckets.
+
+A standalone uploader must therefore not be fire-and-forget. Before enabling
+it, add a minimal upload ledger, such as `prsn_media_uploads`, with fields
+approximately like these:
+
+- `id`;
+- `user_id`;
+- `bucket` and `object_key`;
+- `original_name`;
+- declared and detected content types;
+- byte size and optional SHA-256;
+- upload kind;
+- lifecycle status such as `uploading`, `ready`, `failed`, `attached`, and
+  `deleted`;
+- source, such as `beta_upload_lab`;
+- `created_at`, `updated_at`, and optional `expires_at`;
+- optional attachment type and attachment ID.
+
+The ledger, rather than a live Storage prefix scan, should become the
+authoritative index for new uploads. A Storage scan can later backfill legacy
+objects, but objects whose references cannot be reconstructed should be marked
+with an unknown reference state rather than assumed to be either attached or
+orphaned.
+
+The upload lifecycle should be recoverable across the database and object
+store boundary:
+
+1. create an `uploading` ledger row before the transfer;
+2. stream the object to Storage under a server-generated immutable key;
+3. mark the row `ready` only after Storage confirms success;
+4. compensate by deleting the object when finalization fails;
+5. retain failed state long enough to diagnose it;
+6. periodically reconcile incomplete rows and abandoned multipart uploads;
+7. associate ready uploads with a chat message, creation, profile field, or
+   other owning record when that record is committed.
+
+For the beta workbench, uploads should either be explicitly temporary with a
+documented expiration or remain visible until the user deletes them. They must
+not disappear from the UI while silently continuing to consume storage.
+
+## Beta upload workbench
+
+The initial workbench should support:
+
+- selecting a file without applying the current client-side image shrinker;
+- displaying the exact target hostname and request metadata;
+- upload progress and a request ID;
+- recent-upload listing for the authenticated user;
+- filename, size, type, status, creation time, and source display;
+- preview or download through the CDN hostname;
+- explicit deletion with confirmation;
+- clear distinction between temporary, unattached, and attached objects;
+- useful error details without exposing credentials or internal Storage
+  responses.
+
+The supporting API can retain the existing upload contract while adding
+non-breaking metadata:
+
+```text
+POST   https://cdn.parascene.com/api/images/generic
+GET    https://cdn.parascene.com/api/uploads
+DELETE https://cdn.parascene.com/api/uploads/:id
+GET    https://cdn.parascene.com/api/images/generic/:key
+```
+
+The upload response may preserve `ok`, `key`, `max_bytes`, `url`, and
+`display_as_file` while adding `upload_id`, `cdn_url`, byte size, checksum, and
+request ID.
+
+Do not immediately replace the existing relative `url` with an absolute CDN
+URL. Some current consumers parse `/api/images/generic/...` and reconstruct
+relative delete requests. During beta, return both the compatibility path and
+an absolute `cdn_url`; use the CDN URL in the workbench and audit every
+consumer before changing the value used by `www`.
+
+## Vercel-limit proof
+
+The current browser helper recompresses supported raster images toward 3 MiB
+before upload specifically to stay below edge limits. The beta workbench must
+not call that preparation path for the proof, because doing so would hide the
+behavior being tested.
+
+Use a generated or otherwise non-sensitive 8–20 MiB JPEG or PNG for the first
+controlled test. Send the same raw request shape to each target:
+
+1. confirm that the equivalent `www` request is rejected with Vercel's expected
+   `413` response;
+2. confirm that the `cdn` request succeeds;
+3. confirm that the ledger row reaches `ready`;
+4. retrieve the object through the CDN hostname;
+5. compare the returned byte count and SHA-256 with the original for a
+   pass-through upload;
+6. refresh or sign back in and confirm that the upload remains listed;
+7. delete it and confirm that both the ledger and Storage object reflect the
+   deletion.
+
+Vercel currently documents a 4.5 MB request/response payload limit for
+Functions:
+
+`https://vercel.com/docs/functions/limitations`
+
+Cloudflare currently documents a 100 MB maximum request body for Free and Pro
+zones:
+
+`https://developers.cloudflare.com/cache/concepts/default-cache-behavior/`
+
+Do not begin with a file near every configured ceiling. A modest file above the
+Vercel limit proves the routing objective while leaving headroom for proxy,
+Storage, and timeout investigation.
+
+## Infrastructure gates
+
+Mapping both hostnames to the same IP is necessary but not sufficient. Before
+the browser test, verify that:
+
+- TLS covers `cdn.parascene.com`;
+- nginx has a matching `server_name` and routes the hostname to the container;
+- Cloudflare proxying is in the intended mode;
+- the public CDN hostname has an independent health check;
+- deployment verification tests the CDN host as well as
+  `beta.parascene.com`;
+- nginx and the application enforce aligned byte limits;
+- proxy request buffering is disabled for the streaming upload route;
+- timeouts allow slow legitimate uploads without permitting unbounded idle
+  connections.
+
+The beta page must make a cross-origin request to the CDN hostname. A request
+to `/api/...` on the beta origin would not prove the eventual CORS or hostname
+routing behavior.
+
+Because the upload uses custom headers, browsers will send a CORS preflight.
+The CDN endpoint must return the exact approved requesting origin, allow
+credentials, enumerate the accepted methods and headers, and never combine
+credentialed requests with `Access-Control-Allow-Origin: *`. Mutating routes
+must validate `Origin` independently of CORS response headers.
+
+## Storage and streaming gates
+
+Do not assume that an incoming request is streamed end to end merely because
+the route avoids `express.raw()`. The current Supabase adapter accepts a
+complete `Buffer`, and an SDK call may still buffer before sending to Storage.
+The proof must measure container memory while the upload is in flight and
+verify that resident memory does not grow in proportion to the file size.
+
+Use a genuinely streaming Storage REST or S3-compatible implementation for
+the pass-through path. Supabase recommends resumable uploads for files above
+6 MB and documents S3 uploads as appropriate for server-side transfers where
+speed is preferred over resumability:
+
+- `https://supabase.com/docs/guides/storage/uploads/standard-uploads`
+- `https://supabase.com/docs/guides/storage/uploads/s3-uploads`
+
+Verify the actual Supabase project-wide and bucket-specific file limits before
+choosing the application limit. Cloudflare, nginx, the application, and
+Supabase must agree. In particular, the existing 50 MiB application constant
+is 52,428,800 bytes and is not identical to a decimal 50 MB Storage limit.
+
+Enforce limits using both an early `Content-Length` check when present and a
+streaming byte counter. Do not trust the declared length, and abort the Storage
+write if the observed byte count crosses the limit.
+
+Transforms that require the whole file must remain separate from the ordinary
+streaming path. The first proof should use a pass-through format. Edited-image
+normalization and HEIC/TIFF/JXL conversion can use bounded temporary storage or
+a later processing step, but they must not cause all uploads to be buffered in
+memory.
+
+## Retrieval and URL gates
+
+An upload bypass is incomplete if the returned URL sends large downloads back
+through Vercel. Relative `/api/images/generic/...` URLs resolve against the
+page origin, so a relative URL rendered on `www` still reads through `www`.
+
+The CDN must provide a retrieval route that streams from Storage and supports
+HTTP range requests for video and audio. The current generic Storage read
+converts the complete object into a buffer; do not carry that behavior into the
+large-media CDN route.
+
+During beta, use the absolute `cdn_url` for preview and download while
+retaining the compatibility URL separately. Before the `www` cutover, update
+URL recognizers, renderers, delete helpers, creation inputs, chat attachments,
+comments, and other consumers so that absolute CDN URLs do not break ownership
+checks or accidentally route deletions back through `www`.
+
+## Security and product-policy gates
+
+Define object visibility explicitly. Profile media, private chat attachments,
+unpublished creation inputs, public creations, and temporary lab uploads do
+not necessarily have the same read policy. A hard-to-guess object key is not an
+authorization policy.
+
+Do not serve arbitrary active content inline from a cookie-bearing
+`*.parascene.com` origin. For the beta proof:
+
+- use a conservative media-type allowlist;
+- validate magic bytes rather than trusting only the supplied MIME type and
+  extension;
+- force risky types to download;
+- return `X-Content-Type-Options: nosniff`;
+- apply a restrictive Content Security Policy to media responses;
+- reject or sanitize active SVG and HTML content;
+- keep Supabase credentials server-side;
+- generate object keys on the server with overwrite disabled;
+- add per-user byte quotas and request rate limits;
+- avoid logging file contents, cookies, authorization tokens, or service
+  credentials;
+- use idempotency keys so a client retry does not create duplicate objects.
+
+The upload ledger should be accessed through the authenticated API and always
+filtered by the requesting user. Do not expose service-role access or permit a
+client to select an arbitrary bucket, owner prefix, or final object key.
+
+## WWW cutover gate
+
+Do not switch production uploads until a beta user can:
+
+- upload an unchanged file larger than 4.5 MB through
+  `cdn.parascene.com`;
+- observe flat VPS memory during the transfer;
+- see the upload in their list after refreshing or signing back in;
+- retrieve it through the CDN without touching Vercel;
+- delete it cleanly;
+- receive correct behavior for unauthenticated, forbidden-origin, oversized,
+  interrupted, retried, and failed-Storage requests.
+
+After those conditions pass, switch the centralized `www` helpers behind a
+reversible configuration or feature flag, begin with a limited cohort, and
+observe error rate, latency, memory, bandwidth, orphan count, and Storage
+results before making the CDN route universal.

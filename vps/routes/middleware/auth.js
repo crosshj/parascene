@@ -1,12 +1,12 @@
 import { COOKIE_NAME, clearSessionCookie, hashToken, readToken } from "../utils/session.js";
 
-export function createAuthMiddleware(db) {
+export function createAuthMiddleware(sessions) {
 	return async (req, res, next) => {
 		const token = req.cookies?.[COOKIE_NAME];
 		const userId = token ? readToken(token) : null;
 		if (!token || !userId) return next();
 		try {
-			const session = await db.sessionByToken(hashToken(token), userId);
+			const session = await sessions.byToken(hashToken(token), userId);
 			// Match the current app: a valid JWT remains usable if the session row
 			// is missing (for example, if session persistence failed during login).
 			// JWT expiry still limits the fallback's lifetime.

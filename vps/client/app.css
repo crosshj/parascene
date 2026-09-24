@@ -1,0 +1,193 @@
+:root {
+	color-scheme: light dark;
+	font-family: "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+body {
+	margin: 0;
+	min-height: 100vh;
+	background: #f6f7fb;
+	color: #0f172a;
+}
+@media (prefers-color-scheme: dark) {
+	body { background: #0f0d1a; color: #ede9fe; }
+}
+header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	min-height: 72px;
+	padding: 0 24px;
+	border-bottom: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+}
+main { max-width: 720px; margin: 0 auto; padding: 72px 24px; }
+.brand { display: inline-block; color: inherit; text-decoration: none; }
+.brand .logo { display: block; width: 150px; height: auto; }
+.brand .logo-text {
+	font-family: "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+	font-size: 36px;
+	font-weight: 700;
+	font-style: italic;
+	fill: currentColor;
+	letter-spacing: -.02em;
+}
+.card {
+	padding: 32px;
+	border: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+	border-radius: 20px;
+	box-shadow: 0 18px 45px color-mix(in srgb, #0f172a 8%, transparent);
+}
+.eyebrow { margin: 0 0 14px; color: #7c3aed; font-size: .75rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+h1 { margin: 0; font-size: clamp(2rem, 5vw, 3.25rem); letter-spacing: -.045em; line-height: 1.05; }
+.state { margin: 18px 0 0; font-size: 1.05rem; line-height: 1.55; }
+.account { margin: 24px 0 0; padding-top: 20px; border-top: 1px solid color-mix(in srgb, currentColor 12%, transparent); }
+.actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 28px; }
+.www-link { display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px; border: 1px solid color-mix(in srgb, currentColor 25%, transparent); border-radius: 999px; color: inherit; font-weight: 600; text-decoration: none; }
+#logout { min-height: 44px; padding: 0 16px; border: 0; border-radius: 999px; color: #fff; background: #7c3aed; font: inherit; font-weight: 700; cursor: pointer; }
+.route-note { margin-top: 28px; font-size: .8rem; }
+.muted { opacity: .7; }
+@media (max-width: 600px) {
+	header { padding: 0 16px; }
+	main { padding: 40px 16px; }
+	.card { padding: 24px; }
+}
+
+.app-header-actions {
+	display: flex;
+	align-items: center;
+	gap: 18px;
+}
+.app-nav { display: flex; align-items: center; gap: 4px; }
+.app-nav a {
+	padding: 8px 10px;
+	border-radius: 999px;
+	color: inherit;
+	font-size: .875rem;
+	font-weight: 650;
+	text-decoration: none;
+	opacity: .68;
+}
+.app-nav a:hover,
+.app-nav a[aria-current] { background: color-mix(in srgb, currentColor 9%, transparent); opacity: 1; }
+.header-account {
+	max-width: 240px;
+	overflow: hidden;
+	color: inherit;
+	font-size: .8rem;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	opacity: .62;
+}
+.app-main { max-width: 1120px; }
+.home-card { max-width: 720px; margin: 0 auto; }
+.primary-link,
+.secondary-link,
+.file-open {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 42px;
+	padding: 0 15px;
+	border-radius: 999px;
+	font-weight: 700;
+	text-decoration: none;
+}
+.primary-link { color: #fff; background: #7c3aed; }
+.secondary-link,
+.file-open { border: 1px solid color-mix(in srgb, currentColor 24%, transparent); color: inherit; }
+.files-page { display: grid; gap: 28px; }
+.page-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; }
+.page-heading .state { margin-top: 10px; }
+.refresh-button {
+	min-height: 40px;
+	padding: 0 16px;
+	border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
+	border-radius: 999px;
+	color: inherit;
+	background: transparent;
+	font: inherit;
+	font-weight: 700;
+	cursor: pointer;
+}
+.refresh-button:disabled,
+.load-more-button:disabled { cursor: wait; opacity: .5; }
+.files-status {
+	padding: 32px;
+	border: 1px dashed color-mix(in srgb, currentColor 24%, transparent);
+	border-radius: 16px;
+	text-align: center;
+	opacity: .72;
+}
+.files-status.is-error { color: #b91c1c; border-color: color-mix(in srgb, #ef4444 45%, transparent); opacity: 1; }
+.files-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+	gap: 18px;
+}
+.files-grid[hidden] { display: none; }
+.file-card {
+	min-width: 0;
+	overflow: hidden;
+	border: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+	border-radius: 16px;
+	background: color-mix(in srgb, currentColor 3%, transparent);
+}
+.file-preview {
+	display: grid;
+	place-items: center;
+	width: 100%;
+	aspect-ratio: 16 / 10;
+	overflow: hidden;
+	background: color-mix(in srgb, currentColor 7%, transparent);
+}
+.file-preview img,
+.file-preview video { width: 100%; height: 100%; object-fit: contain; background: #050505; }
+.file-preview audio { width: calc(100% - 24px); }
+.file-icon {
+	display: grid;
+	place-items: center;
+	width: 64px;
+	height: 80px;
+	border: 1px solid color-mix(in srgb, currentColor 28%, transparent);
+	border-radius: 8px;
+	font-size: .72rem;
+	font-weight: 800;
+	letter-spacing: .12em;
+}
+.file-card-body { display: grid; gap: 8px; padding: 18px; }
+.file-card h2 {
+	margin: 0;
+	overflow: hidden;
+	font-size: .98rem;
+	font-weight: 750;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.file-meta,
+.file-type { margin: 0; text-align: left; font-size: .78rem; opacity: .66; }
+.file-type { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-open { justify-self: start; min-height: 36px; margin-top: 6px; padding: 0 12px; font-size: .82rem; }
+.load-more-button {
+	justify-self: center;
+	min-height: 42px;
+	padding: 0 18px;
+	border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
+	border-radius: 999px;
+	color: inherit;
+	background: transparent;
+	font: inherit;
+	font-weight: 700;
+	cursor: pointer;
+}
+.load-more-button[hidden] { display: none; }
+
+@media (prefers-color-scheme: dark) {
+	.files-status.is-error { color: #fda4af; }
+}
+
+@media (max-width: 760px) {
+	header { align-items: flex-start; gap: 12px; padding-top: 12px; padding-bottom: 12px; }
+	.app-header-actions { flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+	.header-account { display: none; }
+	.page-heading { align-items: flex-start; }
+}

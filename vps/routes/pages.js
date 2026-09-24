@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { createSpaFallback } from "./middleware/spa.js";
 import { getAppAssetNames } from "./utils/appAssets.js";
+import { filesOriginForRequest } from "./utils/origins.js";
 
 const PAGE_ROUTES = {
 	"/": "index/index.html",
@@ -36,16 +37,17 @@ function serializeBootstrap(value) {
 		.replaceAll("/", "\\u002f");
 }
 
-async function sendPage(req, res, next, filePath, db, buildDir) {
+async function sendPage(req, res, next, filePath, users, buildDir) {
 	try {
 		let html = await fs.readFile(filePath, "utf8");
 		html = html.replace("{{CANONICAL_LINK}}", `<link rel="canonical" href="${escapeHtml(canonicalUrlForRequest(req))}" />`);
 		if (html.includes("{{APP_BOOTSTRAP}}")) {
-			const user = req.auth?.userId ? await db?.userById(req.auth.userId) : null;
-			const profile = req.auth?.userId ? await db?.profileByUserId(req.auth.userId) : null;
+			const user = req.auth?.userId ? await users?.byId(req.auth.userId) : null;
+			const profile = req.auth?.userId ? await users?.profileByUserId(req.auth.userId) : null;
 			const bootstrap = {
 				user: user ? { ...user, profile: profile || null } : null,
-				clientRoute: req.originalUrl || req.path || "/"
+				clientRoute: req.originalUrl || req.path || "/",
+				filesOrigin: filesOriginForRequest(req)
 			};
 			html = html.replace("{{APP_BOOTSTRAP}}", `<script>window.__PARASCENE_BOOTSTRAP__=${serializeBootstrap(bootstrap)};</script>`);
 		}
@@ -60,7 +62,7 @@ async function sendPage(req, res, next, filePath, db, buildDir) {
 }
 
 /** Serve page modules and their CSS/JS/assets from pages/<page>/. */
-export default function createPageRoutes({ pagesDir, db }) {
+export default function createPageRoutes({ pagesDir, users }) {
 	const router = express.Router();
 	const buildDir = path.join(pagesDir, "..", "build");
 
@@ -69,7 +71,7 @@ export default function createPageRoutes({ pagesDir, db }) {
 			const pagePath = (route === "/" || route === "/index.html") && req.auth?.userId
 				? path.join(pagesDir, "app/app.html")
 				: path.join(pagesDir, relativePath);
-			sendPage(req, res, next, pagePath, db, buildDir);
+			sendPage(req, res, next, pagePath, users, buildDir);
 		});
 	}
 
@@ -80,7 +82,7 @@ export default function createPageRoutes({ pagesDir, db }) {
 		maxAge: "1y",
 		immutable: true
 	}));
-	router.use(createSpaFallback({ appPagePath: path.join(pagesDir, "app/app.html"), db, buildDir }));
+	router.use(createSpaFallback({ appPagePath: path.join(pagesDir, "app/app.html"), users, buildDir }));
 
 	return router;
 }

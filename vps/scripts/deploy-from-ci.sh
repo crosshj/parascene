@@ -24,7 +24,10 @@ if [[ "${1:-}" == "remote" ]]; then
 	for attempt in {1..30}; do
 		if curl --fail --silent --output /dev/null \
 			--insecure https://localhost/ \
-			-H 'Host: beta.parascene.com'; then
+			-H 'Host: beta.parascene.com' && \
+		curl --fail --silent --output /dev/null \
+			--insecure https://localhost/healthz \
+			-H 'Host: cdn.parascene.com'; then
 			exit 0
 		fi
 		sleep 2

@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import { getAppAssetNames } from "../utils/appAssets.js";
+import { filesOriginForRequest } from "../utils/origins.js";
 
 function serializeBootstrap(value) {
 	return JSON.stringify(value)
@@ -9,12 +10,13 @@ function serializeBootstrap(value) {
 		.replaceAll("/", "\\u002f");
 }
 
-async function bootstrapForRequest(req, db) {
-	const user = req.auth?.userId ? await db?.userById(req.auth.userId) : null;
-	const profile = req.auth?.userId ? await db?.profileByUserId(req.auth.userId) : null;
+async function bootstrapForRequest(req, users) {
+	const user = req.auth?.userId ? await users?.byId(req.auth.userId) : null;
+	const profile = req.auth?.userId ? await users?.profileByUserId(req.auth.userId) : null;
 	return {
 		user: user ? { ...user, profile: profile || null } : null,
-		clientRoute: req.originalUrl || req.path || "/"
+		clientRoute: req.originalUrl || req.path || "/",
+		filesOrigin: filesOriginForRequest(req)
 	};
 }
 
@@ -32,14 +34,14 @@ function loginUrlFor(req) {
 }
 
 /** Fall back authenticated document navigations to the client-side app shell. */
-export function createSpaFallback({ appPagePath, db, buildDir }) {
+export function createSpaFallback({ appPagePath, users, buildDir }) {
 	return async function spaFallback(req, res, next) {
 		if (!isDocumentRequest(req)) return next();
 		if (!req.auth?.userId) return res.redirect(loginUrlFor(req));
 		try {
 			let html = await fs.readFile(appPagePath, "utf8");
 			if (html.includes("{{APP_BOOTSTRAP}}")) {
-				html = html.replace("{{APP_BOOTSTRAP}}", `<script>window.__PARASCENE_BOOTSTRAP__=${serializeBootstrap(await bootstrapForRequest(req, db))};</script>`);
+				html = html.replace("{{APP_BOOTSTRAP}}", `<script>window.__PARASCENE_BOOTSTRAP__=${serializeBootstrap(await bootstrapForRequest(req, users))};</script>`);
 			}
 			if (html.includes("{{APP_JS}}") || html.includes("{{APP_CSS}}")) {
 				const assets = await getAppAssetNames(buildDir);

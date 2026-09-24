@@ -4,7 +4,9 @@ import express from "express";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createAuthRoutes } from "./routes/auth.js";
+import { createCdnRoutes } from "./routes/cdn.js";
 import { createAuthMiddleware } from "./routes/middleware/auth.js";
+import { createCdnHostBoundary } from "./routes/middleware/cdnHost.js";
 import createPageRoutes from "./routes/pages.js";
 import { createDb } from "./db/index.js";
 
@@ -17,9 +19,10 @@ const db = createDb();
 app.set("trust proxy", true);
 app.use(express.json({ limit: "1mb" }));
 app.use(cookieParser());
-app.use(createAuthMiddleware(db));
-app.use(createAuthRoutes(db));
-	app.use(createPageRoutes({ pagesDir, db }));
+app.use(createAuthMiddleware(db.sessions));
+app.use(createCdnHostBoundary(createCdnRoutes(db.profileFiles)));
+app.use(createAuthRoutes({ users: db.users, sessions: db.sessions }));
+app.use(createPageRoutes({ pagesDir, users: db.users }));
 app.use(express.static(path.join(__dirname, "public")));
 app.use((error, req, res, next) => {
 	console.error("[beta] request failed", error);
