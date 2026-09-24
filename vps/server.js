@@ -17,7 +17,7 @@ const app = express();
 const db = createDb();
 
 app.set("trust proxy", true);
-app.use(express.json({ limit: "1mb" }));
+app.use("/api/auth", express.json({ limit: "1mb" }));
 app.use(cookieParser());
 app.use(createAuthMiddleware(db.sessions));
 app.use(createCdnHostBoundary(createCdnRoutes(db.profileFiles)));

@@ -19,7 +19,7 @@ export function createFilesCors() {
 			res.vary("Origin");
 		}
 		if (req.method === "OPTIONS") {
-			res.set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+			res.set("Access-Control-Allow-Methods", "GET, HEAD, POST, DELETE, OPTIONS");
 			res.set("Access-Control-Allow-Headers", "Content-Type, Range");
 			res.set("Access-Control-Max-Age", "600");
 			return res.sendStatus(204);

@@ -41,7 +41,7 @@ export function serializeFile(file) {
 	const size = Number(file?.metadata?.size);
 	return {
 		id,
-		display_name: null,
+		display_name: String(file?.metadata?.originalName || "").trim() || null,
 		content_type: contentTypeForFile(file),
 		size: Number.isFinite(size) && size >= 0 ? size : null,
 		created_at: file?.created_at || null,

@@ -301,8 +301,9 @@ Storage, and timeout investigation.
 
 ## Infrastructure gates
 
-Mapping both hostnames to the same IP is necessary but not sufficient. Before
-the browser test, verify that:
+The current environment already serves both `beta.parascene.com` and
+`cdn.parascene.com` successfully through Cloudflare Full (strict), establishing
+the DNS, TLS, and nginx path. Preserve these properties during deployment:
 
 - TLS covers `cdn.parascene.com`;
 - nginx has a matching `server_name` and routes the hostname to the container;
@@ -327,11 +328,11 @@ must validate `Origin` independently of CORS response headers.
 
 ## Storage and streaming gates
 
-Do not assume that an incoming request is streamed end to end merely because
-the route avoids `express.raw()`. The current Supabase adapter accepts a
-complete `Buffer`, and an SDK call may still buffer before sending to Storage.
-The proof must measure container memory while the upload is in flight and
-verify that resident memory does not grow in proportion to the file size.
+The beta profile-file adapter passes the incoming Node stream to the Supabase
+Storage client with half-duplex streaming enabled; Express does not parse or
+buffer the file body. The live proof must still measure container memory while
+the upload is in flight and verify that resident memory does not grow in
+proportion to the file size.
 
 Use a genuinely streaming Storage REST or S3-compatible implementation for
 the pass-through path. Supabase recommends resumable uploads for files above
@@ -418,3 +419,29 @@ After those conditions pass, switch the centralized `www` helpers behind a
 reversible configuration or feature flag, begin with a limited cohort, and
 observe error rate, latency, memory, bandwidth, orphan count, and Storage
 results before making the CDN route universal.
+
+## Current narrow beta proof
+
+The immediate beta scope intentionally stops short of the full upload ledger,
+media normalization, transcoding, resumable transfer, and `www` cutover:
+
+- `POST /api/files?filename=...` accepts one raw request body, generates the
+  final object ID on the server, and streams it into the authenticated user's
+  `prsn_misc/profile/{userId}` prefix;
+- the application rejects declared or observed bodies above 50 MiB and never
+  places Supabase credentials in the browser;
+- the original filename is retained as object metadata for display;
+- `DELETE /api/files/:fileId` permanently removes only an object inside the
+  authenticated user's prefix and is available from the Files page after an
+  explicit confirmation;
+- the beta UI exposes upload progress, refreshes the owner-scoped listing, and
+  permits cleanup during repeated tests;
+- CDN CORS permits the beta origin to use `POST` and `DELETE` in addition to
+  listing and retrieval.
+
+The live acceptance exercise should use a known-good, fast-start media file
+approaching but not exceeding the configured 50 MiB boundary. Confirm upload,
+listing after refresh, CDN retrieval/range behavior, container memory, and
+hard deletion. The previously examined MP4 with an end-positioned `moov` atom
+belongs to the later media-normalization scope and should not be used to judge
+this transport proof.

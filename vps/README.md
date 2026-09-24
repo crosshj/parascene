@@ -12,13 +12,16 @@ modules. `public/` contains static assets.
 Page assets are exposed at page-relative URLs such as `/auth/auth.css`, not
 through a `/pages` URL namespace.
 
-The current migration focus is the canonical `cdn.parascene.com` media-upload
-boundary. The VPS will accept the existing browser upload contract, stream
-request bodies to Supabase Storage, and keep storage credentials server-side.
-See `MIGRATION_PLAN.md` for the implementation and cutover plan.
+The current migration focus is proving the canonical `cdn.parascene.com`
+media boundary. The beta Files tool streams raw request bodies of up to 50 MiB
+to Supabase Storage, supports owner-scoped hard deletion, and keeps storage
+credentials server-side. This narrow beta contract does not yet replace the
+existing `www` upload helpers. See `MIGRATION_PLAN.md` for the implementation
+and cutover plan.
 
 The authenticated beta SPA includes a client-side `/files` page. It calls the
-owner-scoped `https://cdn.parascene.com/api/files` API to enumerate and stream
-objects from the signed-in user's `prsn_misc/profile/{userId}` prefix. Requests
-to the CDN hostname are host-gated: only CDN service routes are exposed, while
-beta pages remain available only on the beta hostname.
+owner-scoped `https://cdn.parascene.com/api/files` API to upload, enumerate,
+stream, and delete objects from the signed-in user's
+`prsn_misc/profile/{userId}` prefix. Requests to the CDN hostname are
+host-gated: only CDN service routes are exposed, while beta pages remain
+available only on the beta hostname.

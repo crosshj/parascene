@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
 import http from "node:http";
+import { Readable } from "node:stream";
 import test from "node:test";
+import { createProfileFilesStore } from "../db/profileFiles.js";
 import express from "express";
 import { createCdnRoutes } from "../routes/cdn.js";
 import { createFilesRoutes } from "../routes/files.js";
 import { createCdnHostBoundary } from "../routes/middleware/cdnHost.js";
 import { createFilesCors } from "../routes/middleware/filesCors.js";
 import { mayDisplayInline, normalizeFileId, serializeFile } from "../routes/utils/files.js";
+import { createSizeLimitedStream, MAX_UPLOAD_BYTES, normalizeOriginalFilename, uploadContentType } from "../routes/utils/uploads.js";
 
 async function withServer(app, run) {
 	const server = http.createServer(app);
@@ -75,6 +78,79 @@ test("serializes Supabase file metadata without exposing bucket or owner prefix"
 	assert.equal(mayDisplayInline("text/html"), false);
 });
 
+test("normalizes upload metadata without accepting client paths", () => {
+	assert.equal(normalizeOriginalFilename("demo video.mp4"), "demo video.mp4");
+	assert.equal(normalizeOriginalFilename("folder/demo.mp4"), null);
+	assert.equal(normalizeOriginalFilename("folder\\demo.mp4"), null);
+	assert.equal(uploadContentType("demo.mp4", "application/octet-stream"), "video/mp4");
+	assert.equal(uploadContentType("demo.mp4", "application/mp4"), "video/mp4");
+	assert.equal(MAX_UPLOAD_BYTES, 50 * 1024 * 1024);
+});
+
+test("stops an upload stream after the observed byte limit", async () => {
+	const upload = createSizeLimitedStream(Readable.from([Buffer.alloc(4), Buffer.alloc(4)]), 7);
+	await assert.rejects(async () => {
+		for await (const _chunk of upload.stream) { /* Consume the bounded stream. */ }
+	}, /file-size limit/);
+	assert.equal(upload.exceeded, true);
+	assert.equal(upload.bytesRead, 8);
+});
+
+test("scopes storage mutations to the authenticated user's profile prefix", async () => {
+	const calls = [];
+	const bucket = {
+		async upload(path, body, options) {
+			calls.push({ operation: "upload", path, body, options });
+			return { data: { path }, error: null };
+		},
+		async remove(paths) {
+			calls.push({ operation: "remove", paths });
+			return { data: [], error: null };
+		}
+	};
+	const client = { storage: { from(name) { assert.equal(name, "prsn_misc"); return bucket; } } };
+	const store = createProfileFilesStore({ client, supabaseUrl: "https://example.supabase.co", serviceRoleKey: "secret" });
+	const body = {};
+	await store.upload(42, "misc_1_test.mp4", body, { contentType: "video/mp4", originalName: "test.mp4" });
+	await store.delete(42, "misc_1_test.mp4");
+	assert.equal(calls[0].path, "profile/42/misc_1_test.mp4");
+	assert.equal(calls[0].body, body);
+	assert.deepEqual(calls[1], { operation: "remove", paths: ["profile/42/misc_1_test.mp4"] });
+});
+
+test("streams an upload to the authenticated user's generated object", async () => {
+	let call = null;
+	const profileFiles = {
+		async upload(userId, fileId, body, options) {
+			const chunks = [];
+			for await (const chunk of body) chunks.push(chunk);
+			call = { userId, fileId, bytes: Buffer.concat(chunks).toString("utf8"), options };
+		},
+		async delete() {
+			assert.fail("a successful upload should not be cleaned up");
+		}
+	};
+	await withServer(filesApp(profileFiles), async (base) => {
+		const response = await fetch(`${base}/api/files?filename=${encodeURIComponent("My clip.mp4")}`, {
+			method: "POST",
+			headers: { "Content-Type": "video/mp4" },
+			body: "video bytes"
+		});
+		assert.equal(response.status, 201);
+		const body = await response.json();
+		assert.equal(body.file.display_name, "My clip.mp4");
+		assert.equal(body.file.content_type, "video/mp4");
+		assert.equal(body.file.size, 11);
+		assert.match(body.file.id, /^misc_\d+_[A-Za-z0-9_-]{8}\.mp4$/);
+		assert.deepEqual(call, {
+			userId: 42,
+			fileId: body.file.id,
+			bytes: "video bytes",
+			options: { contentType: "video/mp4", originalName: "My clip.mp4" }
+		});
+	});
+});
+
 test("lists only through the authenticated user id", async () => {
 	let call = null;
 	const profileFiles = {
@@ -97,6 +173,24 @@ test("rejects an unauthenticated list", async () => {
 	await withServer(filesApp({}, { authenticated: false }), async (base) => {
 		const response = await fetch(`${base}/api/files`);
 		assert.equal(response.status, 401);
+	});
+});
+
+test("deletes only through the authenticated user id", async () => {
+	let call = null;
+	const profileFiles = {
+		async delete(userId, fileId) {
+			call = { userId, fileId };
+		}
+	};
+	await withServer(filesApp(profileFiles), async (base) => {
+		const response = await fetch(`${base}/api/files/misc_1_test.mp4`, { method: "DELETE" });
+		assert.equal(response.status, 204);
+		assert.deepEqual(call, { userId: 42, fileId: "misc_1_test.mp4" });
+
+		const invalid = await fetch(`${base}/api/files/bad..mp4`, { method: "DELETE" });
+		assert.equal(invalid.status, 400);
+		assert.deepEqual(call, { userId: 42, fileId: "misc_1_test.mp4" });
 	});
 });
 
@@ -136,6 +230,13 @@ test("allows credentialed beta CORS and rejects other origins", async () => {
 		assert.equal(allowed.status, 200);
 		assert.equal(allowed.headers.get("access-control-allow-origin"), "https://beta.parascene.com");
 		assert.equal(allowed.headers.get("access-control-allow-credentials"), "true");
+		const preflight = await fetch(`${base}/api/files`, {
+			method: "OPTIONS",
+			headers: { Origin: "https://beta.parascene.com", "Access-Control-Request-Method": "POST" }
+		});
+		assert.equal(preflight.status, 204);
+		assert.match(preflight.headers.get("access-control-allow-methods"), /POST/);
+		assert.match(preflight.headers.get("access-control-allow-methods"), /DELETE/);
 
 		const denied = await fetch(`${base}/api/files`, { headers: { Origin: "https://evil.example" } });
 		assert.equal(denied.status, 403);

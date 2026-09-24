@@ -2,6 +2,13 @@ import express from "express";
 import { Readable } from "node:stream";
 import { requireAuth } from "./middleware/auth.js";
 import { mayDisplayInline, normalizeFileId, safeDispositionFilename, serializeFile } from "./utils/files.js";
+import {
+	createFileId,
+	createSizeLimitedStream,
+	MAX_UPLOAD_BYTES,
+	normalizeOriginalFilename,
+	uploadContentType
+} from "./utils/uploads.js";
 
 function boundedInteger(value, fallback, min, max) {
 	const parsed = Number.parseInt(String(value ?? ""), 10);
@@ -23,6 +30,45 @@ export function createFilesRoutes(profileFiles) {
 	const router = express.Router();
 
 	router.use(requireAuth);
+	router.post("/", async (req, res, next) => {
+		const originalName = normalizeOriginalFilename(req.query.filename);
+		if (!originalName) {
+			return res.status(400).json({ error: "Bad request", message: "A valid filename is required" });
+		}
+		const declaredBytes = Number(req.get("content-length"));
+		if (Number.isFinite(declaredBytes) && declaredBytes > MAX_UPLOAD_BYTES) {
+			return res.status(413).json({ error: "File too large", max_bytes: MAX_UPLOAD_BYTES });
+		}
+		if (declaredBytes === 0) {
+			return res.status(400).json({ error: "Bad request", message: "The file is empty" });
+		}
+
+		const fileId = createFileId(originalName);
+		const contentType = uploadContentType(originalName, req.get("content-type"));
+		const upload = createSizeLimitedStream(req);
+		try {
+			await profileFiles.upload(req.auth.userId, fileId, upload.stream, { contentType, originalName });
+			if (upload.bytesRead === 0) {
+				await profileFiles.delete(req.auth.userId, fileId).catch(() => undefined);
+				return res.status(400).json({ error: "Bad request", message: "The file is empty" });
+			}
+			const file = serializeFile({
+				name: fileId,
+				created_at: new Date().toISOString(),
+				metadata: { mimetype: contentType, originalName, size: upload.bytesRead }
+			});
+			res.set("Cache-Control", "private, no-store");
+			return res.status(201).json({ file });
+		} catch (error) {
+			await profileFiles.delete(req.auth.userId, fileId).catch(() => undefined);
+			if (upload.exceeded) {
+				return res.status(413).json({ error: "File too large", max_bytes: MAX_UPLOAD_BYTES });
+			}
+			if (req.aborted) return undefined;
+			return next(error);
+		}
+	});
+
 	router.get("/", async (req, res, next) => {
 		try {
 			const limit = boundedInteger(req.query.limit, 50, 1, 100);
@@ -38,6 +84,18 @@ export function createFilesRoutes(profileFiles) {
 					next_offset: rows.length === limit ? offset + limit : null
 				}
 			});
+		} catch (error) {
+			return next(error);
+		}
+	});
+
+	router.delete("/:fileId", async (req, res, next) => {
+		const fileId = normalizeFileId(req.params.fileId);
+		if (!fileId) return res.status(400).json({ error: "Invalid file id" });
+		try {
+			await profileFiles.delete(req.auth.userId, fileId);
+			res.set("Cache-Control", "private, no-store");
+			return res.sendStatus(204);
 		} catch (error) {
 			return next(error);
 		}
