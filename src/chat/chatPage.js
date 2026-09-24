@@ -2410,6 +2410,16 @@ export async function initChatPage(root, options = {}) {
 	function buildAttachmentMessageUrl(item) {
 		const basePath = String(item?.urlPath || '').trim();
 		if (!basePath) return '';
+		try {
+			const shareUrl = new URL(basePath, window.location.origin);
+			if (shareUrl.pathname.startsWith('/s/')) {
+				// CDN share links are already self-describing: keep the absolute origin
+				// and original filename, without legacy name/size query decoration.
+				return `https://cdn.parascene.com${shareUrl.pathname}`;
+			}
+		} catch {
+			// Fall through to the legacy generic-upload handling below.
+		}
 		const kind = chatAttachmentKindFromType(item?.fileType);
 		if (kind === 'image') return basePath;
 		try {

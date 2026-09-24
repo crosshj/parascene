@@ -51,18 +51,34 @@ function normalizedMetadata(file) {
 }
 
 function originalNameFromMetadata(file) {
-	const metadata = normalizedMetadata(file);
-	const nested = metadata.metadata && typeof metadata.metadata === "object" ? metadata.metadata : {};
-	return [
-		metadata.originalName,
-		metadata.original_name,
-		metadata.filename,
-		metadata.fileName,
-		nested.originalName,
-		nested.original_name,
-		file?.originalName,
-		file?.original_name
-	].map((value) => String(value || "").trim()).find(Boolean) || null;
+	// Preserve the exact legacy Supabase object shape used before the CDN work.
+	const legacy = String(file?.metadata?.originalName || "").trim();
+	if (legacy) return legacy;
+
+	const seen = new Set();
+	function find(value) {
+		if (!value || typeof value !== "object" || seen.has(value)) return null;
+		seen.add(value);
+		for (const [key, child] of Object.entries(value)) {
+			const normalizedKey = key.toLowerCase().replace(/[^a-z]/g, "");
+			if (["originalname", "filename", "fileoriginalname"].includes(normalizedKey)) {
+				const name = String(child || "").trim();
+				if (name) return name;
+			}
+			if (child && typeof child === "object") {
+				const nested = find(child);
+				if (nested) return nested;
+			}
+			if (typeof child === "string" && child.trim().startsWith("{")) {
+				try {
+					const nested = find(JSON.parse(child));
+					if (nested) return nested;
+				} catch { /* Ignore non-JSON metadata values. */ }
+			}
+		}
+		return null;
+	}
+	return find(normalizedMetadata(file)) || String(file?.originalName || file?.original_name || "").trim() || null;
 }
 
 function originalNameFromId(id) {
