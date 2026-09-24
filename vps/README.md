@@ -12,12 +12,10 @@ modules. `public/` contains static assets.
 Page assets are exposed at page-relative URLs such as `/auth/auth.css`, not
 through a `/pages` URL namespace.
 
-The current migration focus is proving the canonical `cdn.parascene.com`
-media boundary. The beta Files tool streams raw request bodies of up to 50 MiB
-to Supabase Storage, supports owner-scoped hard deletion, and keeps storage
-credentials server-side. This narrow beta contract does not yet replace the
-existing `www` upload helpers. See `MIGRATION_PLAN.md` for the implementation
-and cutover plan.
+The beta/CDN proof is accepted. The Files tool streams raw request bodies of up
+to 50 MiB to Supabase Storage, supports owner-scoped hard deletion, and keeps
+storage credentials server-side. It does not yet replace the existing www
+upload helpers; the remaining cutover work is summarized in `MIGRATION_PLAN.md`.
 
 The authenticated beta SPA includes a client-side `/files` page. It calls the
 owner-scoped `https://cdn.parascene.com/api/files` API to upload, enumerate,
@@ -26,13 +24,13 @@ stream, and delete objects from the signed-in user's
 host-gated: only CDN service routes are exposed, while beta pages remain
 available only on the beta hostname.
 
-The Files page also provides a public-by-link URL at
+The Files page also provides a temporary shared URL at
 `https://cdn.parascene.com/s/{signed-key}/{original-filename}`. The signed key
 keeps the bucket path and storage key out of the URL, and the original filename
 is retained in the URL and download disposition. A valid Parascene sign-in and
 the link are both required to view the file; the private listing, upload,
-delete, and owner content routes remain owner-scoped. Deleting the file revokes
-the link, though cached responses may remain available briefly.
+delete, and owner content routes remain owner-scoped. The link is temporary
+proof behavior, not the final sharing model.
 
 The host Nginx site is versioned at `infra/nginx/parascene.conf`. The CI deploy
 installs it over the currently enabled `parascene` site, validates the complete
