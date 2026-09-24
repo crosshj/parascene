@@ -1,5 +1,5 @@
 import express from "express";
-import { createFilesRoutes } from "./files.js";
+import { createFilesRoutes, createPublicFileRoutes } from "./files.js";
 import { createFilesCors } from "./middleware/filesCors.js";
 
 export function createCdnRoutes(profileFiles) {
@@ -10,6 +10,7 @@ export function createCdnRoutes(profileFiles) {
 		return res.json({ ok: true, service: "parascene-cdn" });
 	});
 
+	router.use("/s", createPublicFileRoutes(profileFiles));
 	router.use("/api/files", createFilesCors(), createFilesRoutes(profileFiles));
 
 	router.use((req, res) => {

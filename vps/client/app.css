@@ -99,7 +99,7 @@ h1 { margin: 0; font-size: clamp(2rem, 5vw, 3.25rem); letter-spacing: -.045em; l
 .page-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; }
 .page-heading .state { margin-top: 10px; }
 .page-actions,
-.file-actions { display: flex; align-items: center; gap: 10px; }
+.file-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .upload-button {
 	display: inline-flex;
 	align-items: center;
@@ -163,63 +163,92 @@ h1 { margin: 0; font-size: clamp(2rem, 5vw, 3.25rem); letter-spacing: -.045em; l
 .files-status.is-error { color: #b91c1c; border-color: color-mix(in srgb, #ef4444 45%, transparent); opacity: 1; }
 .files-grid {
 	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-	gap: 18px;
+	grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+	gap: 16px;
 }
 .files-grid[hidden] { display: none; }
 .file-card {
 	min-width: 0;
 	overflow: hidden;
-	border: 1px solid color-mix(in srgb, currentColor 15%, transparent);
-	border-radius: 16px;
-	background: color-mix(in srgb, currentColor 3%, transparent);
+	border: 1px solid color-mix(in srgb, currentColor 11%, transparent);
+	border-radius: 13px;
+	background: color-mix(in srgb, currentColor 2%, transparent);
+	transition: border-color 150ms ease, box-shadow 150ms ease;
 }
+.file-card:hover { border-color: color-mix(in srgb, currentColor 22%, transparent); box-shadow: 0 8px 24px #0f172a12; }
 .file-preview {
 	display: grid;
 	place-items: center;
 	width: 100%;
-	aspect-ratio: 16 / 10;
+	aspect-ratio: 16 / 9;
 	overflow: hidden;
-	background: color-mix(in srgb, currentColor 7%, transparent);
+	background: #09090b;
 }
 .file-preview img,
 .file-preview video { width: 100%; height: 100%; object-fit: contain; background: #050505; }
 .file-preview audio { width: calc(100% - 24px); }
+.file-preview--audio { aspect-ratio: 16 / 6; background: color-mix(in srgb, currentColor 5%, transparent); }
+.file-preview--file { aspect-ratio: 16 / 6; background: color-mix(in srgb, currentColor 4%, transparent); }
 .file-icon {
 	display: grid;
 	place-items: center;
-	width: 64px;
-	height: 80px;
-	border: 1px solid color-mix(in srgb, currentColor 28%, transparent);
-	border-radius: 8px;
-	font-size: .72rem;
+	width: 52px;
+	height: 64px;
+	border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
+	border-radius: 7px;
+	font-size: .65rem;
 	font-weight: 800;
 	letter-spacing: .12em;
 }
-.file-card-body { display: grid; gap: 8px; padding: 18px; }
+.file-card-body { display: grid; gap: 5px; padding: 14px 15px 13px; }
 .file-card h2 {
 	margin: 0;
 	overflow: hidden;
-	font-size: .98rem;
-	font-weight: 750;
+	font-size: .93rem;
+	font-weight: 650;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
 .file-meta,
-.file-type { margin: 0; text-align: left; font-size: .78rem; opacity: .66; }
+.file-type { margin: 0; text-align: left; font-size: .73rem; opacity: .62; }
 .file-type { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.file-actions { margin-top: 6px; }
+.file-type { font-size: .66rem; letter-spacing: .025em; }
+.file-actions { gap: 7px; margin-top: 5px; }
 .file-open,
-.file-delete { min-height: 36px; padding: 0 12px; font-size: .82rem; }
+.file-copy-link,
+.file-delete { min-height: 32px; padding: 0 10px; border-radius: 7px; font-size: .76rem; }
+.files-page .file-open {
+	border: 0;
+	border-radius: 7px;
+	color: inherit;
+	background: color-mix(in srgb, currentColor 7%, transparent);
+	font-size: .76rem;
+	font-weight: 650;
+	text-decoration: none;
+}
+.file-copy-link {
+	border: 1px solid color-mix(in srgb, currentColor 13%, transparent);
+	color: inherit;
+	background: transparent;
+	font: inherit;
+	font-weight: 650;
+	cursor: pointer;
+}
+.file-copy-link:disabled { cursor: not-allowed; opacity: .5; }
 .file-delete {
-	border: 1px solid color-mix(in srgb, #dc2626 35%, transparent);
-	border-radius: 999px;
+	border: 0;
 	color: #b91c1c;
 	background: transparent;
 	font: inherit;
-	font-weight: 700;
+	font-weight: 600;
 	cursor: pointer;
 }
+.files-page .file-open:hover,
+.file-copy-link:hover:not(:disabled) { background: color-mix(in srgb, currentColor 12%, transparent); }
+.file-delete:hover:not(:disabled) { background: color-mix(in srgb, #dc2626 9%, transparent); }
+.files-page .file-open:focus-visible,
+.file-copy-link:focus-visible,
+.file-delete:focus-visible { outline: 2px solid #8b5cf6; outline-offset: 2px; }
 .file-delete:disabled { cursor: wait; opacity: .5; }
 .load-more-button {
 	justify-self: center;

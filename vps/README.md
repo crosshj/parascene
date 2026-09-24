@@ -26,6 +26,14 @@ stream, and delete objects from the signed-in user's
 host-gated: only CDN service routes are exposed, while beta pages remain
 available only on the beta hostname.
 
+The Files page also provides a public-by-link URL at
+`https://cdn.parascene.com/s/{signed-key}/{original-filename}`. The signed key
+keeps the bucket path and storage key out of the URL, and the original filename
+is retained in the URL and download disposition. A valid Parascene sign-in and
+the link are both required to view the file; the private listing, upload,
+delete, and owner content routes remain owner-scoped. Deleting the file revokes
+the link, though cached responses may remain available briefly.
+
 The host Nginx site is versioned at `infra/nginx/parascene.conf`. The CI deploy
 installs it over the currently enabled `parascene` site, validates the complete
 Nginx configuration, restores the prior file on failure, and reloads Nginx

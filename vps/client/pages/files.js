@@ -82,7 +82,24 @@ function createFileCard(file, filesApi, onDelete) {
 	open.href = contentUrl;
 	open.target = '_blank';
 	open.rel = 'noopener';
-	open.textContent = 'Open file';
+	open.textContent = 'Open';
+	open.title = 'Open file';
+	const copyLink = document.createElement('button');
+	copyLink.className = 'file-copy-link';
+	copyLink.type = 'button';
+	copyLink.textContent = 'Copy link';
+	copyLink.disabled = !file.public_url;
+	copyLink.title = 'Any signed-in Parascene user with this link can view the file';
+	copyLink.addEventListener('click', async () => {
+		if (!file.public_url) return;
+		try {
+			await navigator.clipboard.writeText(file.public_url);
+			copyLink.textContent = 'Copied';
+			setTimeout(() => { copyLink.textContent = 'Copy link'; }, 1800);
+		} catch {
+			window.prompt('Copy this public link', file.public_url);
+		}
+	});
 	const remove = document.createElement('button');
 	remove.className = 'file-delete';
 	remove.type = 'button';
@@ -90,7 +107,7 @@ function createFileCard(file, filesApi, onDelete) {
 	remove.addEventListener('click', () => onDelete(file, remove));
 	const actions = document.createElement('div');
 	actions.className = 'file-actions';
-	actions.append(open, remove);
+	actions.append(open, copyLink, remove);
 	body.append(title, meta, type, actions);
 	article.append(body);
 	return article;

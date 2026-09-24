@@ -1,7 +1,9 @@
 import express from "express";
 import { Readable } from "node:stream";
 import { requireAuth } from "./middleware/auth.js";
-import { mayDisplayInline, normalizeFileId, safeDispositionFilename, serializeFile } from "./utils/files.js";
+import { contentDisposition, mayDisplayInline, normalizeFileId, safeDispositionFilename, serializeFile } from "./utils/files.js";
+import { filesOriginForRequest } from "./utils/origins.js";
+import { createPublicFileToken, verifyPublicFileToken } from "./utils/publicFileLinks.js";
 import {
 	createFileId,
 	createSizeLimitedStream,
@@ -26,7 +28,15 @@ function upstreamErrorStatus(status) {
 	return status >= 400 && status < 600 ? status : 502;
 }
 
-export function createFilesRoutes(profileFiles) {
+function publicFileUrl(req, userId, file, secret) {
+	const filename = file.display_name || file.id;
+	const token = createPublicFileToken(userId, file.id, filename, secret);
+	if (!token) return null;
+	const origin = filesOriginForRequest(req) || "https://cdn.parascene.com";
+	return `${origin}/s/${token}/${encodeURIComponent(filename)}`;
+}
+
+export function createFilesRoutes(profileFiles, { publicLinkSecret = process.env.SESSION_SECRET } = {}) {
 	const router = express.Router();
 
 	router.use(requireAuth);
@@ -58,7 +68,7 @@ export function createFilesRoutes(profileFiles) {
 				metadata: { mimetype: contentType, originalName, size: upload.bytesRead }
 			});
 			res.set("Cache-Control", "private, no-store");
-			return res.status(201).json({ file });
+			return res.status(201).json({ file: { ...file, public_url: publicFileUrl(req, req.auth.userId, file, publicLinkSecret) } });
 		} catch (error) {
 			await profileFiles.delete(req.auth.userId, fileId).catch(() => undefined);
 			if (upload.exceeded) {
@@ -74,7 +84,10 @@ export function createFilesRoutes(profileFiles) {
 			const limit = boundedInteger(req.query.limit, 50, 1, 100);
 			const offset = boundedInteger(req.query.offset, 0, 0, 100000);
 			const rows = await profileFiles.list(req.auth.userId, { limit, offset });
-			const files = rows.map(serializeFile).filter(Boolean);
+			const files = rows.map(serializeFile).filter(Boolean).map((file) => ({
+				...file,
+				public_url: publicFileUrl(req, req.auth.userId, file, publicLinkSecret)
+			}));
 			res.set("Cache-Control", "private, no-store");
 			return res.json({
 				files,
@@ -139,5 +152,53 @@ export function createFilesRoutes(profileFiles) {
 
 	router.get("/:fileId/content", sendContent);
 	router.head("/:fileId/content", sendContent);
+	return router;
+}
+
+export function createPublicFileRoutes(profileFiles, { publicLinkSecret = process.env.SESSION_SECRET } = {}) {
+	const router = express.Router();
+	router.use((_req, res, next) => {
+		res.set("Cache-Control", "private, no-store");
+		res.set("Cloudflare-CDN-Cache-Control", "no-store");
+		next();
+	});
+	router.use(requireAuth);
+
+	async function sendPublicContent(req, res, next) {
+		const grant = verifyPublicFileToken(req.params.token, req.params.filename, publicLinkSecret);
+		if (!grant) return res.status(404).type("text").send("File not found");
+		const controller = new AbortController();
+		res.on("close", () => {
+			if (!res.writableEnded) controller.abort();
+		});
+		try {
+			const upstream = await profileFiles.fetch(grant.userId, grant.fileId, {
+				method: req.method,
+				range: req.get("range") || undefined,
+				signal: controller.signal
+			});
+			if (!upstream.ok) return res.status(upstreamErrorStatus(upstream.status)).type("text").send("File not found");
+			res.status(upstream.status);
+			for (const header of ["content-length", "content-range", "accept-ranges", "etag", "last-modified"]) {
+				copyHeader(upstream, res, header);
+			}
+			const contentType = upstream.headers.get("content-type") || "application/octet-stream";
+			res.set("Content-Type", contentType);
+			res.set("Cache-Control", "private, no-store");
+			res.set("X-Content-Type-Options", "nosniff");
+			res.set("Content-Security-Policy", "default-src 'none'; sandbox");
+			const mode = mayDisplayInline(contentType) ? "inline" : "attachment";
+			res.set("Content-Disposition", contentDisposition(mode, grant.filename));
+			if (req.method === "HEAD" || !upstream.body) return res.end();
+			Readable.fromWeb(upstream.body).on("error", (error) => res.destroy(error)).pipe(res);
+			return undefined;
+		} catch (error) {
+			if (error?.name === "AbortError") return undefined;
+			return next(error);
+		}
+	}
+
+	router.get("/:token/:filename", sendPublicContent);
+	router.head("/:token/:filename", sendPublicContent);
 	return router;
 }

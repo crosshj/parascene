@@ -57,3 +57,10 @@ export function mayDisplayInline(contentType) {
 export function safeDispositionFilename(fileId) {
 	return String(fileId || "file").replace(/["\\\r\n]/g, "_");
 }
+
+export function contentDisposition(mode, filename) {
+	const name = String(filename || "file").replace(/[\\\r\n\0]/g, "_");
+	const fallback = name.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "_");
+	const encoded = encodeURIComponent(name).replace(/[!'()*]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
+	return `${mode}; filename="${fallback}"; filename*=UTF-8''${encoded}`;
+}
