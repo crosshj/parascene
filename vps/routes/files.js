@@ -5,7 +5,7 @@ import { contentDisposition, mayDisplayInline, normalizeFileId, safeDispositionF
 import { filesOriginForRequest } from "./utils/origins.js";
 import { createPublicFileToken, verifyPublicFileToken } from "./utils/publicFileLinks.js";
 import { createFilesCors } from "./middleware/filesCors.js";
-import { isVideoUpload, normalizeUploadedVideo } from "./utils/media.js";
+import { imageNeedsBrowserSafeTranscode, isVideoUpload, normalizeUploadedImage, normalizeUploadedVideo } from "./utils/media.js";
 import {
 	createFileId,
 	createSizeLimitedStream,
@@ -63,7 +63,7 @@ export function createFilesRoutes(profileFiles, { publicLinkSecret = process.env
 			return res.status(400).json({ error: "Bad request", message: "The file is empty" });
 		}
 
-		const fileId = createFileId(originalName);
+		let fileId = createFileId(originalName);
 		let contentType = uploadContentType(originalName, req.get("content-type"));
 		const upload = createSizeLimitedStream(req);
 		try {
@@ -74,7 +74,20 @@ export function createFilesRoutes(profileFiles, { publicLinkSecret = process.env
 				const normalized = await normalizeUploadedVideo(Buffer.concat(chunks));
 				body = normalized.buffer;
 				contentType = normalized.contentType;
+			} else if (imageNeedsBrowserSafeTranscode(originalName, contentType)) {
+				const chunks = [];
+				for await (const chunk of upload.stream) chunks.push(chunk);
+				try {
+					const normalized = await normalizeUploadedImage(Buffer.concat(chunks));
+					body = normalized.buffer;
+					contentType = normalized.contentType;
+				} catch {
+					// Match www: retain the original as a downloadable file if conversion
+					// is unavailable rather than losing the upload.
+					body = Buffer.concat(chunks);
+				}
 			}
+			if (contentType === "image/webp") fileId = createFileId(originalName, ".webp");
 			await profileFiles.upload(req.auth.userId, fileId, body, { contentType, originalName });
 			if (upload.bytesRead === 0) {
 				await profileFiles.delete(req.auth.userId, fileId).catch(() => undefined);

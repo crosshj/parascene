@@ -2,12 +2,14 @@ import { execFile } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import sharp from "sharp";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 const FFMPEG_BIN = process.env.FFMPEG_BIN || "ffmpeg";
 const FFPROBE_BIN = process.env.FFPROBE_BIN || "ffprobe";
 const MAX_NORMALIZED_VIDEO_BYTES = 50 * 1024 * 1024;
+const BROWSER_UNSAFE_IMAGE_EXTENSIONS = new Set([".heic", ".heif", ".jxl", ".tif", ".tiff"]);
 
 function mediaError(message, code = "MEDIA_INVALID") {
 	const error = new Error(message);
@@ -18,6 +20,28 @@ function mediaError(message, code = "MEDIA_INVALID") {
 export function isVideoUpload(filename, contentType) {
 	if (String(contentType || "").toLowerCase().startsWith("video/")) return true;
 	return /\.(?:avi|m4v|mkv|mov|mp4|mpeg|mpg|ogv|webm)$/i.test(String(filename || ""));
+}
+
+export function imageNeedsBrowserSafeTranscode(filename, contentType) {
+	const ext = path.extname(String(filename || "")).toLowerCase();
+	const type = String(contentType || "").toLowerCase();
+	return BROWSER_UNSAFE_IMAGE_EXTENSIONS.has(ext) ||
+		type.includes("heic") || type.includes("heif") || type === "image/tiff" || type.includes("jpeg-xl");
+}
+
+export async function normalizeUploadedImage(input) {
+	try {
+		const metadata = await sharp(input).metadata();
+		let pipeline = sharp(input).rotate();
+		if (Number(metadata.width) > 4096 || Number(metadata.height) > 4096) {
+			pipeline = pipeline.resize({ width: 4096, height: 4096, fit: "inside", withoutEnlargement: true });
+		}
+		return { buffer: await pipeline.webp({ quality: 85 }).toBuffer(), contentType: "image/webp" };
+	} catch {
+		const error = mediaError("The uploaded image could not be converted");
+		error.code = "IMAGE_INVALID";
+		throw error;
+	}
 }
 
 /**

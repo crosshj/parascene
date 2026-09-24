@@ -22,9 +22,12 @@ export function uploadContentType(filename, headerValue) {
 	return contentTypeForFile({ name: filename });
 }
 
-export function createFileId(filename) {
+export function createFileId(filename, extensionOverride = null) {
 	const candidate = path.extname(filename).toLowerCase();
-	const extension = /^\.[a-z0-9]{1,10}$/.test(candidate) ? candidate : "";
+	const override = String(extensionOverride || "").toLowerCase();
+	const extension = /^\.[a-z0-9]{1,10}$/.test(override)
+		? override
+		: /^\.[a-z0-9]{1,10}$/.test(candidate) ? candidate : "";
 	const encodedName = Buffer.from(filename, "utf8").toString("base64url").slice(0, 160);
 	return `misc_${Date.now()}_${crypto.randomBytes(6).toString("base64url")}_fn_${encodedName}${extension}`;
 }
