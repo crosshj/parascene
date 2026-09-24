@@ -121,3 +121,26 @@ export async function normalizeUploadedVideo(input) {
 		await rm(directory, { recursive: true, force: true }).catch(() => undefined);
 	}
 }
+
+/**
+ * Extract embedded album artwork without persisting a derivative. Returns null
+ * when the audio has no attached picture (or the container cannot decode it).
+ */
+export async function extractAudioArtwork(input) {
+	if (!Buffer.isBuffer(input) || input.length === 0) return null;
+	const directory = await mkdtemp(path.join(os.tmpdir(), "parascene-audio-art-"));
+	const sourcePath = path.join(directory, "source.bin");
+	try {
+		await writeFile(sourcePath, input);
+		const result = await execFileAsync(FFMPEG_BIN, [
+			"-y", "-v", "error", "-i", sourcePath,
+			"-map", "0:v:0", "-frames:v", "1", "-f", "image2pipe", "-vcodec", "png", "pipe:1"
+		], { encoding: "buffer", maxBuffer: 12 * 1024 * 1024, timeout: 120_000 });
+		const artwork = Buffer.isBuffer(result.stdout) ? result.stdout : Buffer.from(result.stdout || "");
+		return artwork.length ? artwork : null;
+	} catch {
+		return null;
+	} finally {
+		await rm(directory, { recursive: true, force: true }).catch(() => undefined);
+	}
+}

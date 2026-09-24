@@ -498,6 +498,27 @@
 				bgEl.hidden = false;
 			}
 
+			function sharedAudioArtworkUrl(raw) {
+				try {
+					var url = new URL(raw, window.location.href);
+					var match = url.pathname.match(/^\/s\/([^/]+)\/(.+)$/i);
+					if (!match) return '';
+					return url.origin + '/api/files/artwork/' + match[1] + '/' + match[2];
+				} catch (_) {
+					return '';
+				}
+			}
+
+			if (!img) {
+				var artworkUrl = sharedAudioArtworkUrl(params.get('src') || '');
+				if (artworkUrl) {
+					coverEl.src = artworkUrl;
+					coverEl.hidden = false;
+					bgEl.src = artworkUrl;
+					bgEl.hidden = false;
+				}
+			}
+
 			function creationIdFromHref(raw) {
 				var m = String(raw || '').match(/\/creations\/(\d+)/i);
 				if (!m) return 0;

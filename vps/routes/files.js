@@ -5,7 +5,8 @@ import { contentDisposition, mayDisplayInline, normalizeFileId, safeDispositionF
 import { filesOriginForRequest } from "./utils/origins.js";
 import { createPublicFileToken, verifyPublicFileToken } from "./utils/publicFileLinks.js";
 import { createFilesCors } from "./middleware/filesCors.js";
-import { imageNeedsBrowserSafeTranscode, isVideoUpload, normalizeUploadedImage, normalizeUploadedVideo } from "./utils/media.js";
+import { extractAudioArtwork, imageNeedsBrowserSafeTranscode, isVideoUpload, normalizeUploadedImage, normalizeUploadedVideo } from "./utils/media.js";
+import { audioArtworkFallback } from "./utils/audioArtwork.js";
 import {
 	createFileId,
 	createSizeLimitedStream,
@@ -236,5 +237,33 @@ export function createPublicFileRoutes(profileFiles, { publicLinkSecret = proces
 
 	router.get("/:token/:filename", sendPublicContent);
 	router.head("/:token/:filename", sendPublicContent);
+	return router;
+}
+
+export function createPublicAudioArtworkRoutes(profileFiles, { publicLinkSecret = process.env.SESSION_SECRET } = {}) {
+	const router = express.Router();
+	router.use(createFilesCors());
+	router.get("/:token/:filename", async (req, res, next) => {
+		const grant = verifyPublicFileToken(req.params.token, req.params.filename, publicLinkSecret);
+		if (!grant) return res.status(404).type("text").send("File not found");
+		try {
+			const upstream = await profileFiles.fetch(grant.userId, grant.fileId, { method: "GET" });
+			if (!upstream.ok || !upstream.body) return res.status(404).type("text").send("File not found");
+			const chunks = [];
+			for await (const chunk of Readable.fromWeb(upstream.body)) chunks.push(chunk);
+			const input = Buffer.concat(chunks);
+			const artwork = await extractAudioArtwork(input);
+			res.set("Cache-Control", "no-store");
+			res.set("X-Content-Type-Options", "nosniff");
+			if (artwork) {
+				res.type("image/png");
+				return res.send(artwork);
+			}
+			res.type("image/svg+xml");
+			return res.send(audioArtworkFallback(grant.filename));
+		} catch (error) {
+			return next(error);
+		}
+	});
 	return router;
 }

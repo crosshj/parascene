@@ -13280,6 +13280,50 @@ button.msg-reply-indicator-inner:hover {
 	text-overflow: ellipsis;
 }
 
+.connect-chat-msg-bubble .user-text-inline-audio-wrap {
+	display: block;
+	max-width: 100%;
+}
+
+.connect-chat-msg-bubble .user-text-inline-audio-card {
+	width: min(420px, 100%);
+	max-width: 100%;
+	box-sizing: border-box;
+	padding: 0;
+	border: 0;
+	border-radius: 12px;
+	background: transparent;
+}
+
+.connect-chat-msg-bubble .user-text-inline-audio-heading {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+	margin-bottom: 8px;
+}
+
+.connect-chat-msg-bubble .user-text-inline-audio-name {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: .9rem;
+	font-weight: 650;
+}
+
+.connect-chat-msg-bubble .user-text-inline-audio {
+	display: block;
+	width: 100%;
+	max-width: 100%;
+}
+
+.connect-chat-msg-bubble .user-text-inline-audio-open {
+	display: inline-block;
+	margin-top: 7px;
+	font-size: .75rem;
+}
+
 /* Full-screen iframe overlay (creation detail on SPA shells). */
 .creation-detail-overlay {
 	position: fixed;

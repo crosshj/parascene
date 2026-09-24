@@ -280,6 +280,10 @@ function isVideoExtension(ext) {
 	return ["mp4", "mov", "m4v", "webm", "ogg", "ogv"].includes(String(ext || "").toLowerCase());
 }
 
+function isAudioExtension(ext) {
+	return ["aac", "flac", "m4a", "mp3", "oga", "ogg", "wav", "weba", "webm"].includes(String(ext || "").toLowerCase());
+}
+
 function isHtmlExtension(ext) {
 	return ["html", "htm"].includes(String(ext || "").toLowerCase());
 }
@@ -331,6 +335,40 @@ function isInlineEligibleGenericVideoPath(relativePath) {
 	}
 	const ext = extFromPathOrName(basePath, queryName);
 	return isVideoExtension(ext);
+}
+
+function isInlineEligibleGenericAudioPath(relativePath) {
+	const basePath = stripQueryAndHash(genericPathForValidation(relativePath));
+	if (!isSafeAttachmentPath(basePath)) return false;
+	let queryName = "";
+	try {
+		const u = new URL(String(relativePath || ""), DEFAULT_APP_ORIGIN);
+		queryName = String(u.searchParams.get("name") || "");
+	} catch {
+		queryName = "";
+	}
+	return isAudioExtension(extFromPathOrName(basePath, queryName));
+}
+
+function renderInlineGenericAudio(relativePath, originalUrl) {
+	const rp = escapeHtml(relativePath);
+	const original = escapeHtml(originalUrl);
+	const nameText = attachmentNameFromPath(relativePath) || "Audio";
+	const name = escapeHtml(nameText);
+	const iframeSrc = escapeHtml(
+		resolveChatAudioPlayerSrc({
+			title: nameText,
+			audioUrl: relativePath,
+			href: originalUrl,
+		})
+	);
+	return (
+		`<span class="user-text-inline-audio-wrap">` +
+		`<div class="connect-chat-creation-embed connect-chat-creation-embed--audio-card connect-chat-suno-embed connect-chat-audio-embed user-text-inline-audio-card" data-prsn-audio-embed="card" data-audio-url="${rp}">` +
+		`<iframe class="connect-chat-suno-embed-iframe connect-chat-audio-embed-iframe" src="${iframeSrc}" title="${name}" allow="autoplay; encrypted-media" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>` +
+		`<a class="user-text-inline-audio-open user-link creation-link" href="${rp}" target="_blank" rel="noopener noreferrer" data-creation-link-original="${original}">Open file</a>` +
+		`</div></span>`
+	);
 }
 
 function isInlineEligibleGenericHtmlPath(relativePath) {
@@ -739,6 +777,8 @@ function textWithCreationLinksCore(text, { inlineMarkdown = false } = {}) {
 				out += `<span class="user-text-inline-image-wrap is-loading"><a href="${rp}" class="user-link creation-link user-text-inline-image-link" aria-label="View full image" data-creation-link-original="${escapeHtml(url)}"><img class="user-text-inline-image" src="${rp}" alt="" width="260" height="260" loading="lazy" decoding="async" data-inline-image-loading="1" /></a></span>`;
 			} else if (isInlineEligibleGenericVideoPath(relativePath)) {
 				out += renderInlineGenericVideo(relativePath, url);
+			} else if (isInlineEligibleGenericAudioPath(relativePath)) {
+				out += renderInlineGenericAudio(relativePath, url);
 			} else if (isInlineEligibleGenericHtmlPath(relativePath)) {
 				out += renderInlineGenericHtml(relativePath, url);
 			} else if (isSafeAttachmentPath(basePath)) {
