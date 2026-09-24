@@ -25,3 +25,11 @@ stream, and delete objects from the signed-in user's
 `prsn_misc/profile/{userId}` prefix. Requests to the CDN hostname are
 host-gated: only CDN service routes are exposed, while beta pages remain
 available only on the beta hostname.
+
+The host Nginx site is versioned at `infra/nginx/parascene.conf`. The CI deploy
+installs it over the currently enabled `parascene` site, validates the complete
+Nginx configuration, restores the prior file on failure, and reloads Nginx
+before public health checks. Unless deployments run as root, the SSH deploy
+user therefore needs non-interactive sudo permission for the required Nginx
+backup, install, validation, reload, and cleanup commands. Certificates and
+private keys remain host-owned and are never copied into the repository.

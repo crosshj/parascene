@@ -1,6 +1,69 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+run_as_root() {
+	if [[ "$EUID" -eq 0 ]]; then
+		"$@"
+	else
+		sudo -n "$@"
+	fi
+}
+
+install_nginx_config() {
+	local app_dir="$1"
+	local source_path="$app_dir/infra/nginx/parascene.conf"
+	local enabled_path="/etc/nginx/sites-enabled/parascene"
+	local target_path
+	local backup_path
+
+	if [[ ! -f "$source_path" ]]; then
+		echo "Nginx configuration is missing from the deployment package: $source_path" >&2
+		return 1
+	fi
+	if [[ ! -e "$enabled_path" ]]; then
+		echo "Expected enabled Nginx site does not exist: $enabled_path" >&2
+		return 1
+	fi
+
+	target_path="$(readlink -f "$enabled_path")"
+	if [[ -z "$target_path" || ! -f "$target_path" ]]; then
+		echo "Unable to resolve the active Nginx site target: $enabled_path" >&2
+		return 1
+	fi
+
+	backup_path="$(mktemp /tmp/parascene-nginx.XXXXXX)"
+	if ! run_as_root cp --preserve=mode,ownership,timestamps "$target_path" "$backup_path"; then
+		echo "The deploy user cannot create an Nginx configuration backup with non-interactive sudo" >&2
+		rm -f "$backup_path"
+		return 1
+	fi
+
+	rollback_nginx() {
+		echo "Restoring the previous Nginx configuration" >&2
+		run_as_root install -o root -g root -m 644 "$backup_path" "$target_path"
+		run_as_root nginx -t
+		run_as_root systemctl reload nginx
+	}
+
+	if ! run_as_root install -o root -g root -m 644 "$source_path" "$target_path"; then
+		echo "The deploy user needs non-interactive sudo permission to install the Nginx site" >&2
+		run_as_root rm -f "$backup_path" || true
+		return 1
+	fi
+	if ! run_as_root nginx -t; then
+		rollback_nginx
+		run_as_root rm -f "$backup_path"
+		return 1
+	fi
+	if ! run_as_root systemctl reload nginx; then
+		rollback_nginx
+		run_as_root rm -f "$backup_path"
+		return 1
+	fi
+
+	run_as_root rm -f "$backup_path"
+}
+
 # Remote mode runs on the VPS. It is invoked by the CI mode below after the
 # script has been copied to the host.
 if [[ "${1:-}" == "remote" ]]; then
@@ -20,14 +83,20 @@ if [[ "${1:-}" == "remote" ]]; then
 		--publish 127.0.0.1:3000:3000 \
 		parascene:vps
 
+	# Nginx is versioned with the app, but installed as a separate privileged
+	# host concern. Validation and rollback happen before public health checks.
+	install_nginx_config "$APP_DIR"
+
 	# Verify the public nginx-to-Docker path. Keep retrying while the container starts.
 	for attempt in {1..30}; do
 		if curl --fail --silent --output /dev/null \
-			--insecure https://localhost/ \
-			-H 'Host: beta.parascene.com' && \
+			--insecure \
+			--resolve beta.parascene.com:443:127.0.0.1 \
+			https://beta.parascene.com/ && \
 		curl --fail --silent --output /dev/null \
-			--insecure https://localhost/healthz \
-			-H 'Host: cdn.parascene.com'; then
+			--insecure \
+			--resolve cdn.parascene.com:443:127.0.0.1 \
+			https://cdn.parascene.com/healthz; then
 			exit 0
 		fi
 		sleep 2

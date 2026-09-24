@@ -305,6 +305,10 @@ The current environment already serves both `beta.parascene.com` and
 `cdn.parascene.com` successfully through Cloudflare Full (strict), establishing
 the DNS, TLS, and nginx path. Preserve these properties during deployment:
 
+- treat `vps/infra/nginx/parascene.conf` as the version-controlled source of
+  truth for the enabled host site;
+- have CI back up the active file, install the reviewed configuration, run
+  `nginx -t`, restore on failure, and reload only after validation;
 - TLS covers `cdn.parascene.com`;
 - nginx has a matching `server_name` and routes the hostname to the container;
 - Cloudflare proxying is in the intended mode;
