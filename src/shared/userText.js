@@ -376,7 +376,7 @@ function renderInlineGenericVideo(relativePath, originalUrl) {
 		`<div class="connect-chat-creation-embed-media connect-chat-creation-embed-media--has-hover-bar">` +
 		`<div class="connect-chat-creation-embed-media-hover-bar"><div class="connect-chat-creation-embed-hover-bar-main"><span class="connect-chat-creation-embed-hover-bar-title">${title}</span></div><a class="connect-chat-creation-embed-detail-link connect-chat-creation-embed-detail-link--hover-bar user-link creation-link" href="${rp}" target="_blank" rel="noopener noreferrer" aria-label="Open file" title="Open file" data-creation-link-original="${original}">${linkIcon2()}</a></div>` +
 		`<div class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--video" role="button" tabindex="0" aria-label="Open video" title="Open video">` +
-		`<video class="connect-chat-creation-embed-video" playsinline preload="metadata" src="${rp}" aria-label="Attached video" data-inline-video-loading="1"></video>` +
+		`<video class="connect-chat-creation-embed-video" crossorigin="anonymous" playsinline preload="metadata" src="${rp}" aria-label="Attached video" data-inline-video-loading="1"></video>` +
 		INLINE_CHAT_VIDEO_PLAY_OVERLAY_HTML +
 		`</div></div></div>`
 	);
