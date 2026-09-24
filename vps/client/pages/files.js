@@ -45,11 +45,6 @@ function createPreview(file, contentUrl) {
 		video.controls = true;
 		video.setAttribute('controls', '');
 		video.preload = 'metadata';
-		video.addEventListener('loadedmetadata', () => {
-			if (video.videoWidth > 0 && video.videoHeight > 0) {
-				frame.style.aspectRatio = `${video.videoWidth} / ${video.videoHeight}`;
-			}
-		}, { once: true });
 		video.src = contentUrl;
 		frame.append(video);
 	} else if (kind === 'audio') {

@@ -180,7 +180,8 @@ h1 { margin: 0; font-size: clamp(2rem, 5vw, 3.25rem); letter-spacing: -.045em; l
 	display: grid;
 	place-items: center;
 	width: 100%;
-	aspect-ratio: 16 / 9;
+	/* Stable gallery stage: media keeps its own ratio inside this frame. */
+	aspect-ratio: 4 / 3;
 	overflow: hidden;
 	background: #09090b;
 }
