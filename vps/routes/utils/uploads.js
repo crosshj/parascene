@@ -25,7 +25,8 @@ export function uploadContentType(filename, headerValue) {
 export function createFileId(filename) {
 	const candidate = path.extname(filename).toLowerCase();
 	const extension = /^\.[a-z0-9]{1,10}$/.test(candidate) ? candidate : "";
-	return `misc_${Date.now()}_${crypto.randomBytes(6).toString("base64url")}${extension}`;
+	const encodedName = Buffer.from(filename, "utf8").toString("base64url").slice(0, 160);
+	return `misc_${Date.now()}_${crypto.randomBytes(6).toString("base64url")}_fn_${encodedName}${extension}`;
 }
 
 export function createSizeLimitedStream(source, maximumBytes = MAX_UPLOAD_BYTES) {

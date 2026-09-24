@@ -170,7 +170,9 @@ export function createPublicFileRoutes(profileFiles, { publicLinkSecret = proces
 		res.set("Cloudflare-CDN-Cache-Control", "no-store");
 		next();
 	});
-	router.use(requireAuth);
+	// The signed token is the authorization for this route. It must work without
+	// a session cookie because cross-origin <img>/<video>/<audio> requests do not
+	// send the beta session cookie by default.
 
 	async function sendPublicContent(req, res, next) {
 		const grant = verifyPublicFileToken(req.params.token, req.params.filename, publicLinkSecret);

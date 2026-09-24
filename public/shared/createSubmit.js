@@ -686,7 +686,16 @@ export async function uploadChatFile(file) {
 		throw new Error(err.message || err.error || `Upload failed (${res.status})`);
 	}
 	const data = await res.json();
-	const url = String(data?.file?.public_url || '').trim();
+	const rawUrl = String(data?.file?.public_url || '').trim();
+	const url = rawUrl && /^https?:\/\//i.test(rawUrl)
+		? rawUrl
+		: rawUrl.startsWith('//')
+			? `https:${rawUrl}`
+			: /^cdn\.parascene\.com\//i.test(rawUrl)
+				? `https://${rawUrl}`
+		: rawUrl.startsWith('/')
+			? `${CDN_GENERIC_UPLOAD_ORIGIN}${rawUrl}`
+			: `${CDN_GENERIC_UPLOAD_ORIGIN}/${rawUrl}`;
 	if (!url) throw new Error('No share URL in response');
 	const contentType = String(data?.file?.content_type || prepared.type || file.type || '').toLowerCase();
 	return {

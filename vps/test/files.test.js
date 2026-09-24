@@ -5,12 +5,13 @@ import test from "node:test";
 import { createProfileFilesStore } from "../db/profileFiles.js";
 import express from "express";
 import { createCdnRoutes } from "../routes/cdn.js";
-import { createFilesRoutes } from "../routes/files.js";
+import { createFilesRoutes, createPublicFileRoutes } from "../routes/files.js";
 import { createGenericRoutes } from "../routes/generic.js";
 import { createCdnHostBoundary } from "../routes/middleware/cdnHost.js";
 import { createFilesCors } from "../routes/middleware/filesCors.js";
 import { mayDisplayInline, normalizeFileId, serializeFile } from "../routes/utils/files.js";
 import { createSizeLimitedStream, MAX_UPLOAD_BYTES, normalizeOriginalFilename, uploadContentType } from "../routes/utils/uploads.js";
+import { createPublicFileToken } from "../routes/utils/publicFileLinks.js";
 
 async function withServer(app, run) {
 	const server = http.createServer(app);
@@ -142,7 +143,7 @@ test("streams an upload to the authenticated user's generated object", async () 
 		assert.equal(body.file.display_name, "My clip.mp4");
 		assert.equal(body.file.content_type, "video/mp4");
 		assert.equal(body.file.size, 11);
-		assert.match(body.file.id, /^misc_\d+_[A-Za-z0-9_-]{8}\.mp4$/);
+		assert.match(body.file.id, /^misc_\d+_[A-Za-z0-9_-]{8}_fn_[A-Za-z0-9_-]+\.mp4$/);
 		assert.deepEqual(call, {
 			userId: 42,
 			fileId: body.file.id,
@@ -221,6 +222,29 @@ test("streams a file for the authenticated owner and forwards range", async () =
 		assert.deepEqual(call, { userId: 42, fileId: "misc_1_note.txt", range: "bytes=0-12" });
 		assert.match(response.headers.get("content-disposition"), /^attachment;/);
 		assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+	});
+});
+
+test("streams a signed share link without a session cookie", async () => {
+	const profileFiles = {
+		async fetch(userId, fileId, options) {
+			assert.equal(userId, 42);
+			assert.equal(fileId, "misc_1_test.mp4");
+			assert.equal(options.range, "bytes=0-3");
+			return new Response(new TextEncoder().encode("test"), {
+				status: 206,
+				headers: { "Content-Type": "video/mp4", "Content-Range": "bytes 0-3/4" }
+			});
+		}
+	};
+	const secret = "test-public-link-secret";
+	const token = createPublicFileToken(42, "misc_1_test.mp4", "clip.mp4", secret);
+	const app = express();
+	app.use("/s", createPublicFileRoutes(profileFiles, { publicLinkSecret: secret }));
+	await withServer(app, async (base) => {
+		const response = await fetch(`${base}/s/${token}/clip.mp4`, { headers: { Range: "bytes=0-3" } });
+		assert.equal(response.status, 206);
+		assert.equal(await response.text(), "test");
 	});
 });
 

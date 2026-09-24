@@ -35,13 +35,24 @@ export function contentTypeForFile(file) {
 	return CONTENT_TYPES.get(path.extname(String(file?.name || "")).toLowerCase()) || "application/octet-stream";
 }
 
+function originalNameFromId(id) {
+	const match = String(id || "").match(/^misc_\d+_[A-Za-z0-9_-]{8}_fn_([A-Za-z0-9_-]+?)(?:\.[a-z0-9]{1,10})?$/i);
+	if (!match) return null;
+	try {
+		const decoded = Buffer.from(match[1], "base64url").toString("utf8").trim();
+		return decoded || null;
+	} catch {
+		return null;
+	}
+}
+
 export function serializeFile(file) {
 	const id = normalizeFileId(file?.name);
 	if (!id) return null;
 	const size = Number(file?.metadata?.size);
 	return {
 		id,
-		display_name: String(file?.metadata?.originalName || "").trim() || null,
+		display_name: String(file?.metadata?.originalName || "").trim() || originalNameFromId(id),
 		content_type: contentTypeForFile(file),
 		size: Number.isFinite(size) && size >= 0 ? size : null,
 		created_at: file?.created_at || null,
