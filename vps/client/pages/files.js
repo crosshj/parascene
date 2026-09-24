@@ -42,9 +42,15 @@ function createPreview(file, contentUrl) {
 	} else if (kind === 'video') {
 		const video = document.createElement('video');
 		video.crossOrigin = 'anonymous';
-		video.src = contentUrl;
 		video.controls = true;
+		video.setAttribute('controls', '');
 		video.preload = 'metadata';
+		video.addEventListener('loadedmetadata', () => {
+			if (video.videoWidth > 0 && video.videoHeight > 0) {
+				frame.style.aspectRatio = `${video.videoWidth} / ${video.videoHeight}`;
+			}
+		}, { once: true });
+		video.src = contentUrl;
 		frame.append(video);
 	} else if (kind === 'audio') {
 		const audio = document.createElement('audio');
