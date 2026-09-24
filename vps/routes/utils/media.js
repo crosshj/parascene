@@ -38,9 +38,27 @@ export async function normalizeUploadedImage(input) {
 		}
 		return { buffer: await pipeline.webp({ quality: 85 }).toBuffer(), contentType: "image/webp" };
 	} catch {
-		const error = mediaError("The uploaded image could not be converted");
-		error.code = "IMAGE_INVALID";
-		throw error;
+		// Some sharp builds can inspect HEIC but lack the HEVC decoder. The VPS
+		// ffmpeg build has that decoder, so use it as the browser-safe fallback.
+		const directory = await mkdtemp(path.join(os.tmpdir(), "parascene-image-"));
+		const sourcePath = path.join(directory, "source.bin");
+		const outputPath = path.join(directory, "normalized.webp");
+		try {
+			await writeFile(sourcePath, input);
+			await execFileAsync(FFMPEG_BIN, [
+				"-y", "-v", "error", "-i", sourcePath, "-frames:v", "1",
+				"-c:v", "libwebp", "-quality", "85", "-f", "webp", outputPath
+			], { maxBuffer: 2 * 1024 * 1024, timeout: 120_000 });
+			const buffer = await readFile(outputPath);
+			if (!buffer.length) throw new Error("empty conversion");
+			return { buffer, contentType: "image/webp" };
+		} catch {
+			const error = mediaError("The uploaded image could not be converted");
+			error.code = "IMAGE_INVALID";
+			throw error;
+		} finally {
+			await rm(directory, { recursive: true, force: true }).catch(() => undefined);
+		}
 	}
 }
 

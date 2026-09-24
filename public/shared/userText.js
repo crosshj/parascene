@@ -278,7 +278,7 @@ function isSafeAttachmentPath(value) {
 function isInlineEligibleGenericImagePath(relativePath) {
 	const p = genericPathForValidation(relativePath);
 	if (isSafeCdnSharePath(p)) {
-		return ['avif', 'gif', 'jpeg', 'jpg', 'png', 'webp'].includes(extFromPathOrName(p));
+		return ['avif', 'gif', 'heic', 'heif', 'jxl', 'jpeg', 'jpg', 'png', 'tif', 'tiff', 'webp'].includes(extFromPathOrName(p));
 	}
 	if (!isSafeGenericApiPath(p)) return false;
 	if (p.startsWith('/api/images/generic/edited/')) {
