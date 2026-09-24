@@ -61,7 +61,10 @@ function createPreview(file, contentUrl) {
 }
 
 function createFileCard(file, filesApi, onDelete) {
-	const contentUrl = filesApi.url(file.content_path);
+	// The private content endpoint is authenticated and cross-origin from beta;
+	// media elements do not send the beta session cookie there. Use the signed
+	// share URL for playback/opening, falling back only for legacy list rows.
+	const contentUrl = file.public_url || filesApi.url(file.content_path);
 	const article = document.createElement('article');
 	article.className = 'file-card';
 	article.append(createPreview(file, contentUrl));
