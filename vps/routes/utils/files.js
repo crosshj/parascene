@@ -30,9 +30,39 @@ export function normalizeFileId(value) {
 }
 
 export function contentTypeForFile(file) {
-	const fromMetadata = String(file?.metadata?.mimetype || file?.metadata?.contentType || "").trim();
+	const metadata = normalizedMetadata(file);
+	const fromMetadata = String(metadata.mimetype || metadata.contentType || "").trim();
 	if (fromMetadata) return fromMetadata;
 	return CONTENT_TYPES.get(path.extname(String(file?.name || "")).toLowerCase()) || "application/octet-stream";
+}
+
+function normalizedMetadata(file) {
+	const raw = file?.metadata;
+	if (raw && typeof raw === "object") return raw;
+	if (typeof raw === "string") {
+		try {
+			const parsed = JSON.parse(raw);
+			return parsed && typeof parsed === "object" ? parsed : {};
+		} catch {
+			return {};
+		}
+	}
+	return {};
+}
+
+function originalNameFromMetadata(file) {
+	const metadata = normalizedMetadata(file);
+	const nested = metadata.metadata && typeof metadata.metadata === "object" ? metadata.metadata : {};
+	return [
+		metadata.originalName,
+		metadata.original_name,
+		metadata.filename,
+		metadata.fileName,
+		nested.originalName,
+		nested.original_name,
+		file?.originalName,
+		file?.original_name
+	].map((value) => String(value || "").trim()).find(Boolean) || null;
 }
 
 function originalNameFromId(id) {
@@ -49,10 +79,11 @@ function originalNameFromId(id) {
 export function serializeFile(file) {
 	const id = normalizeFileId(file?.name);
 	if (!id) return null;
-	const size = Number(file?.metadata?.size);
+	const metadata = normalizedMetadata(file);
+	const size = Number(metadata.size ?? metadata.contentLength ?? file?.size);
 	return {
 		id,
-		display_name: String(file?.metadata?.originalName || "").trim() || originalNameFromId(id),
+		display_name: originalNameFromMetadata(file) || originalNameFromId(id),
 		content_type: contentTypeForFile(file),
 		size: Number.isFinite(size) && size >= 0 ? size : null,
 		created_at: file?.created_at || null,

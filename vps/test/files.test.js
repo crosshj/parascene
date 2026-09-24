@@ -171,6 +171,11 @@ test("lists only through the authenticated user id", async () => {
 	});
 });
 
+test("preserves original names from storage metadata variants", () => {
+	assert.equal(serializeFile({ name: "misc_1_file.mp4", metadata: JSON.stringify({ original_name: "clip.mp4", mimetype: "video/mp4" }) }).display_name, "clip.mp4");
+	assert.equal(serializeFile({ name: "misc_1_file.mp4", metadata: { metadata: { originalName: "photo.jpg" } } }).display_name, "photo.jpg");
+});
+
 test("rejects an unauthenticated list", async () => {
 	await withServer(filesApp({}, { authenticated: false }), async (base) => {
 		const response = await fetch(`${base}/api/files`);
@@ -242,8 +247,9 @@ test("streams a signed share link without a session cookie", async () => {
 	const app = express();
 	app.use("/s", createPublicFileRoutes(profileFiles, { publicLinkSecret: secret }));
 	await withServer(app, async (base) => {
-		const response = await fetch(`${base}/s/${token}/clip.mp4`, { headers: { Range: "bytes=0-3" } });
+		const response = await fetch(`${base}/s/${token}/clip.mp4`, { headers: { Origin: "https://beta.parascene.com", Range: "bytes=0-3" } });
 		assert.equal(response.status, 206);
+		assert.equal(response.headers.get("access-control-allow-origin"), "https://beta.parascene.com");
 		assert.equal(await response.text(), "test");
 	});
 });

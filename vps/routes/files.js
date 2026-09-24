@@ -4,6 +4,7 @@ import { requireAuth } from "./middleware/auth.js";
 import { contentDisposition, mayDisplayInline, normalizeFileId, safeDispositionFilename, serializeFile } from "./utils/files.js";
 import { filesOriginForRequest } from "./utils/origins.js";
 import { createPublicFileToken, verifyPublicFileToken } from "./utils/publicFileLinks.js";
+import { createFilesCors } from "./middleware/filesCors.js";
 import {
 	createFileId,
 	createSizeLimitedStream,
@@ -170,6 +171,7 @@ export function createPublicFileRoutes(profileFiles, { publicLinkSecret = proces
 		res.set("Cloudflare-CDN-Cache-Control", "no-store");
 		next();
 	});
+	router.use(createFilesCors());
 	// The signed token is the authorization for this route. It must work without
 	// a session cookie because cross-origin <img>/<video>/<audio> requests do not
 	// send the beta session cookie by default.
