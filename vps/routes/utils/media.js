@@ -44,16 +44,32 @@ export async function normalizeUploadedVideo(input) {
 		if (!Array.isArray(probe?.streams) || !probe.streams.some((stream) => stream?.codec_type === "video")) {
 			throw mediaError("The uploaded file does not contain a video stream");
 		}
+		const formatNames = String(probe?.format?.format_name || "").split(",").map((value) => value.trim().toLowerCase());
+		const videoStreams = probe.streams.filter((stream) => stream?.codec_type === "video");
+		const audioStreams = probe.streams.filter((stream) => stream?.codec_type === "audio");
+		const canRemux =
+			(formatNames.includes("mov") || formatNames.includes("mp4")) &&
+			videoStreams.length > 0 &&
+			videoStreams.every((stream) => String(stream.codec_name || "").toLowerCase() === "h264") &&
+			audioStreams.every((stream) => String(stream.codec_name || "").toLowerCase() === "aac");
 		try {
-			await execFileAsync(FFMPEG_BIN, [
-				"-y", "-v", "error", "-i", sourcePath,
-				"-map", "0:v:0", "-map", "0:a?",
-				"-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
-				"-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart",
-				"-f", "mp4", outputPath
-			], { maxBuffer: 2 * 1024 * 1024, timeout: 300_000 });
+			const args = canRemux
+				? ["-y", "-v", "error", "-i", sourcePath, "-map", "0:v:0", "-map", "0:a?", "-c", "copy", "-movflags", "+faststart", "-f", "mp4", outputPath]
+				: ["-y", "-v", "error", "-i", sourcePath, "-map", "0:v:0", "-map", "0:a?", "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", "-f", "mp4", outputPath];
+			await execFileAsync(FFMPEG_BIN, args, { maxBuffer: 2 * 1024 * 1024, timeout: 300_000 });
 		} catch {
-			throw mediaError("The uploaded video could not be normalized");
+			if (!canRemux) throw mediaError("The uploaded video could not be normalized");
+			try {
+				await execFileAsync(FFMPEG_BIN, [
+					"-y", "-v", "error", "-i", sourcePath,
+					"-map", "0:v:0", "-map", "0:a?",
+					"-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
+					"-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart",
+					"-f", "mp4", outputPath
+				], { maxBuffer: 2 * 1024 * 1024, timeout: 300_000 });
+			} catch {
+				throw mediaError("The uploaded video could not be normalized");
+			}
 		}
 		const normalized = await readFile(outputPath);
 		if (!normalized.length) throw mediaError("The normalized video is empty");
