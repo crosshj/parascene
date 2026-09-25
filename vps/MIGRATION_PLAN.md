@@ -1,93 +1,43 @@
-# Media upload rollout
+# Media upload rollout — remaining work
 
-## Beta/CDN proof
+The beta/CDN implementation and the browser upload transport are complete.
+This document tracks only work that remains before treating the CDN path as
+fully rolled out.
 
-The beta proof is accepted. The authenticated beta SPA has a client-side
-`/files` page that uploads, lists, previews, and deletes files in the signed-in
-user's `prsn_misc/profile/{userId}` folder through `cdn.parascene.com`.
+## Production validation
 
-The beta API streams uploads up to 50 MiB, retains the original filename,
-supports range reads for media, and limits listing and deletion to the owner.
-The temporary `/s/{signed-key}/{filename}` link lets any signed-in Parascene
-user who has the link view the file. It does not change the owner-only file
-list, upload, delete, or content routes. These temporary links are signed with
-`SESSION_SECRET`; rotating that secret invalidates them. Proper file sharing
-and per-file visibility controls belong to later product work.
+Exercise the deployed CDN path across the existing www flows:
 
-The beta file API is a proof tool, not the www upload contract. The VPS now
-also exposes a compatibility `/api/images/generic` contract for www browser
-uploads.
+- generic and edited image uploads;
+- chat media and file uploads;
+- creation inputs, comments, previews, and playback;
+- owner listing and deletion behavior;
+- signed share links, including cross-origin image, audio, and video reads;
+- uploaded audio artwork/fallback and download behavior;
+- uploaded video playback and range requests;
+- an unchanged file near the size limit, including byte count and failure
+  handling;
+- owner isolation and invalid/deleted share-link behavior.
 
-## In progress: move www uploads to the CDN
+Confirm that large upload bodies and media reads do not pass through Vercel.
 
-Browser generic, edited, and chat uploads now target the CDN by default. The
-shared `ps_session` cookie and credentialed www CORS are supported, and the
-client has a temporary legacy switch for rollback.
+## Cutover hardening
 
-Chat uploads use the CDN Files endpoint's normal success response and place its
-signed `file.public_url` (`/s/...`) in the message. Chat rendering treats those
-share URLs exactly like pasted CDN share URLs. Message deletion removes only
-the message; share-link-backed files are not auto-deleted.
-
-The remaining migration is to validate the CDN path across www and finish
-moving any server-side media helpers, without routing large request or response
-bodies through Vercel. Preserve existing www behavior while changing the
-transport.
-
-Remaining before calling the cutover complete:
-
-- ~~Implement the VPS compatibility API for `POST /api/images/generic`,
-  `GET /api/images/generic/:key`, and `DELETE /api/images/:namespace/:key`.
-  Preserve the request headers, response fields, ownership checks, key layout,
-  and upload-kind behavior that current callers depend on.~~ Implemented in
-  `vps/routes/generic.js`.
-- ~~Allow credentialed requests from the www origin through the CDN CORS policy;
-  keep the request identity compatible with www sessions.~~ Implemented in
-  `vps/routes/middleware/filesCors.js` and the shared `ps_session` cookie.
-- Return CDN-hosted media URLs and update URL consumers, renderers, and delete
-  helpers so reads and deletes do not silently go back through www/Vercel.
-- Preserve the existing public-read behavior needed by current creation and
-  chat media references during this transport migration. The beta `/s/` link
-  route's sign-in requirement is separate from that www compatibility policy.
-- Keep Cloudflare, Nginx, the VPS, and Supabase size limits aligned. Confirm
-  that the deployed Nginx configuration is managed by CI and keeps request
+- Keep Cloudflare, Nginx, VPS, and Supabase size limits aligned.
+- Confirm the deployed Nginx configuration is managed by CI and keeps request
   buffering disabled for streamed uploads.
+- Roll out behind the existing reversible switch and retain the legacy www
+  path as rollback until the CDN path is stable.
+- Remove the temporary legacy transport switch after the rollout has been
+  accepted in production.
 
-Then exercise the existing www flows against the CDN: generic and edited
-images, chat media and files, creation inputs, comments, previews, playback,
-and deletion. Include an unchanged file near the 50 MiB limit and verify its
-byte count, range playback, owner behavior, and failure handling. Confirm the
-upload body and media reads no longer pass through Vercel. Roll out behind a
-reversible switch and retain the current www path as rollback until the CDN
-path is stable.
+## Optional follow-up
 
-## Follow-up: server-side media inspection and chat presentation
-
-The VPS image now installs `ffmpeg`/`ffprobe`. Video uploads are inspected and
-normalized to browser-streamable H.264/AAC MP4 with fast-start metadata while
-retaining the user's original filename. Reliable video posters and richer
-audio/video metadata remain follow-up work.
-
-Then improve chat attachments using the existing creation video/audio player
-patterns while keeping the semantics explicit:
-
-- creations retain creation identity, creator/title context, and creation
-  actions;
-- uploaded videos render as file attachments with filename, size, duration,
-  poster, playback, and download/open actions;
-- uploaded audio uses the established player language but is labeled as an
-  attachment, not a creation;
-- images remain inline media and other files use a type/filename/size download
-  card.
-
-Preserve the current upload response fields while adding media metadata and
-poster URLs needed by the richer attachment renderer.
+Reliable video posters, richer duration metadata, and additional media
+metadata can be added later. They are not prerequisites for the CDN cutover.
 
 ## Out of this migration
 
 Resumable uploads, a durable upload ledger, and proper per-file
-sharing/privacy controls are separate work. Do not add those as prerequisites
-to the www transport cutover unless an existing www upload flow cannot be
-preserved without them.
-
-[bump]
+sharing/privacy controls are separate work. Do not add them as prerequisites
+unless an existing upload flow cannot be preserved without them.

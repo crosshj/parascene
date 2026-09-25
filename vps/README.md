@@ -23,8 +23,9 @@ media-helper work is summarized in `MIGRATION_PLAN.md`.
 
 The VPS image includes `ffmpeg`/`ffprobe`; video uploads are normalized to
 browser-streamable H.264/AAC MP4 with fast-start metadata while retaining the
-original filename. Reliable video posters and richer file-versus-creation
-presentation in chat remain follow-up work.
+original filename. Chat now distinguishes files from creations while using
+the creation-style media presentation: shared audio uses the same Suno-like
+player, embedded artwork or a generated fallback, and a download action.
 
 The authenticated beta SPA includes a client-side `/files` page. It calls the
 owner-scoped `https://cdn.parascene.com/api/files` API to upload, enumerate,
