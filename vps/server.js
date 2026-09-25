@@ -3,6 +3,7 @@ import cookieParser from "cookie-parser";
 import express from "express";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import WebSocket from "ws";
 import { createAuthRoutes } from "./routes/auth.js";
 import { createCdnRoutes } from "./routes/cdn.js";
 import { createAuthMiddleware } from "./routes/middleware/auth.js";
@@ -10,8 +11,12 @@ import { createCdnHostBoundary } from "./routes/middleware/cdnHost.js";
 import createPageRoutes from "./routes/pages.js";
 import { createDb } from "./db/index.js";
 
+// Supabase Realtime needs a WebSocket implementation on Node 20.
+if (!globalThis.WebSocket) globalThis.WebSocket = WebSocket;
+
 const port = Number(process.env.PORT || 3000);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const bindHost = process.env.NODE_ENV === "production" ? "0.0.0.0" : "127.0.0.1";
 const pagesDir = path.join(__dirname, "pages");
 const app = express();
 const db = createDb();
@@ -30,4 +35,7 @@ app.use((error, req, res, next) => {
 	res.status(500).json({ error: "Internal server error" });
 });
 
-app.listen(port, "0.0.0.0", () => console.log(`Parascene beta listening on port ${port}`));
+app.listen(port, bindHost, () => {
+	console.log(`Parascene beta dev server: http://localhost:${port}/`);
+	console.log(`[beta] bound to ${bindHost}:${port}`);
+});

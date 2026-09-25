@@ -9,7 +9,8 @@ export function isCdnRequest(req) {
 
 export function createCdnHostBoundary(cdnRouter) {
 	return function cdnHostBoundary(req, res, next) {
-		if (!isCdnRequest(req)) return next();
+		const localDev = process.env.NODE_ENV !== "production" && /^(\/api\/files(?:\/|$)|\/api\/images\/generic(?:\/|$)|\/s\/)/.test(String(req.path || ""));
+		if (!isCdnRequest(req) && !localDev) return next();
 		return cdnRouter(req, res, next);
 	};
 }

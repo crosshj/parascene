@@ -1,0 +1,15 @@
+.home-card { max-width: 720px; margin: 0 auto; }
+.home-view__actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 28px; }
+.primary-link,
+.secondary-link {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 42px;
+	padding: 0 15px;
+	border-radius: 999px;
+	font-weight: 700;
+	text-decoration: none;
+}
+.primary-link { color: #fff; background: #7c3aed; }
+.secondary-link { border: 1px solid color-mix(in srgb, currentColor 24%, transparent); color: inherit; }

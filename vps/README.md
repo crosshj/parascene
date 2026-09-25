@@ -34,6 +34,23 @@ stream, and delete objects from the signed-in user's
 host-gated: only CDN service routes are exposed, while beta pages remain
 available only on the beta hostname.
 
+## Local development
+
+From `vps/`, install dependencies and run:
+
+```sh
+npm install
+npm run dev
+```
+
+This starts the Express beta server and Rollup in watch mode together. Changes
+to `client/` rebuild the hashed JS/CSS assets; changes to server modules restart
+the server; changes to page HTML/CSS are served on the next browser refresh.
+Open the local beta origin printed by the server (normally
+`http://localhost:3000/`). The first dev loop intentionally uses a normal
+browser refresh rather than runtime style injection or hot-module replacement,
+so the behavior remains close to the production asset path.
+
 The Files page also provides a temporary shared URL at
 `https://cdn.parascene.com/s/{signed-key}/{original-filename}`. The signed key
 keeps the bucket path and storage key out of the URL, and the original filename

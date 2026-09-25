@@ -2,7 +2,7 @@ function currentReturnUrl() {
 	return location.pathname + location.search + location.hash;
 }
 
-export function createSession({ initialUser = null, accountElement, logoutButton }) {
+export function createSession({ initialUser = null, accountElement, avatarElement, avatarInitial, avatarImage, logoutButton }) {
 	let user = initialUser;
 	let initialized = false;
 
@@ -11,7 +11,18 @@ export function createSession({ initialUser = null, accountElement, logoutButton
 	}
 
 	function renderAccount() {
-		if (accountElement) accountElement.textContent = user?.email || 'Signed in';
+		const profile = user?.profile || {};
+		const label = profile.display_name || profile.user_name || user?.email || 'Signed in';
+		if (accountElement) accountElement.textContent = label;
+		if (avatarElement) avatarElement.setAttribute('aria-label', label);
+		if (avatarInitial) avatarInitial.textContent = (label.trim().slice(0, 1) || '?').toUpperCase();
+		if (avatarImage) {
+			const avatarUrl = profile.avatar_url || '';
+			if (avatarInitial) avatarInitial.hidden = Boolean(avatarUrl);
+			avatarImage.hidden = !avatarUrl;
+			if (avatarUrl) avatarImage.src = avatarUrl;
+			else avatarImage.removeAttribute('src');
+		}
 	}
 
 	async function refresh() {

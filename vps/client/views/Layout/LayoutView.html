@@ -1,0 +1,40 @@
+<div class="beta-layout" data-ref="root">
+	<aside class="beta-layout__sidebar" aria-label="Application menu">
+		<div class="beta-layout__sidebar-head">
+			<a class="beta-layout__brand" href="/" data-spa-link aria-label="Parascene home">parascene</a>
+		</div>
+		<div class="beta-layout__sidebar-scroll">
+			<section class="beta-layout__section">
+				<div class="beta-layout__section-head"><h2>Navigation</h2></div>
+				<nav class="beta-layout__desktop-menu" data-ref="desktopMenu" aria-label="Primary navigation"></nav>
+			</section>
+			<section class="beta-layout__section">
+				<div class="beta-layout__section-head"><h2>Direct messages</h2><button type="button" aria-label="New direct message">+</button></div>
+				<div class="beta-layout__rows" data-ref="directMessages"></div>
+			</section>
+			<section class="beta-layout__section">
+				<div class="beta-layout__section-head"><h2>Servers</h2><button type="button" aria-label="Add or browse servers">+</button></div>
+				<div class="beta-layout__rows" data-ref="servers"></div>
+			</section>
+			<section class="beta-layout__section">
+				<div class="beta-layout__section-head"><h2>Channels</h2><button type="button" aria-label="Open or browse channels">+</button></div>
+				<div class="beta-layout__rows" data-ref="channels"></div>
+			</section>
+		</div>
+		<div class="beta-layout__sidebar-footer">
+			<div class="beta-layout__footer-row">
+				<button class="beta-layout__user" type="button" aria-label="Account">
+					<span class="beta-layout__avatar" data-ref="avatar" aria-hidden="true"><span data-ref="avatarInitial">H</span><img data-ref="avatarImage" alt="" hidden></span>
+					<span class="beta-layout__account-label" data-ref="account">Account</span>
+				</button>
+				<div class="beta-layout__footer-actions">
+					<button class="beta-layout__footer-action" type="button" aria-label="Notifications"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg></button>
+					<button class="beta-layout__footer-action beta-layout__credits" type="button" aria-label="Credits"><span>0</span></button>
+					<button class="beta-layout__footer-action beta-layout__logout" data-ref="logout" type="button" aria-label="Log out"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17l5-5-5-5M15 12H3M21 3v18" /></svg></button>
+				</div>
+			</div>
+		</div>
+	</aside>
+	<div class="beta-layout__resize-handle" data-ref="resizeHandle" role="separator" aria-orientation="vertical" aria-label="Resize sidebar" tabindex="0"></div>
+	<nav class="beta-layout__mobile-menu" data-ref="mobileMenu" aria-label="Mobile navigation"></nav>
+</div>

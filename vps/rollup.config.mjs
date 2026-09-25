@@ -7,16 +7,33 @@ import terser from "@rollup/plugin-terser";
 const vpsDir = path.dirname(fileURLToPath(import.meta.url));
 const buildDir = path.join(vpsDir, "build");
 
-function emitAppCss() {
+function htmlStringImports() {
 	return {
-		name: "emit-app-css",
-		async buildStart() {
-			await fs.rm(buildDir, { recursive: true, force: true });
+		name: "html-string-imports",
+		async load(id) {
+			if (!id.endsWith(".html")) return null;
+			const source = await fs.readFile(id, "utf8");
+			return `export default ${JSON.stringify(source)};`;
+		}
+	};
+}
+
+function emitImportedCss() {
+	const cssSources = new Map();
+	return {
+		name: "emit-imported-css",
+		buildStart() {
+			cssSources.clear();
+			return fs.rm(buildDir, { recursive: true, force: true });
 		},
-		async generateBundle() {
-			const source = path.join(vpsDir, "client", "app.css");
-			const css = await fs.readFile(source, "utf8");
-			const minified = new CleanCSS({ level: 1 }).minify(css);
+		async load(id) {
+			if (!id.endsWith(".css")) return null;
+			cssSources.set(id, await fs.readFile(id, "utf8"));
+			return "export default {};";
+		},
+		generateBundle() {
+			const source = [...cssSources.values()].join("\n\n");
+			const minified = new CleanCSS({ level: 1 }).minify(source);
 			if (minified.errors.length) throw new Error(minified.errors.join("\n"));
 			this.emitFile({ type: "asset", name: "app.css", source: minified.styles });
 		},
@@ -37,5 +54,5 @@ export default {
 		entryFileNames: "app.[hash].js",
 		assetFileNames: "app.[hash][extname]"
 	},
-	plugins: [terser(), emitAppCss()]
+	plugins: [htmlStringImports(), emitImportedCss(), terser()]
 };

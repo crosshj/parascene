@@ -1,0 +1,16 @@
+.ps-button {
+	min-height: 40px;
+	padding: 0 16px;
+	border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
+	border-radius: 999px;
+	color: inherit;
+	background: transparent;
+	font: inherit;
+	font-weight: 700;
+	cursor: pointer;
+}
+
+.ps-button:hover:not(:disabled) { background: color-mix(in srgb, currentColor 9%, transparent); }
+.ps-button:disabled { cursor: wait; opacity: .5; }
+.ps-button--primary { border-color: transparent; color: #fff; background: #7c3aed; }
+.ps-button--danger { border-color: transparent; color: #b91c1c; background: transparent; }

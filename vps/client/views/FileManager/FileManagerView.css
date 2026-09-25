@@ -1,0 +1,20 @@
+.file-manager-view { display: grid; gap: 28px; }
+.file-manager-view__heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; }
+.file-manager-view__heading .state { margin-top: 10px; }
+.file-manager-view__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.file-manager-view__upload-input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.file-manager-view__upload-label { display: inline-flex; align-items: center; min-height: 40px; padding: 0 16px; border-radius: 999px; color: #fff; background: #7c3aed; font-weight: 700; cursor: pointer; }
+.file-manager-view__upload-label.is-disabled { cursor: wait; opacity: .5; }
+.file-manager-view__upload-dialog { width: min(460px, calc(100% - 48px)); padding: 26px; border: 1px solid color-mix(in srgb, currentColor 18%, transparent); border-radius: 18px; color: inherit; background: Canvas; box-shadow: 0 24px 80px #0f172a55; }
+.file-manager-view__upload-dialog::backdrop { background: #0f172a88; }
+.file-manager-view__upload-dialog h2 { margin: 0; font-size: 1.35rem; }
+.file-manager-view__upload-message { min-height: 1.5em; line-height: 1.5; overflow-wrap: anywhere; }
+.file-manager-view__upload-dialog progress { width: 100%; }
+.file-manager-view__upload-dialog.is-error .file-manager-view__upload-message { color: #b91c1c; }
+.file-manager-view__upload-dismiss { float: right; min-height: 40px; margin-top: 20px; padding: 0 16px; border: 1px solid color-mix(in srgb, currentColor 24%, transparent); border-radius: 999px; color: inherit; background: transparent; font: inherit; font-weight: 700; cursor: pointer; }
+.file-manager-view__status { padding: 32px; border: 1px dashed color-mix(in srgb, currentColor 24%, transparent); border-radius: 16px; text-align: center; opacity: .72; }
+.file-manager-view__status.is-error { color: #b91c1c; border-color: color-mix(in srgb, #ef4444 45%, transparent); opacity: 1; }
+.file-manager-view__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+.file-manager-view__grid[hidden], .file-manager-view__load-more[hidden] { display: none; }
+.file-manager-view__load-more { justify-self: center; }
+@media (max-width: 760px) { .file-manager-view__heading { align-items: flex-start; flex-direction: column; } }

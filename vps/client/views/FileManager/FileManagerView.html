@@ -1,0 +1,48 @@
+<section class="file-manager-view" data-ref="root">
+	<div class="file-manager-view__heading">
+		<div>
+			<p class="eyebrow">Private files</p>
+			<h1>Your files</h1>
+			<p class="state">Files stored in your personal Parascene folder.</p>
+		</div>
+		<div class="file-manager-view__actions" data-ref="actions">
+			<label class="file-manager-view__upload-label" data-ref="uploadLabel">
+				<input class="file-manager-view__upload-input" data-ref="fileInput" type="file" />
+				<span>Upload file</span>
+			</label>
+		</div>
+	</div>
+	<dialog class="file-manager-view__upload-dialog" data-ref="dialog" aria-labelledby="upload-dialog-title">
+		<h2 id="upload-dialog-title" data-ref="dialogTitle">Uploading file</h2>
+		<p class="file-manager-view__upload-message" data-ref="message" role="status" aria-live="polite"></p>
+		<progress data-ref="progress" max="100" value="0"></progress>
+		<button class="file-manager-view__upload-dismiss" data-ref="dismiss" type="button" hidden>Dismiss</button>
+	</dialog>
+	<div class="file-manager-view__status" data-ref="status" role="status">Loading your files…</div>
+	<div class="file-manager-view__grid" data-ref="grid" hidden></div>
+	<button class="file-manager-view__load-more" data-ref="loadMore" type="button" hidden>Load more</button>
+
+	<template data-template="file-card">
+		<article class="file-card">
+			<div data-ref="preview"></div>
+			<div class="file-card-body">
+				<h2 data-ref="title"></h2>
+				<p class="file-meta" data-ref="meta"></p>
+				<p class="file-type" data-ref="type"></p>
+				<div class="file-actions">
+					<a class="file-open" data-ref="open" target="_blank" rel="noopener" title="Open file">Open</a>
+					<button class="file-copy-link" data-ref="copy" type="button" title="Any signed-in Parascene user with this link can view the file">Copy link</button>
+					<button class="file-delete" data-ref="remove" type="button">Delete</button>
+				</div>
+			</div>
+		</article>
+	</template>
+	<template data-template="file-preview">
+		<div class="file-preview" data-ref="preview">
+			<img data-ref="image" alt="" loading="lazy" hidden>
+			<video class="file-preview-video" data-ref="video" crossorigin="anonymous" controls preload="metadata" hidden></video>
+			<audio data-ref="audio" controls preload="metadata" hidden></audio>
+			<span class="file-icon" data-ref="file" hidden>FILE</span>
+		</div>
+	</template>
+</section>

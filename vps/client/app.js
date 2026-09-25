@@ -1,23 +1,42 @@
-import { createFilesApi } from './api/files.js';
+import './app.css';
 import { createRouter } from './core/router.js';
 import { createSession } from './core/session.js';
-import { renderFilesPage } from './pages/files.js';
-import { renderHomePage } from './pages/home.js';
+import { createFilesApi } from './api/files.js';
+import { renderFileManagerView } from './views/FileManager/FileManagerView.js';
+import { renderHomeView } from './views/Home/HomeView.js';
+import { mountLayout } from './views/Layout/LayoutView.js';
 
 const bootstrap = window.__PARASCENE_BOOTSTRAP__ || {};
 const outlet = document.getElementById('app-outlet');
+const shell = document.getElementById('app-shell');
 const filesApi = createFilesApi(bootstrap.filesOrigin || '');
-const session = createSession({
-	initialUser: bootstrap.user,
+
+const menuItems = [
+	{ label: 'Home', path: '/' },
+	{ label: 'Files', path: '/files' }
+];
+
+const layout = mountLayout({
+	shell,
+	outlet,
+	menuItems,
 	accountElement: document.getElementById('header-account'),
 	logoutButton: document.getElementById('logout')
+});
+const session = createSession({
+	initialUser: bootstrap.user,
+	accountElement: layout.accountElement,
+	avatarElement: layout.avatarElement,
+	avatarInitial: layout.avatarInitial,
+	avatarImage: layout.avatarImage,
+	logoutButton: layout.logoutButton
 });
 
 const router = createRouter({
 	outlet,
 	routes: {
-		'/': () => renderHomePage({ outlet, user: session.user }),
-		'/files': () => renderFilesPage({ outlet, filesApi, onUnauthorized: session.redirectToLogin })
+		'/': () => renderHomeView({ outlet, user: session.user }),
+		'/files': () => renderFileManagerView({ outlet, filesApi, onUnauthorized: session.redirectToLogin })
 	}
 });
 
