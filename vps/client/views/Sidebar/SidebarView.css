@@ -179,8 +179,6 @@
 .sidebar-view__row { gap: 0; }
 .sidebar-view__menu-item:hover,
 .sidebar-view__row:hover { background: color-mix(in srgb, currentColor 5%, transparent); border-color: color-mix(in srgb, currentColor 12%, transparent); }
-.sidebar-view__menu-item:focus-visible,
-.sidebar-view__row:focus-within { outline: 2px solid #7c3aed; outline-offset: -2px; }
 .sidebar-view__menu-item.is-active,
 .sidebar-view__row.is-active {
 	background: color-mix(in srgb, #7c3aed 14%, transparent);
@@ -415,8 +413,6 @@ body.is-resizing-sidebar main#app-outlet { pointer-events: none; will-change: ma
 	.sidebar-view__row.is-active { border-color: color-mix(in srgb, #05c76f 35%, #3d3552); background: color-mix(in srgb, #05c76f 14%, transparent); }
 	.sidebar-view__menu-item.is-active:hover,
 	.sidebar-view__row.is-active:hover { background: color-mix(in srgb, #05c76f 18%, transparent); }
-	.sidebar-view__menu-item:focus-visible,
-	.sidebar-view__row:focus-within,
 	.sidebar-view__section-head button:focus-visible,
 	.sidebar-view__footer-action:focus-visible { outline-color: #05c76f; }
 	.sidebar-view__user:focus-visible { box-shadow: 0 0 0 2px #05c76f; }
