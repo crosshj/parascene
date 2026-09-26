@@ -13,6 +13,7 @@
 .file-manager-view__upload-dismiss { float: right; min-height: 40px; margin-top: 20px; padding: 0 16px; border: 1px solid color-mix(in srgb, currentColor 24%, transparent); border-radius: 999px; color: inherit; background: transparent; font: inherit; font-weight: 700; cursor: pointer; }
 .file-manager-view__status { padding: 32px; border: 1px dashed color-mix(in srgb, currentColor 24%, transparent); border-radius: 16px; text-align: center; opacity: .72; }
 .file-manager-view__status.is-error { color: #b91c1c; border-color: color-mix(in srgb, #ef4444 45%, transparent); opacity: 1; }
+.file-manager-view__status.is-stale { color: color-mix(in srgb, currentColor 72%, transparent); border-color: transparent; font-size: .8125rem; }
 .file-manager-view__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
 .file-manager-view__grid[hidden], .file-manager-view__load-more[hidden] { display: none; }
 .file-manager-view__load-more { justify-self: center; }

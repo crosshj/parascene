@@ -9,6 +9,10 @@
 	--beta-page-gutter: clamp(24px, 5vw, 72px);
 	--beta-canvas-background: #ffffff;
 	--beta-panel-background: #eef1f6;
+	--beta-accent: #7c3aed;
+	--beta-accent-text: #ffffff;
+	--beta-text-muted: #525a6b;
+	--beta-sidebar-control-inset: 3px;
 }
 
 body.beta-layout {
@@ -67,6 +71,9 @@ body.beta-layout main#app-outlet {
 	:root {
 		--beta-canvas-background: #0e0d19;
 		--beta-panel-background: color-mix(in srgb, #191627 88%, #0e0d19);
+		--beta-accent: #05c76f;
+		--beta-accent-text: #0f0d1a;
+		--beta-text-muted: #b3b7c3;
 	}
 }
 

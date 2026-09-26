@@ -1,4 +1,5 @@
 import { escapeHtml } from '../../utils/dom.js';
+import './Avatar.css';
 
 export function avatarMarkup({ label = '', avatarUrl = '', color = '#7c3aed', text = '', kind = 'person' } = {}, className = '') {
 	const safeLabel = escapeHtml(label);

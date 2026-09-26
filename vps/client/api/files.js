@@ -1,3 +1,5 @@
+import { ApiError, requestJson } from '../core/request.js';
+
 function normalizeApiOrigin(origin) {
 	return String(origin || '').trim().replace(/\/$/, '');
 }
@@ -6,24 +8,14 @@ export function createFilesApi(origin) {
 	const base = normalizeApiOrigin(origin);
 	const url = (path) => `${base}${path}`;
 
-	async function responseData(response) {
-		const data = await response.json().catch(() => ({}));
-		if (!response.ok) {
-			const error = new Error(data.message || data.error || `File request failed (${response.status})`);
-			error.status = response.status;
-			throw error;
-		}
-		return data;
-	}
-
 	return {
 		url,
 		async list({ limit = 100, offset = 0, signal } = {}) {
-			const response = await fetch(url(`/api/files?limit=${limit}&offset=${offset}`), {
-				credentials: 'include',
-				signal
-			});
-			return responseData(response);
+			const data = await requestJson(url(`/api/files?limit=${limit}&offset=${offset}`), { signal });
+			if (!Array.isArray(data?.files) || !data.pagination || !Number.isInteger(data.pagination.offset)) {
+				throw new ApiError('The files response was incomplete. Try refreshing.');
+			}
+			return data;
 		},
 
 		upload(file, { onProgress, signal } = {}) {
@@ -42,13 +34,12 @@ export function createFilesApi(origin) {
 					let data = {};
 					try { data = JSON.parse(request.responseText || '{}'); } catch { /* Empty or non-JSON error response. */ }
 					if (request.status >= 200 && request.status < 300) return resolve(data);
-					const error = new Error(data.message || data.error || `Unable to upload file (${request.status})`);
-					error.status = request.status;
+					const error = new ApiError(data.message || data.error || `Unable to upload file (${request.status})`, { status: request.status, data });
 					return reject(error);
 				});
 				request.addEventListener('error', () => {
 					cleanup();
-					reject(new Error('The upload connection failed'));
+					reject(new ApiError('The upload connection failed'));
 				});
 				request.addEventListener('abort', () => {
 					cleanup();
@@ -60,14 +51,8 @@ export function createFilesApi(origin) {
 			});
 		},
 
-		async remove(fileId, { signal } = {}) {
-			const response = await fetch(url(`/api/files/${encodeURIComponent(fileId)}`), {
-				method: 'DELETE',
-				credentials: 'include',
-				signal
-			});
-			if (response.status === 204) return;
-			await responseData(response);
+		remove(fileId, { signal } = {}) {
+			return requestJson(url(`/api/files/${encodeURIComponent(fileId)}`), { method: 'DELETE', signal });
 		}
 	};
 }

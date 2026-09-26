@@ -10,6 +10,7 @@ import { createAuthMiddleware } from "./routes/middleware/auth.js";
 import { createCdnHostBoundary } from "./routes/middleware/cdnHost.js";
 import createPageRoutes from "./routes/pages.js";
 import { createDb } from "./db/index.js";
+import { createAppDataRoutes } from "./routes/appData.js";
 
 // Supabase Realtime needs a WebSocket implementation on Node 20.
 if (!globalThis.WebSocket) globalThis.WebSocket = WebSocket;
@@ -26,6 +27,7 @@ app.use("/api/auth", express.json({ limit: "1mb" }));
 app.use(cookieParser());
 app.use(createAuthMiddleware(db.sessions));
 app.use(createCdnHostBoundary(createCdnRoutes({ profileFiles: db.profileFiles, genericFiles: db.genericFiles, users: db.users })));
+app.use(createAppDataRoutes({ users: db.users, credits: db.credits }));
 app.use(createAuthRoutes({ users: db.users, sessions: db.sessions }));
 app.use(createPageRoutes({ pagesDir, users: db.users }));
 app.use(express.static(path.join(__dirname, "public")));

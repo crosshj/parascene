@@ -36,7 +36,7 @@ function notificationMarkup(item, index) {
 	</button>`;
 }
 
-export function mountSidebarOverlays({ onAction } = {}) {
+export function mountSidebarOverlays({ onAction, creditsResource, onClaimCredits, onRefreshCredits } = {}) {
 	const host = document.createElement('div');
 	host.className = 'ps-overlays';
 	host.innerHTML = `
@@ -56,9 +56,9 @@ export function mountSidebarOverlays({ onAction } = {}) {
 		<div class="ps-modal-scrim" data-modal="credits" hidden>
 			<section class="ps-modal ps-modal--credits" role="dialog" aria-modal="true" aria-labelledby="ps-credits-title">
 				<header class="ps-modal__header"><h2 id="ps-credits-title">Credits</h2><button class="ps-modal__close" aria-label="Close" data-close-modal>${iconMarkup('close', 'ps-modal__close-icon')}</button></header>
-				<div class="ps-credits-content">
-					<p class="ps-credits-balance">You have <strong>2912.4 credits</strong> available.</p>
-					<section><h3>Claim daily free credits</h3><p>Claim 10 credits once per day.</p><div class="ps-credits-actions"><button class="ps-outline-button" data-overlay-action="claim-credits">Claim 10 credits</button><span>Check back tomorrow for more credits.</span></div></section>
+				<div class="ps-credits-content" data-credits-content>
+					<p class="ps-credits-balance">You have <strong data-credits-balance>—</strong> credits available.</p>
+					<section><h3>Claim daily free credits</h3><p>Claim 10 credits once per day.</p><div class="ps-credits-actions"><button class="ps-outline-button" data-overlay-action="claim-credits" disabled>Claim 10 credits</button><span data-credits-claim-status aria-live="polite">Checking daily credit availability…</span><button class="ps-credits-retry" data-overlay-action="retry-credits" hidden>Retry</button></div></section>
 					<section><h3>Get more credits</h3><p>Buy a credit pack or subscribe on the pricing page.</p><a class="ps-outline-button is-green" href="/credits" data-spa-link>${iconMarkup('credits')}View pricing</a></section>
 					<section><h3>Run a server</h3><p>Run a server and earn credits for supporting the community.</p><a class="ps-outline-button" href="/servers/new" data-spa-link>${iconMarkup('help')}Learn More</a></section>
 				</div>
@@ -68,6 +68,53 @@ export function mountSidebarOverlays({ onAction } = {}) {
 	let anchor = null;
 	let activePopover = null;
 	let activeModal = null;
+	const creditsBalance = host.querySelector('[data-credits-balance]');
+	const claimButton = host.querySelector('[data-overlay-action="claim-credits"]');
+	const claimStatus = host.querySelector('[data-credits-claim-status]');
+	const retryCreditsButton = host.querySelector('[data-overlay-action="retry-credits"]');
+	let claiming = false;
+	function syncCredits(snapshot = creditsResource?.getSnapshot?.()) {
+		const data = snapshot?.data;
+		if (!data) {
+			claimButton.disabled = true;
+			retryCreditsButton.hidden = snapshot?.status !== 'error';
+			if (snapshot?.status === 'error') claimStatus.textContent = 'Could not load credits.';
+			return;
+		}
+		retryCreditsButton.hidden = true;
+		const balanceText = Number(data.balance || 0).toLocaleString('en-US');
+		if (creditsBalance.textContent !== balanceText) creditsBalance.textContent = balanceText;
+		claimButton.disabled = !data.canClaim || claiming || snapshot.status === 'loading';
+		if (!claiming && !claimStatus.dataset.error) {
+			claimStatus.textContent = data.success ? 'Daily credits claimed successfully.' : data.canClaim ? 'Available once every UTC day.' : 'Check back tomorrow for more credits.';
+		}
+	}
+	const unsubscribeCredits = creditsResource?.subscribe(syncCredits);
+	async function claimDailyCredits() {
+		if (claiming || !creditsResource?.data?.canClaim) return;
+		claiming = true;
+		claimButton.disabled = true;
+		claimButton.setAttribute('aria-busy', 'true');
+		claimStatus.dataset.error = '';
+		claimStatus.textContent = 'Claiming…';
+		try {
+			const result = await onClaimCredits?.();
+			claimStatus.textContent = result?.message || 'Daily credits claimed successfully.';
+		} catch (error) {
+			claimStatus.dataset.error = 'true';
+			claimStatus.textContent = error?.message || 'Unable to claim credits right now.';
+		} finally {
+			claiming = false;
+			claimButton.removeAttribute('aria-busy');
+			syncCredits();
+		}
+	}
+	async function refreshCredits() {
+		retryCreditsButton.disabled = true;
+		try { await onRefreshCredits?.(); }
+		catch { /* State subscription surfaces a retryable error without discarding cached data. */ }
+		finally { retryCreditsButton.disabled = false; syncCredits(); }
+	}
 
 	function positionPopover() {
 		if (!activePopover || !anchor) return;
@@ -125,6 +172,8 @@ export function mountSidebarOverlays({ onAction } = {}) {
 		if (modal && activeModal) {
 			const action = event.target.closest('[data-overlay-action]')?.dataset.overlayAction;
 			if (action === 'notifications') openModal('notifications');
+			else if (action === 'claim-credits') void claimDailyCredits();
+			else if (action === 'retry-credits') void refreshCredits();
 			else if (action) onAction?.({ action });
 			return;
 		}
@@ -144,8 +193,15 @@ export function mountSidebarOverlays({ onAction } = {}) {
 	window.addEventListener('resize', positionPopover);
 	window.addEventListener('scroll', positionPopover, true);
 	return {
-		open(name, element) { if (name === 'credits' || name === 'notifications-full') openModal(name === 'credits' ? 'credits' : 'notifications'); else openPopover(name, element); },
+		open(name, element) {
+			if (name === 'credits' || name === 'notifications-full') {
+				const modalName = name === 'credits' ? 'credits' : 'notifications';
+				openModal(modalName);
+				if (name === 'credits' && creditsResource && creditsResource.status !== 'loading' && creditsResource.status !== 'refreshing' && (!creditsResource.data || creditsResource.isStale())) void refreshCredits();
+			} else openPopover(name, element);
+		},
 		destroy() {
+			unsubscribeCredits?.();
 			host.removeEventListener('click', onClick);
 			document.removeEventListener('pointerdown', onPointerDown, true);
 			document.removeEventListener('keydown', onKeydown);

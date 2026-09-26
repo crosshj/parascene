@@ -8,6 +8,7 @@ function publicUser(user, profile) {
 		id: user.id,
 		email: user.email,
 		role: user.role,
+		plan: user.meta?.plan === 'founder' ? 'founder' : 'free',
 		created_at: user.created_at,
 		last_active_at: user.last_active_at,
 		profile: profile || null

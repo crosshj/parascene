@@ -1,0 +1,128 @@
+/* Founder avatar treatment copied from public/global.css. Keep this shared so
+   the VPS account avatar uses the same size variants and visual rules as www. */
+.avatar-with-founder-flair {
+	--founder-flair-dark: #6300ff;
+	--founder-flair-mid: #ff00fb;
+	--founder-flair-top: #00f9ff;
+	--founder-flair-text: #ffffff;
+	--founder-flair-size: 36px;
+	--founder-flair-ring-inset: -2px;
+	--founder-flair-label-width: 36px;
+	--founder-flair-label-font: 0.4rem;
+	--founder-flair-label-bottom: -2px;
+	position: relative;
+	display: inline-flex;
+	flex-direction: column;
+	align-items: center;
+}
+
+.avatar-with-founder-flair .founder-flair-avatar-ring {
+	position: relative;
+	width: var(--founder-flair-size);
+	height: var(--founder-flair-size);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.avatar-with-founder-flair .founder-flair-avatar-ring::before {
+	content: '';
+	position: absolute;
+	inset: var(--founder-flair-ring-inset);
+	border-radius: 50%;
+	background: linear-gradient(175deg, var(--founder-flair-top) 0%, var(--founder-flair-mid) 35%, var(--founder-flair-dark) 95%);
+	pointer-events: none;
+}
+
+.avatar-with-founder-flair .founder-flair-avatar-inner {
+	width: var(--founder-flair-size);
+	height: var(--founder-flair-size);
+	aspect-ratio: 1 / 1;
+	border-radius: 50%;
+	overflow: hidden;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	position: relative;
+	z-index: 0;
+	/* --avatar-bg set in JS when showing initial only (no image); otherwise surface-strong for image container */
+	background: var(--avatar-bg, var(--surface-strong));
+	color: #fff;
+	font-weight: 600;
+	font-size: calc(var(--founder-flair-size) * 0.25);
+}
+
+.avatar-with-founder-flair .founder-flair-avatar-inner img {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	object-position: center;
+	display: block;
+}
+
+.avatar-with-founder-flair::after {
+	content: 'Founder';
+	position: absolute;
+	left: 50%;
+	transform: translateX(-50%);
+	bottom: var(--founder-flair-label-bottom);
+	width: var(--founder-flair-label-width);
+	min-width: max-content;
+	box-sizing: border-box;
+	background: linear-gradient(151deg, var(--founder-flair-dark), var(--founder-flair-mid));
+	border-radius: 2px;
+	text-align: center;
+	font-size: var(--founder-flair-label-font);
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--founder-flair-text);
+	line-height: 1.2;
+	padding: 0;
+	white-space: nowrap;
+	pointer-events: none;
+}
+
+.avatar-with-founder-flair--xs {
+	--founder-flair-size: 16px;
+	--founder-flair-ring-inset: -1px;
+	--founder-flair-label-width: 0;
+	--founder-flair-label-font: 0;
+	--founder-flair-label-bottom: 0;
+}
+
+.avatar-with-founder-flair--xs::after { display: none; }
+
+.avatar-with-founder-flair--sm {
+	--founder-flair-size: 28px;
+	--founder-flair-ring-inset: -2px;
+	--founder-flair-label-width: calc(100% + 6px);
+	--founder-flair-label-font: 5.5px;
+	--founder-flair-label-bottom: -2px;
+}
+
+.avatar-with-founder-flair--md {
+	--founder-flair-size: 36px;
+	--founder-flair-ring-inset: -2px;
+	--founder-flair-label-width: 36px;
+	--founder-flair-label-font: 0.4rem;
+	--founder-flair-label-bottom: -2px;
+}
+
+.avatar-with-founder-flair--lg {
+	--founder-flair-size: 48px;
+	--founder-flair-ring-inset: -2px;
+	--founder-flair-label-width: 42px;
+	--founder-flair-label-font: 0.45rem;
+	--founder-flair-label-bottom: -3px;
+}
+
+.avatar-with-founder-flair--xl {
+	--founder-flair-size: 96px;
+	--founder-flair-ring-inset: -4px;
+	--founder-flair-label-width: 88px;
+	--founder-flair-label-font: 0.7rem;
+	--founder-flair-label-bottom: -6px;
+}

@@ -23,17 +23,30 @@ function artworkUrlFor(publicUrl) {
 	}
 }
 
-function createPreview(file, contentUrl, previewTemplate, { onPlayAudio, onPlayVideo }) {
+function fileContentUrl(file, filesApi) {
+	return file.public_url || filesApi.url(file.content_path);
+}
+
+function previewKey(file, filesApi) {
+	const kind = mediaKind(file.content_type);
+	return `${kind}|${fileContentUrl(file, filesApi)}|${artworkUrlFor(file.public_url)}`;
+}
+
+function createPreview(file, previewTemplate, { filesApi, getFile, onPlayAudio, onPlayVideo }) {
 	const kind = mediaKind(file.content_type);
 	const refs = bindRefs(cloneTemplateElement(previewTemplate).firstElementChild);
+	refs.preview.dataset.previewKey = previewKey(file, filesApi);
 	refs.preview.classList.add(`file-preview--${kind}`);
-	if (kind === 'image') { refs.image.src = contentUrl; refs.image.hidden = false; }
+	if (kind === 'image') { refs.image.src = fileContentUrl(file, filesApi); refs.image.hidden = false; }
 	else if (kind === 'video') {
 		const title = file.display_name || file.id || 'Video';
 		const thumbnailUrl = artworkUrlFor(file.public_url);
 		refs.videoTrigger.setAttribute('aria-label', `Play ${title}`);
 		if (thumbnailUrl) refs.videoPoster.poster = thumbnailUrl;
-		refs.videoTrigger.addEventListener('click', () => onPlayVideo(contentUrl, title));
+		refs.videoTrigger.addEventListener('click', () => {
+			const current = getFile();
+			onPlayVideo(fileContentUrl(current, filesApi), current.display_name || current.id || 'Video');
+		});
 		refs.videoPoster.hidden = false;
 		refs.videoTrigger.hidden = false;
 	}
@@ -45,7 +58,10 @@ function createPreview(file, contentUrl, previewTemplate, { onPlayAudio, onPlayV
 			refs.audioThumbnail.addEventListener('error', () => { refs.audioThumbnail.hidden = true; }, { once: true });
 			refs.audioThumbnail.src = artworkUrl;
 		} else refs.audioThumbnail.hidden = true;
-		refs.audioTrigger.addEventListener('click', () => onPlayAudio(contentUrl, title, artworkUrl));
+		refs.audioTrigger.addEventListener('click', () => {
+			const current = getFile();
+			onPlayAudio(fileContentUrl(current, filesApi), current.display_name || current.id || 'Audio', artworkUrlFor(current.public_url));
+		});
 		refs.audioSizer.hidden = false;
 		refs.audioTrigger.hidden = false;
 	}
@@ -54,27 +70,44 @@ function createPreview(file, contentUrl, previewTemplate, { onPlayAudio, onPlayV
 }
 
 function createFileCard(file, { cardTemplate, previewTemplate, filesApi, onDelete, onPlayAudio, onPlayVideo }) {
-	const contentUrl = file.public_url || filesApi.url(file.content_path);
 	const root = cloneTemplateElement(cardTemplate).firstElementChild;
+	root.__fileRecord = file;
 	const refs = bindRefs(root);
-	const title = file.display_name || file.id;
-	refs.preview.replaceWith(createPreview(file, contentUrl, previewTemplate, { onPlayAudio, onPlayVideo }));
-	refs.title.textContent = title;
-	refs.title.title = title;
-	refs.meta.textContent = `${formatFileSize(file.size)} · ${formatDate(file.created_at || file.updated_at)}`;
-	refs.type.textContent = file.content_type || 'application/octet-stream';
-	refs.open.href = contentUrl;
-	refs.copy.disabled = !file.public_url;
+	refs.preview.replaceWith(createPreview(file, previewTemplate, { filesApi, getFile: () => root.__fileRecord, onPlayAudio, onPlayVideo }));
 	refs.copy.addEventListener('click', async () => {
-		if (!file.public_url) return;
-		try { await navigator.clipboard.writeText(file.public_url); refs.copy.textContent = 'Copied'; setTimeout(() => { refs.copy.textContent = 'Copy link'; }, 1800); }
-		catch { window.prompt('Copy this public link', file.public_url); }
+		const current = root.__fileRecord;
+		if (!current.public_url) return;
+		try { await navigator.clipboard.writeText(current.public_url); refs.copy.textContent = 'Copied'; setTimeout(() => { if (refs.copy.isConnected) refs.copy.textContent = 'Copy link'; }, 1800); }
+		catch { window.prompt('Copy this public link', current.public_url); }
 	});
-	refs.remove.addEventListener('click', () => onDelete(file, refs.remove, root));
+	refs.remove.addEventListener('click', () => onDelete(root.__fileRecord, refs.remove, root));
+	updateFileCard(root, file, { previewTemplate, filesApi, onPlayAudio, onPlayVideo });
 	return root;
 }
 
-export async function renderFileManagerView({ outlet, filesApi, onUnauthorized, setHeaderMenu }) {
+function updateFileCard(root, file, { previewTemplate, filesApi, onPlayAudio, onPlayVideo }) {
+	root.__fileRecord = file;
+	const refs = bindRefs(root);
+	const title = file.display_name || file.id;
+	const meta = `${formatFileSize(file.size)} · ${formatDate(file.created_at || file.updated_at)}`;
+	const type = file.content_type || 'application/octet-stream';
+	const contentUrl = fileContentUrl(file, filesApi);
+	if (refs.title.textContent !== title) refs.title.textContent = title;
+	if (refs.title.title !== title) refs.title.title = title;
+	if (refs.meta.textContent !== meta) refs.meta.textContent = meta;
+	if (refs.type.textContent !== type) refs.type.textContent = type;
+	if (refs.open.getAttribute('href') !== contentUrl) refs.open.href = contentUrl;
+	refs.copy.disabled = !file.public_url;
+	const kind = mediaKind(file.content_type);
+	const mediaTitle = file.display_name || file.id || (kind === 'video' ? 'Video' : 'Audio');
+	const mediaTrigger = kind === 'video' ? refs.preview.querySelector('[data-ref="videoTrigger"]') : kind === 'audio' ? refs.preview.querySelector('[data-ref="audioTrigger"]') : null;
+	if (mediaTrigger && mediaTrigger.getAttribute('aria-label') !== `Play ${mediaTitle}`) mediaTrigger.setAttribute('aria-label', `Play ${mediaTitle}`);
+	if (refs.preview.dataset.previewKey !== previewKey(file, filesApi)) {
+		refs.preview.replaceWith(createPreview(file, previewTemplate, { filesApi, getFile: () => root.__fileRecord, onPlayAudio, onPlayVideo }));
+	}
+}
+
+export async function renderFileManagerView({ outlet, filesApi, filesResource, onUnauthorized, setHeaderMenu }) {
 	const controller = new AbortController();
 	const root = mountTemplate(outlet, template);
 	const refs = bindRefs(root);
@@ -95,6 +128,7 @@ export async function renderFileManagerView({ outlet, filesApi, onUnauthorized, 
 	});
 	let nextOffset = null;
 	let busy = false;
+	let loadingMore = false;
 	const uploadedNames = new Map();
 
 	function stopVideo() {
@@ -137,17 +171,18 @@ export async function renderFileManagerView({ outlet, filesApi, onUnauthorized, 
 		status.textContent = 'No files are stored in your personal folder yet.';
 	}
 	function insertFile(file) {
-		const displayFile = !file.display_name && uploadedNames.has(file.id)
-			? { ...file, display_name: uploadedNames.get(file.id) }
-			: file;
-		const existing = [...grid.children].find((card) => card.dataset.fileId === String(file.id));
-		existing?.remove();
-		const card = createFileCard(displayFile, { cardTemplate, previewTemplate, filesApi, onDelete: deleteFile, onPlayAudio: playAudio, onPlayVideo: playVideo });
-		card.dataset.fileId = String(file.id);
-		grid.prepend(card);
+		const displayFile = !file.display_name && uploadedNames.has(file.id) ? { ...file, display_name: uploadedNames.get(file.id) } : file;
+		const current = filesResource?.data;
+		if (current && Array.isArray(current.files)) {
+			const files = [displayFile, ...current.files.filter((row) => String(row.id) !== String(displayFile.id))];
+			filesResource.setData({ ...current, files });
+		} else {
+			const card = createFileCard(displayFile, { cardTemplate, previewTemplate, filesApi, onDelete: deleteFile, onPlayAudio: playAudio, onPlayVideo: playVideo });
+			card.dataset.fileId = String(file.id);
+			grid.prepend(card);
+		}
 		status.hidden = true;
 		grid.hidden = false;
-		if (nextOffset !== null && !existing) nextOffset += 1;
 	}
 
 	function setBusy(value) {
@@ -163,31 +198,76 @@ export async function renderFileManagerView({ outlet, filesApi, onUnauthorized, 
 		dismiss.hidden = false;
 		showDialog();
 	}
-	async function load({ append = false, uploadedFile = null } = {}) {
-		status.hidden = false;
-		status.classList.remove('is-error');
-		status.textContent = append ? 'Loading more files…' : 'Loading your files…';
-		if (!append) { nextOffset = null; grid.hidden = true; grid.replaceChildren(); loadMore.hidden = true; }
+	function renderSnapshot(data) {
+		const files = Array.isArray(data?.files) ? data.files : [];
+		const existing = new Map([...grid.children].map((card) => [card.dataset.fileId, card]));
+		let targetIndex = 0;
+		for (const file of files) {
+			const displayFile = !file.display_name && uploadedNames.has(file.id) ? { ...file, display_name: uploadedNames.get(file.id) } : file;
+			const key = String(displayFile.id);
+			let card = existing.get(key);
+			if (!card) {
+				const next = createFileCard(displayFile, { cardTemplate, previewTemplate, filesApi, onDelete: deleteFile, onPlayAudio: playAudio, onPlayVideo: playVideo });
+				next.dataset.fileId = key;
+				card = next;
+			} else updateFileCard(card, displayFile, { previewTemplate, filesApi, onPlayAudio: playAudio, onPlayVideo: playVideo });
+			const atIndex = grid.children[targetIndex];
+			if (atIndex !== card) grid.insertBefore(card, atIndex || null);
+			targetIndex++;
+			existing.delete(key);
+		}
+		for (const card of existing.values()) card.remove();
+		nextOffset = Number.isInteger(data?.pagination?.next_offset) ? data.pagination.next_offset : null;
+		loadMore.hidden = nextOffset === null;
+		grid.hidden = files.length === 0;
+		if (!files.length) {
+			status.hidden = false;
+			status.classList.remove('is-error', 'is-stale');
+			status.textContent = 'No files are stored in your personal folder yet.';
+		} else status.hidden = true;
+	}
+	function onResourceState(snapshot) {
+		if (snapshot.error?.status === 401) { onUnauthorized(); return; }
+		const hasFiles = Array.isArray(snapshot.data?.files);
+		if (hasFiles) renderSnapshot(snapshot.data);
+		status.classList.toggle('is-error', snapshot.status === 'error');
+		status.classList.toggle('is-stale', snapshot.status === 'stale-error');
+		if (snapshot.status === 'loading' && !hasFiles) {
+			status.hidden = false;
+			status.textContent = 'Loading your files…';
+		} else if (snapshot.status === 'error' && !hasFiles) {
+			status.hidden = false;
+			status.textContent = snapshot.error?.message || 'Unable to load your files.';
+		} else if (snapshot.status === 'stale-error' && hasFiles) {
+			status.hidden = false;
+			status.textContent = 'Showing saved files. Could not refresh just now.';
+		} else if (hasFiles && snapshot.data.files.length) status.hidden = true;
+	}
+	async function load({ append = false } = {}) {
+		if (append && loadingMore) return;
+		if (!append && filesResource) {
+			try { await filesResource.refresh({ force: true }); } catch { /* Resource keeps cached data and publishes a stale error. */ }
+			return;
+		}
+		if (append) { loadingMore = true; loadMore.disabled = true; }
+		if (!append) {
+			status.hidden = false;
+			status.classList.remove('is-error', 'is-stale');
+			status.textContent = 'Loading your files…';
+		}
 		try {
-			const data = await filesApi.list({ offset: append ? nextOffset : 0, signal: controller.signal });
-			let files = Array.isArray(data.files) ? data.files : [];
-			if (!append && uploadedFile?.id && !files.some((file) => file.id === uploadedFile.id)) files = [uploadedFile, ...files];
-			if (!append && files.length === 0) { status.textContent = 'No files are stored in your personal folder yet.'; return; }
-			for (const file of files) {
-				const displayFile = !file.display_name && uploadedNames.has(file.id) ? { ...file, display_name: uploadedNames.get(file.id) } : file;
-				const card = createFileCard(displayFile, { cardTemplate, previewTemplate, filesApi, onDelete: deleteFile, onPlayAudio: playAudio, onPlayVideo: playVideo });
-				card.dataset.fileId = String(file.id);
-				grid.append(card);
-			}
-			nextOffset = Number.isInteger(data?.pagination?.next_offset) ? data.pagination.next_offset : null;
-			status.hidden = true;
-			grid.hidden = false;
-			loadMore.hidden = nextOffset === null;
+			const data = await filesApi.list({ offset: nextOffset, signal: controller.signal });
+			const current = filesResource?.data;
+			const mergedFiles = [...(current?.files || []), ...(Array.isArray(data.files) ? data.files : [])];
+			filesResource?.setData({ ...data, files: mergedFiles, pagination: data.pagination });
+			if (!filesResource) renderSnapshot({ ...data, files: mergedFiles });
 		} catch (error) {
 			if (error?.name === 'AbortError') return;
 			if (error?.status === 401) return onUnauthorized();
 			status.classList.add('is-error');
 			status.textContent = error?.message || 'Unable to load your files.';
+		} finally {
+			if (append) { loadingMore = false; loadMore.disabled = false; }
 		}
 	}
 	async function deleteFile(file, button, card) {
@@ -195,7 +275,9 @@ export async function renderFileManagerView({ outlet, filesApi, onUnauthorized, 
 		button.disabled = true;
 		try {
 			await filesApi.remove(file.id, { signal: controller.signal });
-			card.remove();
+			const current = filesResource?.data;
+			if (current) filesResource.setData({ ...current, files: current.files.filter((row) => String(row.id) !== String(file.id)) });
+			else card.remove();
 			if (nextOffset !== null) nextOffset = Math.max(0, nextOffset - 1);
 			if (!grid.children.length) showEmptyState();
 		}
@@ -225,8 +307,11 @@ export async function renderFileManagerView({ outlet, filesApi, onUnauthorized, 
 	audioDialog.addEventListener('click', (event) => { if (event.target === audioDialog) audioDialog.close(); });
 	lightboxArtwork.addEventListener('error', () => { lightboxArtwork.hidden = true; });
 	fileInput.addEventListener('change', () => { const file = fileInput.files?.[0]; if (file) void uploadFile(file); });
-	void load();
+	const unsubscribeResource = filesResource?.subscribe(onResourceState);
+	if (filesResource) void load();
+	else void filesApi.list({ signal: controller.signal }).then((data) => renderSnapshot(data)).catch((error) => { if (error?.name !== 'AbortError') { status.hidden = false; status.classList.add('is-error'); status.textContent = error?.message || 'Unable to load your files.'; } });
 	return () => {
+		unsubscribeResource?.();
 		controller.abort();
 		stopVideo();
 		stopAudio();

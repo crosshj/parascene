@@ -11,7 +11,7 @@ function getRegion(shell, name) {
 	return region;
 }
 
-export function initializeLayout({ shell, sidebarModel, mobileNavigationItems, onSidebarAction }) {
+export function initializeLayout({ shell, sidebarModel, mobileNavigationItems, onSidebarAction, creditsResource, onClaimCredits }) {
 	if (!shell) throw new Error('Missing application shell');
 
 	const page = getRegion(shell, 'page');
@@ -50,7 +50,12 @@ export function initializeLayout({ shell, sidebarModel, mobileNavigationItems, o
 		}
 		onSidebarAction?.(action);
 	};
-	const overlays = mountSidebarOverlays({ onAction: handleSidebarAction });
+	const overlays = mountSidebarOverlays({
+		onAction: handleSidebarAction,
+		creditsResource,
+		onClaimCredits,
+		onRefreshCredits: () => creditsResource?.refresh({ force: true })
+	});
 	const sidebarAction = (action) => {
 		if (action?.action === 'open-overlay') {
 			overlays.open(action.overlay, action.anchor);
@@ -96,6 +101,8 @@ export function initializeLayout({ shell, sidebarModel, mobileNavigationItems, o
 		logoutButton: sidebar.logoutButton,
 		syncRoute: sidebar.syncRoute,
 		updateSidebar: sidebar.update,
+		setSidebarStatus: sidebar.setRosterStatus,
+		updateCredits: sidebar.updateCredits,
 		destroy() {
 			menu?.destroy();
 			overlays.destroy();
