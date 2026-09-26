@@ -144,3 +144,34 @@ export async function extractAudioArtwork(input) {
 		await rm(directory, { recursive: true, force: true }).catch(() => undefined);
 	}
 }
+
+/**
+ * Extract a small, browser-safe poster frame for a video. A short seek avoids
+ * the black leader common in exported videos; very short clips fall back to
+ * their first decodable frame.
+ */
+export async function extractVideoThumbnail(input) {
+	if (!Buffer.isBuffer(input) || input.length === 0) return null;
+	const directory = await mkdtemp(path.join(os.tmpdir(), "parascene-video-art-"));
+	const sourcePath = path.join(directory, "source.bin");
+	try {
+		await writeFile(sourcePath, input);
+		for (const seek of ["0.5", "0"]) {
+			try {
+				const result = await execFileAsync(FFMPEG_BIN, [
+					"-y", "-v", "error", "-ss", seek, "-i", sourcePath,
+					"-map", "0:v:0", "-frames:v", "1",
+					"-vf", "scale=960:960:force_original_aspect_ratio=decrease:force_divisible_by=2",
+					"-c:v", "mjpeg", "-q:v", "3", "-f", "image2pipe", "pipe:1"
+				], { encoding: "buffer", maxBuffer: 4 * 1024 * 1024, timeout: 120_000 });
+				const thumbnail = Buffer.isBuffer(result.stdout) ? result.stdout : Buffer.from(result.stdout || "");
+				if (thumbnail.length) return thumbnail;
+			} catch {
+				// Try the first frame when the clip is shorter than the initial seek.
+			}
+		}
+		return null;
+	} finally {
+		await rm(directory, { recursive: true, force: true }).catch(() => undefined);
+	}
+}

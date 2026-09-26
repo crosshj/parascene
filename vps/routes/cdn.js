@@ -1,5 +1,5 @@
 import express from "express";
-import { createFilesRoutes, createPublicAudioArtworkRoutes, createPublicFileRoutes } from "./files.js";
+import { createFilesRoutes, createPublicArtworkRoutes, createPublicFileRoutes } from "./files.js";
 import { createGenericRoutes } from "./generic.js";
 import { createFilesCors } from "./middleware/filesCors.js";
 
@@ -15,7 +15,7 @@ export function createCdnRoutes(input) {
 	});
 
 	router.use("/s", createPublicFileRoutes(profileFiles));
-	router.use("/api/files/artwork", createPublicAudioArtworkRoutes(profileFiles));
+	router.use("/api/files/artwork", createPublicArtworkRoutes(profileFiles));
 	router.use("/api/files", createFilesCors(), createFilesRoutes(profileFiles));
 	if (genericFiles && users) router.use("/api/images/generic", createFilesCors(), createGenericRoutes(genericFiles, users));
 

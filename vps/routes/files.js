@@ -5,7 +5,7 @@ import { contentDisposition, mayDisplayInline, normalizeFileId, safeDispositionF
 import { filesOriginForRequest } from "./utils/origins.js";
 import { createPublicFileToken, verifyPublicFileToken } from "./utils/publicFileLinks.js";
 import { createFilesCors } from "./middleware/filesCors.js";
-import { extractAudioArtwork, imageNeedsBrowserSafeTranscode, isVideoUpload, normalizeUploadedImage, normalizeUploadedVideo } from "./utils/media.js";
+import { extractAudioArtwork, extractVideoThumbnail, imageNeedsBrowserSafeTranscode, isVideoUpload, normalizeUploadedImage, normalizeUploadedVideo } from "./utils/media.js";
 import { audioArtworkFallback } from "./utils/audioArtwork.js";
 import {
 	createFileId,
@@ -240,7 +240,7 @@ export function createPublicFileRoutes(profileFiles, { publicLinkSecret = proces
 	return router;
 }
 
-export function createPublicAudioArtworkRoutes(profileFiles, { publicLinkSecret = process.env.SESSION_SECRET } = {}) {
+export function createPublicArtworkRoutes(profileFiles, { publicLinkSecret = process.env.SESSION_SECRET } = {}) {
 	const router = express.Router();
 	router.use(createFilesCors());
 	router.get("/:token/:filename", async (req, res, next) => {
@@ -252,13 +252,16 @@ export function createPublicAudioArtworkRoutes(profileFiles, { publicLinkSecret 
 			const chunks = [];
 			for await (const chunk of Readable.fromWeb(upstream.body)) chunks.push(chunk);
 			const input = Buffer.concat(chunks);
-			const artwork = await extractAudioArtwork(input);
-			res.set("Cache-Control", "no-store");
+			const contentType = upstream.headers.get("content-type") || "application/octet-stream";
+			const isVideo = isVideoUpload(grant.filename, contentType);
+			const artwork = isVideo ? await extractVideoThumbnail(input) : await extractAudioArtwork(input);
+			res.set("Cache-Control", "private, max-age=86400");
 			res.set("X-Content-Type-Options", "nosniff");
 			if (artwork) {
-				res.type("image/png");
+				res.type(isVideo ? "image/jpeg" : "image/png");
 				return res.send(artwork);
 			}
+			if (isVideo) return res.status(404).type("text").send("Video thumbnail unavailable");
 			res.type("image/svg+xml");
 			return res.send(audioArtworkFallback(grant.filename));
 		} catch (error) {
@@ -267,3 +270,6 @@ export function createPublicAudioArtworkRoutes(profileFiles, { publicLinkSecret 
 	});
 	return router;
 }
+
+// Kept as an export for callers that used the original audio-only name.
+export const createPublicAudioArtworkRoutes = createPublicArtworkRoutes;

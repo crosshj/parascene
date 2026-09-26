@@ -9,6 +9,7 @@ export function createRouter({ outlet, routes }) {
 	async function render() {
 		if (typeof disposePage === 'function') disposePage();
 		disposePage = null;
+		outlet.scrollTop = 0;
 		const path = normalizeRoutePath(location.pathname);
 		const handler = routes[path] || routes['/'];
 		const result = await handler({ path });

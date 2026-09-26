@@ -18,6 +18,15 @@
 		<progress data-ref="progress" max="100" value="0"></progress>
 		<button class="file-manager-view__upload-dismiss" data-ref="dismiss" type="button" hidden>Dismiss</button>
 	</dialog>
+	<dialog class="file-manager-view__video-dialog" data-ref="videoDialog" aria-label="Video player">
+		<button class="file-manager-view__video-close" data-ref="videoClose" type="button" aria-label="Close video">&#215;</button>
+		<video data-ref="lightboxVideo" controls playsinline preload="none"></video>
+	</dialog>
+	<dialog class="file-manager-view__audio-dialog" data-ref="audioDialog" aria-label="Audio player">
+		<button class="file-manager-view__video-close" data-ref="audioClose" type="button" aria-label="Close audio">&#215;</button>
+		<img class="file-manager-view__audio-artwork" data-ref="lightboxArtwork" alt="" width="1" height="1" hidden>
+		<audio data-ref="lightboxAudio" controls preload="none"></audio>
+	</dialog>
 	<div class="file-manager-view__status" data-ref="status" role="status">Loading your files…</div>
 	<div class="file-manager-view__grid" data-ref="grid" hidden></div>
 	<button class="file-manager-view__load-more" data-ref="loadMore" type="button" hidden>Load more</button>
@@ -40,8 +49,19 @@
 	<template data-template="file-preview">
 		<div class="file-preview" data-ref="preview">
 			<img data-ref="image" alt="" loading="lazy" hidden>
-			<video class="file-preview-video" data-ref="video" crossorigin="anonymous" controls preload="metadata" hidden></video>
-			<audio data-ref="audio" controls preload="metadata" hidden></audio>
+			<video class="file-preview-video" data-ref="videoPoster" crossorigin="anonymous" playsinline preload="none" aria-hidden="true" tabindex="-1" hidden></video>
+			<button class="file-preview-media-trigger file-preview-video-trigger" data-ref="videoTrigger" type="button" hidden>
+				<span class="file-preview-media__play" aria-hidden="true">
+					<svg viewBox="0 0 24 24" focusable="false"><path d="M8 5.6v12.8L18.5 12 8 5.6Z"/></svg>
+				</span>
+			</button>
+			<audio class="file-preview-audio-sizer" data-ref="audioSizer" controls preload="none" aria-hidden="true" tabindex="-1" hidden></audio>
+			<button class="file-preview-media-trigger file-preview-audio-trigger" data-ref="audioTrigger" type="button" hidden>
+				<img data-ref="audioThumbnail" alt="" loading="lazy">
+				<span class="file-preview-media__play" aria-hidden="true">
+					<svg viewBox="0 0 24 24" focusable="false"><path d="M8 5.6v12.8L18.5 12 8 5.6Z"/></svg>
+				</span>
+			</button>
 			<span class="file-icon" data-ref="file" hidden>FILE</span>
 		</div>
 	</template>

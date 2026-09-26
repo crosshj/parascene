@@ -1,0 +1,56 @@
+:root {
+	--beta-sidebar-width: 272px;
+	--beta-mobile-nav-height: 68px;
+	--beta-shell-inset: 6px;
+	--beta-panel-gap: 8px;
+	--beta-panel-radius: 20px;
+	--beta-canvas-background: #ffffff;
+	--beta-panel-background: #eef1f6;
+}
+
+body.beta-layout {
+	height: 100vh;
+	min-height: 100vh;
+	overflow: hidden;
+	overscroll-behavior: none;
+	background: var(--beta-canvas-background);
+}
+body.beta-layout > header { display: none; }
+body.beta-layout #app-shell {
+	height: 100vh;
+	min-height: 100vh;
+	overflow: hidden;
+}
+body.beta-layout main#app-outlet {
+	box-sizing: border-box;
+	width: auto;
+	max-width: none;
+	min-width: 0;
+	height: calc(100vh - var(--beta-shell-inset) - var(--beta-shell-inset));
+	min-height: calc(100vh - var(--beta-shell-inset) - var(--beta-shell-inset));
+	margin: var(--beta-shell-inset) var(--beta-shell-inset) var(--beta-shell-inset) calc(var(--beta-sidebar-width) + var(--beta-shell-inset) + var(--beta-panel-gap));
+	padding: 48px clamp(24px, 5vw, 72px);
+	overflow-x: hidden;
+	overflow-y: auto;
+	overscroll-behavior: none;
+	scrollbar-gutter: stable;
+	border-radius: var(--beta-panel-radius);
+	corner-shape: squircle;
+	background: var(--beta-panel-background);
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--beta-canvas-background: #0f0d1a;
+		--beta-panel-background: color-mix(in srgb, #191627 88%, #0f0d1a);
+	}
+}
+
+@media (max-width: 760px) {
+	body.beta-layout main#app-outlet {
+		height: calc(100vh - var(--beta-mobile-nav-height) - var(--beta-shell-inset) - var(--beta-shell-inset));
+		min-height: calc(100vh - var(--beta-mobile-nav-height) - var(--beta-shell-inset) - var(--beta-shell-inset));
+		margin: var(--beta-shell-inset);
+		padding: 32px 16px;
+	}
+}

@@ -14,23 +14,52 @@ function mediaKind(contentType) {
 	return 'file';
 }
 
-function createPreview(file, contentUrl, previewTemplate) {
+function artworkUrlFor(publicUrl) {
+	try {
+		const url = new URL(publicUrl, window.location.href);
+		const match = url.pathname.match(/^\/s\/([^/]+)\/(.+)$/i);
+		return match ? `${url.origin}/api/files/artwork/${match[1]}/${match[2]}?v=native-aspect-1` : '';
+	} catch {
+		return '';
+	}
+}
+
+function createPreview(file, contentUrl, previewTemplate, { onPlayAudio, onPlayVideo }) {
 	const kind = mediaKind(file.content_type);
 	const refs = bindRefs(cloneTemplateElement(previewTemplate).firstElementChild);
 	refs.preview.classList.add(`file-preview--${kind}`);
 	if (kind === 'image') { refs.image.src = contentUrl; refs.image.hidden = false; }
-	else if (kind === 'video') { refs.video.src = contentUrl; refs.video.hidden = false; }
-	else if (kind === 'audio') { refs.audio.src = contentUrl; refs.audio.hidden = false; }
+	else if (kind === 'video') {
+		const title = file.display_name || file.id || 'Video';
+		const thumbnailUrl = artworkUrlFor(file.public_url);
+		refs.videoTrigger.setAttribute('aria-label', `Play ${title}`);
+		if (thumbnailUrl) refs.videoPoster.poster = thumbnailUrl;
+		refs.videoTrigger.addEventListener('click', () => onPlayVideo(contentUrl, title));
+		refs.videoPoster.hidden = false;
+		refs.videoTrigger.hidden = false;
+	}
+	else if (kind === 'audio') {
+		const title = file.display_name || file.id || 'Audio';
+		const artworkUrl = artworkUrlFor(file.public_url);
+		refs.audioTrigger.setAttribute('aria-label', `Play ${title}`);
+		if (artworkUrl) {
+			refs.audioThumbnail.addEventListener('error', () => { refs.audioThumbnail.hidden = true; }, { once: true });
+			refs.audioThumbnail.src = artworkUrl;
+		} else refs.audioThumbnail.hidden = true;
+		refs.audioTrigger.addEventListener('click', () => onPlayAudio(contentUrl, title, artworkUrl));
+		refs.audioSizer.hidden = false;
+		refs.audioTrigger.hidden = false;
+	}
 	else refs.file.hidden = false;
 	return refs.preview;
 }
 
-function createFileCard(file, { cardTemplate, previewTemplate, filesApi, onDelete }) {
+function createFileCard(file, { cardTemplate, previewTemplate, filesApi, onDelete, onPlayAudio, onPlayVideo }) {
 	const contentUrl = file.public_url || filesApi.url(file.content_path);
 	const root = cloneTemplateElement(cardTemplate).firstElementChild;
 	const refs = bindRefs(root);
 	const title = file.display_name || file.id;
-	refs.preview.replaceWith(createPreview(file, contentUrl, previewTemplate));
+	refs.preview.replaceWith(createPreview(file, contentUrl, previewTemplate, { onPlayAudio, onPlayVideo }));
 	refs.title.textContent = title;
 	refs.title.title = title;
 	refs.meta.textContent = `${formatFileSize(file.size)} · ${formatDate(file.created_at || file.updated_at)}`;
@@ -51,7 +80,7 @@ export async function renderFileManagerView({ outlet, filesApi, onUnauthorized }
 	const root = mountTemplate(outlet, template);
 	const refs = bindRefs(root);
 	document.title = 'Your files · parascene beta';
-	const { actions, dialog, dialogTitle, dismiss, fileInput, grid, loadMore, message, progress, status, uploadLabel } = refs;
+	const { actions, audioClose, audioDialog, dialog, dialogTitle, dismiss, fileInput, grid, lightboxArtwork, lightboxAudio, lightboxVideo, loadMore, message, progress, status, uploadLabel, videoClose, videoDialog } = refs;
 	const cardTemplate = root.querySelector('template[data-template="file-card"]');
 	const previewTemplate = root.querySelector('template[data-template="file-preview"]');
 	const refresh = createButton({ label: 'Refresh', onClick: () => load() });
@@ -59,6 +88,40 @@ export async function renderFileManagerView({ outlet, filesApi, onUnauthorized }
 	let nextOffset = null;
 	let busy = false;
 	const uploadedNames = new Map();
+
+	function stopVideo() {
+		lightboxVideo.pause();
+		lightboxVideo.removeAttribute('src');
+		lightboxVideo.removeAttribute('aria-label');
+		lightboxVideo.load();
+	}
+	function playVideo(url, title) {
+		stopVideo();
+		lightboxVideo.src = url;
+		lightboxVideo.setAttribute('aria-label', title);
+		if (!videoDialog.open) videoDialog.showModal();
+		void lightboxVideo.play().catch(() => undefined);
+	}
+	function stopAudio() {
+		lightboxAudio.pause();
+		lightboxAudio.removeAttribute('src');
+		lightboxAudio.removeAttribute('aria-label');
+		lightboxAudio.load();
+		lightboxArtwork.removeAttribute('src');
+		lightboxArtwork.hidden = true;
+	}
+	function playAudio(url, title, artworkUrl) {
+		stopAudio();
+		lightboxAudio.src = url;
+		lightboxAudio.setAttribute('aria-label', title);
+		audioDialog.setAttribute('aria-label', `${title} audio player`);
+		if (artworkUrl) {
+			lightboxArtwork.src = artworkUrl;
+			lightboxArtwork.hidden = false;
+		}
+		if (!audioDialog.open) audioDialog.showModal();
+		void lightboxAudio.play().catch(() => undefined);
+	}
 
 	function showEmptyState() {
 		grid.hidden = true;
@@ -71,7 +134,7 @@ export async function renderFileManagerView({ outlet, filesApi, onUnauthorized }
 			: file;
 		const existing = [...grid.children].find((card) => card.dataset.fileId === String(file.id));
 		existing?.remove();
-		const card = createFileCard(displayFile, { cardTemplate, previewTemplate, filesApi, onDelete: deleteFile });
+		const card = createFileCard(displayFile, { cardTemplate, previewTemplate, filesApi, onDelete: deleteFile, onPlayAudio: playAudio, onPlayVideo: playVideo });
 		card.dataset.fileId = String(file.id);
 		grid.prepend(card);
 		status.hidden = true;
@@ -106,7 +169,7 @@ export async function renderFileManagerView({ outlet, filesApi, onUnauthorized }
 			if (!append && files.length === 0) { status.textContent = 'No files are stored in your personal folder yet.'; return; }
 			for (const file of files) {
 				const displayFile = !file.display_name && uploadedNames.has(file.id) ? { ...file, display_name: uploadedNames.get(file.id) } : file;
-				const card = createFileCard(displayFile, { cardTemplate, previewTemplate, filesApi, onDelete: deleteFile });
+				const card = createFileCard(displayFile, { cardTemplate, previewTemplate, filesApi, onDelete: deleteFile, onPlayAudio: playAudio, onPlayVideo: playVideo });
 				card.dataset.fileId = String(file.id);
 				grid.append(card);
 			}
@@ -148,7 +211,20 @@ export async function renderFileManagerView({ outlet, filesApi, onUnauthorized }
 	loadMore.addEventListener('click', () => load({ append: true }));
 	dismiss.addEventListener('click', () => dialog.close());
 	dialog.addEventListener('cancel', (event) => { if (busy) event.preventDefault(); });
+	videoClose.addEventListener('click', () => videoDialog.close());
+	videoDialog.addEventListener('close', stopVideo);
+	videoDialog.addEventListener('click', (event) => { if (event.target === videoDialog) videoDialog.close(); });
+	audioClose.addEventListener('click', () => audioDialog.close());
+	audioDialog.addEventListener('close', stopAudio);
+	audioDialog.addEventListener('click', (event) => { if (event.target === audioDialog) audioDialog.close(); });
+	lightboxArtwork.addEventListener('error', () => { lightboxArtwork.hidden = true; });
 	fileInput.addEventListener('change', () => { const file = fileInput.files?.[0]; if (file) void uploadFile(file); });
 	void load();
-	return () => controller.abort();
+	return () => {
+		controller.abort();
+		stopVideo();
+		stopAudio();
+		if (videoDialog.open) videoDialog.close();
+		if (audioDialog.open) audioDialog.close();
+	};
 }

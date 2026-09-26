@@ -17,4 +17,26 @@
 .file-manager-view__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
 .file-manager-view__grid[hidden], .file-manager-view__load-more[hidden] { display: none; }
 .file-manager-view__load-more { justify-self: center; }
+.file-preview--video,
+.file-preview--audio { position: relative; }
+.file-preview-video { grid-area: 1 / 1; }
+.file-preview-audio-sizer { visibility: hidden; pointer-events: none; }
+.file-preview-media-trigger { position: absolute; inset: 0; display: block; width: 100%; height: 100%; padding: 0; border: 0; color: #fff; background: transparent; cursor: pointer; }
+.file-preview-media-trigger[hidden] { display: none; }
+.file-preview-audio-trigger > img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.file-preview-media__play { position: absolute; z-index: 1; top: 50%; left: 50%; display: grid; place-items: center; width: 54px; height: 54px; border: 1px solid #ffffff55; border-radius: 50%; background: #09090bcc; transform: translate(-50%, -50%); transition: background-color 120ms ease, transform 120ms ease; }
+.file-preview-media__play svg { width: 25px; height: 25px; fill: currentColor; transform: translateX(1px); }
+.file-preview-media-trigger:hover .file-preview-media__play { background: #7c3aed; transform: translate(-50%, -50%) scale(1.05); }
+.file-preview-media-trigger:focus-visible { outline: 3px solid #a78bfa; outline-offset: -3px; }
+.file-manager-view__video-dialog { contain: layout paint; box-sizing: border-box; width: min(1100px, calc(100vw - 32px)); max-width: none; max-height: calc(100dvh - 32px); aspect-ratio: 16 / 9; padding: 0; overflow: hidden; border: 0; border-radius: 18px; color: #fff; background: #050505; }
+.file-manager-view__video-dialog::backdrop { background: #050509d9; }
+.file-manager-view__video-dialog video { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: contain; background: #050505; }
+.file-manager-view__video-close { position: absolute; z-index: 2; top: 10px; right: 10px; display: grid; place-items: center; width: 38px; height: 38px; padding: 0 0 3px; border: 1px solid #ffffff45; border-radius: 50%; color: #fff; background: #09090bd9; font: 500 1.75rem/1 system-ui, sans-serif; cursor: pointer; }
+.file-manager-view__video-close:hover { background: #27272a; }
+.file-manager-view__video-close:focus-visible { outline: 2px solid #c4b5fd; outline-offset: 2px; }
+.file-manager-view__audio-dialog { box-sizing: border-box; width: min(520px, calc(100vw - 32px)); max-width: none; padding: 18px; overflow: hidden; border: 0; border-radius: 18px; color: #fff; background: #050505; }
+.file-manager-view__audio-dialog::backdrop { background: #050509d9; }
+.file-manager-view__audio-artwork { display: block; width: 100%; height: auto; max-height: min(62dvh, 484px); aspect-ratio: 1 / 1; object-fit: contain; border-radius: 10px; background: #09090b; }
+.file-manager-view__audio-artwork[hidden] { display: none; }
+.file-manager-view__audio-dialog audio { display: block; width: 100%; margin-top: 16px; }
 @media (max-width: 760px) { .file-manager-view__heading { align-items: flex-start; flex-direction: column; } }
