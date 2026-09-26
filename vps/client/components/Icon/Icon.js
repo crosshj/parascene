@@ -12,6 +12,7 @@ const ICONS = {
 	megaphone: '<path d="M11 6a13 13 0 0 0 8.4-2.8A1 1 0 0 1 21 4v12a1 1 0 0 1-1.6.8A13 13 0 0 0 11 14H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Zm-5 8a12 12 0 0 0 2.4 7.2 2 2 0 0 0 3.2-2.4A8 8 0 0 1 10 14M8 6v8"/>',
 	plus: '<path d="M12 5v14M5 12h14"/>',
 	more: '<circle cx="5" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1" fill="currentColor" stroke="none"/>',
+	send: '<path d="M12 19V5M5 12l7-7 7 7"/>',
 	bell: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0"/>',
 	credits: '<circle cx="12" cy="12" r="9"/><path d="M9.3 16.6V7.75h3.34c2.28 0 3.42.86 3.42 2.57 0 1.8-1.1 2.7-3.32 2.7h-2.27v3.58Zm1.17-4.63h2.29c1.39 0 2.09-.54 2.09-1.61 0-1.04-.7-1.56-2.11-1.56h-2.27Z"/>',
 	user: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',

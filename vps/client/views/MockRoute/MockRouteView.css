@@ -1,1 +1,3 @@
-.mock-route-view { max-width: 720px; margin: 0 auto; }
+.mock-route-view { display: grid; min-height: min(56vh, 440px); place-items: center; }
+.mock-route-view__surface { display: grid; width: 100%; min-height: 260px; place-items: center; background: color-mix(in srgb, var(--beta-panel-background, #eef1f6) 94%, currentColor 6%); }
+.mock-route-view__graphic { display: block; width: min(240px, 62vw); height: auto; overflow: visible; color: color-mix(in srgb, currentColor 68%, transparent); }

@@ -10,7 +10,7 @@ body {
 	color: #0f172a;
 }
 @media (prefers-color-scheme: dark) {
-	body { background: #0f0d1a; color: #ede9fe; }
+	body { background: #0e0d19; color: #ede9fe; }
 }
 header {
 	display: flex;

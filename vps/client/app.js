@@ -65,13 +65,22 @@ const router = createRouter({
 	outlet: layout.outlet,
 	routes: {
 		'/': () => renderHomeView({ outlet: layout.outlet, user: session.user, sidebarMock: sidebarMockPreference, onSidebarMockChange: updateSidebarMock }),
-		'/files': () => renderFileManagerView({ outlet: layout.outlet, filesApi, onUnauthorized: session.redirectToLogin }),
+		'/files': () => renderFileManagerView({ outlet: layout.outlet, filesApi, onUnauthorized: session.redirectToLogin, setHeaderMenu: layout.setHeaderMenu }),
 		'*': ({ path }) => {
 			const item = [...sidebarState.get().navigation, ...sidebarState.get().directMessages, ...sidebarState.get().servers, ...sidebarState.get().channels].find((entry) => isSidebarRouteActive(entry, path));
 			return renderMockRouteView({ outlet: layout.outlet, title: item?.label?.replace(/^[@#]/, '') || 'Coming soon' });
 		}
 	},
-	onRouteChange: ({ path }) => layout.syncRoute(path)
+	onRouteChange: ({ path }) => {
+		layout.syncRoute(path);
+		const item = [...sidebarState.get().navigation, ...sidebarState.get().directMessages, ...sidebarState.get().servers, ...sidebarState.get().channels].find((entry) => isSidebarRouteActive(entry, path));
+		layout.setPage({
+			key: path,
+			title: path === '/' ? 'Feed' : item?.label?.replace(/^[@#]/, '') || 'Coming soon',
+			icon: item?.icon || (item?.route?.kind === 'dm' ? 'user' : item?.route?.kind === 'channel' ? 'comments' : 'home'),
+			showComposer: path !== '/files'
+		});
+	}
 });
 
 await session.initialize();

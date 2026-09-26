@@ -1,4 +1,3 @@
-import { createButton } from '../../components/Button/Button.js';
 import { bindRefs, cloneTemplateElement, mountTemplate } from '../../utils/dom.js';
 import { formatDate, formatFileSize } from '../../utils/format.js';
 import template from './FileManagerView.html';
@@ -75,16 +74,25 @@ function createFileCard(file, { cardTemplate, previewTemplate, filesApi, onDelet
 	return root;
 }
 
-export async function renderFileManagerView({ outlet, filesApi, onUnauthorized }) {
+export async function renderFileManagerView({ outlet, filesApi, onUnauthorized, setHeaderMenu }) {
 	const controller = new AbortController();
 	const root = mountTemplate(outlet, template);
 	const refs = bindRefs(root);
-	document.title = 'Your files · parascene beta';
-	const { actions, audioClose, audioDialog, dialog, dialogTitle, dismiss, fileInput, grid, lightboxArtwork, lightboxAudio, lightboxVideo, loadMore, message, progress, status, uploadLabel, videoClose, videoDialog } = refs;
+	document.title = 'My Files · parascene beta';
+	const { audioClose, audioDialog, dialog, dialogTitle, dismiss, fileInput, grid, lightboxArtwork, lightboxAudio, lightboxVideo, loadMore, message, progress, status, videoClose, videoDialog } = refs;
 	const cardTemplate = root.querySelector('template[data-template="file-card"]');
 	const previewTemplate = root.querySelector('template[data-template="file-preview"]');
-	const refresh = createButton({ label: 'Refresh', onClick: () => load() });
-	actions.append(uploadLabel, refresh);
+	setHeaderMenu?.({
+		label: 'My Files',
+		items: [
+			{ label: 'Upload file', icon: 'files', action: 'upload' },
+			{ label: 'Refresh', action: 'refresh' }
+		],
+		onSelect: ({ action }) => {
+			if (action === 'upload' && !fileInput.disabled) fileInput.click();
+			if (action === 'refresh' && !fileInput.disabled) void load();
+		}
+	});
 	let nextOffset = null;
 	let busy = false;
 	const uploadedNames = new Map();
@@ -145,8 +153,6 @@ export async function renderFileManagerView({ outlet, filesApi, onUnauthorized }
 	function setBusy(value) {
 		busy = value;
 		fileInput.disabled = value;
-		uploadLabel.classList.toggle('is-disabled', value);
-		refresh.disabled = value;
 	}
 	function showDialog() { if (!dialog.open) dialog.showModal(); }
 	function showUploadError(text) {

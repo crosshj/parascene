@@ -9,6 +9,7 @@ export function createRouter({ outlet, routes, onRouteChange }) {
 	async function render() {
 		if (typeof disposePage === 'function') disposePage();
 		disposePage = null;
+		outlet.closest('.beta-outlet__scroll')?.scrollTo(0, 0);
 		outlet.scrollTop = 0;
 		const path = normalizeRoutePath(location.pathname);
 		onRouteChange?.({ path, url: new URL(location.href) });

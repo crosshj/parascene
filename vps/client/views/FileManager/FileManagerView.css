@@ -1,7 +1,6 @@
 .file-manager-view { display: grid; gap: 28px; }
-.file-manager-view__heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; }
+.file-manager-view__heading { display: grid; gap: 10px; }
 .file-manager-view__heading .state { margin-top: 10px; }
-.file-manager-view__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .file-manager-view__upload-input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 .file-manager-view__upload-label { display: inline-flex; align-items: center; min-height: 40px; padding: 0 16px; border-radius: 999px; color: #fff; background: #7c3aed; font-weight: 700; cursor: pointer; }
 .file-manager-view__upload-label.is-disabled { cursor: wait; opacity: .5; }
@@ -39,4 +38,3 @@
 .file-manager-view__audio-artwork { display: block; width: 100%; height: auto; max-height: min(62dvh, 484px); aspect-ratio: 1 / 1; object-fit: contain; border-radius: 10px; background: #09090b; }
 .file-manager-view__audio-artwork[hidden] { display: none; }
 .file-manager-view__audio-dialog audio { display: block; width: 100%; margin-top: 16px; }
-@media (max-width: 760px) { .file-manager-view__heading { align-items: flex-start; flex-direction: column; } }

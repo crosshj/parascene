@@ -48,8 +48,8 @@
 	z-index: 4;
 	display: flex;
 	align-items: center;
-	flex: 0 0 48px;
-	height: 48px;
+	flex: 0 0 var(--beta-chrome-row-height, 48px);
+	height: var(--beta-chrome-row-height, 48px);
 	padding: 0 10px;
 	box-sizing: border-box;
 	background: var(--beta-panel-background);

@@ -159,11 +159,9 @@
 				height: calc(100vh - var(--beta-shell-inset) - var(--beta-shell-inset));
 				min-height: calc(100vh - var(--beta-shell-inset) - var(--beta-shell-inset));
 				margin: var(--beta-shell-inset) var(--beta-shell-inset) var(--beta-shell-inset) calc(var(--beta-sidebar-width) + var(--beta-shell-inset) + var(--beta-panel-gap));
-				padding: 48px clamp(24px, 5vw, 72px);
-				overflow-x: hidden;
-				overflow-y: auto;
+				padding: 0;
+				overflow: hidden;
 				overscroll-behavior: none;
-				scrollbar-gutter: stable;
 				border-radius: var(--beta-panel-radius);
 				corner-shape: squircle;
 				background: var(--beta-panel-background);
@@ -213,11 +211,11 @@
 			}
 			@media (prefers-color-scheme: dark) {
 				:root {
-					--beta-canvas-background: #0f0d1a;
-					--beta-panel-background: color-mix(in srgb, #191627 88%, #0f0d1a);
+					--beta-canvas-background: #0e0d19;
+					--beta-panel-background: color-mix(in srgb, #191627 88%, #0e0d19);
 				}
 				body {
-					background: #0f0d1a;
+					background: #0e0d19;
 					color: #ede9fe;
 				}
 			}
@@ -226,7 +224,6 @@
 					height: calc(100vh - var(--beta-mobile-nav-height) - var(--beta-shell-inset) - var(--beta-shell-inset));
 					min-height: calc(100vh - var(--beta-mobile-nav-height) - var(--beta-shell-inset) - var(--beta-shell-inset));
 					margin: var(--beta-shell-inset);
-					padding: 32px 16px;
 				}
 				.app-layout-placeholder-sidebar {
 					display: none;
