@@ -2,6 +2,7 @@
 	--beta-sidebar-width: 272px;
 	--beta-mobile-nav-height: 68px;
 	--beta-shell-inset: 6px;
+	--beta-shell-inset-inline: 6px;
 	--beta-panel-gap: 8px;
 	--beta-panel-radius: 20px;
 	--beta-canvas-background: #ffffff;
@@ -28,7 +29,7 @@ body.beta-layout main#app-outlet {
 	min-width: 0;
 	height: calc(100vh - var(--beta-shell-inset) - var(--beta-shell-inset));
 	min-height: calc(100vh - var(--beta-shell-inset) - var(--beta-shell-inset));
-	margin: var(--beta-shell-inset) var(--beta-shell-inset) var(--beta-shell-inset) calc(var(--beta-sidebar-width) + var(--beta-shell-inset) + var(--beta-panel-gap));
+	margin: var(--beta-shell-inset) var(--beta-shell-inset-inline) var(--beta-shell-inset) calc(var(--beta-sidebar-width) + var(--beta-shell-inset-inline) + var(--beta-panel-gap));
 	padding: 48px clamp(24px, 5vw, 72px);
 	overflow-x: hidden;
 	overflow-y: auto;

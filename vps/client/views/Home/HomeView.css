@@ -1,5 +1,16 @@
 .home-card { max-width: 720px; margin: 0 auto; }
 .home-view__actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 28px; }
+.home-view__sidebar-mock { display: grid; gap: 10px; margin-top: 28px; padding-top: 20px; border-top: 1px solid color-mix(in srgb, currentColor 12%, transparent); }
+.home-view__sidebar-mock h2,
+.home-view__sidebar-mock p { margin: 0; }
+.home-view__sidebar-mock h2 { font-size: 1rem; }
+.home-view__sidebar-mock p { opacity: .72; font-size: .875rem; }
+.home-view__mock-modes { display: flex; flex-wrap: wrap; gap: 16px; }
+.home-view__mock-modes label,
+.home-view__mock-sections label { display: flex; align-items: center; gap: 8px; }
+.home-view__mock-sections { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px 16px; }
+.home-view__mock-sections[hidden] { display: none; }
+.home-view__mock-sections select { min-height: 34px; margin-left: auto; padding: 0 8px; border: 1px solid color-mix(in srgb, currentColor 20%, transparent); border-radius: 8px; color: inherit; background: transparent; font: inherit; }
 .primary-link,
 .secondary-link {
 	display: inline-flex;

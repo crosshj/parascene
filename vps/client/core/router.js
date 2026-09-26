@@ -3,7 +3,7 @@ function normalizeRoutePath(pathname) {
 	return value || '/';
 }
 
-export function createRouter({ outlet, routes }) {
+export function createRouter({ outlet, routes, onRouteChange }) {
 	let disposePage = null;
 
 	async function render() {
@@ -11,7 +11,8 @@ export function createRouter({ outlet, routes }) {
 		disposePage = null;
 		outlet.scrollTop = 0;
 		const path = normalizeRoutePath(location.pathname);
-		const handler = routes[path] || routes['/'];
+		onRouteChange?.({ path, url: new URL(location.href) });
+		const handler = routes[path] || routes['*'] || routes['/'];
 		const result = await handler({ path });
 		disposePage = typeof result === 'function' ? result : null;
 		document.querySelectorAll('[data-spa-link]').forEach((link) => {
@@ -19,6 +20,7 @@ export function createRouter({ outlet, routes }) {
 			if (target === path) link.setAttribute('aria-current', 'page');
 			else link.removeAttribute('aria-current');
 		});
+		onRouteChange?.({ path, url: new URL(location.href) });
 	}
 
 	function onClick(event) {
@@ -28,7 +30,7 @@ export function createRouter({ outlet, routes }) {
 		const url = new URL(link.href, location.href);
 		if (url.origin !== location.origin) return;
 		event.preventDefault();
-		history.pushState({}, '', url.pathname + url.search + url.hash);
+		history.pushState({ parascene: true }, '', url.pathname + url.search + url.hash);
 		void render();
 	}
 
@@ -39,7 +41,7 @@ export function createRouter({ outlet, routes }) {
 			void render();
 		},
 		navigate(path) {
-			history.pushState({}, '', path);
+			history.pushState({ parascene: true }, '', path);
 			return render();
 		},
 		destroy() {

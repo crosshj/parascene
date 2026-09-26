@@ -1,5 +1,5 @@
 <div class="sidebar-view" data-ref="root">
-	<aside class="sidebar-view__panel" data-ref="panel" aria-label="Application menu">
+	<aside class="sidebar-view__panel has-scroll-below" data-ref="panel" aria-label="Application menu">
 		<div class="sidebar-view__head">
 			<a class="sidebar-view__brand" href="/" data-spa-link aria-label="Go to parascene home">
 				<svg class="sidebar-view__brand-mark" width="120" height="40" viewBox="0 0 185 40" aria-hidden="true">
@@ -7,34 +7,31 @@
 				</svg>
 			</a>
 		</div>
-		<div class="sidebar-view__scroll">
+		<div class="sidebar-view__scroll" data-ref="scroll">
+			<nav class="sidebar-view__menu" data-ref="menu" aria-label="Primary navigation"></nav>
 			<section class="sidebar-view__section">
-				<div class="sidebar-view__section-head"><h2>Navigation</h2></div>
-				<nav class="sidebar-view__menu" data-ref="menu" aria-label="Primary navigation"></nav>
-			</section>
-			<section class="sidebar-view__section">
-				<div class="sidebar-view__section-head"><h2>Direct messages</h2><button type="button" aria-label="New direct message">+</button></div>
+				<div class="sidebar-view__section-head"><h2>Direct messages</h2><button type="button" data-menu-key="addDm" aria-label="New direct message" aria-haspopup="menu" aria-expanded="false"><span data-icon="plus"></span></button></div>
 				<div class="sidebar-view__rows" data-ref="directMessages"></div>
 			</section>
 			<section class="sidebar-view__section">
-				<div class="sidebar-view__section-head"><h2>Servers</h2><button type="button" aria-label="Add or browse servers">+</button></div>
+				<div class="sidebar-view__section-head"><h2>Servers</h2><button type="button" data-menu-key="addServer" aria-label="Add or browse servers" aria-haspopup="menu" aria-expanded="false"><span data-icon="plus"></span></button></div>
 				<div class="sidebar-view__rows" data-ref="servers"></div>
 			</section>
 			<section class="sidebar-view__section">
-				<div class="sidebar-view__section-head"><h2>Channels</h2><button type="button" aria-label="Open or browse channels">+</button></div>
+				<div class="sidebar-view__section-head"><h2>Channels</h2><button type="button" data-menu-key="addChannel" aria-label="Open or browse channels" aria-haspopup="menu" aria-expanded="false"><span data-icon="plus"></span></button></div>
 				<div class="sidebar-view__rows" data-ref="channels"></div>
 			</section>
 		</div>
-		<div class="sidebar-view__footer">
+		<div class="sidebar-view__footer" data-ref="footer">
 			<div class="sidebar-view__footer-row">
-				<button class="sidebar-view__user" type="button" aria-label="Account">
+				<button class="sidebar-view__user" type="button" data-menu-key="account" aria-label="Account" aria-haspopup="menu" aria-expanded="false">
 					<span class="sidebar-view__avatar" data-ref="avatar" aria-hidden="true"><span data-ref="avatarInitial">H</span><img data-ref="avatarImage" alt="" hidden></span>
 					<span class="sidebar-view__account-label" data-ref="account">Account</span>
 				</button>
 				<div class="sidebar-view__footer-actions">
-					<button class="sidebar-view__footer-action" type="button" aria-label="Notifications"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg></button>
-					<button class="sidebar-view__footer-action sidebar-view__credits" type="button" aria-label="Credits"><span>0</span></button>
-					<button class="sidebar-view__footer-action sidebar-view__logout" data-ref="logout" type="button" aria-label="Log out"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17l5-5-5-5M15 12H3M21 3v18" /></svg></button>
+					<button class="sidebar-view__footer-action" type="button" data-menu-key="notifications" aria-label="Notifications" aria-haspopup="menu" aria-expanded="false"><span data-icon="bell"></span></button>
+					<button class="sidebar-view__footer-action sidebar-view__credits" type="button" data-menu-key="credits" aria-label="Credits" aria-haspopup="menu" aria-expanded="false"><span data-icon="credits"></span><span data-ref="credits">0</span></button>
+					<button data-ref="logout" type="button" hidden>Log out</button>
 				</div>
 			</div>
 		</div>
