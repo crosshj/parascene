@@ -2,6 +2,7 @@ import { avatarMarkup } from '../../components/Avatar/Avatar.js';
 import { iconMarkup } from '../../components/Icon/Icon.js';
 import { createPopupMenu } from '../../components/PopupMenu/PopupMenu.js';
 import { bindRefs, escapeHtml, htmlFragment, mountTemplate } from '../../utils/dom.js';
+import { formatCredits } from '../../utils/format.js';
 import { isSidebarRouteActive } from '../../utils/sidebarRoutes.js';
 import template from './SidebarView.html';
 import './SidebarView.css';
@@ -423,7 +424,7 @@ export function mountSidebarView({ outlet, model, onAction }) {
 		update: renderModel,
 		setRosterStatus,
 		updateCredits(value) {
-			const next = Number.isFinite(Number(value)) ? Number(value).toLocaleString('en-US') : '0';
+			const next = formatCredits(value);
 			if (refs.credits.textContent !== next) refs.credits.textContent = next;
 		},
 		destroy() {

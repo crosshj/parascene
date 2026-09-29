@@ -16,6 +16,7 @@ import { renderHomeView } from './views/Home/HomeView.js';
 import { renderMockRouteView } from './views/MockRoute/MockRouteView.js';
 import { createSidebarModel } from './models/sidebar.js';
 import { mobileNavigationItems } from './config/sidebar.js';
+import { formatCredits } from './utils/format.js';
 import { isSidebarRouteActive, parseSidebarPath } from './utils/sidebarRoutes.js';
 
 const bootstrap = window.__PARASCENE_BOOTSTRAP__ || {};
@@ -56,7 +57,7 @@ const sidebarState = createAppState(createSidebarModel(sidebarMockPreference, si
 
 function currentSidebarModel() {
 	const model = createSidebarModel(sidebarMockPreference, sidebarResource?.data || { viewerId, threads: [], servers: [] });
-	model.footer.credits = creditsResource?.data?.balance ?? '';
+	model.footer.credits = creditsResource?.data ? formatCredits(creditsResource.data.balance) : '';
 	return model;
 }
 
@@ -145,8 +146,8 @@ const unsubscribeCredits = creditsResource?.subscribe((snapshot) => {
 	}
 	if (snapshot.data) layout.updateCredits(snapshot.data.balance);
 });
-if (sidebarResource) void sidebarResource.refresh().catch(() => undefined);
-if (creditsResource) void creditsResource.refresh().catch(() => undefined);
+if (sidebarResource) void sidebarResource.loadIfNeeded().catch(() => undefined);
+if (creditsResource) void creditsResource.loadIfNeeded().catch(() => undefined);
 const filesCache = viewerId ? createStorageCache(`prsn-vps-files-v1:${viewerId}`, {
 	validate: (data) => Array.isArray(data?.files) && data.files.every((file) => file && typeof file.id === 'string')
 }) : null;
@@ -182,8 +183,8 @@ let lastAppRefreshAt = 0;
 function refreshSharedResources() {
 	if (document.visibilityState === 'hidden' || Date.now() - lastAppRefreshAt < 5_000) return;
 	lastAppRefreshAt = Date.now();
-	if (sidebarResource) void sidebarResource.refresh({ force: true }).catch(() => undefined);
-	if (creditsResource) void creditsResource.refresh({ force: true }).catch(() => undefined);
+	if (sidebarResource) void sidebarResource.loadIfNeeded().catch(() => undefined);
+	if (creditsResource) void creditsResource.loadIfNeeded().catch(() => undefined);
 }
 function onVisibilityChange() { if (document.visibilityState === 'visible') refreshSharedResources(); }
 window.addEventListener('storage', syncExternalCache);

@@ -1,4 +1,5 @@
 import { iconMarkup } from '../../components/Icon/Icon.js';
+import { formatCredits } from '../../utils/format.js';
 import { escapeHtml } from '../../utils/dom.js';
 import './SidebarOverlaysView.css';
 
@@ -82,7 +83,7 @@ export function mountSidebarOverlays({ onAction, creditsResource, onClaimCredits
 			return;
 		}
 		retryCreditsButton.hidden = true;
-		const balanceText = Number(data.balance || 0).toLocaleString('en-US');
+		const balanceText = formatCredits(data.balance);
 		if (creditsBalance.textContent !== balanceText) creditsBalance.textContent = balanceText;
 		claimButton.disabled = !data.canClaim || claiming || snapshot.status === 'loading';
 		if (!claiming && !claimStatus.dataset.error) {

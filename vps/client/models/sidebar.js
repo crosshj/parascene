@@ -1,4 +1,5 @@
 import { navigationItems, sidebarMenus } from '../config/sidebar.js';
+import { formatCredits } from '../utils/format.js';
 
 function rosterModel(roster = {}) {
 	const threads = Array.isArray(roster.threads) ? roster.threads : [];
@@ -45,7 +46,8 @@ function rosterModel(roster = {}) {
 	const pinnedFirst = (rows) => [...rows].sort((a, b) => Number(pinnedIds.has(b.id)) - Number(pinnedIds.has(a.id)));
 	return {
 		navigation, directMessages: pinnedFirst(directMessages), servers: pinnedFirst(servers),
-		channels: pinnedFirst(channelRows.filter((row) => !serverThreadIds.has(Number(row.route.threadId))))
+		channels: pinnedFirst(channelRows.filter((row) => !serverThreadIds.has(Number(row.route.threadId)))),
+		footer: { credits: roster?.credits == null ? '' : formatCredits(roster.credits) }
 	};
 }
 
@@ -53,7 +55,7 @@ export function createSidebarModel(preference = {}, roster = null) {
 	const model = {
 		...rosterModel(roster || {}),
 		menus: structuredClone(sidebarMenus),
-		footer: { credits: '' }
+		footer: { credits: roster?.credits == null ? '' : formatCredits(roster.credits) }
 	};
 	if (preference.mode !== 'minimal') return model;
 	for (const key of ['directMessages', 'servers', 'channels']) {
