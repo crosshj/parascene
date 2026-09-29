@@ -78,7 +78,13 @@ export function createCreationsRoutes({ creations, users }) {
 			const response = await creations.fetchMedia(key, { variant: req.query.variant, method: req.method, range: req.get("range") });
 			if (!response.ok) return res.status(response.status === 404 ? 404 : 502).json({ error: "Media not found" });
 			setMediaHeaders(res, response, key);
-			res.set("Cache-Control", "private, max-age=3600");
+			// Creation media is treated as shareable, non-sensitive content. Keep the
+			// ownership check on origin misses, then let browsers and Cloudflare reuse
+			// the successful representation. The URL contains the media key and variant,
+			// so different media objects do not collide in the cache. Do not use
+			// `immutable`: these URLs are stable, but are not formally content-addressed.
+			res.set("Cache-Control", "public, max-age=86400, stale-while-revalidate=86400");
+			res.set("Cloudflare-CDN-Cache-Control", "public, max-age=604800, stale-while-revalidate=86400");
 			if (req.method === "HEAD" || !response.body) return res.end();
 			return Readable.fromWeb(response.body).on("error", next).pipe(res);
 		} catch (error) { return next(error); }
