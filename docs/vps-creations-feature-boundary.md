@@ -3,6 +3,8 @@
 > # 🚨🔥 DO NOT USE THE DEPRECATED STANDALONE WWW ROUTES AS THE VPS FRONTEND SOURCE OF TRUTH 🔥🚨
 >
 > **THE ACTIVE WWW SPA IS THE SOURCE OF TRUTH.** We are bringing the SPA over into VPS/Beta. The old standalone/page-oriented WWW implementations are deprecated and must be removed or ignored wherever possible. Do not copy their route shells, card markup, layout rules, breakpoints, or interaction patterns merely because they are nearby or easier to find. Before implementing a VPS feature, identify the corresponding active SPA implementation and port that boundary and its shared behavior. If no SPA equivalent exists, document that exception explicitly before inventing a new pattern.
+>
+> **VPS IS A SELF-CONTAINED DEPLOYMENT. NEVER IMPORT RUNTIME CODE FROM OUTSIDE `vps/`.** Do not import from `api_routes/`, `public/`, `src/`, or any other legacy/application tree. Inspect those trees as references only; port the required behavior into VPS-owned modules. The Docker image contains `vps/` and nothing else from the repository.
 
 ## Purpose
 

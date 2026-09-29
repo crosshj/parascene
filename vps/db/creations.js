@@ -1,8 +1,17 @@
 import path from "node:path";
-import { isHiddenInGroupMeta } from "../../api_routes/utils/groupV2.js";
 
 const IMAGE_BUCKET = "prsn_created-images";
 const THUMBNAIL_BUCKET = "prsn_created-images-thumbnails";
+
+// Keep the VPS image-list boundary self-contained. The deployment image contains
+// only vps/, so it must not import from the legacy WWW/API tree.
+function isHiddenInGroupMeta(meta) {
+	if (!meta || typeof meta !== "object") return false;
+	return [meta.hidden_in_group, meta.hidden_in_project].some((value) => {
+		const id = Number(value);
+		return Number.isFinite(id) && id > 0;
+	});
+}
 
 function safeKey(value) {
 	const key = String(value || "").trim();

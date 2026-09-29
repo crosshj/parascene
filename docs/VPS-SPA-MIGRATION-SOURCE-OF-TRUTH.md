@@ -14,6 +14,19 @@ Before writing or moving VPS frontend code:
 4. Port that structure and behavior into VPS, replacing only API, resource, navigation, and build seams.
 5. If there is no active SPA equivalent, document the exception and the new decision.
 
+## 🚨 Deployment boundary: VPS must be self-contained
+
+**VPS code must never import runtime code from outside the `vps/` directory.**
+
+That means no imports from `api_routes/`, `public/`, `src/`, or other legacy/application trees in VPS server or client modules. Those trees may be inspected as references, but required behavior must be deliberately ported into a VPS-owned module. The Docker deployment contains `vps/`; an import that works only because the monorepo happens to have a parent directory is a deployment bug.
+
+When shared behavior is needed:
+
+- use the active WWW SPA code as the reference;
+- port the required implementation into `vps/`;
+- keep the port’s boundary and ownership clear;
+- verify the module graph from the Docker image’s `/app` root before deploying.
+
 ## Creations example
 
 The active SPA creations browse surface is the chat/pseudo-channel implementation:
