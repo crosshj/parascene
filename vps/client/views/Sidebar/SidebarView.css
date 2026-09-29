@@ -251,8 +251,9 @@
 }
 .sidebar-view__unread { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; box-sizing: border-box; min-width: 16px; height: 16px; padding: 0 5px; border-radius: 999px; color: var(--beta-accent-text); background: var(--beta-accent); font-size: .6rem; font-weight: 700; line-height: normal; }
 .sidebar-view__unread[hidden] { display: none; }
-.sidebar-view__row-controls { position: absolute; top: 50%; right: var(--beta-sidebar-control-inset); display: flex; width: 56px; align-items: center; transform: translateY(-50%); }
-.sidebar-view__badge-slot { display: inline-flex; flex: 0 0 28px; width: 28px; align-items: center; justify-content: center; }
+.sidebar-view__menu-item:hover .sidebar-view__unread { visibility: hidden; }
+.sidebar-view__row-controls { position: absolute; top: 50%; right: var(--beta-sidebar-control-inset); width: 56px; height: 28px; transform: translateY(-50%); }
+.sidebar-view__badge-slot { position: absolute; top: 50%; right: 0; display: inline-flex; width: 28px; height: 28px; align-items: center; justify-content: center; transform: translateY(-50%); }
 .sidebar-view__row-menu {
 	display: inline-flex;
 	align-items: center;
@@ -269,12 +270,16 @@
 	background: transparent;
 	cursor: pointer;
 	opacity: 0;
+	position: absolute;
+	top: 50%;
+	right: 0;
+	transform: translateY(-50%);
 	transition: opacity 120ms ease, color 120ms ease, background-color 120ms ease;
 }
 .sidebar-view__row:hover .sidebar-view__row-menu,
 .sidebar-view__row:focus-within .sidebar-view__row-menu,
 .sidebar-view__row-menu[aria-expanded="true"] { opacity: 1; }
-.sidebar-view__row:not(.has-unread) .sidebar-view__row-menu { transform: translateX(28px); }
+.sidebar-view__row.has-unread:hover .sidebar-view__badge-slot { visibility: hidden; }
 .sidebar-view__row-menu:hover { color: inherit; background: color-mix(in srgb, currentColor 8%, transparent); }
 .sidebar-view__row-menu:focus-visible { outline: none; }
 .sidebar-view__row-menu-icon { display: block; width: 16px; height: 16px; stroke-width: 2; }
