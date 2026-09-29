@@ -13,6 +13,11 @@
 	background: var(--beta-panel-background);
 	z-index: 10;
 }
+
+@media (max-width: 1023px) {
+	.sidebar-view__panel,
+	.sidebar-view__resize-handle { display: none; }
+}
 .sidebar-view__panel::before,
 .sidebar-view__panel::after {
 	position: absolute;

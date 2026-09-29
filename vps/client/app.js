@@ -4,12 +4,14 @@ import { initializeLayout } from './core/layout.js';
 import { createRouter } from './core/router.js';
 import { createSession } from './core/session.js';
 import { createFilesApi } from './api/files.js';
+import { createCreationsApi } from './api/creations.js';
 import { createSidebarApi } from './api/sidebar.js';
 import { createCreditsApi } from './api/credits.js';
 import { createResource } from './core/resource.js';
 import { createResourceRegistry } from './core/resourceRegistry.js';
 import { createStorageCache } from './core/storageCache.js';
 import { renderFileManagerView } from './views/FileManager/FileManagerView.js';
+import { renderCreationsView } from './views/Creations/CreationsView.js';
 import { renderHomeView } from './views/Home/HomeView.js';
 import { renderMockRouteView } from './views/MockRoute/MockRouteView.js';
 import { createSidebarModel } from './models/sidebar.js';
@@ -19,6 +21,7 @@ import { isSidebarRouteActive, parseSidebarPath } from './utils/sidebarRoutes.js
 const bootstrap = window.__PARASCENE_BOOTSTRAP__ || {};
 const shell = document.getElementById('app-shell');
 const filesApi = createFilesApi(bootstrap.filesOrigin || '');
+const creationsApi = createCreationsApi();
 const sidebarApi = createSidebarApi();
 const creditsApi = createCreditsApi();
 const viewerId = Number(bootstrap.user?.id) || null;
@@ -152,12 +155,21 @@ const filesLease = viewerId ? appResources.acquire(['files', viewerId], () => cr
 	load: ({ signal }) => filesApi.list({ signal })
 })) : null;
 const filesResource = filesLease?.resource || null;
+const creationsCache = viewerId ? createStorageCache(`prsn-vps-creations-v1:${viewerId}`, {
+	validate: (data) => Array.isArray(data?.creations) && typeof data?.has_more === 'boolean'
+}) : null;
+const creationsLease = viewerId ? appResources.acquire(['creations', viewerId], () => createResource({
+	key: ['creations', viewerId], cache: creationsCache, maxAge: 30_000,
+	load: ({ signal }) => creationsApi.list({ signal })
+})) : null;
+const creationsResource = creationsLease?.resource || null;
 
 function syncExternalCache(event) {
 	const targets = [
 		[sidebarCache, sidebarResource, `prsn-vps-sidebar-roster-v1:${viewerId}`],
 		[creditsCache, creditsResource, `prsn-vps-credits-v1:${viewerId}`],
-		[filesCache, filesResource, `prsn-vps-files-v1:${viewerId}`]
+		[filesCache, filesResource, `prsn-vps-files-v1:${viewerId}`],
+		[creationsCache, creationsResource, `prsn-vps-creations-v1:${viewerId}`]
 	];
 	for (const [cache, resource, key] of targets) {
 		if (!resource || event.key !== key) continue;
@@ -197,6 +209,7 @@ const router = createRouter({
 	outlet: layout.outlet,
 	routes: {
 		'/': () => renderHomeView({ outlet: layout.outlet, user: session.user, sidebarMock: sidebarMockPreference, onSidebarMockChange: updateSidebarMock }),
+		'/creations': () => renderCreationsView({ outlet: layout.outlet, creationsApi, creationsResource, onUnauthorized: session.redirectToLogin, setHeaderMenu: layout.setHeaderMenu }),
 		'/files': () => renderFileManagerView({ outlet: layout.outlet, filesApi, filesResource, onUnauthorized: session.redirectToLogin, setHeaderMenu: layout.setHeaderMenu }),
 		'*': ({ path }) => {
 			const item = [...sidebarState.get().navigation, ...sidebarState.get().directMessages, ...sidebarState.get().servers, ...sidebarState.get().channels].find((entry) => isSidebarRouteActive(entry, path));
@@ -222,6 +235,7 @@ window.addEventListener('pagehide', () => {
 	window.clearInterval(sharedRefreshInterval);
 	sidebarLease?.release();
 	creditsLease?.release();
-	filesLease?.release();
+		filesLease?.release();
+		creationsLease?.release();
 	appResources.clear();
 }, { once: true });

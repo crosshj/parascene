@@ -23,6 +23,7 @@ const ICONS = {
 	chart: '<path d="M5 19V11M12 19V5M19 19V8"/>',
 	help: '<circle cx="12" cy="12" r="10"/><path d="M9.6 9a2.5 2.5 0 1 1 4.7 1.2c-.7 1.1-2.3 1.4-2.3 3M12 17h.01"/>',
 	close: '<path d="m18 6-12 12M6 6l12 12"/>'
+	, music: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>'
 };
 
 const STROKE_WIDTHS = {
@@ -39,7 +40,8 @@ const STROKE_WIDTHS = {
 	credits: 2,
 	gear: 2,
 	user: 2,
-	logout: 2
+	logout: 2,
+	music: 1.75
 };
 
 export function iconMarkup(name, className = '') {

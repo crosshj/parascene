@@ -6,7 +6,7 @@
 	--beta-panel-gap: 8px;
 	--beta-panel-radius: 20px;
 	--beta-chrome-row-height: 48px;
-	--beta-page-gutter: clamp(24px, 5vw, 72px);
+	--beta-page-gutter: 24px;
 	--beta-canvas-background: #ffffff;
 	--beta-panel-background: #eef1f6;
 	--beta-accent: #7c3aed;
@@ -77,13 +77,29 @@ body.beta-layout main#app-outlet {
 	}
 }
 
-@media (max-width: 760px) {
+@media (max-width: 1023px) {
 	body.beta-layout main#app-outlet {
-		height: calc(100vh - var(--beta-mobile-nav-height) - var(--beta-shell-inset) - var(--beta-shell-inset));
-		min-height: calc(100vh - var(--beta-mobile-nav-height) - var(--beta-shell-inset) - var(--beta-shell-inset));
+		width: auto;
+		max-width: none;
+		height: calc(100vh - 2 * var(--beta-shell-inset));
+		min-height: calc(100vh - 2 * var(--beta-shell-inset));
+		margin: var(--beta-shell-inset);
+		margin-right: var(--beta-shell-inset-inline);
+		margin-left: var(--beta-shell-inset-inline);
+	}
+	.beta-outlet__content { padding-top: 60px; }
+	.beta-outlet__header { height: var(--beta-chrome-row-height); }
+}
+
+@media (max-width: 768px) {
+	body.beta-layout main#app-outlet {
+		width: auto;
+		max-width: none;
+		height: calc(100vh - var(--beta-mobile-nav-height) - 2 * var(--beta-shell-inset));
+		min-height: calc(100vh - var(--beta-mobile-nav-height) - 2 * var(--beta-shell-inset));
 		margin: var(--beta-shell-inset);
 	}
-	.beta-outlet__content { padding-top: 68px; padding-right: 16px; padding-left: 16px; }
-	:root { --beta-page-gutter: 16px; }
+	.beta-outlet__content { padding-top: 68px; padding-right: 8px; padding-left: 8px; }
+	:root { --beta-page-gutter: 8px; }
 	.beta-outlet__header { min-height: 0; height: 58px; padding-right: 6px; padding-left: 6px; }
 }
