@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
 import { createAuthRoutes } from "./routes/auth.js";
 import { createCdnRoutes } from "./routes/cdn.js";
+import { createGenericRoutes } from "./routes/generic.js";
+import { createFilesCors } from "./routes/middleware/filesCors.js";
 import { createAuthMiddleware } from "./routes/middleware/auth.js";
 import { createCdnHostBoundary } from "./routes/middleware/cdnHost.js";
 import createPageRoutes from "./routes/pages.js";
@@ -27,6 +29,9 @@ app.set("trust proxy", true);
 app.use("/api/auth", express.json({ limit: "1mb" }));
 app.use(cookieParser());
 app.use(createAuthMiddleware(db.sessions));
+// The beta application also serves the public profile/edited-image compatibility
+// path. The CDN host serves the same VPS-owned route through createCdnRoutes.
+app.use("/api/images/generic", createFilesCors(), createGenericRoutes(db.genericFiles, db.users));
 app.use(createCdnHostBoundary(createCdnRoutes({ profileFiles: db.profileFiles, genericFiles: db.genericFiles, users: db.users })));
 app.use(createAppDataRoutes({ users: db.users, credits: db.credits }));
 app.use(createCreationsRoutes({ creations: db.creations, users: db.users }));

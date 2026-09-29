@@ -155,7 +155,15 @@ export function createGenericRoutes(genericFiles, users) {
 			const type = contentTypeForFile({ name: key });
 			res.status(upstream.status);
 			setResponseHeaders(res, upstream, key, type);
-			res.set("Cache-Control", publicRead ? "public, max-age=3600" : "private, no-store");
+			if (publicRead) {
+				// Profile and edited images are shareable site assets. Keep the browser
+				// copy for a day and let Cloudflare retain it for a week while allowing
+				// a stale response during background revalidation.
+				res.set("Cache-Control", "public, max-age=86400, stale-while-revalidate=86400");
+				res.set("Cloudflare-CDN-Cache-Control", "public, max-age=604800, stale-while-revalidate=86400");
+			} else {
+				res.set("Cache-Control", "private, no-store");
+			}
 			if (req.method === "HEAD" || !upstream.body) return res.end();
 			return Readable.fromWeb(upstream.body).on("error", (error) => res.destroy(error)).pipe(res);
 		} catch (error) {
