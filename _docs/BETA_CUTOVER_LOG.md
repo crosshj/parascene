@@ -20,7 +20,7 @@ Shared areas should be extracted into clear modules. The overall structure needs
 
 These may ultimately be cleanup tasks, but they are important to the long-term health of the system. I’ll leave it there for now.
 
-### AI feedback (FPT-5.6-Luna medium)
+### AI feedback (GPT-5.6-Luna medium)
 
 This seems like the right direction. Using creation detail and overlays as the next vertical slice is especially strong because it proves an application-wide pattern while advancing a real feature.
 
@@ -38,3 +38,35 @@ The areas still needing explicit attention are:
 - Clear user-facing states when the API, media service, or VPS is unavailable.
 
 The key distinction is between proving that a feature can be migrated and proving that the resulting architecture is healthy enough to operate and extend. Creation detail can test both. A concise beta-readiness checklist would turn the broader concerns into measurable criteria.
+
+### Farther-reaching future direction
+
+After the current pushes are more stable, I want to return to the larger idea behind Parascene: helping people build characters and worlds. I want the product to be less centered on social activity for its own sake. The social layer should support the work of building characters, worlds, and shared creative settings.
+
+That could lead to workflows that help people review their creations, identify recurring characters, and turn them into character sheets or other structured creative resources. The goal is to help people develop characters in a meaningful, almost three-dimensional sense, and to create media that travels naturally to the platforms around us. Parascene should not become a warehouse for an ever-growing pile of undifferentiated files.
+
+This raises the possibility of resource limits on stored creations and files, along with tools for compacting or distilling a body of work into more useful summaries and reusable assets. The analogy is to compaction in an AI coding session: at some point, accumulated material needs to be condensed so the important structure remains usable. This could also help control infrastructure costs that are not supported by subscribers or other contributors.
+
+I need stronger safeguards around these resources. That includes thinking about how to protect Parascene itself and how to safely protect connected servers if the broader network model becomes more active. At the same time, I may want to reduce the prominence of the server concept in the product. There are not currently enough users interested in running servers to justify making that use case central to the interface.
+
+This does not mean abandoning the server architecture or the original peer-to-peer vision. It means simplifying the product around the use case that is active now, while keeping the underlying capabilities available for a later stage. The two related goals are to expose fewer distractions and to provide stronger tools that guide people toward the creative work Parascene is meant to support.
+
+#### AI feedback
+
+This is a coherent and potentially stronger product thesis: Parascene would be organized around persistent creative entities—characters, worlds, styles, and relationships—rather than around an endless stream of generated media. Social features would remain, but as infrastructure for collaboration, feedback, and shared development.
+
+The most important caution is not to turn “fewer stored files” into “users must delete their work.” A useful compaction system should be additive and reversible where possible. It could distinguish between source material, working variations, canonical creations, character/world records, and externally published exports. Users should be able to archive, export, restore, or rehydrate material, with clear warnings before anything is deleted.
+
+The character and world idea also needs a concrete first workflow. A good pilot might let a user select several creations, identify or define a character, review the extracted traits and references, edit the resulting character sheet, and use it in a later generation. That would test whether the concept creates real value before introducing a broad knowledge-management system.
+
+The product should be careful about automatically inferring identity, canon, or ownership from a collection of creations. Extraction should be presented as a draft for the user to confirm. Provenance, permissions, privacy, and the distinction between a private working character and a publicly shareable one will matter as soon as these resources can be reused by other people.
+
+The server simplification is sensible as a product decision, but it should be validated rather than treated as permanent. Measure whether server UI is confusing, unused, or merely difficult to discover. Keep provider APIs, credits accounting, and connection boundaries stable underneath while reducing their prominence in the main experience. This preserves optionality without forcing the current audience to understand the entire network model.
+
+There are three separate future initiatives here:
+
+- **Creative direction:** make characters, worlds, and reusable creative context central to the product.
+- **Information lifecycle:** help users organize, distill, archive, export, and eventually remove accumulated media.
+- **Platform simplification:** make servers and providers less prominent for ordinary users while preserving them as infrastructure.
+
+They should not be implemented as one large redesign. The safest sequence is to validate the creative workflow first, establish user-controlled lifecycle primitives second, and then simplify the server-facing product based on observed usage. The main measures should be whether users return to develop a character or world, whether extracted resources are reused in later creations, whether users understand what is canonical, and whether storage costs become more predictable without undermining trust.
