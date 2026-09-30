@@ -12,6 +12,7 @@ function htmlStringImports() {
 		name: "html-string-imports",
 		async load(id) {
 			if (!id.endsWith(".html")) return null;
+			this.addWatchFile(id);
 			const source = await fs.readFile(id, "utf8");
 			return `export default ${JSON.stringify(source)};`;
 		}
@@ -28,6 +29,7 @@ function emitImportedCss() {
 		},
 		async load(id) {
 			if (!id.endsWith(".css")) return null;
+			this.addWatchFile(id);
 			cssSources.set(id, await fs.readFile(id, "utf8"));
 			return "export default {};";
 		},

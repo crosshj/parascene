@@ -210,6 +210,17 @@ function statusMarkup(status) {
 	return `<span class="creation-grid__status is-queued"><svg class="creation-grid__status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="6"></circle><polyline points="12 10 12 12 13.5 13"></polyline><path d="m16.13 7.66-.81-1.41a2 2 0 0 0-1.74-1h-3.16a2 2 0 0 0-1.74 1l-.81 1.41M16.13 16.34l-.81 1.41a2 2 0 0 1-1.74 1h-3.16a2 2 0 0 1-1.74-1l-.81-1.41"></path></svg><span>QUEUED</span></span>`;
 }
 
+function filledAdornmentIcon(name) {
+	const paths = {
+		globe: '<path fill-rule="evenodd" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 2c1.1 1.3 1.9 3 2.3 5H9.7C10.1 7 10.9 5.3 12 4Zm-3 7h6c.1.3.1.7.1 1s0  .7-.1 1H9c-.1-.3-.1-.7-.1-1s0-.7.1-1Zm-4.9 0h2.9c-.1.7-.1 1.3 0 2H4.1a8 8 0 0 1 0-2Zm1 4h2.3c.4 2 1.2 3.7 2.3 5a8.03 8.03 0 0 1-4.6-5Zm4.6 0h4.6c-.4 2-1.2 3.7-2.3 5-1.1-1.3-1.9-3-2.3-5Zm6.3 0h2.3a8.03 8.03 0 0 1-4.6 5c1.1-1.3 1.9-3 2.3-5Zm.4-2c.1-.7.1-1.3 0-2h2.9a8 8 0 0 1 0 2h-2.9Zm-.4-4c-.4-2-1.2-3.7-2.3-5a8.03 8.03 0 0 1 4.6 5H16Z"></path>',
+		trophy: '<path d="M7 3h10v2h2v2a4 4 0 0 1-3.1 3.9A4.01 4.01 0 0 1 13 14.7V18h3v3H8v-3h3v-3.3a4.01 4.01 0 0 1-2.9-3.8A4 4 0 0 1 5 7V5h2V3Zm-2 4a2 2 0 0 0 1.6 1.96A8 8 0 0 1 5 7Zm14 0a8 8 0 0 1-1.6 1.96A2 2 0 0 0 19 7Z"></path>',
+		group: '<path d="M3 6.5A2.5 2.5 0 0 1 5.5 4H12a2.5 2.5 0 0 1 2.5 2.5V9H18.5A2.5 2.5 0 0 1 21 11.5v7A2.5 2.5 0 0 1 18.5 21h-7A2.5 2.5 0 0 1 9 18.5V17H5.5A2.5 2.5 0 0 1 3 14.5v-8Z"></path>',
+		music: '<path d="M9 17.5V4.2l11-2v12.3a3.5 3.5 0 1 1-2-3.15V5.8l-7 1.27v10.43a3.5 3.5 0 1 1-2-3.15V17.5Zm-3 4a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Zm12-4a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"></path>',
+		video: '<path d="M3 6.5A2.5 2.5 0 0 1 5.5 4h8A2.5 2.5 0 0 1 16 6.5v1.7l4.2-2.4A1.2 1.2 0 0 1 22 6.85v10.3a1.2 1.2 0 0 1-1.8 1.04L16 15.8v1.7a2.5 2.5 0 0 1-2.5 2.5h-8A2.5 2.5 0 0 1 3 17.5v-11Z"></path>'
+	};
+	return `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">${paths[name] || ''}</svg>`;
+}
+
 function badges(item, { hideChallengeCorner = false } = {}) {
 	const groupBadge = isGroupCreation(item) ? '<span class="creation-group-badge" title="Group creation" aria-label="Group creation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="6.5" width="9.5" height="9.5" rx="2"></rect><rect x="10.5" y="10.5" width="10" height="10" rx="2"></rect></svg></span>' : '';
 	const published = item?.published === true || item?.published === 1 ? `<span class="creation-published-badge" title="Published" aria-label="Published">${iconMarkup('globe')}</span>` : '';
@@ -268,14 +279,13 @@ export function creationCardMarkup(item) {
 	</div>`;
 }
 
-export function createCreationMediaLoader(root, { eagerCount = 6, maxConcurrent = 4 } = {}) {
+export function createCreationMediaLoader(root, { eagerCount = 16, maxConcurrent = 8 } = {}) {
 	const queue = [];
 	let active = 0;
 	const connection = typeof navigator !== 'undefined' ? navigator.connection || navigator.mozConnection || navigator.webkitConnection : null;
 	const constrained = Boolean(connection?.saveData || String(connection?.effectiveType || '').includes('2g'));
 	eagerCount = constrained ? 2 : eagerCount;
 	maxConcurrent = constrained ? 2 : maxConcurrent;
-	const rootMargin = constrained ? '200px 0px' : '600px 0px';
 	const observer = new IntersectionObserver((entries) => {
 		for (const entry of entries) {
 			if (!entry.isIntersecting) continue;
@@ -287,13 +297,14 @@ export function createCreationMediaLoader(root, { eagerCount = 6, maxConcurrent 
 			}
 		}
 		drain();
-	}, { rootMargin, threshold: 0.01 });
+	}, { threshold: 0.01 });
 
 	function drain() {
 		while (active < maxConcurrent && queue.length) {
 			const next = queue.shift();
 			const media = next?.media || next;
 			const eager = next?.eager === true;
+			const highPriority = next?.highPriority === true;
 			if (!media) continue;
 			active += 1;
 			media.classList.add('loading');
@@ -301,7 +312,7 @@ export function createCreationMediaLoader(root, { eagerCount = 6, maxConcurrent 
 			if (!(image instanceof HTMLImageElement)) { finish(); continue; }
 			image.decoding = 'async';
 			image.loading = eager ? 'eager' : 'lazy';
-			if ('fetchPriority' in image) image.fetchPriority = eager ? 'high' : 'low';
+			if ('fetchPriority' in image) image.fetchPriority = highPriority ? 'high' : 'auto';
 			image.onload = () => { media.dataset.bgLoadedUrl = media.dataset.bgUrl; media.style.setProperty('--creation-grid-image', `url("${media.dataset.bgUrl.replaceAll('"', '\\"')}")`); media.classList.remove('loading', 'error'); media.classList.add('loaded'); finish(); };
 			image.onerror = () => {
 				const fallback = media.dataset.bgFallback;
@@ -329,10 +340,12 @@ export function createCreationMediaLoader(root, { eagerCount = 6, maxConcurrent 
 				return;
 			}
 			if (element.dataset.bgLoadedUrl) return;
-			if (index < eagerCount) {
-				element.dataset.bgQueued = '1';
-				queue.push({ media: element, eager: index < 2 });
-			} else observer.observe(element);
+			if (element.dataset.bgQueued === '1') return;
+			// Give every rendered card a URL immediately, matching the active SPA.
+			// Native loading="lazy" still controls transfer for distant cards, while
+			// the browser gets much more lead time than a custom viewport observer.
+			element.dataset.bgQueued = '1';
+			queue.push({ media: element, eager: index < eagerCount, highPriority: index < 2 });
 		});
 		drain();
 	}
