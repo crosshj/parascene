@@ -103,7 +103,11 @@ export function createCreationsStore({ client, supabaseUrl, serviceRoleKey }) {
 }
 
 export function creationMediaKey(row) {
-	const meta = row?.meta && typeof row.meta === "object" ? row.meta : null;
+	let meta = row?.meta;
+	if (typeof meta === "string") {
+		try { meta = JSON.parse(meta); } catch { meta = null; }
+	}
+	if (!meta || typeof meta !== "object") meta = null;
 	const group = meta?.group && typeof meta.group === "object" ? meta.group : null;
 	if (group?.kind === "group_v2") {
 		const cover = (Array.isArray(group.items) ? group.items : []).find((item) => item?.cover) || group.items?.[0];
@@ -128,14 +132,50 @@ export function creationMediaKey(row) {
 	return String(row?.filename || "").trim();
 }
 
+function mediaKeyFromValue(value) {
+	const raw = String(value || "").trim();
+	if (!raw) return "";
+	for (const marker of ["/api/images/created/", "/api/videos/created/", "/api/creations/media/"]) {
+		const markerIndex = raw.indexOf(marker);
+		if (markerIndex < 0) continue;
+		const encoded = raw.slice(markerIndex + marker.length).split("?", 1)[0];
+		try { return decodeURIComponent(encoded); } catch { return encoded; }
+	}
+	if (raw.startsWith("http://") || raw.startsWith("https://")) return "";
+	return raw.replace(/^\/+/, "");
+}
+
+export function creationVideoMediaKey(row) {
+	let meta = row?.meta;
+	if (typeof meta === "string") {
+		try { meta = JSON.parse(meta); } catch { meta = null; }
+	}
+	if (!meta || typeof meta !== "object") meta = null;
+	const video = meta?.video && typeof meta.video === "object" ? meta.video : null;
+	return mediaKeyFromValue(
+		row?.video_url ||
+		row?.video_path ||
+		meta?.video_url ||
+		video?.file_path ||
+		video?.filePath ||
+		video?.url
+	);
+}
+
 export function creationMediaKeys(row) {
-	const values = [creationMediaKey({ filename: row?.filename, file_path: row?.file_path })];
-	const group = row?.meta?.group && typeof row.meta.group === "object" ? row.meta.group : null;
+	const values = [creationMediaKey({ filename: row?.filename, file_path: row?.file_path }), creationVideoMediaKey(row)];
+	let meta = row?.meta;
+	if (typeof meta === "string") {
+		try { meta = JSON.parse(meta); } catch { meta = null; }
+	}
+	const group = meta?.group && typeof meta.group === "object" ? meta.group : null;
 	const sources = group?.kind === "group_creations"
 		? group.source_creations
 		: group?.kind === "group_v2"
 			? (Array.isArray(group.items) ? group.items.map((item) => item?.view || {}) : [])
 			: [];
-	for (const source of Array.isArray(sources) ? sources : []) values.push(creationMediaKey(source));
+	for (const source of Array.isArray(sources) ? sources : []) {
+		values.push(creationMediaKey(source), creationVideoMediaKey(source));
+	}
 	return [...new Set(values.filter(Boolean))];
 }

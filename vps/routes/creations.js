@@ -2,7 +2,8 @@ import express from "express";
 import { Readable } from "node:stream";
 import path from "node:path";
 import { requireAuth } from "./middleware/auth.js";
-import { creationMediaKey } from "../db/creations.js";
+import { creationMediaKey, creationVideoMediaKey } from "../db/creations.js";
+import { extractVideoThumbnail } from "./utils/media.js";
 
 function integer(value, fallback, min, max) {
 	const n = Number.parseInt(String(value ?? ""), 10);
@@ -10,8 +11,14 @@ function integer(value, fallback, min, max) {
 }
 
 function mediaType(row) {
-	const value = row?.meta && typeof row.meta === "object" ? row.meta.media_type : null;
-	return typeof value === "string" && value.trim() ? value.trim() : "image";
+	let meta = row?.meta;
+	if (typeof meta === "string") {
+		try { meta = JSON.parse(meta); } catch { meta = null; }
+	}
+	if (!meta || typeof meta !== "object") meta = {};
+	const value = typeof meta.media_type === "string" ? meta.media_type.trim().toLowerCase() : "";
+	if (value === "video" || creationVideoMediaKey({ meta })) return "video";
+	return value || "image";
 }
 
 function isModeratedError(row) {
@@ -32,6 +39,10 @@ function mediaUrl(id, key, variant = "") {
 
 function serializeCreation(row) {
 	const key = creationMediaKey(row);
+	// A video's still-image row is often a transparent placeholder. Never expose
+	// that still as video_url; only a real video object may be used for playback
+	// or first-frame poster extraction.
+	const videoKey = creationVideoMediaKey(row);
 	const imageUrl = mediaUrl(row.id, key);
 	const type = mediaType(row);
 	return {
@@ -41,6 +52,7 @@ function serializeCreation(row) {
 		url: imageUrl,
 		thumbnail_url: mediaUrl(row.id, key, "thumbnail"),
 		fit_thumbnail_url: mediaUrl(row.id, key, "fit"),
+		video_thumbnail_url: type === "video" && videoKey ? mediaUrl(row.id, videoKey, "video_thumbnail") : null,
 		width: row.width,
 		height: row.height,
 		color: row.color,
@@ -54,7 +66,7 @@ function serializeCreation(row) {
 		nsfw: Boolean(row.meta && typeof row.meta === "object" && row.meta.nsfw),
 		is_moderated_error: isModeratedError(row),
 		media_type: type,
-		video_url: type === "video" ? imageUrl : null,
+		video_url: type === "video" && videoKey ? mediaUrl(row.id, videoKey) : null,
 		audio_url: type === "audio" ? imageUrl : null
 	};
 }
@@ -75,6 +87,23 @@ export function createCreationsRoutes({ creations, users }) {
 		if (!key) return res.status(400).json({ error: "Invalid media key" });
 		try {
 			if (!(await creations.ownsMedia(req.auth.userId, req.query.creation_id, key))) return res.status(404).json({ error: "Media not found" });
+			const variant = String(req.query.variant || "").trim().toLowerCase();
+			if (variant === "video_thumbnail") {
+				const response = await creations.fetchMedia(key, { method: "GET" });
+				if (!response.ok || !response.body) return res.status(404).json({ error: "Video not found" });
+				const chunks = [];
+				for await (const chunk of Readable.fromWeb(response.body)) chunks.push(chunk);
+				const poster = await extractVideoThumbnail(Buffer.concat(chunks));
+				if (!poster) return res.status(404).json({ error: "Video thumbnail unavailable" });
+				res.status(200);
+				res.type("jpg");
+				res.set("Content-Length", String(poster.length));
+				res.set("Content-Disposition", `inline; filename="${path.basename(key).replace(/["\\\r\n]/g, "_")}.jpg"`);
+				res.set("X-Content-Type-Options", "nosniff");
+				res.set("Cache-Control", "public, max-age=86400, stale-while-revalidate=86400");
+				res.set("Cloudflare-CDN-Cache-Control", "public, max-age=604800, stale-while-revalidate=86400");
+				return req.method === "HEAD" ? res.end() : res.send(poster);
+			}
 			const response = await creations.fetchMedia(key, { variant: req.query.variant, method: req.method, range: req.get("range") });
 			if (!response.ok) return res.status(response.status === 404 ? 404 : 502).json({ error: "Media not found" });
 			setMediaHeaders(res, response, key);

@@ -24,6 +24,7 @@ const ICONS = {
 	help: '<circle cx="12" cy="12" r="10"/><path d="M9.6 9a2.5 2.5 0 1 1 4.7 1.2c-.7 1.1-2.3 1.4-2.3 3M12 17h.01"/>',
 	close: '<path d="m18 6-12 12M6 6l12 12"/>'
 	, music: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>'
+	, video: '<rect x="3" y="5" width="13" height="14" rx="2"/><path d="m16 10 5-3v10l-5-3z"/>'
 };
 
 const STROKE_WIDTHS = {
@@ -41,7 +42,8 @@ const STROKE_WIDTHS = {
 	gear: 2,
 	user: 2,
 	logout: 2,
-	music: 1.75
+	music: 1.75,
+	video: 1.8
 };
 
 export function iconMarkup(name, className = '') {

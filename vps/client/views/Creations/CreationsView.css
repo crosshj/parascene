@@ -8,12 +8,22 @@
 .skeleton-grid-tile::after { position: absolute; inset: 0; content: ''; border-radius: inherit; background: linear-gradient(90deg, transparent, color-mix(in srgb, currentColor 10%, transparent), transparent); background-size: 300vw 100%; animation: creations-grid-skeleton-shimmer 1.6s ease-in-out infinite; }
 @keyframes creations-grid-skeleton-shimmer { from { background-position: 300% 0; } to { background-position: -300% 0; } }
 .creations-view__grid[hidden] { display: none; }
-.creation-grid__card { position: relative; min-width: 0; width: 100%; padding: 0; background: transparent; border: 0; }
+.creation-grid__card { position: relative; isolation: isolate; min-width: 0; width: 100%; padding: 0; background: transparent; border: 0; }
 .feed-card-image { position: relative; width: 100%; aspect-ratio: 1 / 1; overflow: hidden; border-radius: 6px; background: var(--beta-panel-background, #eef1f6); }
 .feed-card-image.loading { background: linear-gradient(90deg, color-mix(in srgb, currentColor 8%, transparent), color-mix(in srgb, currentColor 16%, transparent), color-mix(in srgb, currentColor 8%, transparent)); background-size: 200% 100%; animation: creations-grid-loading 4s linear infinite; }
 .feed-card-img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; object-position: center; opacity: 0; transition: opacity .3s ease; }
 .feed-card-image.loaded .feed-card-img { opacity: 1; }
 .feed-card-image.error .feed-card-img { opacity: 0; pointer-events: none; }
+.feed-card-image.creation-grid__status-card { background: color-mix(in srgb, var(--beta-panel-background, #eef1f6) 92%, currentColor 8%); background-size: auto; animation: none; }
+.feed-card-image.creation-grid__failed-card { display: grid; place-items: center; color: inherit; }
+.creation-grid__status { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 8px; color: inherit; font-size: .7rem; font-weight: 650; letter-spacing: .06em; text-align: center; pointer-events: none; }
+.creation-grid__status-icon { display: block; width: 48px; height: 48px; flex: 0 0 auto; opacity: .75; }
+.creation-grid__status-gears { position: relative; display: block; width: 48px; height: 48px; flex: 0 0 auto; opacity: .75; }
+.creation-grid__status-gear { position: absolute; overflow: visible; }
+.creation-grid__status-gear--large { top: 6%; left: 0; width: 72%; height: 72%; animation: creation-grid-status-spin 4.5s linear infinite; }
+.creation-grid__status-gear--small { right: 2%; bottom: 4%; width: 46%; height: 46%; animation: creation-grid-status-spin 3.15s linear infinite reverse; }
+@keyframes creation-grid-status-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .creation-grid__status-gear { animation: none; } }
 @keyframes creations-grid-loading { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 .feed-card-image.nsfw .feed-card-img { filter: blur(16px); transform: scale(1.08); }
 .feed-card-image.feed-card-image--challenge-pending { position: relative; overflow: hidden; }
@@ -35,12 +45,13 @@
 .creation-grid__group-nav--prev { left: 8px; }
 .creation-grid__group-nav--next { right: 8px; }
 .creation-grid__group-nav:hover { background: rgb(9 9 11 / 88%); }
-.creation-published-badge, .creation-challenge-locked-badge, .creation-group-badge, .creation-music-badge { position: absolute; top: 8px; z-index: 3; display: flex; width: 32px; height: 32px; align-items: center; justify-content: center; border-radius: 50%; color: #fff; background: rgb(0 0 0 / 70%); backdrop-filter: blur(4px); pointer-events: none; }
-.creation-published-badge svg, .creation-challenge-locked-badge svg, .creation-group-badge svg, .creation-music-badge svg { display: block; width: 16px; height: 16px; }
+.creation-published-badge, .creation-challenge-locked-badge, .creation-group-badge, .creation-music-badge, .creation-video-badge { position: absolute; top: 8px; z-index: 3; display: flex; width: 32px; height: 32px; align-items: center; justify-content: center; border-radius: 50%; color: #fff; background: rgb(0 0 0 / 70%); backdrop-filter: blur(4px); pointer-events: none; }
+.creation-published-badge svg, .creation-challenge-locked-badge svg, .creation-group-badge svg, .creation-music-badge svg, .creation-video-badge svg { display: block; width: 16px; height: 16px; }
 .creation-published-badge { right: 8px; }
 .creation-challenge-locked-badge { left: 8px; z-index: 5; border: 1px solid rgb(255 255 255 / 22%); background: rgb(0 0 0 / 72%); box-shadow: 0 2px 10px rgb(0 0 0 / 25%); }
 .creation-group-badge { top: auto; bottom: 8px; left: 8px; }
 .creation-music-badge { top: auto; right: 8px; bottom: 8px; }
+.creation-video-badge { top: auto; right: 8px; bottom: 8px; }
 .creations-view__sentinel { height: 1px; margin: 0; overflow: hidden; }
 .creations-view__load-more { display: block; min-width: 120px; margin: 24px auto 8px; padding: 9px 14px; border: 1px solid color-mix(in srgb, currentColor 24%, transparent); border-radius: 999px; color: inherit; background: transparent; font: inherit; font-weight: 650; cursor: pointer; }
 .creations-view__load-more[hidden] { display: none; }
