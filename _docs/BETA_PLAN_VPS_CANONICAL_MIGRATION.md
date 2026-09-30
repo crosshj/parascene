@@ -501,7 +501,7 @@ The VPS can be called canonical when all of the following are true:
 
 ## The next concrete step
 
-Do not start by asking an agent to copy the old site wholesale. Start by producing the route/capability matrix and selecting one vertical slice as the migration template. The first implementation pilot is the existing VPS file-management experience, documented separately in [PLAN_beta_frontend_pilot.md](PLAN_beta_frontend_pilot.md).
+Do not start by asking an agent to copy the old site wholesale. Start by producing the route/capability matrix and selecting one vertical slice as the migration template. The first implementation pilot is the existing VPS file-management experience, documented separately in [BETA_PLAN_FRONTEND_PILOT.md](BETA_PLAN_FRONTEND_PILOT.md).
 
 That pilot will refactor the current VPS pages in place as an example of the new beta frontend pattern. It is intentionally not an attempt to migrate the old site. It should prove the source organization, component/view boundary, HTML/CSS import pipeline, API/data layer, caching conventions, and test approach that later beta surfaces will use.
 
