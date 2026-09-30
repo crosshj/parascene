@@ -274,7 +274,7 @@ export function creationCardMarkup(item) {
 		`data-image-url-full="${escapeHtml(original || thumbnail)}"`,
 		processingStatus ? `data-creation-status="${escapeHtml(processingStatus)}"` : ''
 	].filter(Boolean).join(' ');
-	return html`<div class="feed-card feed-card--image-only creation-grid__card" ${attributes}>
+	return html`<div class="feed-card feed-card--image-only creation-grid__card" ${attributes} role="link" tabindex="0" aria-label="Open ${escapeHtml(title || `Creation ${creationId || ''}`)}">
 		<div class="${mediaClass}" aria-hidden="true" data-bg-url="${escapeHtml(thumbnail)}" data-bg-fallback="${escapeHtml(original)}" data-group-slides="${escapeHtml(JSON.stringify(slides))}"><img class="feed-card-img" alt="${escapeHtml(title || 'Creation')}" loading="lazy" decoding="async">${state}${challengeOverlay}${!failed ? badges(item, { hideChallengeCorner: challengeBlur }) : ''}</div>
 	</div>`;
 }

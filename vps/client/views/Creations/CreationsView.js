@@ -10,7 +10,7 @@ function renderGridSkeleton(count = 25) {
 	return Array.from({ length: count }, () => '<div class="skeleton skeleton-grid-tile" aria-hidden="true"></div>').join('');
 }
 
-export function renderCreationsView({ outlet, creationsApi, creationsResource, onUnauthorized, setHeaderMenu }) {
+export function renderCreationsView({ outlet, creationsApi, creationsResource, onUnauthorized, setHeaderMenu, onOpenCreation }) {
 	const root = mountTemplate(outlet, template);
 	const refs = bindRefs(root);
 	let offset = 0;
@@ -20,6 +20,20 @@ export function renderCreationsView({ outlet, creationsApi, creationsResource, o
 	let mediaLoader;
 	const scrollRegion = root.closest('.beta-outlet__scroll');
 	refs.grid.innerHTML = renderGridSkeleton();
+	const onGridClick = (event) => {
+		const card = event.target.closest?.('[data-creation-id]');
+		const id = Number(card?.dataset?.creationId);
+		if (card && Number.isFinite(id) && id > 0) onOpenCreation?.(id, card.__creationRecord || null);
+	};
+	refs.grid.addEventListener('click', onGridClick);
+	refs.grid.addEventListener('keydown', (event) => {
+		if (event.key !== 'Enter' && event.key !== ' ') return;
+		const card = event.target.closest?.('[data-creation-id]');
+		if (!card) return;
+		event.preventDefault();
+		const id = Number(card.dataset.creationId);
+		if (Number.isFinite(id) && id > 0) onOpenCreation?.(id, card.__creationRecord || null);
+	});
 
 	document.title = 'Creations · parascene beta';
 	setHeaderMenu?.({
@@ -45,6 +59,7 @@ export function renderCreationsView({ outlet, creationsApi, creationsResource, o
 	function render(data, append = false) {
 		const items = Array.isArray(data?.creations) ? data.creations : [];
 		const fragment = document.createRange().createContextualFragment(items.map(creationCardMarkup).join(''));
+		[...fragment.children].forEach((card, index) => { card.__creationRecord = items[index] || null; });
 		if (!append) {
 			refs.grid.replaceChildren(fragment);
 		} else {
@@ -133,5 +148,5 @@ export function renderCreationsView({ outlet, creationsApi, creationsResource, o
 	if (creationsResource) void creationsResource.loadIfNeeded().catch(() => undefined);
 	else void refresh(true);
 
-	return () => { unsubscribe?.(); mediaLoader?.disconnect(); sentinelObserver.disconnect(); refs.scrollTop.removeEventListener('click', onScrollTopClick); refs.scrollBottom.removeEventListener('click', onScrollBottomClick); scrollRegion?.removeEventListener('scroll', updateScrollTopVisibility); setHeaderMenu?.(); };
+	return () => { unsubscribe?.(); mediaLoader?.disconnect(); sentinelObserver.disconnect(); refs.grid.removeEventListener('click', onGridClick); refs.scrollTop.removeEventListener('click', onScrollTopClick); refs.scrollBottom.removeEventListener('click', onScrollBottomClick); scrollRegion?.removeEventListener('scroll', updateScrollTopVisibility); setHeaderMenu?.(); };
 }

@@ -67,6 +67,15 @@ body.beta-layout main#app-outlet {
 .beta-outlet__composer button:disabled { opacity: .45; }
 .beta-outlet__composer button svg { width: 18px; height: 18px; }
 
+.beta-app-overlay-host { position: fixed; z-index: 100; inset: 0; pointer-events: none; }
+.beta-app-overlay-host[hidden] { display: none; }
+.beta-app-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; pointer-events: auto; background: var(--beta-panel-background); }
+.beta-app-overlay__chrome { display: flex; z-index: 2; flex: 0 0 56px; align-items: center; gap: 12px; padding: 0 16px; border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent); background: color-mix(in srgb, var(--beta-panel-background) 90%, transparent); backdrop-filter: blur(18px); }
+.beta-app-overlay__close { display: grid; width: 36px; height: 36px; place-items: center; padding: 0; border: 0; border-radius: 50%; color: inherit; background: transparent; font: inherit; font-size: 28px; line-height: 1; cursor: pointer; }
+.beta-app-overlay__close:hover, .beta-app-overlay__close:focus-visible { background: color-mix(in srgb, currentColor 8%, transparent); outline: none; }
+.beta-app-overlay__content { min-height: 0; flex: 1 1 auto; overflow: auto; }
+body.beta-creation-overlay-open { overflow: hidden; }
+
 @media (prefers-color-scheme: dark) {
 	:root {
 		--beta-canvas-background: #0e0d19;

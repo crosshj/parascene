@@ -1,0 +1,260 @@
+
+	<app-modal-profile></app-modal-profile>
+	<app-modal-credits></app-modal-credits>
+	<app-modal-notifications></app-modal-notifications>
+	<app-modal-publish></app-modal-publish>
+	<app-modal-creation-details></app-modal-creation-details>
+	<app-modal-share></app-modal-share>
+	<app-modal-tip-creator></app-modal-tip-creator>
+
+	<!-- Landscape: single modal with placeholder or image + bottom buttons -->
+	<dialog class="creation-detail-dialog landscape-modal" data-landscape-modal aria-labelledby="landscape-modal-title">
+		<div class="landscape-modal-title-row">
+			<h2 id="landscape-modal-title" class="dialog-title">Landscape (16:9)</h2>
+			<button type="button" class="landscape-debug-btn" data-landscape-copy-debug aria-label="Copy debug info for support">
+				<span class="landscape-debug-icon" aria-hidden="true">?</span>
+				<span class="landscape-debug-label">debug</span>
+			</button>
+		</div>
+		<button class="modal-close" type="button" aria-label="Close" data-landscape-close-btn>
+			<svg class="modal-close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+				stroke-linecap="round" stroke-linejoin="round">
+				<line x1="18" y1="6" x2="6" y2="18"></line>
+				<line x1="6" y1="6" x2="18" y2="18"></line>
+			</svg>
+		</button>
+		<div class="landscape-modal-content" data-landscape-content>
+			<div class="landscape-placeholder" data-landscape-placeholder>
+				<div class="landscape-placeholder-spinner" data-landscape-placeholder-spinner style="display: none;" aria-label="Loading" role="status"></div>
+				<p class="landscape-placeholder-message landscape-generate-prompt" data-landscape-generate-prompt style="display: none;">Generate a 16:9 landscape version of this creation.</p>
+				<p class="landscape-placeholder-message landscape-error" data-landscape-error style="display: none;"></p>
+			</div>
+			<img class="landscape-image" data-landscape-image alt="Landscape" style="display: none;" />
+		</div>
+		<div class="landscape-modal-actions" data-landscape-modal-actions>
+			<button type="button" class="btn-primary landscape-primary-btn" data-landscape-primary-btn>
+				<span class="landscape-btn-spinner" data-landscape-btn-spinner style="display: none;" aria-hidden="true"></span>
+				<span class="landscape-btn-text" data-landscape-btn-text>Generate</span>
+			</button>
+			<button type="button" class="btn-outlined landscape-menu-item-danger" data-landscape-remove-btn style="display: none;">Remove</button>
+		</div>
+	</dialog>
+
+	<!-- Support report: send debug info to administrator -->
+	<dialog class="creation-detail-dialog debug-copied-modal" data-debug-copied-modal aria-labelledby="debug-copied-title">
+		<h2 id="debug-copied-title" class="dialog-title">Support</h2>
+		<p class="debug-copied-message" data-debug-copied-message>We'll send a report to the administrator to help troubleshoot.</p>
+		<div class="debug-copied-summary-wrap">
+			<label for="debug-copied-summary" class="debug-copied-summary-label">Summarize the issue</label>
+			<textarea id="debug-copied-summary" class="debug-copied-summary" data-debug-copied-summary rows="6" placeholder="Describe what you see (e.g. blank screen, missing button), what you expected, and your device or browser if relevant. This will be included in the report sent to support."></textarea>
+		</div>
+		<p class="debug-copied-status" data-debug-copied-status role="alert" aria-live="polite"></p>
+		<div class="dialog-actions">
+			<button type="button" class="btn-secondary" data-debug-copied-cancel>Cancel</button>
+			<button type="button" class="btn-primary" data-debug-copied-send>Send</button>
+		</div>
+	</dialog>
+
+	<!-- Landscape cost confirm: small modal with Cancel / Continue -->
+	<dialog class="creation-detail-dialog landscape-cost-dialog" data-landscape-cost-dialog aria-labelledby="landscape-cost-dialog-title">
+		<h2 id="landscape-cost-dialog-title" class="dialog-title">Landscape</h2>
+		<p class="landscape-cost-dialog-message" data-landscape-cost-dialog-message></p>
+		<div class="dialog-actions">
+			<button type="button" class="btn-secondary" data-landscape-cost-cancel>Cancel</button>
+			<button type="button" class="btn-primary" data-landscape-cost-continue>Continue</button>
+		</div>
+	</dialog>
+
+	<!-- Share Audio: extract audio from video or show existing shareable link -->
+	<dialog class="creation-detail-dialog share-audio-modal" data-share-audio-modal aria-labelledby="share-audio-modal-title">
+		<h2 id="share-audio-modal-title" class="dialog-title">Share Audio</h2>
+		<button class="modal-close" type="button" aria-label="Close" data-share-audio-close-btn>
+			<svg class="modal-close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+				stroke-linecap="round" stroke-linejoin="round">
+				<line x1="18" y1="6" x2="6" y2="18"></line>
+				<line x1="6" y1="6" x2="18" y2="18"></line>
+			</svg>
+		</button>
+		<div class="share-audio-modal-content">
+			<div class="share-audio-modal-stage">
+				<div class="share-audio-panel share-audio-prompt-panel is-active" data-share-audio-panel="prompt">
+					<p class="share-audio-prompt" data-share-audio-prompt>
+						Extract audio from this video and get a link you can share anywhere. Extraction runs in real time and may take as long as the video.
+					</p>
+				</div>
+				<div class="share-audio-panel share-audio-progress-panel" data-share-audio-panel="progress">
+					<div class="share-audio-progress-wrap" data-share-audio-progress-wrap>
+						<div class="share-audio-progress-track" aria-hidden="true">
+							<div class="share-audio-progress-bar" data-share-audio-progress-bar></div>
+						</div>
+						<p class="share-audio-progress-label" data-share-audio-progress-label role="status" aria-live="polite">Extracting audio… 0%</p>
+					</div>
+				</div>
+				<div class="share-audio-panel share-audio-ready-panel" data-share-audio-panel="ready">
+					<div class="share-audio-ready" data-share-audio-ready>
+						<audio class="share-audio-player" data-share-audio-player controls preload="metadata"></audio>
+						<label class="share-audio-link-label" for="share-audio-link-input">Shareable link</label>
+						<div class="share-audio-link-row">
+							<input id="share-audio-link-input" class="share-audio-link-input" data-share-audio-link-input type="text" readonly />
+							<button type="button" class="btn-outlined share-audio-copy-btn" data-share-audio-copy-btn>Copy link</button>
+						</div>
+					</div>
+				</div>
+			</div>
+			<p class="share-audio-error" data-share-audio-error role="alert"></p>
+		</div>
+		<div class="share-audio-modal-actions">
+			<button type="button" class="btn-primary share-audio-extract-btn" data-share-audio-extract-btn>
+				<span data-share-audio-extract-btn-text>Extract audio</span>
+			</button>
+		</div>
+	</dialog>
+
+
+	<main>
+		<div class="creation-detail-route">
+			<div class="creation-detail-hero">
+				<div class="creation-detail-background" data-background></div>
+				<div class="creation-detail-image-wrapper image-loading">
+					<img class="creation-detail-image" data-image alt="Creation" />
+					<video class="creation-detail-image" data-video playsinline muted style="display: none;"></video>
+					<button type="button" class="creation-detail-video-muted-badge" data-video-muted-badge hidden
+						aria-label="Unmute video">
+						<span data-video-muted-icon-on class="creation-detail-video-muted-glyph">
+							<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+								<path d="M11 5 6 9H2v6h4l5 4V5z" />
+								<path d="m22 9-7 7M15 9l7 7" />
+							</svg>
+						</span>
+						<span data-video-muted-icon-off class="creation-detail-video-muted-glyph" hidden>
+							<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+								<path d="M11 5 6 9H2v6h4l5 4V5z" />
+								<path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+								<path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+							</svg>
+						</span>
+					</button>
+					<button type="button" class="creation-detail-hero-nav creation-detail-hero-nav-prev" data-group-hero-prev
+						aria-label="Previous grouped image" hidden>
+						<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+							<path d="M14.5 6.5L9 12l5.5 5.5" />
+						</svg>
+					</button>
+					<button type="button" class="creation-detail-hero-nav creation-detail-hero-nav-next" data-group-hero-next
+						aria-label="Next grouped image" hidden>
+						<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+							<path d="M9.5 6.5L15 12l-5.5 5.5" />
+						</svg>
+					</button>
+				</div>
+			</div>
+			<div class="creation-detail-footer">
+				<div class="creation-detail-info" data-detail-content><div class="creation-detail-skeleton" aria-label="Loading" aria-busy="true">
+	<div class="creation-detail-title-row">
+		<div class="skeleton skeleton-line" style="width: 72%; max-width: 320px;"></div>
+	</div>
+	<div class="creation-detail-action-strip">
+		<div class="creation-detail-action-strip-scroll">
+			<div class="creation-detail-action-strip-avatar"><span class="skeleton skeleton-circle" style="width: 40px; height: 40px;" aria-hidden="true"></span></div>
+			<div class="creation-detail-action-strip-creator-info">
+				<div class="skeleton skeleton-line skeleton-line--short" style="margin-bottom: 4px;"></div>
+				<div class="skeleton skeleton-line skeleton-line--medium"></div>
+			</div>
+			<span class="skeleton skeleton-pill" style="width: 72px; height: 34px;" aria-hidden="true"></span>
+			<span class="skeleton skeleton-pill" style="width: 64px; height: 34px;" aria-hidden="true"></span>
+			<span class="skeleton skeleton-pill" style="width: 88px; height: 34px;" aria-hidden="true"></span>
+			<span class="skeleton skeleton-circle" style="width: 34px; height: 34px;" aria-hidden="true"></span>
+		</div>
+	</div>
+	<div class="creation-detail-skeleton-description" style="margin-bottom: 40px;">
+		<span class="skeleton skeleton-line" style="display: block; margin-bottom: 8px;"></span>
+		<span class="skeleton skeleton-line" style="display: block; margin-bottom: 12px; width: 95%;"></span>
+		<span class="skeleton skeleton-line skeleton-line--medium" style="display: block; margin-bottom: 12px;"></span>
+	</div>
+	<div data-creation-comments-host>
+	<div class="comment-input" data-comment-input-skeleton>
+		<div class="comment-avatar"><span class="skeleton skeleton-circle" style="width: 32px; height: 32px;" aria-hidden="true"></span></div>
+		<div class="comment-input-body">
+			<span class="skeleton skeleton-line" style="display: block; height: 40px; border-radius: 8px;"></span>
+		</div>
+	</div>
+	<div class="creation-detail-comments-section" data-comments-section>
+	<div class="comments-toolbar">
+		<h3 class="comments-heading"><span data-comment-count>Comments</span></h3>
+		<div class="comments-sort">
+			<label class="comments-sort-label" for="comments-sort-pending">Sort by</label>
+			<select class="comments-sort-select" id="comments-sort-pending" data-comments-sort disabled>
+				<option value="asc">Oldest</option>
+				<option value="desc">Most recent</option>
+			</select>
+		</div>
+	</div>
+	<div class="comment-list" data-comment-list>
+		<div class="creation-comments-loading" role="status" aria-live="polite" aria-busy="true">
+			<div class="creation-comments-skeleton-row">
+				<div class="skeleton skeleton-circle" style="width:32px;height:32px;border-radius:50%"></div>
+				<div class="creation-comments-skeleton-body">
+					<div class="skeleton skeleton-line skeleton-line--short"></div>
+					<div class="skeleton skeleton-line skeleton-line--medium"></div>
+					<div class="skeleton skeleton-line" style="max-width:72%"></div>
+				</div>
+			</div>
+			<div class="creation-comments-skeleton-row">
+				<div class="skeleton skeleton-circle" style="width:32px;height:32px;border-radius:50%"></div>
+				<div class="creation-comments-skeleton-body">
+					<div class="skeleton skeleton-line skeleton-line--medium"></div>
+					<div class="skeleton skeleton-line skeleton-line--short"></div>
+					<div class="skeleton skeleton-line" style="max-width:58%"></div>
+				</div>
+			</div>
+			<div class="creation-comments-skeleton-row">
+				<div class="skeleton skeleton-circle" style="width:32px;height:32px;border-radius:50%"></div>
+				<div class="creation-comments-skeleton-body">
+					<div class="skeleton skeleton-line skeleton-line--short"></div>
+					<div class="skeleton skeleton-line"></div>
+					<div class="skeleton skeleton-line skeleton-line--medium"></div>
+				</div>
+			</div>
+		</div>
+	</div>
+	</div>
+	</div>
+</div></div>
+			</div>
+		</div>
+	</main>
+
+	<dialog class="creation-detail-dialog audio-cover-modal" data-audio-cover-modal aria-labelledby="audio-cover-modal-title">
+		<h2 id="audio-cover-modal-title" class="dialog-title">Change cover</h2>
+		<button class="modal-close" type="button" aria-label="Close" data-audio-cover-close>
+			<svg class="modal-close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+				stroke-linecap="round" stroke-linejoin="round">
+				<line x1="18" y1="6" x2="6" y2="18"></line>
+				<line x1="6" y1="6" x2="18" y2="18"></line>
+			</svg>
+		</button>
+		<div class="audio-cover-methods" role="tablist" aria-label="How to set the cover">
+			<button type="button" class="audio-cover-method is-active" role="tab" aria-selected="true" aria-controls="audio-cover-panel-upload" id="audio-cover-tab-upload" data-audio-cover-tab="upload">Use an image</button>
+			<button type="button" class="audio-cover-method" role="tab" aria-selected="false" aria-controls="audio-cover-panel-generate" id="audio-cover-tab-generate" data-audio-cover-tab="generate">Generate one</button>
+		</div>
+		<div class="audio-cover-panel is-active" id="audio-cover-panel-upload" role="tabpanel" aria-labelledby="audio-cover-tab-upload" data-audio-cover-panel="upload">
+			<p class="audio-cover-help">Use + to upload. Paste an image, or enter an image URL or creation link.</p>
+			<p class="image-picker-url-hint" data-audio-cover-url-hint>Enter an image URL (http:// or https://) or a creation link.</p>
+			<div class="image-picker-composer-row">
+				<button type="button" class="image-picker-composer-add" data-audio-cover-pick aria-label="Choose image file">+</button>
+				<input type="text" inputmode="url" class="image-url-input image-picker-composer-input" data-audio-cover-url placeholder="Paste image or enter URL" aria-label="Paste image or enter image URL" autocomplete="off" />
+				<button type="button" class="image-picker-composer-send" data-audio-cover-url-submit hidden disabled aria-label="Use this image URL">&#10148;</button>
+			</div>
+			<input type="file" accept="image/*" hidden data-audio-cover-file />
+		</div>
+		<div class="audio-cover-panel" id="audio-cover-panel-generate" role="tabpanel" aria-labelledby="audio-cover-tab-generate" data-audio-cover-panel="generate">
+			<label class="audio-cover-label" for="audio-cover-prompt">Prompt</label>
+			<textarea id="audio-cover-prompt" class="audio-cover-prompt" data-audio-cover-prompt rows="4" maxlength="800" placeholder="Album cover, atmospheric, no text"></textarea>
+			<p class="audio-cover-cost" data-audio-cover-cost></p>
+			<button type="button" class="btn-primary" data-audio-cover-generate>
+				<span data-audio-cover-generate-label>Generate</span>
+			</button>
+		</div>
+		<p class="audio-cover-error" data-audio-cover-error hidden></p>
+		<button type="button" class="btn-secondary audio-cover-reset" data-audio-cover-reset hidden>Use original cover</button>
+	</dialog>

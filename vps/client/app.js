@@ -1,4 +1,5 @@
 import './app.css';
+import './elements/index.js';
 import { createAppState } from './core/appState.js';
 import { initializeLayout } from './core/layout.js';
 import { createRouter } from './core/router.js';
@@ -210,16 +211,23 @@ const router = createRouter({
 	outlet: layout.outlet,
 	routes: {
 		'/': () => renderHomeView({ outlet: layout.outlet, user: session.user, sidebarMock: sidebarMockPreference, onSidebarMockChange: updateSidebarMock }),
-		'/creations': () => renderCreationsView({ outlet: layout.outlet, creationsApi, creationsResource, onUnauthorized: session.redirectToLogin, setHeaderMenu: layout.setHeaderMenu }),
+		'/creations': () => renderCreationsView({ outlet: layout.outlet, creationsApi, creationsResource, onUnauthorized: session.redirectToLogin, setHeaderMenu: layout.setHeaderMenu, onOpenCreation: (id, seed) => layout.openCreationDetailOverlay({ creationId: id, seed }) }),
 		'/files': () => renderFileManagerView({ outlet: layout.outlet, filesApi, filesResource, onUnauthorized: session.redirectToLogin, setHeaderMenu: layout.setHeaderMenu }),
 		'*': ({ path }) => {
+			const detailMatch = path.match(/^\/creations\/(\d+)$/);
+			if (detailMatch) {
+				const dispose = renderCreationsView({ outlet: layout.outlet, creationsApi, creationsResource, onUnauthorized: session.redirectToLogin, setHeaderMenu: layout.setHeaderMenu, onOpenCreation: (id, seed) => layout.openCreationDetailOverlay({ creationId: id, seed }) });
+				queueMicrotask(() => layout.openCreationDetailOverlay({ creationId: Number(detailMatch[1]), replaceHistory: true }));
+				return dispose;
+			}
 			const item = [...sidebarState.get().navigation, ...sidebarState.get().directMessages, ...sidebarState.get().servers, ...sidebarState.get().channels].find((entry) => isSidebarRouteActive(entry, path));
 			return renderMockRouteView({ outlet: layout.outlet, title: item?.label?.replace(/^[@#]/, '') || 'Coming soon' });
 		}
 	},
 	onRouteChange: ({ path }) => {
-		layout.syncRoute(path);
-		syncPageChrome(path);
+		const shellPath = /^\/creations\/\d+$/.test(path) ? '/creations' : path;
+		layout.syncRoute(shellPath);
+		syncPageChrome(shellPath);
 	}
 });
 

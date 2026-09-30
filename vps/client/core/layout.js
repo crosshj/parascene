@@ -4,6 +4,7 @@ import { mountSidebarView } from '../views/Sidebar/SidebarView.js';
 import { mountSidebarOverlays } from '../views/SidebarOverlays/SidebarOverlaysView.js';
 import { createPopupMenu } from '../components/PopupMenu/PopupMenu.js';
 import { iconMarkup } from '../components/Icon/Icon.js';
+import { renderCreationDetailView } from '../views/CreationDetail/CreationDetailView.js';
 
 function getRegion(shell, name) {
 	const region = shell.querySelector(`[data-layout-region="${name}"]`);
@@ -72,6 +73,64 @@ export function initializeLayout({ shell, sidebarModel, mobileNavigationItems, o
 		outlet: getRegion(shell, 'mobile-navigation'),
 		navigationItems: mobileNavigationItems
 	});
+	const overlayHost = document.createElement('div');
+	overlayHost.className = 'beta-app-overlay-host';
+	overlayHost.hidden = true;
+	shell.appendChild(overlayHost);
+	let creationOverlay = null;
+	let creationOverlayReturnPath = null;
+	const currentPath = () => `${window.location.pathname}${window.location.search}${window.location.hash}`;
+	const isDetailPath = () => /^\/creations\/\d+$/.test(window.location.pathname);
+
+	function closeCreationDetailOverlay({ fromHistory = false } = {}) {
+		if (!creationOverlay) return;
+		const overlay = creationOverlay;
+		creationOverlay = null;
+		overlay.dispose?.();
+		overlay.element.remove();
+		overlayHost.hidden = true;
+		document.body.classList.remove('beta-creation-overlay-open');
+		if (!fromHistory && isDetailPath() && window.history.state?.betaCreationDetailOverlay) window.history.back();
+	}
+
+	function openCreationDetailOverlay({ creationId, seed = null, replaceHistory = false } = {}) {
+		const id = Number(creationId);
+		if (!Number.isFinite(id) || id <= 0) return;
+		const href = `/creations/${encodeURIComponent(String(id))}`;
+		if (creationOverlay) {
+			if (window.location.pathname !== href) window.history.pushState({ ...(window.history.state || {}), betaCreationDetailOverlay: true }, '', href);
+			return;
+		}
+		creationOverlayReturnPath = isDetailPath() ? '/creations' : currentPath();
+		const state = { ...(window.history.state || {}), betaCreationDetailOverlay: true, betaCreationDetailReturnPath: creationOverlayReturnPath, betaCreationDetailId: id };
+		if (replaceHistory) window.history.replaceState(state, '', href);
+		else window.history.pushState(state, '', href);
+		const element = document.createElement('section');
+		element.className = 'beta-app-overlay';
+		element.setAttribute('role', 'dialog');
+		element.setAttribute('aria-modal', 'true');
+		element.innerHTML = `<div class="beta-app-overlay__chrome"><button type="button" class="beta-app-overlay__close" aria-label="Close">×</button><span>Creation #${id}</span></div><div class="beta-app-overlay__content"></div>`;
+		const content = element.querySelector('.beta-app-overlay__content');
+		element.querySelector('.beta-app-overlay__close')?.addEventListener('click', () => closeCreationDetailOverlay());
+		overlayHost.replaceChildren(element);
+		overlayHost.hidden = false;
+		document.body.classList.add('beta-creation-overlay-open');
+		creationOverlay = { element, dispose: null };
+		void renderCreationDetailView({ outlet: content, initialSeed: seed, setHeaderMenu: null }).then((dispose) => {
+			if (creationOverlay?.element === element) creationOverlay.dispose = dispose;
+		});
+	}
+
+	const onOverlayPopState = () => {
+		if (creationOverlay && !window.history.state?.betaCreationDetailOverlay) {
+			closeCreationDetailOverlay({ fromHistory: true });
+			return;
+		}
+		if (!creationOverlay && isDetailPath()) {
+			openCreationDetailOverlay({ creationId: Number(window.location.pathname.split('/').pop()), replaceHistory: true });
+		}
+	};
+	window.addEventListener('popstate', onOverlayPopState, true);
 
 	document.body.classList.add('beta-layout');
 
@@ -103,7 +162,12 @@ export function initializeLayout({ shell, sidebarModel, mobileNavigationItems, o
 		updateSidebar: sidebar.update,
 		setSidebarStatus: sidebar.setRosterStatus,
 		updateCredits: sidebar.updateCredits,
+		openCreationDetailOverlay,
+		closeCreationDetailOverlay,
 		destroy() {
+		window.removeEventListener('popstate', onOverlayPopState, true);
+		closeCreationDetailOverlay({ fromHistory: true });
+		overlayHost.remove();
 			menu?.destroy();
 			overlays.destroy();
 			sidebar.destroy();

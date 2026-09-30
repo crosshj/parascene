@@ -70,3 +70,20 @@ There are three separate future initiatives here:
 - **Platform simplification:** make servers and providers less prominent for ordinary users while preserving them as infrastructure.
 
 They should not be implemented as one large redesign. The safest sequence is to validate the creative workflow first, establish user-controlled lifecycle primitives second, and then simplify the server-facing product based on observed usage. The main measures should be whether users return to develop a character or world, whether extracted resources are reused in later creations, whether users understand what is canonical, and whether storage costs become more predictable without undermining trust.
+
+## Migration-critical constraints — treat as on fire
+
+### Creation-detail overlay and routing must mirror the www SPA
+
+Creation detail is not a normal route rendered into the page outlet. The overlay is app functionality owned by the layout/app shell, with the detail view mounted inside an app-level overlay host. It must remain independent of the underlying view that opened it.
+
+Routing and overlay state are one system:
+
+- A deep-loaded `/creations/:id` URL must cause the app to select and prepare a valid underlying/default route, then open the creation-detail overlay over it.
+- A card click must preserve the already-loaded creation row/seed, update history, and open the same overlay path used by a deep link.
+- The overlay must preserve the underlying route and scroll state while open.
+- Closing, dismissing, or pressing Back must restore the correct underlying URL and state rather than leaving a detail route in the outlet or producing a blank shell.
+- Navigating between details must update overlay history and content without tearing down the app shell.
+- The detail view must be mounted by the app-level overlay controller, not by `CreationsView` and not as a normal router outlet page.
+
+Do not continue the beta creation-detail migration until the www SPA routing/overlay lifecycle has been traced clearly enough to reproduce these behaviors. If any part of the www implementation, deep-link defaulting, history ownership, or seed handoff is unclear, stop and resolve that detail before adapting code.
