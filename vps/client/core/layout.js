@@ -87,7 +87,27 @@ export function createLayout({ root, views, services } = {}) {
 	}
 
 	function setPage(chrome = {}) {
-		pageTitle.textContent = chrome.title || 'Feed';
+		pageTitle.replaceChildren();
+		if (chrome.breadcrumb) {
+			const breadcrumb = document.createElement('span');
+			breadcrumb.className = 'beta-outlet__title-text beta-outlet__title-text--breadcrumb';
+			const parent = document.createElement('a');
+			parent.className = 'beta-outlet__breadcrumb-link';
+			parent.href = chrome.breadcrumb.href;
+			parent.dataset.spaLink = '';
+			parent.textContent = chrome.breadcrumb.parent;
+			const separator = document.createElement('span');
+			separator.className = 'beta-outlet__breadcrumb-sep';
+			separator.setAttribute('aria-hidden', 'true');
+			separator.textContent = '›';
+			const current = document.createElement('span');
+			current.className = 'beta-outlet__breadcrumb-current';
+			current.textContent = chrome.breadcrumb.current;
+			breadcrumb.append(parent, separator, current);
+			pageTitle.append(breadcrumb);
+		} else {
+			pageTitle.textContent = chrome.title || 'Feed';
+		}
 		pageIcon.innerHTML = iconMarkup(chrome.icon || 'home');
 		composer.hidden = chrome.composer === 'none';
 	}

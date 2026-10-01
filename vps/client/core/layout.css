@@ -58,6 +58,11 @@ body.beta-layout main#app-outlet {
 .beta-outlet__icon { display: grid; flex: 0 0 24px; width: 24px; height: 24px; place-items: center; color: inherit; }
 .beta-outlet__icon svg { width: 18px; height: 18px; }
 .beta-outlet__title { overflow: hidden; margin: 0; font-size: 1.0625rem; font-weight: 600; line-height: 1; text-overflow: ellipsis; white-space: nowrap; }
+.beta-outlet__title-text--breadcrumb { display: inline-flex; align-items: center; gap: 0; min-width: 0; overflow: hidden; }
+.beta-outlet__breadcrumb-link { flex-shrink: 0; color: var(--text-muted); font-weight: 500; text-decoration: none; }
+.beta-outlet__breadcrumb-link:hover, .beta-outlet__breadcrumb-link:focus-visible { color: var(--text); text-decoration: underline; text-underline-offset: 2px; }
+.beta-outlet__breadcrumb-sep { flex-shrink: 0; margin: 0 0.4em; color: var(--text-muted); font-weight: 400; }
+.beta-outlet__breadcrumb-current { min-width: 0; overflow: hidden; color: var(--text); font-weight: 600; text-overflow: ellipsis; }
 .beta-outlet__actions { position: relative; z-index: 1; display: inline-flex; flex: 0 0 auto; align-items: center; gap: 6px; margin-left: auto; }
 .beta-outlet__identity > * { position: relative; z-index: 1; }
 .beta-outlet__action { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; min-width: 40px; min-height: 40px; padding: 8px; border: 0; border-radius: 50%; color: color-mix(in srgb, currentColor 68%, transparent); background: transparent; cursor: pointer; }

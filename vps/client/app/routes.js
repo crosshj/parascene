@@ -62,11 +62,21 @@ export function createAppRoutes({ definitions = [] } = {}) {
 			titleMode === 'notes' ? 'My Notes' : null;
 		const defaults = fallbackChrome(url.pathname);
 		const resolvedTitle = title || route.title || 'Coming soon';
+		const challengeSection = route.path.startsWith('/challenges/')
+			? route.path.split('/')[2].replace(/^./, (letter) => letter.toUpperCase())
+			: null;
 		return {
 			key: `route:${route.path}:${Object.values(params).join(':')}`,
 			view: route.view,
 			props: { title: resolvedTitle, viewName: route.viewName || route.title || resolvedTitle, ...params },
-			chrome: { title: resolvedTitle, icon: route.icon || defaults.icon, composer: route.composer || 'message' },
+			chrome: {
+				title: resolvedTitle,
+				icon: route.icon || defaults.icon,
+				composer: route.composer || 'message',
+				breadcrumb: challengeSection
+					? { parent: 'Challenges', href: '/challenges', current: challengeSection }
+					: null,
+			},
 		};
 	}
 

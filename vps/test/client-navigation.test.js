@@ -11,22 +11,22 @@ const views = {
 const definitions = [
 	{ path: '/', view: views.Feed, title: 'Feed', icon: 'home', composer: 'none' },
 	{ path: '/feed', view: views.Feed, title: 'Feed', icon: 'home', composer: 'none' },
-	{ path: '/feed/doom/:creationId', view: views.DoomScroll, title: 'Doom Scroll', presentation: 'overlay', defaultBackground: '/feed', composer: 'none' },
-	{ path: '/explore', view: views.Explore, title: 'Explore' },
-	{ path: '/challenges', view: views.Challenges, title: 'Challenges' },
-	{ path: '/challenges/organize', view: views.Challenges, title: 'Organize challenges', viewName: 'Challenges · Organize' },
-	{ path: '/challenges/details/:challengeId', view: views.Challenges, title: 'Challenge details', viewName: 'Challenges · Details' },
-	{ path: '/comments', view: views.Comments, title: 'Comments' },
-	{ path: '/ch/:slug', view: views.Channel, titleMode: 'channel' },
-	{ path: '/dm/:slug', view: views.DirectMessage, titleMode: 'dm' },
-	{ path: '/notes', view: views.DirectMessage, titleMode: 'notes', slug: 'self' },
-	{ path: '/library', view: views.Library, title: 'Library' },
-	{ path: '/feedback', view: views.Channel, titleMode: 'feedback', title: '#feedback', slug: 'feedback' },
-	{ path: '/creations', view: views.Creations, title: 'My Creations' },
-	{ path: '/files', view: views.FileManager, title: 'My Files' },
-	{ path: '/create', view: views.Create, presentation: 'overlay', defaultBackground: '/feed', title: 'Create', composer: 'none' },
-	{ path: '/creations/:creationId', view: views.CreationDetail, presentation: 'overlay', defaultBackground: '/creations', params: { id: 'creationId' } },
-	{ path: '*', view: views.NotFound },
+	{ path: '/feed/doom/:creationId', view: views.DoomScroll, title: 'Doom Scroll', icon: 'chart', presentation: 'overlay', defaultBackground: '/feed', composer: 'none' },
+	{ path: '/explore', view: views.Explore, title: 'Explore', icon: 'globe' },
+	{ path: '/challenges', view: views.Challenges, title: 'Challenges', icon: 'trophy' },
+	{ path: '/challenges/organize', view: views.Challenges, title: 'Organize challenges', viewName: 'Challenges · Organize', icon: 'trophy' },
+	{ path: '/challenges/details/:challengeId', view: views.Challenges, title: 'Challenge details', viewName: 'Challenges · Details', icon: 'trophy' },
+	{ path: '/comments', view: views.Comments, title: 'Comments', icon: 'comments' },
+	{ path: '/ch/:slug', view: views.Channel, titleMode: 'channel', icon: 'comments', composer: 'message' },
+	{ path: '/dm/:slug', view: views.DirectMessage, titleMode: 'dm', icon: 'user', composer: 'message' },
+	{ path: '/notes', view: views.DirectMessage, titleMode: 'notes', slug: 'self', icon: 'notes', composer: 'message' },
+	{ path: '/library', view: views.Library, title: 'Library', icon: 'book' },
+	{ path: '/feedback', view: views.Channel, title: 'Feedback', slug: 'feedback', icon: 'megaphone', composer: 'message' },
+	{ path: '/creations', view: views.Creations, title: 'My Creations', icon: 'picture' },
+	{ path: '/files', view: views.FileManager, title: 'My Files', icon: 'files' },
+	{ path: '/create', view: views.Create, presentation: 'overlay', defaultBackground: '/feed', title: 'Create', icon: 'plus', composer: 'none' },
+	{ path: '/creations/:creationId', view: views.CreationDetail, icon: 'picture', presentation: 'overlay', defaultBackground: '/creations' },
+	{ path: '*', view: views.NotFound, title: 'Not Found', icon: 'info', composer: 'none' },
 ];
 
 function browserAt(initialPath) {
@@ -126,6 +126,28 @@ test('all declared app routes resolve with the expected overlay and dynamic rout
 			'/library', '/feedback', '/creations', '/files', '/create', '/creations/42', '/not-a-route',
 		];
 		for (const path of expected) assert.ok(routes.match(path), `Expected route for ${path}`);
+		assert.equal(routes.resolve({ url: '/not-a-route' }).outlet.chrome.icon, 'info');
+		assert.equal(routes.resolve({ url: '/not-a-route' }).outlet.chrome.composer, 'none');
+		for (const [path, icon] of [
+			['/feed', 'home'], ['/explore', 'globe'], ['/challenges', 'trophy'],
+			['/challenges/organize', 'trophy'], ['/challenges/details/demo', 'trophy'],
+			['/comments', 'comments'], ['/ch/general', 'comments'], ['/dm/example', 'user'],
+			['/notes', 'notes'], ['/feedback', 'megaphone'], ['/library', 'book'],
+			['/creations', 'picture'], ['/files', 'files'], ['/not-a-route', 'info'],
+		]) assert.equal(routes.resolve({ url: path }).outlet.chrome.icon, icon, `Expected ${icon} icon for ${path}`);
+		assert.equal(routes.match('/create').icon, 'plus');
+		assert.equal(routes.match('/feed/doom/42').icon, 'chart');
+		assert.equal(routes.match('/creations/42').icon, 'picture');
+		assert.equal(routes.resolve({ url: '/ch/general' }).outlet.chrome.composer, 'message');
+		assert.equal(routes.resolve({ url: '/dm/example' }).outlet.chrome.composer, 'message');
+		assert.equal(routes.resolve({ url: '/notes' }).outlet.chrome.composer, 'message');
+		assert.equal(routes.resolve({ url: '/feedback' }).outlet.chrome.composer, 'message');
+		assert.deepEqual(routes.resolve({ url: '/challenges/organize' }).outlet.chrome.breadcrumb, {
+			parent: 'Challenges', href: '/challenges', current: 'Organize',
+		});
+		assert.deepEqual(routes.resolve({ url: '/challenges/details/demo' }).outlet.chrome.breadcrumb, {
+			parent: 'Challenges', href: '/challenges', current: 'Details',
+		});
 
 		const challengeDetails = routes.resolve({ url: '/challenges/details/demo' });
 		assert.equal(challengeDetails.outlet.props.challengeId, 'demo');
