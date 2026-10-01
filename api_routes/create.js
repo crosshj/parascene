@@ -4185,6 +4185,27 @@ export default function createCreateRoutes({ queries, storage }) {
 		const isUnavailable = anyImage.unavailable_at != null && anyImage.unavailable_at !== "";
 		if (isUnavailable && !isAdmin) return null;
 		if (isPublished || isAdmin) return anyImage;
+		// Challenge vote playback uses the same message proof as the creation
+		// metadata request. Without forwarding this gate, unpublished Parascene
+		// audio entries render in the vote overlay but their audio URL returns 404.
+		const cmRaw = req.query?.challenge_message_id ?? req.query?.challenge_msg;
+		const challengeMessageId =
+			typeof cmRaw === "string" ? parseInt(cmRaw, 10) : Number(cmRaw);
+		if (Number.isFinite(challengeMessageId) && challengeMessageId > 0) {
+			const sb = getSupabaseServiceClient();
+			if (sb) {
+				try {
+					const challengeOk = await canViewUnpublishedCreationViaChallengeMessage(sb, {
+						ancestorRow: anyImage,
+						challengeMessageId,
+						viewerUserId: user.id
+					});
+					if (challengeOk) return anyImage;
+				} catch {
+					// A failed membership or submission check must not grant audio access.
+				}
+			}
+		}
 		try {
 			const proof = readPostedCreationProofFromRequest(req);
 			const posted = await canViewUnpublishedCreationViaPostedRef({

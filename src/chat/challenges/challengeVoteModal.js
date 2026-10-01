@@ -374,6 +374,17 @@ export function createChallengeVoteModal(opts) {
 		return Number.isFinite(mid) && mid > 0 ? mid : null;
 	}
 
+	function creationWithChallengeAudioProof(creation, messageId) {
+		if (!creation || creation._error || !messageId || typeof creation.audio_url !== 'string') return creation;
+		try {
+			const audioUrl = new URL(creation.audio_url, window.location.origin);
+			audioUrl.searchParams.set('challenge_message_id', String(messageId));
+			return { ...creation, audio_url: `${audioUrl.pathname}${audioUrl.search}` };
+		} catch {
+			return creation;
+		}
+	}
+
 	async function fetchCreation(creationId, challengeMessageId) {
 		const id = Number(creationId);
 		const ck = voteFetchCacheKey(id, challengeMessageId);
@@ -430,8 +441,9 @@ export function createChallengeVoteModal(opts) {
 		const url = typeof c.url === 'string' ? c.url.trim() : '';
 		const thumb = typeof c.thumbnail_url === 'string' ? c.thumbnail_url.trim() : '';
 
-		/* Suno vote UI uses cover art + docked embed — warm the cover like an image. */
-		if (sunoEmbedFromCreation(c)) {
+		/* External audio uses cover art + its provider player; hosted Parascene audio
+		 * warms the cover while the inline hosted player loads its audio URL. */
+		if (sunoEmbedFromCreation(c) || (mediaType === 'audio' && c?.audio_url)) {
 			const artSrc = (url || thumb).trim();
 			if (!artSrc) return;
 			const im = new Image();
@@ -540,8 +552,8 @@ export function createChallengeVoteModal(opts) {
 				: typeof meta?.media_type === 'string'
 					? meta.media_type
 					: '';
-		if (provider !== 'suno' && mediaType !== 'audio') return null;
-		if (provider && provider !== 'suno') return null;
+		if (provider !== 'suno') return null;
+		if (mediaType !== 'audio') return null;
 
 		const songId = typeof importMeta?.song_id === 'string' ? importMeta.song_id.trim() : '';
 		const embedUrlRaw =
@@ -577,7 +589,8 @@ export function createChallengeVoteModal(opts) {
 	}
 
 	/**
-	 * Vote UI for Suno: cover art + compact 315×100 player at center-bottom (all sizes).
+	 * Audio vote UI: Suno embeds use their provider card; Parascene creations use
+	 * the hosted player over the cover art.
 	 */
 	function injectVoteMediaFromCreation(stage, c, cid) {
 		const mediaType = typeof c.media_type === 'string' ? c.media_type : 'image';
@@ -605,6 +618,26 @@ export function createChallengeVoteModal(opts) {
 			return;
 		}
 		setVoteMediaSunoMode(stage, false);
+		if (mediaType === 'audio' && typeof c.audio_url === 'string' && c.audio_url.trim()) {
+			const artSrc = url || thumb;
+			const artHtml = artSrc
+				? `<img class="challenge-vote-modal-suno-art${nsfwClass}" src="${escAttr(artSrc)}" alt="" decoding="async" draggable="false" />`
+				: `<div class="challenge-vote-modal-suno-art challenge-vote-modal-suno-art--empty" aria-hidden="true"></div>`;
+			const title = typeof c.title === 'string' && c.title.trim() ? c.title.trim() : 'Audio';
+			const duration = Number(c.meta?.audio?.duration);
+			const playerUrl = new URL('/audio-card.html', window.location.origin);
+			playerUrl.searchParams.set('src', c.audio_url.trim());
+			playerUrl.searchParams.set('t', title);
+			if (Number.isFinite(duration) && duration > 0) playerUrl.searchParams.set('d', String(duration));
+			stage.innerHTML = `<div class="challenge-vote-modal-suno-stage"${idAttr}>
+				${artHtml}
+				<div class="challenge-vote-modal-suno-dock">
+					<iframe class="challenge-vote-modal-suno-embed-iframe" src="${escAttr(`${playerUrl.pathname}${playerUrl.search}`)}" title="${escAttr(title)}" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>
+				</div>
+			</div>`;
+			lastVoteMediaCreationId = cid;
+			return;
+		}
 
 		if (mediaType === 'video' && videoUrl) {
 			const poster = thumb || url ? escAttr(thumb || url) : '';
@@ -646,7 +679,7 @@ export function createChallengeVoteModal(opts) {
 				dropCurrentSlideAsMissing();
 				return;
 			}
-			injectVoteMediaFromCreation(stage, cached, cid);
+			injectVoteMediaFromCreation(stage, creationWithChallengeAudioProof(cached, msgId), cid);
 			return;
 		}
 
@@ -658,7 +691,7 @@ export function createChallengeVoteModal(opts) {
 			dropCurrentSlideAsMissing();
 			return;
 		}
-		injectVoteMediaFromCreation(stage, c, cid);
+		injectVoteMediaFromCreation(stage, creationWithChallengeAudioProof(c, msgId), cid);
 	}
 
 	function paintHeatUi(value) {
