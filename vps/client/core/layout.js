@@ -183,10 +183,14 @@ export function createLayout({ root, views, services } = {}) {
 
 	function showOverlay(descriptor, changed) {
 		const visible = Boolean(descriptor);
-		if (visible && overlayHost.hidden) {
+		const opening = visible && overlayHost.hidden;
+		if (opening) {
 			restoreFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
 		}
 		overlayHost.hidden = !visible;
+		if (opening && document.activeElement instanceof HTMLElement && !overlayHost.contains(document.activeElement)) {
+			document.activeElement.blur();
+		}
 		setBackgroundSuppressed(visible);
 		if (visible) {
 			overlayTitle.textContent = descriptor.title || 'Detail';
@@ -197,6 +201,16 @@ export function createLayout({ root, views, services } = {}) {
 			queueMicrotask(() => { if (focusTarget.isConnected) focusTarget.focus(); });
 		}
 		if (!visible || changed) overlayContent.scrollTop = 0;
+	}
+
+	function focusOverlayInitialContent() {
+		const detailContent = overlayContent.querySelector('[data-detail-content]');
+		if (detailContent instanceof HTMLElement) {
+			if (!detailContent.hasAttribute('tabindex')) detailContent.setAttribute('tabindex', '-1');
+			detailContent.focus({ preventScroll: true });
+			return;
+		}
+		overlayClose.focus({ preventScroll: true });
 	}
 
 	function onOverlayKeydown(event) {
@@ -272,10 +286,12 @@ export function createLayout({ root, views, services } = {}) {
 		const revision = ++backgroundRevision;
 		const overlayChanged = mounted.overlay?.key !== composition.overlay?.key;
 		if (composition.overlay) {
+			const overlayOpening = overlayHost.hidden;
 			// Reset before revealing/mounting a new route so stale scroll position
 			// cannot flash while the new detail view is being inserted.
 			showOverlay(composition.overlay, overlayChanged);
 			await reconcileRegion('overlay', overlayContent, composition.overlay);
+			if (overlayOpening) focusOverlayInitialContent();
 			showOverlay(composition.overlay, false);
 			appliedComposition = composition;
 
