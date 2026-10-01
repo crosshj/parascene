@@ -2167,16 +2167,15 @@ const creationDetailScrollEngagement = {
 function bindCreationDetailScrollEngagementListener() {
 	if (creationDetailScrollEngagement.listenerBound) return;
 	creationDetailScrollEngagement.listenerBound = true;
-	window.addEventListener(
-		'scroll',
-		() => {
-			const y = window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
-			if (y > 0) {
-				creationDetailScrollEngagement.userScrolled = true;
-			}
-		},
-		{ passive: true, capture: true }
-	);
+	const markScrolled = (event) => {
+		const target = event.currentTarget;
+		const y = target === window
+			? (window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0)
+			: (target?.scrollTop || 0);
+		if (y > 0) creationDetailScrollEngagement.userScrolled = true;
+	};
+	window.addEventListener('scroll', markScrolled, { passive: true });
+	document.querySelector('.beta-app-overlay__content')?.addEventListener('scroll', markScrolled, { passive: true });
 }
 
 /**
@@ -2201,16 +2200,14 @@ function creationDetailUserHasScrolled() {
 function resetCreationDetailScroll(options = {}) {
 	const { force = false } = options;
 	if (!force && creationDetailUserHasScrolled()) return;
-	const apply = () => {
-		window.scrollTo(0, 0);
-		if (document.documentElement) document.documentElement.scrollTop = 0;
-		if (document.body) document.body.scrollTop = 0;
-	};
-	apply();
-	requestAnimationFrame(() => {
-		apply();
-		requestAnimationFrame(apply);
-	});
+	const overlayScroll = document.querySelector('.beta-app-overlay__content');
+	if (overlayScroll instanceof HTMLElement) {
+		overlayScroll.scrollTo({ top: 0, behavior: 'auto' });
+		return;
+	}
+	window.scrollTo({ top: 0, behavior: 'auto' });
+	if (document.documentElement) document.documentElement.scrollTop = 0;
+	if (document.body) document.body.scrollTop = 0;
 }
 
 /**
