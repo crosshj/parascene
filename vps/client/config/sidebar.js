@@ -1,5 +1,5 @@
-// Static product navigation and interaction definitions. Roster data itself
-// always comes from the sidebar API adapter in client/models/sidebar.js.
+// Static product navigation and interaction definitions. Conversation and
+// server data comes from the chat provider; this module holds sidebar options.
 export const navigationItems = [
 	{ id: 'feed', label: 'Feed', path: '/feed', icon: 'home' },
 	{ id: 'challenges', label: 'Challenges', path: '/challenges', icon: 'trophy' },

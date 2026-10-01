@@ -39,6 +39,28 @@ The areas still needing explicit attention are:
 
 The key distinction is between proving that a feature can be migrated and proving that the resulting architecture is healthy enough to operate and extend. Creation detail can test both. A concise beta-readiness checklist would turn the broader concerns into measurable criteria.
 
+## 2026-10-01
+
+I’ve recently worked on My Creations and Creation Detail. They are the first pages I’ve built out, and they get close to the heart of Parascene: creations. I can listen to music, watch videos, view NSFW creations, and Creation Detail is working too. Creation Detail feels like the center of the experience.
+
+I’ve also created the routes and views for the rest of the client. The next useful slice seems to be chat, especially channel chats and direct messages. They are currently separate views, and I’m not sure whether they should stay separate or be handled together. Getting chat working would cover My Notes, which is a DM to myself, along with direct messages, servers, and channels. It would also give me an outlet view that scrolls in the opposite direction, so it can help establish how that kind of view should work.
+
+The other major areas are Feed and Challenges. Creation is also a key part of the product, and it may deserve attention sooner, but I’m leaning toward getting composers working first and then building the create pages around them. That makes the likely sequence: chat, composers, create pages, then Challenges. Explore, Comments, and Library are less urgent and can remain simple placeholders for now.
+
+Mobile matters too, and I want to improve it as soon as possible. I’d like to merge this work into Parascene so I can stop relying on Vercel and avoid maintaining two codebases. The VPS client is currently inside the existing project structure; after the migration, I’ll need to pull it into the normal structure and deprecate the old implementation. I want to keep moving toward that cutover while choosing slices that make the client work end to end.
+
+### AI feedback
+
+Chat is a sensible next vertical slice because it exercises a different kind of view and unlocks several destinations at once: DMs, channels, servers, and Notes. Keep channel and DM routes distinct while their URL and navigation behavior differ, but look for shared conversation behavior—message loading, sending, scrolling, read state, and composer interaction. That lets each view reflect its purpose without forcing them into one large generic chat page.
+
+The sequence of chat, composers, then creation pages has a useful dependency: composers are the reusable interaction needed by the create flows. Before committing to the whole sequence, make one composer work end to end in its intended context, then use it to prove one create flow. That will show whether the composer boundary supports the actual creation workflow before the rest of the create pages are built.
+
+Feed and Challenges should remain visible in the plan even if they come later. A small, working navigation path is more valuable for cutover readiness than having every route appear complete. Explore, Comments, and Library can stay lightweight, provided their routes render predictably and give users a clear way back into the working parts of the app.
+
+Treat mobile as a requirement across each slice rather than a final pass. Chat especially needs checks for message-list direction, composer placement, keyboard behavior, and preserving the scroll position when older messages load. The route and view work already provides a useful shell for testing those flows.
+
+For the cutover, track a short list of end-to-end paths that must work on the VPS: open a creation from My Creations, use Creation Detail, open a DM and a channel, send a message, launch a composer, and complete one create flow. Include mobile checks and a recovery path for deployment failures. This gives you a concrete point to stop maintaining the old client without requiring every lower-priority view to be fully built first.
+
 ### Farther-reaching future direction
 
 After the current pushes are more stable, I want to return to the larger idea behind Parascene: helping people build characters and worlds. I want the product to be less centered on social activity for its own sake. The social layer should support the work of building characters, worlds, and shared creative settings.

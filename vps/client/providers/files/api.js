@@ -1,4 +1,4 @@
-import { ApiError, requestJson } from '../core/request.js';
+import { ApiError, requestJson } from '../../core/request.js';
 
 function normalizeApiOrigin(origin) {
 	return String(origin || '').trim().replace(/\/$/, '');

@@ -35,8 +35,8 @@ export const appViews = Object.freeze({
 		mount({ outlet, services, actions, setHeaderMenu }) {
 			return cleanup(outlet, renderCreationsView({
 				outlet,
-				creationsApi: services.resources.creationsApi,
-				creationsResource: services.resources.creationsResource,
+				creationsApi: services.providers.creations.api,
+				creationsQuery: services.providers.creations.query,
 				onUnauthorized: services.session.redirectToLogin,
 				setHeaderMenu,
 				onOpenCreation: (id, seed) => actions.navigate(`/creations/${id}`, { seed }),
@@ -47,8 +47,8 @@ export const appViews = Object.freeze({
 		mount({ outlet, services, setHeaderMenu }) {
 			return cleanup(outlet, renderFileManagerView({
 				outlet,
-				filesApi: services.resources.filesApi,
-				filesResource: services.resources.filesResource,
+				filesApi: services.providers.files.api,
+				filesQuery: services.providers.files.query,
 				onUnauthorized: services.session.redirectToLogin,
 				setHeaderMenu,
 			}));

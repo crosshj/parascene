@@ -32,7 +32,7 @@ function notificationMarkup(item, index) {
 	</button>`;
 }
 
-export function mountSidebarOverlays({ onAction, creditsResource, onClaimCredits, onRefreshCredits } = {}) {
+export function mountSidebarOverlays({ onAction, creditsQuery, onClaimCredits, onRefreshCredits } = {}) {
 	const host = document.createElement('div');
 	host.className = 'ps-overlays';
 	host.innerHTML = `
@@ -69,7 +69,7 @@ export function mountSidebarOverlays({ onAction, creditsResource, onClaimCredits
 	const claimStatus = host.querySelector('[data-credits-claim-status]');
 	const retryCreditsButton = host.querySelector('[data-overlay-action="retry-credits"]');
 	let claiming = false;
-	function syncCredits(snapshot = creditsResource?.getSnapshot?.()) {
+	function syncCredits(snapshot = creditsQuery?.getSnapshot?.()) {
 		const data = snapshot?.data;
 		if (!data) {
 			claimButton.disabled = true;
@@ -85,9 +85,9 @@ export function mountSidebarOverlays({ onAction, creditsResource, onClaimCredits
 			claimStatus.textContent = data.success ? 'Daily credits claimed successfully.' : data.canClaim ? 'Available once every UTC day.' : 'Check back tomorrow for more credits.';
 		}
 	}
-	const unsubscribeCredits = creditsResource?.subscribe(syncCredits);
+	const unsubscribeCredits = creditsQuery?.subscribe(syncCredits);
 	async function claimDailyCredits() {
-		if (claiming || !creditsResource?.data?.canClaim) return;
+		if (claiming || !creditsQuery?.data?.canClaim) return;
 		claiming = true;
 		claimButton.disabled = true;
 		claimButton.setAttribute('aria-busy', 'true');
@@ -193,7 +193,15 @@ export function mountSidebarOverlays({ onAction, creditsResource, onClaimCredits
 			if (name === 'credits' || name === 'notifications-full') {
 				const modalName = name === 'credits' ? 'credits' : 'notifications';
 				openModal(modalName);
-				if (name === 'credits' && creditsResource && creditsResource.status !== 'loading' && creditsResource.status !== 'refreshing' && (!creditsResource.data || creditsResource.isStale())) void refreshCredits();
+				if (
+					name === 'credits' &&
+					creditsQuery &&
+					creditsQuery.status !== 'loading' &&
+					creditsQuery.status !== 'refreshing' &&
+					(!creditsQuery.data || creditsQuery.isStale())
+				) {
+					void refreshCredits();
+				}
 			} else openPopover(name, element);
 		},
 		destroy() {

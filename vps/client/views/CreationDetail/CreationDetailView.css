@@ -4991,3 +4991,230 @@ body.view-nsfw .creation-detail-related-grid .feed-card-image.nsfw::after {
 		padding: 0 8px;
 	}
 }
+/* Submit to challenge confirmation modal (creation detail) */
+.creation-detail-challenge-submit-modal-overlay {
+	position: fixed;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.5);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 10000;
+	opacity: 0;
+	visibility: hidden;
+	pointer-events: none;
+	transition: opacity 0.2s, visibility 0.2s;
+}
+
+.creation-detail-challenge-submit-modal-overlay.open {
+	opacity: 1;
+	visibility: visible;
+	pointer-events: auto;
+}
+
+.creation-detail-challenge-submit-modal {
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: 14px;
+	box-shadow: var(--shadow);
+	max-width: 520px;
+	width: 90%;
+	max-height: min(88vh, 640px);
+	padding: 20px;
+	display: flex;
+	flex-direction: column;
+	gap: 0;
+	transform: scale(0.95);
+	transition: transform 0.2s;
+	box-sizing: border-box;
+}
+
+.creation-detail-challenge-submit-modal-overlay.open .creation-detail-challenge-submit-modal {
+	transform: scale(1);
+}
+
+.creation-detail-challenge-submit-modal-header {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 12px;
+	margin-bottom: 14px;
+	flex-shrink: 0;
+}
+
+.creation-detail-challenge-submit-modal-heading {
+	margin: 0;
+	padding: 2px 0 0;
+	font-size: 1.125rem;
+	font-weight: 600;
+	color: var(--text);
+	line-height: 1.35;
+	flex: 1;
+	min-width: 0;
+}
+
+.creation-detail-challenge-submit-modal-dismiss {
+	flex-shrink: 0;
+	width: 36px;
+	height: 36px;
+	margin: -4px -8px 0 0;
+	padding: 0;
+	border: none;
+	border-radius: 4px;
+	background: transparent;
+	color: var(--text-muted);
+	font-size: 1.5rem;
+	line-height: 1;
+	cursor: pointer;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	font: inherit;
+}
+
+.creation-detail-challenge-submit-modal-dismiss:hover {
+	background: var(--surface-strong);
+	color: var(--text);
+}
+
+.creation-detail-challenge-submit-modal-dismiss:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
+}
+
+.creation-detail-challenge-submit-modal-body {
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+	margin: 0 -4px 0 0;
+	padding-right: 8px;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.creation-detail-challenge-submit-modal-section-label {
+	margin: 0;
+	font-size: 0.65rem;
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--text-muted);
+}
+
+.creation-detail-challenge-submit-modal-challenge-title {
+	margin: 0;
+	font-size: 1rem;
+	font-weight: 600;
+	color: var(--text);
+	line-height: 1.35;
+}
+
+.creation-detail-challenge-submit-modal-challenge-details {
+	margin: 0;
+	font-size: 0.9375rem;
+	line-height: 1.5;
+	color: var(--text-muted);
+	white-space: pre-wrap;
+	word-break: break-word;
+	overflow-wrap: anywhere;
+}
+
+.creation-detail-challenge-submit-modal-challenge-details.user-text {
+	color: var(--text-muted);
+}
+
+.creation-detail-challenge-submit-modal-no-details {
+	margin: 0;
+	font-style: italic;
+	color: var(--text-muted);
+	font-size: 0.875rem;
+}
+
+.creation-detail-challenge-submit-modal-verify {
+	margin: 8px 0 0;
+	padding-top: 12px;
+	border-top: 1px solid var(--border);
+	font-size: 0.875rem;
+	line-height: 1.45;
+	color: var(--text);
+}
+
+.creation-detail-challenge-submit-modal-error {
+	margin: 12px 0 0;
+	padding: 10px 12px;
+	background: var(--error-bg);
+	border: 1px solid var(--error-border);
+	border-radius: 6px;
+	color: var(--error-text);
+	font-size: 0.875rem;
+}
+
+.creation-detail-challenge-submit-modal-error[hidden] {
+	display: none !important;
+}
+
+.creation-detail-challenge-submit-modal-footer {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	margin-top: 18px;
+	padding-top: 16px;
+	border-top: 1px solid var(--border);
+	flex-shrink: 0;
+}
+
+.creation-detail-challenge-submit-modal-cancel {
+	margin: 0;
+	padding: 8px 6px;
+	background: transparent;
+	border: none;
+	color: var(--text-muted);
+	font-size: 0.9375rem;
+	font-weight: 600;
+	cursor: pointer;
+	font: inherit;
+	text-decoration: underline;
+	text-underline-offset: 3px;
+	border-radius: 6px;
+	flex-shrink: 0;
+}
+
+.creation-detail-challenge-submit-modal-cancel:hover {
+	color: var(--text);
+}
+
+.creation-detail-challenge-submit-modal-cancel:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
+}
+
+.creation-detail-challenge-submit-modal-confirm {
+	min-width: 112px;
+	position: relative;
+	flex-shrink: 0;
+}
+
+.creation-detail-challenge-submit-modal-confirm-spinner {
+	display: none;
+	width: 1em;
+	height: 1em;
+	border: 2px solid color-mix(in srgb, currentColor 40%, transparent);
+	border-top-color: currentColor;
+	border-radius: 50%;
+	animation: spin 0.8s linear infinite;
+}
+
+.creation-detail-challenge-submit-modal-confirm.is-loading .creation-detail-challenge-submit-modal-confirm-label {
+	visibility: hidden;
+}
+
+.creation-detail-challenge-submit-modal-confirm.is-loading .creation-detail-challenge-submit-modal-confirm-spinner {
+	display: block;
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	margin-left: -0.5em;
+	margin-top: -0.5em;
+}

@@ -1,8 +1,8 @@
-export function connectLifecycle({ state, session, resources, router } = {}) {
+export function connectLifecycle({ state, session, providers, router } = {}) {
 	let started = false;
 
 	function syncExternalCache(event) {
-		resources.syncExternalCache?.(event);
+		providers.syncExternalCache?.(event);
 	}
 
 	async function start() {
@@ -11,7 +11,7 @@ export function connectLifecycle({ state, session, resources, router } = {}) {
 		window.addEventListener('storage', syncExternalCache);
 		// Bootstrap already contains the authenticated viewer. Resolve and paint
 		// the requested route before a session refresh can delay an overlay deep link.
-		// Domain resources load on demand when their owning views mount.
+		// Providers load query data on demand when their owning views mount.
 		await router.start();
 		await session.initialize();
 		state.actions.sessionChanged({ status: 'ready', user: session.user });
@@ -23,7 +23,7 @@ export function connectLifecycle({ state, session, resources, router } = {}) {
 		window.removeEventListener('storage', syncExternalCache);
 		router.destroy();
 		session.destroy();
-		resources.destroy();
+		providers.destroy();
 	}
 
 	return { start, destroy };

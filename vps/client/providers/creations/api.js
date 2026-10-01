@@ -1,4 +1,4 @@
-import { ApiError, requestJson } from '../core/request.js';
+import { ApiError, requestJson } from '../../core/request.js';
 
 export function createCreationsApi(origin = '') {
 	const base = String(origin || '').trim().replace(/\/$/, '');

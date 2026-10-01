@@ -1,4 +1,4 @@
-import { createSidebarModel } from '../../models/sidebar.js';
+import { createSidebarModel } from './SidebarModel.js';
 import { formatCredits } from '../../utils/format.js';
 import { mountSidebarOverlays } from '../SidebarOverlays/SidebarOverlaysView.js';
 
@@ -8,14 +8,15 @@ function routePath(navigation) {
 }
 
 export function createSidebarController({ view, services } = {}) {
-	const { resources, state, session } = services;
-	const { sidebarResource, creditsResource } = resources;
+	const { providers, state, session } = services;
+	const chatQuery = providers.chat.query;
+	const creditsQuery = providers.credits.query;
 
 	function model() {
 		const preference = state.selectors.sidebarPreference();
-		const roster = sidebarResource?.data || { viewerId: resources.viewerId, threads: [], servers: [] };
+		const roster = chatQuery?.data || { viewerId: providers.viewerId, threads: [], servers: [] };
 		const next = createSidebarModel(preference, roster);
-		if (creditsResource?.data) next.footer.credits = formatCredits(creditsResource.data.balance);
+		if (creditsQuery?.data) next.footer.credits = formatCredits(creditsQuery.data.balance);
 		return next;
 	}
 
@@ -27,11 +28,11 @@ export function createSidebarController({ view, services } = {}) {
 
 	function updateRoster(action) {
 		if (action?.action === 'refresh-sidebar') {
-			void sidebarResource?.refresh({ force: true }).catch(() => undefined);
+			void chatQuery?.refresh({ force: true }).catch(() => undefined);
 			return;
 		}
-		if (!action?.row || !sidebarResource?.data) return;
-		const data = sidebarResource.data;
+		if (!action?.row || !chatQuery?.data) return;
+		const data = chatQuery.data;
 		const next = {
 			...data,
 			threads: data.threads.map((row) => ({ ...row })),
@@ -54,18 +55,18 @@ export function createSidebarController({ view, services } = {}) {
 				? { ...row, unread_count: 0, last_read_message_id: next.readMarkers[String(threadId)] || row.last_read_message_id }
 				: row);
 		}
-		sidebarResource.setData(next);
+		chatQuery.setData(next);
 	}
 
 	const overlays = mountSidebarOverlays({
 		onAction: handleAction,
-		creditsResource,
+		creditsQuery,
 		onClaimCredits: async () => {
-			const result = await resources.creditsApi.claimDaily();
-			creditsResource?.update((current) => ({ ...current, ...result, canClaim: false, viewerId: resources.viewerId }));
+			const result = await providers.credits.api.claimDaily();
+			creditsQuery?.update((current) => ({ ...current, ...result, canClaim: false, viewerId: providers.viewerId }));
 			return result;
 		},
-		onRefreshCredits: () => creditsResource?.refresh({ force: true }),
+		onRefreshCredits: () => creditsQuery?.refresh({ force: true }),
 	});
 
 	function handleAction(action) {
@@ -85,18 +86,18 @@ export function createSidebarController({ view, services } = {}) {
 	}
 
 	const unsubscribeState = state.subscribe(renderState);
-	const unsubscribeRoster = sidebarResource?.subscribe((snapshot) => {
+	const unsubscribeRoster = chatQuery?.subscribe((snapshot) => {
 		if (snapshot.error?.status === 401) return session.redirectToLogin();
 		view.setRosterStatus(snapshot);
 		if (snapshot.data) renderState();
 	});
-	const unsubscribeCredits = creditsResource?.subscribe((snapshot) => {
+	const unsubscribeCredits = creditsQuery?.subscribe((snapshot) => {
 		if (snapshot.error?.status === 401) return session.redirectToLogin();
 		if (snapshot.data) renderState();
 	});
 
 	renderState();
-	if (sidebarResource) void sidebarResource.loadIfNeeded().catch(() => undefined);
+	if (chatQuery) void chatQuery.loadIfNeeded().catch(() => undefined);
 
 	return {
 		handleAction,

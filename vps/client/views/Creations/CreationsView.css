@@ -44,6 +44,8 @@
 @media (prefers-reduced-motion: reduce) { .creation-grid__status-gear { animation: none; } }
 .feed-card-image.nsfw .feed-card-img { filter: none; transform: none; }
 .creations-view__grid .feed-card-image.nsfw { position: relative; overflow: hidden; }
+/* CreationCard.css adds a generic NSFW text pill; this view renders the eye-hidden icon instead. */
+.creations-view__grid .feed-card-image.nsfw::before { content: none; }
 .creations-view__grid .creation-grid__nsfw-badge { position: absolute; top: 50%; left: 50%; z-index: 6; display: inline-flex; width: 44px; height: 44px; align-items: center; justify-content: center; border: 0; border-radius: 15px; corner-shape: squircle; color: rgb(255 255 255 / 70%); background: rgb(18 18 24 / 26%); box-shadow: none; transform: translate(-50%, -50%); pointer-events: none; }
 .creations-view__grid .creation-grid__nsfw-badge svg { display: block; width: 22px; height: 22px; }
 .creations-view__grid .feed-card-image.nsfw::after { content: ''; position: absolute; inset: -1px; z-index: 4; background: rgb(255 255 255 / 8%); pointer-events: none; }

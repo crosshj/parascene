@@ -65,13 +65,13 @@ function updateCreationCard(card, item, markup) {
 	return false;
 }
 
-export function renderCreationsView({ outlet, creationsApi, creationsResource, onUnauthorized, setHeaderMenu, onOpenCreation }) {
+export function renderCreationsView({ outlet, creationsApi, creationsQuery, onUnauthorized, setHeaderMenu, onOpenCreation }) {
 	const root = mountTemplate(outlet, template);
 	const refs = bindRefs(root);
 	let offset = 0;
 	let hasMore = false;
 	let loading = false;
-	let lastResourceData = null;
+	let lastQueryData = null;
 	let unsubscribe;
 	let pollTimer = 0;
 	let pollInProgress = false;
@@ -268,10 +268,10 @@ export function renderCreationsView({ outlet, creationsApi, creationsResource, o
 		}
 	}
 
-	function onResourceState(snapshot) {
+	function onQueryState(snapshot) {
 		if (snapshot.error?.status === 401) return onUnauthorized?.();
-		if (snapshot.data && !loading && snapshot.data !== lastResourceData) {
-			lastResourceData = snapshot.data;
+		if (snapshot.data && !loading && snapshot.data !== lastQueryData) {
+			lastQueryData = snapshot.data;
 			const items = Array.isArray(snapshot.data.creations) ? snapshot.data.creations : [];
 			offset = items.length;
 			render(snapshot.data);
@@ -330,8 +330,8 @@ export function renderCreationsView({ outlet, creationsApi, creationsResource, o
 	scrollRegion?.addEventListener('scroll', updateScrollTopVisibility, { passive: true });
 	updateScrollTopVisibility();
 	sentinelObserver.observe(refs.sentinel);
-	unsubscribe = creationsResource?.subscribe(onResourceState);
-	if (creationsResource) void creationsResource.loadIfNeeded().catch(() => undefined);
+	unsubscribe = creationsQuery?.subscribe(onQueryState);
+	if (creationsQuery) void creationsQuery.loadIfNeeded().catch(() => undefined);
 	else void refresh(true);
 
 	return () => { unsubscribe?.(); mediaLoader?.disconnect(); sentinelObserver.disconnect(); window.clearTimeout(pollTimer); pollTimer = 0; document.removeEventListener('visibilitychange', onVisibilityChange); document.removeEventListener('creation-detail:mutation', onCreationDetailMutation); refs.grid.removeEventListener('click', onGridClick); refs.scrollTop.removeEventListener('click', onScrollTopClick); refs.scrollBottom.removeEventListener('click', onScrollBottomClick); scrollRegion?.removeEventListener('scroll', updateScrollTopVisibility); setHeaderMenu?.(); };

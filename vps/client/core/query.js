@@ -2,8 +2,8 @@ function safeRead(cache) {
 	try { return cache?.read?.() ?? null; } catch { return null; }
 }
 
-export function createResource({ key, load, cache, initialData, maxAge = 60_000 } = {}) {
-	if (typeof load !== 'function') throw new TypeError('A resource requires a load function');
+export function createQuery({ key, load, cache, initialData, maxAge = 60_000 } = {}) {
+	if (typeof load !== 'function') throw new TypeError('A query requires a load function');
 	const cached = initialData === undefined ? safeRead(cache) : null;
 	let data = initialData !== undefined ? initialData : cached?.data;
 	let error = null;
@@ -14,7 +14,7 @@ export function createResource({ key, load, cache, initialData, maxAge = 60_000 
 	const subscribers = new Set();
 	function snapshot() { return { key, status, data, error, updatedAt, isLoading: status === 'loading', isRefreshing: status === 'refreshing' }; }
 	function notify(subscriber, value) {
-		try { subscriber(value); } catch (reason) { console.error('[resource] subscriber failed', reason); }
+		try { subscriber(value); } catch (reason) { console.error('[query] subscriber failed', reason); }
 	}
 	function publish() { const value = snapshot(); for (const subscriber of subscribers) notify(subscriber, value); }
 	function setData(next, { persist = true, updated = Date.now() } = {}) {

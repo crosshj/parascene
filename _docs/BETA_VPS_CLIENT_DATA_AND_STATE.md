@@ -64,7 +64,7 @@ resources are fetched when the selected route/thread needs them
 (`src/chat/chatPage.js`). The shared `renderEmptyState` helper in
 `src/shared/emptyState.js` distinguishes loading from empty and error content.
 
-VPS `createFilesApi` (`vps/client/api/files.js`) is a network API boundary. The
+VPS `createFilesApi` (`vps/client/providers/files/api.js`) is a network API boundary. The
 Files view owns request/loading/error/empty state and supports cancellation for
 its route lifetime. **Files is the target example for a cache-then-update-inline
 experience:** render a usable cached listing immediately, fetch the current
@@ -74,15 +74,16 @@ should be viewer-scoped and validated; successful uploads/deletes should update
 the visible listing and cache consistently, while a failed refresh keeps the
 last usable listing and exposes only subtle/recoverable stale status.
 
-The VPS Files view now follows this pattern through an app-scoped resource and
+The VPS Files view now follows this pattern through an app-scoped provider query and
 viewer-scoped storage cache: it leaves existing cards mounted while refresh is
 pending, reconciles the refreshed page by file id, and retains cached content
 when refresh fails. Upload, delete, and pagination update the resource snapshot
 so cache and visible list stay aligned. `www` chat caches remain a source of
 existing data-lifecycle concepts, while Files is the VPS product example for
-how cache-backed lists should feel. Keep transport and response normalization
-in `client/api/`; keep view-specific presentation in the view, and reusable
-resource/cache behavior in `client/core/` or a focused utility/component.
+how cache-backed lists should feel. Keep each domain's transport and response
+normalization in `client/providers/<domain>/api.js`; keep view-specific
+presentation in the view, and reusable resource/cache behavior in
+`client/core/` or a focused utility/component.
 
 ### 4. User-provided data
 
@@ -161,9 +162,9 @@ so a slow optional source does not make the entire view look broken.
 ### 10. Live sidebar rosters (DMs, channels, servers)
 
 The sidebar fixture belongs to `server/mocks/sidebar.js`; client views do not
-import mock roster records. The `client/api/sidebar.js` boundary requests the
-`www`-shaped endpoints, and `client/models/sidebar.js` adapts those API rows to
-the sidebar presentation model. Static product navigation and popup-menu
+import mock roster records. The `client/providers/chat/api.js` boundary requests the
+`www`-shaped endpoints, and `client/views/Sidebar/SidebarModel.js` adapts those
+chat rows to the sidebar presentation model. Static product navigation and popup-menu
 definitions are kept separately in `client/config/sidebar.js`. The Home page's
 full/minimal controls only filter the API-backed roster for visual testing.
 
@@ -312,15 +313,15 @@ observe, cache, invalidate, and report failures.
 
 A useful separation is:
 
-1. **Request layer (`client/api/`)** — performs HTTP, credentials, abort
-   signals, response parsing, and consistent error normalization. Domain API
-   modules (`files.js`, etc.) describe endpoints and payloads; views should not
-   repeatedly hand-roll `fetch` parsing and status checks.
-2. **Resource/lifecycle layer (`client/core/`)** — wraps a loader with explicit
+1. **Provider layer (`client/providers/<domain>/`)** — groups a capability's
+   public interface, HTTP API, optional data model, and optional query/observable
+   lifecycle. Views consume the provider instead of assembling those pieces.
+2. **Core lifecycle layer (`client/core/`)** — wraps a loader with explicit
    status, current data, error, refresh, cancellation, and optional cache and
    deduplication policies. It does not need to know how a particular page
    renders.
-3. **Scope/registry layer (`client/core/`)** — decides who owns a resource. A
+3. **Scope/registry layer (`client/core/`)** — decides which consumers share a
+   query and who owns its lifetime. A
    view can create a local resource by default; if another view later needs the
    same data or its loading state, register/promote it under a stable key in an
    app-scoped registry. The resource contract stays the same; only its owner and
@@ -348,8 +349,8 @@ const lease = appResources.acquire(['files', viewerId], makeFilesResource);
 const sharedResource = lease.resource;
 ```
 
-The VPS client now implements this shape in `client/core/resource.js` and
-`client/core/resourceRegistry.js`; the snippet is illustrative usage, not a
+The VPS client now implements this shape in `client/core/query.js` and
+`client/core/queryRegistry.js`; the snippet is illustrative usage, not a
 prescription that every resource be app-scoped. Important properties are stable
 resource identity, explicit ownership/release, and predictable transitions—not
 a particular library or a mandatory global singleton.
@@ -396,7 +397,9 @@ it only when a real second consumer appears.
 
 The VPS client now has a small centralized data foundation: a common JSON
 request/error boundary, observable resource lifecycle, app-scoped keyed resource
-registry, and versioned storage-cache helper. This is deliberately separate
+registry, and versioned storage-cache helper. Domain behavior is grouped in
+`providers/chat/`, `providers/creations/`, `providers/files/`, and
+`providers/credits/`, with the generic resource lifecycle kept in `core/`. This is deliberately separate
 from `createAppState`, which remains a simple observable value holder rather
 than a bucket for every domain. Files, sidebar roster, and credits are the
 first resources. Files is cache-first and reconciles inline. Sidebar rows come

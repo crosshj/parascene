@@ -7281,7 +7281,6 @@ async function loadCreation() {
 		const organizerAssignModalCancel = detailContent.querySelector('[data-organizer-assign-modal-cancel]');
 		const organizerAssignDetailBtn = detailContent.querySelector('[data-organizer-assign-detail-btn]');
 		let organizerAssignModalEscapeHandler = null;
-		let organizerAssignLoadGen = 0;
 
 		function closeOrganizerAssignModal() {
 			if (!(organizerAssignModal instanceof HTMLElement)) return;
@@ -7306,22 +7305,9 @@ async function loadCreation() {
 			};
 			document.addEventListener('keydown', organizerAssignModalEscapeHandler);
 
-			const loadId = ++organizerAssignLoadGen;
-			const result = await fillOrganizerAssignModalContent(organizerAssignModalBody, creationId, {
+			await fillOrganizerAssignModalContent(organizerAssignModalBody, creationId, {
 				isChallengeEntry: hasChallengeSubmission
 			});
-			if (loadId !== organizerAssignLoadGen) return;
-			if (result === 'not_organizer' || result === 'empty') {
-				closeOrganizerAssignModal();
-				if (organizerAssignDetailBtn instanceof HTMLElement) {
-					organizerAssignDetailBtn.hidden = true;
-				}
-				if (result === 'not_organizer' && typeof showToast === 'function') {
-					showToast('Only challenge organizers can assign media');
-				} else if (result === 'empty' && typeof showToast === 'function') {
-					showToast('No challenges available to assign');
-				}
-			}
 		}
 
 		if (organizerAssignDetailBtn instanceof HTMLButtonElement) {

@@ -107,7 +107,7 @@ function updateFileCard(root, file, { previewTemplate, filesApi, onPlayAudio, on
 	}
 }
 
-export function renderFileManagerView({ outlet, filesApi, filesResource, onUnauthorized, setHeaderMenu }) {
+export function renderFileManagerView({ outlet, filesApi, filesQuery, onUnauthorized, setHeaderMenu }) {
 	const controller = new AbortController();
 	const root = mountTemplate(outlet, template);
 	const refs = bindRefs(root);
@@ -172,10 +172,10 @@ export function renderFileManagerView({ outlet, filesApi, filesResource, onUnaut
 	}
 	function insertFile(file) {
 		const displayFile = !file.display_name && uploadedNames.has(file.id) ? { ...file, display_name: uploadedNames.get(file.id) } : file;
-		const current = filesResource?.data;
+		const current = filesQuery?.data;
 		if (current && Array.isArray(current.files)) {
 			const files = [displayFile, ...current.files.filter((row) => String(row.id) !== String(displayFile.id))];
-			filesResource.setData({ ...current, files });
+			filesQuery.setData({ ...current, files });
 		} else {
 			const card = createFileCard(displayFile, { cardTemplate, previewTemplate, filesApi, onDelete: deleteFile, onPlayAudio: playAudio, onPlayVideo: playVideo });
 			card.dataset.fileId = String(file.id);
@@ -226,7 +226,7 @@ export function renderFileManagerView({ outlet, filesApi, filesResource, onUnaut
 			status.textContent = 'No files are stored in your personal folder yet.';
 		} else status.hidden = true;
 	}
-	function onResourceState(snapshot) {
+	function onQueryState(snapshot) {
 		if (snapshot.error?.status === 401) { onUnauthorized(); return; }
 		const hasFiles = Array.isArray(snapshot.data?.files);
 		if (hasFiles) renderSnapshot(snapshot.data);
@@ -245,8 +245,8 @@ export function renderFileManagerView({ outlet, filesApi, filesResource, onUnaut
 	}
 	async function load({ append = false } = {}) {
 		if (append && loadingMore) return;
-		if (!append && filesResource) {
-			try { await filesResource.refresh({ force: true }); } catch { /* Resource keeps cached data and publishes a stale error. */ }
+		if (!append && filesQuery) {
+			try { await filesQuery.refresh({ force: true }); } catch { /* Query keeps cached data and publishes a stale error. */ }
 			return;
 		}
 		if (append) { loadingMore = true; loadMore.disabled = true; }
@@ -257,10 +257,10 @@ export function renderFileManagerView({ outlet, filesApi, filesResource, onUnaut
 		}
 		try {
 			const data = await filesApi.list({ offset: nextOffset, signal: controller.signal });
-			const current = filesResource?.data;
+			const current = filesQuery?.data;
 			const mergedFiles = [...(current?.files || []), ...(Array.isArray(data.files) ? data.files : [])];
-			filesResource?.setData({ ...data, files: mergedFiles, pagination: data.pagination });
-			if (!filesResource) renderSnapshot({ ...data, files: mergedFiles });
+			filesQuery?.setData({ ...data, files: mergedFiles, pagination: data.pagination });
+			if (!filesQuery) renderSnapshot({ ...data, files: mergedFiles });
 		} catch (error) {
 			if (error?.name === 'AbortError') return;
 			if (error?.status === 401) return onUnauthorized();
@@ -275,8 +275,8 @@ export function renderFileManagerView({ outlet, filesApi, filesResource, onUnaut
 		button.disabled = true;
 		try {
 			await filesApi.remove(file.id, { signal: controller.signal });
-			const current = filesResource?.data;
-			if (current) filesResource.setData({ ...current, files: current.files.filter((row) => String(row.id) !== String(file.id)) });
+			const current = filesQuery?.data;
+			if (current) filesQuery.setData({ ...current, files: current.files.filter((row) => String(row.id) !== String(file.id)) });
 			else card.remove();
 			if (nextOffset !== null) nextOffset = Math.max(0, nextOffset - 1);
 			if (!grid.children.length) showEmptyState();
@@ -307,11 +307,11 @@ export function renderFileManagerView({ outlet, filesApi, filesResource, onUnaut
 	audioDialog.addEventListener('click', (event) => { if (event.target === audioDialog) audioDialog.close(); });
 	lightboxArtwork.addEventListener('error', () => { lightboxArtwork.hidden = true; });
 	fileInput.addEventListener('change', () => { const file = fileInput.files?.[0]; if (file) void uploadFile(file); });
-	const unsubscribeResource = filesResource?.subscribe(onResourceState);
-	if (filesResource) void load();
+	const unsubscribeQuery = filesQuery?.subscribe(onQueryState);
+	if (filesQuery) void load();
 	else void filesApi.list({ signal: controller.signal }).then((data) => renderSnapshot(data)).catch((error) => { if (error?.name !== 'AbortError') { status.hidden = false; status.classList.add('is-error'); status.textContent = error?.message || 'Unable to load your files.'; } });
 	return () => {
-		unsubscribeResource?.();
+		unsubscribeQuery?.();
 		controller.abort();
 		stopVideo();
 		stopAudio();

@@ -10,7 +10,7 @@ This is the target pattern for `vps/client`, not a claim that the migration is c
 | --- | --- |
 | Markup, styling, rendering, or local DOM interaction | `View.html`, `View.css`, and `View.js`. |
 | Coordinating a feature's data, subscriptions, and user actions | Its adjacent `Controller.js`; keep this in `View.js` while simple. |
-| Loading, updating, caching, or sharing server data | A resource; its API adapter handles HTTP. |
+| Loading, updating, caching, or sharing server data | A domain provider; its API adapter handles HTTP, and it uses `core/query.js` for query-cache behavior when appropriate. |
 | Client state shared across features | App state with named actions/selectors. Keep local UI state in its view/controller; don't duplicate resource data. |
 | URL changes, route selection, Back/Forward, or route-driven overlay open/close | Route definitions and the router. Together with relevant state, they resolve the shell and its region contents, including a retained/default background; only the router writes history. |
 | Mounting/unmounting views, persistent regions, overlay visibility, focus, Escape, or scroll | Layout. It manages both shell structure and interaction, without implementing feature behavior. |
@@ -37,13 +37,13 @@ Illustrative target interfaces, to be implemented during cleanup:
 ```js
 const bootstrap = window.__PARASCENE_BOOTSTRAP__ || {};
 const state = createApplicationState({ bootstrap });
-const resources = createAppResources({ bootstrap });
+const providers = createAppProviders({ bootstrap });
 const session = createSession({
   initialUser: bootstrap.user,
   onChange: (user) => state.actions.sessionChanged({ status: 'ready', user }),
-  onLogout: () => resources.clearCaches(),
+  onLogout: () => providers.clearCaches(),
 });
-const services = { state, session, resources };
+const services = { state, session, providers };
 const routes = createAppRoutes({
   definitions: [
     { name: 'home', path: '/', view: views.Home },
@@ -63,7 +63,7 @@ const layout = createLayout({
   root: document.getElementById('app-shell'), views, services,
 });
 const router = createRouter({ routes, state, layout });
-const lifecycle = connectLifecycle({ state, session, resources, router });
+const lifecycle = connectLifecycle({ state, session, providers, router });
 await lifecycle.start();
 ```
 
@@ -85,7 +85,7 @@ Imports include the view barrel and element-registration barrel. Startup resolve
 | `core/layout.js` | Declares shell children and named regions; owns mounted-view handles. Applies the resolved composition, retaining shared children across transitions. Owns overlay visibility, focus, dismissal interaction, and scroll locking/restoration. No creation-specific code, fetching, or history writes. |
 | `views/Sidebar/SidebarController.js` | Subscriptions, preferences, roster actions, and deriving sidebar render data. Created and destroyed by the sidebar view; persists while that view persists. |
 | `views/*/*View.js` | Public mount entrypoint: markup, rendering, local interaction, and an optional attached controller. Exposes one lifetime/cleanup handle for both. |
-| `app/resources.js`, `api/`, `core/resource*` | Domain resource configuration, HTTP contracts, and reusable loading/cache machinery respectively. |
+| `providers/<domain>/`, `core/resource*` | Domain data behavior and HTTP contracts, and reusable query/cache machinery respectively. `providers/index.js` composes the app's providers; each domain folder exposes `index.js` and adds `api.js`, `model.js`, `resource.js`, or other modules only when useful. |
 | `core/session.js` | Identity, authentication refresh, and logout. Account/avatar rendering belongs to the sidebar view. |
 | `app/lifecycle.js` | Startup order, browser lifecycle subscriptions, and teardown; delegates refresh/cache policies to resource owners. |
 
@@ -93,7 +93,7 @@ Dependencies flow from composition into infrastructure and features. Features re
 
 ## 3. Views and controllers stay together
 
-Keep `SidebarView.{js,html,css}` and `SidebarController.js` in `views/Sidebar/`. Mounting `SidebarView` creates its controller, which subscribes to relevant data, derives render values, and translates emitted actions into service calls. The view renders those values and emits intent. Pure mapping can remain in `models/sidebar.js`; shared roster/credits data remain in resources. Callers mount the view, not a separately managed controller.
+Keep `SidebarView.{js,html,css}`, `SidebarController.js`, and the sidebar presentation model in `views/Sidebar/`. Mounting `SidebarView` creates its controller, which subscribes to relevant provider queries, derives render values, and translates emitted actions into provider calls. The view renders those values and emits intent. Chat roster data and credits remain in their respective providers. Callers mount the view, not a separately managed controller.
 
 A small view needs only `View.js`. Split a controller when coordination obscures rendering, not by default. For this migration, `CreationDetailView.js` continues to mount the full fragment and run the adapted existing behavior; do not replace it with a reduced renderer.
 
@@ -121,7 +121,7 @@ Consumers read selectors and subscribe to relevant changes; owners apply named t
 
 State changes that affect view presence (for example, session state) feed the same layout reconciliation as routing. Ordinary data changes notify existing controllers. State-only surfaces use explicit app-state selection; URL-backed surfaces use the router. Both request mounts through layout, not competing render/visibility paths.
 
-Resources own caching, deduplication, refresh, and invalidation. Bootstrap/cached values paint immediately; fetch only missing or stale data. Load resources when needed, and clear private state on identity changes. A sidebar refresh must not reset outlet chrome by independently rereading `location.pathname`.
+Providers own domain-specific data behavior and lifetime. A provider may expose a query cache, an observable subscription, or both; it should expose only the behavior its consumers need. The current Creations, Files, Sidebar, and Credits providers expose API adapters and query caches built on `core/query.js`. Their views continue to own page-specific work such as pagination, rendering, and mounted-view cleanup. Bootstrap/cached values paint immediately; fetch only missing or stale data. Load providers' query data when needed, and clear private state on identity changes. A sidebar refresh must not reset outlet chrome by independently rereading `location.pathname`.
 
 ## 5. Routes describe layout compositions
 
@@ -156,7 +156,7 @@ WWW references: `src/shared/spaPageOverlay.js` handles history, dismissal, and s
 ## 6. Apply this to the existing client
 
 1. **Consolidate navigation and mounting.** Put route resolution/history in the router, replacing wildcard/microtask detail handling with explicit shell/outlet/overlay compositions and background policy. Make layout reconcile those compositions and derive overlay interaction/visibility from occupancy. Remove creation-specific layout navigation, duplicate history listeners, and history monkey-patching from `CreationDetailView.js`. Do not introduce an overlay controller.
-2. **Finish the sidebar boundary.** Declare sidebar as a child of the shared app shell, selected through route composition—not an explicit `app.js` mount. Move `app/sidebar.js` beside `SidebarView.js`; create/dispose its controller through the view mount. Absorb sidebar subscriptions from `app/shell.js` and account rendering from session. Keep resource policy in resources. Remove the duplicate sidebar snapshot from app state; retain sidebar/controller across routes that share that shell.
+2. **Finish the sidebar boundary.** Declare sidebar as a child of the shared app shell, selected through route composition—not an explicit `app.js` mount. Move `app/sidebar.js` beside `SidebarView.js`; create/dispose its controller through the view mount. Absorb sidebar subscriptions from `app/shell.js` and account rendering from session. Keep provider policy in its domain provider. Remove the duplicate sidebar snapshot from app state; retain sidebar/controller across routes that share that shell.
 3. **Make composition visible.** Move session/router construction out of `app/runtime.js` into `app.js`; distribute storage/refresh handling to resources and startup/disposal to lifecycle. Remove `app/shell.js` once its bindings have owners. Keep route/view inputs current instead of capturing preferences once at startup.
 4. **Complete the fragment seam.** Pass `creationId`, seed, and navigation actions directly into the detail mount; consume the seed instead of assigning an unused window global. Move page-load listeners into its lifetime. Preserve full markup and existing feature behavior.
 5. **Close the build boundary.** Port required helpers directly into their canonical owner under `vps/client` and use static, relative imports, including dependencies of custom elements. Adapt WWW imports in the source files themselves; Rollup aliases, path remapping, dynamic-import rewriting, and module-specific source transforms are not migration tools. No `/shared/...` runtime fetches or imports from outside `vps/`. A successful build with unresolved local imports is not a completed migration.

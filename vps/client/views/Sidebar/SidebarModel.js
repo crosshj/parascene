@@ -1,5 +1,5 @@
-import { navigationItems, sidebarMenus } from '../config/sidebar.js';
-import { formatCredits } from '../utils/format.js';
+import { navigationItems, sidebarMenus } from '../../config/sidebar.js';
+import { formatCredits } from '../../utils/format.js';
 
 function rosterModel(roster = {}) {
 	const threads = Array.isArray(roster.threads) ? roster.threads : [];
