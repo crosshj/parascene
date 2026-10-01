@@ -156,6 +156,9 @@ async function refreshAfterMutation(_reason, options = {}) {
 		tags: ['creations', 'feed', 'explore'],
 		urls: ['/api/create/images'],
 	});
+	document.dispatchEvent(new CustomEvent('creation-detail:mutation', {
+		detail: { reason: _reason, ...options },
+	}));
 	if (options.skipContentRefresh !== true) {
 		await loadCreation();
 	}
@@ -8427,6 +8430,8 @@ export function renderCreationDetailView({ outlet, creationId, initialSeed = nul
 		hasOpenEscapeTarget: creationDetailPageHasOpenEscapeTarget,
 		destroy() {
 		listenerController.abort();
+		stopCreationDetailInFlightPoll();
+		stopCreationDetailGroupMemberPoll();
 		clearCreationDetailSunoPlayer(outlet.querySelector('.creation-detail-image-wrapper'));
 		creationDetailViewMounted = false;
 		activeCreationDetailId = null;

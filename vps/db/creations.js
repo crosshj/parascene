@@ -53,6 +53,20 @@ export function createCreationsStore({ client, supabaseUrl, serviceRoleKey }) {
 			const rows = (Array.isArray(data) ? data : []).filter((row) => !isHiddenInGroupMeta(row?.meta));
 			return { rows: rows.slice(0, limit), hasMore: rows.length > limit };
 		},
+		async listByIds(userId, ids) {
+			const safeIds = [...new Set((Array.isArray(ids) ? ids : [])
+				.map(Number).filter((id) => Number.isInteger(id) && id > 0))].slice(0, 100);
+			if (!safeIds.length) return [];
+			let query = client
+				.from("prsn_created_images")
+				.select(CREATION_FIELDS)
+				.eq("user_id", userId)
+				.is("unavailable_at", null)
+				.in("id", safeIds);
+			const { data, error } = await query;
+			if (error) throw error;
+			return (Array.isArray(data) ? data : []).filter((row) => !isHiddenInGroupMeta(row?.meta));
+		},
 		async byIdForViewer(userId, creationId, { isAdmin = false } = {}) {
 			const id = Number(creationId);
 			if (!Number.isInteger(id) || id <= 0) return null;
@@ -226,6 +240,11 @@ export function creationMediaKeys(row) {
 	let meta = row?.meta;
 	if (typeof meta === "string") {
 		try { meta = JSON.parse(meta); } catch { meta = null; }
+	}
+	const audio = meta?.audio && typeof meta.audio === "object" ? meta.audio : {};
+	for (const cover of [meta?.cover_url, meta?.cover_image_url, audio.cover_url, audio.cover_image_url, audio.thumbnail_url]) {
+		const key = mediaKeyFromValue(cover);
+		if (key) values.push(key);
 	}
 	const group = meta?.group && typeof meta.group === "object" ? meta.group : null;
 	const sources = group?.kind === "group_creations"

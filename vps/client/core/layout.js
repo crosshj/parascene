@@ -48,6 +48,7 @@ export function createLayout({ root, views, services } = {}) {
 	let restoreFocus = null;
 	let backgroundRevision = 0;
 	let viewportResizeTimer = 0;
+	let sidebarLayoutReady = false;
 
 	const overlayHost = document.createElement('div');
 	overlayHost.className = 'beta-app-overlay-host';
@@ -146,6 +147,11 @@ export function createLayout({ root, views, services } = {}) {
 		document.body.classList.toggle('beta-creation-overlay-open', suppressed);
 	}
 
+	function setSidebarLayoutReady(ready) {
+		sidebarLayoutReady = Boolean(ready);
+		document.documentElement.classList.toggle('beta-sidebar-layout-pending', !sidebarLayoutReady);
+	}
+
 	function onViewportResize() {
 		document.body.classList.add('is-resizing-viewport');
 		window.clearTimeout(viewportResizeTimer);
@@ -208,8 +214,11 @@ export function createLayout({ root, views, services } = {}) {
 	async function prepareBackground(composition, revision) {
 		if (revision !== backgroundRevision) return;
 		const appShell = composition.shell === 'app';
+		setSidebarLayoutReady(!appShell);
 		await reconcileRegion('sidebar', sidebarRegion, appShell ? { key: 'app:sidebar', view: views.Sidebar, props: {} } : null);
 		if (revision !== backgroundRevision) return;
+		// Sidebar mount reads the saved width and applies it before returning.
+		setSidebarLayoutReady(true);
 		await reconcileRegion('mobile', mobileRegion, appShell ? { key: 'app:mobile', view: views.MobileNavigation, props: {} } : null);
 		if (revision !== backgroundRevision) return;
 
@@ -275,6 +284,7 @@ export function createLayout({ root, views, services } = {}) {
 		unmount('sidebar', sidebarRegion);
 		setHeaderMenu();
 		setBackgroundSuppressed(false);
+		setSidebarLayoutReady(true);
 		document.removeEventListener('keydown', onDocumentKeydown);
 		window.removeEventListener('resize', onViewportResize);
 		window.clearTimeout(viewportResizeTimer);
@@ -295,6 +305,7 @@ export function createLayout({ root, views, services } = {}) {
 	document.addEventListener('keydown', onDocumentKeydown);
 	window.addEventListener('resize', onViewportResize, { passive: true });
 	document.body.classList.add('beta-layout');
+	setSidebarLayoutReady(false);
 
 	return {
 		apply,

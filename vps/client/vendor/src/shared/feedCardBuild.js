@@ -211,11 +211,21 @@ export function feedItemCardImageUrl(item, preferThumbnail = false) {
 	const creationId = Number(item?.created_image_id ?? item?.id);
 	const useThumbnail = preferThumbnail && !isFeedRowVideoCreation(item);
 	const groupCover = resolveGroupCoverDisplayUrl(item, useThumbnail);
-	if (groupCover) return groupCover;
+	const meta = parseFeedItemMeta(item) || {};
+	const blur = Boolean(item?.nsfw || meta.nsfw) || creationMetaHasChallengeSubmission(meta) && !(item.published === true || item.published === 1) && item.challenge_ended !== true && String(item.media_type || meta.media_type || '').toLowerCase() !== 'audio';
+	if (groupCover) return blur ? appendMediaVariant(groupCover, 'blur') : groupCover;
 	if (useThumbnail) {
-		return appendCreationIdToMediaUrl(item.thumbnail_url || item.image_url || '', creationId);
+		return appendMediaVariant(appendCreationIdToMediaUrl(item.thumbnail_url || item.image_url || '', creationId), blur ? 'blur' : '');
 	}
-	return appendCreationIdToMediaUrl(item.image_url || item.thumbnail_url || '', creationId);
+	return appendMediaVariant(appendCreationIdToMediaUrl(item.image_url || item.thumbnail_url || '', creationId), blur ? 'blur' : '');
+}
+
+function appendMediaVariant(url, variant) {
+	if (!url || !variant || !url.includes('/api/creations/media/')) return url;
+	const parsed = new URL(url, 'http://localhost');
+	parsed.searchParams.set('variant', variant);
+	if (variant === 'blur') parsed.searchParams.set('source_variant', 'thumbnail');
+	return `${parsed.pathname}${parsed.search}${parsed.hash}`;
 }
 
 /**
@@ -230,10 +240,13 @@ export function feedItemCardImageUrlCandidates(item, preferThumbnail = false) {
 	const full = appendCreationIdToMediaUrl(fullRaw, creationId);
 	const thumb = appendCreationIdToMediaUrl(thumbRaw, creationId);
 	const useThumbnail = preferThumbnail && !isFeedRowVideoCreation(item);
+	const meta = parseFeedItemMeta(item) || {};
+	const blur = Boolean(item?.nsfw || meta.nsfw) || creationMetaHasChallengeSubmission(meta) && !(item.published === true || item.published === 1) && item.challenge_ended !== true && String(item.media_type || meta.media_type || '').toLowerCase() !== 'audio';
 	const ordered = useThumbnail ? [thumb, full] : [full, thumb];
+	const urls = blur ? ordered.map((url) => appendMediaVariant(url, 'blur')) : ordered;
 	const out = [];
 	const seen = new Set();
-	for (const u of ordered) {
+	for (const u of urls) {
 		if (!u || seen.has(u)) continue;
 		seen.add(u);
 		out.push(u);

@@ -96,6 +96,7 @@ export function createSidebarController({ view, services } = {}) {
 	});
 
 	renderState();
+	if (sidebarResource) void sidebarResource.loadIfNeeded().catch(() => undefined);
 
 	return {
 		handleAction,

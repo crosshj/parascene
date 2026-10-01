@@ -5,8 +5,11 @@ export function createCreationsApi(origin = '') {
 	const url = (path) => `${base}${path}`;
 
 	return {
-		async list({ limit = 50, offset = 0, signal } = {}) {
-			const data = await requestJson(url(`/api/creations?limit=${limit}&offset=${offset}`), { signal });
+		async list({ limit = 50, offset = 0, ids, signal } = {}) {
+			const query = Array.isArray(ids) && ids.length
+				? `ids=${encodeURIComponent(ids.join(','))}`
+				: `limit=${limit}&offset=${offset}`;
+			const data = await requestJson(url(`/api/creations?${query}`), { signal });
 			if (!Array.isArray(data?.creations) || typeof data?.has_more !== 'boolean') {
 				throw new ApiError('The creations response was incomplete. Try refreshing.');
 			}

@@ -1,6 +1,7 @@
 import express from "express";
 import { Readable } from "node:stream";
 import path from "node:path";
+import sharp from "sharp";
 import { requireAuth } from "./middleware/auth.js";
 import { creationAudioCdnId, creationMediaKey, creationVideoMediaKey } from "../db/creations.js";
 import { extractVideoThumbnail } from "./utils/media.js";
@@ -105,6 +106,20 @@ function setMediaHeaders(res, upstream, key) {
 	res.set("Content-Disposition", `inline; filename="${path.basename(key).replace(/["\\\r\n]/g, "_")}"`);
 }
 
+function blurredThumbnail(input) {
+	let image = sharp(input, { failOn: "none" }).rotate();
+	// Match the card crop on the server so the browser only composites a bitmap.
+	return image.resize(480, 480, { fit: "cover", position: "centre" }).blur(60).jpeg({ quality: 82, mozjpeg: true }).toBuffer();
+}
+
+function gridThumbnail(input) {
+	return sharp(input, { failOn: "none" })
+		.rotate()
+		.resize(480, 480, { fit: "cover", position: "centre" })
+		.jpeg({ quality: 82, mozjpeg: true })
+		.toBuffer();
+}
+
 export function createCreationsRoutes({ creations, users }) {
 	const router = express.Router();
 	async function sendMedia(req, res, next) {
@@ -114,6 +129,37 @@ export function createCreationsRoutes({ creations, users }) {
 			const viewer = await users.byId(req.auth.userId);
 			if (!(await creations.canAccessMedia(req.auth.userId, req.query.creation_id, key, { isAdmin: viewer?.role === "admin" }))) return res.status(404).json({ error: "Media not found" });
 			const variant = String(req.query.variant || "").trim().toLowerCase();
+			if (variant === "grid_thumbnail") {
+				const response = await creations.fetchMedia(key, { method: "GET" });
+				if (!response.ok || !response.body) return res.status(404).json({ error: "Media not found" });
+				const chunks = [];
+				for await (const chunk of Readable.fromWeb(response.body)) chunks.push(chunk);
+				const output = await gridThumbnail(Buffer.concat(chunks));
+				res.status(200);
+				res.type("jpg");
+				res.set("Content-Length", String(output.length));
+				res.set("Content-Disposition", `inline; filename="${path.basename(key).replace(/["\\\r\n]/g, "_")}.jpg"`);
+				res.set("X-Content-Type-Options", "nosniff");
+				res.set("Cache-Control", "public, max-age=86400, stale-while-revalidate=86400");
+				res.set("Cloudflare-CDN-Cache-Control", "public, max-age=604800, stale-while-revalidate=86400");
+				return req.method === "HEAD" ? res.end() : res.send(output);
+			}
+			if (variant === "blur") {
+				const sourceVariant = req.query.source_variant === "fit" ? "fit" : "thumbnail";
+				const response = await creations.fetchMedia(key, { variant: sourceVariant, method: "GET" });
+				if (!response.ok || !response.body) return res.status(404).json({ error: "Media not found" });
+				const chunks = [];
+				for await (const chunk of Readable.fromWeb(response.body)) chunks.push(chunk);
+				const output = await blurredThumbnail(Buffer.concat(chunks));
+				res.status(200);
+				res.type("jpg");
+				res.set("Content-Length", String(output.length));
+				res.set("Content-Disposition", `inline; filename="${path.basename(key).replace(/["\\\r\n]/g, "_")}.jpg"`);
+				res.set("X-Content-Type-Options", "nosniff");
+				res.set("Cache-Control", "public, max-age=86400, stale-while-revalidate=86400");
+				res.set("Cloudflare-CDN-Cache-Control", "public, max-age=604800, stale-while-revalidate=86400");
+				return req.method === "HEAD" ? res.end() : res.send(output);
+			}
 			if (variant === "video_thumbnail") {
 				const response = await creations.fetchMedia(key, { method: "GET" });
 				if (!response.ok || !response.body) return res.status(404).json({ error: "Video not found" });
@@ -152,11 +198,17 @@ export function createCreationsRoutes({ creations, users }) {
 
 	router.get("/api/creations", requireAuth, async (req, res, next) => {
 		try {
+			const user = await users.byId(req.auth.userId);
+			const viewerEnableNsfw = user?.meta?.enableNsfw === true;
+			if (typeof req.query.ids === "string") {
+				const ids = req.query.ids.split(",").map((value) => integer(value, 0, 0, Number.MAX_SAFE_INTEGER));
+				const rows = await creations.listByIds(req.auth.userId, ids);
+				res.set("Cache-Control", "private, no-store");
+				return res.json({ creations: rows.map(serializeCreation), has_more: false });
+			}
 			const limit = integer(req.query.limit, 50, 1, 100);
 			const offset = integer(req.query.offset, 0, 0, 100000);
 			const challengeOnly = req.query.challenge_only === "1" || req.query.challenge_only === "true";
-			const user = await users.byId(req.auth.userId);
-			const viewerEnableNsfw = user?.meta?.enableNsfw === true;
 			const page = await creations.list(req.auth.userId, { limit, offset, challengeOnly, viewerEnableNsfw });
 			res.set("Cache-Control", "private, no-store");
 			return res.json({ creations: page.rows.map(serializeCreation), has_more: page.hasMore, limit, offset });

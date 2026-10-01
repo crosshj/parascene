@@ -3,6 +3,7 @@ import { escapeHtml } from '../../utils/dom.js';
 const ICONS = {
 	home: '<path d="M3 9 12 2l9 7v11a2 2 0 0 1-2 2h-4V12H9v10H5a2 2 0 0 1-2-2Z"/>',
 	trophy: '<path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4ZM7 8H5a2 2 0 0 1-2-2V5h2M17 8h2a2 2 0 0 0 2-2V5h-2"/>',
+	eyeHidden: '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/><path d="m3 3 18 18"/>',
 	picture: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8" cy="10" r="2"/><path d="m21 17-5-5L5 19"/>',
 	files: '<path d="M4 4.5h5l2 2h9v13H4Z"/><path d="M4 9h16"/>',
 	notes: '<path d="M4 4.75A2.25 2.25 0 0 1 6.25 2.5h11.5A2.25 2.25 0 0 1 20 4.75v14.5a2.25 2.25 0 0 1-2.25 2.25H6.25A2.25 2.25 0 0 1 4 19.25ZM8.25 7h7.5M8.25 11.5h7.5M8.25 16h5"/>',
@@ -24,12 +25,13 @@ const ICONS = {
 	help: '<circle cx="12" cy="12" r="10"/><path d="M9.6 9a2.5 2.5 0 1 1 4.7 1.2c-.7 1.1-2.3 1.4-2.3 3M12 17h.01"/>',
 	close: '<path d="m18 6-12 12M6 6l12 12"/>'
 	, music: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>'
-	, video: '<rect x="3" y="5" width="13" height="14" rx="2"/><path d="m16 10 5-3v10l-5-3z"/>'
+	, video: '<path d="M3 7a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v2l5-3v12l-5-3v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/>'
 };
 
 const STROKE_WIDTHS = {
 	home: 2,
 	trophy: 2,
+	eyeHidden: 2,
 	picture: 2,
 	notes: 1.8,
 	comments: 1.8,

@@ -89,6 +89,21 @@ export function appendThumbnailVariant(url) {
 	return `${s}${sep}variant=thumbnail`;
 }
 
+export function appendBlurVariant(url) {
+	if (!url) return "";
+	const s = String(url);
+	if (!s.includes("/api/creations/media/")) return s;
+	try {
+		const parsed = new URL(s, "http://localhost");
+		parsed.searchParams.set("variant", "blur");
+		parsed.searchParams.set("source_variant", "thumbnail");
+		return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+	} catch {
+		const sep = s.includes("?") ? "&" : "?";
+		return `${s}${sep}variant=blur&source_variant=thumbnail`;
+	}
+}
+
 export function appendCreationIdToMediaUrl(url, creationId) {
 	if (!url) return "";
 	const id = Number(creationId);

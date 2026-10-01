@@ -30,7 +30,7 @@ function isAudioCoverPlaceholder(value) {
 	return path.endsWith('.svg') ||
 		path.includes('audio-cover') ||
 		/\/audio\/?$/.test(path) ||
-		/\.(mp3|wav|ogg|m4a|aac|flac|opus|webm)$/.test(path);
+		/\.(mp3|wav|ogg|oga|m4a|aac|flac|opus|webm|mp4)$/.test(path);
 }
 
 function creationHasRealAudioCover(item) {
@@ -162,6 +162,7 @@ function mediaPath(url, item, variant = '') {
 	if (raw.startsWith('/api/creations/media/')) {
 		const parsed = new URL(raw, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
 		if (variant) parsed.searchParams.set('variant', variant);
+		if (variant === 'blur') parsed.searchParams.set('source_variant', 'thumbnail');
 		return `${parsed.pathname}${parsed.search}`;
 	}
 	const markers = ['/api/images/created/', '/api/videos/created/'];
@@ -169,25 +170,37 @@ function mediaPath(url, item, variant = '') {
 	const index = marker ? raw.indexOf(marker) : -1;
 	if (marker && index >= 0) {
 		const key = raw.slice(index + marker.length).split(/[?#]/, 1)[0];
-		return `/api/creations/media/${key.split('/').map(encodeURIComponent).join('/')}?creation_id=${encodeURIComponent(String(item.id))}${variant ? `&variant=${variant}` : ''}`;
+		return `/api/creations/media/${key.split('/').map(encodeURIComponent).join('/')}?creation_id=${encodeURIComponent(String(item.id))}${variant ? `&variant=${variant}` : ''}${variant === 'blur' ? '&source_variant=thumbnail' : ''}`;
 	}
 	if (!raw.startsWith('http://') && !raw.startsWith('https://') && !raw.startsWith('/')) {
-		return `/api/creations/media/${raw.split('/').map(encodeURIComponent).join('/')}?creation_id=${encodeURIComponent(String(item.id))}${variant ? `&variant=${variant}` : ''}`;
+		return `/api/creations/media/${raw.split('/').map(encodeURIComponent).join('/')}?creation_id=${encodeURIComponent(String(item.id))}${variant ? `&variant=${variant}` : ''}${variant === 'blur' ? '&source_variant=thumbnail' : ''}`;
 	}
 	return raw;
 }
 
 export function creationThumbnailUrl(item, { video = false } = {}) {
+	const nsfw = Boolean(item?.nsfw || parseCreationMeta(item)?.nsfw);
+	const meta = parseCreationMeta(item) || {};
+	const blurVariant = nsfw || shouldBlurChallengeMedia(item) ? 'blur' : '';
 	if (video && creationNeedsVideoFramePoster(item) && item?.video_thumbnail_url) {
-		return mediaPath(item.video_thumbnail_url, item);
+		return mediaPath(item.video_thumbnail_url, item, blurVariant || 'video_thumbnail');
+	}
+	if (creationMediaType(item) === 'audio') {
+		const audio = meta.audio && typeof meta.audio === 'object' ? meta.audio : {};
+		const cover = [item?.cover_url, item?.cover_image_url, meta.cover_url, meta.cover_image_url, audio.cover_url, audio.cover_image_url, audio.thumbnail_url, item?.fit_thumbnail_url, item?.thumbnail_url, item?.url]
+			.find((value) => typeof value === 'string' && !isAudioCoverPlaceholder(value));
+		// Audio detail uses the cover URL directly. Derive a small square from that
+		// same source for the grid instead of downloading the full-resolution cover.
+		if (cover) return mediaPath(cover, item, blurVariant || 'grid_thumbnail');
 	}
 	const cover = groupCover(item);
-	const coverUrl = groupCoverSourceUrl(cover, item);
+	let coverUrl = groupCoverSourceUrl(cover, item);
+	if (coverUrl && blurVariant) coverUrl = mediaPath(coverUrl, item, blurVariant);
 	if (coverUrl) return coverUrl;
 	const raw = video
 		? item?.thumbnail_url || item?.fit_thumbnail_url || item?.url
 		: item?.fit_thumbnail_url || item?.thumbnail_url || item?.url;
-	return mediaPath(raw, item, video ? '' : 'thumbnail');
+	return mediaPath(raw, item, blurVariant || (video ? '' : 'thumbnail'));
 }
 
 export function creationOriginalUrl(item) {
@@ -199,7 +212,7 @@ function waveform() {
 	return `<svg class="creation-grid__waveform" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" aria-hidden="true">${bars.map((height, index) => `<rect x="${12 + index * 4.8}" y="${50 - height / 2}" width="3.5" height="${height}" rx="1.25"></rect>`).join('')}</svg>`;
 }
 
-function statusMarkup(status) {
+function statusMarkup(status, queuePosition = null) {
 	const value = String(status || '').toLowerCase();
 	if (value === 'failed') {
 		return `<span class="creation-grid__status is-failed"><svg class="creation-grid__status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="m9 9 6 6M15 9l-6 6"></path></svg><span>FAILED</span></span>`;
@@ -207,7 +220,11 @@ function statusMarkup(status) {
 	if (['processing', 'running'].includes(value)) {
 		return `<span class="creation-grid__status is-generating"><span class="creation-grid__status-gears" aria-hidden="true"><svg class="creation-grid__status-gear creation-grid__status-gear--large" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09A1.65 1.65 0 0 0 19.4 15Z"></path></svg><svg class="creation-grid__status-gear creation-grid__status-gear--small" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82-.33l-.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09A1.65 1.65 0 0 0 19.4 15Z"></path></svg></span><span>GENERATING…</span></span>`;
 	}
-	return `<span class="creation-grid__status is-queued"><svg class="creation-grid__status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="6"></circle><polyline points="12 10 12 12 13.5 13"></polyline><path d="m16.13 7.66-.81-1.41a2 2 0 0 0-1.74-1h-3.16a2 2 0 0 0-1.74 1l-.81 1.41M16.13 16.34l-.81 1.41a2 2 0 0 1-1.74 1h-3.16a2 2 0 0 1-1.74-1l-.81-1.41"></path></svg><span>QUEUED</span></span>`;
+	const place = Number(queuePosition);
+	const positionBadge = Number.isFinite(place) && place > 0
+		? `<span class="creation-grid__status-place">${escapeHtml(String(place))}</span>`
+		: '';
+	return `<span class="creation-grid__status is-queued"><span class="creation-grid__status-watch-wrap"><svg class="creation-grid__status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="6"></circle><polyline points="12 10 12 12 13.5 13"></polyline><path d="m16.13 7.66-.81-1.41a2 2 0 0 0-1.74-1h-3.16a2 2 0 0 0-1.74 1l-.81 1.41M16.13 16.34l-.81 1.41a2 2 0 0 1-1.74 1h-3.16a2 2 0 0 1-1.74-1l-.81-1.41"></path></svg>${positionBadge}</span><span>QUEUED</span></span>`;
 }
 
 function filledAdornmentIcon(name) {
@@ -241,17 +258,18 @@ export function creationCardMarkup(item) {
 	const hasCreationId = Number.isFinite(creationId) && creationId > 0;
 	const nsfw = Boolean(item?.nsfw || meta?.nsfw);
 	const challengeBlur = shouldBlurChallengeMedia(item);
+	const queuePosition = Number(meta?.line_place ?? meta?.provider_last_payload?.place);
 	const title = String(item?.title || '').trim() || (item?.published ? 'Untitled' : '');
 	const mediaClass = `feed-card-image${pending || failed ? ' creation-grid__status-card' : nsfw ? ' nsfw' : ''}${failed ? ' creation-grid__failed-card' : ''}${!failed && challengeBlur ? ' feed-card-image--challenge-pending' : ''}`;
 	const state = failed
 		? statusMarkup(status)
 		: pending
-			? statusMarkup(status)
+			? statusMarkup(status, queuePosition)
 			: creationNeedsAudioWaveformCover(item) ? waveform() : '';
 	const thumbnail = pending || failed ? '' : creationThumbnailUrl(item, { video: type === 'video' });
 	const original = pending || failed ? '' : creationOriginalUrl(item);
 	const slides = pending || failed ? [] : groupSlides(item);
-	const challengeOverlay = !failed && challengeBlur
+	const challengeOverlay = !pending && !failed && challengeBlur
 		? `<span class="route-media-challenge-blur-overlay" aria-hidden="true"></span><span class="creation-challenge-entered-badge" role="img" aria-label="Entered in challenge" title="Entered in challenge">${iconMarkup('trophy')}</span>`
 		: '';
 	const group = meta?.group;
@@ -275,17 +293,18 @@ export function creationCardMarkup(item) {
 		processingStatus ? `data-creation-status="${escapeHtml(processingStatus)}"` : ''
 	].filter(Boolean).join(' ');
 	return html`<div class="feed-card feed-card--image-only creation-grid__card" ${attributes} role="link" tabindex="0" aria-label="Open ${escapeHtml(title || `Creation ${creationId || ''}`)}">
-		<div class="${mediaClass}" aria-hidden="true" data-bg-url="${escapeHtml(thumbnail)}" data-bg-fallback="${escapeHtml(original)}" data-group-slides="${escapeHtml(JSON.stringify(slides))}"><img class="feed-card-img" alt="${escapeHtml(title || 'Creation')}" loading="lazy" decoding="async">${state}${challengeOverlay}${!failed ? badges(item, { hideChallengeCorner: challengeBlur }) : ''}</div>
+		<div class="${mediaClass}" aria-hidden="true" data-creation-id="${escapeHtml(creationId)}" data-media-type="${escapeHtml(type)}" data-bg-blur="${nsfw || challengeBlur ? '1' : '0'}" data-bg-url="${escapeHtml(thumbnail)}" data-bg-fallback="${escapeHtml(original)}" data-group-slides="${escapeHtml(JSON.stringify(slides))}"><img class="feed-card-img" alt="${escapeHtml(title || 'Creation')}" loading="lazy" decoding="async">${state}${nsfw && !pending && !failed ? `<span class="creation-grid__nsfw-badge" role="img" aria-label="NSFW">${iconMarkup('eyeHidden')}</span>` : ''}${challengeOverlay}${!failed && !pending ? badges(item, { hideChallengeCorner: challengeBlur }) : ''}</div>
 	</div>`;
 }
 
 export function createCreationMediaLoader(root, { eagerCount = 16, maxConcurrent = 8 } = {}) {
 	const queue = [];
 	let active = 0;
-	const connection = typeof navigator !== 'undefined' ? navigator.connection || navigator.mozConnection || navigator.webkitConnection : null;
-	const constrained = Boolean(connection?.saveData || String(connection?.effectiveType || '').includes('2g'));
-	eagerCount = constrained ? 2 : eagerCount;
-	maxConcurrent = constrained ? 2 : maxConcurrent;
+	const loadingMedia = new WeakSet();
+	// Match the working www grid: assign src to every card and let native
+	// loading="lazy" schedule network work. An app-level concurrency cap left
+	// queued cards with no img src while they waited their turn.
+	maxConcurrent = Number.POSITIVE_INFINITY;
 	const observer = new IntersectionObserver((entries) => {
 		for (const entry of entries) {
 			if (!entry.isIntersecting) continue;
@@ -306,22 +325,50 @@ export function createCreationMediaLoader(root, { eagerCount = 16, maxConcurrent
 			const eager = next?.eager === true;
 			const highPriority = next?.highPriority === true;
 			if (!media) continue;
+			if (!media.isConnected || !media.dataset.bgUrl || media.dataset.bgLoadedUrl) {
+				if (media?.dataset) media.dataset.bgQueued = '0';
+				continue;
+			}
 			active += 1;
+			loadingMedia.add(media);
 			media.classList.add('loading');
 			const image = media.querySelector('.feed-card-img');
 			if (!(image instanceof HTMLImageElement)) { finish(); continue; }
 			image.decoding = 'async';
 			image.loading = eager ? 'eager' : 'lazy';
 			if ('fetchPriority' in image) image.fetchPriority = highPriority ? 'high' : 'auto';
-			image.onload = () => { media.dataset.bgLoadedUrl = media.dataset.bgUrl; media.style.setProperty('--creation-grid-image', `url("${media.dataset.bgUrl.replaceAll('"', '\\"')}")`); media.classList.remove('loading', 'error'); media.classList.add('loaded'); finish(); };
+			image.onload = () => { loadingMedia.delete(media); media.dataset.bgLoadedUrl = media.dataset.bgUrl; media.dataset.bgQueued = '0'; media.style.setProperty('--creation-grid-image', `url("${media.dataset.bgUrl.replaceAll('"', '\\"')}")`); media.classList.remove('loading', 'error'); media.classList.add('loaded'); finish(); };
 			image.onerror = () => {
+				loadingMedia.delete(media);
+				media.dataset.bgQueued = '0';
 				const fallback = media.dataset.bgFallback;
-				if (fallback && media.dataset.bgUrl !== fallback && !media.dataset.bgRetried) {
+				const retries = Number(media.dataset.bgRetries || 0);
+				const isAudio = media.dataset.mediaType === 'audio';
+				if (isAudio && retries < 3) {
+					media.dataset.bgRetries = String(retries + 1);
+					media.dataset.bgQueued = '1';
+					media.classList.remove('loading');
+					finish();
+					window.setTimeout(() => {
+						if (!media.isConnected || media.dataset.bgLoadedUrl) return;
+						if (retries === 2 && fallback && media.dataset.bgUrl !== fallback) {
+							media.dataset.bgUrl = media.dataset.bgBlur === '1'
+								? mediaPath(fallback, { id: media.dataset.creationId }, 'blur')
+								: fallback;
+						}
+						media.dataset.bgQueued = '0';
+						queue.push({ media, eager });
+						drain();
+					}, 500 * (retries + 1));
+				} else if (fallback && media.dataset.bgUrl !== fallback && !media.dataset.bgRetried) {
 					media.dataset.bgRetried = '1';
-					media.dataset.bgUrl = fallback;
+					media.dataset.bgUrl = media.dataset.bgBlur === '1'
+						? mediaPath(fallback, { id: media.dataset.creationId }, 'blur')
+						: fallback;
 					media.dataset.bgQueued = '0';
 					image.removeAttribute('src');
 					queue.push({ media, eager });
+					drain();
 				} else { media.classList.remove('loading'); media.classList.add('error'); }
 				finish();
 			};
@@ -342,7 +389,10 @@ export function createCreationMediaLoader(root, { eagerCount = 16, maxConcurrent
 				return;
 			}
 			if (element.dataset.bgLoadedUrl) return;
-			if (element.dataset.bgQueued === '1') return;
+			if (element.dataset.bgQueued === '1' && (loadingMedia.has(element) || queue.some((entry) => (entry?.media || entry) === element))) return;
+			// Recover stale markup where the queued flag survived but no request is
+			// active and this card is no longer present in the in-memory queue.
+			if (element.dataset.bgQueued === '1') element.dataset.bgQueued = '0';
 			// Give every rendered card a URL immediately, matching the active SPA.
 			// Native loading="lazy" still controls transfer for distant cards, while
 			// the browser gets much more lead time than a custom viewport observer.
