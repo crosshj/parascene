@@ -9,6 +9,7 @@
 	position: relative;
 	overflow: hidden;
 	background: var(--surface-muted);
+	border: 0;
 	animation: none;
 }
 
