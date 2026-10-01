@@ -1,5 +1,5 @@
 import fs from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
@@ -37,12 +37,24 @@ function assertVpsClientBoundary() {
 export function assertVpsClientBoundaryOnDisk() {
 	const vendorMirror = path.join(vpsDir, 'client', 'vendor');
 	if (existsSync(vendorMirror)) {
+		const entries = listFiles(vendorMirror).map((entry) => `  - ${path.relative(vpsDir, entry)}`);
 		throw new Error([
 			'vps/client/vendor is not an allowed migration boundary.',
 			'Place each ported WWW module in its owning VPS client directory and update imports to that canonical path.',
 			'Do not preserve a mirrored WWW tree or forwarding wrappers.',
+			entries.length ? 'Found:' : 'The directory is empty; remove it from the deployment source.',
+			...entries,
 		].join('\n'));
 	}
+}
+
+function listFiles(directory) {
+	return readdirSync(directory).flatMap((name) => {
+		const entry = path.join(directory, name);
+		return existsSync(entry) && statSync(entry).isDirectory()
+			? listFiles(entry)
+			: [entry];
+	});
 }
 
 function htmlStringImports() {

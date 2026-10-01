@@ -70,12 +70,23 @@ if [[ "${1:-}" == "remote" ]]; then
 	set -euo pipefail
 	PACKAGE_PATH="${2:?Package path is required}"
 	APP_DIR="${3:?App directory is required}"
+	DEPLOY_ID="$(date -u +%Y%m%d%H%M%S)-$$"
+	STAGING_DIR="${APP_DIR}.staging-${DEPLOY_ID}"
+	cleanup_staging() {
+		rm -rf -- "$STAGING_DIR"
+	}
+	trap cleanup_staging EXIT
 
-	# Install the packaged app, build the image, and replace the running container.
-	install -d -m 755 "$APP_DIR"
-	tar -xzf "$PACKAGE_PATH" -C "$APP_DIR"
+	# Build from a fresh extraction so deleted files from older deployments,
+	# including a stale client/vendor tree, cannot leak into the Docker context.
+	install -d -m 755 "$STAGING_DIR"
+	tar -xzf "$PACKAGE_PATH" -C "$STAGING_DIR"
 	rm -f "$PACKAGE_PATH"
-	docker build --tag parascene:vps "$APP_DIR"
+	docker build --tag parascene:vps "$STAGING_DIR"
+
+	# Replace the on-disk deployment only after the new image builds successfully.
+	find "$APP_DIR" -mindepth 1 -maxdepth 1 ! -name '.env' -exec rm -rf -- {} +
+	cp -a "$STAGING_DIR"/. "$APP_DIR"/
 	docker rm --force parascene 2>/dev/null || true
 	docker run --detach \
 		--name parascene \
@@ -118,17 +129,22 @@ fi
 
 SSH_DIR="$RUNNER_TEMP/vps-ssh"
 PACKAGE_PATH="$RUNNER_TEMP/vps.tar.gz"
+BUILD_DIR="$RUNNER_TEMP/vps-deploy-build"
 REMOTE="$VPS_USER@$VPS_HOST"
 SSH_OPTS=(-i "$SSH_DIR/id_ed25519" -o UserKnownHostsFile="$SSH_DIR/known_hosts" -o StrictHostKeyChecking=yes)
+
+# Validate and build the exact deployment payload before creating credentials,
+# contacting the VPS, or changing anything on the deployment host.
+mkdir -p "$BUILD_DIR"
+tar --exclude='.env' -czf "$PACKAGE_PATH" -C vps .
+tar -xzf "$PACKAGE_PATH" -C "$BUILD_DIR"
+docker build --tag parascene:vps-ci "$BUILD_DIR"
 
 # Keep the private key and known-hosts file inside the runner's temporary area.
 install -m 700 -d "$SSH_DIR"
 printf '%s\n' "$VPS_SSH_KEY" > "$SSH_DIR/id_ed25519"
 chmod 600 "$SSH_DIR/id_ed25519"
 ssh-keyscan -H "$VPS_HOST" > "$SSH_DIR/known_hosts"
-
-# Never include a local .env in the deployment archive.
-tar --exclude='.env' -czf "$PACKAGE_PATH" -C vps .
 
 # Transfer the app package and this script separately. The script is needed on
 # the host before the package has been extracted.

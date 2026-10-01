@@ -19,10 +19,6 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Build VPS client
-        run: npm ci && npm run build
-        working-directory: vps
-
       - name: Deploy VPS
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
