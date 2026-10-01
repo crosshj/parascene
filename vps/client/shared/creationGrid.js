@@ -330,8 +330,10 @@ export function createCreationMediaLoader(root, { eagerCount = 16, maxConcurrent
 		}
 	}
 	function finish() { active -= 1; drain(); }
-	function observe() {
-		const media = [...root.querySelectorAll('.feed-card-image[data-bg-url]')];
+	function observe(cards = null) {
+		const media = Array.isArray(cards)
+			? cards.flatMap((card) => [...card.querySelectorAll('.feed-card-image[data-bg-url]')])
+			: [...root.querySelectorAll('.feed-card-image[data-bg-url]')];
 		media.forEach((element, index) => {
 			mountGroupMedia(element);
 			if (element.dataset.groupMounted === '1') {

@@ -1,5 +1,5 @@
-.creations-view { --creations-lane-max: 960px; --creations-tile-min: 220px; --creations-card-placeholder: var(--skeleton, #e2e3e6); --creations-card-shine: var(--skeleton-shine, rgba(0, 0, 0, .06)); container-type: inline-size; container-name: creations-lane; min-width: 0; width: 100%; max-width: var(--creations-lane-max); margin: 0 auto; }
-@media (prefers-color-scheme: dark) { .creations-view { --creations-card-placeholder: color-mix(in srgb, var(--surface, #1a1628) 76%, var(--text, #ede9fe) 24%); --creations-card-shine: color-mix(in srgb, var(--text, #ede9fe) 14%, transparent); } }
+.creations-view { --creations-lane-max: 960px; --creations-tile-min: 220px; --creations-card-placeholder: var(--skeleton, #e2e3e6); container-type: inline-size; container-name: creations-lane; min-width: 0; width: 100%; max-width: var(--creations-lane-max); margin: 0 auto; }
+@media (prefers-color-scheme: dark) { .creations-view { --creations-card-placeholder: color-mix(in srgb, var(--surface, #1a1628) 76%, var(--text, #ede9fe) 24%); } }
 .creations-view__status { padding: 32px; color: var(--beta-text-muted); text-align: center; }
 .creations-view__status[hidden] { display: none; }
 .creations-view__status.is-error { color: #b91c1c; }
@@ -14,20 +14,23 @@
 .creations-view__scroll-bottom svg { width: 17px; height: 17px; }
 .creations-view__scroll-bottom[hidden] { display: none; }
 .route-cards { display: grid; gap: 12px; }
-.content-cards-image-grid { grid-template-columns: repeat(auto-fill, minmax(min(var(--creations-tile-min), 100%), 1fr)); gap: 10px; width: 100%; min-width: 0; box-sizing: border-box; }
+.content-cards-image-grid { position: relative; grid-template-columns: repeat(auto-fill, minmax(min(var(--creations-tile-min), 100%), 1fr)); gap: 10px; width: 100%; min-width: 0; box-sizing: border-box; }
 .skeleton-grid-tile { position: relative; width: 100%; min-width: 0; aspect-ratio: 1 / 1; overflow: hidden; border-radius: 11px; background-color: var(--skeleton, #e2e3e6); }
-.skeleton-grid-tile::after { position: absolute; inset: 0; content: ''; border-radius: inherit; background: linear-gradient(90deg, transparent, var(--skeleton-shine, rgba(0, 0, 0, .06)), transparent); background-size: 180% 100%; opacity: .72; animation: creations-grid-skeleton-shimmer 4.8s ease-in-out infinite; }
-@keyframes creations-grid-skeleton-shimmer { from { background-position: 180% 0; } to { background-position: -80% 0; } }
+.skeleton-grid-tile::after { position: absolute; top: 0; bottom: 0; left: -55%; width: 55%; content: ''; border-radius: inherit; background: linear-gradient(90deg, transparent, var(--skeleton-shine, rgba(0, 0, 0, .06)), transparent); opacity: .72; transform: translate3d(0, 0, 0); animation: creations-grid-shimmer 2.4s ease-in-out infinite; pointer-events: none; }
+@keyframes creations-grid-shimmer { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(280%, 0, 0); } }
 .creations-view__grid[hidden] { display: none; }
 .creation-grid__card { position: relative; isolation: isolate; min-width: 0; width: 100%; padding: 0; background: transparent; border: 0; cursor: pointer; }
 .creation-grid__card:focus, .creation-grid__card:focus-visible { outline: none; box-shadow: none; }
-.creations-view__grid .feed-card-image { position: relative; width: 100%; aspect-ratio: 1 / 1; overflow: hidden; border-radius: 11px; corner-shape: squircle; background-color: var(--creations-card-placeholder); }
+.creations-view__grid .feed-card-image { position: relative; width: 100%; aspect-ratio: 1 / 1; overflow: hidden; border-radius: 11px; corner-shape: squircle; background-color: color-mix(in srgb, var(--creations-card-placeholder) 72%, transparent); }
 .creations-view__grid .creation-grid__card > .feed-card-image { overflow: hidden; border-radius: 11px; corner-shape: squircle; }
-.creations-view__grid .feed-card-image.loading { background-color: var(--creations-card-placeholder); background-image: linear-gradient(90deg, transparent, var(--creations-card-shine), transparent); background-size: 200% 100%; animation: creations-grid-loading 4s linear infinite; }
+.creations-view__grid .feed-card-image.loading,
+.creations-view__grid .feed-card-image.loaded { background-color: color-mix(in srgb, var(--creations-card-placeholder) 72%, transparent); }
+.creations-view__grid .feed-card-image.loading { background-image: none; animation: none; }
+.creations-view__grid .feed-card-image.loading::after { position: absolute; top: 0; bottom: 0; left: -55%; z-index: 2; width: 55%; content: ''; border-radius: inherit; background: linear-gradient(90deg, transparent, rgb(255 255 255 / 14%), transparent); transform: translate3d(0, 0, 0); animation: creations-grid-shimmer 2.4s ease-in-out infinite; pointer-events: none; }
 .feed-card-img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; object-position: center; opacity: 0; transition: opacity .3s ease; }
 .feed-card-image.loaded .feed-card-img { opacity: 1; }
 .feed-card-image.error .feed-card-img { opacity: 0; pointer-events: none; }
-.creations-view__grid .feed-card-image.creation-grid__status-card { background: var(--creations-card-placeholder); background-size: auto; animation: none; }
+.creations-view__grid .feed-card-image.creation-grid__status-card { background: color-mix(in srgb, var(--creations-card-placeholder) 72%, transparent); background-size: auto; animation: none; }
 .feed-card-image.creation-grid__failed-card { display: grid; place-items: center; color: inherit; }
 .creation-grid__status { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 8px; color: inherit; font-size: .7rem; font-weight: 650; letter-spacing: .06em; text-align: center; pointer-events: none; }
 .creation-grid__status-icon { display: block; width: 48px; height: 48px; flex: 0 0 auto; opacity: .75; }
@@ -37,7 +40,6 @@
 .creation-grid__status-gear--small { right: 2%; bottom: 4%; width: 46%; height: 46%; animation: creation-grid-status-spin 3.15s linear infinite reverse; }
 @keyframes creation-grid-status-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .creation-grid__status-gear { animation: none; } }
-@keyframes creations-grid-loading { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 .feed-card-image.nsfw .feed-card-img { filter: blur(16px); transform: scale(1.08); }
 .feed-card-image.feed-card-image--challenge-pending { position: relative; overflow: hidden; }
 .feed-card-image.feed-card-image--challenge-pending .route-media-challenge-blur-overlay { position: absolute; inset: 0; z-index: 4; backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); background: rgb(0 0 0 / 14%); pointer-events: none; }
@@ -65,7 +67,7 @@
 .creation-group-badge { top: auto; bottom: 8px; left: 8px; }
 .creation-music-badge { top: auto; right: 8px; bottom: 8px; }
 .creation-video-badge { top: auto; right: 8px; bottom: 8px; }
-.creations-view__sentinel { grid-column: 1 / -1; width: 100%; height: 1px; margin: 0; overflow: hidden; }
+.creations-view__sentinel { position: absolute; left: 0; z-index: -1; width: 1px; height: 1px; margin: 0; overflow: hidden; pointer-events: none; }
 .creations-view__load-more { display: block; min-width: 120px; margin: 24px auto 8px; padding: 9px 14px; border: 1px solid color-mix(in srgb, currentColor 24%, transparent); border-radius: 999px; color: inherit; background: transparent; font: inherit; font-weight: 650; cursor: pointer; }
 .creations-view__load-more[hidden] { display: none; }
 .creations-view__load-more:disabled { cursor: wait; opacity: .5; }
@@ -74,4 +76,4 @@
 @media (max-width: 768px) { .skeleton-grid-tile { border-radius: 11px; } }
 @media (max-width: 768px) { .creations-view__scroll-top { top: 66px; } }
 @media (max-width: 1023px) { .creations-view__scroll-bottom { left: 50%; } }
-@media (prefers-reduced-motion: reduce) { .skeleton-grid-tile::after { animation: none; display: none; } }
+@media (prefers-reduced-motion: reduce) { .skeleton-grid-tile::after, .creations-view__grid .feed-card-image.loading::after { animation: none; display: none; } }

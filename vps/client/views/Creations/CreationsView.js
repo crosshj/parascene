@@ -6,8 +6,43 @@ import './CreationsView.css';
 const PAGE_SIZE = 50;
 const LOOKAHEAD_SKELETONS = 16;
 
-function renderGridSkeleton(count = 25) {
-	return Array.from({ length: count }, () => '<div class="skeleton skeleton-grid-tile" aria-hidden="true"></div>').join('');
+function makeGridSkeleton() {
+	const tile = document.createElement('div');
+	tile.className = 'skeleton-grid-tile';
+	tile.setAttribute('aria-hidden', 'true');
+	return tile;
+}
+
+function creationId(item) {
+	const id = Number(item?.created_image_id ?? item?.id);
+	return Number.isFinite(id) && id > 0 ? String(id) : '';
+}
+
+function makeCreationCard(item, markup = creationCardMarkup(item)) {
+	const fragment = document.createRange().createContextualFragment(markup);
+	const card = fragment.firstElementChild;
+	if (card) {
+		card.__creationRecord = item;
+		card.__creationMarkup = markup;
+	}
+	return card;
+}
+
+function updateCreationCard(card, item, markup) {
+	if (card.__creationMarkup !== markup) {
+		const nextCard = makeCreationCard(item, markup);
+		if (!nextCard) return false;
+		for (const attr of [...card.attributes]) {
+			if (!nextCard.hasAttribute(attr.name)) card.removeAttribute(attr.name);
+		}
+		for (const attr of [...nextCard.attributes]) card.setAttribute(attr.name, attr.value);
+		card.replaceChildren(...nextCard.childNodes);
+		card.__creationMarkup = markup;
+		card.__creationRecord = item;
+		return true;
+	}
+	card.__creationRecord = item;
+	return false;
 }
 
 export function renderCreationsView({ outlet, creationsApi, creationsResource, onUnauthorized, setHeaderMenu, onOpenCreation }) {
@@ -16,10 +51,11 @@ export function renderCreationsView({ outlet, creationsApi, creationsResource, o
 	let offset = 0;
 	let hasMore = false;
 	let loading = false;
+	let lastResourceData = null;
 	let unsubscribe;
-	let mediaLoader;
+	const mediaLoader = createCreationMediaLoader(refs.grid);
 	const scrollRegion = root.closest('.beta-outlet__scroll');
-	refs.grid.innerHTML = renderGridSkeleton();
+	for (let i = 0; i < 25; i += 1) refs.grid.append(makeGridSkeleton());
 	const onGridClick = (event) => {
 		const card = event.target.closest?.('[data-creation-id]');
 		const id = Number(card?.dataset?.creationId);
@@ -52,41 +88,79 @@ export function renderCreationsView({ outlet, creationsApi, creationsResource, o
 		refs.grid.querySelectorAll('.skeleton-grid-tile').forEach((element) => element.remove());
 	}
 
-	function appendGridSkeletons() {
-		refs.grid.insertAdjacentHTML('beforeend', renderGridSkeleton(LOOKAHEAD_SKELETONS));
+	function syncGridSkeletons(count) {
+		const skeletons = [...refs.grid.querySelectorAll('.skeleton-grid-tile')];
+		for (const tile of skeletons.slice(count)) tile.remove();
+		for (let i = skeletons.length; i < count; i += 1) refs.grid.append(makeGridSkeleton());
 	}
 
 	function render(data, append = false) {
 		const items = Array.isArray(data?.creations) ? data.creations : [];
-		const fragment = document.createRange().createContextualFragment(items.map(creationCardMarkup).join(''));
-		[...fragment.children].forEach((card, index) => { card.__creationRecord = items[index] || null; });
-		if (!append) {
-			refs.grid.replaceChildren(fragment);
-		} else {
-			const skeletons = [...refs.grid.querySelectorAll('.skeleton-grid-tile')];
-			const cards = [...fragment.children];
-			cards.slice(0, skeletons.length).forEach((card, index) => skeletons[index].replaceWith(card));
-			skeletons.slice(cards.length).forEach((skeleton) => skeleton.remove());
-			cards.slice(skeletons.length).forEach((card) => refs.grid.append(card));
+		const currentCards = [...refs.grid.querySelectorAll('.creation-grid__card')];
+		const currentById = new Map(currentCards.map((card) => [card.dataset.creationId, card]).filter(([id]) => id));
+		const desiredItems = append
+			? currentCards.map((card) => card.__creationRecord).filter(Boolean)
+			: [];
+		const desiredIndexById = new Map(desiredItems.map((item, index) => [creationId(item), index]).filter(([id]) => id));
+		for (const item of items) {
+			const id = creationId(item);
+			const existingIndex = id ? desiredIndexById.get(id) : undefined;
+			if (existingIndex !== undefined) desiredItems[existingIndex] = item;
+			else {
+				if (id) desiredIndexById.set(id, desiredItems.length);
+				desiredItems.push(item);
+			}
 		}
-		const hasCards = refs.grid.querySelector('.creation-grid__card');
+
+		const desiredCards = [];
+		const cardsToHydrate = [];
+		const retainedCards = new Set();
+		for (const item of desiredItems) {
+			const id = creationId(item);
+			const markup = creationCardMarkup(item);
+			const card = id ? currentById.get(id) : null;
+			if (card) {
+				if (updateCreationCard(card, item, markup)) cardsToHydrate.push(card);
+				retainedCards.add(card);
+				desiredCards.push(card);
+			} else {
+				const nextCard = makeCreationCard(item, markup);
+				if (nextCard) {
+					desiredCards.push(nextCard);
+					cardsToHydrate.push(nextCard);
+				}
+			}
+		}
+		for (const card of currentCards) if (!retainedCards.has(card)) card.remove();
+		let position = refs.grid.firstElementChild;
+		for (const card of desiredCards) {
+			if (position !== card) refs.grid.insertBefore(card, position || refs.sentinel);
+			position = card.nextElementSibling;
+		}
+
+		const hasCards = desiredCards.length > 0;
 		refs.grid.hidden = !hasCards;
 		if (!hasCards) showState('No creations yet. Start creating to see your work here.');
 		else refs.status.hidden = true;
 		hasMore = data?.has_more === true && items.length > 0;
-		if (hasMore) appendGridSkeletons();
-		// Keep the sentinel out of the cards' flow: as a full-row grid item it
-		// would force the look-ahead skeletons onto a new row and leave a gap.
+		syncGridSkeletons(hasMore ? LOOKAHEAD_SKELETONS : 0);
+		// Observe at the loaded-card edge without letting the sentinel occupy a
+		// grid cell. The look-ahead tiles then fill any partial row naturally.
 		refs.sentinel.hidden = !hasMore;
-		refs.grid.append(refs.sentinel);
-		mediaLoader?.disconnect();
-		mediaLoader = createCreationMediaLoader(refs.grid);
-		mediaLoader.observe();
+		const lastCard = desiredCards[desiredCards.length - 1];
+		refs.sentinel.style.top = lastCard
+			? `${lastCard.offsetTop + lastCard.offsetHeight}px`
+			: '0px';
+		if (refs.sentinel.parentElement !== refs.grid || refs.grid.lastElementChild !== refs.sentinel) {
+			refs.grid.append(refs.sentinel);
+		}
+		if (cardsToHydrate.length) mediaLoader.observe(cardsToHydrate);
 	}
 
 	function onResourceState(snapshot) {
 		if (snapshot.error?.status === 401) return onUnauthorized?.();
-		if (snapshot.data && !loading) {
+		if (snapshot.data && !loading && snapshot.data !== lastResourceData) {
+			lastResourceData = snapshot.data;
 			const items = Array.isArray(snapshot.data.creations) ? snapshot.data.creations : [];
 			offset = items.length;
 			render(snapshot.data);
