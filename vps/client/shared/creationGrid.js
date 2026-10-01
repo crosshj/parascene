@@ -1,6 +1,5 @@
 import { escapeHtml } from '../utils/dom.js';
 import { iconMarkup } from '../components/Icon/Icon.js';
-import { applyVideoFirstFramePoster } from './videoFirstFramePoster.js';
 
 const html = String.raw;
 
@@ -338,51 +337,6 @@ export function createCreationMediaLoader(root, { eagerCount = 16, maxConcurrent
 			image.decoding = 'async';
 			image.loading = eager ? 'eager' : 'lazy';
 			if ('fetchPriority' in image) image.fetchPriority = highPriority ? 'high' : 'auto';
-			const item = media.closest('.creation-grid__card')?.__creationRecord || null;
-			if (item && creationMediaType(item) === 'video' && creationNeedsVideoFramePoster(item)) {
-				const videoUrl = item.video_url || parseCreationMeta(item)?.video?.file_path;
-				let finished = false;
-				const finishMedia = () => {
-					if (finished) return;
-					finished = true;
-					loadingMedia.delete(media);
-					finish();
-				};
-				applyVideoFirstFramePoster(image, {
-					videoUrl,
-				onPainted: () => {
-						if (!media.isConnected) return;
-						media.dataset.bgLoadedUrl = media.dataset.bgUrl;
-						media.dataset.bgQueued = '0';
-						media.classList.remove('loading', 'error');
-						media.classList.add('loaded');
-						finishMedia();
-					},
-				onFail: () => {
-						if (media.dataset.bgUrl) {
-							image.onload = () => {
-								media.dataset.bgLoadedUrl = media.dataset.bgUrl;
-								media.dataset.bgQueued = '0';
-								media.classList.remove('loading', 'error');
-								media.classList.add('loaded');
-								finishMedia();
-							};
-							image.onerror = () => {
-								media.dataset.bgQueued = '0';
-								media.classList.remove('loading');
-								media.classList.add('error');
-								finishMedia();
-							};
-							image.src = media.dataset.bgUrl;
-						} else {
-							media.classList.remove('loading');
-							media.classList.add('error');
-							finishMedia();
-						}
-					}
-				});
-				return;
-			}
 			image.onload = () => { loadingMedia.delete(media); media.dataset.bgLoadedUrl = media.dataset.bgUrl; media.dataset.bgQueued = '0'; media.style.setProperty('--creation-grid-image', `url("${media.dataset.bgUrl.replaceAll('"', '\\"')}")`); media.classList.remove('loading', 'error'); media.classList.add('loaded'); finish(); };
 			image.onerror = () => {
 				loadingMedia.delete(media);
