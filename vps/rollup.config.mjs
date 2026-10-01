@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createHash } from "node:crypto";
 import CleanCSS from "clean-css";
 import terser from "@rollup/plugin-terser";
 
@@ -9,26 +10,27 @@ const vpsDir = path.dirname(fileURLToPath(import.meta.url));
 const buildDir = path.join(vpsDir, "build");
 
 function resolveBundledWwwImports() {
-	const imports = new Map([
-		['/icons/svg-strings.js', path.join(vpsDir, '..', 'public', 'icons', 'svg-strings.js')],
-		['/pages/create-styles.js', path.join(vpsDir, '..', 'public', 'pages', 'create-styles.js')],
-		['/shared/createSubmit.js', path.join(vpsDir, '..', 'public', 'shared', 'createSubmit.js')],
-	]);
 	return {
-		name: 'resolve-bundled-www-imports',
+		name: 'resolve-vps-browser-imports',
 		resolveId(source) {
-			return imports.get(source) || null;
+			if (source === '/icons/svg-strings.js') return path.join(vpsDir, 'client', 'vendor', 'public', 'icons', 'svg-strings.js');
+			if (source === '/pages/create-styles.js') return path.join(vpsDir, 'client', 'vendor', 'pages', 'create-styles.js');
+			if (source === '/shared/createSubmit.js') return path.join(vpsDir, 'client', 'shared', 'createSubmit.js');
+			if (source === '/shared/createWorkflowHost.js') return path.join(vpsDir, 'client', 'vendor', 'public', 'shared', 'createWorkflowHost.js');
+			if (source === '/shared/escapeLayers.js') return path.join(vpsDir, 'client', 'vendor', 'public', 'shared', 'escapeLayers.js');
+			if (source === '/shared/createSettingsSync.js') return path.join(vpsDir, 'client', 'vendor', 'public', 'shared', 'createSettingsSync.js');
+			return null;
 		},
 	};
 }
 
 function resolveWwwRootImports() {
 	const roots = new Map([
-		['/shared/', [path.join(vpsDir, 'client', 'shared'), path.join(vpsDir, '..', 'src', 'shared'), path.join(vpsDir, '..', 'public', 'shared')]],
-		['/icons/', [path.join(vpsDir, 'client', 'icons'), path.join(vpsDir, '..', 'public', 'icons')]],
-		['/components/', [path.join(vpsDir, '..', 'public', 'components')]],
-		['/chat/', [path.join(vpsDir, '..', 'src', 'chat'), path.join(vpsDir, '..', 'public', 'chat')]],
-		['/pages/', [path.join(vpsDir, '..', 'public', 'pages')]],
+		['/shared/', [path.join(vpsDir, 'client', 'shared'), path.join(vpsDir, 'client', 'vendor', 'src', 'shared'), path.join(vpsDir, 'client', 'vendor', 'public', 'shared')]],
+		['/icons/', [path.join(vpsDir, 'client', 'icons'), path.join(vpsDir, 'client', 'vendor', 'public', 'icons')]],
+		['/components/', [path.join(vpsDir, 'client', 'vendor', 'public', 'components')]],
+		['/chat/', [path.join(vpsDir, 'client', 'vendor', 'src', 'chat'), path.join(vpsDir, 'client', 'vendor', 'public', 'chat')]],
+		['/pages/', [path.join(vpsDir, 'client', 'vendor', 'pages'), path.join(vpsDir, 'client', 'vendor', 'public', 'pages')]],
 	]);
 	return {
 		name: 'resolve-www-root-imports',
@@ -53,18 +55,15 @@ function resolveWwwRootImports() {
 					const sharedMarker = `${path.sep}shared${path.sep}`;
 					if (localCandidate.includes(sharedMarker)) {
 						const relative = localCandidate.slice(localCandidate.indexOf(sharedMarker) + sharedMarker.length);
-						for (const root of [path.join(vpsDir, '..', 'src', 'shared'), path.join(vpsDir, '..', 'public', 'shared')]) {
+						for (const root of [path.join(vpsDir, 'client', 'vendor', 'src', 'shared'), path.join(vpsDir, 'client', 'vendor', 'public', 'shared')]) {
 							const candidate = path.join(root, relative);
 							if (existsSync(candidate)) return candidate;
 						}
 					}
-					if (source === './about.js' && importer.includes(`${path.sep}elements${path.sep}modals${path.sep}`)) {
-						return path.join(vpsDir, '..', 'public', 'components', 'modals', 'about.js');
-					}
 				}
 			}
 			if (importer && source.startsWith('../components/')) {
-				const candidate = path.join(vpsDir, '..', 'public', source.slice(3));
+				const candidate = path.join(vpsDir, 'client', 'vendor', 'public', source.slice(3));
 				if (existsSync(candidate)) return candidate;
 			}
 			if (!source.startsWith('.') && !source.startsWith('/') && !source.startsWith('\0')) {
@@ -159,10 +158,31 @@ function staticallyBundleDynamicImports() {
 	};
 }
 
+function assertVpsClientBoundary() {
+	return {
+		name: 'assert-vps-client-boundary',
+		generateBundle() {
+			const outside = [...this.getModuleIds()].filter((id) => {
+				if (!path.isAbsolute(id) || id.startsWith('\0')) return false;
+				const relative = path.relative(vpsDir, id);
+				return relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative);
+			});
+			if (outside.length) {
+				throw new Error([
+					'VPS browser bundle source must stay inside vps/.',
+					'Copy the required implementation into vps/ and update its imports.',
+					'Outside source modules:',
+					...outside.sort().map((id) => `  - ${id}`),
+				].join('\n'));
+			}
+		},
+	};
+}
+
 function staticallyBundleRouteCardGroupMedia() {
-	const target = path.join(vpsDir, '..', 'public', 'shared', 'routeCardGroupMedia.js');
-	const sourceRoot = path.join(vpsDir, '..', 'src', 'shared');
-	const publicRoot = path.join(vpsDir, '..', 'public', 'shared');
+	const target = path.join(vpsDir, 'client', 'vendor', 'public', 'shared', 'routeCardGroupMedia.js');
+	const sourceRoot = path.join(vpsDir, 'client', 'vendor', 'src', 'shared');
+	const publicRoot = path.join(vpsDir, 'client', 'vendor', 'public', 'shared');
 	return {
 		name: 'statically-bundle-route-card-group-media',
 		transform(code, id) {
@@ -185,7 +205,7 @@ function staticallyBundleRouteCardGroupMedia() {
 }
 
 function staticallyBundleCreationCommentsThread() {
-	const target = path.join(vpsDir, '..', 'src', 'shared', 'creationCommentsThread.js');
+	const target = path.join(vpsDir, 'client', 'vendor', 'src', 'shared', 'creationCommentsThread.js');
 	const sharedRoot = path.join(vpsDir, 'client', 'shared');
 	const icons = path.join(vpsDir, 'client', 'icons', 'svg-strings.js');
 	return {
@@ -257,26 +277,6 @@ function staticallyBundleCreationCommentsThread() {
 	};
 }
 
-function removeMutateQueueImportCycle() {
-	const target = path.join(vpsDir, '..', 'public', 'shared', 'mutateQueue.js');
-	return {
-		name: 'remove-mutate-queue-import-cycle',
-		transform(code, id) {
-			if (id !== target) return null;
-			const dynamicNotify = /\tvoid import\('\.\/mutateQueueSync\.js'\)\.then\(\(\{ notifyMutateQueueUpdated \}\) => \{[\s\S]*?\t\}\);/;
-			if (!dynamicNotify.test(code)) throw new Error('Could not locate mutateQueue dynamic notification');
-			return {
-				code: code.replace(dynamicNotify, `\ttry {
-	\tdocument.dispatchEvent(new CustomEvent('mutate-queue-updated', {
-	\t\tdetail: { reason: options.reason || 'write', queueLength: Array.isArray(items) ? items.length : 0 },
-	\t}));
-	} catch {}`),
-				map: null,
-			};
-		},
-	};
-}
-
 function htmlStringImports() {
 	return {
 		name: "html-string-imports",
@@ -313,7 +313,8 @@ function emitImportedCss() {
 			const jsFile = Object.keys(bundle).find((fileName) => fileName.endsWith(".js"));
 			const cssFile = Object.keys(bundle).find((fileName) => fileName.endsWith(".css"));
 			if (!jsFile || !cssFile) throw new Error("Rollup did not produce the app JavaScript and CSS assets");
-			await fs.writeFile(path.join(buildDir, "manifest.json"), JSON.stringify({ js: jsFile, css: cssFile }, null, 2) + "\n", "utf8");
+			const appBuild = createHash("sha256").update(bundle[jsFile].code).digest("hex").slice(0, 12);
+			await fs.writeFile(path.join(buildDir, "manifest.json"), JSON.stringify({ js: jsFile, css: cssFile, appBuild }, null, 2) + "\n", "utf8");
 		}
 	};
 }
@@ -331,8 +332,8 @@ export default {
 		resolveWwwRootImports(),
 		staticallyBundleRouteCardGroupMedia(),
 		staticallyBundleCreationCommentsThread(),
-		removeMutateQueueImportCycle(),
 		staticallyBundleDynamicImports(),
+		assertVpsClientBoundary(),
 		htmlStringImports(),
 		emitImportedCss(),
 		terser(),

@@ -18,7 +18,7 @@
 
 import { getAvatarColor } from './avatar.js';
 import { getPseudoStripRouteIconHtml } from './chatSidebarRoster.js';
-import { getStyleThumbUrl } from '/pages/create-styles.js';
+import { getStyleThumbUrl } from '../../pages/create-styles.js';
 import { CHAT_BROADCAST_MENTION_SLUGS } from './chatBroadcastMentions.js';
 
 const DEBOUNCE_MS = 130;

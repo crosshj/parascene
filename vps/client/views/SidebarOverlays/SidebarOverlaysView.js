@@ -15,12 +15,7 @@ const accountItems = [
 	{ label: 'View Profile', icon: 'user', href: '/user' },
 	{ label: 'Connections', icon: 'globe', href: '/integrations' },
 	{ label: 'Settings', icon: 'settings', action: 'settings' },
-	{ label: 'Help', icon: 'help', href: '/help' },
-	{ separator: true },
-	{ label: 'About', icon: 'info', action: 'about' },
-	{ label: 'Reports', icon: 'chart', href: '/reports/' },
-	{ label: 'Clear cache', icon: 'settings', action: 'clear-cache' },
-	{ label: 'Log Out', icon: 'logout', action: 'logout', danger: true }
+	{ label: 'Help', icon: 'help', href: '/help' }
 ];
 
 function accountMarkup() {

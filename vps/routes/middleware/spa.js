@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import { getAppAssetNames } from "../utils/appAssets.js";
 import { filesOriginForRequest } from "../utils/origins.js";
+import { buildMetaTags } from "../utils/buildMetaTags.js";
 
 function serializeBootstrap(value) {
 	return JSON.stringify(value)
@@ -40,11 +41,12 @@ export function createSpaFallback({ appPagePath, users, buildDir }) {
 		if (!req.auth?.userId) return res.redirect(loginUrlFor(req));
 		try {
 			let html = await fs.readFile(appPagePath, "utf8");
+			const assets = await getAppAssetNames(buildDir);
+			html = html.replace("</head>", `${buildMetaTags(assets.appBuild)}\n\t</head>`);
 			if (html.includes("{{APP_BOOTSTRAP}}")) {
 				html = html.replace("{{APP_BOOTSTRAP}}", `<script>window.__PARASCENE_BOOTSTRAP__=${serializeBootstrap(await bootstrapForRequest(req, users))};</script>`);
 			}
 			if (html.includes("{{APP_JS}}") || html.includes("{{APP_CSS}}")) {
-				const assets = await getAppAssetNames(buildDir);
 				html = html.replaceAll("{{APP_JS}}", assets.js).replaceAll("{{APP_CSS}}", assets.css);
 			}
 			return res.type("html").send(html);

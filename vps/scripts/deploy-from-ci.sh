@@ -136,10 +136,15 @@ scp "${SSH_OPTS[@]}" vps/scripts/deploy-from-ci.sh "$REMOTE:/tmp/deploy-vps.sh"
 
 # Write runtime secrets directly to the VPS with restrictive permissions; they
 # are passed to Docker through --env-file and are never put in the archive.
-printf '%s\n' \
+	printf '%s\n' \
 	"SUPABASE_URL=$SUPABASE_URL" \
 	"SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_SERVICE_ROLE_KEY" \
-	"SESSION_SECRET=$SESSION_SECRET" | \
+	"SESSION_SECRET=$SESSION_SECRET" \
+	"APP_VERSION=beta" \
+	"BUILD_COMMIT=$GITHUB_SHA" \
+	"BUILD_COMMIT_URL=https://github.com/crosshj/parascene/commit/$GITHUB_SHA" \
+	"BUILD_DEPLOYED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+	"ASSET_VERSION=$GITHUB_SHA" | \
 ssh "${SSH_OPTS[@]}" "$REMOTE" 'set -euo pipefail; install -d -m 755 "$HOME/parascene-vps"; umask 077; cat > "$HOME/parascene-vps/.env"; chmod 600 "$HOME/parascene-vps/.env"'
 
 # Start the remote deployment and remove the temporary script afterward.

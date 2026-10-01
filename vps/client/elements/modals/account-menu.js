@@ -295,7 +295,10 @@ class AppAccountMenu extends HTMLElement {
 		const host = window.location?.hostname || '';
 		const isLocal = host === 'localhost' || host === '127.0.0.1' || host === '[::1]';
 		const fromChatSidebar = !!(
-			el && (el.matches?.('[data-chat-sidebar-open-profile]') || el.closest?.('[data-chat-sidebar-open-profile]'))
+			el && (
+				el.matches?.('[data-chat-sidebar-open-profile], [data-menu-key="account"]') ||
+				el.closest?.('[data-chat-sidebar-open-profile], [data-menu-key="account"]')
+			)
 		);
 		item.hidden = !(isLocal && fromChatSidebar);
 	}

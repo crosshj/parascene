@@ -70,6 +70,10 @@ export function createSidebarController({ view, services } = {}) {
 
 	function handleAction(action) {
 		if (action?.action === 'open-overlay') {
+			if (action.overlay === 'account') {
+				document.dispatchEvent(new CustomEvent('open-account-menu', { detail: { anchor: action.anchor } }));
+				return;
+			}
 			overlays.open(action.overlay, action.anchor);
 			return;
 		}
