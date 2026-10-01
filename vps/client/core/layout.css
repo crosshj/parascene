@@ -66,6 +66,10 @@ body.beta-layout main#app-outlet {
 .beta-outlet__composer button:last-child { color: white; background: #7c3aed; }
 .beta-outlet__composer button:disabled { opacity: .45; }
 .beta-outlet__composer button svg { width: 18px; height: 18px; }
+body.is-resizing-sidebar .beta-outlet__composer { background: var(--beta-panel-background); }
+body.is-resizing-sidebar .beta-outlet__composer textarea { background: var(--beta-panel-background); }
+body.is-resizing-viewport .beta-outlet__composer { background: var(--beta-panel-background); }
+body.is-resizing-viewport .beta-outlet__composer textarea { background: var(--beta-panel-background); }
 
 .beta-app-overlay-host { position: fixed; z-index: 100; inset: 0; pointer-events: none; }
 .beta-app-overlay-host[hidden] { display: none; }
@@ -79,6 +83,31 @@ body.beta-layout main#app-outlet {
 .beta-app-overlay__content { position: absolute; inset: 0; min-height: 0; overflow: auto; padding-top: calc(58px + env(safe-area-inset-top, 0px)); box-sizing: border-box; scrollbar-width: none; -ms-overflow-style: none; }
 .beta-app-overlay__content::-webkit-scrollbar { display: none; width: 0; height: 0; }
 body.beta-creation-overlay-open { overflow: hidden; }
+
+/* Temporarily skip decorative glass blur during continuous layout resizing. */
+body.is-resizing-sidebar .beta-outlet__header,
+body.is-resizing-viewport .beta-outlet__header,
+body.is-resizing-sidebar .beta-app-overlay__chrome,
+body.is-resizing-viewport .beta-app-overlay__chrome,
+body.is-resizing-sidebar .creation-published-badge,
+body.is-resizing-viewport .creation-published-badge,
+body.is-resizing-sidebar .creation-challenge-locked-badge,
+body.is-resizing-viewport .creation-challenge-locked-badge,
+body.is-resizing-sidebar .creation-group-badge,
+body.is-resizing-viewport .creation-group-badge,
+body.is-resizing-sidebar .creation-music-badge,
+body.is-resizing-viewport .creation-music-badge,
+body.is-resizing-sidebar .creation-video-badge,
+body.is-resizing-viewport .creation-video-badge,
+body.is-resizing-sidebar .creation-detail-hero-nav,
+body.is-resizing-viewport .creation-detail-hero-nav,
+body.is-resizing-sidebar .creation-detail-video-muted-badge,
+body.is-resizing-viewport .creation-detail-video-muted-badge,
+body.is-resizing-sidebar .creation-detail-suno-play,
+body.is-resizing-viewport .creation-detail-suno-play {
+	-webkit-backdrop-filter: none;
+	backdrop-filter: none;
+}
 
 @media (prefers-color-scheme: dark) {
 	:root {

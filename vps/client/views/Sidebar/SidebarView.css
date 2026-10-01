@@ -411,8 +411,7 @@
 .sidebar-view__resize-handle:focus-visible { outline: none; }
 body.is-resizing-sidebar,
 body.is-resizing-sidebar * { cursor: col-resize !important; user-select: none !important; }
-body.is-resizing-sidebar .sidebar-view__panel { will-change: width; }
-body.is-resizing-sidebar main#app-outlet { pointer-events: none; will-change: margin-left; }
+body.is-resizing-sidebar main#app-outlet { pointer-events: none; }
 @media (hover: none), (pointer: coarse) { .sidebar-view__row-menu { opacity: 1; } }
 @media (prefers-color-scheme: dark) {
 	.sidebar-view__section-head h2,

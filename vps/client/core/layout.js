@@ -47,6 +47,7 @@ export function createLayout({ root, views, services } = {}) {
 	let appliedComposition = null;
 	let restoreFocus = null;
 	let backgroundRevision = 0;
+	let viewportResizeTimer = 0;
 
 	const overlayHost = document.createElement('div');
 	overlayHost.className = 'beta-app-overlay-host';
@@ -143,6 +144,15 @@ export function createLayout({ root, views, services } = {}) {
 			else region.removeAttribute('aria-hidden');
 		}
 		document.body.classList.toggle('beta-creation-overlay-open', suppressed);
+	}
+
+	function onViewportResize() {
+		document.body.classList.add('is-resizing-viewport');
+		window.clearTimeout(viewportResizeTimer);
+		viewportResizeTimer = window.setTimeout(() => {
+			viewportResizeTimer = 0;
+			document.body.classList.remove('is-resizing-viewport');
+		}, 180);
 	}
 
 	function showOverlay(descriptor, changed) {
@@ -266,9 +276,12 @@ export function createLayout({ root, views, services } = {}) {
 		setHeaderMenu();
 		setBackgroundSuppressed(false);
 		document.removeEventListener('keydown', onDocumentKeydown);
+		window.removeEventListener('resize', onViewportResize);
+		window.clearTimeout(viewportResizeTimer);
+		viewportResizeTimer = 0;
 		document.documentElement.classList.remove('beta-overlay-route-pending');
 		overlayHost.remove();
-		document.body.classList.remove('beta-layout', 'is-resizing-sidebar');
+		document.body.classList.remove('beta-layout', 'is-resizing-sidebar', 'is-resizing-viewport');
 		document.body.style.removeProperty('--beta-sidebar-width');
 		appliedComposition = null;
 	}
@@ -280,6 +293,7 @@ export function createLayout({ root, views, services } = {}) {
 	overlayBack.addEventListener('click', () => actions.dismissOverlay?.());
 	overlayHost.addEventListener('keydown', onOverlayKeydown);
 	document.addEventListener('keydown', onDocumentKeydown);
+	window.addEventListener('resize', onViewportResize, { passive: true });
 	document.body.classList.add('beta-layout');
 
 	return {
