@@ -12,8 +12,21 @@ function serializeBootstrap(value) {
 }
 
 async function bootstrapForRequest(req, users) {
-	const user = req.auth?.userId ? await users?.byId(req.auth.userId) : null;
-	const profile = req.auth?.userId ? await users?.profileByUserId(req.auth.userId) : null;
+	const userId = req.auth?.userId;
+	let user = null;
+	let profile = null;
+	if (userId) {
+		const cached = users?.getCachedBootstrap?.(userId);
+		if (cached) {
+			user = cached.user;
+			profile = cached.profile;
+		} else {
+			[user, profile] = await Promise.all([
+				users?.byId(userId) ?? null,
+				users?.profileByUserId(userId) ?? null
+			]);
+		}
+	}
 	return {
 		user: user ? { ...user, profile: profile || null } : null,
 		clientRoute: req.originalUrl || req.path || "/",
@@ -49,7 +62,8 @@ export function createSpaFallback({ appPagePath, users, buildDir }) {
 			if (html.includes("{{APP_JS}}") || html.includes("{{APP_CSS}}")) {
 				html = html.replaceAll("{{APP_JS}}", assets.js).replaceAll("{{APP_CSS}}", assets.css);
 			}
-			return res.type("html").send(html);
+			res.type("html").send(html);
+			return;
 		} catch (error) {
 			return next(error);
 		}

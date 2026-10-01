@@ -30,7 +30,7 @@ app.use("/api/auth", express.json({ limit: "1mb" }));
 app.use("/api", express.json({ limit: "1mb" }));
 app.use("/api/notifications", express.urlencoded({ extended: false }));
 app.use(cookieParser());
-app.use(createAuthMiddleware(db.sessions));
+app.use(createAuthMiddleware(db.sessions, db.users));
 // The beta application also serves the public profile/edited-image compatibility
 // path. The CDN host serves the same VPS-owned route through createCdnRoutes.
 app.use("/api/images/generic", createFilesCors(), createGenericRoutes(db.genericFiles, db.users));

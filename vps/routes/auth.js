@@ -88,6 +88,7 @@ export function createAuthRoutes({ users, sessions }) {
 	router.post("/api/auth/logout", async (req, res, next) => {
 		try {
 			if (req.auth?.token) await sessions.delete(hashToken(req.auth.token), req.auth.userId);
+			if (req.auth?.userId) users.invalidateCache?.(req.auth.userId);
 			clearSessionCookie(res, req);
 			return res.json({ authenticated: false, user: null });
 		} catch (error) {

@@ -45,8 +45,21 @@ async function sendPage(req, res, next, filePath, users, buildDir) {
 		html = html.replace("</head>", `${buildMetaTags(assets.appBuild)}\n\t</head>`);
 		html = html.replace("{{CANONICAL_LINK}}", `<link rel="canonical" href="${escapeHtml(canonicalUrlForRequest(req))}" />`);
 		if (html.includes("{{APP_BOOTSTRAP}}")) {
-			const user = req.auth?.userId ? await users?.byId(req.auth.userId) : null;
-			const profile = req.auth?.userId ? await users?.profileByUserId(req.auth.userId) : null;
+			const userId = req.auth?.userId;
+			let user = null;
+			let profile = null;
+			if (userId) {
+				const cached = users?.getCachedBootstrap?.(userId);
+				if (cached) {
+					user = cached.user;
+					profile = cached.profile;
+				} else {
+					[user, profile] = await Promise.all([
+						users?.byId(userId) ?? null,
+						users?.profileByUserId(userId) ?? null
+					]);
+				}
+			}
 			const bootstrap = {
 				user: user ? { ...user, profile: profile || null } : null,
 				clientRoute: req.originalUrl || req.path || "/",
