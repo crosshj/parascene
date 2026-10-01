@@ -5,6 +5,7 @@ import { createSupabaseContext } from "./supabase.js";
 import { createUsersStore } from "./users.js";
 import { createCreditsStore } from "./credits.js";
 import { createCreationsStore } from "./creations.js";
+import { createNotificationsStore } from "./notifications.js";
 
 export function createDb() {
 	const context = createSupabaseContext();
@@ -15,6 +16,7 @@ export function createDb() {
 		sessions: createSessionsStore(context.client),
 		profileFiles: createProfileFilesStore(context),
 		genericFiles: createGenericFilesStore(context),
-		creations: createCreationsStore(context)
+		creations: createCreationsStore(context),
+		notifications: createNotificationsStore(context.client)
 	};
 }

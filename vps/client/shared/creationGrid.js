@@ -1,5 +1,6 @@
 import { escapeHtml } from '../utils/dom.js';
 import { iconMarkup } from '../components/Icon/Icon.js';
+import { applyVideoFirstFramePoster } from './videoFirstFramePoster.js';
 
 const html = String.raw;
 
@@ -238,9 +239,9 @@ function filledAdornmentIcon(name) {
 	return `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">${paths[name] || ''}</svg>`;
 }
 
-function badges(item, { hideChallengeCorner = false } = {}) {
+function badges(item, { hideChallengeCorner = false, hidePublished = false } = {}) {
 	const groupBadge = isGroupCreation(item) ? '<span class="creation-group-badge" title="Group creation" aria-label="Group creation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="6.5" width="9.5" height="9.5" rx="2"></rect><rect x="10.5" y="10.5" width="10" height="10" rx="2"></rect></svg></span>' : '';
-	const published = item?.published === true || item?.published === 1 ? `<span class="creation-published-badge" title="Published" aria-label="Published">${iconMarkup('globe')}</span>` : '';
+	const published = !hidePublished && (item?.published === true || item?.published === 1) ? `<span class="creation-published-badge" title="Published" aria-label="Published">${iconMarkup('globe')}</span>` : '';
 	const music = creationMediaType(item) === 'audio' ? `<span class="creation-music-badge" title="Music" aria-label="Music">${iconMarkup('music')}</span>` : '';
 	const video = creationMediaType(item) === 'video' ? `<span class="creation-video-badge" title="Video" aria-label="Video">${iconMarkup('video')}</span>` : '';
 	const challenge = isChallengeLocked(item) && !hideChallengeCorner
@@ -248,7 +249,7 @@ function badges(item, { hideChallengeCorner = false } = {}) {
 	return `${published}${challenge}${groupBadge}${music}${video}`;
 }
 
-export function creationCardMarkup(item) {
+export function creationCardMarkup(item, { hidePublishedBadge = false } = {}) {
 	const status = String(item?.status || 'completed').toLowerCase();
 	const failed = status === 'failed';
 	const pending = status !== 'completed' && status !== 'failed';
@@ -293,7 +294,7 @@ export function creationCardMarkup(item) {
 		processingStatus ? `data-creation-status="${escapeHtml(processingStatus)}"` : ''
 	].filter(Boolean).join(' ');
 	return html`<div class="feed-card feed-card--image-only creation-grid__card" ${attributes} role="link" tabindex="0" aria-label="Open ${escapeHtml(title || `Creation ${creationId || ''}`)}">
-		<div class="${mediaClass}" aria-hidden="true" data-creation-id="${escapeHtml(creationId)}" data-media-type="${escapeHtml(type)}" data-bg-blur="${nsfw || challengeBlur ? '1' : '0'}" data-bg-url="${escapeHtml(thumbnail)}" data-bg-fallback="${escapeHtml(original)}" data-group-slides="${escapeHtml(JSON.stringify(slides))}"><img class="feed-card-img" alt="${escapeHtml(title || 'Creation')}" loading="lazy" decoding="async">${state}${nsfw && !pending && !failed ? `<span class="creation-grid__nsfw-badge" role="img" aria-label="NSFW">${iconMarkup('eyeHidden')}</span>` : ''}${challengeOverlay}${!failed && !pending ? badges(item, { hideChallengeCorner: challengeBlur }) : ''}</div>
+		<div class="${mediaClass}" aria-hidden="true" data-creation-id="${escapeHtml(creationId)}" data-media-type="${escapeHtml(type)}" data-bg-blur="${nsfw || challengeBlur ? '1' : '0'}" data-bg-url="${escapeHtml(thumbnail)}" data-bg-fallback="${escapeHtml(original)}" data-group-slides="${escapeHtml(JSON.stringify(slides))}"><img class="feed-card-img" alt="${escapeHtml(title || 'Creation')}" loading="lazy" decoding="async">${state}${nsfw && !pending && !failed ? `<span class="creation-grid__nsfw-badge" role="img" aria-label="NSFW">${iconMarkup('eyeHidden')}</span>` : ''}${challengeOverlay}${!failed && !pending ? badges(item, { hideChallengeCorner: challengeBlur, hidePublished: hidePublishedBadge }) : ''}</div>
 	</div>`;
 }
 
@@ -337,6 +338,51 @@ export function createCreationMediaLoader(root, { eagerCount = 16, maxConcurrent
 			image.decoding = 'async';
 			image.loading = eager ? 'eager' : 'lazy';
 			if ('fetchPriority' in image) image.fetchPriority = highPriority ? 'high' : 'auto';
+			const item = media.closest('.creation-grid__card')?.__creationRecord || null;
+			if (item && creationMediaType(item) === 'video' && creationNeedsVideoFramePoster(item)) {
+				const videoUrl = item.video_url || parseCreationMeta(item)?.video?.file_path;
+				let finished = false;
+				const finishMedia = () => {
+					if (finished) return;
+					finished = true;
+					loadingMedia.delete(media);
+					finish();
+				};
+				applyVideoFirstFramePoster(image, {
+					videoUrl,
+				onPainted: () => {
+						if (!media.isConnected) return;
+						media.dataset.bgLoadedUrl = media.dataset.bgUrl;
+						media.dataset.bgQueued = '0';
+						media.classList.remove('loading', 'error');
+						media.classList.add('loaded');
+						finishMedia();
+					},
+				onFail: () => {
+						if (media.dataset.bgUrl) {
+							image.onload = () => {
+								media.dataset.bgLoadedUrl = media.dataset.bgUrl;
+								media.dataset.bgQueued = '0';
+								media.classList.remove('loading', 'error');
+								media.classList.add('loaded');
+								finishMedia();
+							};
+							image.onerror = () => {
+								media.dataset.bgQueued = '0';
+								media.classList.remove('loading');
+								media.classList.add('error');
+								finishMedia();
+							};
+							image.src = media.dataset.bgUrl;
+						} else {
+							media.classList.remove('loading');
+							media.classList.add('error');
+							finishMedia();
+						}
+					}
+				});
+				return;
+			}
 			image.onload = () => { loadingMedia.delete(media); media.dataset.bgLoadedUrl = media.dataset.bgUrl; media.dataset.bgQueued = '0'; media.style.setProperty('--creation-grid-image', `url("${media.dataset.bgUrl.replaceAll('"', '\\"')}")`); media.classList.remove('loading', 'error'); media.classList.add('loaded'); finish(); };
 			image.onerror = () => {
 				loadingMedia.delete(media);

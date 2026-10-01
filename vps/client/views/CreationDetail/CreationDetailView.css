@@ -4828,3 +4828,166 @@ app-route-create .create-route-blog-campaign-simple-note {
 	position: absolute; top: 50%; left: 0; width: 8px; height: 8px; margin: -4px 0 0 -4px;
 	border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.12); pointer-events: none;
 }
+
+/* Related creations break out of the narrow detail copy lane into the full overlay viewport. */
+.creation-detail-related {
+	position: relative;
+	left: 50%;
+	right: 50%;
+	box-sizing: border-box;
+	width: 100vw;
+	margin-top: 32px;
+	margin-right: -50vw;
+	margin-left: -50vw;
+	padding-top: 24px;
+	border-top: 1px solid var(--border);
+}
+
+.creation-detail-related-inner {
+	max-width: 1400px;
+	margin: 0 auto;
+	padding: 0 24px;
+}
+
+.creation-detail-related-heading {
+	margin: 0 0 16px;
+	color: var(--text);
+	font-size: 1.25rem;
+	font-weight: 600;
+}
+
+.creation-detail-related .creation-detail-related-grid {
+	display: grid;
+	grid-template-columns: repeat(5, minmax(0, 1fr));
+	gap: 6px;
+	width: 100%;
+	min-width: 0;
+	grid-auto-rows: auto;
+}
+
+.creation-detail-related-grid > .route-card {
+	min-width: 0;
+}
+
+.creation-detail-related-grid > .creation-detail-related-card {
+	position: relative;
+	display: block;
+	min-width: 0;
+	width: 100%;
+	height: auto;
+	aspect-ratio: 1 / 1;
+	align-self: start;
+	overflow: hidden;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	cursor: pointer;
+}
+
+.creation-detail-related-grid .feed-card-image {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	aspect-ratio: auto;
+	overflow: hidden;
+	border-radius: 11px;
+	background: var(--surface-muted);
+}
+
+.creation-detail-related-grid .feed-card-image .feed-card-img {
+	position: absolute;
+	inset: 0;
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	object-position: center;
+	opacity: 0;
+	transition: opacity .3s ease;
+}
+
+.creation-detail-related-grid .feed-card-image.loaded .feed-card-img {
+	opacity: 1;
+}
+
+/* Match the hidden-eye NSFW badge used by the My Creations grid. */
+.creation-detail-related-grid .feed-card-image.nsfw {
+	position: relative;
+	overflow: hidden;
+}
+
+.creation-detail-related-grid .feed-card-image.nsfw::before {
+	display: none;
+}
+
+.creation-detail-related-grid .feed-card-image.nsfw::after {
+	content: '';
+	position: absolute;
+	inset: -1px;
+	z-index: 4;
+	background: rgb(255 255 255 / 8%);
+	pointer-events: none;
+}
+
+.creation-detail-related-grid .creation-grid__nsfw-badge {
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	z-index: 6;
+	display: inline-flex;
+	width: 44px;
+	height: 44px;
+	align-items: center;
+	justify-content: center;
+	border: 0;
+	border-radius: 15px;
+	corner-shape: squircle;
+	color: rgb(255 255 255 / 70%);
+	background: rgb(18 18 24 / 26%);
+	box-shadow: none;
+	transform: translate(-50%, -50%);
+	pointer-events: none;
+}
+
+.creation-detail-related-grid .creation-grid__nsfw-badge svg {
+	display: block;
+	width: 22px;
+	height: 22px;
+}
+
+body.view-nsfw .creation-detail-related-grid .creation-grid__nsfw-badge,
+body.view-nsfw .creation-detail-related-grid .feed-card-image.nsfw::after {
+	display: none;
+}
+
+.creation-detail-related-sentinel {
+	min-height: 20px;
+}
+
+.creation-detail-related-reasons {
+	margin-top: 6px;
+	padding-top: 6px;
+	border-top: 1px solid color-mix(in srgb, var(--text-muted) 35%, transparent);
+}
+
+.creation-detail-related-reason-line {
+	overflow: hidden;
+	color: var(--text-muted);
+	font-size: 0.72rem;
+	line-height: 1.3;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+@media (max-width: 860px) {
+	.creation-detail-related .creation-detail-related-grid {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+
+@media (max-width: 768px) {
+	.creation-detail-related-inner {
+		padding: 0 8px;
+	}
+}

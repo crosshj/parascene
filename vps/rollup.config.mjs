@@ -8,6 +8,7 @@ import terser from "@rollup/plugin-terser";
 
 const vpsDir = path.dirname(fileURLToPath(import.meta.url));
 const buildDir = path.join(vpsDir, "build");
+const isProduction = process.env.NODE_ENV === "production";
 
 function assertVpsClientBoundary() {
 	return {
@@ -87,6 +88,7 @@ export default {
 	output: {
 		dir: buildDir,
 		format: "es",
+		sourcemap: !isProduction,
 		entryFileNames: "app.[hash].js",
 		assetFileNames: "app.[hash][extname]"
 	},
@@ -94,6 +96,6 @@ export default {
 		assertVpsClientBoundary(),
 		htmlStringImports(),
 		emitImportedCss(),
-		terser(),
+		...(isProduction ? [terser()] : []),
 	]
 };

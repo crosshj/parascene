@@ -1,6 +1,7 @@
 const HISTORY_FLAG = 'parasceneSpa';
 const OVERLAY_FLAG = 'parasceneOverlay';
 const BACKGROUND_KEY = 'parasceneBackgroundUrl';
+const PREVIOUS_CREATION_KEY = 'parascenePreviousCreationUrl';
 
 function currentUrl() {
 	return `${location.pathname}${location.search}${location.hash}`;
@@ -17,18 +18,20 @@ export function createRouter({ routes, state, layout } = {}) {
 	let currentComposition = null;
 	const creationSeeds = new Map();
 
-	function historyStateFor(url, backgroundUrl = null) {
+	function historyStateFor(url, backgroundUrl = null, previousCreationUrl = null) {
 		const prior = history.state && typeof history.state === 'object' ? history.state : {};
 		const route = routes.match(url);
 		if (route.presentation !== 'overlay') {
-			const { [BACKGROUND_KEY]: _background, ...base } = prior;
+			const { [BACKGROUND_KEY]: _background, [PREVIOUS_CREATION_KEY]: _previousCreation, ...base } = prior;
 			return { ...base, [HISTORY_FLAG]: true, [OVERLAY_FLAG]: false };
 		}
+		const { [PREVIOUS_CREATION_KEY]: _previousCreation, ...base } = prior;
 		return {
-			...prior,
+			...base,
 			[HISTORY_FLAG]: true,
 			[OVERLAY_FLAG]: true,
 			[BACKGROUND_KEY]: backgroundUrl || route.defaultBackground,
+			...(previousCreationUrl ? { [PREVIOUS_CREATION_KEY]: previousCreationUrl } : {}),
 		};
 	}
 
@@ -52,7 +55,7 @@ export function createRouter({ routes, state, layout } = {}) {
 		}
 		const seed = route.name === 'creation-detail' ? creationSeeds.get(route.params.creationId) || null : null;
 		const composition = routes.resolve({ url, backgroundUrl, seed });
-		await layout.apply(composition, { navigate, dismissOverlay });
+		await layout.apply(composition, { navigate, dismissOverlay, backOverlay });
 		currentComposition = composition;
 		state.actions.navigationResolved({
 			url: composition.url,
@@ -71,9 +74,34 @@ export function createRouter({ routes, state, layout } = {}) {
 				? currentComposition.backgroundUrl
 				: currentComposition?.url || route.defaultBackground;
 		}
+		const currentRoute = currentComposition ? routes.match(currentComposition.url) : null;
+		const previousCreationUrl = route.name === 'creation-detail'
+			? options.replace
+				? history.state?.[PREVIOUS_CREATION_KEY]
+				: currentRoute?.name === 'creation-detail'
+					? currentComposition.url
+					: null
+			: null;
 		const method = options.replace ? 'replaceState' : 'pushState';
-		history[method](historyStateFor(url, backgroundUrl), '', url);
+		history[method](historyStateFor(url, backgroundUrl, previousCreationUrl), '', url);
 		return reconcile();
+	}
+
+	function backOverlay() {
+		if (!currentComposition?.overlay) return;
+		const currentRoute = routes.match(currentComposition.url);
+		const previousUrl = history.state?.[PREVIOUS_CREATION_KEY];
+		if (currentRoute?.name === 'creation-detail' && typeof previousUrl === 'string') {
+			try {
+				if (routes.match(pathFor(previousUrl)).name === 'creation-detail') {
+					history.back();
+					return;
+				}
+			} catch {
+				// Invalid or stale predecessor: fall back to closing the overlay.
+			}
+		}
+		void dismissOverlay();
 	}
 
 	async function dismissOverlay() {
@@ -119,6 +147,7 @@ export function createRouter({ routes, state, layout } = {}) {
 		},
 		navigate,
 		dismissOverlay,
+		backOverlay,
 		destroy() {
 			if (!started) return;
 			started = false;

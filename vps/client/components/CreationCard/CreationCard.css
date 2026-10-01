@@ -1,0 +1,1324 @@
+/* Shared creation-card media and grid styles ported from the active WWW SPA. */
+.route-media.route-media-error {
+	background:
+		linear-gradient(135deg,
+			color-mix(in srgb, var(--text) 10%, transparent),
+			color-mix(in srgb, var(--text) 4%, transparent));
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	text-align: center;
+	padding: 12px;
+}
+
+.route-media.route-media-error::after {
+	content: "";
+	width: 40px;
+	height: 40px;
+	background-color: color-mix(in srgb, var(--text) 42%, transparent);
+	-webkit-mask: var(--icon-image-unavailable) center / contain no-repeat;
+	mask: var(--icon-image-unavailable) center / contain no-repeat;
+	opacity: 0.85;
+}
+
+.route-media.route-media-error.route-media-error-moderated::after {
+	display: none;
+}
+
+.route-media-error-moderated-icon {
+	position: absolute;
+	inset: 0;
+	margin: auto;
+	width: 40px;
+	height: 40px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--text);
+	opacity: 0.36;
+	pointer-events: none;
+}
+
+.route-media-error-moderated-icon svg {
+	width: 100%;
+	height: 100%;
+}
+
+/* Play icon only when not NSFW — NSFW uses ::before/::after for label and blur overlay */
+.route-media[data-media-type="video"]:not(.route-media-error):not(.nsfw)::before {
+	content: "";
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	width: 28px;
+	height: 28px;
+	border-radius: 50%;
+	background-color: rgba(0, 0, 0, 0.7);
+	transform: translate(-50%, -50%);
+}
+
+.route-media[data-media-type="video"]:not(.route-media-error):not(.nsfw)::after {
+	content: "";
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	width: 0;
+	height: 0;
+	border-top: 7px solid transparent;
+	border-bottom: 7px solid transparent;
+	border-left: 11px solid rgba(255, 255, 255, 0.9);
+	transform: translate(-40%, -50%);
+}
+
+/* When NSFW is shown unobscured, show play icon on video thumbnails (explore, profile, creations, etc.) */
+body.view-nsfw .route-media[data-media-type="video"]:not(.route-media-error).nsfw::before {
+	content: "";
+	display: block;
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	width: 28px;
+	height: 28px;
+	border-radius: 50%;
+	background-color: rgba(0, 0, 0, 0.7);
+	border: none;
+	transform: translate(-50%, -50%);
+	z-index: 1;
+}
+
+body.view-nsfw .route-media[data-media-type="video"]:not(.route-media-error).nsfw::after {
+	content: "";
+	display: block;
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	width: 0;
+	height: 0;
+	border-top: 7px solid transparent;
+	border-bottom: 7px solid transparent;
+	border-left: 11px solid rgba(255, 255, 255, 0.9);
+	border-right: none;
+	background: transparent;
+	backdrop-filter: none;
+	-webkit-backdrop-filter: none;
+	transform: translate(-40%, -50%);
+	z-index: 1;
+}
+
+/* Audio cover fallback — same dark plate + bars as desktop when there is no real image */
+.creation-audio-cover {
+	background:
+		radial-gradient(ellipse at 50% 50%, color-mix(in srgb, var(--color-purple) 18%, transparent), transparent 55%),
+		#14141a;
+	color: var(--color-purple);
+}
+
+.creation-audio-cover .creation-audio-wave {
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	width: 58%;
+	max-width: 140px;
+	height: auto;
+	transform: translate(-50%, -50%);
+	color: inherit;
+	pointer-events: none;
+	z-index: 2;
+}
+
+.creation-detail-image-wrapper.creation-audio-cover .creation-audio-wave {
+	max-width: 220px;
+}
+
+.creation-detail-image-wrapper.creation-audio-cover [data-image],
+.creation-detail-image-wrapper.creation-audio-cover [data-background] {
+	opacity: 0;
+}
+
+.feed-card-image.creation-audio-cover:not(.feed-card-audio-real-cover) .feed-card-img,
+.feed-card-image.creation-audio-cover.loaded:not(.feed-card-audio-real-cover) .feed-card-img {
+	opacity: 0 !important;
+	visibility: hidden;
+}
+
+.feed-card-image.feed-card-audio-real-cover .creation-audio-wave {
+	display: none;
+}
+
+.feed-card-image.feed-card-audio-real-cover.creation-audio-cover {
+	background: none;
+	color: inherit;
+}
+
+/* Keep the waveform above a placeholder PNG; only hide it for a real bitmap cover. */
+.route-media.creation-audio-cover.route-media-has-image .creation-audio-wave {
+	display: block;
+}
+
+.route-media.route-media-audio-real-cover .creation-audio-wave {
+	display: none;
+}
+
+.route-media.route-media-audio-real-cover.creation-audio-cover {
+	background: none;
+	color: inherit;
+}
+.route-cards {
+	display: grid;
+	gap: 12px;
+}
+.feed-card-image {
+	position: relative;
+	width: 100%;
+	aspect-ratio: 1 / 1;
+	flex-shrink: 0;
+	border-radius: 0;
+	overflow: hidden;
+	background: var(--surface-muted);
+}
+
+.feed-card-image.loading {
+	background: linear-gradient(90deg, var(--surface-muted), var(--surface-strong), var(--surface-muted));
+	background-size: 200% 100%;
+	animation: loading 4s linear infinite;
+}
+
+.feed-card-image.loading.feed-card-image--creation-processing,
+.feed-card-image--creation-processing {
+	background: var(--surface-muted);
+	background-size: auto;
+	animation: none;
+	color: var(--text);
+}
+
+/* Pull the empty <img> out of normal flow so a row flex layout cannot shove the label sideways. */
+.feed-card-image--creation-processing .feed-card-img {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	z-index: 0;
+	pointer-events: none;
+}
+
+.feed-card-image--creation-processing .feed-card-video {
+	opacity: 0;
+	visibility: hidden;
+	pointer-events: none;
+}
+
+/* Real node (not ::after) so it does not clash with `.nsfw::after` blur on the same tile. */
+.feed-card-image--creation-processing .feed-card-creation-processing-label,
+.feed-card-image--creation-processing [data-creation-gpu-wait] {
+	z-index: 5;
+}
+
+.feed-card-image--creation-processing .creation-music-badge,
+.feed-card-image--creation-processing .creation-audio-wave,
+.route-media.loading .creation-music-badge,
+.route-media.loading .creation-audio-wave {
+	display: none;
+}
+
+@media (prefers-color-scheme: light) {
+	.feed-card-image--creation-processing .feed-card-creation-processing-label {
+		color: var(--text);
+		font-weight: 500;
+	}
+}
+
+.feed-card-image.loaded {
+	background: var(--surface-muted);
+}
+
+.feed-card-image .feed-card-img {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	display: block;
+	object-fit: cover;
+	border-radius: 0;
+	opacity: 0;
+	transition: opacity 0.3s ease;
+}
+
+.feed-card-image.loaded .feed-card-img {
+	opacity: 1;
+}
+
+.feed-card-image--group-carousel .feed-card-img {
+	opacity: 0;
+	visibility: hidden;
+	pointer-events: none;
+	position: absolute;
+	width: 0;
+	height: 0;
+	overflow: hidden;
+}
+
+/* Loaded placeholder img must stay hidden; `.feed-card-image.loaded .feed-card-img` otherwise wins. */
+.feed-card-image.feed-card-image--group-carousel.loaded .feed-card-img {
+	opacity: 0;
+	visibility: hidden;
+	pointer-events: none;
+}
+
+.feed-card-group-stack {
+	position: absolute;
+	inset: 0;
+	z-index: 1;
+}
+
+.feed-card-group-img {
+	position: absolute;
+	inset: 0;
+	display: block;
+	width: 100%;
+	height: 100%;
+	border-radius: inherit;
+	object-fit: cover;
+	object-position: center;
+	opacity: 0;
+	visibility: hidden;
+	transition: opacity 0.14s ease;
+}
+
+.feed-card-group-img.is-active {
+	opacity: 1;
+	visibility: visible;
+}
+
+.feed-card-group-nav {
+	position: absolute;
+	top: 50%;
+	transform: translateY(-50%);
+	width: 42px;
+	height: 42px;
+	border: 1px solid rgba(255, 255, 255, 0.28);
+	border-radius: 50%;
+	background: rgba(0, 0, 0, 0.54);
+	color: rgba(255, 255, 255, 0.94);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0;
+	cursor: pointer;
+	z-index: 6;
+	touch-action: manipulation;
+}
+
+.feed-card-group-nav svg {
+	display: block;
+	width: 18px;
+	height: 18px;
+	stroke: currentColor;
+	stroke-width: 2.2;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	fill: none;
+	pointer-events: none;
+}
+
+.feed-card-group-nav--prev {
+	left: 8px;
+}
+
+.feed-card-group-nav--next {
+	right: 8px;
+}
+
+.feed-card-group-nav:hover {
+	background: rgba(0, 0, 0, 0.66);
+}
+
+.feed-card-group-nav:active {
+	transform: translateY(-50%);
+}
+
+.feed-card-group-nav:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
+}
+
+/* Group carousel: prev/next stay side-anchored above stack + NSFW blur (not grid-centered). */
+.feed-card-image--group-carousel > .feed-card-group-nav {
+	position: absolute;
+	z-index: 7;
+}
+
+.feed-card-image--group-carousel.nsfw:not(.nsfw-revealed)::after {
+	z-index: 4;
+}
+
+.feed-card-image--group-carousel.nsfw:not(.nsfw-revealed)::before {
+	z-index: 5;
+}
+
+.feed-card-image.nsfw::before {
+	padding: 10px 20px;
+}
+
+@supports (width: 1cqi) {
+	.feed-card-image.nsfw::before {
+		padding: 10px 20px;
+	}
+}
+
+body.view-nsfw .feed-card-image--group-carousel.nsfw::after {
+	pointer-events: none;
+	cursor: default;
+}
+
+.feed-card-image--group-carousel .creation-published-badge,
+.feed-card-image--group-carousel .creation-group-badge {
+	z-index: 5;
+}
+
+/* Same language as route tiles: hide broken <img> glyph, show neutral “unavailable” mark */
+.feed-card-image.error {
+	background:
+		linear-gradient(135deg,
+			color-mix(in srgb, var(--text) 10%, transparent),
+			color-mix(in srgb, var(--text) 4%, transparent));
+}
+
+.feed-card-image.error .feed-card-img {
+	opacity: 0;
+	pointer-events: none;
+}
+
+.feed-card-image.error::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	margin: auto;
+	width: 36px;
+	height: 36px;
+	background-color: color-mix(in srgb, var(--text) 42%, transparent);
+	-webkit-mask: var(--icon-image-unavailable) center / contain no-repeat;
+	mask: var(--icon-image-unavailable) center / contain no-repeat;
+	opacity: 0.85;
+	pointer-events: none;
+}
+
+.feed-card-image.error.feed-card-image-error-moderated::after {
+	display: none;
+}
+
+.feed-card-image.feed-card-image-video {
+	position: relative;
+}
+
+.feed-card-image.feed-card-image-video .feed-card-img,
+.feed-card-image.feed-card-image-video .feed-card-video {
+	object-fit: cover;
+	object-position: center;
+}
+
+.feed-card-image .feed-card-video,
+.route-media .feed-card-video {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	object-position: center;
+	border-radius: 0;
+	pointer-events: none;
+	opacity: 0;
+	transition: opacity 0.25s ease;
+}
+
+.feed-card-image .feed-card-video.is-active,
+.route-media .feed-card-video.is-active {
+	opacity: 1;
+}
+
+.feed-card-image--group-video-playlist .feed-card-group-video-stack {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+}
+
+.feed-card-image--group-video-playlist .feed-card-group-video-slot {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+}
+
+.feed-card-image--group-video-playlist .feed-card-group-video {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	object-position: center;
+}
+
+.sequential-video-player-slot--noninteractive,
+.feed-card-image--group-video-playlist .feed-card-group-video-slot {
+	pointer-events: none;
+}
+
+.feed-card-group-video-slot.sequential-video-player-slot,
+.connect-chat-creation-embed-group-video-slot.sequential-video-player-slot,
+.chat-doom-group-video-slot.sequential-video-player-slot {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+}
+
+.sequential-video-player-slot .sequential-video-player-play-overlay,
+.sequential-video-player-slot .chat-doom-play-overlay {
+	position: absolute;
+	inset: 0;
+	z-index: 4;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	pointer-events: none;
+}
+
+.sequential-video-player-slot .sequential-video-player-play-overlay[hidden],
+.sequential-video-player-slot .chat-doom-play-overlay[hidden] {
+	display: none !important;
+}
+
+.sequential-video-player-slot .chat-doom-play-overlay-inner {
+	width: 72px;
+	height: 72px;
+	border-radius: 50%;
+	background: rgba(0, 0, 0, 0.45);
+	color: #fff;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+}
+
+.sequential-video-player-slot .chat-doom-play-overlay-inner--pausehint {
+	position: static;
+	inset: auto;
+	width: 72px;
+	height: 72px;
+	border-radius: 50%;
+	background: rgba(0, 0, 0, 0.45);
+	color: #fff;
+	box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+}
+
+@media (hover: none), (pointer: coarse) {
+	.sequential-video-player-slot .chat-doom-play-overlay-inner--pausehint {
+		display: none !important;
+	}
+}
+
+.sequential-video-player-slot .chat-doom-play-glyph {
+	width: 36px;
+	height: 36px;
+	margin-left: 5px;
+	opacity: 0.95;
+}
+
+.sequential-video-player-slot .chat-doom-pause-glyph {
+	width: 34px;
+	height: 34px;
+	opacity: 0.95;
+}
+
+.connect-chat-creation-embed-inner--group-video-playlist .connect-chat-creation-embed-group-video-slot {
+	position: relative;
+	width: 100%;
+	height: 100%;
+}
+
+.connect-chat-creation-embed-inner--group-video-playlist .connect-chat-creation-embed-group-video {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.chat-doom-group-video-stack {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+}
+
+.chat-doom-group-video-slot {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+}
+
+.chat-doom-group-video-slot .chat-doom-group-video {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.sequential-video-player-slot .sequential-video-player-video {
+	transition: opacity var(--sequential-video-crossfade-ms, 0ms) ease;
+}
+
+.sequential-video-player-slot .sequential-video-player-video:not(.is-active) {
+	opacity: 0;
+	pointer-events: none;
+}
+
+.sequential-video-player-slot .sequential-video-player-video.is-active {
+	opacity: 1;
+}
+
+.sequential-video-player-slot.sequential-video-slot--crossfading .sequential-video-player-video--crossfade-in.is-active {
+	opacity: 0;
+	pointer-events: none;
+}
+
+.sequential-video-player-slot.sequential-video-slot--crossfading .sequential-video-player-video--crossfade-out.is-active {
+	opacity: 1;
+}
+
+.sequential-video-player-slot.sequential-video-slot--crossfading.sequential-video-slot--crossfade-run .sequential-video-player-video--crossfade-in.is-active {
+	opacity: 1;
+	pointer-events: auto;
+}
+
+.sequential-video-player-slot.sequential-video-slot--crossfading.sequential-video-slot--crossfade-run .sequential-video-player-video--crossfade-out.is-active {
+	opacity: 0;
+	pointer-events: none;
+}
+
+.content-cards-image-grid {
+	grid-template-columns: repeat(5, minmax(0, 1fr));
+	gap: 6px;
+	width: 100%;
+	min-width: 0;
+}
+@media (max-width: 1024px) {
+	.content-cards-image-grid {
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+	}
+}
+
+@media (max-width: 860px) {
+	.content-cards-image-grid {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+
+.route-card {
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	padding: 14px;
+	box-shadow: var(--shadow);
+	display: grid;
+	gap: 8px;
+}
+
+/* Image card variant */
+.route-card-image {
+	background: transparent;
+	border: none;
+	border-radius: 0;
+	box-shadow: none;
+	position: relative;
+	isolation: isolate;
+	overflow: hidden;
+	aspect-ratio: 1 / 1;
+	width: 100%;
+	height: 100%;
+	min-width: 0;
+	display: flex;
+	align-items: stretch;
+	padding: 0;
+}
+
+.route-media {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	border-radius: 6px;
+	background-color: var(--image-placeholder);
+	background-size: cover;
+	background-position: center;
+	border: none;
+}
+
+.route-media.route-media--group-host {
+	overflow: hidden;
+}
+
+.route-media.route-media--group-host.feed-card-image--group-carousel,
+.route-media.route-media--group-host.feed-card-image--group-video-playlist {
+	background-image: none !important;
+}
+
+.route-media.feed-card-image--group-carousel .creation-group-badge,
+.route-media.feed-card-image--group-video-playlist .creation-group-badge {
+	z-index: 5;
+}
+
+.route-media .sequential-video-player-poster {
+	position: absolute;
+	inset: 0;
+	z-index: 2;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	object-position: center;
+	pointer-events: none;
+}
+
+/* Chat embed error tile: stacks under static title bar; overrides absolute .route-media fill. */
+.connect-chat-creation-embed-inner--error-layout .route-media.connect-chat-creation-embed-route-error {
+	position: relative;
+	inset: auto;
+	width: 100%;
+	height: auto;
+	flex: 1;
+	min-height: 0;
+}
+
+.route-media.loading {
+	background: var(--surface-muted);
+	animation: none;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	z-index: 1;
+	color: var(--text);
+	overflow: hidden;
+}
+
+@keyframes loading {
+	0% {
+		background-position: 200% 0;
+	}
+
+	100% {
+		background-position: -200% 0;
+	}
+}
+
+@keyframes like-beat {
+	0% {
+		transform: scale(1);
+	}
+
+	12% {
+		transform: scale(1.25);
+	}
+
+	22% {
+		transform: scale(1);
+	}
+
+	42% {
+		transform: scale(1.18);
+	}
+
+	52% {
+		transform: scale(1);
+	}
+
+	72% {
+		transform: scale(1.12);
+	}
+
+	82% {
+		transform: scale(1);
+	}
+
+	100% {
+		transform: scale(1.02);
+	}
+}
+
+.route-media.loading::after {
+	content: none;
+}
+
+.route-media-wait {
+	position: absolute;
+	inset: 0;
+	z-index: 2;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	padding: 8px;
+	text-align: center;
+	color: var(--text);
+	font-size: 0.82rem;
+	pointer-events: none;
+}
+
+.route-media-wait-label {
+	font-weight: 600;
+	letter-spacing: 0.06em;
+}
+
+@container (max-width: 140px) {
+	.route-media-wait {
+		gap: 6px;
+		font-size: 0.72rem;
+	}
+
+	.creation-wait-icon,
+	.creation-wait-gears,
+	.creation-wait-timeout {
+		width: 36px;
+		height: 36px;
+	}
+}
+
+.creation-wait-gears {
+	position: relative;
+	display: block;
+	width: 48px;
+	height: 48px;
+	flex-shrink: 0;
+	opacity: 0.75;
+}
+
+.creation-wait-gear {
+	position: absolute;
+	overflow: visible;
+}
+
+.creation-wait-gear--lg {
+	width: 72%;
+	height: 72%;
+	left: 0;
+	top: 6%;
+	animation: creation-wait-spin 4.5s linear infinite;
+}
+
+.creation-wait-gear--sm {
+	width: 46%;
+	height: 46%;
+	right: 2%;
+	bottom: 4%;
+	animation: creation-wait-spin 3.15s linear infinite reverse;
+}
+
+.creation-wait-icon {
+	position: relative;
+	display: block;
+	width: 48px;
+	height: 48px;
+	flex-shrink: 0;
+	container-type: size;
+}
+
+.creation-wait-icon .creation-wait-watch {
+	width: 100%;
+	height: 100%;
+}
+
+.creation-wait-watch {
+	display: block;
+	width: 48px;
+	height: 48px;
+	flex-shrink: 0;
+	overflow: visible;
+	opacity: 0.75;
+}
+
+.creation-wait-timeout {
+	display: block;
+	width: 48px;
+	height: 48px;
+	flex-shrink: 0;
+	overflow: visible;
+	opacity: 0.75;
+}
+
+.creation-wait-place {
+	position: absolute;
+	right: -6%;
+	bottom: 2%;
+	z-index: 1;
+	box-sizing: border-box;
+	width: 44%;
+	height: 44%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border: 1.5px solid var(--text);
+	border-radius: 50%;
+	background: var(--surface-muted);
+	color: var(--text);
+	font-size: 0.62rem;
+	font-size: 22cqmin;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+	letter-spacing: 0;
+	line-height: 1;
+}
+
+@keyframes creation-wait-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.creation-wait-gear--lg,
+	.creation-wait-gear--sm {
+		animation: none;
+	}
+}
+
+.route-details {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	width: 100%;
+	background: rgba(15, 13, 26, 0.92);
+	opacity: 0;
+	transform: translateY(6px);
+	transition: opacity 0.2s ease, transform 0.2s ease;
+	color: var(--text);
+	z-index: 2;
+	user-select: none;
+}
+
+@media (prefers-color-scheme: light) {
+	.route-details {
+		background: rgba(255, 255, 255, 0.9);
+		color: var(--text);
+	}
+}
+
+.route-details-content {
+	padding: 12px;
+	user-select: none;
+}
+
+.route-card:focus-within .route-details {
+	opacity: 1;
+	transform: translateY(0);
+}
+
+@media (hover: hover) and (pointer: fine) {
+	.route-card:hover .route-details {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+@media (max-width: 768px) {
+	.route-card-image .route-details {
+		display: none !important;
+	}
+}
+
+.route-title {
+	font-weight: 600;
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	line-clamp: 2;
+	line-height: 1.2;
+	max-height: calc(1.2em * 2);
+	height: calc(1.2em * 2);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: normal;
+	overflow-wrap: anywhere;
+	word-break: break-word;
+}
+
+.route-meta {
+	font-size: 0.85rem;
+	color: var(--text-muted);
+}
+
+.route-meta-spacer {
+	height: 6px;
+}
+
+.route-summary {
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	line-clamp: 2;
+	line-height: 1.3;
+	max-height: calc(1.3em * 2);
+	height: calc(1.3em * 2);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: normal;
+	overflow-wrap: anywhere;
+	word-break: break-word;
+	font-size: 0.85rem;
+	color: rgba(237, 233, 254, 0.7);
+	margin-top: 0;
+}
+
+@media (prefers-color-scheme: light) {
+	.route-summary {
+		color: rgba(15, 23, 42, 0.65);
+	}
+}
+
+.route-tags {
+	font-size: 0.8rem;
+	color: var(--text-muted);
+}
+.creation-published-badge {
+	position: absolute;
+	top: 8px;
+	right: 8px;
+	width: 32px;
+	height: 32px;
+	background: rgba(0, 0, 0, 0.7);
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 1;
+	backdrop-filter: blur(4px);
+	pointer-events: none;
+}
+
+.creation-published-badge svg {
+	width: 18px;
+	height: 18px;
+	color: white;
+}
+
+/* Corner trophy — challenge entry / pin / organizer media lock */
+.creation-challenge-locked-badge {
+	position: absolute;
+	top: 8px;
+	left: 8px;
+	width: 32px;
+	height: 32px;
+	background: rgba(0, 0, 0, 0.72);
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 5;
+	backdrop-filter: blur(4px);
+	pointer-events: none;
+	color: rgba(255, 255, 255, 0.95);
+	border: 1px solid rgba(255, 255, 255, 0.22);
+	box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+}
+
+.creation-challenge-locked-badge svg {
+	width: 16px;
+	height: 16px;
+	display: block;
+}
+
+/* Creation detail hero: corner trophy when locked to a challenge */
+.creation-detail-image-wrapper {
+	position: relative;
+}
+
+.creation-detail-image-wrapper .creation-detail-hero-challenge-lock {
+	z-index: 6;
+}
+
+.creation-group-badge {
+	position: absolute;
+	bottom: 8px;
+	left: 8px;
+	width: 32px;
+	height: 32px;
+	background: rgba(0, 0, 0, 0.7);
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 1;
+	backdrop-filter: blur(4px);
+	pointer-events: none;
+}
+
+.creation-group-badge svg {
+	width: 16px;
+	height: 16px;
+	color: white;
+}
+
+.creation-music-badge {
+	position: absolute;
+	bottom: 8px;
+	right: 8px;
+	width: 32px;
+	height: 32px;
+	background: rgba(0, 0, 0, 0.7);
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 1;
+	backdrop-filter: blur(4px);
+	pointer-events: none;
+}
+
+.creation-music-badge svg {
+	width: 16px;
+	height: 16px;
+	color: white;
+}
+
+.creation-user-deleted-badge {
+	position: absolute;
+	top: 8px;
+	left: 8px;
+	width: 32px;
+	height: 32px;
+	background: rgba(120, 53, 15, 0.85);
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 1;
+	backdrop-filter: blur(4px);
+	pointer-events: none;
+}
+
+.creation-user-deleted-badge svg {
+	width: 16px;
+	height: 16px;
+	color: white;
+}
+
+@media (prefers-color-scheme: light) {
+	.creation-challenge-entered-badge {
+		background: rgba(255, 255, 255, 0.92);
+		border-color: rgba(0, 0, 0, 0.12);
+		color: var(--accent);
+		box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
+	}
+
+	.creation-published-badge {
+		background: rgba(255, 255, 255, 0.9);
+	}
+
+	.creation-published-badge svg {
+		color: var(--accent);
+	}
+
+	.creation-challenge-locked-badge {
+		background: rgba(255, 255, 255, 0.92);
+		border-color: rgba(0, 0, 0, 0.12);
+		color: var(--accent);
+		box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
+	}
+
+	.creation-group-badge {
+		background: rgba(255, 255, 255, 0.9);
+	}
+
+	.creation-group-badge svg {
+		color: var(--accent);
+	}
+
+	.creation-music-badge {
+		background: rgba(255, 255, 255, 0.9);
+	}
+
+	.creation-music-badge svg {
+		color: var(--accent);
+	}
+}
+/* NSFW content: frosted overlay unless user has enabled "View NSFW" (body.view-nsfw).
+   Blur amount scales with container size via container query units (cqi). */
+.route-card-image,
+.feed-card-image,
+.creation-detail-image-wrapper,
+.connect-comment-thumb,
+.connect-chat-creation-embed-inner.nsfw {
+	container-type: inline-size;
+}
+
+/* Challenge submissions: blur grid thumbnails only (creation detail hero unchanged). */
+.route-media.route-media--challenge-pending {
+	position: relative;
+	overflow: hidden;
+}
+
+.route-media.route-media--challenge-pending .route-media-challenge-blur-overlay,
+.feed-card-image.feed-card-image--challenge-pending .route-media-challenge-blur-overlay {
+	position: absolute;
+	inset: 0;
+	z-index: 4;
+	backdrop-filter: blur(18px);
+	-webkit-backdrop-filter: blur(18px);
+	background: rgba(0, 0, 0, 0.14);
+	pointer-events: none;
+}
+
+.route-media.route-media--challenge-pending .creation-challenge-entered-badge,
+.feed-card-image.feed-card-image--challenge-pending .creation-challenge-entered-badge {
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	transform: translate(-50%, -50%);
+	z-index: 6;
+	width: 44px;
+	height: 44px;
+	border-radius: 50%;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	background: rgba(0, 0, 0, 0.58);
+	border: 1px solid rgba(255, 255, 255, 0.28);
+	color: rgba(255, 255, 255, 0.94);
+	box-shadow: 0 2px 14px rgba(0, 0, 0, 0.28);
+	pointer-events: none;
+}
+
+.route-media.route-media--challenge-pending .creation-challenge-entered-badge svg,
+.feed-card-image.feed-card-image--challenge-pending .creation-challenge-entered-badge svg {
+	width: 22px;
+	height: 22px;
+	display: block;
+}
+
+.feed-card-image.feed-card-image--challenge-pending .creation-published-badge,
+.feed-card-image.feed-card-image--challenge-pending .creation-group-badge,
+.feed-card-image.feed-card-image--challenge-pending .creation-music-badge {
+	z-index: 5;
+}
+
+.feed-card-image.feed-card-image--challenge-pending .creations-card-bulk-overlay {
+	z-index: 7;
+}
+
+.nsfw {
+	position: relative;
+	overflow: hidden;
+}
+
+.nsfw::before {
+	content: 'NSFW';
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	transform: translate(-50%, -50%);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 1.125rem;
+	font-weight: 600;
+	letter-spacing: 0.06em;
+	color: rgba(255, 255, 255, 0.65);
+	background: rgba(0, 0, 0, 0.35);
+	border: 1px solid rgba(255, 255, 255, 0.25);
+	padding: 10px 20px;
+	border-radius: 16px;
+	pointer-events: auto;
+	cursor: pointer;
+	user-select: none;
+	z-index: 1;
+}
+
+@supports (width: 1cqi) {
+	.nsfw::before {
+		padding: min(2cqi, 10px) min(4cqi, 20px);
+	}
+}
+
+.nsfw::after {
+	content: '';
+	position: absolute;
+	inset: -1px;
+	backdrop-filter: blur(40px);
+	-webkit-backdrop-filter: blur(40px);
+	background: rgba(255, 255, 255, 0.08);
+	pointer-events: none;
+	user-select: none;
+}
+
+/* Scale blur with image/container size (10cqi) */
+@supports (width: 1cqi) {
+	.nsfw::after {
+		backdrop-filter: blur(10cqi);
+		-webkit-backdrop-filter: blur(10cqi);
+	}
+}
+
+/* NSFW blur uses ::after with later source order than .feed-card-image.error::after; when both apply, restore unavailable icon. */
+.feed-card-image.nsfw.error::after {
+	backdrop-filter: none;
+	-webkit-backdrop-filter: none;
+	background-color: color-mix(in srgb, var(--text) 42%, transparent);
+	inset: 0;
+	margin: auto;
+	width: 36px;
+	height: 36px;
+	max-width: 45%;
+	max-height: 45%;
+	border-radius: 0;
+	-webkit-mask: var(--icon-image-unavailable) center / contain no-repeat;
+	mask: var(--icon-image-unavailable) center / contain no-repeat;
+	opacity: 0.85;
+}
+
+body.view-nsfw .nsfw::before,
+body.view-nsfw .nsfw::after {
+	display: none;
+}
+
+/* Failed preview while “view NSFW” is on: keep generic hide above from removing the error mark. */
+body.view-nsfw .feed-card-image.nsfw.error::after {
+	display: block;
+	backdrop-filter: none;
+	-webkit-backdrop-filter: none;
+	background-color: color-mix(in srgb, var(--text) 42%, transparent);
+	inset: 0;
+	margin: auto;
+	width: 36px;
+	height: 36px;
+	max-width: 45%;
+	max-height: 45%;
+	border-radius: 0;
+	-webkit-mask: var(--icon-image-unavailable) center / contain no-repeat;
+	mask: var(--icon-image-unavailable) center / contain no-repeat;
+	opacity: 0.85;
+}
+
+/* Moderated error tiles use the eye-hidden icon element instead of the generic unavailable mask. */
+.feed-card-image.nsfw.error.feed-card-image-error-moderated::after,
+body.view-nsfw .feed-card-image.nsfw.error.feed-card-image-error-moderated::after {
+	display: none;
+}
+
+/* One-off reveal (creation detail hero, chat embed, etc.) */
+.nsfw.nsfw-revealed::before,
+.nsfw.nsfw-revealed::after {
+	display: none;
+}
+
+/* Creation detail: one-off reveal for this image only (no body class / no storage) */
+.creation-detail-image-wrapper.nsfw-revealed::before,
+.creation-detail-image-wrapper.nsfw-revealed::after {
+	display: none;
+}
+
+/* When user has not enabled NSFW, creation-detail hero should not suggest click (no pointer cursor) */
+body[data-enable-nsfw="0"] .nsfw,
+body[data-enable-nsfw="0"] .nsfw::before {
+	cursor: default;
+}

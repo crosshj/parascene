@@ -15,6 +15,14 @@ async function withApp(run, { mediaResponse } = {}) {
 	};
 	const creations = {
 		byIdForViewer: async (userId, id) => Number(userId) === 42 && Number(id) === row.id ? row : null,
+		lineageAncestorForViewer: async (_userId, id, parentId) => Number(id) === 31884 && Number(parentId) === row.id
+			? { ...row, id: 31884, published: false }
+			: null,
+		nsfwFlags: async (ids) => Object.fromEntries(ids.map((id) => [String(id), Number(id) === 31884])),
+		likeMeta: async () => ({ like_count: 2, viewer_liked: true, liked_by: ['@creator', '@friend'] }),
+		setLiked: async (_userId, _creationId, liked) => ({ like_count: liked ? 2 : 1, viewer_liked: liked, liked_by: liked ? ['@creator', '@friend'] : ['@friend'] }),
+		comments: async () => ({ commentCount: 1, rows: [{ id: 7, user_id: 42, text: 'hello', reactions: {}, viewer_reactions: [] }] }),
+		related: async () => ({ rows: [{ ...row, id: 31921, published: true }], hasMore: false }),
 		canAccessMedia: async () => true,
 		safeKey: (key) => key,
 		fetchMedia: async () => mediaResponse || new Response('media'),
@@ -48,6 +56,37 @@ test('creation detail rejects missing creations and unauthenticated viewers', as
 		assert.equal(missing.status, 404);
 		const unauthenticated = await fetch(`${origin}/api/creations/31885`);
 		assert.equal(unauthenticated.status, 401);
+	});
+});
+
+test('creation detail dependent APIs expose likes, comments, lineage, flags, and related creations', async () => {
+	await withApp(async (origin) => {
+		const headers = { Authorization: 'Bearer test' };
+		const [likes, activity, lineage, flags, related] = await Promise.all([
+			fetch(`${origin}/api/created-images/31885/like`, { headers }).then((res) => res.json()),
+			fetch(`${origin}/api/created-images/31885/activity?order=asc&limit=50&offset=0`, { headers }).then((res) => res.json()),
+			fetch(`${origin}/api/create/images/31884?lineage_of=31885`, { headers }).then((res) => res.json()),
+			fetch(`${origin}/api/creations/nsfw-flags?ids=31884,31885`, { headers }).then((res) => res.json()),
+			fetch(`${origin}/api/creations/31885/related?limit=40`, { headers }).then((res) => res.json())
+		]);
+		assert.equal(likes.like_count, 2);
+		assert.equal(activity.items[0].type, 'comment');
+		assert.equal(activity.comment_count, 1);
+		assert.equal(lineage.id, 31884);
+		assert.match(lineage.thumbnail_url, /lineage_of=31885/);
+		assert.equal(flags['31884'], true);
+		assert.equal(related.items[0].created_image_id, 31921);
+		assert.equal(related.hasMore, false);
+	});
+});
+
+test('creation likes can be toggled through the www-compatible route', async () => {
+	await withApp(async (origin) => {
+		const headers = { Authorization: 'Bearer test' };
+		const liked = await fetch(`${origin}/api/created-images/31885/like`, { method: 'POST', headers }).then((res) => res.json());
+		const unliked = await fetch(`${origin}/api/created-images/31885/like`, { method: 'DELETE', headers }).then((res) => res.json());
+		assert.equal(liked.viewer_liked, true);
+		assert.equal(unliked.viewer_liked, false);
 	});
 });
 

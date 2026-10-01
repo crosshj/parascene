@@ -1,3 +1,7 @@
+import { challengeEnteredBadgeHtml } from './creationBadges.js';
+
+const html = String.raw;
+
 /** @param {string|null|undefined} title */
 export function creationTitleTrimmed(title) {
 	return typeof title === 'string' ? title.trim() : '';
@@ -23,4 +27,65 @@ export function creationTitleDisplay(item, opts = {}) {
 	if (isCreationPublished(item)) return { text: placeholder, untitled: true };
 	const draftFallback = opts.draftFallback ?? '';
 	return { text: draftFallback, untitled: false };
+}
+
+function escapeAttr(value) {
+	if (value == null) return '';
+	return String(value)
+		.replace(/&/g, '&amp;')
+		.replace(/"/g, '&quot;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;');
+}
+
+/**
+ * Build the shared route-card body used by Creation Detail and the SPA grids.
+ * Callers own the outer list item, click behavior, and media hydration.
+ *
+ * @param {{
+ *   mediaAttrs?: Record<string, string|boolean>,
+ *   badgesHtml?: string,
+ *   detailsContentHtml?: string,
+ *   bulkOverlayHtml?: string,
+ *   nsfw?: boolean,
+ *   challengeGridBlur?: boolean
+ * }} options
+ * @returns {string}
+ */
+export function buildCreationCardShell(options = {}) {
+	const {
+		mediaAttrs = {},
+		badgesHtml = '',
+		detailsContentHtml = '',
+		bulkOverlayHtml = '',
+		nsfw = false,
+		challengeGridBlur = false,
+	} = options;
+
+	const attrs = Object.entries(mediaAttrs)
+		.filter(([, value]) => value != null && value !== '')
+		.map(([key, value]) => value === true ? key : `${key}="${escapeAttr(value)}"`)
+		.join(' ');
+	const mediaClass =
+		'route-media' +
+		(nsfw ? ' nsfw' : '') +
+		(challengeGridBlur && !nsfw ? ' route-media--challenge-pending' : '');
+	const blurOverlay = challengeGridBlur && !nsfw
+		? html`<span class="route-media-challenge-blur-overlay" aria-hidden="true"></span>${challengeEnteredBadgeHtml()}`
+		: '';
+	const mediaTag = html`<div class="${mediaClass}" aria-hidden="true"${attrs ? ` ${attrs}` : ''}>${blurOverlay}</div>`;
+	const detailsBlock = typeof detailsContentHtml === 'string' && detailsContentHtml.trim()
+		? html`<div class="route-details">
+	<div class="route-details-content">
+${detailsContentHtml}
+	</div>
+</div>`
+		: '';
+
+	return html`<div class="route-card route-card-image">
+${mediaTag}
+${badgesHtml}
+${detailsBlock}
+${bulkOverlayHtml}
+</div>`;
 }

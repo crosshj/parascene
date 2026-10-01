@@ -64,7 +64,7 @@
 .skeleton-circle { border-radius: 50%; }
 .skeleton-pill { border-radius: 999px; }
 
-.route-empty { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 180px; padding: 32px 20px; color: var(--text-muted); text-align: center; }
+.route-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; min-height: 180px; padding: 32px 20px; color: var(--text-muted); text-align: center; }
 .route-empty-state { max-width: 440px; margin: auto; }
 .route-empty-icon { display: grid; width: 42px; height: 42px; margin: 0 auto 12px; place-items: center; }
 .route-empty-icon svg { width: 100%; height: 100%; }

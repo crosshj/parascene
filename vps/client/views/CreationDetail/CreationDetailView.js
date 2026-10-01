@@ -7,6 +7,7 @@ import * as datetimeBundledMod from '../../shared/datetime.js';
 import * as apiBundledMod from '../../shared/api.js';
 import * as iconsBundledMod from '../../icons/svg-strings.js';
 import * as nsfwBundledMod from '../../shared/nsfwView.js';
+import { creationCardMarkup, createCreationMediaLoader } from '../../shared/creationGrid.js';
 import * as triggeredSuggestBundledMod from '../../shared/triggeredSuggest.js';
 import * as likesBundledMod from '../../shared/likes.js';
 import * as aspectRatioBundledMod from '../../shared/aspectRatio.js';
@@ -77,9 +78,6 @@ let renderEmptyError;
 let skeletonLine;
 let skeletonCircle;
 let skeletonPill;
-let buildCreationCardShell;
-let hydrateRouteCardMedia;
-let routeCardGroupBadgeHtml;
 let renderCommentAvatarHtml;
 let uploadImageFile;
 let createReplyIndicatorElement;
@@ -323,10 +321,8 @@ const iconsMod = iconsBundledMod;
 const replyPreviewMod = creationDetailDependencies.plainTextReplyPreview;
 const emptyStateMod = creationDetailDependencies.emptyState;
 const skeletonMod = creationDetailDependencies.skeleton;
-const creationCardMod = creationDetailDependencies.creationCard;
 const challengeMetaMod = creationDetailDependencies.challengeSubmitMeta;
 const organizerRefMod = creationDetailDependencies.challengeOrganizerRefMeta;
-const routeCardGroupMod = creationDetailDependencies.routeCardGroupMedia;
 const commentItemMod = creationDetailDependencies.commentItem;
 const createSubmitMod = creationDetailDependencies.createSubmit;
 const aspectRatioMod = aspectRatioBundledMod;
@@ -404,8 +400,6 @@ const audioCoverWaveformMod = creationDetailDependencies.audioCoverWaveform;
 		skeletonCircle = skeletonMod.skeletonCircle;
 		skeletonPill = skeletonMod.skeletonPill;
 
-		buildCreationCardShell = creationCardMod.buildCreationCardShell;
-
 		creationMetaHasActiveChallengeFeedPin = challengeMetaMod.creationMetaHasActiveChallengeFeedPin;
 		creationMetaHasChallengeAnnotation = challengeMetaMod.creationMetaHasChallengeAnnotation;
 
@@ -413,9 +407,6 @@ const audioCoverWaveformMod = creationDetailDependencies.audioCoverWaveform;
 		creationMetaHasChallengeResultsOrganizerRef = organizerRefMod.creationMetaHasChallengeResultsOrganizerRef;
 		challengeOrganizerRefRoleLabel = organizerRefMod.challengeOrganizerRefRoleLabel;
 		listChallengeOrganizerRefsFromMeta = organizerRefMod.listChallengeOrganizerRefsFromMeta;
-
-		hydrateRouteCardMedia = routeCardGroupMod.hydrateRouteCardMedia;
-		routeCardGroupBadgeHtml = routeCardGroupMod.routeCardGroupBadgeHtml;
 
 		renderCommentAvatarHtml = commentItemMod.renderCommentAvatarHtml;
 
@@ -2027,6 +2018,7 @@ function initRelatedSection(root, currentCreationId, options = {}) {
 	let randomMode = false;
 	let relatedObserver = null;
 	let firstBatchReported = false;
+	const mediaLoader = createCreationMediaLoader(grid, { eagerCount: 6 });
 
 	function notifyFirstRelatedBatch(meta) {
 		if (firstBatchReported) return;
@@ -2048,54 +2040,25 @@ function initRelatedSection(root, currentCreationId, options = {}) {
 
 	function appendRelatedCards(items) {
 		if (!items || items.length === 0) return;
-		const startIndex = grid.querySelectorAll('.route-card').length;
-		items.forEach((item, i) => {
+		items.forEach((item) => {
 			if (!item || typeof item !== 'object') return;
 			const cid = item.created_image_id ?? item.id;
 			if (!cid) return;
-			const card = document.createElement('div');
-			card.className = 'route-card route-card-image';
+			const markup = creationCardMarkup(item, { hidePublishedBadge: true });
+			const fragment = document.createRange().createContextualFragment(markup);
+			const card = fragment.firstElementChild;
+			if (!card) return;
+			card.classList.add('creation-detail-related-card');
+			card.__creationRecord = item;
 			card.setAttribute('role', 'listitem');
 			const href = relatedCardUrl(cid);
-			const mediaType = typeof item.media_type === 'string' ? item.media_type : 'image';
-			const mediaAttrs = {
-				'data-related-media': true,
-				'data-image-id': cid,
-				'data-status': 'completed'
-			};
-			if (mediaType === 'video') {
-				mediaAttrs['data-media-type'] = 'video';
-			} else if (mediaType === 'audio') {
-				mediaAttrs['data-media-type'] = 'audio';
-			}
-			card.innerHTML = buildCreationCardShell({
-				mediaAttrs,
-				badgesHtml: routeCardGroupBadgeHtml(item),
-				nsfw: Boolean(item.nsfw),
-			});
+			card.setAttribute('data-related-creation', String(cid));
 			card.style.cursor = 'pointer';
 			card.addEventListener('click', () => {
 				navigateCreationDetail(href);
 			});
-			const mediaEl = card.querySelector('[data-related-media]');
-			if (mediaEl && typeof hydrateRouteCardMedia === 'function') {
-				if (startIndex + i < 6) {
-					hydrateRouteCardMedia(mediaEl, item, { preferThumbnail: mediaType !== 'video', eager: true });
-				} else {
-					const io = new IntersectionObserver((entries) => {
-						entries.forEach((entry) => {
-							if (!entry.isIntersecting) return;
-							hydrateRouteCardMedia(mediaEl, item, {
-								preferThumbnail: mediaType !== 'video',
-								eager: true
-							});
-							io.disconnect();
-						});
-					}, { rootMargin: '100px', threshold: 0 });
-					io.observe(mediaEl);
-				}
-			}
 			grid.appendChild(card);
+			mediaLoader.observe([card]);
 		});
 	}
 
@@ -4435,6 +4398,7 @@ async function loadCreation() {
 			viewer_liked: Boolean(creation.viewer_liked),
 			liked_by: Array.isArray(creation.liked_by) ? creation.liked_by : []
 		};
+		let creationWithLikes = null;
 		if (shareMounted || isPinnedInteractiveDetail) {
 			perf.skipPart(
 				'likeMeta',
@@ -4452,11 +4416,17 @@ async function loadCreation() {
 						viewer_liked: Boolean(meta?.viewer_liked),
 						liked_by: Array.isArray(meta?.liked_by) ? meta.liked_by : likeMeta.liked_by
 					};
+					if (creationWithLikes) {
+						Object.assign(creationWithLikes, likeMeta);
+						detailContent.querySelectorAll('button[data-like-button]').forEach((button) => {
+							initLikeButton(button, creationWithLikes);
+						});
+					}
 				});
 		}
 		if (!isCurrentLoad()) return;
 
-		const creationWithLikes = { ...creation, ...likeMeta, created_image_id: creationId };
+		creationWithLikes = { ...creation, ...likeMeta, created_image_id: creationId };
 		lastCreationMeta = creation;
 		try {
 			const seedMod = creationDetailSeedBundledMod;

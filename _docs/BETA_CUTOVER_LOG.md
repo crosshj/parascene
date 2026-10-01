@@ -90,11 +90,11 @@ Do not continue the beta creation-detail migration until the www SPA routing/ove
 
 ### Known incomplete creation-detail seam after the client-architecture refactor
 
-The app shell, route composition, retained background, seed handoff, and layout-owned overlay are now represented by the VPS client architecture. The copied `CreationDetailView.js` is **not** thereby considered migrated. Its dependencies now use canonical static VPS imports, but it still contains document-wide selectors and delayed listeners plus calls to WWW API contracts that have not all been ported to VPS. Treat any claim that creation detail is complete while those remain as a release blocker. Move every listener/request into the view lifetime and verify the VPS API contract before enabling the corresponding behavior.
+The app shell, route composition, retained background, seed handoff, and layout-owned overlay are now represented by the VPS client architecture. The copied `CreationDetailView.js` is **not** thereby considered migrated. Its dependencies now use canonical static VPS imports, but it still contains document-wide selectors and delayed listeners. The initial-load API contracts observed below are ported and covered by VPS contract tests; action-specific requests elsewhere in the view still need verification as their controls are enabled. Treat any claim that creation detail is complete while those lifecycle seams remain as a release blocker.
 
 #### Observed Creation Detail 404s (2026-10-01)
 
-The following `GET` requests returned `404` while opening creations `31921` and `31885` in the VPS Creation Detail overlay. These API contracts can be brought over from WWW without further product-design review. Port their handlers and required dependencies into the self-contained VPS server; do not make the VPS runtime depend on `api_routes/` or another non-VPS source tree.
+The following `GET` requests returned `404` while opening creations `31921` and `31885` in the VPS Creation Detail overlay. They were implemented in the self-contained VPS server on 2026-10-01, along with the like and notification acknowledgement mutations used by the same UI. The VPS implementation owns its routes and stores and does not import from `api_routes/` or another non-VPS source tree.
 
 - `/api/profile` — current viewer profile; repeated across shell/detail initialization.
 - `/api/users/:creatorId/profile` — creation-author profile. DevTools displays this and the viewer request as `profile`; `CreationDetailView.js` issues both route shapes.

@@ -3,7 +3,7 @@ import { Readable } from "node:stream";
 import path from "node:path";
 import sharp from "sharp";
 import { requireAuth } from "./middleware/auth.js";
-import { creationAudioCdnId, creationMediaKey, creationVideoMediaKey } from "../db/creations.js";
+import { creationAudioCdnId, creationMediaKey, creationMediaKeys, creationVideoMediaKey } from "../db/creations.js";
 import { extractVideoThumbnail } from "./utils/media.js";
 
 function integer(value, fallback, min, max) {
@@ -53,6 +53,12 @@ function mediaUrl(id, key, variant = "") {
 	const query = new URLSearchParams({ creation_id: String(id) });
 	if (variant) query.set("variant", variant);
 	return `/api/creations/media/${encoded}?${query}`;
+}
+
+function withLineageProof(value, parentId) {
+	if (!value || !parentId) return value;
+	const separator = value.includes("?") ? "&" : "?";
+	return `${value}${separator}lineage_of=${encodeURIComponent(String(parentId))}`;
 }
 
 function serializeCreation(row) {
@@ -122,12 +128,44 @@ function gridThumbnail(input) {
 
 export function createCreationsRoutes({ creations, users }) {
 	const router = express.Router();
+	const noStore = (_req, res, next) => { res.set("Cache-Control", "private, no-store"); next(); };
+
+	async function accessibleCreation(req) {
+		const viewer = await users.byId(req.auth.userId);
+		if (!viewer) return { viewer: null, row: null };
+		const row = await creations.byIdForViewer(req.auth.userId, req.params.id, { isAdmin: viewer.role === "admin" });
+		return { viewer, row };
+	}
+
+	async function serializeWithCreator(row) {
+		const [creatorUser, creatorProfile] = await Promise.all([
+			users.byId(row.user_id),
+			users.profileByUserId(row.user_id)
+		]);
+		return {
+			...serializeCreation(row),
+			creator: creatorUser ? {
+				id: creatorUser.id,
+				email: creatorUser.email,
+				role: creatorUser.role,
+				user_name: creatorProfile?.user_name ?? null,
+				display_name: creatorProfile?.display_name ?? null,
+				avatar_url: creatorProfile?.avatar_url ?? null,
+				plan: creatorUser.meta?.plan === "founder" ? "founder" : "free"
+			} : null
+		};
+	}
 	async function sendMedia(req, res, next) {
 		const key = creations.safeKey(req.params[0]);
 		if (!key) return res.status(400).json({ error: "Invalid media key" });
 		try {
 			const viewer = await users.byId(req.auth.userId);
-			if (!(await creations.canAccessMedia(req.auth.userId, req.query.creation_id, key, { isAdmin: viewer?.role === "admin" }))) return res.status(404).json({ error: "Media not found" });
+			let allowed = await creations.canAccessMedia(req.auth.userId, req.query.creation_id, key, { isAdmin: viewer?.role === "admin" });
+			if (!allowed && req.query.lineage_of != null) {
+				const ancestor = await creations.lineageAncestorForViewer(req.auth.userId, req.query.creation_id, req.query.lineage_of, { isAdmin: viewer?.role === "admin" });
+				allowed = Boolean(ancestor && creationMediaKeys(ancestor).some((value) => creations.safeKey(value) === key));
+			}
+			if (!allowed) return res.status(404).json({ error: "Media not found" });
 			const variant = String(req.query.variant || "").trim().toLowerCase();
 			if (variant === "grid_thumbnail") {
 				const response = await creations.fetchMedia(key, { method: "GET" });
@@ -215,6 +253,91 @@ export function createCreationsRoutes({ creations, users }) {
 		} catch (error) { return next(error); }
 	});
 
+	router.get("/api/creations/nsfw-flags", noStore, requireAuth, async (req, res, next) => {
+		try {
+			const ids = typeof req.query.ids === "string" ? req.query.ids.split(",") : [];
+			return res.json(await creations.nsfwFlags(ids));
+		} catch (error) { return next(error); }
+	});
+
+	router.get("/api/creations/:id/related", noStore, requireAuth, async (req, res, next) => {
+		try {
+			const { viewer, row } = await accessibleCreation(req);
+			if (!viewer || !row) return res.status(404).json({ error: "Creation not found" });
+			const limit = integer(req.query.limit, 10, 1, 40);
+			const excludeIds = typeof req.query.exclude_ids === "string" ? req.query.exclude_ids.split(",") : [];
+			const page = await creations.related(row.id, {
+				limit,
+				excludeIds,
+				viewerEnableNsfw: viewer.meta?.enableNsfw === true,
+				seenCount: integer(req.query.seen_count, 0, 0, 1000000),
+				forceRandom: String(req.query.force_random || "0") === "1",
+			});
+			const items = page.rows.map((relatedRow) => ({
+				...serializeCreation(relatedRow),
+				created_image_id: relatedRow.id,
+				reason_labels: relatedRow.related_reasons || [],
+				like_count: 0,
+				comment_count: 0,
+				viewer_liked: false,
+				liked_by: [],
+				commented_by: []
+			}));
+			return res.json({ items, hasMore: page.hasMore });
+		} catch (error) { return next(error); }
+	});
+
+	router.get("/api/create/images/:id", noStore, requireAuth, async (req, res, next) => {
+		try {
+			const viewer = await users.byId(req.auth.userId);
+			if (!viewer) return res.status(404).json({ error: "User not found" });
+			let row = await creations.byIdForViewer(req.auth.userId, req.params.id, { isAdmin: viewer.role === "admin" });
+			if (!row && req.query.lineage_of != null) {
+				row = await creations.lineageAncestorForViewer(req.auth.userId, req.params.id, req.query.lineage_of, { isAdmin: viewer.role === "admin" });
+			}
+			if (!row) return res.status(404).json({ error: "Image not found" });
+			const payload = await serializeWithCreator(row);
+			if (req.query.lineage_of != null) {
+				for (const field of ["url", "thumbnail_url", "fit_thumbnail_url", "video_thumbnail_url", "video_url", "audio_url"]) {
+					payload[field] = withLineageProof(payload[field], req.query.lineage_of);
+				}
+			}
+			return res.json(payload);
+		} catch (error) { return next(error); }
+	});
+
+	router.get("/api/created-images/:id/like", noStore, requireAuth, async (req, res, next) => {
+		try {
+			const { viewer, row } = await accessibleCreation(req);
+			if (!viewer || !row) return res.status(404).json({ error: "Image not found" });
+			return res.json(await creations.likeMeta(viewer.id, row.id));
+		} catch (error) { return next(error); }
+	});
+	for (const [method, liked] of [["post", true], ["delete", false]]) {
+		router[method]("/api/created-images/:id/like", noStore, requireAuth, async (req, res, next) => {
+			try {
+				const { viewer, row } = await accessibleCreation(req);
+				if (!viewer || !row) return res.status(404).json({ error: "Image not found" });
+				const meta = await creations.setLiked(viewer.id, row.id, liked);
+				return res.json({ ...meta, viewer_liked: liked });
+			} catch (error) { return next(error); }
+		});
+	}
+
+	router.get("/api/created-images/:id/activity", noStore, requireAuth, async (req, res, next) => {
+		try {
+			const { viewer, row } = await accessibleCreation(req);
+			if (!viewer || !row) return res.status(404).json({ error: "Image not found" });
+			const result = await creations.comments(row.id, {
+				order: req.query.order === "desc" ? "desc" : "asc",
+				limit: integer(req.query.limit, 50, 1, 200),
+				offset: integer(req.query.offset, 0, 0, 100000),
+				viewerId: viewer.id
+			});
+			return res.json({ items: result.rows.map((comment) => ({ type: "comment", ...comment })), comment_count: result.commentCount });
+		} catch (error) { return next(error); }
+	});
+
 	router.get("/api/creations/:id", requireAuth, async (req, res, next) => {
 		try {
 			const viewer = await users.byId(req.auth.userId);
@@ -254,7 +377,10 @@ export function createCreationsRoutes({ creations, users }) {
 	router.get("/api/creations/:id/audio", requireAuth, async (req, res, next) => {
 		try {
 			const viewer = await users.byId(req.auth.userId);
-			const row = await creations.byIdForViewer(req.auth.userId, req.params.id, { isAdmin: viewer?.role === "admin" });
+			let row = await creations.byIdForViewer(req.auth.userId, req.params.id, { isAdmin: viewer?.role === "admin" });
+			if (!row && req.query.lineage_of != null) {
+				row = await creations.lineageAncestorForViewer(req.auth.userId, req.params.id, req.query.lineage_of, { isAdmin: viewer?.role === "admin" });
+			}
 			if (!row) return res.status(404).json({ error: "Audio not found" });
 			const meta = parseMeta(row.meta);
 			if (meta.nsfw === true && viewer?.meta?.enableNsfw !== true && Number(row.user_id) !== Number(req.auth.userId) && viewer?.role !== "admin") {

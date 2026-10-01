@@ -2,7 +2,7 @@ const USERS_TABLE = "prsn_users";
 const PROFILES_TABLE = "prsn_user_profiles";
 const LOGIN_FIELDS = "id, email, password_hash, role, created_at, last_active_at, meta";
 const PUBLIC_FIELDS = "id, email, role, created_at, last_active_at, meta";
-const PROFILE_FIELDS = "user_id, user_name, display_name, avatar_url";
+const PROFILE_FIELDS = "user_id, user_name, display_name, about, socials, avatar_url, cover_image_url, badges, meta, created_at, updated_at";
 
 export function createUsersStore(client) {
 	async function byIdForLogin(id) {
@@ -56,6 +56,25 @@ export function createUsersStore(client) {
 				.maybeSingle();
 			if (error) throw error;
 			return data || null;
+		},
+
+		async profileStats(viewerId, targetId) {
+			const [allCreations, publishedCreations, followers, follow] = await Promise.all([
+				client.from("prsn_created_images").select("id", { count: "exact", head: true }).eq("user_id", targetId).is("unavailable_at", null),
+				client.from("prsn_created_images").select("id", { count: "exact", head: true }).eq("user_id", targetId).eq("published", true).is("unavailable_at", null),
+				client.from("prsn_user_follows").select("id", { count: "exact", head: true }).eq("following_id", targetId),
+				Number(viewerId) === Number(targetId)
+					? Promise.resolve({ data: null, error: null })
+					: client.from("prsn_user_follows").select("id").eq("follower_id", viewerId).eq("following_id", targetId).maybeSingle()
+			]);
+			for (const result of [allCreations, publishedCreations, followers, follow]) if (result.error) throw result.error;
+			return {
+				creations_total: Number(allCreations.count) || 0,
+				creations_published: Number(publishedCreations.count) || 0,
+				likes_received: 0,
+				followers_count: Number(followers.count) || 0,
+				viewer_follows: Boolean(follow.data)
+			};
 		},
 
 		async create(email, passwordHash) {

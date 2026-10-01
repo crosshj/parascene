@@ -300,7 +300,7 @@ export function createLayout({ root, views, services } = {}) {
 	menuButton.addEventListener('click', (event) => menu?.toggle(event.currentTarget));
 	composer.addEventListener('submit', (event) => event.preventDefault());
 	overlayClose.addEventListener('click', () => actions.dismissOverlay?.());
-	overlayBack.addEventListener('click', () => actions.dismissOverlay?.());
+	overlayBack.addEventListener('click', () => (actions.backOverlay || actions.dismissOverlay)?.());
 	overlayHost.addEventListener('keydown', onOverlayKeydown);
 	document.addEventListener('keydown', onDocumentKeydown);
 	window.addEventListener('resize', onViewportResize, { passive: true });

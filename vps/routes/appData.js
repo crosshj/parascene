@@ -11,8 +11,99 @@ function noStore(_req, res, next) {
 	next();
 }
 
-export function createAppDataRoutes({ users, credits }) {
+function integer(value, fallback, min, max) {
+	const parsed = Number.parseInt(String(value ?? ''), 10);
+	return Number.isInteger(parsed) ? Math.min(max, Math.max(min, parsed)) : fallback;
+}
+
+function publicNotification(row) {
+	let target = row?.target;
+	if (typeof target === 'string') {
+		try { target = JSON.parse(target); } catch { target = null; }
+	}
+	return {
+		id: row.id,
+		title: row.title,
+		message: row.message,
+		link: row.link,
+		type: row.type ?? null,
+		created_at: row.created_at,
+		acknowledged_at: row.acknowledged_at,
+		...(target?.creation_id != null ? { creation_id: Number(target.creation_id) } : {})
+	};
+}
+
+function publicUserMeta(meta) {
+	if (!meta || typeof meta !== 'object') return {};
+	const { apiKeyHash, vynlyBearerToken, presence_last_seen_at, appear_offline, chat_private_keys, ...safe } = meta;
+	return safe;
+}
+
+export function createAppDataRoutes({ users, credits, notifications }) {
 	const router = express.Router();
+
+	router.get('/api/profile', noStore, requireAuth, async (req, res, next) => {
+		try {
+			const [user, profile, creditRecord] = await Promise.all([
+				users.byId(req.auth.userId),
+				users.profileByUserId(req.auth.userId),
+				credits.get(req.auth.userId)
+			]);
+			if (!user) return res.status(404).json({ error: 'User not found' });
+			const privateMeta = user.meta && typeof user.meta === 'object' ? user.meta : {};
+			const meta = publicUserMeta(privateMeta);
+			return res.json({
+				...user,
+				meta,
+				credits: Number(creditRecord?.balance) || 0,
+				plan: meta.plan || 'free',
+				pendingPlanActivation: Boolean(privateMeta.pendingCheckoutSessionId),
+				profile: profile || {},
+				enableNsfw: meta.enableNsfw === true,
+				showOwnPostsInFeed: meta.showOwnPostsInFeed === true,
+				audibleNotifications: meta.audibleNotifications !== false,
+				forceLegacyFeed: meta.forceLegacyFeed === true,
+				hasApiKey: Boolean(privateMeta.apiKeyHash),
+				apiKeyPrefix: typeof privateMeta.apiKeyPrefix === 'string' ? privateMeta.apiKeyPrefix : null,
+				hasVynlyToken: Boolean(typeof privateMeta.vynlyBearerToken === 'string' && privateMeta.vynlyBearerToken.trim()),
+				vynlyTokenPrefix: typeof privateMeta.vynlyTokenPrefix === 'string' ? privateMeta.vynlyTokenPrefix : null
+			});
+		} catch (error) { return next(error); }
+	});
+
+	router.get('/api/users/:id/profile', noStore, requireAuth, async (req, res, next) => {
+		try {
+			const targetId = Number(req.params.id);
+			if (!Number.isInteger(targetId) || targetId <= 0) return res.status(400).json({ error: 'Invalid user id' });
+			const [viewer, target, profile] = await Promise.all([
+				users.byId(req.auth.userId),
+				users.byId(targetId),
+				users.profileByUserId(targetId)
+			]);
+			if (!viewer || !target) return res.status(404).json({ error: 'User not found' });
+			const isSelf = Number(viewer.id) === targetId;
+			const email = String(target.email || '');
+			const summary = users.profileStats
+				? await users.profileStats(viewer.id, targetId)
+				: { creations_total: 0, creations_published: 0, likes_received: 0, followers_count: 0, viewer_follows: false };
+			return res.json({
+				user: isSelf
+					? { id: target.id, email: target.email, role: target.role, created_at: target.created_at }
+					: { id: target.id, role: target.role, created_at: target.created_at, email_prefix: email.split('@')[0] || null },
+				profile: profile || {},
+				plan: target.meta?.plan === 'founder' ? 'founder' : 'free',
+				stats: {
+					creations_total: summary.creations_total,
+					creations_published: summary.creations_published,
+					likes_received: summary.likes_received,
+					followers_count: summary.followers_count,
+					member_since: target.created_at || null
+				},
+				is_self: isSelf,
+				viewer_follows: summary.viewer_follows === true
+			});
+		} catch (error) { return next(error); }
+	});
 
 	// Mock-backed for beta, shaped like www's chat/servers APIs so view contracts
 	// can move over without inventing a parallel client-side data model.
@@ -45,6 +136,32 @@ export function createAppDataRoutes({ users, credits }) {
 			if (user?.role === 'admin') return res.status(403).json({ error: 'Forbidden', message: 'Admins cannot claim daily credits' });
 			const result = await credits.claimDaily(req.auth.userId, 10);
 			return res.status(result.success ? 200 : 400).json({ ...result, viewer_id: Number(req.auth.userId) });
+		} catch (error) { return next(error); }
+	});
+
+	router.get('/api/notifications', noStore, requireAuth, async (req, res, next) => {
+		try {
+			const user = await users.byId(req.auth.userId);
+			if (!user) return res.status(404).json({ error: 'User not found' });
+			const limit = integer(req.query.limit, 25, 1, 200);
+			const rows = notifications ? await notifications.list(user.id, user.role, { limit }) : [];
+			return res.json({ notifications: rows.map(publicNotification) });
+		} catch (error) { return next(error); }
+	});
+	router.post('/api/notifications/acknowledge', noStore, requireAuth, async (req, res, next) => {
+		try {
+			const user = await users.byId(req.auth.userId);
+			if (!user) return res.status(404).json({ error: 'User not found' });
+			const updated = notifications ? await notifications.acknowledge(user.id, user.role, req.body?.id) : 0;
+			return res.json({ ok: true, updated });
+		} catch (error) { return next(error); }
+	});
+	router.post('/api/notifications/acknowledge-all', noStore, requireAuth, async (req, res, next) => {
+		try {
+			const user = await users.byId(req.auth.userId);
+			if (!user) return res.status(404).json({ error: 'User not found' });
+			const updated = notifications ? await notifications.acknowledgeAll(user.id, user.role) : 0;
+			return res.json({ ok: true, updated });
 		} catch (error) { return next(error); }
 	});
 	return router;
