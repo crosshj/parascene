@@ -22,13 +22,13 @@ export function mockThreads(viewerId) {
 		other_user: { id: 1001 + index, display_name: username, user_name: username, avatar_url: null },
 		last_message: index < 2 ? { id: 9000 + index, body: index ? 'Are you around?' : 'Just shared a new creation', created_at: new Date(now - index * 60_000).toISOString(), sender_id: 1001 + index } : null,
 		last_read_message_id: null, unread_count: index === 1 ? 2 : 0, beta_presence: online,
-		beta_sidebar_path: `/chat/dm/${username}`, beta_sidebar_color: color
+		beta_sidebar_color: color
 	}));
 	const channels = mockChannels.map(([slug, text, color, isServer], index) => ({
 		id: isServer ? 201 + index : 297 + index,
 		type: 'channel', channel_slug: slug, title: `#${slug}`,
 		last_message: null, last_read_message_id: null, unread_count: index === 0 ? 3 : 0, visibility: 'public',
-		beta_sidebar_path: `/chat/c/${slug}`, beta_sidebar_text: text, beta_sidebar_color: color,
+		beta_sidebar_text: text, beta_sidebar_color: color,
 		beta_sidebar_is_server: isServer
 	}));
 	return [...dms, ...channels];
@@ -37,7 +37,7 @@ export function mockThreads(viewerId) {
 export function mockServers() {
 	return mockChannels.filter(([, , , isServer]) => isServer).map(([name, text, color], index) => ({
 		id: 201 + index, name, description: '', status: 'active', icon: text,
-		beta_sidebar_path: `/chat/c/${name}`, beta_sidebar_color: color, beta_sidebar_text: text,
+		beta_sidebar_color: color, beta_sidebar_text: text,
 		beta_sidebar_thread_id: 201 + index, can_manage: false, can_join: false, is_member: true
 	}));
 }

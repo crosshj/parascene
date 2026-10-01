@@ -1172,7 +1172,7 @@ function seedChallengeSlotHtml(seed) {
 		!isPublished &&
 		!hasPin &&
 		groupActionSupportedWhenKnown(meta?.group, 'challenge_assign');
-	const challengesHref = '/chat/c/challenges';
+	const challengesHref = '/challenges';
 	let banners = '';
 	if (hasOrganizerRef && !hasPin) {
 		const detail = isOwner

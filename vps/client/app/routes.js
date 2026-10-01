@@ -12,7 +12,6 @@ function fallbackChrome(pathname) {
 	return { title: 'Coming soon', icon: 'home' };
 }
 
-
 function matchPattern(pattern, pathname) {
 	if (pattern === '*') return { pathname };
 	const patternParts = pattern.split('/').filter(Boolean);
@@ -37,7 +36,7 @@ export function createAppRoutes({ definitions = [] } = {}) {
 		for (const definition of definitions) {
 			const params = matchPattern(definition.path, pathname);
 			if (!params) continue;
-			if (definition.name === 'creation-detail') {
+			if (definition.path === '/creations/:creationId' || definition.path === '/feed/doom/:creationId') {
 				const creationId = Number(params.creationId);
 				if (!Number.isFinite(creationId) || creationId <= 0) continue;
 				params.creationId = creationId;
@@ -55,21 +54,19 @@ export function createAppRoutes({ definitions = [] } = {}) {
 		const url = new URL(value, location.origin);
 		const route = match(url);
 		if (route.presentation === 'overlay') return page(route.defaultBackground);
-		if (route.name === 'home') {
-			return { key: 'home', view: route.view, props: {}, chrome: { title: 'Feed', icon: 'home', showComposer: true } };
-		}
-		if (route.name === 'creations') {
-			return { key: 'creations', view: route.view, props: {}, chrome: { title: 'My Creations', icon: 'picture', showComposer: true } };
-		}
-		if (route.name === 'files') {
-			return { key: 'files', view: route.view, props: {}, chrome: { title: 'My Files', icon: 'files', showComposer: false } };
-		}
-		const chrome = fallbackChrome(url.pathname);
+		const params = route.params || {};
+		const titleMode = route.titleMode;
+		const title = titleMode === 'channel' ? `#${params.slug}` :
+			titleMode === 'feedback' ? '#feedback' :
+			titleMode === 'dm' ? `@${params.slug}` :
+			titleMode === 'notes' ? 'My Notes' : null;
+		const defaults = fallbackChrome(url.pathname);
+		const resolvedTitle = title || route.title || 'Coming soon';
 		return {
-			key: `fallback:${url.pathname}`,
+			key: `route:${route.path}:${Object.values(params).join(':')}`,
 			view: route.view,
-			props: { title: chrome.title },
-			chrome: { ...chrome, showComposer: true },
+			props: { title: resolvedTitle, viewName: route.viewName || route.title || resolvedTitle, ...params },
+			chrome: { title: resolvedTitle, icon: route.icon || defaults.icon, composer: route.composer || 'message' },
 		};
 	}
 
@@ -98,10 +95,15 @@ export function createAppRoutes({ definitions = [] } = {}) {
 			shell: 'app',
 			outlet,
 			overlay: {
-				key: `creation-detail:${route.params.creationId}`,
+				key: `overlay:${route.path}:${Object.values(route.params).join(':')}`,
 				view: route.view,
-				props: { creationId: route.params.creationId, seed },
-				title: `Creation #${route.params.creationId}`,
+				props: {
+					...Object.fromEntries(Object.entries(route.params).filter(([key]) => key !== 'id')),
+					...(route.params.creationId ? { creationId: route.params.creationId } : {}),
+					viewName: route.viewName || route.title || 'Details',
+					seed,
+				},
+				title: route.title || (route.params.creationId ? `Creation #${route.params.creationId}` : 'Details'),
 			},
 		};
 	}

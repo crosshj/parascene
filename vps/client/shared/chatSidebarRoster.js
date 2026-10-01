@@ -23,7 +23,7 @@ function escapeHtmlPseudoStrip(str) {
 export const SIDEBAR_PSEUDO_STRIP_ORDER = ['feed', 'challenges', 'creations', 'comments', 'explore', 'prompt-library', 'feedback'];
 
 /** Notes-to-self shortcut: not a channel, opens the viewer's own DM. */
-export const SIDEBAR_NOTES_STRIP_HREF = '/chat/notes';
+export const SIDEBAR_NOTES_STRIP_HREF = '/notes';
 
 /** @type {Record<string, string>} */
 const SIDEBAR_PSEUDO_STRIP_TITLES = {
@@ -443,8 +443,7 @@ export function buildSidebarPseudoStripListStaticHtml(requestPath = '', opts = {
 	const activeSlug = pseudoStripActiveSlugFromRequestPath(requestPath);
 	const channelHtml = SIDEBAR_PSEUDO_STRIP_ORDER.map((slug) => {
 		const title = pseudoStripTitleForSlug(slug, opts);
-		const href =
-			slug === 'prompt-library' ? '/prompt-library' : `/chat/c/${encodeURIComponent(slug)}`;
+		const href = slug === 'feed' ? '/feed' : slug === 'challenges' || slug === 'creations' || slug === 'comments' || slug === 'explore' ? `/${slug}` : `/ch/${encodeURIComponent(slug)}`;
 		const bg = getAvatarColor(slug);
 		const iconAvatarHtml = pseudoStripRouteIconAvatarHtml(slug);
 		const avatarHtml = iconAvatarHtml || `<div class="comment-avatar connect-chat-thread-row-channel-avatar chat-page-sidebar-channel-avatar" style="background: ${escapeHtmlPseudoStrip(bg)};" aria-hidden="true">#</div>`;
@@ -559,22 +558,21 @@ export function buildChatThreadUrl(meta) {
 		}
 		if (meta.channel_slug) {
 			const slugLow = String(meta.channel_slug).trim().toLowerCase();
-			if (slugLow === 'prompt-library') return '/prompt-library';
-			return `/chat/c/${encodeURIComponent(String(meta.channel_slug))}`;
+			return `/ch/${encodeURIComponent(String(meta.channel_slug))}`;
 		}
 	}
 	if (meta.type === 'dm') {
 		const un = typeof meta.other_user?.user_name === 'string' ? meta.other_user.user_name.trim() : '';
 		if (un) {
-			return `/chat/dm/${encodeURIComponent(un.toLowerCase())}`;
+			return `/dm/${encodeURIComponent(un.toLowerCase())}`;
 		}
 		if (Number.isFinite(Number(meta.other_user_id))) {
-			return `/chat/dm/${encodeURIComponent(String(meta.other_user_id))}`;
+			return `/dm/${encodeURIComponent(String(meta.other_user_id))}`;
 		}
 	}
 	const id = Number(meta.id);
 	if (Number.isFinite(id) && id > 0) {
-		return `/chat/t/${encodeURIComponent(String(id))}`;
+		return `/dm/${encodeURIComponent(String(id))}`;
 	}
 	return '/connect#chat';
 }
@@ -584,13 +582,13 @@ export function normalizeChatNavPathForCompare(p) {
 	const s = String(p || '')
 		.replace(/\/+$/, '')
 		.trim();
-	if (!s || s === '/index.html' || s === '/feed') return '/chat/c/feed';
-	if (s === '/explore') return '/chat/c/explore';
-	if (s === '/creations') return '/chat/c/creations';
-	if (s === '/prompt-library') return '/prompt-library';
+	if (!s || s === '/index.html') return '/feed';
+	if (s.startsWith('/chat/c/')) return `/ch/${s.slice('/chat/c/'.length)}`;
+	if (s.startsWith('/chat/dm/')) return `/dm/${s.slice('/chat/dm/'.length)}`;
+	if (s === '/chat/notes') return '/notes';
 	if (s === SIDEBAR_NOTES_STRIP_HREF) return SIDEBAR_NOTES_STRIP_HREF;
 	const t = s.match(/^\/chat\/t\/(\d+)(?:\/[^/?#]+)?$/i);
-	if (t && t[1]) return `/chat/t/${t[1]}`;
+	if (t && t[1]) return `/dm/${t[1]}`;
 	return s;
 }
 

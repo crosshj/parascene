@@ -1,15 +1,15 @@
 // Static product navigation and interaction definitions. Roster data itself
 // always comes from the sidebar API adapter in client/models/sidebar.js.
 export const navigationItems = [
-	{ id: 'feed', label: 'Feed', path: '/', icon: 'home' },
+	{ id: 'feed', label: 'Feed', path: '/feed', icon: 'home' },
 	{ id: 'challenges', label: 'Challenges', path: '/challenges', icon: 'trophy' },
 	{ id: 'creations', label: 'My Creations', path: '/creations', icon: 'picture' },
 	{ id: 'files', label: 'My Files', path: '/files', icon: 'files' },
-	{ id: 'notes', label: 'My Notes', path: '/chat/notes', icon: 'notes' },
-	{ id: 'comments', label: 'Comments', path: '/chat/c/comments', icon: 'comments' },
+	{ id: 'notes', label: 'My Notes', path: '/notes', icon: 'notes' },
+	{ id: 'comments', label: 'Comments', path: '/comments', icon: 'comments' },
 	{ id: 'explore', label: 'Explore', path: '/explore', icon: 'globe' },
-	{ id: 'prompt-library', label: 'Prompt Library', path: '/prompt-library', icon: 'book' },
-	{ id: 'feedback', label: 'Feedback', path: '/chat/c/feedback', icon: 'megaphone' }
+	{ id: 'library', label: 'Library', path: '/library', icon: 'book' },
+	{ id: 'feedback', label: 'Feedback', path: '/feedback', icon: 'megaphone' }
 ];
 
 export const sidebarMenus = {
@@ -25,6 +25,6 @@ export const sidebarMenus = {
 };
 
 export const mobileNavigationItems = [
-	{ label: 'Home', path: '/' },
+	{ label: 'Feed', path: '/feed' },
 	{ label: 'Files', path: '/files' }
 ];

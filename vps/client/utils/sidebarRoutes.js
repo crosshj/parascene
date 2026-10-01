@@ -12,9 +12,14 @@ export function parseSidebarPath(pathname) {
 	if (path === '/' || path === '/index.html' || path === '/feed' || path === '/chat') return { kind: 'channel', slug: 'feed' };
 	if (path === '/explore') return { kind: 'channel', slug: 'explore' };
 	if (path === '/creations') return { kind: 'channel', slug: 'creations' };
-	if (path === '/prompt-library') return { kind: 'channel', slug: 'prompt-library' };
+	if (path === '/library') return { kind: 'channel', slug: 'library' };
+	if (path === '/notes') return { kind: 'dm', self: true };
 	if (path === '/challenges' || path.startsWith('/challenges/')) return { kind: 'channel', slug: 'challenges' };
+	if (path.startsWith('/feed/doom/')) return { kind: 'channel', slug: 'feed' };
 	const parts = path.split('/').filter(Boolean);
+	if (parts[0] === 'ch' && parts[1]) return { kind: 'channel', slug: decodeSegment(parts[1]).toLowerCase() };
+	if (parts[0] === 'feed' && parts[1] === 'doom') return { kind: 'channel', slug: 'feed' };
+	if (parts[0] === 'dm' && parts[1]) return { kind: 'dm', userName: decodeSegment(parts[1]).replace(/^@/, '').toLowerCase() };
 	if (parts[0] !== 'chat') return { kind: 'path', path };
 	if (parts[1] === 'notes' && parts.length === 2) return { kind: 'dm', self: true };
 	if (parts[1] === 'c' && parts[2]) return { kind: 'channel', slug: decodeSegment(parts[2]).toLowerCase() };

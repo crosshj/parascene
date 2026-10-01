@@ -53,14 +53,14 @@ export function createRouter({ routes, state, layout } = {}) {
 		if (route.presentation === 'overlay' && typeof history.state?.[BACKGROUND_KEY] !== 'string') {
 			history.replaceState(historyStateFor(url, backgroundUrl), '', url);
 		}
-		const seed = route.name === 'creation-detail' ? creationSeeds.get(route.params.creationId) || null : null;
+		const seed = route.params.creationId ? creationSeeds.get(route.params.creationId) || null : null;
 		const composition = routes.resolve({ url, backgroundUrl, seed });
 		await layout.apply(composition, { navigate, dismissOverlay, backOverlay });
 		currentComposition = composition;
 		state.actions.navigationResolved({
 			url: composition.url,
 			backgroundUrl: composition.backgroundUrl,
-			overlay: composition.overlay ? { kind: route.name, params: route.params } : null,
+			overlay: composition.overlay ? { path: route.path, params: route.params } : null,
 		});
 	}
 
@@ -68,17 +68,17 @@ export function createRouter({ routes, state, layout } = {}) {
 		const url = pathFor(target);
 		const route = routes.match(url);
 		let backgroundUrl = null;
-		if (route.name === 'creation-detail' && options.seed) creationSeeds.set(route.params.creationId, options.seed);
+		if (route.presentation === 'overlay' && route.params.creationId && options.seed) creationSeeds.set(route.params.creationId, options.seed);
 		if (route.presentation === 'overlay') {
 			backgroundUrl = currentComposition?.overlay
 				? currentComposition.backgroundUrl
 				: currentComposition?.url || route.defaultBackground;
 		}
 		const currentRoute = currentComposition ? routes.match(currentComposition.url) : null;
-		const previousCreationUrl = route.name === 'creation-detail'
+		const previousCreationUrl = route.presentation === 'overlay' && route.params.creationId
 			? options.replace
 				? history.state?.[PREVIOUS_CREATION_KEY]
-				: currentRoute?.name === 'creation-detail'
+				: currentRoute?.presentation === 'overlay' && currentRoute.params.creationId
 					? currentComposition.url
 					: null
 			: null;
@@ -91,9 +91,10 @@ export function createRouter({ routes, state, layout } = {}) {
 		if (!currentComposition?.overlay) return;
 		const currentRoute = routes.match(currentComposition.url);
 		const previousUrl = history.state?.[PREVIOUS_CREATION_KEY];
-		if (currentRoute?.name === 'creation-detail' && typeof previousUrl === 'string') {
+		if (currentRoute?.presentation === 'overlay' && currentRoute.params.creationId && typeof previousUrl === 'string') {
 			try {
-				if (routes.match(pathFor(previousUrl)).name === 'creation-detail') {
+				const previousRoute = routes.match(pathFor(previousUrl));
+				if (previousRoute.presentation === 'overlay' && previousRoute.params.creationId) {
 					history.back();
 					return;
 				}

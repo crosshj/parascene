@@ -89,7 +89,7 @@ export function createLayout({ root, views, services } = {}) {
 	function setPage(chrome = {}) {
 		pageTitle.textContent = chrome.title || 'Feed';
 		pageIcon.innerHTML = iconMarkup(chrome.icon || 'home');
-		composer.hidden = chrome.showComposer === false;
+		composer.hidden = chrome.composer === 'none';
 	}
 
 	function mountContext(extra = {}) {

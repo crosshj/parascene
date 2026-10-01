@@ -14,7 +14,7 @@ function rosterModel(roster = {}) {
 		const username = String(other.user_name || row.title || 'user');
 		return {
 			id: `dm-${row.id}`, label: `@${username}`,
-			path: row.beta_sidebar_path || `/chat/dm/${encodeURIComponent(username)}`,
+			path: `/dm/${encodeURIComponent(username)}`,
 			avatarUrl: other.avatar_url || '', color: row.beta_sidebar_color || '', online: row.beta_presence === true,
 			unread: Number(row.unread_count) || 0,
 			route: { kind: 'dm', userName: username, threadId: Number(row.id) }
@@ -24,7 +24,7 @@ function rosterModel(roster = {}) {
 		const slug = String(row.channel_slug || row.title || 'channel').replace(/^#/, '');
 		return {
 			id: `channel-${row.id}`, label: `#${slug}`,
-			path: row.beta_sidebar_path || `/chat/c/${encodeURIComponent(slug)}`,
+			path: `/ch/${encodeURIComponent(slug)}`,
 			text: row.beta_sidebar_text || '#', color: row.beta_sidebar_color || '', unread: Number(row.unread_count) || 0,
 			route: { kind: 'channel', slug, threadId: Number(row.id) }
 		};
@@ -33,8 +33,8 @@ function rosterModel(roster = {}) {
 	const servers = serversFromApi.filter((row) => !hiddenIds.has(`server-${row.id}`)).map((row) => {
 		const thread = threadById.get(Number(row.beta_sidebar_thread_id));
 		const slug = String(thread?.channel_slug || row.slug || row.name || 'server').toLowerCase().replace(/[^a-z0-9-]+/g, '-');
-		const path = row.beta_sidebar_path || thread?.beta_sidebar_path || `/servers/${row.id}`;
 		const hasThread = Number.isFinite(Number(row.beta_sidebar_thread_id));
+		const path = hasThread ? `/ch/${encodeURIComponent(slug)}` : `/servers/${row.id}`;
 		return {
 			id: `server-${row.id}`, label: `#${row.name || slug}`, path,
 			text: row.beta_sidebar_text || String(row.name || 'S').slice(0, 1), color: row.beta_sidebar_color || '',

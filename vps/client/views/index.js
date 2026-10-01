@@ -2,10 +2,18 @@ import { mobileNavigationItems } from '../config/sidebar.js';
 import { renderCreationDetailView } from './CreationDetail/CreationDetailView.js';
 import { renderCreationsView } from './Creations/CreationsView.js';
 import { renderFileManagerView } from './FileManager/FileManagerView.js';
-import { renderHomeView } from './Home/HomeView.js';
 import { mountMobileNavigationView } from './MobileNavigation/MobileNavigationView.js';
-import { renderMockRouteView } from './MockRoute/MockRouteView.js';
 import { mountSidebarView } from './Sidebar/SidebarView.js';
+import { FeedView } from './Feed/FeedView.js';
+import { ExploreView } from './Explore/ExploreView.js';
+import { ChallengesView } from './Challenges/ChallengesView.js';
+import { CommentsView } from './Comments/CommentsView.js';
+import { ChannelView } from './Channel/ChannelView.js';
+import { DirectMessageView } from './DirectMessage/DirectMessageView.js';
+import { LibraryView } from './Library/LibraryView.js';
+import { NotFoundView } from './NotFound/NotFoundView.js';
+import { CreateView } from './Create/CreateView.js';
+import { DoomScrollView } from './DoomScroll/DoomScrollView.js';
 
 function cleanup(outlet, dispose) {
 	return {
@@ -21,17 +29,6 @@ export const appViews = Object.freeze({
 	MobileNavigation: {
 		mount({ outlet }) {
 			return mountMobileNavigationView({ outlet, navigationItems: mobileNavigationItems });
-		},
-	},
-	Home: {
-		mount({ outlet, services }) {
-			renderHomeView({
-				outlet,
-				user: services.session.user,
-				sidebarMock: services.state.selectors.sidebarPreference(),
-				onSidebarMockChange: services.state.actions.setSidebarPreference,
-			});
-			return cleanup(outlet);
 		},
 	},
 	Creations: {
@@ -57,12 +54,16 @@ export const appViews = Object.freeze({
 			}));
 		},
 	},
-	MockRoute: {
-		mount({ outlet, title }) {
-			renderMockRouteView({ outlet, title });
-			return cleanup(outlet);
-		},
-	},
+	Feed: FeedView,
+	Explore: ExploreView,
+	Challenges: ChallengesView,
+	Comments: CommentsView,
+	Channel: ChannelView,
+	DirectMessage: DirectMessageView,
+	Library: LibraryView,
+	Create: CreateView,
+	DoomScroll: DoomScrollView,
+	NotFound: NotFoundView,
 	CreationDetail: {
 		mount({ outlet, creationId, seed, actions }) {
 			return renderCreationDetailView({

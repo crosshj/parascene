@@ -13,13 +13,13 @@ export const SPECIAL_HASHTAG_HREFS = Object.freeze({
 	create: '/create',
 	feed: '/feed',
 	help: '/help',
-	creations: '/chat/c/creations',
-	creation: '/chat/c/creations',
+	creations: '/creations',
+	creation: '/creations',
 	challenges: '/challenges',
-	notes: '/chat/notes',
+	notes: '/notes',
 	explore: '/explore',
-	comments: '/chat/c/comments',
-	feedback: '/chat/c/feedback',
+	comments: '/comments',
+	feedback: '/feedback',
 });
 
 /** @type {null | (() => void)} */
@@ -274,7 +274,7 @@ export async function openHashtagDestination(slug, options) {
 	}
 
 	const tagHref = `/t/${encodeURIComponent(safe)}`;
-	const channelHref = `/chat/c/${encodeURIComponent(safe)}`;
+	const channelHref = `/ch/${encodeURIComponent(safe)}`;
 
 	try {
 		const exists = await fetchHashtagChannelExists(safe);

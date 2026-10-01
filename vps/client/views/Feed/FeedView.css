@@ -12,15 +12,8 @@
 .home-view__mock-sections[hidden] { display: none; }
 .home-view__mock-sections select { min-height: 34px; margin-left: auto; padding: 0 8px; border: 1px solid color-mix(in srgb, currentColor 20%, transparent); border-radius: 8px; color: inherit; background: transparent; font: inherit; }
 .primary-link,
-.secondary-link {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	min-height: 42px;
-	padding: 0 15px;
-	border-radius: 999px;
-	font-weight: 700;
-	text-decoration: none;
-}
+.secondary-link { display: inline-flex; align-items: center; justify-content: center; min-height: 42px; padding: 0 15px; border-radius: 999px; font-weight: 700; text-decoration: none; }
 .primary-link { color: #fff; background: #7c3aed; }
 .secondary-link { border: 1px solid color-mix(in srgb, currentColor 24%, transparent); color: inherit; }
+.feed-route-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+.feed-route-links a { display: inline-flex; align-items: center; min-height: 34px; padding: 0 12px; border: 1px solid color-mix(in srgb, currentColor 18%, transparent); border-radius: 999px; color: inherit; font-size: 12px; text-decoration: none; }
