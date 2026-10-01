@@ -2017,6 +2017,9 @@ function initRelatedSection(root, currentCreationId, options = {}) {
 	let isLoading = false;
 	let randomMode = false;
 	let relatedObserver = null;
+	let active = true;
+	let retryTimer = 0;
+	let requestController = null;
 	let firstBatchReported = false;
 	const mediaLoader = createCreationMediaLoader(grid, { eagerCount: 6 });
 
@@ -2063,8 +2066,10 @@ function initRelatedSection(root, currentCreationId, options = {}) {
 	}
 
 	async function loadRelated(excludeIds = null) {
-		if (isLoading) return;
+		if (!active || isLoading) return;
 		isLoading = true;
+		const controller = new AbortController();
+		requestController = controller;
 		const relatedFetchStart = performance.now();
 		try {
 			const params = new URLSearchParams();
@@ -2072,12 +2077,14 @@ function initRelatedSection(root, currentCreationId, options = {}) {
 			if (excludeIds && excludeIds.length > 0) params.set('exclude_ids', excludeIds.join(','));
 			if (randomMode) params.set('force_random', '1');
 			else if (relatedIds.length >= RECSYS_RANDOM_ONLY_SEEN_THRESHOLD) params.set('seen_count', String(relatedIds.length));
-			const res = await fetch(`/api/creations/${currentCreationId}/related?${params}`, { credentials: 'include' });
+			const res = await fetch(`/api/creations/${currentCreationId}/related?${params}`, { credentials: 'include', signal: controller.signal });
+			if (!active) return;
 			if (!res.ok) {
 				container.style.display = 'none';
 				return;
 			}
 			const data = await res.json();
+			if (!active) return;
 			const rawItems = Array.isArray(data?.items) ? data.items : [];
 			let items = [];
 			hasMore = Boolean(data?.hasMore);
@@ -2116,12 +2123,16 @@ function initRelatedSection(root, currentCreationId, options = {}) {
 				hasMore = true;
 				if (sentinel) sentinel.style.display = '';
 			}
+		} catch (error) {
+			if (error?.name !== 'AbortError' && active) container.style.display = 'none';
 		} finally {
 			isLoading = false;
+			if (requestController === controller) requestController = null;
 			// If the sentinel remains in view, continue auto-loading.
 			// Use a small delay to avoid tight request loops when responses are sparse.
-			if (hasMore && relatedIds.length > 0 && isSentinelNearViewport()) {
-				window.setTimeout(() => {
+			if (active && hasMore && relatedIds.length > 0 && isSentinelNearViewport()) {
+				retryTimer = window.setTimeout(() => {
+					retryTimer = 0;
 					loadMoreRelated();
 				}, 180);
 			}
@@ -2129,7 +2140,7 @@ function initRelatedSection(root, currentCreationId, options = {}) {
 	}
 
 	function loadMoreRelated() {
-		if (!hasMore || isLoading || relatedIds.length === 0) return;
+		if (!active || !hasMore || isLoading || relatedIds.length === 0) return;
 		// Keep excludes tighter in random mode to reduce request lock-in.
 		const excludeTail = randomMode
 			? Math.min(40, RELATED_EXCLUDE_IDS_CAP)
@@ -2139,7 +2150,7 @@ function initRelatedSection(root, currentCreationId, options = {}) {
 	}
 
 	function observeSentinel() {
-		if (!sentinel || !hasMore) return;
+		if (!active || !sentinel || !hasMore) return;
 		relatedObserver = new IntersectionObserver((entries) => {
 			entries.forEach((entry) => {
 				if (entry.isIntersecting) loadMoreRelated();
@@ -2151,6 +2162,17 @@ function initRelatedSection(root, currentCreationId, options = {}) {
 	void loadRelated().then(() => {
 		if (hasMore) observeSentinel();
 	});
+	return () => {
+		if (!active) return;
+		active = false;
+		relatedObserver?.disconnect();
+		relatedObserver = null;
+		if (retryTimer) window.clearTimeout(retryTimer);
+		retryTimer = 0;
+		requestController?.abort();
+		requestController = null;
+		mediaLoader.disconnect();
+	};
 }
 
 if (window.history && 'scrollRestoration' in window.history) {
@@ -8157,10 +8179,11 @@ async function loadCreation() {
 		}
 
 		// Related section and transition recording: only when creation is published and not failed.
-		if (isPublished && !isFailed && !hideIdentifyActionChrome) {
+		if (isCurrentLoad() && creationDetailViewMounted && activeCreationDetailId === Number(creationId) && isPublished && !isFailed && !hideIdentifyActionChrome) {
 			recordTransitionFromQuery(creationId);
 			perf.expectReady('related');
-			initRelatedSection(detailContent.parentElement, creationId, {
+			stopRelatedSection?.();
+			stopRelatedSection = initRelatedSection(detailContent.parentElement, creationId, {
 				onFirstBatchReady: (meta) => {
 					if (meta?.fetchMs != null) {
 						perf.recordStep('related', 'fetch', meta.fetchMs);
@@ -8191,6 +8214,7 @@ async function loadCreation() {
 }
 
 let currentCreationId = null;
+let stopRelatedSection = null;
 let lastCreationMeta = null;
 let loadCreationSequence = 0;
 let lastDetailLandscapeOwner = false;
@@ -8383,6 +8407,8 @@ export function renderCreationDetailView({ outlet, creationId, initialSeed = nul
 		hasOpenEscapeTarget: creationDetailPageHasOpenEscapeTarget,
 		destroy() {
 		listenerController.abort();
+		stopRelatedSection?.();
+		stopRelatedSection = null;
 		stopCreationDetailInFlightPoll();
 		stopCreationDetailGroupMemberPoll();
 		clearCreationDetailSunoPlayer(outlet.querySelector('.creation-detail-image-wrapper'));
