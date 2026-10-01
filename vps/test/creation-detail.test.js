@@ -3,7 +3,7 @@ import test from 'node:test';
 import express from 'express';
 import { createCreationsRoutes } from '../routes/creations.js';
 
-async function withApp(run) {
+async function withApp(run, { mediaResponse } = {}) {
 	const row = {
 		id: 31885,
 		user_id: 42,
@@ -16,6 +16,8 @@ async function withApp(run) {
 	const creations = {
 		byIdForViewer: async (userId, id) => Number(userId) === 42 && Number(id) === row.id ? row : null,
 		canAccessMedia: async () => true,
+		safeKey: (key) => key,
+		fetchMedia: async () => mediaResponse || new Response('media'),
 	};
 	const users = {
 		byId: async () => ({ id: 42, email: 'creator@example.com', role: 'consumer', meta: {} }),
@@ -47,4 +49,28 @@ test('creation detail rejects missing creations and unauthenticated viewers', as
 		const unauthenticated = await fetch(`${origin}/api/creations/31885`);
 		assert.equal(unauthenticated.status, 401);
 	});
+});
+
+test('creation video media preserves partial-content status and range headers', async () => {
+	const bytes = Buffer.from('video-chunk');
+	const mediaResponse = new Response(bytes, {
+		status: 206,
+		headers: {
+			'Content-Type': 'video/mp4',
+			'Content-Length': String(bytes.length),
+			'Content-Range': `bytes 0-${bytes.length - 1}/1000`,
+			'Accept-Ranges': 'bytes',
+		},
+	});
+
+	await withApp(async (origin) => {
+		const response = await fetch(`${origin}/api/creations/media/42%2Fvideo.mp4?creation_id=31885`, {
+			headers: { Authorization: 'Bearer test', Range: 'bytes=0-10' },
+		});
+		assert.equal(response.status, 206);
+		assert.equal(response.headers.get('content-type'), 'video/mp4');
+		assert.equal(response.headers.get('content-range'), `bytes 0-${bytes.length - 1}/1000`);
+		assert.equal(response.headers.get('accept-ranges'), 'bytes');
+		assert.deepEqual(Buffer.from(await response.arrayBuffer()), bytes);
+	}, { mediaResponse });
 });

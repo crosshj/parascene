@@ -1,4 +1,5 @@
-.creations-view { --creations-lane-max: 960px; --creations-tile-min: 220px; container-type: inline-size; container-name: creations-lane; min-width: 0; width: 100%; max-width: var(--creations-lane-max); margin: 0 auto; }
+.creations-view { --creations-lane-max: 960px; --creations-tile-min: 220px; --creations-card-placeholder: var(--skeleton, #e2e3e6); --creations-card-shine: var(--skeleton-shine, rgba(0, 0, 0, .06)); container-type: inline-size; container-name: creations-lane; min-width: 0; width: 100%; max-width: var(--creations-lane-max); margin: 0 auto; }
+@media (prefers-color-scheme: dark) { .creations-view { --creations-card-placeholder: color-mix(in srgb, var(--surface, #1a1628) 76%, var(--text, #ede9fe) 24%); --creations-card-shine: color-mix(in srgb, var(--text, #ede9fe) 14%, transparent); } }
 .creations-view__status { padding: 32px; color: var(--beta-text-muted); text-align: center; }
 .creations-view__status[hidden] { display: none; }
 .creations-view__status.is-error { color: #b91c1c; }
@@ -14,19 +15,19 @@
 .creations-view__scroll-bottom[hidden] { display: none; }
 .route-cards { display: grid; gap: 12px; }
 .content-cards-image-grid { grid-template-columns: repeat(auto-fill, minmax(min(var(--creations-tile-min), 100%), 1fr)); gap: 10px; width: 100%; min-width: 0; box-sizing: border-box; }
-.skeleton-grid-tile { position: relative; width: 100%; min-width: 0; aspect-ratio: 1 / 1; overflow: hidden; border-radius: 11px; background: color-mix(in srgb, currentColor 6%, transparent); }
-.skeleton-grid-tile::after { position: absolute; inset: 0; content: ''; border-radius: inherit; background: linear-gradient(90deg, transparent, color-mix(in srgb, currentColor 7%, transparent), transparent); background-size: 180% 100%; opacity: .72; animation: creations-grid-skeleton-shimmer 4.8s ease-in-out infinite; }
+.skeleton-grid-tile { position: relative; width: 100%; min-width: 0; aspect-ratio: 1 / 1; overflow: hidden; border-radius: 11px; background-color: var(--skeleton, #e2e3e6); }
+.skeleton-grid-tile::after { position: absolute; inset: 0; content: ''; border-radius: inherit; background: linear-gradient(90deg, transparent, var(--skeleton-shine, rgba(0, 0, 0, .06)), transparent); background-size: 180% 100%; opacity: .72; animation: creations-grid-skeleton-shimmer 4.8s ease-in-out infinite; }
 @keyframes creations-grid-skeleton-shimmer { from { background-position: 180% 0; } to { background-position: -80% 0; } }
 .creations-view__grid[hidden] { display: none; }
-.creation-grid__card { position: relative; isolation: isolate; min-width: 0; width: 100%; padding: 0; background: transparent; border: 0; }
+.creation-grid__card { position: relative; isolation: isolate; min-width: 0; width: 100%; padding: 0; background: transparent; border: 0; cursor: pointer; }
 .creation-grid__card:focus, .creation-grid__card:focus-visible { outline: none; box-shadow: none; }
-.feed-card-image { position: relative; width: 100%; aspect-ratio: 1 / 1; overflow: hidden; border-radius: 11px; corner-shape: squircle; background: var(--beta-panel-background, #eef1f6); }
+.creations-view__grid .feed-card-image { position: relative; width: 100%; aspect-ratio: 1 / 1; overflow: hidden; border-radius: 11px; corner-shape: squircle; background-color: var(--creations-card-placeholder); }
 .creations-view__grid .creation-grid__card > .feed-card-image { overflow: hidden; border-radius: 11px; corner-shape: squircle; }
-.feed-card-image.loading { background: linear-gradient(90deg, color-mix(in srgb, currentColor 8%, transparent), color-mix(in srgb, currentColor 16%, transparent), color-mix(in srgb, currentColor 8%, transparent)); background-size: 200% 100%; animation: creations-grid-loading 4s linear infinite; }
+.creations-view__grid .feed-card-image.loading { background-color: var(--creations-card-placeholder); background-image: linear-gradient(90deg, transparent, var(--creations-card-shine), transparent); background-size: 200% 100%; animation: creations-grid-loading 4s linear infinite; }
 .feed-card-img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; object-position: center; opacity: 0; transition: opacity .3s ease; }
 .feed-card-image.loaded .feed-card-img { opacity: 1; }
 .feed-card-image.error .feed-card-img { opacity: 0; pointer-events: none; }
-.feed-card-image.creation-grid__status-card { background: color-mix(in srgb, var(--beta-panel-background, #eef1f6) 92%, currentColor 8%); background-size: auto; animation: none; }
+.creations-view__grid .feed-card-image.creation-grid__status-card { background: var(--creations-card-placeholder); background-size: auto; animation: none; }
 .feed-card-image.creation-grid__failed-card { display: grid; place-items: center; color: inherit; }
 .creation-grid__status { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 8px; color: inherit; font-size: .7rem; font-weight: 650; letter-spacing: .06em; text-align: center; pointer-events: none; }
 .creation-grid__status-icon { display: block; width: 48px; height: 48px; flex: 0 0 auto; opacity: .75; }

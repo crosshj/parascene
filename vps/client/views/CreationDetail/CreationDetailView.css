@@ -4703,6 +4703,74 @@ app-route-create .create-route-blog-campaign-simple-note {
 		gap: 8px;
 	}
 }
+/* Creation-detail Suno / YouTube cover controls and embedded player dock. */
+.creation-detail-image-wrapper.hero-audio-pending .creation-detail-suno-play {
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	z-index: 3;
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	padding: 10px 16px;
+	border: 0;
+	border-radius: 999px;
+	color: #fff;
+	background: rgba(0, 0, 0, .72);
+	font: inherit;
+	font-size: .9rem;
+	font-weight: 600;
+	transform: translate(-50%, -50%);
+	backdrop-filter: blur(4px);
+	cursor: pointer;
+}
+.creation-detail-image-wrapper.hero-audio-pending .creation-detail-suno-play:hover { background: rgba(0,0,0,.85); }
+.creation-detail-image-wrapper.hero-audio-playing .creation-detail-suno-play { display: none; }
+/* YouTube import: cover the creation frame with the player, matching www. */
+.creation-detail-image-wrapper.hero-youtube-playing .creation-detail-youtube-embed {
+	position: absolute;
+	inset: 0;
+	z-index: 3;
+	margin: 0;
+	border-radius: inherit;
+	overflow: hidden;
+	background: #000;
+}
+.creation-detail-image-wrapper.hero-youtube-playing .creation-detail-youtube-embed-iframe {
+	display: block;
+	width: 100%;
+	height: 100%;
+	border: 0;
+	background: #000;
+}
+.creation-detail-image-wrapper.hero-youtube-playing [data-image],
+.creation-detail-image-wrapper.hero-youtube-playing [data-background] {
+	opacity: 0;
+	pointer-events: none;
+}
+.creation-detail-image-wrapper.hero-audio-playing:not(.hero-youtube-playing) .creation-detail-suno-embed {
+	position: absolute;
+	z-index: 3;
+	bottom: 10px;
+	left: 50%;
+	box-sizing: border-box;
+	width: min(315px, calc(100% - 24px));
+	height: 100px;
+	margin: 0;
+	border-radius: 10px;
+	overflow: hidden;
+	background: #0b1220;
+	box-shadow: 0 8px 28px rgba(0,0,0,.55);
+	transform: translateX(-50%);
+}
+.creation-detail-image-wrapper.hero-audio-playing:not(.hero-youtube-playing) .creation-detail-suno-embed-iframe {
+	display: block;
+	width: 100%;
+	height: 100%;
+	border: 0;
+	background: #0b1220;
+}
+
 .creation-detail-image-wrapper.hero-audio-playing:not(.hero-youtube-playing) .creation-detail-hosted-audio {
 	position: absolute; z-index: 3; left: 50%; bottom: 10px; transform: translateX(-50%);
 	box-sizing: border-box; width: min(315px, calc(100% - 24px)); height: 100px; margin: 0;

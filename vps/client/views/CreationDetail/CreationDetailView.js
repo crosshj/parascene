@@ -2393,6 +2393,23 @@ function createCreationDetailPerfTracker({ creationId, loadToken, isCurrentLoad 
 let creationDetailHeroVideoPlayer = null;
 let creationDetailHeroVideoStackEl = null;
 let creationDetailGroupHeroStackEl = null;
+const CREATION_DETAIL_VIDEO_MUTE_PREFERENCE_KEY = 'chatDoomPreferMuted';
+
+function getCreationDetailVideoMutedPreference() {
+	try {
+		return window.sessionStorage.getItem(CREATION_DETAIL_VIDEO_MUTE_PREFERENCE_KEY) === '1';
+	} catch {
+		return false;
+	}
+}
+
+function setCreationDetailVideoMutedPreference(muted) {
+	try {
+		window.sessionStorage.setItem(CREATION_DETAIL_VIDEO_MUTE_PREFERENCE_KEY, muted ? '1' : '0');
+	} catch {
+		// Session storage may be unavailable; playback still uses the current choice.
+	}
+}
 
 function clearCreationDetailSunoPlayer(imageWrapper) {
 	const wrap =
@@ -2434,6 +2451,7 @@ function isExternalImportCreation(mediaType, meta) {
 }
 
 function getCreationHostedAudioUrl(creation, meta) {
+	if (getCreationImportProvider(meta) === 'suno') return '';
 	const fromCreation =
 		typeof creation?.audio_url === 'string' ? creation.audio_url.trim() : '';
 	if (fromCreation) return fromCreation;
@@ -2445,8 +2463,6 @@ function getCreationHostedAudioUrl(creation, meta) {
 	if (/^o_[a-f0-9]{24}$/.test(cdnId) && Number.isFinite(id) && id > 0) {
 		return `/api/creations/${id}/audio`;
 	}
-	const mediaUrl = typeof creation?.url === 'string' ? creation.url.trim() : '';
-	if (!cdnId && mediaUrl) return mediaUrl;
 	return '';
 }
 
@@ -2504,6 +2520,7 @@ function mountCreationDetailHostedAudio(imageWrapper, creation, meta) {
 		mountHostedAudioPlayer(imageWrapper, {
 			src,
 			title,
+			autoplay: true,
 			...(Number.isFinite(durationSec) && durationSec > 0 ? { durationSec } : {}),
 		});
 	});
@@ -2515,7 +2532,7 @@ function mountCreationDetailHostedAudio(imageWrapper, creation, meta) {
  * @param {HTMLElement | null | undefined} imageWrapper
  * @param {object | null | undefined} meta
  */
-function mountCreationDetailSunoPlayer(imageWrapper, meta) {
+function mountCreationDetailSunoPlayer(imageWrapper, meta, creation) {
 	if (!(imageWrapper instanceof HTMLElement)) return;
 	clearCreationDetailSunoPlayer(imageWrapper);
 
@@ -2551,9 +2568,11 @@ function mountCreationDetailSunoPlayer(imageWrapper, meta) {
 		}
 	}
 	if (!id || !/^[a-f0-9-]{36}$/i.test(id)) return;
+	const coverUrl = typeof creation?.url === 'string' ? creation.url.trim() : '';
+	const absoluteCoverUrl = coverUrl ? new URL(coverUrl, window.location.origin).toString() : '';
 	const embedSrc = `/suno-card.html?id=${encodeURIComponent(id.toLowerCase())}${
 		title ? `&t=${encodeURIComponent(title)}` : ''
-	}`;
+	}${absoluteCoverUrl ? `&img=${encodeURIComponent(absoluteCoverUrl)}` : ''}`;
 
 	imageWrapper.classList.add('hero-audio-playing');
 
@@ -2569,6 +2588,18 @@ function mountCreationDetailSunoPlayer(imageWrapper, meta) {
 	iframe.setAttribute('referrerpolicy', 'no-referrer-when-downgrade');
 	embedWrap.appendChild(iframe);
 	imageWrapper.appendChild(embedWrap);
+}
+
+function mountCreationDetailAudioPlayer(imageWrapper, creation, meta) {
+	if (getCreationImportProvider(meta) === 'suno') {
+		mountCreationDetailSunoPlayer(imageWrapper, meta, creation);
+		return;
+	}
+	if (getCreationHostedAudioUrl(creation, meta)) {
+		mountCreationDetailHostedAudio(imageWrapper, creation, meta);
+		return;
+	}
+	clearCreationDetailSunoPlayer(imageWrapper);
 }
 
 /**
@@ -2618,40 +2649,27 @@ function mountCreationDetailYoutubePlayer(imageWrapper, meta) {
 	}
 	if (!embedSrc) return;
 
-	imageWrapper.classList.add('hero-audio-pending', 'hero-youtube-pending');
-
-	const playBtn = document.createElement('button');
-	playBtn.type = 'button';
-	playBtn.className = 'creation-detail-suno-play';
-	playBtn.setAttribute('data-youtube-play', '');
-	playBtn.setAttribute('aria-label', `Play ${title}`);
-	playBtn.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"></path></svg><span>Play video</span>`;
-	playBtn.addEventListener('click', (e) => {
-		e.preventDefault();
-		e.stopPropagation();
-		if (imageWrapper.querySelector('[data-youtube-embed]')) return;
-		const embedWrap = document.createElement('div');
-		embedWrap.className = 'creation-detail-youtube-embed';
-		embedWrap.setAttribute('data-youtube-embed', '');
-		const iframe = document.createElement('iframe');
-		iframe.className = 'creation-detail-youtube-embed-iframe';
-		try {
-			const playUrl = new URL(embedSrc);
-			playUrl.searchParams.set('autoplay', '1');
-			iframe.src = playUrl.toString();
-		} catch {
-			iframe.src = embedSrc;
-		}
-		iframe.title = title;
-		iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen');
-		iframe.setAttribute('allowfullscreen', '');
-		iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
-		embedWrap.appendChild(iframe);
-		imageWrapper.appendChild(embedWrap);
-		imageWrapper.classList.remove('hero-audio-pending', 'hero-youtube-pending');
-		imageWrapper.classList.add('hero-audio-playing', 'hero-youtube-playing');
-	});
-	imageWrapper.appendChild(playBtn);
+	if (imageWrapper.querySelector('[data-youtube-embed]')) return;
+	const embedWrap = document.createElement('div');
+	embedWrap.className = 'creation-detail-youtube-embed';
+	embedWrap.setAttribute('data-youtube-embed', '');
+	const iframe = document.createElement('iframe');
+	iframe.className = 'creation-detail-youtube-embed-iframe';
+	try {
+		const playUrl = new URL(embedSrc);
+		playUrl.searchParams.set('autoplay', '1');
+		iframe.src = playUrl.toString();
+	} catch {
+		iframe.src = embedSrc;
+	}
+	iframe.title = title;
+	iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen');
+	iframe.setAttribute('allowfullscreen', '');
+	iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+	embedWrap.appendChild(iframe);
+	imageWrapper.appendChild(embedWrap);
+	imageWrapper.classList.remove('hero-audio-pending', 'hero-youtube-pending');
+	imageWrapper.classList.add('hero-audio-playing', 'hero-youtube-playing');
 }
 
 function resetCreationDetailHeroVideoElement() {
@@ -3484,12 +3502,14 @@ async function loadCreation() {
 		if (muteOn instanceof HTMLElement) muteOn.hidden = !isMuted;
 		if (muteOff instanceof HTMLElement) muteOff.hidden = isMuted;
 		videoMutedBadgeEl.setAttribute('aria-label', isMuted ? 'Unmute video' : 'Mute video');
+		setCreationDetailVideoMutedPreference(isMuted);
 	}
 
 	function toggleHeroVideoMute() {
 		const activeVideo = getActiveHeroPlaybackVideo();
 		if (!activeVideo) return;
 		const nextMuted = !activeVideo.muted;
+		setCreationDetailVideoMutedPreference(nextMuted);
 		if (creationDetailHeroVideoPlayer && typeof creationDetailHeroVideoPlayer.setMuted === 'function') {
 			creationDetailHeroVideoPlayer.setMuted(nextMuted);
 		}
@@ -3894,11 +3914,12 @@ async function loadCreation() {
 			return false;
 		}
 
+		const preferredMuted = getCreationDetailVideoMutedPreference();
 		creationDetailHeroVideoPlayer = mod.mountSequentialVideoPlayer(stack, slides, {
 			startIndex,
 			loopPlaylist: true,
 			autoAdvanceOnEnded: true,
-			muted: true,
+			muted: preferredMuted,
 			videoClass: 'creation-detail-group-hero-video',
 			slotClass: 'creation-detail-group-hero-video-slot',
 			posterUrl: typeof hooks.posterUrl === 'string' ? hooks.posterUrl.trim() : '',
@@ -4564,11 +4585,7 @@ async function loadCreation() {
 				}
 				showHeroImage(creation.url);
 			}
-			if (getCreationHostedAudioUrl(creation, meta)) {
-				mountCreationDetailHostedAudio(imageWrapper, creation, meta);
-			} else {
-				mountCreationDetailSunoPlayer(imageWrapper, meta);
-			}
+			mountCreationDetailAudioPlayer(imageWrapper, creation, meta);
 			markHeroReady({ state: 'audio' });
 		} else if (
 			status === 'completed' &&
@@ -7911,7 +7928,7 @@ async function loadCreation() {
 						} else if (source.filePath) {
 							showHeroImage(source.filePath);
 						}
-						mountCreationDetailHostedAudio(imageWrapper, memberCreation, source.meta);
+						mountCreationDetailAudioPlayer(imageWrapper, memberCreation, source.meta);
 						markHeroReady({ state: 'group-member-audio' });
 					} else if (source.filePath) {
 						teardownGroupHeroVideoPlayer();
@@ -8331,8 +8348,8 @@ async function checkAndLoadCreation() {
 				activeCreationDetailSeed,
 				detailContent,
 				imageEl,
-				null,
-				null
+				creationDetailSeedBundledMod.creationDetailChromeHtmlFromSeed,
+				aspectRatioBundledMod.applyHeroAspectLayoutToElement
 			);
 		}
 		try {

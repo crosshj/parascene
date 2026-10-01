@@ -69,15 +69,16 @@ export function renderCreationsView({ outlet, creationsApi, creationsResource, o
 			skeletons.slice(cards.length).forEach((skeleton) => skeleton.remove());
 			cards.slice(skeletons.length).forEach((card) => refs.grid.append(card));
 		}
-		// Keep the trigger between loaded cards and the visual look-ahead runway.
-		// Pagination should be timed from real content, never from skeletons.
-		refs.grid.append(refs.sentinel);
 		const hasCards = refs.grid.querySelector('.creation-grid__card');
 		refs.grid.hidden = !hasCards;
 		if (!hasCards) showState('No creations yet. Start creating to see your work here.');
 		else refs.status.hidden = true;
 		hasMore = data?.has_more === true && items.length > 0;
 		if (hasMore) appendGridSkeletons();
+		// Keep the sentinel out of the cards' flow: as a full-row grid item it
+		// would force the look-ahead skeletons onto a new row and leave a gap.
+		refs.sentinel.hidden = !hasMore;
+		refs.grid.append(refs.sentinel);
 		mediaLoader?.disconnect();
 		mediaLoader = createCreationMediaLoader(refs.grid);
 		mediaLoader.observe();

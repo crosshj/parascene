@@ -29,6 +29,15 @@ function parseMeta(value) {
 	return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
 
+function hasSunoImport(row) {
+	const provider = parseMeta(row?.meta)?.import?.provider;
+	return typeof provider === "string" && provider.trim().toLowerCase() === "suno";
+}
+
+function isAudioMediaKey(key) {
+	return typeof key === "string" && /\.(mp3|wav|flac|ogg|oga|aac|m4a|mp4|webm)$/i.test(key);
+}
+
 function isModeratedError(row) {
 	if (String(row?.status || "") !== "failed") return false;
 	const meta = row?.meta && typeof row.meta === "object" ? row.meta : {};
@@ -77,7 +86,13 @@ function serializeCreation(row) {
 		is_moderated_error: isModeratedError(row),
 		media_type: type,
 		video_url: type === "video" && videoKey ? mediaUrl(row.id, videoKey) : null,
-		audio_url: type === "audio" ? (audioCdnId ? `/api/creations/${row.id}/audio` : imageUrl) : null
+		audio_url: type !== "audio"
+			? null
+			: audioCdnId
+				? `/api/creations/${row.id}/audio`
+				: !hasSunoImport(row) && isAudioMediaKey(key)
+					? imageUrl
+					: null
 	};
 }
 
@@ -116,7 +131,12 @@ export function createCreationsRoutes({ creations, users }) {
 				return req.method === "HEAD" ? res.end() : res.send(poster);
 			}
 			const response = await creations.fetchMedia(key, { variant: req.query.variant, method: req.method, range: req.get("range") });
-			if (!response.ok) return res.status(response.status === 404 ? 404 : 502).json({ error: "Media not found" });
+			if (!response.ok && response.status !== 416) {
+				return res.status(response.status === 404 ? 404 : 502).json({ error: "Media not found" });
+			}
+			// Preserve 206 for Range requests; returning partial bytes as 200 makes
+			// browsers treat the chunk as a complete video and breaks seeking/playback.
+			res.status(response.status);
 			setMediaHeaders(res, response, key);
 			// Creation media is treated as shareable, non-sensitive content. Keep the
 			// ownership check on origin misses, then let browsers and Cloudflare reuse
