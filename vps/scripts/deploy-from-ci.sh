@@ -67,6 +67,7 @@ install_nginx_config() {
 # Remote mode runs on the VPS. It is invoked by the CI mode below after the
 # script has been copied to the host.
 if [[ "${1:-}" == "remote" ]]; then
+	set -euo pipefail
 	PACKAGE_PATH="${2:?Package path is required}"
 	APP_DIR="${3:?App directory is required}"
 

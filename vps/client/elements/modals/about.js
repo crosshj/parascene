@@ -88,7 +88,7 @@ class AppModalAbout extends HTMLElement {
 		}
 		if (commitEl) {
 			const short = typeof formatBuildCommit === 'function' ? formatBuildCommit(info.commit) : info.commit || 'Unknown';
-			const label = info.commit ? `Build ${short}${info.buildSuffix || '-next'}` : 'Build unknown';
+			const label = info.commit ? `Build ${short}${info.buildSuffix || ''}` : 'Build unknown';
 			const url = String(info.commitUrl || '').trim();
 			commitEl.textContent = '';
 			commitEl.removeAttribute('title');

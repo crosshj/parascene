@@ -14,14 +14,7 @@ function assertVpsClientBoundary() {
 	return {
 		name: 'assert-vps-client-boundary',
 		buildStart() {
-			const vendorMirror = path.join(vpsDir, 'client', 'vendor');
-			if (existsSync(vendorMirror)) {
-				throw new Error([
-					'vps/client/vendor is not an allowed migration boundary.',
-					'Place each ported WWW module in its owning VPS client directory and update imports to that canonical path.',
-					'Do not preserve a mirrored WWW tree or forwarding wrappers.',
-				].join('\n'));
-			}
+			assertVpsClientBoundaryOnDisk();
 		},
 		generateBundle() {
 			const outside = [...this.getModuleIds()].filter((id) => {
@@ -39,6 +32,17 @@ function assertVpsClientBoundary() {
 			}
 		},
 	};
+}
+
+export function assertVpsClientBoundaryOnDisk() {
+	const vendorMirror = path.join(vpsDir, 'client', 'vendor');
+	if (existsSync(vendorMirror)) {
+		throw new Error([
+			'vps/client/vendor is not an allowed migration boundary.',
+			'Place each ported WWW module in its owning VPS client directory and update imports to that canonical path.',
+			'Do not preserve a mirrored WWW tree or forwarding wrappers.',
+		].join('\n'));
+	}
 }
 
 function htmlStringImports() {

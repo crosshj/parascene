@@ -8,7 +8,7 @@ export function getClientBuildInfo() {
 		commitUrl: readMeta('build-commit-url'),
 		deployedAt: readMeta('build-deployed-at'),
 		version: readMeta('app-version'),
-		buildSuffix: readMeta('build-suffix') || '-next',
+		buildSuffix: readMeta('build-suffix'),
 		appBuild: readMeta('app-build')
 	};
 }

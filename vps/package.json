@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "rollup -c rollup.config.mjs",
+		"check:client-boundary": "node scripts/check-client-boundary.js",
+		"build": "npm run check:client-boundary && rollup -c rollup.config.mjs",
     "dev": "node scripts/dev.js",
     "test": "node --test"
   },
