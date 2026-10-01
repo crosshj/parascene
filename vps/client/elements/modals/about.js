@@ -1,33 +1,6 @@
-let formatDateTime;
-let modalDismissIconSvg;
-let getClientBuildInfo;
-let formatBuildCommit;
-
-function getAssetVersionParam() {
-	const meta = document.querySelector('meta[name="asset-version"]');
-	return meta?.getAttribute('content')?.trim() || '';
-}
-
-function getImportQuery(version) {
-	return version && typeof version === 'string' ? `?v=${encodeURIComponent(version)}` : '';
-}
-
-let _depsPromise;
-async function loadDeps() {
-	if (_depsPromise) return _depsPromise;
-	const v = getAssetVersionParam();
-	const qs = getImportQuery(v);
-	_depsPromise = (async () => {
-		const datetimeMod = await import(`../../shared/datetime.js${qs}`);
-		formatDateTime = datetimeMod.formatDateTime;
-		const dismissMod = await import(`../../shared/modalDismiss.js${qs}`);
-		modalDismissIconSvg = dismissMod.MODAL_DISMISS_ICON_SVG;
-		const buildInfoMod = await import(`../../shared/buildInfo.js${qs}`);
-		getClientBuildInfo = buildInfoMod.getClientBuildInfo;
-		formatBuildCommit = buildInfoMod.formatBuildCommit;
-	})();
-	return _depsPromise;
-}
+import { formatDateTime } from '../../shared/datetime.js';
+import { MODAL_DISMISS_ICON_SVG as modalDismissIconSvg } from '../../shared/modalDismiss.js';
+import { getClientBuildInfo, formatBuildCommit } from '../../shared/buildInfo.js';
 
 const html = String.raw;
 
@@ -96,7 +69,6 @@ class AppModalAbout extends HTMLElement {
 	}
 
 	async initModal() {
-		await loadDeps();
 		this.setAttribute('data-modal', '');
 		if (this._initialized) return;
 		this._initialized = true;

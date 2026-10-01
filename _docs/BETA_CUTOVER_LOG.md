@@ -90,4 +90,19 @@ Do not continue the beta creation-detail migration until the www SPA routing/ove
 
 ### Known incomplete creation-detail seam after the client-architecture refactor
 
-The app shell, route composition, retained background, seed handoff, and layout-owned overlay are now represented by the VPS client architecture. The copied `CreationDetailView.js` is **not** thereby considered migrated. It still contains WWW-era dynamic `/shared/...` module loads, document-wide selectors and delayed listeners, and calls to WWW API contracts that have not all been ported to VPS. Treat any claim that creation detail is complete while those remain as a release blocker. Port each dependency statically into `vps/client`, move every listener/request into the view lifetime, and verify the VPS API contract before enabling the corresponding behavior.
+The app shell, route composition, retained background, seed handoff, and layout-owned overlay are now represented by the VPS client architecture. The copied `CreationDetailView.js` is **not** thereby considered migrated. Its dependencies now use canonical static VPS imports, but it still contains document-wide selectors and delayed listeners plus calls to WWW API contracts that have not all been ported to VPS. Treat any claim that creation detail is complete while those remain as a release blocker. Move every listener/request into the view lifetime and verify the VPS API contract before enabling the corresponding behavior.
+
+#### Observed Creation Detail 404s (2026-10-01)
+
+The following `GET` requests returned `404` while opening creations `31921` and `31885` in the VPS Creation Detail overlay. These API contracts can be brought over from WWW without further product-design review. Port their handlers and required dependencies into the self-contained VPS server; do not make the VPS runtime depend on `api_routes/` or another non-VPS source tree.
+
+- `/api/profile` — current viewer profile; repeated across shell/detail initialization.
+- `/api/users/:creatorId/profile` — creation-author profile. DevTools displays this and the viewer request as `profile`; `CreationDetailView.js` issues both route shapes.
+- `/api/notifications` — notification list loaded by the shared navigation runtime; repeated on detail navigation.
+- `/api/created-images/:creationId/like` — like metadata; observed for creations `31921` and `31885`.
+- `/api/creations/nsfw-flags?ids=31773,31880,31884` — lineage NSFW flags.
+- `/api/created-images/31885/activity?order=asc&limit=50&offset=0` — Creation Detail comments/activity.
+- `/api/creations/31885/related?limit=40` — related creations.
+- `/api/create/images/:lineageId?lineage_of=31885` — lineage item detail; observed for lineage IDs `31773`, `31880`, `31884`, and `31885`, with some requests repeated.
+
+The primary creation loads for `31921` and `31885`, plus their PNG media requests, returned `200` in the same trace. The failures are therefore the dependent profile/social/lineage requests above rather than the base Creation Detail fetch.
