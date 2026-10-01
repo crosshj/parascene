@@ -45,7 +45,6 @@ export function createLayout({ root, views, services } = {}) {
 	let menu = null;
 	let actions = {};
 	let appliedComposition = null;
-	let restoreFocus = null;
 	let backgroundRevision = 0;
 	let viewportResizeTimer = 0;
 	let sidebarLayoutReady = false;
@@ -54,7 +53,7 @@ export function createLayout({ root, views, services } = {}) {
 	overlayHost.className = 'beta-app-overlay-host';
 	overlayHost.hidden = true;
 	overlayHost.innerHTML = `
-		<section class="beta-app-overlay" role="dialog" aria-modal="true" aria-labelledby="beta-app-overlay-title">
+		<section class="beta-app-overlay">
 			<div class="beta-app-overlay__chrome">
 				<button type="button" class="beta-app-overlay__back" aria-label="Back">
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"></path><path d="M11 6 5 12l6 6"></path></svg>
@@ -78,7 +77,6 @@ export function createLayout({ root, views, services } = {}) {
 		outlet: null,
 		overlay: null,
 	};
-	const inertBeforeOverlay = new Map();
 
 	function setHeaderMenu({ label = 'Page actions', items = [], onSelect } = {}) {
 		menu?.destroy();
@@ -160,21 +158,6 @@ export function createLayout({ root, views, services } = {}) {
 	}
 
 	function setBackgroundSuppressed(suppressed) {
-		const outsideOverlay = [
-			...Array.from(document.body.children).filter((element) => element !== root),
-			...Array.from(root.children).filter((element) => element !== overlayHost)
-		];
-		if (suppressed) {
-			for (const element of outsideOverlay) {
-				if (!inertBeforeOverlay.has(element)) inertBeforeOverlay.set(element, element.inert);
-				element.inert = true;
-			}
-		} else {
-			for (const [element, wasInert] of inertBeforeOverlay) {
-				if (element.isConnected) element.inert = wasInert;
-			}
-			inertBeforeOverlay.clear();
-		}
 		document.body.classList.toggle('beta-creation-overlay-open', suppressed);
 	}
 
@@ -194,42 +177,13 @@ export function createLayout({ root, views, services } = {}) {
 
 	function showOverlay(descriptor, changed) {
 		const visible = Boolean(descriptor);
-		const opening = visible && overlayHost.hidden;
-		if (opening) {
-			restoreFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-		}
 		overlayHost.hidden = !visible;
 		setBackgroundSuppressed(visible);
 		if (visible) {
 			overlayTitle.textContent = descriptor.title || 'Detail';
 			if (mounted.overlay) document.documentElement.classList.remove('beta-overlay-route-pending');
-		} else if (restoreFocus) {
-			const focusTarget = restoreFocus;
-			restoreFocus = null;
-			queueMicrotask(() => { if (focusTarget.isConnected) focusTarget.focus(); });
 		}
 		if (!visible || changed) overlayContent.scrollTop = 0;
-	}
-
-	function onOverlayKeydown(event) {
-		if (overlayHost.hidden) return;
-		if (event.key !== 'Tab') return;
-		const focusable = [...overlayHost.querySelectorAll('button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')]
-			.filter((element) => !element.hidden && element.getClientRects().length > 0);
-		if (!focusable.length) {
-			event.preventDefault();
-			overlayClose.focus();
-			return;
-		}
-		const first = focusable[0];
-		const last = focusable[focusable.length - 1];
-		if (event.shiftKey && document.activeElement === first) {
-			event.preventDefault();
-			last.focus();
-		} else if (!event.shiftKey && document.activeElement === last) {
-			event.preventDefault();
-			first.focus();
-		}
 	}
 
 	function onDocumentKeydown(event) {
@@ -335,7 +289,6 @@ export function createLayout({ root, views, services } = {}) {
 	composer.addEventListener('submit', (event) => event.preventDefault());
 	overlayClose.addEventListener('click', () => actions.dismissOverlay?.());
 	overlayBack.addEventListener('click', () => (actions.backOverlay || actions.dismissOverlay)?.());
-	overlayHost.addEventListener('keydown', onOverlayKeydown);
 	document.addEventListener('keydown', onDocumentKeydown);
 	window.addEventListener('resize', onViewportResize, { passive: true });
 	document.body.classList.add('beta-layout');
