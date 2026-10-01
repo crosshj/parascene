@@ -272,9 +272,11 @@ export function createLayout({ root, views, services } = {}) {
 		const revision = ++backgroundRevision;
 		const overlayChanged = mounted.overlay?.key !== composition.overlay?.key;
 		if (composition.overlay) {
-			showOverlay(composition.overlay, false);
-			await reconcileRegion('overlay', overlayContent, composition.overlay);
+			// Reset before revealing/mounting a new route so stale scroll position
+			// cannot flash while the new detail view is being inserted.
 			showOverlay(composition.overlay, overlayChanged);
+			await reconcileRegion('overlay', overlayContent, composition.overlay);
+			showOverlay(composition.overlay, false);
 			appliedComposition = composition;
 
 			if (!mounted.outlet) {
