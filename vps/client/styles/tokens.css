@@ -1,0 +1,57 @@
+:root {
+	--font-family: "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+	--bg: #f6f7fb;
+	--surface: #ffffff;
+	--surface-strong: #f5f6fa;
+	--surface-muted: #f8f9fc;
+	--text: #0f172a;
+	--text-muted: #525a6b;
+	--border: #e2e8f0;
+	--accent: #7c3aed;
+	--accent-text: #ffffff;
+	--focus: #6d28d9;
+	--input-bg: #ffffff;
+	--error: #b91c1c;
+	--error-text: #b91c1c;
+	--error-bg: #fef2f2;
+	--error-border: #fecaca;
+	--danger: #b91c1c;
+	--state-danger-fg: #b91c1c;
+	--color-green: #16a34a;
+	--color-green-fg: color-mix(in srgb, var(--color-green) 80%, var(--text));
+	--color-green-bg-subtle: color-mix(in srgb, var(--color-green) 16%, var(--surface));
+	--color-purple: #7c3aed;
+	--color-red-fg: #b91c1c;
+	--image-placeholder: rgba(15, 23, 42, 0.06);
+	--skeleton: color-mix(in srgb, var(--text) 12%, var(--surface));
+	--skeleton-shine: rgba(0, 0, 0, 0.06);
+	--shadow: 0 10px 25px rgba(15, 23, 42, 0.08);
+	--icon-image-unavailable: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='%23000' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='6' width='16' height='12' rx='1.5'/%3E%3Cpath d='M4 18L20 6'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--bg: #0f0d1a;
+		--surface: #1a1628;
+		--surface-strong: #191627;
+		--surface-muted: #120f1d;
+		--text: #ede9fe;
+		--text-muted: #b3b7c3;
+		--border: #3d3552;
+		--accent: #05c76f;
+		--accent-text: #0f0d1a;
+		--focus: #a78bfa;
+		--input-bg: #120f1d;
+		--error: #fca5a5;
+		--error-text: #fca5a5;
+		--error-bg: #2a1520;
+		--error-border: #5b1f35;
+		--danger: #fca5a5;
+		--state-danger-fg: #fca5a5;
+		--color-red-fg: #fca5a5;
+		--image-placeholder: rgba(237, 233, 254, 0.08);
+		--skeleton: color-mix(in srgb, var(--text) 8%, var(--surface));
+		--skeleton-shine: rgba(255, 255, 255, 0.04);
+		--shadow: 0 16px 32px rgba(0, 0, 0, 0.35);
+	}
+}

@@ -1,43 +1,8 @@
-let fetchJsonWithStatusDeduped;
-let formatRelativeTime;
-let helpIcon;
-let creditIcon;
-let modalDismissIconSvg;
-let getHelpHref;
-
-function getAssetVersionParam() {
-	const meta = document.querySelector('meta[name="asset-version"]');
-	return meta?.getAttribute('content')?.trim() || '';
-}
-
-function getImportQuery(version) {
-	return version && typeof version === 'string' ? `?v=${encodeURIComponent(version)}` : '';
-}
-
-let _depsPromise;
-async function loadDeps() {
-	if (_depsPromise) return _depsPromise;
-	const v = getAssetVersionParam();
-	const qs = getImportQuery(v);
-	_depsPromise = (async () => {
-		const apiMod = await import(`../../shared/api.js${qs}`);
-		fetchJsonWithStatusDeduped = apiMod.fetchJsonWithStatusDeduped;
-
-		const datetimeMod = await import(`../../shared/datetime.js${qs}`);
-		formatRelativeTime = datetimeMod.formatRelativeTime;
-
-		const iconsMod = await import(`../../icons/svg-strings.js${qs}`);
-		helpIcon = iconsMod.helpIcon;
-		creditIcon = iconsMod.creditIcon;
-
-		const dismissMod = await import(`../../shared/modalDismiss.js${qs}`);
-		modalDismissIconSvg = dismissMod.MODAL_DISMISS_ICON_SVG;
-
-		const helpUrlMod = await import(`../../shared/helpUrl.js${qs}`);
-		getHelpHref = helpUrlMod.getHelpHref;
-	})();
-	return _depsPromise;
-}
+import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
+import { formatRelativeTime } from '../../shared/datetime.js';
+import { helpIcon, creditIcon } from '../../icons/svg-strings.js';
+import { MODAL_DISMISS_ICON_SVG as modalDismissIconSvg } from '../../shared/modalDismiss.js';
+import { getHelpHref } from '../../shared/helpUrl.js';
 
 const html = String.raw;
 
@@ -57,8 +22,7 @@ class AppModalCredits extends HTMLElement {
 		this.handleClaimCredits = this.handleClaimCredits.bind(this);
 	}
 
-	async connectedCallback() {
-		await loadDeps();
+	connectedCallback() {
 		this.setAttribute('data-modal', '');
 		this.render();
 		this.setupEventListeners();
@@ -580,4 +544,3 @@ class AppModalCredits extends HTMLElement {
 }
 
 customElements.define('app-modal-credits', AppModalCredits);
-

@@ -1,0 +1,313 @@
+/**
+ * Shared skeleton loader markup. Use with global.css skeleton classes for consistent,
+ * subtle loading placeholders. Pages compose these into layout-specific skeletons.
+ */
+
+/**
+ * @param {string} [width] - CSS width (e.g. '40%', '120px'). Omit for full width.
+ * @param {string} [modifier] - Optional class modifier, e.g. 'skeleton-line--short'.
+ * @returns {string} HTML for a skeleton line
+ */
+export function skeletonLine(width, modifier = '') {
+	const style = width ? ` style="width: ${width};"` : '';
+	const mod = modifier ? ` ${modifier}` : '';
+	return `<span class="skeleton skeleton-line${mod}"${style} aria-hidden="true"></span>`;
+}
+
+/**
+ * @param {number} [size] - Pixel size (default 32).
+ * @returns {string} HTML for a skeleton circle (e.g. avatar)
+ */
+export function skeletonCircle(size = 32) {
+	return `<span class="skeleton skeleton-circle" style="width: ${size}px; height: ${size}px;" aria-hidden="true"></span>`;
+}
+
+/**
+ * @param {string} [width] - CSS width (e.g. '80px', '20%'). Omit for default pill width.
+ * @param {number} [height] - Pixel height (default 34).
+ * @returns {string} HTML for a skeleton pill (e.g. button)
+ */
+export function skeletonPill(width, height = 34) {
+	const w = width ? `width: ${width}; ` : '';
+	return `<span class="skeleton skeleton-pill" style="${w}height: ${height}px;" aria-hidden="true"></span>`;
+}
+
+/**
+ * @returns {string} HTML for one feed card skeleton (image + footer + actions)
+ */
+export function renderFeedCardSkeleton() {
+	return `<div class="skeleton-feed-card" aria-hidden="true">
+		<div class="skeleton-feed-card-image"></div>
+		<div class="skeleton-feed-card-footer">
+			${skeletonCircle(36)}
+			<div class="skeleton-feed-card-content">
+				${skeletonLine('72%', 'skeleton-line--short')}
+				${skeletonLine('62%', 'skeleton-line--medium')}
+			</div>
+		</div>
+		<div class="skeleton-feed-card-actions">
+			<div style="display: inline-flex; align-items: center; gap: 14px;">
+				${skeletonPill('72px')}
+				${skeletonPill('64px')}
+				${skeletonPill('88px')}
+			</div>
+			${skeletonCircle(34)}
+		</div>
+	</div>`;
+}
+
+/**
+ * Image-only feed tile skeleton (matches `feed-card--image-only` browse lanes).
+ * @returns {string}
+ */
+export function renderFeedCardImageOnlySkeleton() {
+	return `<div class="skeleton-feed-card skeleton-feed-card--image-only" aria-hidden="true">
+		<div class="skeleton-feed-card-image"></div>
+	</div>`;
+}
+
+/**
+ * @param {number} [count] - Number of feed card skeletons (default 4).
+ * @returns {string} HTML for N feed card skeletons
+ */
+export function renderFeedCardsSkeleton(count = 4) {
+	const n = Math.max(1, Math.min(10, Number(count) || 4));
+	return Array.from({ length: n }, () => renderFeedCardSkeleton()).join('');
+}
+
+/**
+ * @param {number} [count] - Number of image-only feed card skeletons (default 4).
+ * @returns {string}
+ */
+export function renderFeedCardsImageOnlySkeleton(count = 4) {
+	const n = Math.max(1, Math.min(10, Number(count) || 4));
+	return Array.from({ length: n }, () => renderFeedCardImageOnlySkeleton()).join('');
+}
+
+/**
+ * @returns {string} HTML for one grid tile skeleton (1:1, for content-cards-image-grid)
+ */
+export function renderGridTileSkeleton() {
+	return `<div class="skeleton skeleton-grid-tile" aria-hidden="true"></div>`;
+}
+
+/**
+ * @param {number} [count] - Number of grid tile skeletons (default 8).
+ * @returns {string} HTML for N grid tile skeletons
+ */
+export function renderGridSkeleton(count = 8) {
+	const n = Math.max(1, Math.min(30, Number(count) || 8));
+	return Array.from({ length: n }, () => renderGridTileSkeleton()).join('');
+}
+
+/**
+ * @returns {string} HTML for one comment row skeleton (thumb + body lines)
+ */
+export function renderCommentRowSkeleton() {
+	return `<div class="skeleton-comment-row" aria-hidden="true">
+		<div class="skeleton-comment-row-thumb"></div>
+		<div class="skeleton-comment-row-body">
+			${skeletonLine('85%')}
+			${skeletonLine('50%', 'skeleton-line--short')}
+			${skeletonLine('95%')}
+			${skeletonLine('70%', 'skeleton-line--medium')}
+			${skeletonLine('40%', 'skeleton-line--short')}
+		</div>
+	</div>`;
+}
+
+/**
+ * @param {number} [count] - Number of comment row skeletons (default 10).
+ * @returns {string} HTML for N comment row skeletons
+ */
+export function renderCommentRowsSkeleton(count = 10) {
+	const n = Math.max(1, Math.min(15, Number(count) || 10));
+	return Array.from({ length: n }, () => renderCommentRowSkeleton()).join('');
+}
+
+/**
+ * @returns {string} HTML for profile hero skeleton (banner + avatar, name, stats, meta lines)
+ */
+export function renderProfileHeroSkeleton() {
+	return `<div class="skeleton-profile-hero" aria-hidden="true">
+		<div class="skeleton-profile-banner"></div>
+		<div class="skeleton-profile-hero-inner">
+			<div class="skeleton-profile-hero-row">
+				${skeletonCircle(96)}
+				<div style="display: flex; flex-direction: column; gap: 8px; flex: 1; min-width: 0;">
+					${skeletonLine('45%', 'skeleton-line--short')}
+					${skeletonLine('35%', 'skeleton-line--short')}
+				</div>
+			</div>
+			<div class="skeleton-profile-hero-stats">
+				${skeletonPill('64px', 44)}
+				${skeletonPill('48px', 44)}
+				${skeletonPill('90px', 44)}
+			</div>
+			<div class="skeleton-profile-hero-meta">
+				${skeletonLine('95%')}
+				${skeletonLine('85%', 'skeleton-line--medium')}
+				${skeletonLine('90%')}
+				${skeletonLine('70%', 'skeleton-line--medium')}
+				${skeletonLine('60%', 'skeleton-line--short')}
+				${skeletonLine('75%', 'skeleton-line--medium')}
+				${skeletonLine('50%', 'skeleton-line--short')}
+				${skeletonLine('40%', 'skeleton-line--short')}
+			</div>
+		</div>
+	</div>`;
+}
+
+/**
+ * @returns {string} HTML for profile tabs skeleton (row of pill placeholders)
+ */
+export function renderProfileTabsSkeleton() {
+	const count = 5;
+	const pills = Array.from({ length: count }, () => skeletonPill('88px', 36)).join('');
+	return `<div class="skeleton-tabs" aria-hidden="true">${pills}</div>`;
+}
+
+/**
+ * @returns {string} HTML for full profile page skeleton (hero + tabs + grid)
+ */
+export function renderProfilePageSkeleton() {
+	return `<div class="skeleton-profile-page" aria-busy="true" aria-label="Loading">
+		${renderProfileHeroSkeleton()}
+		${renderProfileTabsSkeleton()}
+		<div class="skeleton-profile-grid-wrap route-cards content-cards-image-grid">
+			${renderGridSkeleton(25)}
+		</div>
+	</div>`;
+}
+
+/**
+ * @returns {string} HTML for one server card skeleton (title + description lines)
+ */
+export function renderServerCardSkeleton() {
+	return `<div class="skeleton-server-card" aria-hidden="true">
+		${skeletonLine('70%')}
+		${skeletonLine('90%', 'skeleton-line--medium')}
+	</div>`;
+}
+
+/**
+ * @param {number} [count] - Number of server card skeletons (default 4).
+ * @returns {string} HTML for N server card skeletons
+ */
+export function renderServerCardsSkeleton(count = 4) {
+	const n = Math.max(1, Math.min(8, Number(count) || 4));
+	return Array.from({ length: n }, () => renderServerCardSkeleton()).join('');
+}
+
+/**
+ * Chat #challenges pane — a few large blobs (no diagrammed fields).
+ * @returns {string} HTML skeleton (wrap in `.challenge-pane-root` in chat messages column)
+ */
+export function renderChallengePaneSkeleton() {
+	return `<div class="challenge-pane-skeleton" aria-hidden="true">
+		<span class="skeleton skeleton-line challenge-pane-skeleton-blob-title" style="width: 56%;" aria-hidden="true"></span>
+		<div class="challenge-pane-skeleton-strip"></div>
+		<div class="challenge-pane-skeleton-blob"></div>
+		<div class="challenge-pane-skeleton-blob challenge-pane-skeleton-blob--short"></div>
+	</div>`;
+}
+
+/**
+ * Blank organize card shell (rounded blob).
+ * @returns {string}
+ */
+export function renderChallengesOrganizeCardSkeleton() {
+	return `<div class="skeleton challenges-organize-card challenges-organize-card--skeleton" aria-hidden="true"></div>`;
+}
+
+/**
+ * `/challenges/organize` board skeleton — a few header + card blobs only.
+ * @returns {string}
+ */
+export function renderChallengesOrganizeBoardSkeleton() {
+	const header = (width) =>
+		`<span class="skeleton skeleton-line challenges-organize-skeleton-header" style="width: ${width};" aria-hidden="true"></span>`;
+	const card = () => renderChallengesOrganizeCardSkeleton();
+	return `<div class="challenges-organize-board challenges-organize-board--skeleton" aria-hidden="true">
+		<section class="challenges-organize-current">
+			${header('72px')}
+			<div class="challenges-organize-card-list challenges-organize-card-list--main">
+				${card()}
+				${card()}
+			</div>
+		</section>
+		<section class="challenges-organize-draft">
+			${header('56px')}
+			<div class="challenges-organize-card-list">
+				${card()}
+			</div>
+		</section>
+		<section class="challenges-organize-past">
+			${header('48px')}
+			<div class="challenges-organize-card-list">
+				${card()}
+				${card()}
+			</div>
+		</section>
+	</div>`;
+}
+
+/**
+ * One chat message row skeleton (meta + bubble lines) for thread/DM/channel loading.
+ * @param {string[]} [lineWidths]
+ * @returns {string}
+ */
+export function renderChatThreadMessageSkeleton(lineWidths = ['72%', '48%']) {
+	const lines = (Array.isArray(lineWidths) ? lineWidths : ['72%'])
+		.map((width) => skeletonLine(width))
+		.join('');
+	return `<div class="skeleton-chat-msg-row" aria-hidden="true">
+		<div class="skeleton-chat-msg-inner">
+			<div class="skeleton-chat-msg-meta">
+				${skeletonCircle(28)}
+				${skeletonLine('34%', 'skeleton-line--short')}
+				${skeletonLine('16%', 'skeleton-line--short')}
+			</div>
+			<div class="skeleton-chat-msg-bubble">${lines}</div>
+		</div>
+	</div>`;
+}
+
+/**
+ * Row count for chat thread loading skeleton (taller desktop panes need more rows).
+ * @returns {number}
+ */
+export function chatThreadSkeletonRowCount() {
+	if (typeof window === 'undefined') return 12;
+	const isDesktop = window.matchMedia(
+		'(min-width: 1024px) and (hover: hover) and (pointer: fine)'
+	).matches;
+	if (!isDesktop) return 12;
+	const host =
+		document.querySelector('[data-chat-messages]') ||
+		document.querySelector('.chat-page-messages');
+	const h = host instanceof HTMLElement ? host.clientHeight : 0;
+	const paneH = h > 0 ? h : window.innerHeight;
+	// Meta row + 1–2 bubble lines + padding/gap (see `.skeleton-chat-msg-row`).
+	const estimatedRowPx = 54;
+	return Math.max(18, Math.min(32, Math.ceil(paneH / estimatedRowPx)));
+}
+
+/**
+ * @param {number} [count]
+ * @returns {string}
+ */
+export function renderChatThreadSkeleton(count) {
+	const lineSets = [
+		['78%', '52%'],
+		['64%'],
+		['88%', '60%', '40%'],
+		['55%'],
+		['70%', '45%'],
+		['50%'],
+	];
+	const n = Math.max(1, Math.min(32, Number(count) || chatThreadSkeletonRowCount()));
+	return `<div class="skeleton-chat-thread" aria-hidden="true">${Array.from({ length: n }, (_, i) =>
+		renderChatThreadMessageSkeleton(lineSets[i % lineSets.length])
+	).join('')}</div>`;
+}

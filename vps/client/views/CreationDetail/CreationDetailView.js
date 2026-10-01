@@ -2,6 +2,30 @@ import template from './CreationDetailView.html';
 import './CreationDetailView.css';
 import * as hostedAudioPlayerMod from '../../shared/hostedAudioPlayer.js';
 import * as creationGpuWaitMod from '../../shared/creationGpuWait.js';
+import { confirmGpuOccupancyIfNeeded } from '../../shared/gpuOccupancy.js';
+import * as datetimeBundledMod from '../../shared/datetime.js';
+import * as apiBundledMod from '../../shared/api.js';
+import * as iconsBundledMod from '../../icons/svg-strings.js';
+import * as nsfwBundledMod from '../../shared/nsfwView.js';
+import * as triggeredSuggestBundledMod from '../../shared/triggeredSuggest.js';
+import * as likesBundledMod from '../../shared/likes.js';
+import * as aspectRatioBundledMod from '../../shared/aspectRatio.js';
+import * as avatarBundledMod from '../../shared/avatar.js';
+import * as commentsBundledMod from '../../shared/comments.js';
+import { creationDetailDependencies } from './dependencies.js';
+import * as creationCommentsThreadBundledMod from '../../shared/creationCommentsThread.js';
+import * as creationDetailEmbedShellBundledMod from '../../shared/creationDetailEmbedShell.js';
+import * as queueFromFrameBundledMod from '../../shared/queueFromFrameModal.js';
+import * as shareAudioBundledMod from '../../shared/shareAudioModal.js';
+import * as adjustImageBundledMod from '../../shared/adjustImageModal.js';
+import * as creationDetailSeedBundledMod from '../../shared/creationDetailSeed.js';
+import * as mutateQueueSyncBundledMod from '../../shared/mutateQueueSync.js';
+import * as createPageRuntimeBundledMod from '../../shared/createPageRuntime.js';
+import * as sequentialVideoPlayerBundledMod from '../../shared/sequentialVideoPlayer.js';
+import * as postedCreationAccessBundledMod from '../../shared/postedCreationAccess.js';
+import * as challengeSubmitContextBundledMod from '../../shared/challengeSubmitContext.js';
+import * as saveVideoFirstFramePosterBundledMod from '../../shared/saveVideoFirstFramePoster.js';
+import * as challengeSubmitPickerBundledMod from '../../shared/challengeSubmitPicker.js';
 
 let formatDateTime;
 let formatRelativeTime;
@@ -103,13 +127,6 @@ function invalidateCreatorProfileCache(userId) {
 	}
 }
 
-const _creationDetailRuntimeQs = (() => {
-	const meta = document.querySelector('meta[name="asset-version"]');
-	const v = meta?.getAttribute('content')?.trim() || '';
-	return v ? `?v=${encodeURIComponent(v)}` : '';
-})();
-
-
 const {
 	creationGpuWaitMarkup,
 	creationLinePlace,
@@ -125,37 +142,33 @@ function isCreationDetailEmbed() {
 	return window.__ps_creation_detail_embed === true;
 }
 
-/** @type {Promise<typeof import('/shared/creationDetailRuntime.js')> | null} */
-let creationDetailRuntimeReady = null;
+let activeCreationDetailId = null;
+let activeCreationDetailSeed = null;
+let activeCreationDetailNavigate = null;
+const creationDetailDocumentListeners = [];
 
-function ensureCreationDetailRuntime() {
-	if (!creationDetailRuntimeReady) {
-		creationDetailRuntimeReady = import(`/shared/creationDetailRuntime.js${_creationDetailRuntimeQs}`)
-			.then((mod) => {
-				mod.bindCreationDetailHashtagClicks();
-				mod.bindCreationDetailEmbedNavigation();
-				mod.bindCreationDetailEmbedEscape(creationDetailPageHasOpenEscapeTarget);
-				mod.registerCreationDetailRefreshHandler(loadCreation);
-				return mod;
-			})
-			.catch((err) => {
-				creationDetailRuntimeReady = null;
-				console.error('[creation-detail] failed to load embed runtime', err);
-				throw err;
-			});
-	}
-	return creationDetailRuntimeReady;
+function addCreationDetailDocumentListener(type, listener, options) {
+	creationDetailDocumentListeners.push([type, listener, options]);
 }
 
-async function refreshAfterMutation(reason, options) {
-	const mod = await ensureCreationDetailRuntime();
-	return mod.refreshAfterMutation(reason, options);
+async function refreshAfterMutation(_reason, options = {}) {
+	apiBundledMod.invalidateAppCaches({
+		tags: ['creations', 'feed', 'explore'],
+		urls: ['/api/create/images'],
+	});
+	if (options.skipContentRefresh !== true) {
+		await loadCreation();
+	}
 }
 
 function navigateCreationDetail(href) {
 	const raw = String(href || '').trim();
 	if (!raw || raw.startsWith('#')) return;
-	void ensureCreationDetailRuntime().then((mod) => mod.navigate(raw));
+	if (activeCreationDetailNavigate) {
+		activeCreationDetailNavigate(raw);
+		return;
+	}
+	window.location.assign(raw);
 }
 
 function shellOut(href) {
@@ -238,9 +251,9 @@ function getImportQuery(version) {
 	return version && typeof version === 'string' ? `?v=${encodeURIComponent(version)}` : '';
 }
 
-/** @type {typeof import('/shared/chatInlineImageLightbox.js') | null} */
+/** @type {object | null} */
 let creationDetailInlineLightboxMod = null;
-/** @type {typeof import('/shared/safeMediaPlay.js').safeMediaPlay | null} */
+/** @type {Function | null} */
 let safeMediaPlay = null;
 
 async function hydrateCreationDetailAudioClips(root) {
@@ -287,71 +300,34 @@ async function hydrateCreationDetailAudioClips(root) {
 	);
 }
 
-let _depsPromise;
-async function loadDeps() {
-	if (_depsPromise) return _depsPromise;
-	const v = getAssetVersionParam();
-	const qs = getImportQuery(v);
-	_depsPromise = (async () => {
-		const [
-			datetimeMod,
-			likesMod,
-			apiMod,
-			avatarMod,
-			commentsMod,
-			replyUiMod,
-			userTextMod,
-			lightboxMod,
-			safeMediaPlayMod,
-			autogrowMod,
-			suggestMod,
-			textCompareMod,
-			profileLinksMod,
-			nsfwMod,
-			mutateQueueMod,
-			toastMod,
-			iconsMod,
-			replyPreviewMod,
-			emptyStateMod,
-			skeletonMod,
-			creationCardMod,
-			challengeMetaMod,
-			organizerRefMod,
-			routeCardGroupMod,
-			commentItemMod,
-			createSubmitMod,
-			aspectRatioMod,
-			audioCoverWaveformMod,
-		] = await Promise.all([
-			import(`/shared/datetime.js${qs}`),
-			import(`/shared/likes.js${qs}`),
-			import(`/shared/api.js${qs}`),
-			import(`/shared/avatar.js${qs}`),
-			import(`/shared/comments.js${qs}`),
-			import(`/shared/replyIndicatorUi.js${qs}`),
-			import(`/shared/userText.js${qs}`),
-			import(`/shared/chatInlineImageLightbox.js${qs}`),
-			import(`/shared/safeMediaPlay.js${qs}`),
-			import(`/shared/autogrow.js${qs}`),
-			import(`/shared/triggeredSuggest.js${qs}`),
-			import(`/shared/textCompare.js${qs}`),
-			import(`/shared/profileLinks.js${qs}`),
-			import(`/shared/nsfwView.js${qs}`),
-			import(`/shared/mutateQueue.js${qs}`),
-			import(`/shared/toast.js${qs}`),
-			import(`/icons/svg-strings.js${qs}`),
-			import(`/shared/plainTextReplyPreview.js${qs}`),
-			import(`/shared/emptyState.js${qs}`),
-			import(`/shared/skeleton.js${qs}`),
-			import(`/shared/creationCard.js${qs}`),
-			import(`/shared/challengeSubmitMeta.js${qs}`),
-			import(`/shared/challengeOrganizerRefMeta.js${qs}`),
-			import(`/shared/routeCardGroupMedia.js${qs}`),
-			import(`/shared/commentItem.js${qs}`),
-			import(`/shared/createSubmit.js${qs}`),
-			import(`/shared/aspectRatio.js${qs}`),
-			import(`/shared/audioCoverWaveform.js${qs}`),
-		]);
+const datetimeMod = datetimeBundledMod;
+const likesMod = likesBundledMod;
+const apiMod = apiBundledMod;
+const avatarMod = avatarBundledMod;
+const commentsMod = commentsBundledMod;
+const replyUiMod = creationDetailDependencies.replyIndicatorUi;
+const userTextMod = creationDetailDependencies.userText;
+const lightboxMod = creationDetailDependencies.chatInlineImageLightbox;
+const safeMediaPlayMod = creationDetailDependencies.safeMediaPlay;
+const autogrowMod = creationDetailDependencies.autogrow;
+const suggestMod = triggeredSuggestBundledMod;
+const textCompareMod = creationDetailDependencies.textCompare;
+const profileLinksMod = creationDetailDependencies.profileLinks;
+const nsfwMod = nsfwBundledMod;
+const mutateQueueMod = creationDetailDependencies.mutateQueue;
+const toastMod = creationDetailDependencies.toast;
+const iconsMod = iconsBundledMod;
+const replyPreviewMod = creationDetailDependencies.plainTextReplyPreview;
+const emptyStateMod = creationDetailDependencies.emptyState;
+const skeletonMod = creationDetailDependencies.skeleton;
+const creationCardMod = creationDetailDependencies.creationCard;
+const challengeMetaMod = creationDetailDependencies.challengeSubmitMeta;
+const organizerRefMod = creationDetailDependencies.challengeOrganizerRefMeta;
+const routeCardGroupMod = creationDetailDependencies.routeCardGroupMedia;
+const commentItemMod = creationDetailDependencies.commentItem;
+const createSubmitMod = creationDetailDependencies.createSubmit;
+const aspectRatioMod = aspectRatioBundledMod;
+const audioCoverWaveformMod = creationDetailDependencies.audioCoverWaveform;
 
 		formatDateTime = datetimeMod.formatDateTime;
 		formatRelativeTime = datetimeMod.formatRelativeTime;
@@ -451,38 +427,11 @@ async function loadDeps() {
 		creationMediaType = audioCoverWaveformMod.creationMediaType;
 		audioCoverWaveformHtml = audioCoverWaveformMod.audioCoverWaveformHtml;
 		mountAudioCoverWaveform = audioCoverWaveformMod.mountAudioCoverWaveform;
-		removeAudioCoverWaveform = audioCoverWaveformMod.removeAudioCoverWaveform;
-	})();
-	return _depsPromise;
-}
-
-let _ownerToolDepsPromise;
-async function ensureOwnerToolDeps() {
-	await loadDeps();
-	if (
-		typeof openQueueFromFrameModal === 'function' &&
-		typeof captureVideoFirstFrameFile === 'function' &&
-		typeof openShareAudioModal === 'function' &&
-		typeof openAdjustImageModal === 'function'
-	) {
-		return;
-	}
-	if (_ownerToolDepsPromise) return _ownerToolDepsPromise;
-	const v = getAssetVersionParam();
-	const qs = getImportQuery(v);
-	_ownerToolDepsPromise = (async () => {
-		const [queueFromFrameMod, shareAudioMod, adjustImageMod] = await Promise.all([
-			import(`/shared/queueFromFrameModal.js${qs}`),
-			import(`/shared/shareAudioModal.js${qs}`),
-			import(`/shared/adjustImageModal.js${qs}`),
-		]);
-		openQueueFromFrameModal = queueFromFrameMod.openQueueFromFrameModal;
-		captureVideoFirstFrameFile = queueFromFrameMod.captureVideoFirstFrameFile;
-		openShareAudioModal = shareAudioMod.openShareAudioModal;
-		openAdjustImageModal = adjustImageMod.openAdjustImageModal;
-	})();
-	return _ownerToolDepsPromise;
-}
+	removeAudioCoverWaveform = audioCoverWaveformMod.removeAudioCoverWaveform;
+	openQueueFromFrameModal = queueFromFrameBundledMod.openQueueFromFrameModal;
+	captureVideoFirstFrameFile = queueFromFrameBundledMod.captureVideoFirstFrameFile;
+	openShareAudioModal = shareAudioBundledMod.openShareAudioModal;
+	openAdjustImageModal = adjustImageBundledMod.openAdjustImageModal;
 
 const html = String.raw;
 
@@ -524,7 +473,7 @@ const CREATION_COMMENTS_TOOLBAR_HTML = `<div class="comments-toolbar">
 	</div>
 </div>`;
 
-/** Static skeleton for detail content — safe before loadDeps() and for SSR first paint. */
+/** Static skeleton for detail content and SSR first paint. */
 const CREATION_DETAIL_CONTENT_SKELETON_HTML = `<div class="creation-detail-skeleton" aria-label="Loading" aria-busy="true">
 	<div class="creation-detail-title-row">
 		<div class="skeleton skeleton-line" style="width: 72%; max-width: 320px;"></div>
@@ -577,11 +526,7 @@ const CREATION_DETAIL_COMMENTS_SKELETON_HTML = `<div class="creation-detail-skel
 </div>`;
 
 function notifyCreationDetailEmbedReady() {
-	if (!isCreationDetailEmbed()) return;
-	const qs = getImportQuery(getAssetVersionParam());
-	void import(`/shared/embedPageRuntime.js${qs}`).then((mod) => {
-		mod.notifySpaPageOverlayEmbedReady();
-	});
+	// Creation detail is mounted natively by the VPS layout; no iframe handshake is needed.
 }
 
 function creationDetailStripChildKey(el) {
@@ -951,8 +896,7 @@ async function writeMutateSeedFromOpenDetail(extra = {}) {
 	const creationId = getCreationId();
 	if (!creationId || !lastCreationMeta) return;
 	try {
-		const qs = getImportQuery(getAssetVersionParam());
-		const seedMod = await import(`/shared/creationDetailSeed.js${qs}`);
+		const seedMod = creationDetailSeedBundledMod;
 		const fromMeta = seedMod.feedItemToCreationDetailSeed(lastCreationMeta);
 		const prev = seedMod.readCreationDetailSeed(creationId);
 		const next = fromMeta && prev ? seedMod.mergeCreationDetailSeeds(fromMeta, prev) : fromMeta || prev;
@@ -1345,7 +1289,6 @@ function creationDetailCopyLabelRowHtml(label, dataAttr) {
 }
 
 async function handleRecreateInAdvanced() {
-	await loadDeps();
 	const creation = lastCreationMeta;
 	if (!creation) return;
 
@@ -1375,9 +1318,8 @@ async function handleRecreateInAdvanced() {
 		recreateMeta.style && typeof recreateMeta.style === 'object' ? recreateMeta.style : null;
 	const styleKey = typeof styleMeta?.key === 'string' ? styleMeta.key.trim() : '';
 
-	const qs = getImportQuery(getAssetVersionParam());
-	const mutateQueueSyncMod = await import(`/shared/mutateQueueSync.js${qs}`);
-	const createPageRuntimeMod = await import(`/shared/createPageRuntime.js${qs}`);
+	const mutateQueueSyncMod = mutateQueueSyncBundledMod;
+	const createPageRuntimeMod = createPageRuntimeBundledMod;
 	const synced = mutateQueueSyncMod.syncCreationDetailToAdvancedCreate({
 		serverId: recreateMeta.server_id,
 		methodKey: typeof recreateMeta.method === 'string' ? recreateMeta.method : '',
@@ -1990,6 +1932,7 @@ function isCreationDetailPagePathname(pathname) {
 }
 
 function getCreationId() {
+	if (Number.isFinite(activeCreationDetailId) && activeCreationDetailId > 0) return activeCreationDetailId;
 	// Only use injected share context while we're actually on a share-mounted URL.
 	// Otherwise it "sticks" across navigation and breaks header/mobile nav routing.
 	if (isShareMountedView()) {
@@ -2063,7 +2006,7 @@ function recordTransitionFromQuery(currentCreationId) {
 			const url = new URL(window.location.href);
 			url.searchParams.delete('from');
 			const newUrl = url.pathname + (url.search ? url.search : '') + (url.hash || '');
-			window.history.replaceState(window.history.state, '', newUrl);
+			activeCreationDetailNavigate?.(newUrl, { replace: true });
 		}
 	}).catch(() => { });
 }
@@ -2243,10 +2186,6 @@ function initRelatedSection(root, currentCreationId, options = {}) {
 		if (hasMore) observeSentinel();
 	});
 }
-
-// Store original history methods before anything else modifies them
-const originalPushState = history.pushState.bind(history);
-const originalReplaceState = history.replaceState.bind(history);
 
 if (window.history && 'scrollRestoration' in window.history) {
 	window.history.scrollRestoration = 'manual';
@@ -2461,6 +2400,11 @@ function clearCreationDetailSunoPlayer(imageWrapper) {
 			? imageWrapper
 			: document.querySelector('[data-image]')?.closest?.('.creation-detail-image-wrapper');
 	if (!(wrap instanceof HTMLElement)) return;
+	wrap.querySelectorAll('[data-hosted-audio] audio').forEach((audio) => {
+		audio.pause();
+		audio.removeAttribute('src');
+		audio.load();
+	});
 	wrap.classList.remove(
 		'hero-audio-pending',
 		'hero-audio-playing',
@@ -2493,14 +2437,16 @@ function getCreationHostedAudioUrl(creation, meta) {
 	const fromCreation =
 		typeof creation?.audio_url === 'string' ? creation.audio_url.trim() : '';
 	if (fromCreation) return fromCreation;
+	const id = Number(creation?.id);
 	const cdnId =
 		meta?.audio && typeof meta.audio === 'object' && typeof meta.audio.cdn_id === 'string'
 			? meta.audio.cdn_id.trim()
 			: '';
-	const id = Number(creation?.id);
-	if (cdnId && Number.isFinite(id) && id > 0) {
-		return `/api/create/images/${id}/audio`;
+	if (/^o_[a-f0-9]{24}$/.test(cdnId) && Number.isFinite(id) && id > 0) {
+		return `/api/creations/${id}/audio`;
 	}
+	const mediaUrl = typeof creation?.url === 'string' ? creation.url.trim() : '';
+	if (!cdnId && mediaUrl) return mediaUrl;
 	return '';
 }
 
@@ -3362,8 +3308,6 @@ async function loadCreation() {
 
 	if (!detailContent || !imageEl || !backgroundEl) return;
 
-	await loadDeps();
-
 	showCreationDetailContentSkeleton(detailContent);
 	const seedHeroVisible =
 		imageEl instanceof HTMLImageElement && Boolean(String(imageEl.getAttribute('src') || '').trim());
@@ -3944,9 +3888,7 @@ async function loadCreation() {
 		let startIndex = slides.findIndex((slide) => Number(slide.sourceId) === Number(initialSourceId));
 		if (startIndex < 0) startIndex = 0;
 
-		const v = getAssetVersionParam();
-		const qs = getImportQuery(v);
-		const mod = await import(`/shared/sequentialVideoPlayer.js${qs}`);
+		const mod = sequentialVideoPlayerBundledMod;
 		if (!isCurrentLoad() || typeof mod.mountSequentialVideoPlayer !== 'function') {
 			teardownGroupHeroVideoPlayer();
 			return false;
@@ -4159,7 +4101,7 @@ async function loadCreation() {
 		}
 		let postedProofQs = '';
 		try {
-			const proofMod = await import(`/shared/postedCreationAccess.js${getImportQuery(getAssetVersionParam())}`);
+			const proofMod = postedCreationAccessBundledMod;
 			const fromShare =
 				headers['x-share-version'] && headers['x-share-token']
 					? { shareVersion: headers['x-share-version'], shareToken: headers['x-share-token'] }
@@ -4181,9 +4123,7 @@ async function loadCreation() {
 		const apiQuery = new URLSearchParams(postedProofQs);
 		if (!isShareMountedView()) {
 			try {
-				const v = getAssetVersionParam();
-				const qs = getImportQuery(v);
-				const ctxMod = await import(`/shared/challengeSubmitContext.js${qs}`);
+				const ctxMod = challengeSubmitContextBundledMod;
 				const ctx = ctxMod.readChallengeSubmitContext?.();
 				if (ctx?.threadId) {
 					apiQuery.set('challenge_submit_thread', String(ctx.threadId));
@@ -4195,7 +4135,7 @@ async function loadCreation() {
 		const challengeSubmitQs = apiQuery.toString() ? `?${apiQuery.toString()}` : '';
 
 		const response = await perf.timeAsync('creationApi', 'fetch', () =>
-			fetch(`/api/create/images/${creationId}${challengeSubmitQs}`, {
+			fetch(`/api/creations/${creationId}${challengeSubmitQs}`, {
 				credentials: 'include',
 				cache: 'reload',
 				headers
@@ -4204,7 +4144,7 @@ async function loadCreation() {
 		if (!response.ok) {
 			if (response.status === 404) {
 				// eslint-disable-next-line no-console
-				console.error('[creation-detail] /api/create/images/:id returned 404; showing image-error', { creationId });
+				console.error('[creation-detail] /api/creations/:id returned 404; showing image-error', { creationId });
 				// Show image-error state (rectangle-with-slash icon), not loading animation
 				imageWrapper?.classList.remove('image-loading', 'nsfw', 'image-error-moderated');
 				imageWrapper?.classList.add('image-error');
@@ -4495,8 +4435,7 @@ async function loadCreation() {
 		const creationWithLikes = { ...creation, ...likeMeta, created_image_id: creationId };
 		lastCreationMeta = creation;
 		try {
-			const qs = getImportQuery(getAssetVersionParam());
-			const seedMod = await import(`/shared/creationDetailSeed.js${qs}`);
+			const seedMod = creationDetailSeedBundledMod;
 			const fromApi = seedMod.feedItemToCreationDetailSeed(creation);
 			const prev = seedMod.readCreationDetailSeed(creationId);
 			const next = fromApi && prev ? seedMod.mergeCreationDetailSeeds(fromApi, prev) : fromApi || prev;
@@ -4908,8 +4847,7 @@ async function loadCreation() {
 			actionsContext.showAdjustImage = false;
 			actionsContext.showChangeCover = false;
 		} else if (canEdit && !adminViewingUserDeleted) {
-			const qs = getImportQuery(getAssetVersionParam());
-			void import(`/shared/saveVideoFirstFramePoster.js${qs}`).then((mod) => {
+			void Promise.resolve(saveVideoFirstFramePosterBundledMod).then((mod) => {
 				if (!isCurrentLoad()) return;
 				if (typeof mod.maybeSaveVideoFirstFramePoster !== 'function') return;
 				const heroVideo = document.querySelector('video[data-video]');
@@ -4998,7 +4936,7 @@ async function loadCreation() {
 						: '';
 				const sourceAudioUrl =
 					sourceMediaType === 'audio' && sourceAudioCdn
-						? `/api/create/images/${sourceId}/audio`
+						? `/api/creations/${sourceId}/audio`
 						: '';
 				return {
 					id: sourceId,
@@ -5500,17 +5438,15 @@ async function loadCreation() {
 				);
 				canShowFollowButton = !viewerFollowsCreator;
 			}
-			void import(`/shared/creationDetailSeed.js${getImportQuery(getAssetVersionParam())}`)
-				.then((mod) => {
-					mod.writeCreatorStripCache?.({
+			try {
+				creationDetailSeedBundledMod.writeCreatorStripCache?.({
 						userId: creatorId,
 						plan: creatorPlan ? 'founder' : '',
 						followerCount: creatorFollowerCount,
 						avatarUrl: creatorAvatarUrl,
 						displayName: creatorName,
-					});
-				})
-				.catch(() => {});
+				});
+			} catch {}
 		}
 		perf.markReady('creatorProfile');
 
@@ -7130,19 +7066,13 @@ async function loadCreation() {
 		/** @type {string} */
 		let challengeSubmitSelectedId = '';
 
-		async function loadChallengeSubmitPickerMod() {
-			const v = getAssetVersionParam();
-			const qs = getImportQuery(v);
-			return import(`/shared/challengeSubmitPicker.js${qs}`);
+		function loadChallengeSubmitPickerMod() {
+			return challengeSubmitPickerBundledMod;
 		}
 
 		async function populateChallengeSubmitModal() {
-			const v = getAssetVersionParam();
-			const qs = getImportQuery(v);
-			const [pickerMod, ctxMod] = await Promise.all([
-				loadChallengeSubmitPickerMod(),
-				import(`/shared/challengeSubmitContext.js${qs}`)
-			]);
+			const pickerMod = loadChallengeSubmitPickerMod();
+			const ctxMod = challengeSubmitContextBundledMod;
 			const options = pickerMod.listChallengeSubmitOptions(lastCreationMeta?.challenge_submit);
 			const ctx = ctxMod.readChallengeSubmitContext?.() || null;
 			challengeSubmitSelectedId = pickerMod.resolveChallengeSubmitSelection(
@@ -7225,9 +7155,7 @@ async function loadCreation() {
 			btn.disabled = true;
 			btn.classList.add('is-loading');
 			try {
-				const v = getAssetVersionParam();
-				const qs = getImportQuery(v);
-				const ctxMod = await import(`/shared/challengeSubmitContext.js${qs}`);
+				const ctxMod = challengeSubmitContextBundledMod;
 				const ctx = ctxMod.readChallengeSubmitContext?.() || null;
 				const fromApi = Number(lastCreationMeta?.challenge_submit?.thread_id);
 				const fromCtx = Number(ctx?.threadId);
@@ -7640,7 +7568,6 @@ async function loadCreation() {
 					'queue-from-frame': async () => {
 						if (!showQueueFromFrame || !creation.video_url) return;
 						closeMobileMoreMenu();
-						await ensureOwnerToolDeps();
 						if (typeof openQueueFromFrameModal !== 'function') return;
 						openQueueFromFrameModal({
 							videoUrl: String(creation.video_url),
@@ -7654,7 +7581,6 @@ async function loadCreation() {
 					'adjust-image': async () => {
 						if (!actionsContext.showAdjustImage || !creation.url) return;
 						closeMobileMoreMenu();
-						await ensureOwnerToolDeps();
 						if (typeof openAdjustImageModal !== 'function') return;
 						openAdjustImageModal({
 							imageUrl: String(creation.url),
@@ -7691,7 +7617,6 @@ async function loadCreation() {
 					'set-video-poster': async () => {
 						if (!actionsContext.showSetVideoPoster || !creation.video_url) return;
 						closeMobileMoreMenu();
-						await ensureOwnerToolDeps();
 						if (typeof captureVideoFirstFrameFile !== 'function') return;
 						try {
 							showToast('Saving poster…');
@@ -7739,7 +7664,6 @@ async function loadCreation() {
 					'share-audio': async () => {
 						if (!showShareAudio || !creation.video_url) return;
 						closeMobileMoreMenu();
-						await ensureOwnerToolDeps();
 						if (typeof openShareAudioModal !== 'function') return;
 						openShareAudioModal({
 							creationId: Number(creationId),
@@ -8204,13 +8128,12 @@ async function loadCreation() {
 		const commentsHost = detailContent.querySelector('[data-creation-comments-host]');
 		if (commentsHost instanceof HTMLElement) {
 			perf.expectReady('comments');
-			const threadQs = getImportQuery(getAssetVersionParam());
 			const threadMod = await perf.timeAsync('comments', 'importModule', () =>
-				import(`/shared/creationCommentsThread.js${threadQs}`)
+				Promise.resolve(creationCommentsThreadBundledMod)
 			);
 			// Mirror likes: when the comment count changes here, tell the overlay
 			// shell so the underlying feed/explore card count updates on return.
-			const embedShellMod = await import(`/shared/creationDetailEmbedShell.js${threadQs}`);
+			const embedShellMod = creationDetailEmbedShellBundledMod;
 			let lastSyncedCommentCount = null;
 			await perf.timeAsync('comments', 'mount', () =>
 				threadMod.mountCreationCommentsThread(commentsHost, {
@@ -8338,6 +8261,8 @@ function paintCreationDetailFromSeed(seed, detailContent, imageEl, chromeHtmlFro
 	if (!seed || typeof seed !== 'object') return false;
 	const imgUrl =
 		(typeof seed.image_url === 'string' && seed.image_url.trim()) ||
+		(typeof seed.url === 'string' && seed.url.trim()) ||
+		(typeof seed.fit_thumbnail_url === 'string' && seed.fit_thumbnail_url.trim()) ||
 		(typeof seed.thumbnail_url === 'string' && seed.thumbnail_url.trim()) ||
 		'';
 	const wrap = imageEl instanceof HTMLImageElement ? imageEl.closest?.('.creation-detail-image-wrapper') : null;
@@ -8401,12 +8326,18 @@ async function checkAndLoadCreation() {
 		const detailContent = document.querySelector('[data-detail-content]');
 		const imageEl = document.querySelector('[data-image]');
 		let paintedSeed = false;
+		if (activeCreationDetailSeed && Number(activeCreationDetailSeed.id) === Number(creationId)) {
+			paintedSeed = paintCreationDetailFromSeed(
+				activeCreationDetailSeed,
+				detailContent,
+				imageEl,
+				null,
+				null
+			);
+		}
 		try {
-			const qs = getImportQuery(getAssetVersionParam());
-			const [seedMod, aspectMod] = await Promise.all([
-				import(`/shared/creationDetailSeed.js${qs}`),
-				import(`/shared/aspectRatio.js${qs}`),
-			]);
+			const seedMod = creationDetailSeedBundledMod;
+			const aspectMod = aspectRatioBundledMod;
 			const seed = seedMod.readCreationDetailSeed(creationId);
 			if (seed) {
 				paintedSeed = paintCreationDetailFromSeed(
@@ -8430,10 +8361,9 @@ async function checkAndLoadCreation() {
 			});
 		}
 	}
-	await loadDeps();
 	if (creationId && creationId !== currentCreationId) {
 		currentCreationId = creationId;
-		loadCreation();
+		await loadCreation();
 	} else if (!creationId && currentCreationId !== null) {
 		// If we're no longer on a creation detail page, reset
 		// console.log('No longer on creation detail page');
@@ -8445,7 +8375,6 @@ async function checkAndLoadCreation() {
 async function bootCreationDetailPage() {
 	bindCreationDetailHeroPlaybackPagehide();
 	bindCreationDetailEmbedStopPlaybackFromParent();
-	await ensureCreationDetailRuntime();
 	await checkAndLoadCreation();
 }
 
@@ -8456,25 +8385,45 @@ let creationDetailViewMounted = false;
  * The full legacy fragment is mounted first; the existing page runtime then boots
  * against the document as it did when this was a standalone page.
  */
-export async function renderCreationDetailView({ outlet, initialSeed = null, setHeaderMenu } = {}) {
-	if (!(outlet instanceof HTMLElement)) return () => {};
+export function renderCreationDetailView({ outlet, creationId, initialSeed = null, onNavigate } = {}) {
+	if (!(outlet instanceof HTMLElement)) return { destroy() {} };
+	const id = Number(creationId);
+	if (!Number.isFinite(id) || id <= 0) return { destroy() {} };
+	const listenerController = new AbortController();
 	creationDetailViewMounted = true;
+	activeCreationDetailId = id;
+	activeCreationDetailSeed = initialSeed;
+	activeCreationDetailNavigate = onNavigate || null;
 	window.__VPS_CREATION_DETAIL_SEED__ = initialSeed;
 	document.body.classList.add('creation-detail-page');
 	outlet.innerHTML = template;
 	document.title = 'Creation · parascene beta';
-	setHeaderMenu?.({ label: 'Creation', items: [] });
-	await bootCreationDetailPage();
-	return () => {
+	for (const [type, listener, options] of creationDetailDocumentListeners) {
+		document.addEventListener(type, listener, { ...(typeof options === 'object' ? options : {}), signal: listenerController.signal });
+	}
+	const backgroundReady = bootCreationDetailPage().catch((error) => {
+		if (!creationDetailViewMounted || activeCreationDetailId !== id) return;
+		console.error('[creation-detail] view boot failed', error);
+	});
+	return {
+		backgroundReady,
+		hasOpenEscapeTarget: creationDetailPageHasOpenEscapeTarget,
+		destroy() {
+		listenerController.abort();
+		clearCreationDetailSunoPlayer(outlet.querySelector('.creation-detail-image-wrapper'));
 		creationDetailViewMounted = false;
+		activeCreationDetailId = null;
+		activeCreationDetailSeed = null;
+		activeCreationDetailNavigate = null;
+		currentCreationId = null;
 		if (window.__VPS_CREATION_DETAIL_SEED__) delete window.__VPS_CREATION_DETAIL_SEED__;
 		document.body.classList.remove('creation-detail-page');
-		setHeaderMenu?.();
 		outlet.replaceChildren();
+		},
 	};
 }
 
-document.addEventListener('creation-video-placeholder-updated', (event) => {
+addCreationDetailDocumentListener('creation-video-placeholder-updated', (event) => {
 	const detail = event?.detail || {};
 	const updatedId = Number(detail.creationId);
 	const pageId = Number(getCreationId());
@@ -8483,7 +8432,7 @@ document.addEventListener('creation-video-placeholder-updated', (event) => {
 });
 
 // Open modal when publish button is clicked
-document.addEventListener('click', (e) => {
+addCreationDetailDocumentListener('click', (e) => {
 	const publishBtn = e.target.closest('[data-publish-btn]');
 	if (publishBtn && !publishBtn.disabled) {
 		e.preventDefault();
@@ -8495,7 +8444,7 @@ document.addEventListener('click', (e) => {
 });
 
 // Delete button handler
-document.addEventListener('click', (e) => {
+addCreationDetailDocumentListener('click', (e) => {
 	const deleteBtn = e.target.closest('[data-delete-btn]');
 	if (deleteBtn && !deleteBtn.disabled) {
 		e.preventDefault();
@@ -8504,7 +8453,7 @@ document.addEventListener('click', (e) => {
 });
 
 // Edit button handler
-document.addEventListener('click', (e) => {
+addCreationDetailDocumentListener('click', (e) => {
 	const editBtn = e.target.closest('[data-edit-btn]');
 	if (editBtn && !editBtn.disabled) {
 		e.preventDefault();
@@ -8516,7 +8465,7 @@ document.addEventListener('click', (e) => {
 });
 
 // Un-publish button handler
-document.addEventListener('click', (e) => {
+addCreationDetailDocumentListener('click', (e) => {
 	const unpublishBtn = e.target.closest('[data-unpublish-btn]');
 	if (unpublishBtn && !unpublishBtn.disabled) {
 		e.preventDefault();
@@ -8525,7 +8474,7 @@ document.addEventListener('click', (e) => {
 });
 
 // Check again: peek Blue for a timed-out creation (not a new generate).
-document.addEventListener('click', (e) => {
+addCreationDetailDocumentListener('click', (e) => {
 	const checkBtn = e.target.closest('[data-check-again-btn]');
 	if (checkBtn && !checkBtn.disabled) {
 		e.preventDefault();
@@ -8534,7 +8483,7 @@ document.addEventListener('click', (e) => {
 });
 
 // Retry button handler
-document.addEventListener('click', (e) => {
+addCreationDetailDocumentListener('click', (e) => {
 	const retryBtn = e.target.closest('[data-retry-btn]');
 	if (retryBtn && !retryBtn.disabled) {
 		e.preventDefault();
@@ -8543,7 +8492,7 @@ document.addEventListener('click', (e) => {
 });
 
 // Mutate button handler
-document.addEventListener('click', (e) => {
+addCreationDetailDocumentListener('click', (e) => {
 	const mutateBtn = e.target.closest('[data-mutate-btn]');
 	if (mutateBtn && !mutateBtn.disabled) {
 		e.preventDefault();
@@ -8572,7 +8521,7 @@ document.addEventListener('click', (e) => {
 });
 
 // Share button handler — prefetch Vynly status so the share modal can show the Vynly row before it opens.
-document.addEventListener('click', async (e) => {
+addCreationDetailDocumentListener('click', async (e) => {
 	const shareBtn = e.target.closest('[data-share-btn]');
 	if (shareBtn && !shareBtn.disabled) {
 		e.preventDefault();
@@ -9298,7 +9247,7 @@ if (debugCopiedSend) {
 	debugCopiedSend.addEventListener('click', () => void sendSupportReport());
 }
 
-document.addEventListener('click', (e) => {
+addCreationDetailDocumentListener('click', (e) => {
 	const landscapeBtn = e.target.closest('[data-landscape-btn]');
 	if (!landscapeBtn || landscapeBtn.disabled) return;
 	e.preventDefault();
@@ -9421,8 +9370,7 @@ async function handleRetry() {
 
 	let retryArgs = args || {};
 	try {
-		const occMod = await import('/shared/gpuOccupancy.js');
-		const occupancy = await occMod.confirmGpuOccupancyIfNeeded({
+		const occupancy = await confirmGpuOccupancyIfNeeded({
 			serverId,
 			method,
 			args: args || {},
@@ -9542,76 +9490,4 @@ async function handleUnpublish() {
 			unpublishBtn.disabled = false;
 		}
 	}
-}
-
-// Listen for URL changes (browser back/forward navigation)
-// Use capture phase to ensure we get the event before header handles it
-window.addEventListener('popstate', (e) => {
-	// console.log('popstate event fired', window.location.pathname);
-	if (creationDetailInlineLightboxMod?.closeChatInlineImageLightboxFromPopstateIfOpen?.()) {
-		return;
-	}
-	// Embed overlay: parent shell owns the history stack; don't reload from iframe popstate alone.
-	if (isCreationDetailEmbed()) {
-		return;
-	}
-	const creationId = getCreationId();
-	if (creationId) {
-		checkAndLoadCreation();
-		return;
-	}
-	navigateToCurrentUrlIfLeftCreationDetail();
-}, true);
-
-// Override pushState and replaceState to detect programmatic navigation
-history.pushState = function (...args) {
-	// console.log('pushState called', args);
-	originalPushState(...args);
-	// Check if URL changed to a different creation
-	setTimeout(() => {
-		const creationId = getCreationId();
-		// console.log('After pushState, creationId:', creationId);
-		if (creationId) {
-			checkAndLoadCreation();
-		}
-	}, 0);
-};
-
-history.replaceState = function (...args) {
-	// console.log('replaceState called', args);
-	originalReplaceState(...args);
-	setTimeout(() => {
-		const creationId = getCreationId();
-		// console.log('After replaceState, creationId:', creationId);
-		if (creationId) {
-			checkAndLoadCreation();
-		}
-	}, 0);
-};
-
-// Listen for the route-change event from the header component
-document.addEventListener('route-change', (e) => {
-	// console.log('route-change event fired', e.detail?.route);
-	const route = e.detail?.route;
-	if (route && route.startsWith('creations/')) {
-		checkAndLoadCreation();
-	}
-});
-
-// Also monitor pathname changes directly as a fallback
-let lastPathname = window.location.pathname;
-if (!isCreationDetailEmbed()) {
-	const pathnameCheck = setInterval(() => {
-		const currentPathname = window.location.pathname;
-		if (currentPathname !== lastPathname) {
-			lastPathname = currentPathname;
-			const creationId = getCreationId();
-			if (creationId) {
-				checkAndLoadCreation();
-			} else {
-				clearInterval(pathnameCheck);
-				navigateToCurrentUrlIfLeftCreationDetail();
-			}
-		}
-	}, 100);
 }

@@ -1,57 +1,19 @@
 import './account-menu.js';
-
-let fetchJsonWithStatusDeduped;
-let invalidateAppCaches;
-let getNsfwContentEnabled;
-let setNsfwContentEnabled;
-let getNsfwObscure;
-let setNsfwObscure;
-let applyNsfwPreference;
-let NSFW_VIEW_BODY_CLASS;
-let hydrateChatAudibleNotificationsFromServer;
-let setChatAudibleNotificationsEnabled;
-let clearChatAudibleNotificationsStorage;
-let setFeedBetaEnabledClient;
-let feedBetaActiveFromProfile;
-
-function getAssetVersionParam() {
-	const meta = document.querySelector('meta[name="asset-version"]');
-	return meta?.getAttribute('content')?.trim() || '';
-}
-
-function getImportQuery(version) {
-	return version && typeof version === 'string' ? `?v=${encodeURIComponent(version)}` : '';
-}
-
-let _depsPromise;
-async function loadDeps() {
-	if (_depsPromise) return _depsPromise;
-	const v = getAssetVersionParam();
-	const qs = getImportQuery(v);
-	_depsPromise = (async () => {
-		const apiMod = await import(`../../shared/api.js${qs}`);
-		fetchJsonWithStatusDeduped = apiMod.fetchJsonWithStatusDeduped;
-		invalidateAppCaches = apiMod.invalidateAppCaches;
-
-		const nsfwMod = await import(`../../shared/nsfwView.js${qs}`);
-		getNsfwContentEnabled = nsfwMod.getNsfwContentEnabled;
-		setNsfwContentEnabled = nsfwMod.setNsfwContentEnabled;
-		getNsfwObscure = nsfwMod.getNsfwObscure;
-		setNsfwObscure = nsfwMod.setNsfwObscure;
-		applyNsfwPreference = nsfwMod.applyNsfwPreference;
-		NSFW_VIEW_BODY_CLASS = nsfwMod.NSFW_VIEW_BODY_CLASS;
-
-		const chatAudiblePrefMod = await import(`../../shared/chatAudibleNotificationsPref.js${qs}`);
-		hydrateChatAudibleNotificationsFromServer = chatAudiblePrefMod.hydrateChatAudibleNotificationsFromServer;
-		setChatAudibleNotificationsEnabled = chatAudiblePrefMod.setChatAudibleNotificationsEnabled;
-		clearChatAudibleNotificationsStorage = chatAudiblePrefMod.clearChatAudibleNotificationsStorage;
-
-		const feedBetaNavMod = await import(`../../shared/feedBetaNav.js${qs}`);
-		setFeedBetaEnabledClient = feedBetaNavMod.setFeedBetaEnabledClient;
-		feedBetaActiveFromProfile = feedBetaNavMod.feedBetaActiveFromProfile;
-	})();
-	return _depsPromise;
-}
+import { fetchJsonWithStatusDeduped, invalidateAppCaches } from '../../shared/api.js';
+import {
+	getNsfwContentEnabled,
+	setNsfwContentEnabled,
+	getNsfwObscure,
+	setNsfwObscure,
+	applyNsfwPreference,
+	NSFW_VIEW_BODY_CLASS,
+} from '../../shared/nsfwView.js';
+import {
+	hydrateChatAudibleNotificationsFromServer,
+	setChatAudibleNotificationsEnabled,
+	clearChatAudibleNotificationsStorage,
+} from '../../shared/chatAudibleNotificationsPref.js';
+import { setFeedBetaEnabledClient, feedBetaActiveFromProfile } from '../../shared/feedBetaNav.js';
 
 const html = String.raw;
 
@@ -76,8 +38,7 @@ class AppModalProfile extends HTMLElement {
 		this.handleCloseAllModals = this.handleCloseAllModals.bind(this);
 	}
 
-	async connectedCallback() {
-		await loadDeps();
+	connectedCallback() {
 		this.setAttribute('data-modal', '');
 		this.render();
 		this.setupEventListeners();
@@ -872,4 +833,3 @@ class AppModalProfile extends HTMLElement {
 }
 
 customElements.define('app-modal-profile', AppModalProfile);
-

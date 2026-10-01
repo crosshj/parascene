@@ -1,0 +1,10 @@
+/* CSS-only component shim. Behavior currently comes from shared/triggeredSuggest. */
+.triggered-suggest-popup { position: fixed; z-index: 100000; min-width: 240px; max-width: min(420px, calc(100vw - 24px)); overflow: auto; padding: 6px; border: 1px solid var(--border); border-radius: 10px; color: var(--text); background: var(--surface); box-shadow: var(--shadow); }
+.triggered-suggest-item { display: flex; align-items: center; gap: 9px; width: 100%; padding: 8px; border: 0; border-radius: 7px; color: inherit; background: transparent; text-align: left; cursor: pointer; }
+.triggered-suggest-item:hover,
+.triggered-suggest-item--selected { background: var(--surface-strong); }
+.triggered-suggest-item-icon { display: grid; flex: 0 0 30px; width: 30px; height: 30px; place-items: center; overflow: hidden; border-radius: 50%; }
+.triggered-suggest-item-icon img { width: 100%; height: 100%; object-fit: cover; }
+.triggered-suggest-item-text { min-width: 0; }
+.triggered-suggest-item-label { display: block; overflow: hidden; font-size: .875rem; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.triggered-suggest-item-sublabel { display: block; overflow: hidden; color: var(--text-muted); font-size: .75rem; text-overflow: ellipsis; white-space: nowrap; }

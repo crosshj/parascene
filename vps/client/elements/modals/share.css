@@ -1,0 +1,133 @@
+app-modal-share {
+	--share-brand-text: #fff;
+	--share-x-bg: #161616;
+	--share-x-fg: #fff;
+	--share-facebook: #1877f2;
+	--share-reddit: #ff4500;
+	--share-linkedin: #0a66c2;
+	--share-vynly: #16aca6;
+	--share-google-photos: #4285f4;
+}
+
+app-modal-share .share-modal-body { min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+app-modal-share .share-modal-note { margin: 0 0 16px; color: var(--text-muted); line-height: 1.6; }
+app-modal-share .share-modal-note-strong { color: var(--text-muted); font-weight: 500; }
+app-modal-share .share-action-list { display: flex; flex-direction: column; overflow: visible; background: transparent; border: none; }
+app-modal-share .share-action-row {
+	appearance: none;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	width: 100%;
+	padding: 14px;
+	background: transparent;
+	border: none;
+	border-radius: 0;
+	color: inherit;
+	cursor: pointer;
+	font: inherit;
+	text-align: left;
+}
+app-modal-share .share-action-row + .share-action-row { border-top: 1px solid color-mix(in srgb, var(--border) 85%, transparent); }
+app-modal-share .share-action-row:hover { background: var(--surface-strong); filter: none; }
+app-modal-share .share-action-row:active { transform: none; }
+app-modal-share .share-action-row:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+app-modal-share :is(.share-action-row--gp-reconnect, .share-action-row--gp-connect) {
+	background: var(--color-amber-bg-subtle, color-mix(in srgb, #f59e0b 14%, var(--surface)));
+	border: 1px solid color-mix(in srgb, #f59e0b 36%, transparent);
+}
+app-modal-share :is(.share-action-row--gp-reconnect, .share-action-row--gp-connect) .share-action-subtitle {
+	color: var(--color-amber-fg, #b45309);
+}
+app-modal-share :is(.share-action-row--gp-reconnect, .share-action-row--gp-connect) .share-action-cta-google-photos {
+	background: color-mix(in srgb, #f59e0b 88%, black);
+	border-color: color-mix(in srgb, #f59e0b 88%, black);
+}
+app-modal-share .share-action-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
+app-modal-share .share-action-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+app-modal-share .share-action-title { color: var(--text); font-weight: 600; }
+app-modal-share .share-action-subtitle { overflow: hidden; color: var(--text-muted); font-size: 0.85rem; text-overflow: ellipsis; white-space: nowrap; }
+app-modal-share .share-option-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: 0 0 auto;
+	width: 36px;
+	height: 36px;
+	background: var(--surface-strong);
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	color: var(--text);
+}
+app-modal-share .share-option-icon svg { display: block; width: 20px; height: 20px; }
+app-modal-share .share-option-icon-x svg { fill: currentcolor; }
+app-modal-share .share-option-icon.is-brand { border-color: transparent; color: var(--share-brand-text); }
+app-modal-share .share-option-icon-x { background: var(--share-x-bg); color: var(--share-x-fg); }
+app-modal-share .share-option-icon-facebook { background: var(--share-facebook); }
+app-modal-share .share-option-icon-reddit { background: var(--share-reddit); }
+app-modal-share .share-option-icon-linkedin { background: var(--share-linkedin); }
+app-modal-share .share-option-icon-vynly { background: var(--share-vynly); }
+app-modal-share .share-option-icon-google-photos { background: #fff; border-color: color-mix(in srgb, var(--border) 70%, transparent); }
+app-modal-share .share-option-icon-google-photos svg { width: 22px; height: 22px; }
+app-modal-share .share-action-cta {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: 0 0 auto;
+	min-width: 84px;
+	padding: 8px 12px;
+	background: var(--surface-strong);
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	color: var(--text);
+	font-size: 0.9rem;
+	font-weight: 700;
+	line-height: 1;
+}
+app-modal-share .share-action-cta-label { transition: opacity 0.15s ease; }
+app-modal-share .share-action-cta[data-state="loading"] .share-action-cta-label { opacity: 0; }
+app-modal-share .share-action-cta[data-state="loading"]::before {
+	position: absolute;
+	width: 14px;
+	height: 14px;
+	border: 2px solid currentcolor;
+	border-top-color: transparent;
+	border-radius: 999px;
+	animation: share-modal-spin 0.8s linear infinite;
+	content: "";
+}
+app-modal-share .share-action-cta-facebook { background: var(--share-facebook); border-color: var(--share-facebook); color: var(--share-brand-text); }
+app-modal-share .share-action-cta-x { background: var(--share-x-bg); border-color: var(--share-x-bg); color: var(--share-x-fg); }
+app-modal-share .share-action-cta-reddit { background: var(--share-reddit); border-color: var(--share-reddit); color: var(--share-brand-text); }
+app-modal-share .share-action-cta-linkedin { background: var(--share-linkedin); border-color: var(--share-linkedin); color: var(--share-brand-text); }
+app-modal-share .share-action-cta-vynly { background: var(--share-vynly); border-color: var(--share-vynly); color: var(--share-brand-text); }
+app-modal-share .share-action-cta-google-photos { background: var(--share-google-photos); border-color: var(--share-google-photos); color: var(--share-brand-text); }
+app-modal-share .share-modal-cancel { width: 100%; margin-top: 14px; padding: 0; background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-weight: 600; text-align: center; }
+app-modal-share .share-modal-cancel:hover { color: var(--text); filter: none; }
+app-modal-share .share-modal-status { min-height: 18px; margin-top: 12px; color: var(--text-muted); font-weight: 600; }
+app-modal-share .qr-modal-overlay { z-index: 100000; background: color-mix(in srgb, var(--text) 42%, transparent); }
+app-modal-share .qr-modal { position: relative; max-width: min(90vw, 320px); background: var(--surface); border-radius: 14px; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35); }
+app-modal-share .qr-modal-header { position: absolute; top: 0; right: 0; z-index: 1; padding: 12px; }
+app-modal-share .qr-modal-close { width: 36px; height: 36px; background: var(--surface-strong); }
+app-modal-share .qr-modal-body { display: flex; align-items: center; justify-content: center; padding: 48px 24px 24px; }
+app-modal-share .qr-modal-svg-wrap { display: flex; align-items: center; justify-content: center; padding: 12px; background: var(--surface); border-radius: 10px; }
+app-modal-share .qr-modal-svg-wrap svg { display: block; width: 256px; height: 256px; background: var(--surface); }
+app-modal-share .qr-modal-svg-wrap svg path:first-of-type,
+app-modal-share .qr-modal-svg-wrap svg path[fill] { fill: var(--surface) !important; }
+app-modal-share .qr-modal-svg-wrap svg path:last-of-type { stroke: var(--text) !important; }
+
+@keyframes share-modal-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-color-scheme: dark) {
+	app-modal-share { --share-x-bg: #fff; --share-x-fg: #0b0b0b; }
+}
+
+@media (max-width: 768px) {
+	app-modal-share .modal { width: calc(100% - 16px); max-width: none; max-height: calc(100vh - 16px); }
+	app-modal-share .modal-header { padding: 16px; }
+	app-modal-share .share-modal-body { padding: 14px 12px calc(38px + env(safe-area-inset-bottom)); }
+	app-modal-share .share-action-row { padding: 10px 12px; }
+	app-modal-share .share-action-cta { min-width: 76px; }
+}

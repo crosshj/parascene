@@ -353,6 +353,8 @@
 .sidebar-view__user:focus-visible { outline: none; box-shadow: 0 0 0 2px #7c3aed; }
 .sidebar-view__avatar { position: relative; flex-basis: 28px; width: 28px; height: 28px; }
 .sidebar-view__avatar.is-founder { overflow: visible; background: transparent; }
+.sidebar-view__avatar:not(.is-founder)::after,
+.sidebar-view__avatar:not(.is-founder) .founder-flair-avatar-ring::before { display: none; }
 .sidebar-view__avatar.is-founder .founder-flair-avatar-inner > .icon { display: block; width: 16px; height: 16px; flex-shrink: 0; }
 .sidebar-view__account-label { flex: 1; min-width: 0; overflow: hidden; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
 .sidebar-view__footer-actions { display: inline-flex; align-items: center; gap: 2px; flex: 0 0 auto; }

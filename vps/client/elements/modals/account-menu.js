@@ -1,52 +1,19 @@
-let fetchJsonWithStatusDeduped;
-let buildProfilePath;
-let clearChatAudibleNotificationsStorage;
-let getHelpHref;
-let userProfileIcon;
-let gearIcon;
-let helpIcon;
-let globeIcon;
-let logOutIcon;
-let infoIcon;
-let statsBarsIcon;
-let confirmAndHardReloadAfterClearingCaches;
-
-function getAssetVersionParam() {
-	const meta = document.querySelector('meta[name="asset-version"]');
-	return meta?.getAttribute('content')?.trim() || '';
-}
-
-function getImportQuery(version) {
-	return version && typeof version === 'string' ? `?v=${encodeURIComponent(version)}` : '';
-}
-
-let _depsPromise;
-async function loadAccountMenuDeps() {
-	if (_depsPromise) return _depsPromise;
-	const v = getAssetVersionParam();
-	const qs = getImportQuery(v);
-	_depsPromise = (async () => {
-		const apiMod = await import(`../../shared/api.js${qs}`);
-		fetchJsonWithStatusDeduped = apiMod.fetchJsonWithStatusDeduped;
-		const profileLinksMod = await import(`../../shared/profileLinks.js${qs}`);
-		buildProfilePath = profileLinksMod.buildProfilePath;
-		const chatAudiblePrefMod = await import(`../../shared/chatAudibleNotificationsPref.js${qs}`);
-		clearChatAudibleNotificationsStorage = chatAudiblePrefMod.clearChatAudibleNotificationsStorage;
-		const helpUrlMod = await import(`../../shared/helpUrl.js${qs}`);
-		getHelpHref = helpUrlMod.getHelpHref;
-		const iconsMod = await import(`../../icons/svg-strings.js${qs}`);
-		userProfileIcon = iconsMod.userProfileIcon;
-		gearIcon = iconsMod.gearIcon;
-		helpIcon = iconsMod.helpIcon;
-		globeIcon = iconsMod.globeIcon;
-		logOutIcon = iconsMod.logOutIcon;
-		infoIcon = iconsMod.infoIcon;
-		statsBarsIcon = iconsMod.statsBarsIcon;
-		const clearMod = await import(`../../shared/clearClientCaches.js${qs}`);
-		confirmAndHardReloadAfterClearingCaches = clearMod.confirmAndHardReloadAfterClearingCaches;
-	})();
-	return _depsPromise;
-}
+import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
+import { buildProfilePath } from '../../shared/profileLinks.js';
+import { clearChatAudibleNotificationsStorage } from '../../shared/chatAudibleNotificationsPref.js';
+import { getHelpHref } from '../../shared/helpUrl.js';
+import {
+	userProfileIcon,
+	gearIcon,
+	helpIcon,
+	globeIcon,
+	logOutIcon,
+	infoIcon,
+	statsBarsIcon,
+} from '../../icons/svg-strings.js';
+import { confirmAndHardReloadAfterClearingCaches } from '../../shared/clearClientCaches.js';
+import * as spaPageOverlay from '../../shared/spaPageOverlay.js';
+import { openAboutModal } from './about.js';
 
 function clearLogoutSideEffects() {
 	try {
@@ -99,7 +66,8 @@ class AppAccountMenu extends HTMLElement {
 	}
 
 	connectedCallback() {
-		this._initPromise = loadAccountMenuDeps().then(() => this.renderShell());
+		this.renderShell();
+		this._initPromise = Promise.resolve();
 	}
 
 	renderShell() {
@@ -259,9 +227,6 @@ class AppAccountMenu extends HTMLElement {
 		if (action === 'view-profile') {
 			e.preventDefault();
 			this.close();
-			await loadAccountMenuDeps();
-			const qs = getImportQuery(getAssetVersionParam());
-			const overlayMod = await import(`../../shared/spaPageOverlay.js${qs}`);
 			try {
 				const res = await fetchJsonWithStatusDeduped('/api/profile', { credentials: 'include' }, { windowMs: 0 });
 				if (res?.ok && res.data) {
@@ -270,13 +235,13 @@ class AppAccountMenu extends HTMLElement {
 							userName: res.data.profile?.user_name,
 							userId: res.data.id
 						}) || '/user';
-					overlayMod.navigateToSpaPageFromSpa(href);
+					spaPageOverlay.navigateToSpaPageFromSpa(href);
 					return;
 				}
 			} catch {
 				// fall through
 			}
-			overlayMod.navigateToSpaPageFromSpa('/user');
+			spaPageOverlay.navigateToSpaPageFromSpa('/user');
 			return;
 		}
 		if (action === 'settings') {
@@ -288,16 +253,12 @@ class AppAccountMenu extends HTMLElement {
 		if (action === 'integrations') {
 			e.preventDefault();
 			this.close();
-			await loadAccountMenuDeps();
-			const qs = getImportQuery(getAssetVersionParam());
-			const overlayMod = await import(`../../shared/spaPageOverlay.js${qs}`);
-			overlayMod.navigateToSpaPageFromSpa('/integrations');
+			spaPageOverlay.navigateToSpaPageFromSpa('/integrations');
 			return;
 		}
 		if (action === 'logout') {
 			e.preventDefault();
 			this.close();
-			await loadAccountMenuDeps();
 			clearLogoutSideEffects();
 			const form = document.createElement('form');
 			form.method = 'post';
@@ -309,11 +270,7 @@ class AppAccountMenu extends HTMLElement {
 		if (action === 'about') {
 			e.preventDefault();
 			this.close();
-			await loadAccountMenuDeps();
-			const v = getAssetVersionParam();
-			const qs = getImportQuery(v);
-			const aboutMod = await import(`./about.js${qs}`);
-			await aboutMod.openAboutModal();
+			await openAboutModal();
 			return;
 		}
 		if (action === 'reports') {
@@ -325,7 +282,6 @@ class AppAccountMenu extends HTMLElement {
 		if (action === 'clear-cache') {
 			e.preventDefault();
 			this.close();
-			await loadAccountMenuDeps();
 			if (typeof confirmAndHardReloadAfterClearingCaches === 'function') {
 				await confirmAndHardReloadAfterClearingCaches();
 			}
@@ -407,4 +363,3 @@ document.addEventListener('open-account-menu', (ev) => {
 document.addEventListener('close-profile', () => {
 	document.querySelector('app-account-menu')?.close?.();
 });
-

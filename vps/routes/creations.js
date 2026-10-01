@@ -2,7 +2,7 @@ import express from "express";
 import { Readable } from "node:stream";
 import path from "node:path";
 import { requireAuth } from "./middleware/auth.js";
-import { creationMediaKey, creationVideoMediaKey } from "../db/creations.js";
+import { creationAudioCdnId, creationMediaKey, creationVideoMediaKey } from "../db/creations.js";
 import { extractVideoThumbnail } from "./utils/media.js";
 
 function integer(value, fallback, min, max) {
@@ -18,7 +18,15 @@ function mediaType(row) {
 	if (!meta || typeof meta !== "object") meta = {};
 	const value = typeof meta.media_type === "string" ? meta.media_type.trim().toLowerCase() : "";
 	if (value === "video" || creationVideoMediaKey({ meta })) return "video";
+	if (value === "audio" || creationAudioCdnId({ meta })) return "audio";
 	return value || "image";
+}
+
+function parseMeta(value) {
+	if (typeof value === "string") {
+		try { value = JSON.parse(value); } catch { value = null; }
+	}
+	return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
 
 function isModeratedError(row) {
@@ -45,8 +53,10 @@ function serializeCreation(row) {
 	const videoKey = creationVideoMediaKey(row);
 	const imageUrl = mediaUrl(row.id, key);
 	const type = mediaType(row);
+	const audioCdnId = creationAudioCdnId(row);
 	return {
 		id: row.id,
+		user_id: row.user_id,
 		filename: row.filename,
 		file_path: row.file_path,
 		url: imageUrl,
@@ -67,7 +77,7 @@ function serializeCreation(row) {
 		is_moderated_error: isModeratedError(row),
 		media_type: type,
 		video_url: type === "video" && videoKey ? mediaUrl(row.id, videoKey) : null,
-		audio_url: type === "audio" ? imageUrl : null
+		audio_url: type === "audio" ? (audioCdnId ? `/api/creations/${row.id}/audio` : imageUrl) : null
 	};
 }
 
@@ -86,7 +96,8 @@ export function createCreationsRoutes({ creations, users }) {
 		const key = creations.safeKey(req.params[0]);
 		if (!key) return res.status(400).json({ error: "Invalid media key" });
 		try {
-			if (!(await creations.ownsMedia(req.auth.userId, req.query.creation_id, key))) return res.status(404).json({ error: "Media not found" });
+			const viewer = await users.byId(req.auth.userId);
+			if (!(await creations.canAccessMedia(req.auth.userId, req.query.creation_id, key, { isAdmin: viewer?.role === "admin" }))) return res.status(404).json({ error: "Media not found" });
 			const variant = String(req.query.variant || "").trim().toLowerCase();
 			if (variant === "video_thumbnail") {
 				const response = await creations.fetchMedia(key, { method: "GET" });
@@ -129,6 +140,59 @@ export function createCreationsRoutes({ creations, users }) {
 			const page = await creations.list(req.auth.userId, { limit, offset, challengeOnly, viewerEnableNsfw });
 			res.set("Cache-Control", "private, no-store");
 			return res.json({ creations: page.rows.map(serializeCreation), has_more: page.hasMore, limit, offset });
+		} catch (error) { return next(error); }
+	});
+
+	router.get("/api/creations/:id", requireAuth, async (req, res, next) => {
+		try {
+			const viewer = await users.byId(req.auth.userId);
+			const row = await creations.byIdForViewer(req.auth.userId, req.params.id, {
+				isAdmin: viewer?.role === "admin"
+			});
+			if (!row) return res.status(404).json({ error: "Creation not found" });
+			const meta = row.meta && typeof row.meta === "object" ? row.meta : {};
+			if (meta.nsfw === true && viewer?.meta?.enableNsfw !== true && Number(row.user_id) !== Number(req.auth.userId) && viewer?.role !== "admin") {
+				return res.status(404).json({ error: "Creation not found" });
+			}
+			const creatorUser = Number(row.user_id) === Number(viewer?.id) ? viewer : await users.byId(row.user_id);
+			const creatorProfile = await users.profileByUserId(row.user_id);
+			const creation = serializeCreation(row);
+			return res.json({
+				...creation,
+				like_count: 0,
+				viewer_liked: false,
+				liked_by: [],
+				comment_count: 0,
+				lineage_descendants: [],
+				feed_pin: { active: false, until: null, challenge_id: null, pins: [] },
+				challenge_organizer: { active: false, refs: [] },
+				creator: creatorUser ? {
+					id: creatorUser.id,
+					email: creatorUser.email,
+					role: creatorUser.role,
+					user_name: creatorProfile?.user_name ?? null,
+					display_name: creatorProfile?.display_name ?? null,
+					avatar_url: creatorProfile?.avatar_url ?? null,
+					plan: creatorUser.meta?.plan === "founder" ? "founder" : "free"
+				} : null
+			});
+		} catch (error) { return next(error); }
+	});
+
+	router.get("/api/creations/:id/audio", requireAuth, async (req, res, next) => {
+		try {
+			const viewer = await users.byId(req.auth.userId);
+			const row = await creations.byIdForViewer(req.auth.userId, req.params.id, { isAdmin: viewer?.role === "admin" });
+			if (!row) return res.status(404).json({ error: "Audio not found" });
+			const meta = parseMeta(row.meta);
+			if (meta.nsfw === true && viewer?.meta?.enableNsfw !== true && Number(row.user_id) !== Number(req.auth.userId) && viewer?.role !== "admin") {
+				return res.status(404).json({ error: "Audio not found" });
+			}
+			const cdnId = creationAudioCdnId(row);
+			if (!cdnId || mediaType(row) !== "audio") return res.status(404).json({ error: "Audio not found" });
+			const target = await creations.mintAudioPlaybackUrl(cdnId);
+			res.set("Cache-Control", "private, no-store");
+			return res.redirect(302, target);
 		} catch (error) { return next(error); }
 	});
 

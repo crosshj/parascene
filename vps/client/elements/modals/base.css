@@ -1,0 +1,132 @@
+/* Shared light-DOM foundation for modal custom elements. Keep selectors host-scoped. */
+:where(app-modal-share, app-modal-creation-details) .modal-overlay,
+:where(app-modal-publish, app-modal-tip-creator) .publish-modal-overlay {
+	position: fixed;
+	inset: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: rgba(0, 0, 0, 0.5);
+	z-index: 99999;
+	opacity: 0;
+	visibility: hidden;
+	pointer-events: none;
+	transition: opacity 0.2s, visibility 0.2s;
+}
+
+:where(app-modal-share, app-modal-creation-details) .modal-overlay.open,
+:where(app-modal-publish, app-modal-tip-creator) .publish-modal-overlay.open {
+	opacity: 1;
+	visibility: visible;
+	pointer-events: auto;
+}
+
+:where(app-modal-share, app-modal-creation-details) .modal,
+:where(app-modal-publish, app-modal-tip-creator) .publish-modal {
+	position: relative;
+	z-index: 1;
+	display: flex;
+	flex-direction: column;
+	width: 90%;
+	max-width: 500px;
+	max-height: 90vh;
+	max-height: 90dvh;
+	overflow: hidden;
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: 14px;
+	box-shadow: var(--shadow);
+	pointer-events: auto;
+	transform: scale(0.95);
+	transition: transform 0.2s;
+}
+
+:where(app-modal-share, app-modal-creation-details) .modal-overlay.open .modal,
+:where(app-modal-publish, app-modal-tip-creator) .publish-modal-overlay.open .publish-modal {
+	transform: scale(1);
+}
+
+:where(app-modal-share, app-modal-creation-details) .modal-header,
+:where(app-modal-publish, app-modal-tip-creator) .publish-modal-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 18px 20px;
+	border-bottom: 1px solid var(--border);
+	flex-shrink: 0;
+}
+
+:where(app-modal-share, app-modal-creation-details) .modal-header :is(h2, h3),
+:where(app-modal-publish, app-modal-tip-creator) .publish-modal-header :is(h2, h3) {
+	margin: 0;
+	font-size: 1.5rem;
+	font-weight: 600;
+}
+
+:where(app-modal-share, app-modal-creation-details) .modal-header h3,
+:where(app-modal-publish, app-modal-tip-creator) .publish-modal-header h3 {
+	font-size: 1.2rem;
+}
+
+:where(app-modal-share, app-modal-creation-details) .modal-close,
+:where(app-modal-publish, app-modal-tip-creator) .publish-modal-close {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 32px;
+	min-height: 32px;
+	padding: 8px;
+	background: transparent;
+	border: none;
+	border-radius: 6px;
+	color: var(--text);
+	cursor: pointer;
+	font-size: 1.2rem;
+	line-height: 1;
+	transition: background-color 0.2s;
+}
+
+:where(app-modal-share, app-modal-creation-details) .modal-close:hover,
+:where(app-modal-publish, app-modal-tip-creator) .publish-modal-close:hover {
+	background: var(--surface-strong);
+}
+
+:where(app-modal-share, app-modal-creation-details) .modal-close-icon {
+	width: 24px;
+	height: 24px;
+}
+
+:where(app-modal-share, app-modal-creation-details) .modal-body,
+:where(app-modal-publish, app-modal-tip-creator) .publish-modal-body {
+	flex: 1 1 auto;
+	min-height: 0;
+	padding: 20px;
+	overflow-y: auto;
+	-webkit-overflow-scrolling: touch;
+	overscroll-behavior: contain;
+}
+
+:where(app-modal-share, app-modal-creation-details) .modal-footer,
+:where(app-modal-publish, app-modal-tip-creator) .publish-modal-footer {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex-shrink: 0;
+	gap: 12px;
+	padding: 18px 20px;
+	border-top: 1px solid var(--border);
+}
+
+:where(app-modal-share, app-modal-creation-details) .modal.modal-medium {
+	max-width: 500px;
+}
+
+@media (max-width: 768px) {
+	:where(app-modal-share, app-modal-creation-details) .modal-overlay,
+	:where(app-modal-publish, app-modal-tip-creator) .publish-modal-overlay {
+		padding-top: max(8px, env(safe-area-inset-top, 0px));
+		padding-right: max(8px, env(safe-area-inset-right, 0px));
+		padding-bottom: max(8px, env(safe-area-inset-bottom, 0px));
+		padding-left: max(8px, env(safe-area-inset-left, 0px));
+	}
+}

@@ -19,7 +19,9 @@
 @keyframes creations-grid-skeleton-shimmer { from { background-position: 180% 0; } to { background-position: -80% 0; } }
 .creations-view__grid[hidden] { display: none; }
 .creation-grid__card { position: relative; isolation: isolate; min-width: 0; width: 100%; padding: 0; background: transparent; border: 0; }
-.feed-card-image { position: relative; width: 100%; aspect-ratio: 1 / 1; overflow: hidden; border-radius: 11px; background: var(--beta-panel-background, #eef1f6); }
+.creation-grid__card:focus, .creation-grid__card:focus-visible { outline: none; box-shadow: none; }
+.feed-card-image { position: relative; width: 100%; aspect-ratio: 1 / 1; overflow: hidden; border-radius: 11px; corner-shape: squircle; background: var(--beta-panel-background, #eef1f6); }
+.creations-view__grid .creation-grid__card > .feed-card-image { overflow: hidden; border-radius: 11px; corner-shape: squircle; }
 .feed-card-image.loading { background: linear-gradient(90deg, color-mix(in srgb, currentColor 8%, transparent), color-mix(in srgb, currentColor 16%, transparent), color-mix(in srgb, currentColor 8%, transparent)); background-size: 200% 100%; animation: creations-grid-loading 4s linear infinite; }
 .feed-card-img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; object-position: center; opacity: 0; transition: opacity .3s ease; }
 .feed-card-image.loaded .feed-card-img { opacity: 1; }

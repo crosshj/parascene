@@ -1,23 +1,26 @@
 import './layout.css';
-import { mountMobileNavigationView } from '../views/MobileNavigation/MobileNavigationView.js';
-import { mountSidebarView } from '../views/Sidebar/SidebarView.js';
-import { mountSidebarOverlays } from '../views/SidebarOverlays/SidebarOverlaysView.js';
 import { createPopupMenu } from '../components/PopupMenu/PopupMenu.js';
 import { iconMarkup } from '../components/Icon/Icon.js';
-import { renderCreationDetailView } from '../views/CreationDetail/CreationDetailView.js';
 
-function getRegion(shell, name) {
-	const region = shell.querySelector(`[data-layout-region="${name}"]`);
+function getRegion(root, name) {
+	const region = root.querySelector(`[data-layout-region="${name}"]`);
 	if (!region) throw new Error(`Missing layout region: ${name}`);
 	return region;
 }
 
-export function initializeLayout({ shell, sidebarModel, mobileNavigationItems, onSidebarAction, creditsResource, onClaimCredits }) {
-	if (!shell) throw new Error('Missing application shell');
+function destroyHandle(handle) {
+	if (typeof handle === 'function') handle();
+	else handle?.destroy?.();
+}
 
-	const page = getRegion(shell, 'page');
-	page.classList.add('beta-outlet');
-	page.innerHTML = `
+export function createLayout({ root, views, services } = {}) {
+	if (!(root instanceof HTMLElement)) throw new Error('Missing application shell');
+
+	const sidebarRegion = getRegion(root, 'sidebar');
+	const pageRegion = getRegion(root, 'page');
+	const mobileRegion = getRegion(root, 'mobile-navigation');
+	pageRegion.classList.add('beta-outlet');
+	pageRegion.innerHTML = `
 		<div class="beta-outlet__frame">
 			<header class="beta-outlet__header">
 				<div class="beta-outlet__identity"><span class="beta-outlet__icon"></span><h1 class="beta-outlet__title"></h1></div>
@@ -32,148 +35,256 @@ export function initializeLayout({ shell, sidebarModel, mobileNavigationItems, o
 				<button type="submit" aria-label="Send message" disabled>${iconMarkup('send')}</button>
 			</form>
 		</div>`;
-	const outlet = page.querySelector('.beta-outlet__content');
-	const scrollRegion = page.querySelector('.beta-outlet__scroll');
-	const pageTitle = page.querySelector('.beta-outlet__title');
-	const pageIcon = page.querySelector('.beta-outlet__icon');
-	const composer = page.querySelector('.beta-outlet__composer');
+
+	const outletRegion = pageRegion.querySelector('.beta-outlet__content');
+	const scrollRegion = pageRegion.querySelector('.beta-outlet__scroll');
+	const pageTitle = pageRegion.querySelector('.beta-outlet__title');
+	const pageIcon = pageRegion.querySelector('.beta-outlet__icon');
+	const composer = pageRegion.querySelector('.beta-outlet__composer');
+	const menuButton = pageRegion.querySelector('.beta-outlet__more');
 	let menu = null;
-	const menuButton = page.querySelector('.beta-outlet__more');
-	menuButton.hidden = true;
-	menuButton.addEventListener('click', (event) => menu?.toggle(event.currentTarget));
-	composer.addEventListener('submit', (event) => event.preventDefault());
-	let pageKey = '';
-	let sidebar;
-	const handleSidebarAction = (action) => {
-		if (action?.action === 'logout') {
-			sidebar?.logoutButton?.click();
-			return;
-		}
-		onSidebarAction?.(action);
-	};
-	const overlays = mountSidebarOverlays({
-		onAction: handleSidebarAction,
-		creditsResource,
-		onClaimCredits,
-		onRefreshCredits: () => creditsResource?.refresh({ force: true })
-	});
-	const sidebarAction = (action) => {
-		if (action?.action === 'open-overlay') {
-			overlays.open(action.overlay, action.anchor);
-			return;
-		}
-		handleSidebarAction(action);
-	};
-	sidebar = mountSidebarView({
-		outlet: getRegion(shell, 'sidebar'),
-		model: sidebarModel,
-		onAction: sidebarAction
-	});
-	const mobileNavigation = mountMobileNavigationView({
-		outlet: getRegion(shell, 'mobile-navigation'),
-		navigationItems: mobileNavigationItems
-	});
+	let actions = {};
+	let appliedComposition = null;
+	let restoreFocus = null;
+	let backgroundRevision = 0;
+
 	const overlayHost = document.createElement('div');
 	overlayHost.className = 'beta-app-overlay-host';
 	overlayHost.hidden = true;
-	shell.appendChild(overlayHost);
-	let creationOverlay = null;
-	let creationOverlayReturnPath = null;
-	const currentPath = () => `${window.location.pathname}${window.location.search}${window.location.hash}`;
-	const isDetailPath = () => /^\/creations\/\d+$/.test(window.location.pathname);
+	overlayHost.innerHTML = `
+		<section class="beta-app-overlay" role="dialog" aria-modal="true" aria-labelledby="beta-app-overlay-title">
+			<div class="beta-app-overlay__chrome">
+				<button type="button" class="beta-app-overlay__back" aria-label="Back">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"></path><path d="M11 6 5 12l6 6"></path></svg>
+				</button>
+				<h1 id="beta-app-overlay-title" class="beta-app-overlay__title" data-overlay-title></h1>
+				<button type="button" class="beta-app-overlay__close" aria-label="Close">
+					<svg class="beta-app-overlay__close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+				</button>
+			</div>
+			<div class="beta-app-overlay__content" data-overlay-content></div>
+		</section>`;
+	root.append(overlayHost);
+	const overlayContent = overlayHost.querySelector('[data-overlay-content]');
+	const overlayTitle = overlayHost.querySelector('[data-overlay-title]');
+	const overlayBack = overlayHost.querySelector('.beta-app-overlay__back');
+	const overlayClose = overlayHost.querySelector('.beta-app-overlay__close');
 
-	function closeCreationDetailOverlay({ fromHistory = false } = {}) {
-		if (!creationOverlay) return;
-		const overlay = creationOverlay;
-		creationOverlay = null;
-		overlay.dispose?.();
-		overlay.element.remove();
-		overlayHost.hidden = true;
-		document.body.classList.remove('beta-creation-overlay-open');
-		if (!fromHistory && isDetailPath() && window.history.state?.betaCreationDetailOverlay) window.history.back();
+	const mounted = {
+		sidebar: null,
+		mobile: null,
+		outlet: null,
+		overlay: null,
+	};
+
+	function setHeaderMenu({ label = 'Page actions', items = [], onSelect } = {}) {
+		menu?.destroy();
+		menu = items.length ? createPopupMenu({ label, items, onSelect }) : null;
+		menuButton.hidden = !menu;
+		menuButton.setAttribute('aria-expanded', 'false');
 	}
 
-	function openCreationDetailOverlay({ creationId, seed = null, replaceHistory = false } = {}) {
-		const id = Number(creationId);
-		if (!Number.isFinite(id) || id <= 0) return;
-		const href = `/creations/${encodeURIComponent(String(id))}`;
-		if (creationOverlay) {
-			if (window.location.pathname !== href) window.history.pushState({ ...(window.history.state || {}), betaCreationDetailOverlay: true }, '', href);
+	function setPage(chrome = {}) {
+		pageTitle.textContent = chrome.title || 'Feed';
+		pageIcon.innerHTML = iconMarkup(chrome.icon || 'home');
+		composer.hidden = chrome.showComposer === false;
+	}
+
+	function mountContext(extra = {}) {
+		return {
+			services,
+			actions,
+			setHeaderMenu,
+			...extra,
+		};
+	}
+
+	function unmount(name, host) {
+		const record = mounted[name];
+		if (!record) return;
+		record.active = false;
+		destroyHandle(record.handle);
+		record.handle = null;
+		host.replaceChildren();
+		mounted[name] = null;
+	}
+
+	async function reconcileRegion(name, host, descriptor, extra = {}) {
+		const current = mounted[name];
+		if (!descriptor) {
+			unmount(name, host);
+			return false;
+		}
+		if (current?.key === descriptor.key) {
+			current.handle?.update?.({ ...descriptor.props, ...mountContext(extra) });
+			return false;
+		}
+		unmount(name, host);
+		const record = { key: descriptor.key, handle: null, active: true };
+		mounted[name] = record;
+		const result = descriptor.view.mount({
+			outlet: host,
+			...mountContext(extra),
+			...(descriptor.props || {}),
+		});
+		const handle = result && typeof result.then === 'function' ? await result : result;
+		if (!record.active || mounted[name] !== record) {
+			destroyHandle(handle);
+			return true;
+		}
+		record.handle = typeof handle === 'function' ? { destroy: handle } : handle || { destroy() {} };
+		return true;
+	}
+
+	function setBackgroundSuppressed(suppressed) {
+		for (const region of [sidebarRegion, pageRegion, mobileRegion]) {
+			region.inert = suppressed;
+			if (suppressed) region.setAttribute('aria-hidden', 'true');
+			else region.removeAttribute('aria-hidden');
+		}
+		document.body.classList.toggle('beta-creation-overlay-open', suppressed);
+	}
+
+	function showOverlay(descriptor, changed) {
+		const visible = Boolean(descriptor);
+		if (visible && overlayHost.hidden) {
+			restoreFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+		}
+		overlayHost.hidden = !visible;
+		setBackgroundSuppressed(visible);
+		if (visible) {
+			overlayTitle.textContent = descriptor.title || 'Detail';
+			if (mounted.overlay) document.documentElement.classList.remove('beta-overlay-route-pending');
+		} else if (restoreFocus) {
+			const focusTarget = restoreFocus;
+			restoreFocus = null;
+			queueMicrotask(() => { if (focusTarget.isConnected) focusTarget.focus(); });
+		}
+		if (!visible || changed) overlayContent.scrollTop = 0;
+	}
+
+	function onOverlayKeydown(event) {
+		if (overlayHost.hidden) return;
+		if (event.key !== 'Tab') return;
+		const focusable = [...overlayHost.querySelectorAll('button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')]
+			.filter((element) => !element.hidden && element.getClientRects().length > 0);
+		if (!focusable.length) {
+			event.preventDefault();
+			overlayClose.focus();
 			return;
 		}
-		creationOverlayReturnPath = isDetailPath() ? '/creations' : currentPath();
-		const state = { ...(window.history.state || {}), betaCreationDetailOverlay: true, betaCreationDetailReturnPath: creationOverlayReturnPath, betaCreationDetailId: id };
-		if (replaceHistory) window.history.replaceState(state, '', href);
-		else window.history.pushState(state, '', href);
-		const element = document.createElement('section');
-		element.className = 'beta-app-overlay';
-		element.setAttribute('role', 'dialog');
-		element.setAttribute('aria-modal', 'true');
-		element.innerHTML = `<div class="beta-app-overlay__chrome"><button type="button" class="beta-app-overlay__close" aria-label="Close">×</button><span>Creation #${id}</span></div><div class="beta-app-overlay__content"></div>`;
-		const content = element.querySelector('.beta-app-overlay__content');
-		element.querySelector('.beta-app-overlay__close')?.addEventListener('click', () => closeCreationDetailOverlay());
-		overlayHost.replaceChildren(element);
-		overlayHost.hidden = false;
-		document.body.classList.add('beta-creation-overlay-open');
-		creationOverlay = { element, dispose: null };
-		void renderCreationDetailView({ outlet: content, initialSeed: seed, setHeaderMenu: null }).then((dispose) => {
-			if (creationOverlay?.element === element) creationOverlay.dispose = dispose;
+		const first = focusable[0];
+		const last = focusable[focusable.length - 1];
+		if (event.shiftKey && document.activeElement === first) {
+			event.preventDefault();
+			last.focus();
+		} else if (!event.shiftKey && document.activeElement === last) {
+			event.preventDefault();
+			first.focus();
+		}
+	}
+
+	function onDocumentKeydown(event) {
+		if (overlayHost.hidden || event.key !== 'Escape' || event.defaultPrevented) return;
+		if (mounted.overlay?.handle?.hasOpenEscapeTarget?.()) return;
+		queueMicrotask(() => {
+			// Let any target/document-level dialog handler consume Escape first.
+			if (event.defaultPrevented || event.cancelBubble || overlayHost.hidden) return;
+			event.preventDefault();
+			actions.dismissOverlay?.();
 		});
 	}
 
-	const onOverlayPopState = () => {
-		if (creationOverlay && !window.history.state?.betaCreationDetailOverlay) {
-			closeCreationDetailOverlay({ fromHistory: true });
+	async function prepareBackground(composition, revision) {
+		if (revision !== backgroundRevision) return;
+		const appShell = composition.shell === 'app';
+		await reconcileRegion('sidebar', sidebarRegion, appShell ? { key: 'app:sidebar', view: views.Sidebar, props: {} } : null);
+		if (revision !== backgroundRevision) return;
+		await reconcileRegion('mobile', mobileRegion, appShell ? { key: 'app:mobile', view: views.MobileNavigation, props: {} } : null);
+		if (revision !== backgroundRevision) return;
+
+		const outletChanged = mounted.outlet?.key !== composition.outlet?.key;
+		if (outletChanged) {
+			setHeaderMenu();
+			setPage(composition.outlet?.chrome);
+		}
+		await reconcileRegion('outlet', outletRegion, composition.outlet);
+		if (revision !== backgroundRevision) return;
+		if (outletChanged) {
+			scrollRegion.scrollTo(0, 0);
+			outletRegion.scrollTop = 0;
+		}
+	}
+
+	function prepareColdOverlayBackground(composition, revision) {
+		const ready = mounted.overlay?.handle?.backgroundReady;
+		if (!ready || typeof ready.then !== 'function') {
+			console.error('[layout] cold overlay did not provide a backgroundReady signal');
 			return;
 		}
-		if (!creationOverlay && isDetailPath()) {
-			openCreationDetailOverlay({ creationId: Number(window.location.pathname.split('/').pop()), replaceHistory: true });
-		}
-	};
-	window.addEventListener('popstate', onOverlayPopState, true);
+		void ready.then(
+			() => prepareBackground(composition, revision),
+			() => prepareBackground(composition, revision)
+		).catch((error) => console.error('[layout] background preparation failed', error));
+	}
 
+	async function apply(composition, nextActions = {}) {
+		actions = nextActions;
+		const revision = ++backgroundRevision;
+		const overlayChanged = mounted.overlay?.key !== composition.overlay?.key;
+		if (composition.overlay) {
+			showOverlay(composition.overlay, false);
+			await reconcileRegion('overlay', overlayContent, composition.overlay);
+			showOverlay(composition.overlay, overlayChanged);
+			appliedComposition = composition;
+
+			if (!mounted.outlet) {
+				// A cold overlay owns startup. Its resolved background remains dormant
+				// until detail reports a terminal ready state or navigation dismisses it.
+				prepareColdOverlayBackground(composition, revision);
+				return;
+			}
+		}
+
+		await prepareBackground(composition, revision);
+
+		if (!composition.overlay) {
+			// Keep an existing overlay covering the page until its destination is
+			// ready, then remove the overlay mount and restore background interaction.
+			await reconcileRegion('overlay', overlayContent, null);
+			showOverlay(null, overlayChanged);
+		}
+		appliedComposition = composition;
+	}
+
+	function destroy() {
+		backgroundRevision++;
+		unmount('overlay', overlayContent);
+		unmount('outlet', outletRegion);
+		unmount('mobile', mobileRegion);
+		unmount('sidebar', sidebarRegion);
+		setHeaderMenu();
+		setBackgroundSuppressed(false);
+		document.removeEventListener('keydown', onDocumentKeydown);
+		document.documentElement.classList.remove('beta-overlay-route-pending');
+		overlayHost.remove();
+		document.body.classList.remove('beta-layout', 'is-resizing-sidebar');
+		document.body.style.removeProperty('--beta-sidebar-width');
+		appliedComposition = null;
+	}
+
+	menuButton.hidden = true;
+	menuButton.addEventListener('click', (event) => menu?.toggle(event.currentTarget));
+	composer.addEventListener('submit', (event) => event.preventDefault());
+	overlayClose.addEventListener('click', () => actions.dismissOverlay?.());
+	overlayBack.addEventListener('click', () => actions.dismissOverlay?.());
+	overlayHost.addEventListener('keydown', onOverlayKeydown);
+	document.addEventListener('keydown', onDocumentKeydown);
 	document.body.classList.add('beta-layout');
 
 	return {
-		shell,
-		outlet,
-		setPage({ key = '', title, icon = 'home', showComposer = true } = {}) {
-			if (key !== pageKey) {
-				pageKey = key;
-				menu?.destroy();
-				menu = null;
-				menuButton.hidden = true;
-			}
-			pageTitle.textContent = title || 'Feed';
-			pageIcon.innerHTML = iconMarkup(icon);
-			composer.hidden = !showComposer;
-		},
-		setHeaderMenu({ label = 'Page actions', items = [], onSelect } = {}) {
-			menu?.destroy();
-			menu = items.length ? createPopupMenu({ label, items, onSelect }) : null;
-			menuButton.hidden = !menu;
-		},
-		accountElement: sidebar.accountElement,
-		avatarElement: sidebar.avatarElement,
-		avatarInitial: sidebar.avatarInitial,
-		avatarImage: sidebar.avatarImage,
-		logoutButton: sidebar.logoutButton,
-		syncRoute: sidebar.syncRoute,
-		updateSidebar: sidebar.update,
-		setSidebarStatus: sidebar.setRosterStatus,
-		updateCredits: sidebar.updateCredits,
-		openCreationDetailOverlay,
-		closeCreationDetailOverlay,
-		destroy() {
-		window.removeEventListener('popstate', onOverlayPopState, true);
-		closeCreationDetailOverlay({ fromHistory: true });
-		overlayHost.remove();
-			menu?.destroy();
-			overlays.destroy();
-			sidebar.destroy();
-			mobileNavigation.destroy();
-			document.body.classList.remove('beta-layout');
-			document.body.style.removeProperty('--beta-sidebar-width');
-		}
+		apply,
+		destroy,
+		get composition() { return appliedComposition; },
 	};
 }

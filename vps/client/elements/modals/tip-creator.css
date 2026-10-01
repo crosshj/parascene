@@ -1,0 +1,40 @@
+app-modal-tip-creator .tip-creator-modal { max-width: 400px; }
+app-modal-tip-creator .tip-creator-recipient { margin: 0 0 16px; color: var(--text-muted); font-size: 0.95rem; }
+app-modal-tip-creator .tip-creator-form { display: grid; gap: 12px; }
+app-modal-tip-creator .tip-creator-label { display: flex; flex-direction: column; gap: 8px; }
+app-modal-tip-creator .tip-creator-label label { color: var(--text); font-size: 0.9rem; font-weight: 500; }
+app-modal-tip-creator .tip-creator-label input,
+app-modal-tip-creator .tip-creator-message {
+	box-sizing: border-box;
+	width: 100%;
+	padding: 10px 12px;
+	background: var(--input-bg);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	color: var(--text);
+	font-size: 0.95rem;
+}
+app-modal-tip-creator .tip-creator-message { min-height: 60px; padding: 8px 10px; resize: vertical; }
+app-modal-tip-creator :is(.tip-creator-label input, .tip-creator-message):focus {
+	border-color: var(--accent);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
+	outline: none;
+}
+app-modal-tip-creator .tip-creator-balance-hint { min-height: 1.2em; margin: 4px 0 0; color: var(--text-muted); font-size: 0.85rem; }
+app-modal-tip-creator .tip-creator-warning { margin: 8px 0 0; color: var(--warning-text, #f7c948); font-size: 0.85rem; }
+app-modal-tip-creator .tip-creator-error { padding: 12px 14px; border: 1px solid var(--error); border-radius: 12px; color: var(--error-text); }
+app-modal-tip-creator .tip-creator-submit { min-width: 96px; }
+app-modal-tip-creator .tip-creator-submit.is-loading .tip-creator-submit-label { visibility: hidden; }
+app-modal-tip-creator .tip-creator-submit .tip-creator-spinner { display: none; }
+app-modal-tip-creator .tip-creator-submit.is-loading .tip-creator-spinner {
+	display: inline-block;
+	width: 1em;
+	height: 1em;
+	margin-left: -1em;
+	border: 2px solid var(--border);
+	border-top-color: currentColor;
+	border-radius: 50%;
+	animation: tip-creator-spin 0.8s linear infinite;
+	vertical-align: middle;
+}
+@keyframes tip-creator-spin { to { transform: rotate(360deg); } }

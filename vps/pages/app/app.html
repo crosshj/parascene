@@ -6,6 +6,11 @@
 			name="viewport"
 			content="width=device-width, initial-scale=1"
 		/>
+		<script>
+			if (/^\/creations\/\d+\/?$/.test(location.pathname)) {
+				document.documentElement.classList.add('beta-overlay-route-pending');
+			}
+		</script>
 		<link
 			rel="icon"
 			href="/favicon.svg"
@@ -150,6 +155,9 @@
 				height: 100vh;
 				min-height: 100vh;
 				overflow: hidden;
+			}
+			html.beta-overlay-route-pending [data-layout-region] {
+				visibility: hidden !important;
 			}
 			body.beta-layout main#app-outlet {
 				box-sizing: border-box;

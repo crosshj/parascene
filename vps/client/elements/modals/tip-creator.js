@@ -1,3 +1,7 @@
+import './base.css';
+import './tip-creator.css';
+import { refreshAfterMutation } from '../../shared/creationDetailRuntime.js';
+
 /**
  * Modal to tip credits to a creator (e.g. from creation detail page).
  * Listens for open-tip-creator-modal with detail: { userId, userName, createdImageId, viewerBalance? }.
@@ -7,13 +11,6 @@ const html = String.raw;
 
 const TIP_MIN_VISIBLE_BALANCE = 10.0;
 const TIP_LARGE_AMOUNT_WARNING = 5.0;
-
-function loadCreationDetailRuntime() {
-	const meta = document.querySelector('meta[name="asset-version"]');
-	const v = meta?.getAttribute('content')?.trim() || '';
-	const qs = v ? `?v=${encodeURIComponent(v)}` : '';
-	return import(`../../shared/creationDetailRuntime.js${qs}`);
-}
 
 class AppModalTipCreator extends HTMLElement {
 	constructor() {
@@ -278,7 +275,6 @@ class AppModalTipCreator extends HTMLElement {
 			document.dispatchEvent(new CustomEvent('user-updated', { detail: { userId: toUserId } }));
 			this.close();
 			if (createdImageId !== null) {
-				const { refreshAfterMutation } = await loadCreationDetailRuntime();
 				await refreshAfterMutation('status-changed', { creationId: createdImageId });
 			}
 		} catch (err) {
@@ -299,4 +295,3 @@ class AppModalTipCreator extends HTMLElement {
 }
 
 customElements.define('app-modal-tip-creator', AppModalTipCreator);
-

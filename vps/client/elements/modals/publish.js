@@ -1,66 +1,12 @@
-let fetchJsonWithStatusDeduped;
-let getNsfwContentEnabled;
-
-function getAssetVersionParam() {
-	const meta = document.querySelector('meta[name="asset-version"]');
-	return meta?.getAttribute('content')?.trim() || '';
-}
-
-function getImportQuery(version) {
-	return version && typeof version === 'string' ? `?v=${encodeURIComponent(version)}` : '';
-}
-
-let _depsPromise;
-async function loadDeps() {
-	if (_depsPromise) return _depsPromise;
-	const v = getAssetVersionParam();
-	const qs = getImportQuery(v);
-	_depsPromise = (async () => {
-		const apiMod = await import(`../../shared/api.js${qs}`);
-		fetchJsonWithStatusDeduped = apiMod.fetchJsonWithStatusDeduped;
-
-		const nsfwMod = await import(`../../shared/nsfwView.js${qs}`);
-		getNsfwContentEnabled = nsfwMod.getNsfwContentEnabled;
-	})();
-	return _depsPromise;
-}
-
-let _runtimePromise;
-async function loadCreationDetailRuntime() {
-	if (_runtimePromise) return _runtimePromise;
-	const v = getAssetVersionParam();
-	const qs = getImportQuery(v);
-	_runtimePromise = import(`../../shared/creationDetailRuntime.js${qs}`);
-	return _runtimePromise;
-}
-
-let _suggestPromise;
-async function loadPublishInlineSuggest() {
-	if (_suggestPromise) return _suggestPromise;
-	const v = getAssetVersionParam();
-	const qs = getImportQuery(v);
-	_suggestPromise = import(`../../shared/triggeredSuggest.js${qs}`).then((m) => m.attachPromptInlineSuggest);
-	return _suggestPromise;
-}
-
-let shouldAutoSetVideoPosterOnPublish;
-let captureVideoFirstFrameFile;
-
-let _videoPosterDepsPromise;
-async function loadVideoPosterDeps() {
-	if (_videoPosterDepsPromise) return _videoPosterDepsPromise;
-	const v = getAssetVersionParam();
-	const qs = getImportQuery(v);
-	_videoPosterDepsPromise = (async () => {
-		const [aspectMod, frameMod] = await Promise.all([
-			import(`../../shared/aspectRatio.js${qs}`),
-			import(`../../shared/queueFromFrameModal.js${qs}`),
-		]);
-		shouldAutoSetVideoPosterOnPublish = aspectMod.shouldAutoSetVideoPosterOnPublish;
-		captureVideoFirstFrameFile = frameMod.captureVideoFirstFrameFile;
-	})();
-	return _videoPosterDepsPromise;
-}
+import './base.css';
+import './publish.css';
+import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
+import { getNsfwContentEnabled } from '../../shared/nsfwView.js';
+import { attachPromptInlineSuggest } from '../../shared/triggeredSuggest.js';
+import { shouldAutoSetVideoPosterOnPublish } from '../../shared/aspectRatio.js';
+import { captureVideoFirstFrameFile } from '../../shared/queueFromFrameModal.js';
+import * as creationDetailRuntime from '../../shared/creationDetailRuntime.js';
+import * as creationDetailSeed from '../../shared/creationDetailSeed.js';
 
 const html = String.raw;
 
@@ -107,8 +53,7 @@ class AppModalPublish extends HTMLElement {
 		this.handleSubmit = this.handleSubmit.bind(this);
 	}
 
-	async connectedCallback() {
-		await loadDeps();
+	connectedCallback() {
 		this.setAttribute('data-modal', '');
 		this.render();
 		this.setupEventListeners();
@@ -240,14 +185,12 @@ class AppModalPublish extends HTMLElement {
 		// @ user and $ style autocomplete on title and description (same triggers as advanced create prompt)
 		const titleInput = this.querySelector('#publish-title');
 		const descriptionTextarea = this.querySelector('#publish-description');
-		loadPublishInlineSuggest().then((attachPromptInlineSuggest) => {
-			if (titleInput && typeof attachPromptInlineSuggest === 'function') {
-				attachPromptInlineSuggest(titleInput);
-			}
-			if (descriptionTextarea && typeof attachPromptInlineSuggest === 'function') {
-				attachPromptInlineSuggest(descriptionTextarea);
-			}
-		});
+		if (titleInput && typeof attachPromptInlineSuggest === 'function') {
+			attachPromptInlineSuggest(titleInput);
+		}
+		if (descriptionTextarea && typeof attachPromptInlineSuggest === 'function') {
+			attachPromptInlineSuggest(descriptionTextarea);
+		}
 	}
 
 	handleEscape(e) {
@@ -558,8 +501,7 @@ class AppModalPublish extends HTMLElement {
 			} else {
 				await this.handlePublishSubmit(title, description, nsfw, doomScrollFullHeight);
 			}
-			const { isCreationDetailEmbed } = await loadCreationDetailRuntime();
-			if (isCreationDetailEmbed()) {
+			if (creationDetailRuntime.isCreationDetailEmbed()) {
 				this.resetSubmitLoadingUi();
 			}
 		} catch (error) {
@@ -586,7 +528,6 @@ class AppModalPublish extends HTMLElement {
 		const creationId = this._creationId;
 		if (!creation || !creationId) return;
 
-		await loadVideoPosterDeps();
 		if (typeof shouldAutoSetVideoPosterOnPublish !== 'function' || !shouldAutoSetVideoPosterOnPublish(creation)) {
 			return;
 		}
@@ -658,8 +599,7 @@ class AppModalPublish extends HTMLElement {
 
 		this.close();
 		try {
-			const qs = getImportQuery(getAssetVersionParam());
-			const seedMod = await import(`../../shared/creationDetailSeed.js${qs}`);
+			const seedMod = creationDetailSeed;
 			const prev = seedMod.readCreationDetailSeed(this._creationId);
 			if (prev) {
 				const titleRaw = typeof title === 'string' ? title.trim() : '';
@@ -675,7 +615,7 @@ class AppModalPublish extends HTMLElement {
 		} catch {
 			// ignore
 		}
-		const { refreshAfterMutation, isCreationDetailEmbed, navigate } = await loadCreationDetailRuntime();
+		const { refreshAfterMutation, isCreationDetailEmbed, navigate } = creationDetailRuntime;
 		if (isCreationDetailEmbed()) {
 			await refreshAfterMutation('published', { creationId: this._creationId, title });
 			return;
@@ -706,8 +646,7 @@ class AppModalPublish extends HTMLElement {
 
 		this.close();
 		try {
-			const qs = getImportQuery(getAssetVersionParam());
-			const seedMod = await import(`../../shared/creationDetailSeed.js${qs}`);
+			const seedMod = creationDetailSeed;
 			const prev = seedMod.readCreationDetailSeed(this._creationId);
 			if (prev) {
 				const titleRaw = typeof title === 'string' ? title.trim() : '';
@@ -721,7 +660,7 @@ class AppModalPublish extends HTMLElement {
 		} catch {
 			// ignore
 		}
-		const { refreshAfterMutation, isCreationDetailEmbed } = await loadCreationDetailRuntime();
+		const { refreshAfterMutation, isCreationDetailEmbed } = creationDetailRuntime;
 		await refreshAfterMutation('edited', {
 			creationId: this._creationId,
 			title,
@@ -731,4 +670,3 @@ class AppModalPublish extends HTMLElement {
 }
 
 customElements.define('app-modal-publish', AppModalPublish);
-

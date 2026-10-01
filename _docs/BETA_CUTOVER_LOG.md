@@ -79,11 +79,15 @@ Creation detail is not a normal route rendered into the page outlet. The overlay
 
 Routing and overlay state are one system:
 
-- A deep-loaded `/creations/:id` URL must cause the app to select and prepare a valid underlying/default route, then open the creation-detail overlay over it.
+- A deep-loaded `/creations/:id` URL must resolve a valid underlying/default route but leave it dormant, reveal and mount creation detail first, and only start the background when detail signals a terminal ready/error state or the overlay is dismissed—whichever happens first. Session refresh and background loading must not delay or flash ahead of detail.
 - A card click must preserve the already-loaded creation row/seed, update history, and open the same overlay path used by a deep link.
 - The overlay must preserve the underlying route and scroll state while open.
 - Closing, dismissing, or pressing Back must restore the correct underlying URL and state rather than leaving a detail route in the outlet or producing a blank shell.
 - Navigating between details must update overlay history and content without tearing down the app shell.
-- The detail view must be mounted by the app-level overlay controller, not by `CreationsView` and not as a normal router outlet page.
+- The detail view must be mounted into the layout's app-level overlay region, not by `CreationsView` and not as a normal router outlet page. There is no separate overlay controller; region occupancy is the overlay lifecycle.
 
 Do not continue the beta creation-detail migration until the www SPA routing/overlay lifecycle has been traced clearly enough to reproduce these behaviors. If any part of the www implementation, deep-link defaulting, history ownership, or seed handoff is unclear, stop and resolve that detail before adapting code.
+
+### Known incomplete creation-detail seam after the client-architecture refactor
+
+The app shell, route composition, retained background, seed handoff, and layout-owned overlay are now represented by the VPS client architecture. The copied `CreationDetailView.js` is **not** thereby considered migrated. It still contains WWW-era dynamic `/shared/...` module loads, document-wide selectors and delayed listeners, and calls to WWW API contracts that have not all been ported to VPS. Treat any claim that creation detail is complete while those remain as a release blocker. Port each dependency statically into `vps/client`, move every listener/request into the view lifetime, and verify the VPS API contract before enabling the corresponding behavior.

@@ -1,5 +1,9 @@
 # 🚨🔥 DO NOT FORGET: VPS/BETA IS AN ACTIVE-WWW-SPA PORT 🔥🚨
 
+For client ownership, composition, controllers, and overlay routing, follow
+[VPS client architecture and cleanup contract](BETA_VPS_CLIENT_ARCHITECTURE.md).
+That document defines the target structure; it does not declare the port complete.
+
 ## Non-negotiable rule
 
 **The active WWW SPA is the only default reference for the VPS/Beta frontend migration.**

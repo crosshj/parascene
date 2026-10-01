@@ -107,7 +107,7 @@ function updateFileCard(root, file, { previewTemplate, filesApi, onPlayAudio, on
 	}
 }
 
-export async function renderFileManagerView({ outlet, filesApi, filesResource, onUnauthorized, setHeaderMenu }) {
+export function renderFileManagerView({ outlet, filesApi, filesResource, onUnauthorized, setHeaderMenu }) {
 	const controller = new AbortController();
 	const root = mountTemplate(outlet, template);
 	const refs = bindRefs(root);

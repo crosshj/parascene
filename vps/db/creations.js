@@ -2,6 +2,7 @@ import path from "node:path";
 
 const IMAGE_BUCKET = "prsn_created-images";
 const THUMBNAIL_BUCKET = "prsn_created-images-thumbnails";
+const CREATION_FIELDS = "id, user_id, filename, file_path, width, height, color, status, created_at, published, published_at, title, description, meta, unavailable_at";
 
 // Keep the VPS image-list boundary self-contained. The deployment image contains
 // only vps/, so it must not import from the legacy WWW/API tree.
@@ -33,7 +34,7 @@ function fitKey(key) {
 function pageQuery(client, userId, limit, offset, challengeOnly, viewerEnableNsfw) {
 	let query = client
 		.from("prsn_created_images")
-		.select("id, user_id, filename, file_path, width, height, color, status, created_at, published, published_at, title, description, meta, unavailable_at")
+		.select(CREATION_FIELDS)
 		.eq("user_id", userId)
 		.is("unavailable_at", null)
 		.is("meta->>hidden_in_group", null)
@@ -51,6 +52,22 @@ export function createCreationsStore({ client, supabaseUrl, serviceRoleKey }) {
 			if (error) throw error;
 			const rows = (Array.isArray(data) ? data : []).filter((row) => !isHiddenInGroupMeta(row?.meta));
 			return { rows: rows.slice(0, limit), hasMore: rows.length > limit };
+		},
+		async byIdForViewer(userId, creationId, { isAdmin = false } = {}) {
+			const id = Number(creationId);
+			if (!Number.isInteger(id) || id <= 0) return null;
+			const { data, error } = await client
+				.from("prsn_created_images")
+				.select(CREATION_FIELDS)
+				.eq("id", id)
+				.maybeSingle();
+			if (error) throw error;
+			if (!data) return null;
+			const owner = Number(data.user_id) === Number(userId);
+			const published = data.published === true || data.published === 1;
+			const unavailable = data.unavailable_at != null && data.unavailable_at !== "";
+			if ((!owner && !published && !isAdmin) || (unavailable && !isAdmin)) return null;
+			return data;
 		},
 		async owns(userId, creationId) {
 			const id = Number(creationId);
@@ -78,6 +95,13 @@ export function createCreationsStore({ client, supabaseUrl, serviceRoleKey }) {
 			if (!data) return false;
 			return creationMediaKeys(data).some((value) => safe === safeKey(value));
 		},
+		async canAccessMedia(userId, creationId, key, { isAdmin = false } = {}) {
+			const id = Number(creationId);
+			const safe = safeKey(key);
+			if (!Number.isInteger(id) || id <= 0 || !safe) return false;
+			const row = await this.byIdForViewer(userId, id, { isAdmin });
+			return Boolean(row && creationMediaKeys(row).some((value) => safe === safeKey(value)));
+		},
 
 		async fetchMedia(filename, { variant = "", method = "GET", range, signal } = {}) {
 			const key = safeKey(filename);
@@ -97,6 +121,32 @@ export function createCreationsStore({ client, supabaseUrl, serviceRoleKey }) {
 				response = await fetch(storageObjectUrl(supabaseUrl, IMAGE_BUCKET, key), { method, headers, signal, redirect: "manual" });
 			}
 			return response;
+		},
+		async mintAudioPlaybackUrl(objectId) {
+			if (!/^o_[a-f0-9]{24}$/.test(String(objectId || ""))) throw new Error("Invalid audio object");
+			const { data: server, error } = await client
+				.from("prsn_servers")
+				.select("server_url, auth_token, server_config")
+				.eq("id", 6)
+				.maybeSingle();
+			if (error) throw error;
+			let origin = "";
+			try { origin = new URL(server?.server_url).origin; } catch { /* missing or invalid host */ }
+			if (!origin) throw new Error("Audio host is not configured");
+			const headers = { Accept: "application/json", "Content-Type": "application/json" };
+			const extraHeaders = server?.server_config?.custom_headers;
+			if (extraHeaders && typeof extraHeaders === "object") {
+				for (const [key, value] of Object.entries(extraHeaders)) if (value != null) headers[key] = String(value);
+			}
+			if (typeof server.auth_token === "string" && server.auth_token.trim()) headers.Authorization = `Bearer ${server.auth_token.trim()}`;
+			const response = await fetch(`${origin}/cdn/objects/${encodeURIComponent(objectId)}/links`, {
+				method: "POST", headers, body: "{}", signal: AbortSignal.timeout(20_000)
+			});
+			if (!response.ok) throw new Error(`Audio host returned ${response.status}`);
+			const payload = await response.json();
+			const url = typeof payload?.url === "string" ? payload.url.trim() : "";
+			if (!url) throw new Error("Audio host returned no playback URL");
+			return url;
 		},
 		safeKey
 	};
@@ -130,6 +180,15 @@ export function creationMediaKey(row) {
 	}
 	if (filePath && !filePath.startsWith("http://") && !filePath.startsWith("https://")) return filePath.replace(/^\/+/, "");
 	return String(row?.filename || "").trim();
+}
+
+export function creationAudioCdnId(row) {
+	let meta = row?.meta;
+	if (typeof meta === "string") {
+		try { meta = JSON.parse(meta); } catch { meta = null; }
+	}
+	const cdnId = meta?.audio && typeof meta.audio === "object" ? String(meta.audio.cdn_id || "").trim() : "";
+	return /^o_[a-f0-9]{24}$/.test(cdnId) ? cdnId : "";
 }
 
 function mediaKeyFromValue(value) {

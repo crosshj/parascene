@@ -1,45 +1,14 @@
-let formatDateTime;
-let formatRelativeTime;
-let fetchJsonWithStatusDeduped;
-let navigateNotificationPrimaryHref;
-let notificationPrimaryHref;
-let notificationPrimaryClickable;
-let modalDismissIconSvg;
-let modalDismissShadowCss;
-
-function getAssetVersionParam() {
-	const meta = document.querySelector('meta[name="asset-version"]');
-	return meta?.getAttribute('content')?.trim() || '';
-}
-
-function getImportQuery(version) {
-	return version && typeof version === 'string' ? `?v=${encodeURIComponent(version)}` : '';
-}
-
-let _depsPromise;
-async function loadDeps() {
-	if (_depsPromise) return _depsPromise;
-	const v = getAssetVersionParam();
-	const qs = getImportQuery(v);
-	_depsPromise = (async () => {
-		const datetimeMod = await import(`../../shared/datetime.js${qs}`);
-		formatDateTime = datetimeMod.formatDateTime;
-		formatRelativeTime = datetimeMod.formatRelativeTime;
-
-		const apiMod = await import(`../../shared/api.js${qs}`);
-		fetchJsonWithStatusDeduped = apiMod.fetchJsonWithStatusDeduped;
-
-		const notifNavMod = await import(`../../shared/notificationNav.js${qs}`);
-		navigateNotificationPrimaryHref = notifNavMod.navigateNotificationPrimaryHref;
-		notificationPrimaryHref = notifNavMod.notificationPrimaryHref;
-		notificationPrimaryClickable = notifNavMod.notificationPrimaryClickable;
-
-		const dismissMod = await import(`../../shared/modalDismiss.js${qs}`);
-		modalDismissIconSvg = dismissMod.MODAL_DISMISS_ICON_SVG;
-		modalDismissShadowCss = dismissMod.MODAL_DISMISS_SHADOW_CSS;
-	})();
-	return _depsPromise;
-}
+import { formatDateTime, formatRelativeTime } from '../../shared/datetime.js';
+import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
+import {
+	navigateNotificationPrimaryHref,
+	notificationPrimaryHref,
+	notificationPrimaryClickable,
+} from '../../shared/notificationNav.js';
+import {
+	MODAL_DISMISS_ICON_SVG as modalDismissIconSvg,
+	MODAL_DISMISS_SHADOW_CSS as modalDismissShadowCss,
+} from '../../shared/modalDismiss.js';
 
 const html = String.raw;
 
@@ -60,8 +29,7 @@ class AppModalNotifications extends HTMLElement {
 		this.handleCloseAllModals = this.handleCloseAllModals.bind(this);
 	}
 
-	async connectedCallback() {
-		await loadDeps();
+	connectedCallback() {
 		this.setAttribute('data-modal', '');
 		this.render();
 		this.setupEventListeners();
@@ -757,4 +725,3 @@ class AppModalNotifications extends HTMLElement {
 }
 
 customElements.define('app-modal-notifications', AppModalNotifications);
-

@@ -1,3 +1,6 @@
+import './base.css';
+import './creation-details.css';
+
 const html = String.raw;
 
 class AppModalCreationDetails extends HTMLElement {
@@ -224,4 +227,3 @@ class AppModalCreationDetails extends HTMLElement {
 }
 
 customElements.define("app-modal-creation-details", AppModalCreationDetails);
-

@@ -4,6 +4,7 @@ import { createPopupMenu } from '../../components/PopupMenu/PopupMenu.js';
 import { bindRefs, escapeHtml, htmlFragment, mountTemplate } from '../../utils/dom.js';
 import { formatCredits } from '../../utils/format.js';
 import { isSidebarRouteActive } from '../../utils/sidebarRoutes.js';
+import { createSidebarController } from './SidebarController.js';
 import template from './SidebarView.html';
 import './SidebarView.css';
 
@@ -92,7 +93,7 @@ function patchRosterRow(current, next) {
 	return current;
 }
 
-export function mountSidebarView({ outlet, model, onAction }) {
+function mountSidebarPresentation({ outlet, model = {}, onAction }) {
 	const root = mountTemplate(outlet, template);
 	// Template icon slots are intentional so static sidebar markup stays readable;
 	// replace them with the shared SVG icon system as soon as the view mounts.
@@ -427,6 +428,20 @@ export function mountSidebarView({ outlet, model, onAction }) {
 			const next = formatCredits(value);
 			if (refs.credits.textContent !== next) refs.credits.textContent = next;
 		},
+		updateAccount(user) {
+			const profile = user?.profile || {};
+			const label = profile.display_name || profile.user_name || user?.email || 'Signed in';
+			const avatarUrl = profile.avatar_url || '';
+			refs.account.textContent = label;
+			refs.avatar.setAttribute('aria-label', label);
+			refs.avatar.classList.toggle('is-founder', user?.plan === 'founder' || user?.meta?.plan === 'founder');
+			refs.avatar.style.setProperty('--avatar-bg', profile.avatar_color || '#7c3aed');
+			refs.avatarInitial.textContent = (label.trim().slice(0, 1) || '?').toUpperCase();
+			refs.avatarInitial.hidden = Boolean(avatarUrl);
+			refs.avatarImage.hidden = !avatarUrl;
+			if (avatarUrl) refs.avatarImage.src = avatarUrl;
+			else refs.avatarImage.removeAttribute('src');
+		},
 		destroy() {
 			if (resizeFrame) cancelAnimationFrame(resizeFrame);
 			footerResizeObserver?.disconnect();
@@ -441,5 +456,22 @@ export function mountSidebarView({ outlet, model, onAction }) {
 			root.removeEventListener('click', onRootClick);
 			root.remove();
 		}
+	};
+}
+
+export function mountSidebarView({ outlet, services } = {}) {
+	let controller = null;
+	const view = mountSidebarPresentation({
+		outlet,
+		onAction: (action) => controller?.handleAction(action),
+	});
+	controller = createSidebarController({ view, services });
+	return {
+		root: view.root,
+		update() {},
+		destroy() {
+			controller.destroy();
+			view.destroy();
+		},
 	};
 }

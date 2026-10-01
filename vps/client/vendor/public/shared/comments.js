@@ -1,0 +1,145 @@
+const _qs = (() => {
+	const v = document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() || '';
+	return v ? `?v=${encodeURIComponent(v)}` : '';
+})();
+const { fetchJsonWithStatusDeduped, invalidateAppCaches } = await import(`/shared/api.js${_qs}`);
+
+function toQuery(params) {
+	const qs = new URLSearchParams();
+	Object.entries(params || {}).forEach(([k, v]) => {
+		if (v === undefined || v === null || v === '') return;
+		qs.set(k, String(v));
+	});
+	const s = qs.toString();
+	return s ? `?${s}` : '';
+}
+
+export function buildCreatedImageActivityUrl(createdImageId, { order, limit, offset } = {}) {
+	return `/api/created-images/${encodeURIComponent(String(createdImageId))}/activity${toQuery({ order, limit, offset })}`;
+}
+
+export async function fetchCreatedImageActivity(createdImageId, { order = 'asc', limit = 50, offset = 0, windowMs = 500 } = {}) {
+	const url = buildCreatedImageActivityUrl(createdImageId, { order, limit, offset });
+	return fetchJsonWithStatusDeduped(url, { credentials: 'include' }, { windowMs });
+}
+
+export function buildLatestCommentsUrl({ limit, before } = {}) {
+	return `/api/comments/latest${toQuery({ limit, before })}`;
+}
+
+/**
+ * @param {{ limit?: number, before?: string }} [opts]
+ * `before` — ISO `created_at` of the oldest comment already shown (loads strictly older).
+ */
+export async function fetchLatestComments({ limit = 10, before } = {}) {
+	const url = buildLatestCommentsUrl({ limit, before });
+	return fetchJsonWithStatusDeduped(url, { credentials: 'include' }, { windowMs: 2000 });
+}
+
+async function readResponsePayload(response) {
+	const contentType = response.headers?.get?.('content-type') || '';
+	if (contentType.includes('application/json')) {
+		try {
+			return await response.json();
+		} catch {
+			return null;
+		}
+	}
+	try {
+		return await response.text();
+	} catch {
+		return null;
+	}
+}
+
+export async function postCreatedImageComment(createdImageId, text, extras = {}) {
+	const bodyPayload = { text: typeof text === 'string' ? text : '' };
+	const refRaw = extras?.referenced_comment_id ?? extras?.reply_to_comment_id;
+	const refNum = Number(refRaw);
+	if (Number.isFinite(refNum) && refNum > 0) {
+		bodyPayload.referenced_comment_id = refNum;
+	}
+	const rp = extras?.reply_preview;
+	if (typeof rp === 'string' && rp.trim()) bodyPayload.reply_preview = rp.trim();
+	const url = `/api/created-images/${encodeURIComponent(String(createdImageId))}/comments`;
+	const response = await fetch(url, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(bodyPayload),
+		credentials: 'include'
+	});
+	const data = await readResponsePayload(response);
+	if (response.ok) {
+		invalidateAppCaches({ tags: ['creations', 'feed', 'explore'] });
+	}
+	return { ok: response.ok, status: response.status, data };
+}
+
+/**
+ * Toggle a reaction on a comment. POST /api/comments/:commentId/reactions with { emoji_key }.
+ * @returns {Promise<{ ok: boolean, status: number, data?: { added: boolean, count: number } }>}
+ */
+export async function toggleCommentReaction(commentId, emojiKey) {
+	const url = `/api/comments/${encodeURIComponent(String(commentId))}/reactions`;
+	const response = await fetch(url, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ emoji_key: emojiKey }),
+		credentials: 'include'
+	});
+	const data = await readResponsePayload(response);
+	return { ok: response.ok, status: response.status, data };
+}
+
+/** Owner/admin: DELETE /api/comments/:commentId — removes comment and cascaded reactions. */
+export async function deleteCreatedImageComment(commentId) {
+	const url = `/api/comments/${encodeURIComponent(String(commentId))}`;
+	const response = await fetch(url, {
+		method: 'DELETE',
+		credentials: 'include'
+	});
+	const data = await readResponsePayload(response);
+	if (response.ok) {
+		invalidateAppCaches({ tags: ['creations', 'feed', 'explore'] });
+	}
+	return { ok: response.ok, status: response.status, data };
+}
+
+/** Owner/admin: PATCH /api/comments/:commentId with { text }. */
+export async function updateCreatedImageComment(commentId, text) {
+	const url = `/api/comments/${encodeURIComponent(String(commentId))}`;
+	const response = await fetch(url, {
+		method: 'PATCH',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ text }),
+		credentials: 'include'
+	});
+	const data = await readResponsePayload(response);
+	if (response.ok) {
+		invalidateAppCaches({ tags: ['creations', 'feed', 'explore'] });
+	}
+	return { ok: response.ok, status: response.status, data };
+}
+
+/**
+ * Toggle a reaction on a chat message. POST /api/chat/messages/:messageId/reactions with { emoji_key, op? }.
+ * @param {number|string} messageId
+ * @param {string} emojiKey
+ * @param {{ op?: 'add' | 'remove' | 'toggle' }} [opts]
+ * @returns {Promise<{ ok: boolean, status: number, data?: { added: boolean, count: number } }>}
+ */
+export async function toggleChatMessageReaction(messageId, emojiKey, opts = {}) {
+	const url = `/api/chat/messages/${encodeURIComponent(String(messageId))}/reactions`;
+	const body = { emoji_key: emojiKey };
+	const op = opts?.op === 'add' || opts?.op === 'remove' ? opts.op : null;
+	if (op) body.op = op;
+	const response = await fetch(url, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(body),
+		credentials: 'include'
+	});
+	const data = await readResponsePayload(response);
+	return { ok: response.ok, status: response.status, data };
+}
+

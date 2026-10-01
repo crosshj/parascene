@@ -1,0 +1,28 @@
+app-modal-creation-details .field {
+	margin: 12px 0;
+}
+
+app-modal-creation-details .field .label {
+	display: block;
+	margin-bottom: 6px;
+	color: var(--text-muted);
+	font-size: 0.9rem;
+	font-weight: 600;
+}
+
+app-modal-creation-details .creation-details-args {
+	white-space: pre-wrap;
+	word-break: break-word;
+	overflow-wrap: break-word;
+}
+
+app-modal-creation-details .creation-details-args-hint {
+	margin: 0 0 10px;
+	color: var(--text-muted);
+	font-size: 0.85rem;
+	line-height: 1.45;
+}
+
+app-modal-creation-details .creation-details-args-hint code {
+	font-size: 0.9em;
+}

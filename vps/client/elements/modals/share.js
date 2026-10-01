@@ -1,54 +1,25 @@
+import './base.css';
+import './share.css';
 import {
 	googlePhotosAuthMessageFromPayload,
 	googlePhotosReconnectUrl,
 	googlePhotosRowStateFromStatus,
 	isGooglePhotosReconnectPayload
 } from "../../shared/googlePhotosClient.js";
-
-let closeIcon;
-let xIcon;
-let facebookIcon;
-let redditIcon;
-let linkedinIcon;
-let smsIcon;
-let emailIcon;
-let shareIcon;
-let linkIcon;
-let qrCodeIcon;
-let pictureIcon;
-let googlePhotosIcon;
-
-function getAssetVersionParam() {
-	const meta = document.querySelector('meta[name="asset-version"]');
-	return meta?.getAttribute('content')?.trim() || '';
-}
-
-function getImportQuery(version) {
-	return version && typeof version === 'string' ? `?v=${encodeURIComponent(version)}` : '';
-}
-
-let _depsPromise;
-async function loadDeps() {
-	if (_depsPromise) return _depsPromise;
-	const v = getAssetVersionParam();
-	const qs = getImportQuery(v);
-	_depsPromise = (async () => {
-		const iconsMod = await import(`../../icons/svg-strings.js${qs}`);
-		closeIcon = iconsMod.closeIcon;
-		xIcon = iconsMod.xIcon;
-		facebookIcon = iconsMod.facebookIcon;
-		redditIcon = iconsMod.redditIcon;
-		linkedinIcon = iconsMod.linkedinIcon;
-		smsIcon = iconsMod.smsIcon;
-		emailIcon = iconsMod.emailIcon;
-		shareIcon = iconsMod.shareIcon;
-		linkIcon = iconsMod.linkIcon;
-		qrCodeIcon = iconsMod.qrCodeIcon;
-		pictureIcon = iconsMod.pictureIcon;
-		googlePhotosIcon = iconsMod.googlePhotosIcon;
-	})();
-	return _depsPromise;
-}
+import {
+	closeIcon,
+	xIcon,
+	facebookIcon,
+	redditIcon,
+	linkedinIcon,
+	smsIcon,
+	emailIcon,
+	shareIcon,
+	linkIcon,
+	qrCodeIcon,
+	pictureIcon,
+	googlePhotosIcon,
+} from '../../icons/svg-strings.js';
 
 const html = String.raw;
 
@@ -151,8 +122,7 @@ class AppModalShare extends HTMLElement {
 		this.closeQrModal = this.closeQrModal.bind(this);
 	}
 
-	async connectedCallback() {
-		await loadDeps();
+	connectedCallback() {
 		this.setAttribute('data-modal', '');
 		this.render();
 		this.setupEventListeners();
@@ -967,5 +937,3 @@ class AppModalShare extends HTMLElement {
 }
 
 customElements.define("app-modal-share", AppModalShare);
-
-
