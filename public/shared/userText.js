@@ -1786,7 +1786,12 @@ function appendShareAccessToMediaUrl(url, shareOpts) {
  * @param {{ moderated?: boolean, titleText?: string }} opts
  * @returns {string}
  */
+function brokenChatMediaIconHtml() {
+	return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2h-4M13 3l-3 5 4 3-3 5M3 17l4-4 4 4 5-4 5 4"/></svg>';
+}
+
 function chatCreationEmbedFailureHtml({ moderated = false, titleText = '' } = {}) {
+	if (!moderated) return `<div class="connect-chat-creation-embed-media"><div class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--error-layout"><span class="connect-chat-media-broken" role="img" aria-label="Creation preview unavailable">${brokenChatMediaIconHtml()}</span></div></div>`;
 	const modClass = moderated ? ' route-media-error-moderated' : '';
 	const iconHtml = moderated
 		? `<span class="route-media-error-moderated-icon" role="img" aria-label="Content moderated">${eyeHiddenIcon()}</span>`
@@ -2508,9 +2513,9 @@ function markSunoPreviewBroken(wrap) {
 	wrap.setAttribute('aria-label', label);
 	if (!wrap.querySelector('.connect-chat-suno-preview-broken')) {
 		const icon = document.createElement('span');
-		icon.className = 'connect-chat-suno-preview-broken';
+		icon.className = 'connect-chat-suno-preview-broken connect-chat-media-broken';
 		icon.setAttribute('aria-hidden', 'true');
-		icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2h-4M13 3l-3 5 4 3-3 5M3 17l4-4 4 4 5-4 5 4"/></svg>';
+		icon.innerHTML = brokenChatMediaIconHtml();
 		wrap.append(icon);
 	}
 }

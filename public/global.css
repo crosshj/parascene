@@ -21498,3 +21498,19 @@ app-modal-creation-details .creation-details-args-hint code {
 .connect-chat-suno-preview.is-broken .chat-doom-play-overlay { display: none; }
 .connect-chat-suno-preview-broken { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--text-muted, currentColor); }
 .connect-chat-suno-preview-broken svg { width: 40px; height: 40px; }
+
+/* One failure presentation for creation shares and external hook previews. */
+.connect-chat-msg-bubble .connect-chat-creation-embed--error:has(.connect-chat-media-broken),
+.connect-chat-suno-preview.is-broken {
+ position: relative; box-sizing: border-box; width: 260px; max-width: 100%; min-width: 0;
+ height: auto; aspect-ratio: 1 / 1; overflow: hidden; border-radius: 20px; corner-shape: squircle;
+ background: var(--image-placeholder); animation: none;
+}
+.connect-chat-msg-bubble .connect-chat-creation-embed--error:has(.connect-chat-media-broken) > .connect-chat-creation-embed-media,
+.connect-chat-msg-bubble .connect-chat-creation-embed--error:has(.connect-chat-media-broken) .connect-chat-creation-embed-inner--error-layout {
+ position: absolute; inset: 0; width: 100%; max-width: 100%; min-width: 0;
+ height: 100%; min-height: 0; max-height: none; background: transparent;
+}
+.connect-chat-media-broken { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--text-muted, currentColor); pointer-events: none; }
+.connect-chat-media-broken svg { width: 40px; height: 40px; }
+.connect-chat-suno-preview.is-broken .connect-chat-suno-preview-meta { display: none; }

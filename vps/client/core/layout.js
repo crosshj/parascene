@@ -290,6 +290,17 @@ export function createLayout({ root, views, services } = {}) {
 		appliedComposition = composition;
 	}
 
+	function onEmbeddedCreationNavigate(event) {
+		if (event.origin !== location.origin || event.data?.type !== 'prsn-creation-detail-overlay-navigate') return;
+		const player = [...root.querySelectorAll('iframe')].find((frame) => frame.contentWindow === event.source);
+		if (!player) return;
+		const url = new URL(player.src, location.href);
+		if (url.origin !== location.origin || url.pathname !== '/audio-card.html') return;
+		const id = Number(event.data.creationId);
+		if (!Number.isSafeInteger(id) || id <= 0) return;
+		void actions.navigate?.(`/creations/${id}`);
+	}
+
 	function destroy() {
 		backgroundRevision++;
 		setHeaderAccessories();
@@ -303,6 +314,7 @@ export function createLayout({ root, views, services } = {}) {
 		setSidebarLayoutReady(true);
 		document.removeEventListener('keydown', onDocumentKeydown);
 		window.removeEventListener('resize', onViewportResize);
+		window.removeEventListener('message', onEmbeddedCreationNavigate);
 		window.clearTimeout(viewportResizeTimer);
 		viewportResizeTimer = 0;
 		document.documentElement.classList.remove('beta-overlay-route-pending');
@@ -319,6 +331,7 @@ export function createLayout({ root, views, services } = {}) {
 	overlayBack.addEventListener('click', () => (actions.backOverlay || actions.dismissOverlay)?.());
 	document.addEventListener('keydown', onDocumentKeydown);
 	window.addEventListener('resize', onViewportResize, { passive: true });
+	window.addEventListener('message', onEmbeddedCreationNavigate);
 	document.body.classList.add('beta-layout');
 	setSidebarLayoutReady(false);
 
