@@ -23,7 +23,7 @@ function scrollReplyJumpTargetIntoView(target) {
 /**
  * @param {Record<string, unknown>} reply meta.reply-shaped object from API (or optimistic copy)
  * @param {boolean} replyParentExists
- * @param {{ kind: 'chat' | 'comment', flairSize?: 'sm' | 'xs', omitAvatar?: boolean }} opts
+ * @param {{ kind: 'chat' | 'comment', flairSize?: 'sm' | 'xs', omitAvatar?: boolean, root?: Element, onJump?: (id: number) => void, onMissingTarget?: (id: number) => void }} opts
  */
 export function createReplyIndicatorElement(reply, replyParentExists, opts = {}) {
 	const kind = opts?.kind === 'comment' ? 'comment' : 'chat';
@@ -125,11 +125,13 @@ export function createReplyIndicatorElement(reply, replyParentExists, opts = {})
 	if (replyParentExists && Number.isFinite(refId) && refId > 0) {
 		control.addEventListener('click', (e) => {
 			e.preventDefault();
+			if (opts.onJump) { opts.onJump(refId); return; }
 			const sel =
 				kind === 'comment'
 					? `[data-comment-id="${refId}"]`
 					: `.connect-chat-msg[data-chat-message-id="${refId}"]`;
-			const target = document.querySelector(sel);
+			const target = (opts.root || document).querySelector(sel);
+			if (!target) opts.onMissingTarget?.(refId);
 			if (target) {
 				scrollReplyJumpTargetIntoView(target);
 				const prevAbort = msgReplyJumpFlashAbortByEl.get(target);

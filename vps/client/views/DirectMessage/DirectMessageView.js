@@ -1,11 +1,32 @@
-import './DirectMessageView.css';
+import { createConversationChrome } from '../../components/Messages/ConversationChrome.js';
+import { bindMessageComposer } from '../../components/Messages/Composer.js';
+import { mountMessages } from '../../components/Messages/Messages.js';
+import { createDirectMessageController } from './DirectMessageController.js';
 
 export const DirectMessageView = Object.freeze({
-	mount({ outlet, title = 'Direct Message', slug = '' }) {
-		const label = slug === 'self' ? 'My Notes' : `@${slug}`;
-		outlet.innerHTML = `<section class="direct-message-view"><div class="direct-message-view__art" role="img" aria-label="Coming soon"><svg viewBox="0 0 240 180" aria-hidden="true"><ellipse cx="120" cy="91" rx="93" ry="59"/><rect x="76" y="46" width="90" height="91" rx="20" transform="rotate(-6 76 46)"/><circle cx="120" cy="92" r="15"/><path d="m112 92 6 6 12-14"/></svg></div><h2>${escapeHtml(label)}</h2><nav aria-label="Direct message routes"><a href="/dm/example" data-spa-link>Example DM</a><a href="/notes" data-spa-link>My Notes</a><a href="/feed" data-spa-link>Feed</a></nav></section>`;
+	mount({ outlet, services, slug = '', title = '', composer, setHeaderMenu, setHeaderAccessories, rightSidebar, actions }) {
+		let controller;
+		const chrome = createConversationChrome({ services, setHeaderMenu, setHeaderAccessories, rightSidebar, actions });
+		const view = mountMessages({
+			outlet, viewerId: services.providers.viewerId,
+			onLoadOlder: () => controller?.loadOlder(),
+			onRetry: () => controller?.refresh(),
+			onRetrySend: (id) => controller?.retrySend(id),
+			onRead: (id) => controller?.markRead(id),
+			onEdit: (id, body) => controller?.edit(id, body),
+			onReply: (id) => controller?.reply(id),
+			onReplyJump: (id) => controller?.jumpToReply(id),
+			onReact: (id, emoji) => controller?.react(id, emoji),
+			onDelete: (id) => controller?.remove(id),
+		});
+		const binding = bindMessageComposer({ form: composer, onSend: (body, reply) => controller?.send(body, reply) ?? false, onReplyChange: (id) => view.setReplyTarget(id) });
+		view.setReady = (ready) => binding.setReady(ready);
+		view.setReply = (reply) => binding.setReply(reply);
+		view.setThread = (thread, inbox) => chrome.setThread(thread, inbox);
+		controller = createDirectMessageController({ view, services, slug: slug || "self" });
+		chrome.connect(controller);
+		view.refreshChrome = () => chrome.refresh();
 		document.title = `${title} - parascene beta`;
-		return { destroy() { outlet.replaceChildren(); } };
+		return { destroy() { chrome.destroy(); controller.destroy(); binding.destroy(); view.destroy(); } };
 	},
 });
-function escapeHtml(value) { return String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]); }

@@ -3,12 +3,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-		"check:client-boundary": "node scripts/check-client-boundary.js",
-		"build": "npm run check:client-boundary && rollup -c rollup.config.mjs",
+    "check:client-boundary": "node scripts/check-client-boundary.js",
+    "build": "npm run check:client-boundary && rollup -c rollup.config.mjs",
     "dev": "node scripts/dev.js",
-    "test": "node --test"
+    "test": "node --test",
+    "verify:messages": "node --experimental-vm-modules --test test/messages-presentation-parity.test.js"
   },
   "dependencies": {
+    "@rollup/plugin-node-resolve": "^16.0.3",
     "@rollup/plugin-terser": "^1.0.0",
     "@supabase/supabase-js": "^2.39.0",
     "bcryptjs": "^2.4.3",
@@ -16,12 +18,17 @@
     "cookie-parser": "^1.4.6",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "isomorphic-dompurify": "^3.19.0",
     "jsonwebtoken": "^9.0.2",
+    "marked": "^17.0.6",
     "rollup": "^4.60.2",
     "sharp": "^0.34.5",
     "ws": "^8.21.3"
   },
   "devDependencies": {
-    "nodemon": "^3.1.14"
+    "acorn": "^8.18.0",
+    "jsdom": "^25.0.1",
+    "nodemon": "^3.1.14",
+    "postcss": "^8.5.28"
   }
 }

@@ -123,7 +123,7 @@ export function hideFloatingWhoTooltip() {
  * Desktop hover + sync with `.is-tooltip-visible` (mobile tap/long-press).
  * Safe to call multiple times; attaches once per container.
  */
-export function setupFloatingWhoTooltips(container) {
+export function setupFloatingWhoTooltips(container, { signal } = {}) {
 	const root =
 		container instanceof Document
 			? container.body || container.documentElement
@@ -142,8 +142,8 @@ export function setupFloatingWhoTooltips(container) {
 	const onScrollOrResize = () => {
 		if (floatAnchor && floatEl && !floatEl.hidden) positionFloatingWhoTooltip(floatAnchor);
 	};
-	window.addEventListener('scroll', onScrollOrResize, true);
-	window.addEventListener('resize', onScrollOrResize);
+	window.addEventListener('scroll', onScrollOrResize, { capture: true, signal });
+	window.addEventListener('resize', onScrollOrResize, { signal });
 
 	const showFromEvent = (e) => {
 		const anchor = e.target?.closest?.(FLOAT_ANCHOR_SEL);
@@ -163,15 +163,15 @@ export function setupFloatingWhoTooltips(container) {
 	root.addEventListener('pointerover', (e) => {
 		if (e.pointerType === 'touch') return;
 		showFromEvent(e);
-	});
+	}, { signal });
 	root.addEventListener('pointerout', (e) => {
 		if (e.pointerType === 'touch') return;
 		hideFromEvent(e);
-	});
+	}, { signal });
 
 	// mouse*: backup for environments that don't fire pointer events on hover.
-	root.addEventListener('mouseover', showFromEvent);
-	root.addEventListener('mouseout', hideFromEvent);
+	root.addEventListener('mouseover', showFromEvent, { signal });
+	root.addEventListener('mouseout', hideFromEvent, { signal });
 
 	const mo = new MutationObserver((mutations) => {
 		for (const m of mutations) {
@@ -186,4 +186,5 @@ export function setupFloatingWhoTooltips(container) {
 		}
 	});
 	mo.observe(root, { attributes: true, subtree: true, attributeFilter: ['class'] });
+	signal?.addEventListener('abort', () => { mo.disconnect(); delete root.dataset.whoFloatAttached; hideFloatingWhoTooltip(); }, { once: true });
 }

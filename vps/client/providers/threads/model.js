@@ -1,4 +1,4 @@
-export function mergeChatInbox(inbox, current = {}) {
+export function mergeThreadsInbox(inbox, current = {}) {
 	const readMarkers = { ...(current?.readMarkers || {}) };
 	const threads = (Array.isArray(inbox?.threads) ? inbox.threads : []).map((row) => {
 		const marker = readMarkers[String(row.id)];

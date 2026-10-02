@@ -93,6 +93,51 @@ There are three separate future initiatives here:
 
 They should not be implemented as one large redesign. The safest sequence is to validate the creative workflow first, establish user-controlled lifecycle primitives second, and then simplify the server-facing product based on observed usage. The main measures should be whether users return to develop a character or world, whether extracted resources are reused in later creations, whether users understand what is canonical, and whether storage costs become more predictable without undermining trust.
 
+## 2026-10-02
+
+### Threads and the next migration steps
+
+I’m working on the threads provider and the features built around it. Threads is the broader name for what used to be chat: it will power several areas of the app, including sidebar updates when a new message or challenge arrives. The immediate work is getting the conversation outlet views working for channels and direct messages.
+
+After that, I want to move through the remaining work in this order:
+
+1. Composers for conversations and creation.
+2. Creation workflows, bringing over the existing behavior without major changes.
+3. Feed, Challenges, Explore, Library, and the remaining custom views.
+4. Mobile layout and interaction.
+
+I’m deliberately putting off a focused mobile pass for now. I want to get the desktop flows working before spending much time on mobile. The progress is encouraging, and I think a mostly functional beta is within reach.
+
+### Profiles and the right sidebar
+
+Profiles are another missing piece. I should be able to click a user and see their profile.
+
+We already have right sidebars, and I want to extend that pattern to profiles, notes, and creation details. On desktop, these would appear beside the current view; on mobile, they would use a popover or overlay.
+
+This would make the center pane feel less sparse and let me inspect something or leave comments without losing my place in the feed or another view. The right sidebar should support that kind of quick interaction across the app.
+
+I haven’t decided whether creation detail in the sidebar should include related images. I may leave them out initially and revisit that later.
+
+### Where things stand
+
+Finishing chat would be a substantial milestone. I expect most of the remaining views to be smaller pieces of work. Creation is still a larger area, but I’m planning a faithful port rather than a redesign, which should help keep it manageable.
+
+There are still things to improve, but the beta is getting closer to being usable across its main flows.
+
+### AI feedback
+
+The threads work provides a useful foundation for both conversations and shared sidebar state. The next step should be to close the remaining known conversation gaps—private channel creation and invitations, plus canvas notification parity—then move to composers. Message hydration is already implemented; it should not be counted as an unported feature.
+
+For composers, complete one conversation flow and one creation flow before expanding across all creation types. That will establish which behavior is genuinely shared and which belongs to each view. Keep the creation work focused on matching the existing experience, as planned.
+
+The right sidebar is a useful app-wide pattern for inspecting profiles and creations while retaining the underlying view. Layout should continue to own its visibility, width, persistence, and mounting lifecycle. Individual features should provide their content and release subscriptions when unmounted. Before adapting creation detail to the sidebar, define how it interacts with the existing creation-detail overlay, URLs, Back, and dismissal so both presentations preserve navigation consistently.
+
+Leaving related images out of an initial compact detail view is a reasonable option. Keep that as an explicit product decision rather than an accidental omission during the port.
+
+Deferring the focused mobile pass is a clear sequencing choice. During the desktop work, keep the layout seams adaptable so mobile can use overlays without duplicating feature logic. Mobile usability still needs to be part of the cutover criteria when that pass arrives.
+
+The remaining views may be smaller, but their dependencies can still take time: permissions, pagination, media, notifications, and failure states. Track completion through concrete user flows rather than the number of routes that render. Also keep the creation-detail lifecycle issues documented below in the cutover checklist; working initial loads do not establish that every action and teardown path is complete.
+
 ## Migration-critical constraints — treat as on fire
 
 ### Creation-detail overlay and routing must mirror the www SPA

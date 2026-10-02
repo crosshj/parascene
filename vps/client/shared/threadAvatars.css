@@ -1,0 +1,43 @@
+/* WWW comment-avatar base and sidebar avatar dimensions. */
+.sidebar-view__row .comment-avatar,
+.beta-outlet__icon .comment-avatar {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	min-width: 24px;
+	flex-shrink: 0;
+	flex: 0 0 auto;
+	position: relative;
+	aspect-ratio: 1 / 1;
+	margin-top: 0;
+	border-radius: 50%;
+	color: var(--text);
+	font-size: .7rem;
+	font-weight: 700;
+	overflow: hidden;
+}
+.sidebar-view__row .comment-avatar-img,
+.beta-outlet__icon .comment-avatar-img {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	object-position: center;
+	display: block;
+}
+.chat-page-sidebar-channel-route-icon {
+	display: block;
+	width: 17px;
+	height: 17px;
+}
+.chat-page-sidebar-lock-icon {
+	width: 14px;
+	height: 14px;
+}
+.connect-chat-thread-row-channel-avatar:not(.chat-page-sidebar-channel-avatar--icon-only) {
+	color: #ffffff;
+	font-weight: 600;
+}

@@ -809,7 +809,4 @@ export const REACTION_ICONS = {
 };
 
 /** Display order for reaction strip (same as API REACTION_ORDER). */
-export const REACTION_ORDER = [
-	'heart', 'thumbsUp', 'thumbsDown', 'joy', 'grin', 'openMouth', 'sad', 'angry',
-	'clap', 'hundred', 'fire', 'thinking', 'eyes', 'rocket', 'pray',
-];
+export { REACTION_ORDER } from '../../shared/reactions.js';

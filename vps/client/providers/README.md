@@ -11,16 +11,16 @@ Not every provider needs every file. Small providers can keep their implementati
 
 Current folders:
 
-- `chat/` supplies the conversation inbox snapshot—threads, server context, and unread summary—consumed by the Sidebar view. Servers and threads belong under this client chat capability because server channels participate in the same conversations; the sidebar model remains beside the Sidebar view because it shapes display, not chat data.
+- `threads/` supplies the conversation inbox snapshot—threads, server context, and unread summary—consumed by the Sidebar view. Servers and threads belong under this client capability because server channels participate in the same conversations; the sidebar model remains beside the Sidebar view because it shapes display, not thread data.
 - `creations/`, `files/`, and `credits/` supply their respective APIs and queries.
 
-## Why this is the next step for chat
+## Why this is the next step for threads
 
-WWW has two distinct realtime lifetimes that the VPS chat provider will need to represent:
+WWW has two distinct realtime lifetimes that the VPS threads provider will need to represent:
 
-- A user-scoped `user:<viewerId>` broadcast invalidates inbox/unread data. WWW responds by fetching the authoritative unread summary and, where appropriate, refreshing the thread list. This belongs to the app-level chat provider so Sidebar and other consumers can observe the same update.
+- A user-scoped `user:<viewerId>` broadcast invalidates inbox/unread data. WWW responds by fetching the authoritative unread summary and, where appropriate, refreshing the thread list. This belongs to the app-level threads provider so Sidebar and other consumers can observe the same update.
 - A room-scoped `room:<threadId>` broadcast invalidates messages for the conversation currently open. WWW binds it when a DM or channel thread opens, refetches messages on activity or reconnect, handles thread deletion, and tears the listener down when that conversation closes. This lifetime must follow the active conversation, not the app-wide inbox.
 
-These broadcasts are hints, not message payloads: consumers refetch authoritative data. The VPS client currently has query providers and view-owned lifecycles, but no chat Realtime provider yet. Making the provider boundary clear first gives the WWW port a home for the app-wide inbox behavior and the route-scoped room behavior without putting either listener in the Sidebar presentation or duplicating it in Channel and DirectMessage views. Channel and DirectMessage remain distinct route views; they can consume the shared chat capability while keeping their route-specific presentation and setup.
+These broadcasts are hints, not message payloads: consumers refetch authoritative data. The VPS client currently has query providers and view-owned lifecycles, but no threads Realtime provider yet. Making the provider boundary clear first gives the WWW port a home for the app-wide inbox behavior and the route-scoped room behavior without putting either listener in the Sidebar presentation or duplicating it in Channel and DirectMessage views. Channel and DirectMessage remain distinct route views; they can consume the shared threads capability while keeping their route-specific presentation and setup.
 
 This refactor is a working example of the provider pattern using existing app data. It establishes where APIs, domain shaping, cached queries, and later observables belong before the much larger chat port begins.

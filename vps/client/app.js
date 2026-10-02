@@ -75,6 +75,8 @@ const routeDefinitions = [
 		icon: 'comments',
 		composer: 'message',
 	},
+	{ path: '/chat/t/:threadId/:threadName', view: views.Channel, titleMode: 'thread', icon: 'comments', composer: 'message' },
+	{ path: '/chat/t/:threadId', view: views.Channel, titleMode: 'thread', icon: 'comments', composer: 'message' },
 	{
 		path: '/dm/:slug',
 		view: views.DirectMessage,

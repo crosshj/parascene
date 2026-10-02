@@ -1026,6 +1026,8 @@ export function textWithCreationLinks(text, options = {}) {
 const YT_TITLE_CACHE_PREFIX = 'ps_yt_title_v2:';
 const YT_TITLE_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
 const ytInFlight = new Map();
+// Retain the title destination after hydration replaces the original link.
+const youtubeIframeByLink = new WeakMap();
 
 function getCachedYoutubeTitle(videoId) {
 	try {
@@ -1097,7 +1099,11 @@ export function hydrateYoutubeLinkTitles(rootEl) {
 		const cached = getCachedYoutubeTitle(videoId);
 		if (cached) {
 			const label = formatYoutubeLabel(cached);
-			if (label) a.textContent = label;
+			if (label) {
+				a.textContent = label;
+				const iframe = youtubeIframeByLink.get(a);
+				if (iframe?.isConnected) iframe.title = label;
+			}
 			a.dataset.youtubeTitleHydrated = 'true';
 			continue;
 		}
@@ -1133,13 +1139,17 @@ export function hydrateYoutubeLinkTitles(rootEl) {
 			// Anchor might have been replaced; re-check by dataset videoId on this element.
 			if (a.dataset.youtubeVideoId !== videoId) return;
 			const label = formatYoutubeLabel(payload);
-			if (label) a.textContent = label;
+			if (label) {
+				a.textContent = label;
+				const iframe = youtubeIframeByLink.get(a);
+				if (iframe?.isConnected) iframe.title = label;
+			}
 			a.dataset.youtubeTitleHydrated = 'true';
 		});
 	}
 }
 
-const SUNO_RESOLVE_CACHE_PREFIX = 'ps_suno_resolve_v2:';
+const SUNO_RESOLVE_CACHE_PREFIX = 'ps_suno_resolve_v3:';
 const SUNO_RESOLVE_TTL_MS = 1000 * 60 * 60 * 24 * 30;
 const sunoResolveInFlight = new Map();
 
@@ -1188,13 +1198,17 @@ function getCachedSunoResolve(cacheKey) {
 		const parsed = JSON.parse(raw);
 		if (!parsed || typeof parsed.savedAt !== 'number') return null;
 		if (Date.now() - parsed.savedAt > SUNO_RESOLVE_TTL_MS) return null;
-		return normalizeSunoResolvePayload(parsed);
+		const payload = normalizeSunoResolvePayload(parsed);
+        // Retry missing artwork rather than caching a failed preview for a month.
+        if (payload && payload.kind !== 'song' && !payload.ogImage) return null;
+		return payload;
 	} catch {
 		return null;
 	}
 }
 
 function setCachedSunoResolve(cacheKey, payload) {
+	if (payload?.kind !== 'song' && !payload?.ogImage) return;
 	try {
 		localStorage.setItem(
 			`${SUNO_RESOLVE_CACHE_PREFIX}${cacheKey}`,
@@ -1241,7 +1255,7 @@ function fetchSunoResolve(url) {
 
 	let p = sunoResolveInFlight.get(key);
 	if (!p) {
-		p = fetch(`/api/suno/resolve?url=${encodeURIComponent(key)}`, {
+		p = fetch(`/api/suno/resolve?url=${encodeURIComponent(key)}&v=3`, {
 			method: 'GET',
 			headers: { Accept: 'application/json' },
 		})
@@ -2452,11 +2466,12 @@ export function hydrateYoutubeEmbeds(rootEl) {
 		iframe.title = safeTitle;
 		iframe.setAttribute(
 			'allow',
-			'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share'
+			'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; compute-pressure https://www.youtube-nocookie.com'
 		);
 		iframe.setAttribute('allowfullscreen', '');
 		iframe.setAttribute('loading', 'lazy');
 		iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+		youtubeIframeByLink.set(a, iframe);
 		wrap.appendChild(iframe);
 		a.replaceWith(wrap);
 	}
@@ -2479,7 +2494,6 @@ function mountSunoEmbed(a, songId, titleText) {
 	}`;
 	iframe.title = safeTitle;
 	iframe.setAttribute('allow', 'autoplay; encrypted-media; fullscreen');
-	iframe.setAttribute('allowfullscreen', '');
 	iframe.setAttribute('loading', 'lazy');
 	iframe.setAttribute('referrerpolicy', 'no-referrer-when-downgrade');
 	wrap.appendChild(iframe);
@@ -2511,6 +2525,10 @@ function mountSunoPreviewCard(a, payload) {
 		img.alt = '';
 		img.loading = 'lazy';
 		img.decoding = 'async';
+        wrap.classList.add('is-loading');
+        const finish = () => wrap.classList.remove('is-loading');
+        img.addEventListener('load', finish, { once: true });
+        img.addEventListener('error', finish, { once: true });
 		media.appendChild(img);
 	}
 	wrap.appendChild(media);

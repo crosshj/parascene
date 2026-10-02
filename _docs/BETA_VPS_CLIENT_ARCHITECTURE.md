@@ -93,7 +93,7 @@ Dependencies flow from composition into infrastructure and features. Features re
 
 ## 3. Views and controllers stay together
 
-Keep `SidebarView.{js,html,css}`, `SidebarController.js`, and the sidebar presentation model in `views/Sidebar/`. Mounting `SidebarView` creates its controller, which subscribes to relevant provider queries, derives render values, and translates emitted actions into provider calls. The view renders those values and emits intent. Chat roster data and credits remain in their respective providers. Callers mount the view, not a separately managed controller.
+Keep `SidebarView.{js,html,css}`, `SidebarController.js`, and the sidebar presentation model in `views/Sidebar/`. Mounting `SidebarView` creates its controller, which subscribes to relevant provider queries, derives render values, and translates emitted actions into provider calls. The view renders those values and emits intent. Threads roster data and credits remain in their respective providers. Callers mount the view, not a separately managed controller.
 
 A small view needs only `View.js`. Split a controller when coordination obscures rendering, not by default. For this migration, `CreationDetailView.js` continues to mount the full fragment and run the adapted existing behavior; do not replace it with a reduced renderer.
 
@@ -164,3 +164,38 @@ WWW references: `src/shared/spaPageOverlay.js` handles history, dismissal, and s
 Verify deep-link → close, grid → A → B → Back/Forward, dismiss/reopen, pending-load dismissal, scroll retention, seed-first paint, and session expiry. Assert that sidebar/background controllers and subscriptions survive overlay transitions, state changes update retained views without duplicate subscriptions, and unmount disposes each controller exactly once. Also check that importing the view barrel does not mutate history and that browser module requests resolve. Building alone does not verify these behaviors.
 
 Per the [on-fire migration constraints](BETA_CUTOVER_LOG.md#migration-critical-constraints--treat-as-on-fire), stop the affected migration step and record any unclear WWW behavior or ownership conflict before guessing. This document authorizes no silent feature deletion or replacement of the requested full detail port.
+
+## Right sidebar interaction contract
+
+The right sidebar is a layout region controlled through `layout.rightSidebar`
+(and the same narrow `rightSidebar` dependency supplied to mounted views).
+`open({ key, title, mount, onClose })` mounts feature content and returns a lease
+with `close()` and `isOpen`; closing a stale lease cannot dismiss its replacement.
+Layout owns the squircle panel, responsive placement, saved width, resize grip,
+keyboard resizing, close control, Escape, and content disposal. Features own their
+content, data, and subscriptions and release their lease on teardown. Changing
+outlets prepares the destination rail before disposing the previous outlet. When
+both routes have saved rail content, the shell stays visible at the same width
+and swaps only feature content for the destination loading state. Retaining an
+outlet under a route overlay retains its rail.
+Header menus and accessories use `setHeaderMenu` and `setHeaderAccessories`.
+
+This is an explicit user-requested departure from WWW's canvas split-pane shell:
+the VPS rail uses the left sidebar's panel styling and delayed resize handle.
+The conversation canvas fragment, Markdown renderer, and content styles are ported
+from the active WWW chat shell; Channel and DM use shared conversation chrome.
+Canvases remain channel-only, with founder creation, author editing/pinning, and
+admin removal of a channel pin. Private-channel canvas bodies remain encrypted.
+
+The right rail now persists its descriptor per background route, independently
+of feature teardown. The head bootstrap restores width and reserves rail space
+before the outlet paints; layout prepares the rail before mounting each outlet,
+and the feature replaces its loading placeholder once its data arrives. Explicit
+close forgets the descriptor; route changes and teardown preserve it. Width is
+limited by available viewport space (leaving room for the outlet), rather than
+an arbitrary 600px cap. Canvas chrome uses the outlet header's transparency.
+
+The loading rail repeats body skeleton paragraphs to cover its full available
+height, recalculating on viewport and rail resize and clipping at the panel edge.
+Content replacement invalidates the previous feature lease before view teardown,
+so the outgoing controller cannot close the incoming rail or erase its state.

@@ -1,5 +1,5 @@
 import { createQueryRegistry } from '../core/queryRegistry.js';
-import { createChatProvider } from './chat/index.js';
+import { createThreadsProvider } from './threads/index.js';
 import { createCreationsProvider } from './creations/index.js';
 import { createFilesProvider } from './files/index.js';
 import { createCreditsProvider } from './credits/index.js';
@@ -8,7 +8,7 @@ export function createAppProviders({ bootstrap = {} } = {}) {
 	const viewerId = Number(bootstrap.user?.id) || null;
 	const registry = createQueryRegistry();
 	const providers = {
-		chat: createChatProvider({ viewerId, registry }),
+		threads: createThreadsProvider({ viewerId, registry }),
 		creations: createCreationsProvider({ viewerId, registry }),
 		files: createFilesProvider({ viewerId, registry, origin: bootstrap.filesOrigin || '' }),
 		credits: createCreditsProvider({ viewerId, registry }),
@@ -26,6 +26,6 @@ export function createAppProviders({ bootstrap = {} } = {}) {
 		clearCaches() {
 			for (const provider of Object.values(providers)) provider.clearCache();
 		},
-		destroy() { registry.clear(); },
+		destroy() { for (const provider of Object.values(providers)) provider.destroy?.(); registry.clear(); },
 	};
 }

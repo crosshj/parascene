@@ -397,6 +397,19 @@
 			setTitle(qTitle);
 			setCover(qImg);
 
+			fetch('/api/suno/resolve?url=' + encodeURIComponent(href), {
+				credentials: 'include',
+				headers: { Accept: 'application/json' }
+			})
+				.then(function (res) {
+					return res.ok ? res.json() : null;
+				})
+				.then(function (data) {
+					if (!data) return;
+					setTitle(typeof data.title === 'string' ? data.title.trim() : '');
+					setCover(typeof data.ogImage === 'string' ? data.ogImage.trim() : '');
+				})
+				.catch(function () {});
 		})();
 	</script>
 </body>

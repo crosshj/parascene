@@ -1,4 +1,5 @@
 import { copyIcon, linkIcon2 } from '../icons/svg-strings.js';
+import './chatInlineImageLightbox.css';
 import { DEFAULT_APP_ORIGIN, collectInlineMediaGroupGallery } from './userText.js';
 import { createModalDismissButton } from './modalDismiss.js';
 import {
@@ -196,9 +197,7 @@ function stripInlineImageLightboxHistoryStateIfPresent() {
 	const state = window.history?.state;
 	if (!state || typeof state !== 'object' || !state.prsnChatInlineImageLightbox) return;
 	try {
-		const next = { ...state };
-		delete next.prsnChatInlineImageLightbox;
-		window.history.replaceState(next, '', window.location.href);
+		document.dispatchEvent(new CustomEvent('parascene:lightbox-history', { detail: { open: false } }));
 	} catch {
 		// ignore
 	}
@@ -270,13 +269,7 @@ function requestParentInlineLightboxOpen(kind, payload) {
 function pushChatInlineImageLightboxHistoryEntry() {
 	if (!isInlineImageLightboxMobileHistoryLayout()) return;
 	try {
-		const curState = window.history?.state;
-		const baseState = curState && typeof curState === 'object' ? curState : {};
-		window.history.pushState(
-			{ ...baseState, prsnChat: true, prsnChatInlineImageLightbox: true },
-			'',
-			window.location.href
-		);
+		document.dispatchEvent(new CustomEvent('parascene:lightbox-history', { detail: { open: true } }));
 	} catch {
 		// ignore
 	}

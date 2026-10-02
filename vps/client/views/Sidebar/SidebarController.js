@@ -9,12 +9,12 @@ function routePath(navigation) {
 
 export function createSidebarController({ view, services } = {}) {
 	const { providers, state, session } = services;
-	const chatQuery = providers.chat.query;
+	const threadsQuery = providers.threads.query;
 	const creditsQuery = providers.credits.query;
 
 	function model() {
 		const preference = state.selectors.sidebarPreference();
-		const roster = chatQuery?.data || { viewerId: providers.viewerId, threads: [], servers: [] };
+		const roster = threadsQuery?.data || { viewerId: providers.viewerId, threads: [], servers: [] };
 		const next = createSidebarModel(preference, roster);
 		if (creditsQuery?.data) next.footer.credits = formatCredits(creditsQuery.data.balance);
 		return next;
@@ -28,11 +28,11 @@ export function createSidebarController({ view, services } = {}) {
 
 	function updateRoster(action) {
 		if (action?.action === 'refresh-sidebar') {
-			void chatQuery?.refresh({ force: true }).catch(() => undefined);
+			void threadsQuery?.refresh({ force: true }).catch(() => undefined);
 			return;
 		}
-		if (!action?.row || !chatQuery?.data) return;
-		const data = chatQuery.data;
+		if (!action?.row || !threadsQuery?.data) return;
+		const data = threadsQuery.data;
 		const next = {
 			...data,
 			threads: data.threads.map((row) => ({ ...row })),
@@ -55,7 +55,7 @@ export function createSidebarController({ view, services } = {}) {
 				? { ...row, unread_count: 0, last_read_message_id: next.readMarkers[String(threadId)] || row.last_read_message_id }
 				: row);
 		}
-		chatQuery.setData(next);
+		threadsQuery.setData(next);
 	}
 
 	const overlays = mountSidebarOverlays({
@@ -86,7 +86,7 @@ export function createSidebarController({ view, services } = {}) {
 	}
 
 	const unsubscribeState = state.subscribe(renderState);
-	const unsubscribeRoster = chatQuery?.subscribe((snapshot) => {
+	const unsubscribeRoster = threadsQuery?.subscribe((snapshot) => {
 		if (snapshot.error?.status === 401) return session.redirectToLogin();
 		view.setRosterStatus(snapshot);
 		if (snapshot.data) renderState();
@@ -97,7 +97,7 @@ export function createSidebarController({ view, services } = {}) {
 	});
 
 	renderState();
-	if (chatQuery) void chatQuery.loadIfNeeded().catch(() => undefined);
+	if (threadsQuery) void threadsQuery.loadIfNeeded().catch(() => undefined);
 
 	return {
 		handleAction,

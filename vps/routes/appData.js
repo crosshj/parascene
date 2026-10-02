@@ -1,6 +1,6 @@
 import express from 'express';
 import { requireAuth } from './middleware/auth.js';
-import { mockServers, mockThreads } from '../server/mocks/sidebar.js';
+import { mockThreads } from '../server/mocks/sidebar.js';
 
 function utcDayStart(value = new Date()) {
 	return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
@@ -39,7 +39,7 @@ function publicUserMeta(meta) {
 	return safe;
 }
 
-export function createAppDataRoutes({ users, credits, notifications }) {
+export function createAppDataRoutes({ users, credits, notifications, servers }) {
 	const router = express.Router();
 
 	router.get('/api/profile', noStore, requireAuth, async (req, res, next) => {
@@ -118,9 +118,9 @@ export function createAppDataRoutes({ users, credits, notifications }) {
 		const total = threads.reduce((sum, thread) => sum + (Number(thread.unread_count) || 0), 0) + challengesUnread;
 		return res.json({ total_unread: total, chat_unread: total - challengesUnread, challenges_unread: challengesUnread, viewer_id: Number(req.auth.userId) });
 	});
-	router.get('/api/servers', noStore, requireAuth, (req, res) => res.json({
-		servers: mockServers(), viewer_is_admin: false
-	}));
+	router.get('/api/servers', noStore, requireAuth, async (req, res, next) => {
+		try { res.json(await servers.list(req.auth.userId)); } catch (error) { next(error); }
+	});
 
 	router.get('/api/credits', noStore, requireAuth, async (req, res, next) => {
 		try {

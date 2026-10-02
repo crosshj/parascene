@@ -14,6 +14,11 @@ import createPageRoutes from "./routes/pages.js";
 import { createDb } from "./db/index.js";
 import { createAppDataRoutes } from "./routes/appData.js";
 import { createCreationsRoutes } from "./routes/creations.js";
+import { createThreadsRoutes } from './routes/threads.js';
+import { createRealtimeAuthRoutes } from './routes/realtimeAuth.js';
+import createYoutubeRoutes from './routes/youtube.js';
+import createSunoRoutes from './routes/suno.js';
+import createXRoutes from './routes/x.js';
 
 // Supabase Realtime needs a WebSocket implementation on Node 20.
 if (!globalThis.WebSocket) globalThis.WebSocket = WebSocket;
@@ -35,7 +40,12 @@ app.use(createAuthMiddleware(db.sessions, db.users));
 // path. The CDN host serves the same VPS-owned route through createCdnRoutes.
 app.use("/api/images/generic", createFilesCors(), createGenericRoutes(db.genericFiles, db.users));
 app.use(createCdnHostBoundary(createCdnRoutes({ profileFiles: db.profileFiles, genericFiles: db.genericFiles, users: db.users })));
-app.use(createAppDataRoutes({ users: db.users, credits: db.credits, notifications: db.notifications }));
+app.use(createThreadsRoutes({ threads: db.threads }));
+app.use(createRealtimeAuthRoutes({ realtimeAuth: db.realtimeAuth }));
+app.use(createYoutubeRoutes());
+app.use(createSunoRoutes());
+app.use(createXRoutes());
+app.use(createAppDataRoutes({ users: db.users, credits: db.credits, notifications: db.notifications, servers: db.servers }));
 app.use(createCreationsRoutes({ creations: db.creations, users: db.users }));
 app.use(createAuthRoutes({ users: db.users, sessions: db.sessions }));
 app.use(createPageRoutes({ pagesDir, users: db.users }));

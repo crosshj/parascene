@@ -3,6 +3,7 @@ import { iconMarkup } from '../Icon/Icon.js';
 import './PopupMenu.css';
 
 function itemMarkup(item, index) {
+	if (item?.section) return `<p class="ps-popup-menu__label">${escapeHtml(item.section)}</p>`;
 	if (item?.separator) return '<div class="ps-popup-menu__divider" role="separator"></div>';
 	const icon = item.icon ? iconMarkup(item.icon, 'ps-popup-menu__icon') : '';
 	const classes = `ps-popup-menu__item${item.danger ? ' ps-popup-menu__item--danger' : ''}`;
@@ -11,7 +12,7 @@ function itemMarkup(item, index) {
 	return `<button type="button" ${attrs}>${icon}<span>${escapeHtml(item.label)}</span></button>`;
 }
 
-export function createPopupMenu({ label = '', items = [], onSelect } = {}) {
+export function createPopupMenu({ label = '', items = [], onSelect, placement = 'side' } = {}) {
 	const menu = document.createElement('div');
 	menu.className = 'ps-popup-menu';
 	menu.setAttribute('role', 'menu');
@@ -28,10 +29,10 @@ export function createPopupMenu({ label = '', items = [], onSelect } = {}) {
 		const inset = 8;
 		const anchorRect = anchor.getBoundingClientRect();
 		const menuRect = menu.getBoundingClientRect();
-		let left = anchorRect.right + gap;
-		if (left + menuRect.width > innerWidth - inset) left = anchorRect.left - menuRect.width - gap;
+		let left = placement === 'below-end' ? anchorRect.right - menuRect.width : anchorRect.right + gap;
+		if (placement === 'side' && left + menuRect.width > innerWidth - inset) left = anchorRect.left - menuRect.width - gap;
 		left = Math.max(inset, Math.min(left, innerWidth - menuRect.width - inset));
-		let top = anchorRect.top;
+		let top = placement === 'below-end' ? anchorRect.bottom + gap : anchorRect.top;
 		if (top + menuRect.height > innerHeight - inset) top = anchorRect.bottom - menuRect.height;
 		top = Math.max(inset, Math.min(top, innerHeight - menuRect.height - inset));
 		menu.style.left = `${Math.round(left)}px`;

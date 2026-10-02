@@ -48,7 +48,7 @@
 				background: #f6f7fb;
 				color: #0f172a;
 			}
-			header {
+			body > header {
 				display: flex;
 				align-items: center;
 				justify-content: space-between;
@@ -261,6 +261,15 @@
 					document.documentElement.style.setProperty('--beta-sidebar-width', `${Math.min(460, Math.max(220, storedSidebarWidth))}px`);
 				}
 			} catch {}
+            try {
+                const width = Number(localStorage.getItem('prsn-right-sidebar-width-px'));
+                if (width >= 220) {
+                    const left = innerWidth >= 1024 ? Number.parseFloat(document.documentElement.style.getPropertyValue('--beta-sidebar-width')) || 272 : 0;
+                    document.documentElement.style.setProperty('--beta-right-sidebar-width', `${Math.max(220, Math.min(width, innerWidth - left - 180))}px`);
+                }
+                const saved = JSON.parse(localStorage.getItem('prsn-right-sidebar-open-by-route-v1') || '{}')[location.pathname];
+                if (saved?.key) document.documentElement.classList.add('beta-right-sidebar-restoring');
+            } catch {}
 		</script>
 		<link
 			rel="stylesheet"

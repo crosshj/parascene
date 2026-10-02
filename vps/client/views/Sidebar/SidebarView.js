@@ -25,7 +25,7 @@ function rosterRowMarkup(item, kind) {
 	const unreadClass = unread > 0 ? ' has-unread' : '';
 	return `<div class="sidebar-view__row${presenceClass}${unreadClass}" data-sidebar-item="${escapeHtml(item.id)}">
 		<a class="sidebar-view__row-link" href="${escapeHtml(item.path)}" data-spa-link>
-			${avatarMarkup({ ...item, kind }, 'sidebar-view__row-avatar')}
+			${item.avatarHtml || avatarMarkup({ ...item, kind }, 'sidebar-view__row-avatar')}
 			<span class="sidebar-view__row-body"><span class="sidebar-view__row-title-line">
 				<span class="sidebar-view__row-label">${escapeHtml(item.label)}</span>
 			</span></span>
@@ -72,8 +72,8 @@ function patchRosterRow(current, next) {
 		if (liveUnread.textContent !== nextUnread.textContent) liveUnread.textContent = nextUnread.textContent;
 		if (liveUnread.getAttribute('aria-label') !== nextUnread.getAttribute('aria-label')) liveUnread.setAttribute('aria-label', nextUnread.getAttribute('aria-label') || 'Unread');
 	} else current.querySelector('.sidebar-view__badge-slot')?.append(nextUnread.cloneNode(true));
-	const liveAvatar = current.querySelector('.ps-avatar');
-	const nextAvatar = next.querySelector('.ps-avatar');
+	const liveAvatar = current.querySelector('.ps-avatar, .comment-avatar');
+	const nextAvatar = next.querySelector('.ps-avatar, .comment-avatar');
 	if (liveAvatar && nextAvatar) {
 		if (liveAvatar.className !== nextAvatar.className) liveAvatar.className = nextAvatar.className;
 		if (liveAvatar.style.cssText !== nextAvatar.style.cssText) liveAvatar.style.cssText = nextAvatar.style.cssText;
@@ -83,7 +83,7 @@ function patchRosterRow(current, next) {
 		if (nextImage && liveImage) {
 			if (liveImage.getAttribute('src') !== nextImage.getAttribute('src')) liveImage.setAttribute('src', nextImage.getAttribute('src'));
 		} else if (nextImage || liveImage) liveAvatar.replaceChildren(...[...nextAvatar.childNodes].map((node) => node.cloneNode(true)));
-		else if (liveAvatar.textContent !== nextAvatar.textContent) liveAvatar.textContent = nextAvatar.textContent;
+		else if (liveAvatar.innerHTML !== nextAvatar.innerHTML) liveAvatar.replaceChildren(...[...nextAvatar.childNodes].map(node => node.cloneNode(true)));
 	}
 	const liveButton = current.querySelector('.sidebar-view__row-menu');
 	const nextButton = next.querySelector('.sidebar-view__row-menu');

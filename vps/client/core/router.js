@@ -136,6 +136,18 @@ export function createRouter({ routes, state, layout } = {}) {
 		void dismissOverlay();
 	}
 
+	// Media dialogs keep the route mounted. On mobile, Back dismisses the
+	// lightbox using the same history marker as WWW; history stays router owned.
+	function onLightboxHistoryRequest(event) {
+		const prior = history.state && typeof history.state === 'object' ? history.state : {};
+		if (event.detail?.open === true) {
+			history.pushState({ ...prior, prsnChatInlineImageLightbox: true }, '', currentUrl());
+		} else if (prior.prsnChatInlineImageLightbox) {
+			const { prsnChatInlineImageLightbox: _lightbox, ...next } = prior;
+			history.replaceState(next, '', currentUrl());
+		}
+	}
+
 	return {
 		async start() {
 			if (started) return;
@@ -143,6 +155,7 @@ export function createRouter({ routes, state, layout } = {}) {
 			document.addEventListener('click', onDocumentClick);
 			document.addEventListener('parascene:navigate', onNavigateRequest);
 			document.addEventListener('parascene:dismiss-overlay', onDismissOverlayRequest);
+			document.addEventListener('parascene:lightbox-history', onLightboxHistoryRequest);
 			window.addEventListener('popstate', onPopState);
 			await reconcile({ fromHistory: true });
 		},
@@ -155,6 +168,7 @@ export function createRouter({ routes, state, layout } = {}) {
 			document.removeEventListener('click', onDocumentClick);
 			document.removeEventListener('parascene:navigate', onNavigateRequest);
 			document.removeEventListener('parascene:dismiss-overlay', onDismissOverlayRequest);
+			document.removeEventListener('parascene:lightbox-history', onLightboxHistoryRequest);
 			window.removeEventListener('popstate', onPopState);
 			layout.destroy();
 			currentComposition = null;

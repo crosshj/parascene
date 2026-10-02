@@ -21488,3 +21488,7 @@ app-modal-creation-details .creation-details-args-hint code {
 	font-weight: 600;
 	line-height: 1.3;
 }
+
+.connect-chat-suno-preview.is-loading { animation: connect-chat-creation-embed-pulse 1.2s ease-in-out infinite; }
+.connect-chat-suno-preview.is-loading .connect-chat-suno-preview-meta,
+.connect-chat-suno-preview.is-loading .chat-doom-play-overlay { visibility: hidden; }

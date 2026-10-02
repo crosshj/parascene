@@ -17,6 +17,23 @@ export function cloneTemplateElement(template) {
 	return template.content.cloneNode(true);
 }
 
+/** Parse component-owned templates once per document; clone without retaining live UI. */
+export function createTemplateFactory(source) {
+	const documents = new WeakMap();
+	return (name, ownerDocument = document) => {
+		let templates = documents.get(ownerDocument);
+		if (!templates) {
+			const holder = ownerDocument.createElement('template');
+			holder.innerHTML = String(source || '').trim();
+			templates = new Map([...holder.content.querySelectorAll('template[id]')].map((template) => [template.id, template]));
+			documents.set(ownerDocument, templates);
+		}
+		const template = templates.get(name);
+		if (!template) throw new Error(`Unknown component template: ${name}`);
+		return template.content.firstElementChild.cloneNode(true);
+	};
+}
+
 export function mountTemplate(outlet, source) {
 	const fragment = htmlFragment(source);
 	const root = fragment.firstElementChild;

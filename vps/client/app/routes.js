@@ -61,14 +61,14 @@ export function createAppRoutes({ definitions = [] } = {}) {
 			titleMode === 'dm' ? `@${params.slug}` :
 			titleMode === 'notes' ? 'My Notes' : null;
 		const defaults = fallbackChrome(url.pathname);
-		const resolvedTitle = title || route.title || 'Coming soon';
+		const resolvedTitle = titleMode === 'thread' ? '' : title || route.title || 'Coming soon';
 		const challengeSection = route.path.startsWith('/challenges/')
 			? route.path.split('/')[2].replace(/^./, (letter) => letter.toUpperCase())
 			: null;
 		return {
 			key: `route:${route.path}:${Object.values(params).join(':')}`,
 			view: route.view,
-			props: { title: resolvedTitle, viewName: route.viewName || route.title || resolvedTitle, ...params },
+			props: { title: resolvedTitle, viewName: route.viewName || route.title || resolvedTitle, ...(route.slug ? { slug: route.slug } : {}), ...params },
 			chrome: {
 				title: resolvedTitle,
 				icon: route.icon || defaults.icon,

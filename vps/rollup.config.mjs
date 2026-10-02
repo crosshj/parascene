@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import CleanCSS from "clean-css";
 import terser from "@rollup/plugin-terser";
+import { nodeResolve } from '@rollup/plugin-node-resolve';
 
 const vpsDir = path.dirname(fileURLToPath(import.meta.url));
 const buildDir = path.join(vpsDir, "build");
@@ -84,7 +85,19 @@ function emitImportedCss() {
 			return "export default {};";
 		},
 		generateBundle() {
-			const source = [...cssSources.values()].join("\n\n");
+			// File reads finish asynchronously. Emit CSS in module import order,
+			// so component overrides always follow their foundational styles.
+			const visited = new Set();
+			const ordered = [];
+			const visit = (id) => {
+				if (visited.has(id)) return;
+				visited.add(id);
+				const info = this.getModuleInfo(id);
+				for (const dependency of [...info?.importedIds || [], ...info?.dynamicallyImportedIds || []]) visit(dependency);
+				if (cssSources.has(id)) ordered.push(cssSources.get(id));
+			};
+			for (const id of this.getModuleIds()) if (this.getModuleInfo(id)?.isEntry) visit(id);
+			const source = ordered.join("\n\n");
 			const minified = new CleanCSS({ level: 1 }).minify(source);
 			if (minified.errors.length) throw new Error(minified.errors.join("\n"));
 			this.emitFile({ type: "asset", name: "app.css", source: minified.styles });
@@ -110,6 +123,7 @@ export default {
 	},
 	plugins: [
 		assertVpsClientBoundary(),
+		nodeResolve({ browser: true }),
 		htmlStringImports(),
 		emitImportedCss(),
 		...(isProduction ? [terser()] : []),

@@ -1,4 +1,5 @@
 import './layout.css';
+import { createRightSidebar } from './rightSidebar.js';
 import { createPopupMenu } from '../components/PopupMenu/PopupMenu.js';
 import { iconMarkup } from '../components/Icon/Icon.js';
 
@@ -71,6 +72,20 @@ export function createLayout({ root, views, services } = {}) {
 	const overlayBack = overlayHost.querySelector('.beta-app-overlay__back');
 	const overlayClose = overlayHost.querySelector('.beta-app-overlay__close');
 
+	const rightSidebar = createRightSidebar({ root });
+	const headerAccessories = document.createElement('span');
+	headerAccessories.className = 'beta-outlet__accessories';
+	menuButton.before(headerAccessories);
+	function setHeaderAccessories(items = []) {
+		headerAccessories.replaceChildren();
+		for (const item of items) {
+			const button = document.createElement('button');
+			button.type = 'button'; button.className = 'beta-outlet__pin chat-page-topbar-pinned-canvas-btn';
+			button.textContent = item.label; button.setAttribute('aria-label', item.ariaLabel || item.label);
+			button.addEventListener('click', item.onClick); headerAccessories.append(button);
+		}
+	}
+
 	const mounted = {
 		sidebar: null,
 		mobile: null,
@@ -80,7 +95,7 @@ export function createLayout({ root, views, services } = {}) {
 
 	function setHeaderMenu({ label = 'Page actions', items = [], onSelect } = {}) {
 		menu?.destroy();
-		menu = items.length ? createPopupMenu({ label, items, onSelect }) : null;
+		menu = items.length ? createPopupMenu({ label, items, onSelect, placement: 'below-end' }) : null;
 		menuButton.hidden = !menu;
 		menuButton.setAttribute('aria-expanded', 'false');
 	}
@@ -105,7 +120,7 @@ export function createLayout({ root, views, services } = {}) {
 			breadcrumb.append(parent, separator, current);
 			pageTitle.append(breadcrumb);
 		} else {
-			pageTitle.textContent = chrome.title || 'Feed';
+			pageTitle.textContent = chrome.title ?? 'Feed';
 		}
 		pageIcon.innerHTML = iconMarkup(chrome.icon || 'home');
 		composer.hidden = chrome.composer === 'none';
@@ -116,6 +131,14 @@ export function createLayout({ root, views, services } = {}) {
 			services,
 			actions,
 			setHeaderMenu,
+			setHeaderAccessories,
+			rightSidebar,
+			setConversationIdentity({ title, avatarHtml }) {
+				pageTitle.textContent = title;
+				pageIcon.innerHTML = avatarHtml;
+				document.title = `${title} - parascene beta`;
+			},
+			composer,
 			...extra,
 		};
 	}
@@ -134,12 +157,14 @@ export function createLayout({ root, views, services } = {}) {
 		const current = mounted[name];
 		if (!descriptor) {
 			unmount(name, host);
+			if (name === 'outlet') rightSidebar.close({ forget: false });
 			return false;
 		}
 		if (current?.key === descriptor.key) {
 			current.handle?.update?.({ ...descriptor.props, ...mountContext(extra) });
 			return false;
 		}
+		if (name === 'outlet') rightSidebar.prepare(extra.sidebarRoute);
 		unmount(name, host);
 		const record = { key: descriptor.key, handle: null, active: true };
 		mounted[name] = record;
@@ -210,10 +235,11 @@ export function createLayout({ root, views, services } = {}) {
 
 		const outletChanged = mounted.outlet?.key !== composition.outlet?.key;
 		if (outletChanged) {
+			setHeaderAccessories();
 			setHeaderMenu();
 			setPage(composition.outlet?.chrome);
 		}
-		await reconcileRegion('outlet', outletRegion, composition.outlet);
+		await reconcileRegion('outlet', outletRegion, composition.outlet, { sidebarRoute: composition.backgroundUrl || composition.url });
 		if (revision !== backgroundRevision) return;
 		if (outletChanged) {
 			scrollRegion.scrollTo(0, 0);
@@ -266,8 +292,10 @@ export function createLayout({ root, views, services } = {}) {
 
 	function destroy() {
 		backgroundRevision++;
+		setHeaderAccessories();
 		unmount('overlay', overlayContent);
 		unmount('outlet', outletRegion);
+		rightSidebar.destroy();
 		unmount('mobile', mobileRegion);
 		unmount('sidebar', sidebarRegion);
 		setHeaderMenu();
@@ -297,6 +325,7 @@ export function createLayout({ root, views, services } = {}) {
 	return {
 		apply,
 		destroy,
+		rightSidebar,
 		get composition() { return appliedComposition; },
 	};
 }

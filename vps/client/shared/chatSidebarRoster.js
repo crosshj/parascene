@@ -3,6 +3,7 @@
  */
 
 import { getAvatarColor } from './avatar.js';
+import './threadAvatars.css';
 import { serverChannelTagFromServerName } from './serverChatTag.js';
 import { readDmPinKeysOrdered } from './chatDmPins.js';
 import { feedNavLabel } from './feedBetaNav.js';
@@ -572,7 +573,7 @@ export function buildChatThreadUrl(meta) {
 	}
 	const id = Number(meta.id);
 	if (Number.isFinite(id) && id > 0) {
-		return `/dm/${encodeURIComponent(String(id))}`;
+		return `/chat/t/${encodeURIComponent(String(id))}`;
 	}
 	return '/connect#chat';
 }
@@ -588,7 +589,7 @@ export function normalizeChatNavPathForCompare(p) {
 	if (s === '/chat/notes') return '/notes';
 	if (s === SIDEBAR_NOTES_STRIP_HREF) return SIDEBAR_NOTES_STRIP_HREF;
 	const t = s.match(/^\/chat\/t\/(\d+)(?:\/[^/?#]+)?$/i);
-	if (t && t[1]) return `/dm/${t[1]}`;
+	if (t && t[1]) return `/chat/t/${t[1]}`;
 	return s;
 }
 

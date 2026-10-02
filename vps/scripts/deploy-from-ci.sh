@@ -155,6 +155,7 @@ scp "${SSH_OPTS[@]}" vps/scripts/deploy-from-ci.sh "$REMOTE:/tmp/deploy-vps.sh"
 # are passed to Docker through --env-file and are never put in the archive.
 	printf '%s\n' \
 	"SUPABASE_URL=$SUPABASE_URL" \
+	"SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY:-}" \
 	"SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_SERVICE_ROLE_KEY" \
 	"SESSION_SECRET=$SESSION_SECRET" \
 	"APP_VERSION=beta" \
