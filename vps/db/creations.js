@@ -93,6 +93,15 @@ export function createCreationsStore({ client, supabaseUrl, serviceRoleKey }) {
 			if (error) throw error;
 			return (Array.isArray(data) ? data : []).filter((row) => !isHiddenInGroupMeta(row?.meta));
 		},
+		// Only call after verifying a share token for this exact creation.
+		async byIdForShare(creationId) {
+			const id = Number(creationId);
+			if (!Number.isInteger(id) || id <= 0) return null;
+			const { data, error } = await client.from("prsn_created_images").select(CREATION_FIELDS).eq("id", id).maybeSingle();
+			if (error) throw error;
+			if (!data || (data.status || "completed") !== "completed" || (data.unavailable_at != null && data.unavailable_at !== "")) return null;
+			return data;
+		},
 		async byIdForViewer(userId, creationId, { isAdmin = false } = {}) {
 			const id = Number(creationId);
 			if (!Number.isInteger(id) || id <= 0) return null;
@@ -525,7 +534,7 @@ export function createCreationsStore({ client, supabaseUrl, serviceRoleKey }) {
 			}
 			return response;
 		},
-		async mintAudioPlaybackUrl(objectId) {
+		async mintAudioPlaybackUrl(objectId, window = {}) {
 			if (!/^o_[a-f0-9]{24}$/.test(String(objectId || ""))) throw new Error("Invalid audio object");
 			const { data: server, error } = await client
 				.from("prsn_servers")
@@ -543,7 +552,7 @@ export function createCreationsStore({ client, supabaseUrl, serviceRoleKey }) {
 			}
 			if (typeof server.auth_token === "string" && server.auth_token.trim()) headers.Authorization = `Bearer ${server.auth_token.trim()}`;
 			const response = await fetch(`${origin}/cdn/objects/${encodeURIComponent(objectId)}/links`, {
-				method: "POST", headers, body: "{}", signal: AbortSignal.timeout(20_000)
+				method: "POST", headers, body: JSON.stringify(window), signal: AbortSignal.timeout(20_000)
 			});
 			if (!response.ok) throw new Error(`Audio host returned ${response.status}`);
 			const payload = await response.json();

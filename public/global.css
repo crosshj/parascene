@@ -21492,3 +21492,9 @@ app-modal-creation-details .creation-details-args-hint code {
 .connect-chat-suno-preview.is-loading { animation: connect-chat-creation-embed-pulse 1.2s ease-in-out infinite; }
 .connect-chat-suno-preview.is-loading .connect-chat-suno-preview-meta,
 .connect-chat-suno-preview.is-loading .chat-doom-play-overlay { visibility: hidden; }
+
+/* Failed previews keep the same reserved card size and remain links to Suno. */
+.connect-chat-suno-preview.is-broken .connect-chat-suno-preview-img,
+.connect-chat-suno-preview.is-broken .chat-doom-play-overlay { display: none; }
+.connect-chat-suno-preview-broken { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--text-muted, currentColor); }
+.connect-chat-suno-preview-broken svg { width: 40px; height: 40px; }

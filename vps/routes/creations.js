@@ -5,6 +5,7 @@ import sharp from "sharp";
 import { requireAuth } from "./middleware/auth.js";
 import { creationAudioCdnId, creationMediaKey, creationMediaKeys, creationVideoMediaKey } from "../db/creations.js";
 import { extractVideoThumbnail } from "./utils/media.js";
+import { verifyShareToken } from "./utils/shareLink.js";
 
 function integer(value, fallback, min, max) {
 	const n = Number.parseInt(String(value ?? ""), 10);
@@ -292,6 +293,10 @@ export function createCreationsRoutes({ creations, users }) {
 			const viewer = await users.byId(req.auth.userId);
 			if (!viewer) return res.status(404).json({ error: "User not found" });
 			let row = await creations.byIdForViewer(req.auth.userId, req.params.id, { isAdmin: viewer.role === "admin" });
+			if (!row && req.headers["x-share-version"] && req.headers["x-share-token"]) {
+				const proof = verifyShareToken({ version: req.headers["x-share-version"], token: req.headers["x-share-token"] });
+				if (proof.ok && proof.imageId === Number(req.params.id)) row = await creations.byIdForShare(proof.imageId);
+			}
 			if (!row && req.query.lineage_of != null) {
 				row = await creations.lineageAncestorForViewer(req.auth.userId, req.params.id, req.query.lineage_of, { isAdmin: viewer.role === "admin" });
 			}
@@ -374,7 +379,33 @@ export function createCreationsRoutes({ creations, users }) {
 		} catch (error) { return next(error); }
 	});
 
-	router.get("/api/creations/:id/audio", requireAuth, async (req, res, next) => {
+	router.get("/api/share/:version/:token/cdn-audio", async (req, res, next) => {
+		const verified = verifyShareToken(req.params);
+		if (!verified.ok) return res.status(404).json({ error: "Not found" });
+		try {
+			const row = await creations.byIdForShare(verified.imageId);
+			const cdnId = creationAudioCdnId(row);
+			if (!row || !cdnId) return res.status(404).json({ error: "Not found" });
+			const window = {};
+			const hasSo = req.query.so != null && String(req.query.so).trim() !== "";
+			const hasDu = req.query.du != null && String(req.query.du).trim() !== "";
+			if (hasSo || hasDu) {
+				window.so = hasSo ? Number(req.query.so) : 0;
+				if (!Number.isFinite(window.so) || window.so < 0) return res.status(400).json({ error: "so must be a non-negative number." });
+				if (hasDu) {
+					window.du = Number(req.query.du);
+					if (!Number.isFinite(window.du) || window.du <= 0) return res.status(400).json({ error: "du must be a positive number." });
+				}
+			}
+			const target = await creations.mintAudioPlaybackUrl(cdnId, window);
+			res.set("Cache-Control", "private, no-store");
+			if (req.query.format === "json" || String(req.headers.accept || "").toLowerCase().includes("application/json")) return res.json({ url: target, expires_at: null });
+			return res.redirect(302, target);
+		} catch (error) { return next(error); }
+	});
+
+	// Shared creation players also use the established WWW playback URL.
+	router.get(["/api/creations/:id/audio", "/api/create/images/:id/audio"], requireAuth, async (req, res, next) => {
 		try {
 			const viewer = await users.byId(req.auth.userId);
 			let row = await creations.byIdForViewer(req.auth.userId, req.params.id, { isAdmin: viewer?.role === "admin" });

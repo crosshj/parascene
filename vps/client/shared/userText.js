@@ -2470,6 +2470,25 @@ function mountSunoEmbed(a, songId, titleText) {
 	a.replaceWith(wrap);
 }
 
+function markSunoPreviewBroken(wrap) {
+	wrap.classList.remove('is-loading');
+	wrap.classList.add('is-broken');
+	const label = wrap.dataset.sunoKind === 'playlist' ? 'Suno playlist preview unavailable' : 'Suno hook preview unavailable';
+	wrap.title = label;
+	wrap.setAttribute('aria-label', label);
+	if (!wrap.querySelector('.connect-chat-suno-preview-broken')) {
+		const icon = document.createElement('span');
+		icon.className = 'connect-chat-suno-preview-broken';
+		icon.setAttribute('aria-hidden', 'true');
+		icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2h-4M13 3l-3 5 4 3-3 5M3 17l4-4 4 4 5-4 5 4"/></svg>';
+		wrap.append(icon);
+	}
+}
+
+function mountBrokenSunoPreview(a, kind = 'hook') {
+	mountSunoPreviewCard(a, { kind, url: a.dataset.sunoUrl || a.href, previewFailed: true });
+}
+
 function mountSunoPreviewCard(a, payload) {
 	if (!(a instanceof HTMLAnchorElement) || !payload) return;
 	if (a.dataset.sunoEmbedHydrated === 'true') return;
@@ -2498,7 +2517,7 @@ function mountSunoPreviewCard(a, payload) {
         wrap.classList.add('is-loading');
         const finish = () => wrap.classList.remove('is-loading');
         img.addEventListener('load', finish, { once: true });
-        img.addEventListener('error', finish, { once: true });
+        img.addEventListener('error', () => markSunoPreviewBroken(wrap), { once: true });
 		media.appendChild(img);
 	}
 	wrap.appendChild(media);
@@ -2539,6 +2558,7 @@ function mountSunoPreviewCard(a, payload) {
 		'aria-label',
 		tooltip || (kind === 'playlist' ? 'Suno playlist' : 'Suno hook')
 	);
+	if (payload.previewFailed || !payload.ogImage) markSunoPreviewBroken(wrap);
 	a.replaceWith(wrap);
 }
 
@@ -2600,7 +2620,7 @@ export function hydrateSunoEmbeds(rootEl) {
 			}
 			void fetchSunoResolve(url).then((payload) => {
 				if (!payload || a.dataset.sunoEmbedHydrated === 'true') {
-					if (!payload) delete a.dataset.sunoPreviewPending;
+					if (!payload) mountBrokenSunoPreview(a, kind);
 					return;
 				}
 				mountSunoFromPayload(a, payload, titleText);
@@ -2619,8 +2639,11 @@ export function hydrateSunoEmbeds(rootEl) {
 		}
 		void fetchSunoResolve(url).then((payload) => {
 			if (!payload) {
-				delete a.dataset.sunoPreviewPending;
-				delete a.dataset.sunoEmbedPending;
+				if (kind === 'share') mountBrokenSunoPreview(a);
+				else {
+					delete a.dataset.sunoPreviewPending;
+					delete a.dataset.sunoEmbedPending;
+				}
 				return;
 			}
 			if (a.dataset.sunoEmbedHydrated === 'true') return;
