@@ -199,3 +199,7 @@ The loading rail repeats body skeleton paragraphs to cover its full available
 height, recalculating on viewport and rail resize and clipping at the panel edge.
 Content replacement invalidates the previous feature lease before view teardown,
 so the outgoing controller cannot close the incoming rail or erase its state.
+
+### Feed placeholder exception (2026-10-02)
+
+At the user’s request, the beta Feed placeholder is a minimal progress overview rather than a port of the WWW feed. Its native template and scoped styles belong to `views/Feed`. It presents the main areas already in place and the remaining work; the activity feed will replace it later.
