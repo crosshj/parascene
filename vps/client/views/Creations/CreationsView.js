@@ -2,6 +2,7 @@ import { bindRefs, mountTemplate } from '../../utils/dom.js';
 import { createCreationMediaLoader, creationCardMarkup } from '../../shared/creationGrid.js';
 import template from './CreationsView.html';
 import './CreationsView.css';
+import '../../components/CreationGrid/CreationGrid.css';
 
 const PAGE_SIZE = 50;
 const LOOKAHEAD_SKELETONS = 16;

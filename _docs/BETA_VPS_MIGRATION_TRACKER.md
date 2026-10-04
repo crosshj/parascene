@@ -5,17 +5,21 @@ Current outstanding migration scope. Update this checklist as items are verified
 ## Completed migrations
 
 - Create workflow and creation/conversation composers are ported to VPS-owned views, components, providers, uploads, and routes.
+- My Creations, My Files, Comments, Explore, Library, Profile, Connections, Settings and User Menu are implemented in VPS; Reports retains its local development link.
+- Help is served as a standalone VPS document using VPS-owned Markdown, with the WWW Help layout/search/footer and same-host new-tab entry points.
+- Chat identity links open profiles from avatars and names in DMs, comments and the chat header; username profile lookup supports hyphenated names.
 
-## Product surfaces
+## Main product surfaces remaining
 
 - [ ] Feed
 - [ ] Challenges
-- [ ] My Files presentation and behavior, using My Creations as the visual reference
-- [ ] Comments
-- [ ] Explore
-- [ ] Library
-- [ ] User menu: Profile, Connections, Settings, Help, Reports
-- [ ] Sidebar plus controls and gear/settings control
+
+These are the two major end-user surfaces still to port. Smaller follow-ups and migration-wide cutover checks are listed separately below. The dated [2026-10-04 review notes](BETA_CUTOVER_LOG.md#comments-explore-my-files-library-and-user-menu-2026-10-04) record the completed port details and validation.
+
+## Product follow-ups
+
+- [ ] Serve the pricing view inside the app.
+- [ ] Finish the sidebar plus controls and gear/settings control.
 
 ## Public pages and discoverability
 

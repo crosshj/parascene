@@ -192,6 +192,7 @@ export function attachFeedImpressionBeacon(card, item, opts = {}) {
 	);
 
 	observer.observe(target);
+	return () => { observer.disconnect(); if (timer) window.clearTimeout(timer); visibleSince = 0; };
 }
 
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {

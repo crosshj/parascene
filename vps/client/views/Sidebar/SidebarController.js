@@ -7,8 +7,9 @@ function routePath(navigation) {
 	try { return new URL(raw, location.origin).pathname; } catch { return location.pathname; }
 }
 
-export function createSidebarController({ view, services } = {}) {
+export function createSidebarController({ view, services, actions } = {}) {
 	const { providers, state, session } = services;
+const settings=document.createElement('app-modal-profile'),about=document.createElement('app-modal-about');document.body.append(settings,about);const accountMenu=document.createElement('app-account-menu');accountMenu.onSettings=()=>settings.open();accountMenu.onAbout=()=>about.open();accountMenu.onNavigate=actions?.navigate;accountMenu.onLogout=session.logout;document.body.appendChild(accountMenu);
 	const threadsQuery = providers.threads.query;
 	const creditsQuery = providers.credits.query;
 
@@ -72,7 +73,7 @@ export function createSidebarController({ view, services } = {}) {
 	function handleAction(action) {
 		if (action?.action === 'open-overlay') {
 			if (action.overlay === 'account') {
-				document.dispatchEvent(new CustomEvent('open-account-menu', { detail: { anchor: action.anchor } }));
+				void accountMenu.open(action.anchor);
 				return;
 			}
 			overlays.open(action.overlay, action.anchor);
@@ -105,7 +106,7 @@ export function createSidebarController({ view, services } = {}) {
 			unsubscribeState();
 			unsubscribeRoster?.();
 			unsubscribeCredits?.();
-			overlays.destroy();
+			overlays.destroy();accountMenu.remove();settings.close();settings.remove();about.close();about.remove();
 		},
 	};
 }

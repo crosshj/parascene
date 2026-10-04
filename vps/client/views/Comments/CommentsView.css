@@ -1,0 +1,346 @@
+/* Active WWW SPA latest-comment cards; the mounted view owns their layout. */
+:where(.comments-view) .connect-comment-list {
+	gap: 0;
+}
+
+:where(.comments-view) .connect-comment {
+	display: grid;
+	grid-template-columns: 128px minmax(0, 1fr);
+	column-gap: 12px;
+	row-gap: 0;
+	grid-template-areas:
+		'thumb title'
+		'thumb creator'
+		'thumb text'
+		'thumb reply'
+		'thumb footer';
+	align-items: start;
+	padding: 12px 0;
+	cursor: pointer;
+	min-width: 0;
+	max-width: 100%;
+	box-sizing: border-box;
+	overflow-x: clip;
+}
+
+:where(.comments-view) .connect-comment.has-reactions {
+	grid-template-areas:
+		'thumb title'
+		'thumb creator'
+		'thumb text'
+		'thumb reply'
+		'thumb footer'
+		'thumb reactions';
+}
+
+:where(.comments-view) .connect-comment+.connect-comment {
+	border-top: 1px solid var(--border);
+}
+
+:where(.comments-view) .connect-comment:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 6px;
+	border-radius: 10px;
+}
+
+:where(.comments-view) .connect-comment.is-disabled {
+	cursor: default;
+	opacity: 0.7;
+}
+
+:where(.comments-view) .connect-comment-thumb {
+	grid-area: thumb;
+	position: relative;
+	width: 128px;
+	height: 128px;
+	border-radius: 0;
+	background: var(--surface-muted);
+	border: 1px solid var(--border);
+	overflow: hidden;
+}
+
+/* Play icon on video thumbnails in Connect > Comments (non-NSFW or when NSFW unobscured) */
+:where(.comments-view) .connect-comment-thumb[data-media-type="video"]:not(.nsfw)::before {
+	content: "";
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	width: 28px;
+	height: 28px;
+	border-radius: 50%;
+	background-color: rgba(0, 0, 0, 0.7);
+	transform: translate(-50%, -50%);
+}
+
+:where(.comments-view) .connect-comment-thumb[data-media-type="video"]:not(.nsfw)::after {
+	content: "";
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	width: 0;
+	height: 0;
+	border-top: 7px solid transparent;
+	border-bottom: 7px solid transparent;
+	border-left: 11px solid rgba(255, 255, 255, 0.9);
+	transform: translate(-40%, -50%);
+}
+
+:where(.comments-view) .connect-comment-thumb-img {
+	width: 100%;
+	height: 100%;
+	display: block;
+	object-fit: cover;
+}
+
+:where(.comments-view) .connect-comment-creation-title {
+	grid-area: title;
+	font-weight: 600;
+	line-height: 1.25;
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	line-clamp: 2;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	word-break: break-word;
+}
+
+:where(.comments-view) .connect-comment-creator {
+	grid-area: creator;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+:where(.comments-view) .connect-comment-creator-left {
+	display: inline-flex;
+	align-items: center;
+	gap: 10px;
+	min-width: 0;
+}
+
+:where(.comments-view) .connect-comment-creator-who {
+	display: inline-flex;
+	align-items: baseline;
+	gap: 8px;
+	min-width: 0;
+}
+
+:where(.comments-view) .connect-comment-creator .comment-avatar,
+:where(.comments-view) .connect-comment-footer .comment-avatar {
+	width: 16px;
+	height: 16px;
+	margin-top: 0;
+	font-weight: 700;
+	font-size: 0.75em;
+}
+
+:where(.comments-view) .connect-comment-creator .comment-avatar:has(.avatar-with-founder-flair),
+:where(.comments-view) .connect-comment-footer .comment-avatar:has(.avatar-with-founder-flair) {
+	width: auto;
+	height: auto;
+	overflow: visible;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+
+:where(.comments-view) .connect-comment .comment-text {
+	grid-area: text;
+	margin-top: 8px;
+	margin-bottom: 0;
+	min-width: 0;
+	max-width: 100%;
+}
+
+:where(.comments-view) .connect-comment > .msg-reply-indicator.msg-reply-indicator--compact.connect-comment-reply {
+	grid-area: reply;
+	margin: 6px 0 0;
+	width: 100%;
+	max-width: 100%;
+	padding-left: 0;
+	box-sizing: border-box;
+}
+
+:where(.comments-view) .connect-comment > .msg-reply-indicator.msg-reply-indicator--compact.connect-comment-reply .msg-reply-indicator-inner {
+	padding: 0;
+	border: none;
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
+	align-items: center;
+	min-height: 0;
+	gap: 2px;
+	min-width: 0;
+	width: 100%;
+	box-sizing: border-box;
+	margin-left: 6px;
+	margin-bottom: -6px;
+}
+
+:where(.comments-view) .connect-comment > .msg-reply-indicator.msg-reply-indicator--compact.connect-comment-reply .msg-reply-indicator-target-mark {
+	flex-shrink: 0;
+	align-self: center;
+	display: block;
+	width: 11px;
+	height: 11px;
+	box-sizing: border-box;
+	margin: 0 0 -10px 0;
+	border: none;
+	border-left: 2px solid color-mix(in srgb, var(--text-muted) 55%, var(--border));
+	border-top: 2px solid color-mix(in srgb, var(--text-muted) 55%, var(--border));
+	border-top-left-radius: 15px;
+}
+
+:where(.comments-view) .connect-comment > .msg-reply-indicator.msg-reply-indicator--compact.connect-comment-reply .msg-reply-indicator-badge {
+	display: none;
+}
+
+:where(.comments-view) .connect-comment > .msg-reply-indicator.msg-reply-indicator--compact.connect-comment-reply .msg-reply-indicator-text {
+	flex-direction: row;
+	flex-wrap: nowrap;
+	align-items: baseline;
+	gap: 6px;
+	min-width: 0;
+}
+
+:where(.comments-view) .connect-comment > .msg-reply-indicator.msg-reply-indicator--compact.connect-comment-reply .msg-reply-indicator-top {
+	display: contents;
+}
+
+:where(.comments-view) .connect-comment > .msg-reply-indicator.msg-reply-indicator--compact.connect-comment-reply .msg-reply-indicator-name {
+	font-size: 0.78rem;
+	font-weight: 600;
+	flex: 0 0 auto;
+	max-width: none;
+	min-width: 0;
+	color: var(--text-muted);
+	overflow: visible;
+	text-overflow: clip;
+	white-space: nowrap;
+}
+
+:where(.comments-view) .connect-comment > .msg-reply-indicator.msg-reply-indicator--compact.connect-comment-reply .msg-reply-indicator-preview {
+	flex: 1 1 auto;
+	min-width: 0;
+	font-size: 0.78rem;
+	line-height: 1.35;
+	color: color-mix(in srgb, var(--text-muted) 86%, transparent);
+	word-break: break-word;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	display: block;
+}
+
+:where(.comments-view) .connect-comment .comment-reactions {
+	grid-area: reactions;
+	margin-top: 8px;
+}
+
+:where(.comments-view) .connect-comment-footer {
+	grid-area: footer;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+:where(.comments-view) .connect-comment-footer-left {
+	display: inline-flex;
+	align-items: center;
+	gap: 10px;
+	min-width: 0;
+}
+
+:where(.comments-view) .connect-comment-footer-who {
+	display: inline-flex;
+	align-items: baseline;
+	gap: 8px;
+	min-width: 0;
+}
+
+:where(.comments-view) .connect-comment-footer-name-handle-time {
+	display: inline-flex;
+	align-items: baseline;
+	gap: 8px;
+	min-width: 0;
+}
+
+:where(.comments-view) .connect-comment-footer-name-handle-time .comment-author-name {
+	flex: 0 1 auto;
+	min-width: 0;
+}
+
+:where(.comments-view) .connect-comment-footer-name-handle-time .comment-author-handle,
+:where(.comments-view) .connect-comment-footer-name-handle-time .comment-time {
+	flex: 0 0 auto;
+}
+
+:where(.comments-view) .connect-comment-footer-name-handle-time .comment-time {
+	font-weight: 400;
+}
+
+@media (max-width: 768px) {
+	:where(.comments-view) .connect-comment {
+		grid-template-columns: 64px minmax(0, 1fr);
+		column-gap: 10px;
+		row-gap: 0;
+		padding: 10px 0;
+		grid-template-areas:
+			'thumb title'
+			'thumb creator'
+			'text text'
+			'thumb reply'
+			'footer footer';
+	}
+
+	:where(.comments-view) .connect-comment.has-reactions {
+		grid-template-areas:
+			'thumb title'
+			'thumb creator'
+			'text text'
+			'thumb reply'
+			'footer footer'
+			'reactions reactions';
+	}
+
+	:where(.comments-view) .connect-comment-thumb {
+		width: 64px;
+		height: 64px;
+		border-radius: 0;
+	}
+
+	:where(.comments-view) .connect-comment-creation-title {
+		font-size: 1rem;
+		-webkit-line-clamp: 1;
+		line-clamp: 1;
+	}
+
+	:where(.comments-view) .connect-comment-creator,
+	:where(.comments-view) .connect-comment-footer {
+		font-size: 0.9rem;
+	}
+
+	:where(.comments-view) .connect-comment .comment-text {
+		margin-top: 10px;
+	}
+
+	/* Optional: reduce visual noise on small screens */
+	:where(.comments-view) .connect-comment-creator-who .comment-author-handle,
+	:where(.comments-view) .connect-comment-footer-who .comment-author-handle {
+		display: none;
+	}
+}
+
+
+.comments-view { width: 100%; max-width: 960px; margin: 0 auto; padding: 16px; box-sizing: border-box; }
+.comments-view .comments-channel-plain-msg { width: 100%; flex-shrink: 0; }
+.comments-view__status { color: var(--text-muted); padding: 12px 0; }
+.comments-view__status.is-error { color: var(--danger); }
+.comments-view__more { margin: 16px auto; display: block; }
+
+@media (hover: hover) { .comments-view .connect-comment:hover { background: color-mix(in srgb, var(--text) 5%, transparent); } }
+
+.comments-view{width:100%;max-width:960px;margin:0 auto;padding:16px;box-sizing:border-box;}

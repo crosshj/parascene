@@ -1,0 +1,1480 @@
+/* ============================================
+   User Profile Page Styles
+   ============================================ */
+
+/* Guest profile: landing/try-style header, no app chrome or bottom nav. */
+
+
+
+/* Embed iframe: scrollbar hiding + layout (chrome clearance in global.css). */
+
+:where(.user-profile-view) .user-profile-hero {
+	border: 1px solid var(--border);
+	border-radius: 14px;
+	background: var(--surface);
+	box-shadow: var(--shadow);
+	overflow: hidden;
+}
+
+:where(.user-profile-view) .user-profile-banner {
+	height: 180px;
+	background:
+		linear-gradient(135deg, rgba(124, 58, 237, 0.32), rgba(5, 199, 111, 0.22)),
+		linear-gradient(180deg, rgba(0, 0, 0, 0.15), transparent);
+	background-size: cover;
+	background-position: top center;
+	border-bottom: 1px solid var(--border);
+}
+
+:where(.user-profile-view) .user-profile-hero-inner {
+	display: grid;
+	grid-template-columns: auto 1fr;
+	gap: 16px;
+	padding: 16px;
+	align-items: start;
+}
+
+:where(.user-profile-view) .user-profile-avatar {
+	width: 96px;
+	height: 96px;
+	margin-top: -44px;
+	border-radius: 50%;
+	background: var(--surface);
+	border: 3px solid var(--surface);
+	box-shadow: var(--shadow);
+	overflow: hidden;
+}
+
+:where(.user-profile-view) .user-profile-avatar-img {
+	width: 100%;
+	height: 100%;
+	display: block;
+	object-fit: cover;
+}
+
+:where(.user-profile-view) .user-profile-avatar-fallback {
+	width: 100%;
+	height: 100%;
+	background: var(--user-profile-avatar-bg, #6b7280);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: #ffffff;
+	font-weight: 700;
+	font-size: 1.5rem;
+}
+
+/* When profile avatar contains founder flair (inner div) */
+:where(.user-profile-view) .user-profile-avatar:has(.avatar-with-founder-flair) {
+	width: auto;
+	height: auto;
+	border: none;
+	overflow: visible;
+	background: transparent;
+	box-shadow: none;
+}
+
+:where(.user-profile-view) .user-profile-identity {
+	min-width: 0;
+}
+
+:where(.user-profile-view) .user-profile-title-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	flex-wrap: wrap;
+}
+
+/* /p/:personality discovery — promote + edit (admin/founder) */
+.user-profile-view .personality-discovery-actions {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.user-profile-view .route-header-title-row .user-profile-persona-promote-btn {
+	flex-shrink: 0;
+}
+
+:where(.user-profile-view) .user-profile-name {
+	font-size: 1.5rem;
+	font-weight: 700;
+	letter-spacing: -0.02em;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+:where(.user-profile-view) .user-profile-actions {
+	display: inline-flex;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+:where(.user-profile-view) .user-profile-handle {
+	color: var(--text-muted);
+	margin-top: 2px;
+}
+
+:where(.user-profile-view) .user-profile-persona-details {
+	margin-top: 12px;
+	display: grid;
+	gap: 14px;
+	min-width: 0;
+}
+
+:where(.user-profile-view) .user-profile-persona-detail {
+	min-width: 0;
+}
+
+:where(.user-profile-view) .user-profile-persona-detail-label {
+	color: var(--text-muted);
+	font-size: 0.85rem;
+	font-weight: 700;
+	margin-bottom: 4px;
+}
+
+:where(.user-profile-view) .user-profile-persona-detail-body {
+	min-width: 0;
+}
+
+:where(.user-profile-view) .user-profile-persona-bio,
+:where(.user-profile-view) .user-profile-persona-character {
+	color: var(--text);
+	font-size: 0.9375rem;
+	line-height: 1.45;
+	overflow-wrap: anywhere;
+	word-break: break-word;
+	white-space: pre-wrap;
+}
+
+:where(.user-profile-view) .user-profile-persona-bio--empty {
+	color: var(--text-muted);
+	font-size: 0.875rem;
+}
+
+:where(.user-profile-view) .user-profile-hero-footer {
+	padding: 10px 16px;
+	border-top: 1px solid var(--border);
+	background: var(--surface-muted);
+	color: var(--text-muted);
+	font-size: 0.8125rem;
+	line-height: 1.45;
+}
+
+:where(.user-profile-view) .user-profile-hero-footer a {
+	color: inherit;
+	font-weight: 600;
+	text-decoration: underline;
+}
+
+:where(.user-profile-view) .user-profile-hero-footer a:hover {
+	color: var(--text);
+}
+
+:where(.user-profile-view) .user-profile-stats {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 10px;
+	margin-top: 12px;
+}
+
+:where(.user-profile-view) .user-profile-stat {
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	background: var(--surface-muted);
+	padding: 10px 12px;
+}
+
+:where(.user-profile-view) .user-profile-stat-value {
+	font-weight: 700;
+}
+
+:where(.user-profile-view) .user-profile-stat-label {
+	font-size: 0.85rem;
+	color: var(--text-muted);
+}
+
+:where(.user-profile-view) .user-profile-meta {
+	margin-top: 12px;
+	display: grid;
+	gap: 8px;
+}
+
+:where(.user-profile-view) .user-profile-meta-row {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	min-width: 0;
+}
+
+:where(.user-profile-view) .user-profile-meta-label {
+	color: var(--text-muted);
+	font-size: 0.85rem;
+	font-weight: 700;
+}
+
+:where(.user-profile-view) .user-profile-meta-text {
+	color: var(--text);
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	word-break: break-word;
+	min-width: 0;
+}
+
+:where(.user-profile-view) .user-profile-meta-link {
+	color: var(--text);
+	text-decoration: none;
+	font-weight: 600;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+:where(.user-profile-view) .user-profile-meta-link:hover {
+	text-decoration: underline;
+}
+
+:where(.user-profile-view) .user-profile-socials {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px;
+	margin-top: 12px;
+}
+
+:where(.user-profile-view) .user-profile-social-link {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	color: var(--text-muted);
+	border-radius: 6px;
+	text-decoration: none;
+}
+
+/* WWW's global anchor rule colors links with the app accent. Social shortcuts use
+   the profile's focus color instead so they stay distinct from the green accent. */
+.user-profile-view a.user-profile-social-link {
+	color: var(--focus);
+}
+
+:where(.user-profile-view) .user-profile-social-link:hover {
+	color: var(--text);
+	background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.user-profile-view a.user-profile-social-link:hover {
+	color: color-mix(in srgb, var(--focus) 82%, var(--text));
+	background: color-mix(in srgb, var(--focus) 12%, transparent);
+}
+
+:where(.user-profile-view) .user-profile-social-icon {
+	width: 18px;
+	height: 18px;
+	display: block;
+}
+
+:where(.user-profile-view) .user-profile-social-icon--fill {
+	fill: currentcolor;
+}
+
+:where(.user-profile-view) .user-profile-social-icon--stroke {
+	fill: none;
+	stroke: currentcolor;
+}
+
+:where(.user-profile-view) .user-profile-social-field {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 0 12px;
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	background: var(--input-bg);
+}
+
+:where(.user-profile-view) .user-profile-social-field-icon {
+	flex: 0 0 auto;
+	width: 18px;
+	height: 18px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--text-muted);
+}
+
+:where(.user-profile-view) .user-profile-social-field-icon svg {
+	width: 18px;
+	height: 18px;
+	display: block;
+}
+
+:where(.user-profile-view) .user-profile-edit-form .user-profile-social-field input {
+	flex: 1 1 auto;
+	min-width: 0;
+	padding: 12px 0;
+	border: none;
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
+}
+
+:where(.user-profile-view) .user-profile-edit-form .user-profile-social-field input:focus-visible {
+	box-shadow: none;
+	border-color: transparent;
+}
+
+:where(.user-profile-view) .user-profile-social-field:focus-within {
+	border-color: var(--focus);
+	box-shadow: 0 0 0 2px var(--focus);
+}
+
+:where(.user-profile-view) .user-profile-content {
+	margin-top: 16px;
+}
+
+:where(.user-profile-view) .user-profile-persona-discovery-content {
+	margin-top: 20px;
+}
+
+:where(.user-profile-view) .persona-discovery-mentions-section {
+	margin-top: 4px;
+}
+
+:where(.user-profile-view) .persona-discovery-section-title {
+	font-size: 1.125rem;
+	font-weight: 600;
+	margin: 0 0 8px 0;
+	letter-spacing: -0.02em;
+}
+
+:where(.user-profile-view) .persona-discovery-section-lede {
+	margin: 0 0 16px 0;
+	font-size: 0.875rem;
+	color: var(--text-muted);
+	line-height: 1.5;
+}
+
+:where(.user-profile-view) .persona-discovery-handle-code {
+	font-family: ui-monospace, monospace;
+	font-size: 0.8125rem;
+	padding: 2px 6px;
+	border-radius: 6px;
+	background: color-mix(in srgb, var(--text) 6%, transparent);
+	color: var(--text);
+}
+
+:where(.user-profile-view) .user-profile-persona-promote-lede {
+	margin: 0 0 16px 0;
+	max-width: 42rem;
+	line-height: 1.5;
+}
+
+:where(.user-profile-view) .route-card-image--persona-mentions-avatar .route-media {
+	position: relative;
+}
+
+:where(.user-profile-view) .route-media.route-media--challenge-pending .persona-mentions-set-avatar-btn {
+	z-index: 8;
+}
+
+:where(.user-profile-view) .persona-mentions-set-avatar-btn {
+	position: absolute;
+	bottom: 8px;
+	right: 8px;
+	z-index: 3;
+	width: 40px;
+	height: 40px;
+	padding: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border: none;
+	border-radius: 8px;
+	cursor: pointer;
+	color: #fff;
+	background: color-mix(in srgb, #000 55%, transparent);
+	backdrop-filter: blur(6px);
+	opacity: 0;
+	transition: opacity 0.15s ease, outline-color 0.15s ease;
+}
+
+:where(.user-profile-view) .route-card-image--persona-mentions-avatar:hover .persona-mentions-set-avatar-btn,
+:where(.user-profile-view) .route-card-image--persona-mentions-avatar:focus-within .persona-mentions-set-avatar-btn {
+	opacity: 1;
+}
+
+:where(.user-profile-view) .persona-mentions-set-avatar-btn:hover:not(:disabled) {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+:where(.user-profile-view) .persona-mentions-set-avatar-btn:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+:where(.user-profile-view) .persona-mentions-set-avatar-btn:disabled {
+	opacity: 0.55;
+	cursor: not-allowed;
+}
+
+:where(.user-profile-view) .persona-mentions-set-avatar-icon {
+	width: 22px;
+	height: 22px;
+}
+
+@media (hover: none) {
+	:where(.user-profile-view) .route-card-image--persona-mentions-avatar .persona-mentions-set-avatar-btn {
+		opacity: 0.92;
+	}
+}
+
+:where(.user-profile-view) .persona-library-notes-empty {
+	color: var(--text-muted);
+	font-style: italic;
+}
+
+:where(.user-profile-view) .user-profile-tab-content {
+	width: 100%;
+}
+
+:where(.user-profile-view) [data-profile-tabs] > tab {
+	width: 100%;
+}
+
+/* Hide tab bar until initial tab has been auto-selected and content is ready */
+:where(.user-profile-view) [data-profile-tabs].user-profile-tabs-pending [data-app-tabs] {
+	visibility: hidden;
+	height: 0;
+	overflow: hidden;
+	margin: 0;
+	padding: 0;
+	border: none;
+	min-height: 0;
+}
+
+/* Center "no items found" empty states in profile tabs (Likes, Mentions, etc.) */
+:where(.user-profile-view) .user-profile-tab-content .route-empty {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	text-align: center;
+	width: 100%;
+}
+
+:where(.user-profile-view) .user-profile-tab-content .route-empty .route-empty-title,
+:where(.user-profile-view) .user-profile-tab-content .route-empty .route-empty-message {
+	text-align: center;
+}
+
+:where(.user-profile-view) .user-profile-tabs {
+	display: inline-flex;
+	gap: 6px;
+	border: 1px solid var(--border);
+	border-radius: 999px;
+	padding: 4px;
+	background: var(--surface);
+	margin-bottom: 2em;
+}
+
+:where(.user-profile-view) .user-profile-tab {
+	background: transparent;
+	border: none;
+	padding: 8px 12px;
+	border-radius: 999px;
+	color: var(--text-muted);
+	cursor: pointer;
+	font-weight: 600;
+}
+
+:where(.user-profile-view) .user-profile-tab.is-active {
+	background: var(--surface-strong);
+	color: var(--text);
+}
+
+:where(.user-profile-view) .user-profile-advanced {
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	background: var(--surface-muted);
+	padding: 10px 12px;
+}
+
+:where(.user-profile-view) .user-profile-advanced summary {
+	cursor: pointer;
+	font-weight: 600;
+	color: var(--text);
+}
+
+:where(.user-profile-view) .user-profile-edit-form {
+	display: grid;
+	gap: 16px;
+}
+
+:where(.user-profile-view) .user-profile-form-section {
+	display: grid;
+	gap: 12px;
+	padding: 0;
+}
+
+:where(.user-profile-view) .user-profile-form-section+.user-profile-form-section {
+	margin-top: 8px;
+}
+
+:where(.user-profile-view) .user-profile-form-section-title {
+	font-weight: 700;
+	letter-spacing: -0.01em;
+}
+
+:where(.user-profile-view) .user-profile-help {
+	margin-top: 6px;
+	color: var(--text-muted);
+	font-size: 0.875rem;
+	line-height: 1.35;
+}
+
+:where(.user-profile-view) .user-profile-edit-form .field {
+	margin: 0;
+}
+
+:where(.user-profile-view) .user-profile-edit-form input,
+:where(.user-profile-view) .user-profile-edit-form textarea {
+	width: 100%;
+}
+
+:where(.user-profile-view) .user-profile-email-readonly {
+	color: var(--text-muted);
+	font-size: 0.9375rem;
+	padding: 8px 0;
+}
+
+:where(.user-profile-view) .user-profile-account-message {
+	margin-top: 10px;
+	padding: 8px 12px;
+	border-radius: 6px;
+	font-size: 0.875rem;
+}
+
+:where(.user-profile-view) .user-profile-account-message.error {
+	background: var(--error-bg, rgba(220, 38, 38, 0.12));
+	color: var(--error-text, #b91c1c);
+}
+
+:where(.user-profile-view) .user-profile-account-message.success {
+	background: var(--success-bg, rgba(22, 163, 74, 0.12));
+	color: var(--success-text, #15803d);
+}
+
+/* Ensure modal body scrolls inside fixed-height modal */
+.user-profile-view .modal-body {
+	min-height: 0;
+	overflow-y: auto;
+	padding-bottom: 36px;
+}
+
+/* Professional file upload UI */
+:where(.user-profile-view) .user-profile-upload {
+	position: relative;
+}
+
+:where(.user-profile-view) .user-profile-file-input {
+	display: none;
+}
+
+:where(.user-profile-view) .user-profile-avatar-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+:where(.user-profile-view) .user-profile-avatar-actions .user-profile-upload-button {
+	flex: 1;
+	min-width: 120px;
+}
+
+:where(.user-profile-view) .user-profile-upload-button {
+	width: 100%;
+	height: 44px;
+	justify-content: center;
+}
+
+/* Generate from character button: spinner when loading */
+:where(.user-profile-view) .user-profile-generate-avatar-btn {
+	position: relative;
+}
+
+:where(.user-profile-view) .user-profile-generate-avatar-spinner {
+	display: none;
+	width: 1em;
+	height: 1em;
+	border: 2px solid var(--border);
+	border-top-color: currentColor;
+	border-radius: 50%;
+	animation: spin 0.8s linear infinite;
+	vertical-align: middle;
+}
+
+:where(.user-profile-view) .user-profile-generate-avatar-btn.is-loading .user-profile-generate-avatar-btn-text {
+	visibility: hidden;
+}
+
+:where(.user-profile-view) .user-profile-generate-avatar-btn.is-loading .user-profile-generate-avatar-spinner {
+	display: inline-block;
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	transform: translate(-50%, -50%);
+}
+
+:where(.user-profile-view) .user-profile-generate-avatar-btn.is-loading .user-profile-generate-avatar-spinner[hidden] {
+	display: inline-block;
+}
+
+/* Blocking overlay while generating avatar */
+:where(.user-profile-view) .user-profile-edit-generating-overlay {
+	display: none;
+	position: absolute;
+	inset: 0;
+	z-index: 10;
+	background: rgba(0, 0, 0, 0.5);
+	align-items: center;
+	justify-content: center;
+	pointer-events: auto;
+}
+
+:where(.user-profile-view) .user-profile-edit-generating-overlay:not([hidden]) {
+	display: flex;
+}
+
+:where(.user-profile-view) .user-profile-edit-generating-spinner {
+	width: 40px;
+	height: 40px;
+	border: 4px solid var(--border);
+	border-top-color: var(--accent);
+	border-radius: 50%;
+	animation: spin 0.8s linear infinite;
+}
+
+/* Generate avatar confirm modal (over edit modal) */
+:where(.user-profile-view) .user-profile-generate-confirm-overlay {
+	display: none;
+	position: absolute;
+	inset: 0;
+	z-index: 20;
+	background: rgba(0, 0, 0, 0.5);
+	align-items: center;
+	justify-content: center;
+	pointer-events: auto;
+}
+
+:where(.user-profile-view) .user-profile-generate-confirm-overlay:not([hidden]) {
+	display: flex;
+}
+
+:where(.user-profile-view) .user-profile-generate-confirm-cta {
+	position: relative;
+	min-width: 160px;
+}
+
+:where(.user-profile-view) .user-profile-generate-confirm-cta-spinner {
+	display: none;
+	width: 1.25em;
+	height: 1.25em;
+	border: 2px solid var(--border);
+	border-top-color: currentColor;
+	border-radius: 50%;
+	animation: spin 0.8s linear infinite;
+	vertical-align: middle;
+}
+
+:where(.user-profile-view) .user-profile-generate-confirm-cta-spinner:not([hidden]) {
+	display: inline-block;
+}
+
+:where(.user-profile-view) .user-profile-generate-confirm-overlay.user-profile-generate-confirm-loading [data-profile-generate-confirm-close],
+:where(.user-profile-view) .user-profile-generate-confirm-overlay.user-profile-generate-confirm-loading [data-profile-generate-confirm-cancel] {
+	pointer-events: none;
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+
+:where(.user-profile-view) .user-profile-upload-preview {
+	position: relative;
+	margin-top: 10px;
+	border: 1px solid var(--border);
+	border-radius: 12px;
+	background: var(--surface);
+	overflow: hidden;
+	width: 110px;
+	height: 110px;
+}
+
+/* Avatar generating placeholder: same size as preview, spinner centered */
+:where(.user-profile-view) .user-profile-avatar-generating-placeholder {
+	display: none;
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	background: var(--surface-muted, var(--surface));
+	align-items: center;
+	justify-content: center;
+	pointer-events: none;
+}
+
+:where(.user-profile-view) .user-profile-avatar-generating-placeholder:not([hidden]) {
+	display: flex;
+}
+
+:where(.user-profile-view) .user-profile-avatar-generating-placeholder .user-profile-avatar-generating-spinner {
+	width: 32px;
+	height: 32px;
+	border: 3px solid var(--border);
+	border-top-color: var(--accent);
+	border-radius: 50%;
+	animation: spin 0.8s linear infinite;
+}
+
+:where(.user-profile-view) .user-profile-upload-preview-cover {
+	width: 100%;
+	height: 140px;
+}
+
+:where(.user-profile-view) .user-profile-upload-img {
+	width: 100%;
+	height: 100%;
+	display: block;
+	object-fit: cover;
+	object-position: center;
+}
+
+:where(.user-profile-view) .user-profile-upload-preview-cover .user-profile-upload-img {
+	object-position: top center;
+}
+
+:where(.user-profile-view) .user-profile-upload-remove {
+	position: absolute;
+	top: 8px;
+	right: 8px;
+	width: 32px;
+	height: 32px;
+	border-radius: 999px;
+	border: 1px solid rgba(255, 255, 255, 0.25);
+	background: rgba(15, 13, 26, 0.65);
+	color: #ffffff;
+	cursor: pointer;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 16px;
+	line-height: 1;
+	padding: 0;
+}
+
+:where(.user-profile-view) .user-profile-upload-remove:hover {
+	background: rgba(15, 13, 26, 0.82);
+	border-color: rgba(255, 255, 255, 0.35);
+}
+
+@media (prefers-color-scheme: light) {
+	:where(.user-profile-view) .user-profile-upload-remove {
+		background: rgba(255, 255, 255, 0.78);
+		color: var(--text);
+		border-color: rgba(15, 23, 42, 0.18);
+	}
+
+	:where(.user-profile-view) .user-profile-upload-remove:hover {
+		background: rgba(255, 255, 255, 0.92);
+		border-color: rgba(15, 23, 42, 0.26);
+	}
+}
+
+/* Profile tab lists: Follows / Following */
+:where(.user-profile-view) .user-profile-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 0;
+	width: 100%;
+}
+
+:where(.user-profile-view) .user-profile-list-item {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	border-bottom: 1px solid var(--border);
+	min-height: 64px;
+}
+
+:where(.user-profile-view) .user-profile-list-item:last-child {
+	border-bottom: none;
+}
+
+:where(.user-profile-view) .user-profile-list-link {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 12px 0;
+	color: var(--text);
+	text-decoration: none;
+	border-radius: 6px;
+	transition: background-color 0.2s;
+}
+
+:where(.user-profile-view) .user-profile-list-action {
+	flex-shrink: 0;
+	align-self: center;
+}
+
+:where(.user-profile-view) .user-profile-list-link:hover {
+	background: var(--surface-strong);
+}
+
+:where(.user-profile-view) .user-profile-list-avatar {
+	width: 40px;
+	height: 40px;
+	border-radius: 50%;
+	overflow: hidden;
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: var(--surface-strong);
+}
+
+:where(.user-profile-view) .user-profile-list-avatar-img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+:where(.user-profile-view) .user-profile-list-avatar-fallback {
+	width: 100%;
+	height: 100%;
+	background: var(--user-profile-avatar-bg, #6b7280);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: #fff;
+	font-weight: 600;
+	font-size: 1rem;
+}
+
+:where(.user-profile-view) .user-profile-list-info {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+
+:where(.user-profile-view) .user-profile-list-name {
+	font-weight: 600;
+	color: var(--text);
+	margin-left: 0;
+	margin-right: auto;
+}
+
+:where(.user-profile-view) .user-profile-list-handle {
+	font-size: 0.875rem;
+	color: var(--text-muted);
+	margin-left: 0;
+	margin-right: auto;
+}
+
+/* Load more button below tab content */
+:where(.user-profile-view) .user-profile-load-more {
+	margin-top: 16px;
+	text-align: center;
+}
+
+:where(.user-profile-view) .user-profile-load-more-inner {
+	display: flex;
+	justify-content: center;
+}
+
+:where(.user-profile-view) .user-profile-load-more-btn {
+	min-width: 120px;
+}
+
+/* Profile tab: Comments (3 columns, 3 rows; thumb spans 3 rows; comment text spans 2 rows; footer = commenter + date) */
+:where(.user-profile-view) .user-profile-comments-list {
+	display: flex;
+	flex-direction: column;
+	gap: 0;
+}
+
+:where(.user-profile-view) .user-profile-comment-block {
+	display: grid;
+	grid-template-columns: 72px 300px 1fr;
+	grid-template-rows: auto auto;
+	gap: 0 12px;
+	align-items: start;
+	padding: 12px 0;
+	border-bottom: 1px solid var(--border);
+}
+
+:where(.user-profile-view) .user-profile-comment-block:last-child {
+	border-bottom: none;
+}
+
+:where(.user-profile-view) .user-profile-comment-thumb {
+	grid-column: 1;
+	grid-row: 1 / -1;
+	display: block;
+	border-radius: 8px;
+	overflow: hidden;
+	background: var(--surface-strong);
+	aspect-ratio: 1;
+}
+
+:where(.user-profile-view) .user-profile-comment-thumb-img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	display: block;
+}
+
+:where(.user-profile-view) .user-profile-comment-thumb-placeholder {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 100%;
+	aspect-ratio: 1;
+	background: var(--surface-strong);
+	color: var(--text-muted);
+	font-size: 1.25rem;
+}
+
+:where(.user-profile-view) .user-profile-comment-title-creator {
+	grid-column: 2;
+	grid-row: 1;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	min-width: 0;
+}
+
+:where(.user-profile-view) .user-profile-comment-name {
+	text-align: left;
+	color: var(--accent);
+	text-decoration: none;
+	font-weight: 600;
+	font-size: 0.9375rem;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+:where(.user-profile-view) .user-profile-comment-name:hover {
+	text-decoration: underline;
+}
+
+:where(.user-profile-view) .user-profile-comment-creator {
+	text-align: left;
+}
+
+:where(.user-profile-view) .user-profile-comment-text {
+	grid-column: 3;
+	grid-row: 1;
+	text-align: left;
+	white-space: pre-wrap;
+	color: var(--text);
+	font-size: 0.9375rem;
+	line-height: 1.4;
+	min-width: 0;
+}
+
+:where(.user-profile-view) .user-profile-comment-block > .comment-reactions {
+	grid-column: 3;
+	grid-row: 2;
+	justify-self: start;
+	min-width: 0;
+	max-width: 100%;
+	overflow: visible;
+	padding-top: 4px;
+}
+
+:where(.user-profile-view) .user-profile-comment-footer {
+	grid-column: 3;
+	grid-row: 3;
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px 12px;
+	text-align: left;
+	padding-top: 4px;
+}
+
+:where(.user-profile-view) .user-profile-comment-date {
+	font-size: 0.8125rem;
+	color: var(--text-muted);
+	white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+	:where(.user-profile-view) .user-profile-comment-block {
+		grid-template-columns: 1fr;
+		grid-template-rows: auto auto auto auto;
+		gap: 8px 0;
+		padding: 16px 0;
+	}
+
+	:where(.user-profile-view) .user-profile-comment-thumb {
+		grid-column: 1;
+		grid-row: 1;
+		max-height: 180px;
+		aspect-ratio: 16 / 10;
+	}
+
+	:where(.user-profile-view) .user-profile-comment-title-creator {
+		grid-column: 1;
+		grid-row: 2;
+	}
+
+	:where(.user-profile-view) .user-profile-comment-name {
+		white-space: normal;
+		overflow: visible;
+		text-overflow: clip;
+	}
+
+	:where(.user-profile-view) .user-profile-comment-text {
+		grid-column: 1;
+		grid-row: 3;
+	}
+
+	:where(.user-profile-view) .user-profile-comment-block > .comment-reactions {
+		grid-column: 1;
+		grid-row: 4;
+	}
+
+	:where(.user-profile-view) .user-profile-comment-footer {
+		grid-column: 1;
+		grid-row: 5;
+	}
+}
+
+:where(.user-profile-view) .user-profile-comment-user {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	color: var(--text);
+	text-decoration: none;
+	font-size: 0.875rem;
+}
+
+:where(.user-profile-view) .user-profile-comment-user:hover {
+	color: var(--accent);
+}
+
+:where(.user-profile-view) .user-profile-comment-avatar {
+	width: 28px;
+	height: 28px;
+	border-radius: 50%;
+	overflow: hidden;
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: var(--surface-strong);
+}
+
+:where(.user-profile-view) .user-profile-comment-avatar-img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+:where(.user-profile-view) .user-profile-comment-avatar-fallback {
+	width: 100%;
+	height: 100%;
+	background: var(--user-profile-avatar-bg, #6b7280);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: #fff;
+	font-weight: 600;
+	font-size: 0.75rem;
+}
+
+:where(.user-profile-view) .user-profile-comment-user-info {
+	display: flex;
+	flex-direction: row;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 4px 6px;
+	line-height: 1.25;
+	min-width: 0;
+}
+
+:where(.user-profile-view) .user-profile-comment-user-name {
+	font-weight: 600;
+}
+
+:where(.user-profile-view) .user-profile-comment-user-handle {
+	font-size: 0.8125rem;
+	color: var(--text-muted);
+}
+
+@media (max-width: 768px) {
+	:where(.user-profile-view) .user-profile-banner {
+		height: 140px;
+	}
+
+	:where(.user-profile-view) .user-profile-hero-inner {
+		grid-template-columns: 1fr;
+	}
+
+	:where(.user-profile-view) .user-profile-avatar {
+		margin-top: -52px;
+	}
+}
+.user-profile-view{width:100%;max-width:960px;margin:0 auto;padding:16px;box-sizing:border-box;}
+
+/* Active WWW SPA reference: spaPageOverlay profile iframe + global.css embed
+   clearance/main sizing. Layout already owns the 58px chrome clearance. */
+.user-profile-view {
+ width: calc(100% - 32px);
+ max-width: 1400px;
+ min-width: 0;
+ margin: 1em auto 24px;
+ font-family: var(--font-family);
+ font-weight: 400;
+ line-height: 1.5;
+ color: var(--text);
+}
+@media (min-width: 769px) {
+ .user-profile-view { width: calc(100% - 48px); }
+}
+/* These selectors also isolate the profile from browse-grid rules imported by
+   other routes. WWW profile uses the shared five/four/two-column image grid. */
+.user-profile-view .content-cards-image-grid {
+ display: grid;
+ grid-template-columns: repeat(5, minmax(0, 1fr));
+ gap: 6px;
+ width: 100%;
+ min-width: 0;
+}
+@media (max-width: 1024px) {
+ .user-profile-view .content-cards-image-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (max-width: 860px) {
+ .user-profile-view .content-cards-image-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.user-profile-view .route-header {
+	margin-bottom: 12px;
+	display: flex;
+	flex-direction: column;
+	gap: 0.75rem;
+}
+
+.user-profile-view .route-header-title-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	overflow: visible;
+}
+
+.user-profile-view .route-header-title-row h3 {
+	margin: 0;
+}
+
+.user-profile-view .route-header h3 {
+	margin: 0;
+}
+
+.user-profile-view .route-header p {
+	color: var(--text-muted);
+	margin: 0;
+}
+
+.user-profile-view .route-header button {
+	align-self: flex-start;
+}
+
+.user-profile-view input {
+	padding: 10px 12px;
+	border-radius: 10px;
+	border: 1px solid var(--border);
+	background: var(--input-bg);
+	color: inherit;
+}
+
+.user-profile-view textarea {
+	padding: 10px 12px;
+	border-radius: 10px;
+	border: 1px solid var(--border);
+	background: var(--input-bg);
+	color: inherit;
+	resize: vertical;
+}
+
+.user-profile-view .field {
+	margin: 12px 0;
+}
+
+.user-profile-view .field label,
+.user-profile-view .field .label {
+	display: block;
+	font-weight: 600;
+	margin-bottom: 6px;
+	color: var(--text-muted);
+	font-size: 0.9rem;
+}
+
+.user-profile-view .field .value {
+	font-size: 1rem;
+	color: var(--text);
+}
+
+.user-profile-view .modal-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 18px 20px;
+	border-bottom: 1px solid var(--border);
+	flex-shrink: 0;
+}
+
+.user-profile-view .modal-header h2,
+.user-profile-view .modal-header h3 {
+	margin: 0;
+	font-size: 1.5rem;
+	font-weight: 600;
+}
+
+.user-profile-view .modal-header h3 {
+	margin: 0;
+	font-size: 1.5rem;
+	font-weight: 600;
+}
+
+.user-profile-view .modal-close-icon {
+	width: 24px;
+	height: 24px;
+}
+
+.user-profile-view .modal-body {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+		min-height: 0;
+	}
+
+.user-profile-view .modal-footer {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 18px 20px;
+	border-top: 1px solid var(--border);
+	gap: 12px;
+	flex-shrink: 0;
+}
+
+.user-profile-view .modal.modal-large {
+	max-width: 700px;
+}
+
+.user-profile-view .skeleton-profile-hero {
+	display: flex;
+	flex-direction: column;
+	gap: 0;
+	border: 1px solid var(--border);
+	border-radius: 14px;
+	background: var(--surface);
+	overflow: hidden;
+	box-shadow: var(--shadow);
+}
+
+.user-profile-view .skeleton-profile-banner {
+	height: 180px;
+	width: 100%;
+	background: var(--skeleton);
+	position: relative;
+	overflow: hidden;
+	flex-shrink: 0;
+}
+
+.user-profile-view .skeleton-profile-hero-inner {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding: 16px;
+}
+
+.user-profile-view .skeleton-profile-hero-row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.user-profile-view .skeleton-profile-hero-stats {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 10px;
+}
+
+.user-profile-view .skeleton-profile-hero-stats .skeleton-pill {
+	width: 100%;
+	max-width: 120px;
+	height: 44px;
+}
+
+.user-profile-view .skeleton-profile-hero-meta {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	min-height: 140px;
+}
+
+.user-profile-view .skeleton-profile-hero-meta .skeleton-line {
+	flex-shrink: 0;
+}
+
+.user-profile-view .skeleton-tabs {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: wrap;
+	margin-top: 24px;
+	margin-bottom: 0;
+}
+
+.user-profile-view .skeleton-tabs .skeleton-pill {
+	width: 88px;
+	height: 36px;
+}
+
+.user-profile-view .skeleton-profile-page {
+	display: block;
+}
+
+.user-profile-view .skeleton-profile-page .skeleton-profile-grid-wrap {
+	margin-top: 24px;
+}
+
+.user-profile-view .modal-overlay {
+ position: fixed; inset: 0; z-index: 99999;
+ display: flex; align-items: center; justify-content: center;
+ background: rgba(0, 0, 0, .5);
+ opacity: 0; visibility: hidden; pointer-events: none;
+ transition: opacity .2s, visibility .2s;
+}
+.user-profile-view .modal-overlay.open { opacity: 1; visibility: visible; pointer-events: auto; }
+.user-profile-view .modal {
+ position: relative; z-index: 1; display: flex; flex-direction: column;
+ width: 90%; max-width: 500px; max-height: 90dvh;
+ overflow: hidden; background: var(--surface); border: 1px solid var(--border);
+ border-radius: 14px; box-shadow: var(--shadow); pointer-events: auto;
+ transform: scale(.95); transition: transform .2s;
+}
+.user-profile-view .modal.modal-large { max-width: 700px; }
+.user-profile-view .modal-overlay.open .modal { transform: scale(1); }
+.user-profile-view .modal-close {
+ display: flex; align-items: center; justify-content: center;
+ min-width: 32px; min-height: 32px; padding: 8px;
+ border: none; border-radius: 6px; background: transparent; color: var(--text);
+ cursor: pointer; font-size: 1.2rem; line-height: 1;
+}
+.user-profile-view .modal-close:hover { background: var(--surface-strong); }
+.user-profile-view .modal-body { padding-bottom: 36px; }
+.user-profile-view .btn-primary {
+ padding: 10px 16px; min-height: 0; border-radius: 6px;
+ background: var(--accent); color: var(--accent-text); border: 1px solid var(--accent);
+ font-weight: 500; line-height: 1.5;
+}
+.user-profile-view .btn-primary:hover:not(:disabled) {
+ background: var(--focus); border-color: var(--focus); transform: translateY(-1px);
+}
+.user-profile-view .btn-secondary {
+ gap: 6px; padding: 8px 12px; min-height: 0; border-radius: 6px;
+ background: var(--surface); color: var(--text); border: 1px solid var(--border);
+ box-shadow: var(--shadow); font-weight: 400; line-height: 1.5;
+}
+.user-profile-view .btn-secondary:hover:not(:disabled) {
+ background: var(--surface-strong); border-color: var(--accent);
+}
+.user-profile-view a.btn-primary { padding: 8px 12px; }
+@supports (corner-shape: squircle) {
+ .user-profile-view .btn-primary, .user-profile-view .btn-secondary { border-radius: 14px; corner-shape: squircle; }
+}
+.user-profile-view .btn-primary:disabled {
+ background: var(--surface-strong); color: var(--text); border-color: var(--border); opacity: .6;
+}
+/* Match the active WWW app-tabs treatment: compact uppercase labels on a shared
+   underline, rather than standalone controls that read as buttons. */
+.user-profile-view app-tabs { display: block; }
+.user-profile-view app-tabs > tab { display: block; }
+.user-profile-view app-tabs > tab[hidden] { display: none; }
+.user-profile-view app-tabs .app-tabs {
+	display: flex;
+	align-items: center;
+	gap: 28px;
+	padding: 0;
+	border-bottom: 1px solid var(--border);
+	background: transparent;
+	box-shadow: none;
+	overflow-x: auto;
+	overflow-y: hidden;
+	-webkit-overflow-scrolling: touch;
+	scrollbar-width: none;
+	overscroll-behavior-x: contain;
+}
+.user-profile-view app-tabs .app-tabs::-webkit-scrollbar { display: none; }
+.user-profile-view app-tabs .app-tabs-button {
+	appearance: none;
+	position: relative;
+	padding: 14px 0 12px;
+	border: 0;
+	background: transparent;
+	color: var(--text-muted);
+	font: inherit;
+	font-size: .75rem;
+	font-weight: 700;
+	letter-spacing: .05em;
+	text-transform: uppercase;
+	white-space: nowrap;
+	cursor: pointer;
+}
+.user-profile-view app-tabs .app-tabs-button:hover { color: var(--text); }
+.user-profile-view app-tabs .app-tabs-button.is-active {
+	color: color-mix(in srgb, var(--text) 20%, var(--accent));
+}
+.user-profile-view app-tabs .app-tabs-button::after {
+	content: '';
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: -1px;
+	height: 2px;
+	border-radius: 999px;
+	background: transparent;
+}
+.user-profile-view app-tabs .app-tabs-button.is-active::after {
+	background: color-mix(in srgb, var(--text) 20%, var(--accent));
+}
+.user-profile-view app-tabs .app-tabs-button:focus-visible {
+	outline: none;
+	box-shadow: none;
+	border-radius: 0;
+}
+.user-profile-view app-tabs .app-tabs-button:focus-visible::after { background: var(--accent); }
+.user-profile-view app-tabs .app-tabs-panel { margin-top: 24px; }
+@media (max-width: 768px) {
+ .user-profile-view .modal-overlay {
+  padding: max(8px, env(safe-area-inset-top, 0px)) max(8px, env(safe-area-inset-right, 0px)) max(8px, env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px));
+ }
+ .user-profile-view .route-header p { display: none; }
+}

@@ -1,0 +1,3211 @@
+import template from './UserProfileView.html';
+import './UserProfileView.css';
+import {mountTemplate} from '../../utils/dom.js';
+import {createFragmentLifetime} from '../shared/fragmentLifetime.js';
+import * as datetimeMod from '../../shared/datetime.js';
+import * as apiMod from '../../shared/api.js';
+import * as avatarMod from '../../shared/avatar.js';
+import * as userTextMod from '../../shared/userText.js';
+import * as infiniteScrollMod from '../../shared/infinite-scroll.js';
+import * as profileLinksMod from '../../shared/profileLinks.js';
+import * as routeMediaMod from '../../shared/routeMedia.js';
+import * as emptyStateMod from '../../shared/emptyState.js';
+import * as skeletonMod from '../../shared/skeleton.js';
+import * as creationBadgesMod from '../../shared/creationBadges.js';
+import * as creationCardMod from '../../shared/creationCard.js';
+import * as routeCardGroupMod from '../../shared/routeCardGroupMedia.js';
+import * as challengeMetaMod from '../../shared/challengeSubmitMeta.js';
+import * as userCardMod from '../../shared/userCard.js';
+import * as iconsMod from '../../icons/svg-strings.js';
+import * as socialsMod from '../../shared/profileSocials.js';
+import * as tooltipTapMod from '../../shared/reactionTooltipTap.js';
+import * as whoLabelsMod from '../../shared/whoLabels.js';
+export const UserProfileView=Object.freeze({mount({outlet,actions,services,url}){
+const mountRoot=mountTemplate(outlet,template);mountRoot.classList.add('user-profile-view');const lifetime=createFragmentLifetime(mountRoot);const OwnedIntersectionObserver=class extends globalThis.IntersectionObserver{constructor(...args){super(...args);lifetime.own(()=>this.disconnect())}};let routeUrl=new URL(url||location.href,location.origin),profileContext=null;
+let formatDate;
+let formatDateTime;
+let formatRelativeTime;
+let fetchJsonWithStatusDeduped;
+let getAvatarColor;
+let processUserText;
+let hydrateUserTextLinks;
+let createInfiniteScroll;
+let buildProfilePath;
+let setRouteMediaBackgroundImage;
+let renderEmptyState;
+let renderEmptyLoading;
+let renderEmptyError;
+let renderGridSkeleton;
+let renderProfilePageSkeleton;
+let publishedBadgeHtml;
+let userDeletedBadgeHtml;
+let challengeEnteredBadgeHtml;
+let challengeLockedBadgeHtml;
+let buildCreationCardShell;
+let hydrateRouteCardMedia;
+let routeCardGroupBadgeHtml;
+let creationMetaHasChallengeSubmission;
+let creationMetaHasActiveChallengeFeedPin;
+let creationMetaHasChallengeAnnotation;
+let buildUserListRowHtml;
+let REACTION_ORDER;
+let REACTION_ICONS;
+let setupReactionTooltipTap;
+let setupWhoTooltips;
+let setupFloatingWhoTooltips;
+let PROFILE_SOCIAL_NETWORKS = [];
+let validateSocialUrl;
+let socialIconFns = {};
+
+let navigateToCreation = (href) => {
+	actions.navigate(href);
+};
+/** @type {((root?: ParentNode) => void) | null} */
+let bindProfileEmbedDmLinks = null;
+
+function getAssetVersionParam() {
+	const meta = mountRoot.querySelector('meta[name="asset-version"]');
+	return meta?.getAttribute('content')?.trim() || '';
+}
+
+function getImportQuery(version) {
+	return version && typeof version === 'string' ? `?v=${encodeURIComponent(version)}` : '';
+}
+
+let _depsPromise;
+async function loadDeps() {
+	if (_depsPromise) return _depsPromise;
+
+	_depsPromise = (async () => {
+
+		formatDate = datetimeMod.formatDate;
+		formatDateTime = datetimeMod.formatDateTime;
+		formatRelativeTime = datetimeMod.formatRelativeTime;
+
+
+		fetchJsonWithStatusDeduped = async (url,options={})=>{const response=await lifetime.fetch(url,{credentials:'include',...options});const data=await response.json().catch(()=>null);if(!lifetime.active)throw new DOMException('View closed','AbortError');return {ok:response.ok,status:response.status,data};};
+
+
+		getAvatarColor = avatarMod.getAvatarColor;
+
+
+		processUserText = userTextMod.processUserText;
+		hydrateUserTextLinks = userTextMod.hydrateUserTextLinks;
+
+
+		createInfiniteScroll = infiniteScrollMod.createInfiniteScroll;
+
+
+		buildProfilePath = profileLinksMod.buildProfilePath;
+
+
+		setRouteMediaBackgroundImage = routeMediaMod.setRouteMediaBackgroundImage;
+
+
+		renderEmptyState = emptyStateMod.renderEmptyState;
+		renderEmptyLoading = emptyStateMod.renderEmptyLoading;
+		renderEmptyError = emptyStateMod.renderEmptyError;
+
+
+		renderGridSkeleton = skeletonMod.renderGridSkeleton;
+		renderProfilePageSkeleton = skeletonMod.renderProfilePageSkeleton;
+
+
+		publishedBadgeHtml = creationBadgesMod.publishedBadgeHtml;
+		userDeletedBadgeHtml = creationBadgesMod.userDeletedBadgeHtml;
+		challengeEnteredBadgeHtml = creationBadgesMod.challengeEnteredBadgeHtml;
+		challengeLockedBadgeHtml = creationBadgesMod.challengeLockedBadgeHtml;
+
+
+		buildCreationCardShell = creationCardMod.buildCreationCardShell;
+
+
+		hydrateRouteCardMedia = routeCardGroupMod.hydrateRouteCardMedia;
+		routeCardGroupBadgeHtml = routeCardGroupMod.routeCardGroupBadgeHtml;
+
+
+		creationMetaHasChallengeSubmission = challengeMetaMod.creationMetaHasChallengeSubmission;
+		creationMetaHasActiveChallengeFeedPin = challengeMetaMod.creationMetaHasActiveChallengeFeedPin;
+		creationMetaHasChallengeAnnotation = challengeMetaMod.creationMetaHasChallengeAnnotation;
+
+
+		buildUserListRowHtml = userCardMod.buildUserListRowHtml;
+
+
+		REACTION_ORDER = iconsMod.REACTION_ORDER;
+		REACTION_ICONS = iconsMod.REACTION_ICONS;
+		socialIconFns = {
+			website: iconsMod.globeIcon,
+			spotify: iconsMod.spotifyIcon,
+			instagram: iconsMod.instagramIcon,
+			facebook: iconsMod.facebookIcon,
+			tiktok: iconsMod.tiktokIcon,
+			soundcloud: iconsMod.soundcloudIcon,
+			youtube: iconsMod.youtubeIcon,
+			x: iconsMod.xIcon,
+			suno: iconsMod.sunoIcon,
+			nightcafe: iconsMod.nightcafeIcon
+		};
+
+
+		PROFILE_SOCIAL_NETWORKS = socialsMod.PROFILE_SOCIAL_NETWORKS;
+		validateSocialUrl = socialsMod.validateSocialUrl;
+
+
+
+		setupReactionTooltipTap = tooltipTapMod.setupReactionTooltipTap;
+		setupWhoTooltips = tooltipTapMod.setupWhoTooltips;
+		setupFloatingWhoTooltips = whoLabelsMod.setupFloatingWhoTooltips;
+	})();
+	return _depsPromise;
+}
+
+const html = String.raw;
+
+function escapeHtml(text) {
+	const div = document.createElement('div');
+	div.textContent = String(text ?? '');
+	return div.innerHTML;
+}
+
+function safeJsonParse(text, fallback) {
+	if (text == null) return fallback;
+	if (typeof text === 'object') return text;
+	if (typeof text !== 'string') return fallback;
+	const trimmed = text.trim();
+	if (!trimmed) return fallback;
+	try {
+		return JSON.parse(trimmed);
+	} catch {
+		return fallback;
+	}
+}
+
+const AVATAR_TRY_POLL_MS = 2000;
+const AVATAR_TRY_MAX_POLLS = 120;
+const PROFILE_AVATAR_TRY_CONTEXT = { source: 'profile_avatar', feature: 'profile_avatar_try' };
+const PERSONA_LIBRARY_AVATAR_TRY_CONTEXT = { source: 'persona_library_avatar', feature: 'persona_library_avatar_try' };
+
+function buildAvatarPrompt(description, variationKey) {
+	const core = typeof description === 'string' ? description.trim() : '';
+	return [
+		`Portrait of ${core}. Avoid showing body, focus on face and head.`,
+		'Head-and-shoulders framing, square composition.',
+		'Clean, plain and simple background colorful and contrasting with subject.',
+		'Expressive eyes, clear facial details, emotive head position.',
+		'Stylized digital portrait suitable for a social profile photo.',
+		`No text, no logo, no watermark, no frame. Variation hint: ${variationKey}.`
+	].join('\n');
+}
+
+async function ensureTryIdentityCookie() {
+	const tz = typeof Intl !== 'undefined' && Intl.DateTimeFormat
+		? (Intl.DateTimeFormat().resolvedOptions()?.timeZone || '')
+		: '';
+	const screenHint = typeof window.screen !== 'undefined'
+		? `${window.screen.width}x${window.screen.height}`
+		: '';
+	await lifetime.fetch('/api/policy/seen', {
+		method: 'POST',
+		headers: { 'content-type': 'application/json' },
+		credentials: 'include',
+		body: JSON.stringify({ tz, screen: screenHint })
+	}).catch(() => null);
+}
+
+async function createTryImage(prompt, options = {}) {
+	const { chargeCredits = 0, context = PROFILE_AVATAR_TRY_CONTEXT } = options;
+	const response = await lifetime.fetch('/api/try/create', {
+		method: 'POST',
+		headers: { 'content-type': 'application/json' },
+		credentials: 'include',
+		body: JSON.stringify({
+			prompt,
+			...(chargeCredits > 0 ? { charge_credits: chargeCredits } : {}),
+			context
+		})
+	});
+	const data = await response.json().catch(() => ({}));
+	return { ok: response.ok, status: response.status, data };
+}
+
+async function pollTryImageById(id) {
+	for (let i = 0; i < AVATAR_TRY_MAX_POLLS; i++) {
+ if(!lifetime.active)throw new DOMException("View closed","AbortError");
+		await lifetime.delay(AVATAR_TRY_POLL_MS);
+		const listRes = await lifetime.fetch('/api/try/list', { credentials: 'include' }).catch(() => null);
+		if (!listRes?.ok) continue;
+		const list = await listRes.json().catch(() => []);
+		const item = Array.isArray(list) ? list.find((entry) => Number(entry?.id) === Number(id)) : null;
+		if (!item) continue;
+		if (item.status === 'completed' && typeof item.url === 'string' && item.url.trim()) {
+			return { ok: true, url: item.url.trim() };
+		}
+		if (item.status === 'failed') {
+			return { ok: false, error: String(item.meta?.error || '').trim() || 'Generation failed.' };
+		}
+	}
+	return { ok: false, error: 'Timed out. Try again.' };
+}
+
+function resizeImageFile(file, { maxWidth, maxHeight, quality = 0.9, mimeType = 'image/jpeg' } = {}) {
+	if (!(file instanceof File) || !file.type.startsWith('image/')) {
+		return Promise.reject(new Error('Not an image file'));
+	}
+	return new Promise((resolve, reject) => {
+		const img = new Image();
+		const url = lifetime.objectUrl(file);
+		img.onload = () => {
+			URL.revokeObjectURL(url);
+			const w = img.naturalWidth;
+			const h = img.naturalHeight;
+			let targetW = w;
+			let targetH = h;
+			if (maxWidth > 0 && maxHeight > 0 && (w > maxWidth || h > maxHeight)) {
+				const r = Math.min(maxWidth / w, maxHeight / h);
+				targetW = Math.round(w * r);
+				targetH = Math.round(h * r);
+			}
+			const canvas = document.createElement('canvas');
+			canvas.width = targetW;
+			canvas.height = targetH;
+			const ctx = canvas.getContext('2d');
+			if (!ctx) {
+				reject(new Error('Canvas not supported'));
+				return;
+			}
+			ctx.drawImage(img, 0, 0, targetW, targetH);
+			canvas.toBlob(
+				(blob) => (blob ? resolve(blob) : reject(new Error('Resize failed'))),
+				mimeType,
+				quality
+			);
+		};
+		img.onerror = () => {
+			URL.revokeObjectURL(url);
+			reject(new Error('Failed to load image'));
+		};
+		img.src = url;
+	});
+}
+
+function getPathUserTarget() {
+	const pathname = routeUrl.pathname || '';
+	if (pathname === '/user') return { kind: 'me', mode: 'id', userId: null, userName: null };
+	const match = pathname.match(/^\/user\/(\d+)$/);
+	if (match) {
+		const id = Number.parseInt(match[1], 10);
+		if (!Number.isFinite(id) || id <= 0) return { kind: 'invalid', mode: 'id', userId: null, userName: null };
+		return { kind: 'other', mode: 'id', userId: id, userName: null };
+	}
+	const personalityMatch = pathname.match(/^\/p\/([a-z0-9][a-z0-9_-]{2,23})$/i);
+	if (personalityMatch) {
+		return { kind: 'other', mode: 'username', userId: null, userName: String(personalityMatch[1] || '').toLowerCase() };
+	}
+	const tagMatch = pathname.match(/^\/t\/([a-z0-9][a-z0-9_-]{1,31})$/i);
+	if (tagMatch) {
+		return { kind: 'other', mode: 'tag', userId: null, userName: String(tagMatch[1] || '').toLowerCase() };
+	}
+	return { kind: 'invalid', mode: 'id', userId: null, userName: null };
+}
+
+function buildTargetUserApiBase(target) {
+	if (target?.mode === 'username' && target?.userName) {
+		return `/api/users/by-username/${encodeURIComponent(target.userName)}`;
+	}
+	if (Number.isFinite(target?.userId) && target.userId > 0) {
+		return `/api/users/${target.userId}`;
+	}
+	return null;
+}
+
+function getServerProfileContext() {
+	const ctx = profileContext;
+	return ctx && typeof ctx === 'object' ? ctx : null;
+}
+
+function renderProfileUnavailableState(container, {
+	title = 'Unable to load profile',
+	message = 'Something went wrong. Please try again.',
+	icon = 'warning'
+} = {}) {
+	const iconSvg = icon === 'user-not-found'
+		? html`<svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+	stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+	<circle cx="10" cy="8" r="3"></circle>
+	<path d="M4 19c0-3.3 2.7-6 6-6s6 2.7 6 6"></path>
+	<path d="M16 8l4 4"></path>
+	<path d="M20 8l-4 4"></path>
+</svg>`
+		: html`<svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+	stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+	<circle cx="12" cy="12" r="9"></circle>
+	<path d="M12 8v5"></path>
+	<circle cx="12" cy="16.5" r="0.8" fill="currentColor"></circle>
+</svg>`;
+	container.innerHTML = renderEmptyState({
+		className: 'route-empty-image-grid',
+		icon: iconSvg,
+		title,
+		message,
+	});
+}
+
+async function copyTextToClipboard(text) {
+	try {
+		if (navigator.clipboard?.writeText) {
+			await navigator.clipboard.writeText(text);
+			return true;
+		}
+	} catch {
+		// ignore
+	}
+	try {
+		const ta = document.createElement('textarea');
+		ta.value = text;
+		ta.style.position = 'fixed';
+		ta.style.left = '-9999px';
+		document.body.appendChild(ta);
+		ta.focus();
+		ta.select();
+		const ok = document.execCommand('copy');
+		document.body.removeChild(ta);
+		return ok;
+	} catch {
+		return false;
+	}
+}
+
+function guessHandle({ user, profile }) {
+	const userName = profile?.user_name ? String(profile.user_name) : '';
+	if (userName) return `@${userName}`;
+	const emailPrefix =
+		(user?.email_prefix ? String(user.email_prefix) : '') ||
+		(user?.email ? String(user.email).split('@')[0] : '');
+	if (emailPrefix) return `@${emailPrefix}`;
+	const id = user?.id != null ? String(user.id) : 'user';
+	return `@user-${id}`;
+}
+
+function buildBannerStyle(coverImageUrl) {
+	const url = typeof coverImageUrl === 'string' ? coverImageUrl.trim() : '';
+	if (!url) return '';
+	// IMPORTANT: This string is injected into an HTML attribute wrapped in double quotes.
+	// So we must avoid double quotes inside the value, otherwise the attribute breaks.
+	const safeUrl = url.replace(/'/g, "\\'");
+	return `background-image: url('${safeUrl}');`;
+}
+
+/**
+ * Shared top-of-page hero: banner, avatar, identity (name + actions, handle, optional stats + meta).
+ * Used for user profiles and Prompt Library–linked personality pages so layout stays one visual system.
+ */
+function renderSharedProfileHeroHtml({
+	bannerStyle = '',
+	avatarBlockHtml,
+	displayName,
+	nameExtraClass = '',
+	handle,
+	handleExtraClass = '',
+	actionsInnerHtml = '',
+	actionsHostAttrs = '',
+	statsBlockHtml = '',
+	metaBlockHtml = '',
+	identityExtraHtml = '',
+	heroFooterHtml = ''
+}) {
+	const dn = String(displayName ?? '').trim() || '—';
+	const h = String(handle ?? '').trim() || '';
+	return html`
+		<div class="user-profile-hero">
+			<div class="user-profile-banner" style="${bannerStyle}"></div>
+			<div class="user-profile-hero-inner">
+				<div class="user-profile-avatar">${avatarBlockHtml}</div>
+				<div class="user-profile-identity">
+					<div class="user-profile-title-row">
+						<div class="user-profile-name${nameExtraClass}">${escapeHtml(dn)}</div>
+						<div class="user-profile-actions"${actionsHostAttrs}>${actionsInnerHtml}</div>
+					</div>
+					<div class="user-profile-handle${handleExtraClass}">${escapeHtml(h)}</div>
+					${identityExtraHtml}
+					${statsBlockHtml}
+					${metaBlockHtml}
+				</div>
+			</div>
+			${heroFooterHtml}
+		</div>
+	`;
+}
+
+function personalitySlugToDisplayTitle(slug) {
+	const s = String(slug ?? '').trim();
+	if (!s) return '';
+	const parts = s.split(/[_-]+/).filter(Boolean);
+	if (parts.length === 0) return s;
+	return parts.map((p) => (p.charAt(0).toUpperCase() + p.slice(1).toLowerCase())).join(' ');
+}
+
+function socialIconHtml(key, extraClass = '') {
+	const fn = socialIconFns[key];
+	if (typeof fn !== 'function') return '';
+	const kind = key === 'website' ? 'stroke' : 'fill';
+	const className = ['user-profile-social-icon', `user-profile-social-icon--${kind}`, extraClass]
+		.filter(Boolean)
+		.join(' ');
+	return fn(className);
+}
+
+function renderProfileSocialsHtml(socials) {
+	if (typeof validateSocialUrl !== 'function') return '';
+	const links = [];
+	for (const network of PROFILE_SOCIAL_NETWORKS) {
+		const result = validateSocialUrl(network.key, socials?.[network.key]);
+		if (!result?.ok || !result.href) continue;
+		links.push(html`<a class="user-profile-social-link" href="${escapeHtml(result.href)}" target="_blank" rel="noopener noreferrer" aria-label="${escapeHtml(network.label)}">${socialIconHtml(network.key)}</a>`);
+	}
+	if (!links.length) return '';
+	return html`<div class="user-profile-socials" aria-label="Social links">${links.join('')}</div>`;
+}
+
+function renderSocialEditFieldsHtml(socials) {
+	const source = socials && typeof socials === 'object' ? socials : {};
+	const fields = PROFILE_SOCIAL_NETWORKS.map((network) => {
+		const stored = typeof source[network.key] === 'string' ? source[network.key] : '';
+		return html`
+							<div class="user-profile-social-field">
+								<span class="user-profile-social-field-icon" aria-hidden="true">${socialIconHtml(network.key)}</span>
+								<input name="social_${network.key}" type="text" inputmode="url" autocomplete="off" spellcheck="false"
+									aria-label="${escapeHtml(network.label)}"
+									placeholder="${escapeHtml(network.placeholder)}"
+									value="${escapeHtml(stored)}">
+							</div>`;
+	});
+	return fields.join('');
+}
+
+function validateProfileSocialForm(form) {
+	if (!form || typeof validateSocialUrl !== 'function') return { ok: true };
+	const fd = new FormData(form);
+	for (const network of PROFILE_SOCIAL_NETWORKS) {
+		const raw = fd.get(`social_${network.key}`);
+		const result = validateSocialUrl(network.key, typeof raw === 'string' ? raw : '');
+		if (!result.ok) return result;
+	}
+	return { ok: true };
+}
+
+function renderProfilePage(
+	container,
+	{ user, profile, stats, plan, isSelf, viewerFollows, isAdmin = false, viewerUserId = null }
+) {
+	const fallbackName =
+		(user?.email_prefix && String(user.email_prefix).trim()) ||
+		(isSelf && user?.email ? String(user.email).split('@')[0] : '') ||
+		'';
+	const displayName =
+		(profile?.display_name && String(profile.display_name).trim()) ||
+		(profile?.user_name && String(profile.user_name).trim()) ||
+		(fallbackName || `User ${user?.id ?? ''}`);
+
+	const handle = guessHandle({ user, profile });
+	const about = typeof profile?.about === 'string' ? profile.about.trim() : '';
+	const characterDescription = typeof profile?.character_description === 'string' ? profile.character_description.trim() : '';
+	const socialsHtml = renderProfileSocialsHtml(profile?.socials);
+	const avatarUrl = typeof profile?.avatar_url === 'string' ? profile.avatar_url.trim() : '';
+	const coverUrl = typeof profile?.cover_image_url === 'string' ? profile.cover_image_url.trim() : '';
+	const userNameValue = profile?.user_name && String(profile.user_name).trim() ? String(profile.user_name).trim() : '';
+	const userNameLocked = Boolean(userNameValue);
+
+	const avatarInitial = displayName.trim().charAt(0).toUpperCase() || '?';
+	const avatarColor = getAvatarColor(profile?.user_name || user?.email_prefix || user?.email || String(user?.id || ''));
+	const isFounder = plan === 'founder';
+
+	const memberSince = stats?.member_since ? formatDate(stats.member_since) : null;
+	const creationsPublished = Number(stats?.creations_published ?? 0);
+	const likesReceived = Number(stats?.likes_received ?? 0);
+
+	const avatarContent = avatarUrl
+		? html`<img class="user-profile-avatar-img" src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(displayName)}">`
+: html`<div class="user-profile-avatar-fallback" style="--user-profile-avatar-bg: ${avatarColor};" aria-hidden="true">${escapeHtml(avatarInitial)}</div>`;
+
+	const avatarBlockHtml = isFounder
+		? html`
+					<div class="avatar-with-founder-flair avatar-with-founder-flair--xl">
+						<div class="founder-flair-avatar-ring">
+							<div class="founder-flair-avatar-inner">
+								${avatarContent}
+							</div>
+						</div>
+					</div>
+					`
+		: avatarContent;
+
+	const actionsInnerHtml = html`
+							${(isSelf || isAdmin) ? html`<button class="btn-primary user-profile-edit" type="button">Edit Profile</button>` :
+							''}
+							${!isSelf && viewerUserId != null && Number(user?.id) > 0 ? html`
+							<a class="btn-secondary user-profile-dm" href="/chat/dm/${encodeURIComponent(userNameValue ? userNameValue.toLowerCase() : String(user.id))}" aria-label="Message ${escapeHtml(displayName)}">Message</a>
+							` : ''}
+							${!isSelf && !isAdmin ? html`
+							<button class="${viewerFollows ? 'btn-secondary' : 'btn-primary'} user-profile-follow" type="button"
+								data-follow-button data-follow-user-id="${escapeHtml(user?.id ?? '')}">
+								${viewerFollows ? 'Unfollow' : 'Follow'}
+							</button>
+							` : ''}
+							<!--
+																	<button class="btn-secondary user-profile-share" type="button">Share</button>
+																	-->
+						`;
+
+	const statsBlockHtml = html`
+					<div class="user-profile-stats">
+						<div class="user-profile-stat">
+							<div class="user-profile-stat-value">${creationsPublished}</div>
+							<div class="user-profile-stat-label">Published</div>
+						</div>
+						<div class="user-profile-stat">
+							<div class="user-profile-stat-value">${likesReceived}</div>
+							<div class="user-profile-stat-label">Likes</div>
+						</div>
+						<div class="user-profile-stat">
+							<div class="user-profile-stat-value">${escapeHtml(memberSince || '—')}</div>
+							<div class="user-profile-stat-label">Member Since</div>
+						</div>
+					</div>
+					`;
+
+	const metaBlockHtml = (about || characterDescription)
+		? html`
+					<div class="user-profile-meta">
+						${about ? html`
+						<div class="user-profile-meta-row">
+							<span class="user-profile-meta-label">About</span>
+							<span class="user-profile-meta-text">${processUserText(about)}</span>
+						</div>
+						` : ''}
+						${characterDescription ? html`
+						<div class="user-profile-meta-row">
+							<span class="user-profile-meta-label">Character</span>
+							<span class="user-profile-meta-text">${processUserText(characterDescription)}</span>
+						</div>
+						` : ''}
+					</div>
+					`
+		: '';
+
+	const profileHeroHtml = renderSharedProfileHeroHtml({
+		bannerStyle: buildBannerStyle(coverUrl),
+		avatarBlockHtml,
+		displayName,
+		nameExtraClass: isFounder ? ' founder-name' : '',
+		handle,
+		handleExtraClass: isFounder ? ' founder-name' : '',
+		actionsInnerHtml,
+		statsBlockHtml,
+		metaBlockHtml: `${metaBlockHtml}${socialsHtml}`
+	});
+
+	const usernameHint = '3–24 characters. Lowercase letters, numbers, and underscores only. This cannot be changed later.'
+	container.innerHTML = html`
+		${profileHeroHtml}
+
+		<div class="user-profile-content">
+			<app-tabs class="user-profile-tabs-pending" data-profile-tabs>
+				<tab data-id="creations" label="Creations" default>
+					<div class="user-profile-tab-content" data-profile-tab-content="creations">
+						<div class="route-cards content-cards-image-grid" data-profile-grid aria-busy="true" aria-label="Loading">
+							${renderGridSkeleton(25)}
+						</div>
+						<div class="user-profile-load-more" data-profile-load-more="creations" hidden></div>
+					</div>
+				</tab>
+				<tab data-id="mentions" label="Mentions">
+					<div class="user-profile-tab-content" data-profile-tab-content="mentions">
+						<div data-profile-mentions><div class="route-empty">Coming soon.</div></div>
+						<div class="user-profile-load-more" data-profile-load-more="mentions" hidden></div>
+					</div>
+				</tab>
+				<tab data-id="likes" label="Likes">
+					<div class="user-profile-tab-content" data-profile-tab-content="likes">
+						<div data-profile-likes><div class="route-empty">Coming soon.</div></div>
+						<div class="user-profile-load-more" data-profile-load-more="likes" hidden></div>
+					</div>
+				</tab>
+				${(isSelf || isAdmin) ? html`
+				<tab data-id="follows" label="${isSelf ? 'You follow' : 'User follows'}">
+					<div class="user-profile-tab-content" data-profile-tab-content="follows">
+						<div data-profile-follows><div class="route-empty">Coming soon.</div></div>
+						<div class="user-profile-load-more" data-profile-load-more="follows" hidden></div>
+					</div>
+				</tab>
+				` : ''}
+				<tab data-id="following" label="${isSelf ? 'Follows you' : isAdmin ? 'Follows user' : 'Followers'}">
+					<div class="user-profile-tab-content" data-profile-tab-content="following">
+						<div data-profile-following><div class="route-empty">Coming soon.</div></div>
+						<div class="user-profile-load-more" data-profile-load-more="following" hidden></div>
+					</div>
+				</tab>
+				<tab data-id="comments" label="Comments">
+					<div class="user-profile-tab-content" data-profile-tab-content="comments">
+						<div data-profile-comments><div class="route-empty">Coming soon.</div></div>
+						<div class="user-profile-load-more" data-profile-load-more="comments" hidden></div>
+					</div>
+				</tab>
+			</app-tabs>
+		</div>
+
+		<div class="modal-overlay" data-profile-edit-overlay>
+			<div class="modal modal-large">
+				<div class="modal-header">
+					<h2>${isAdmin && !isSelf ? 'Edit profile (admin)' : 'Edit profile'}</h2>
+					<button class="modal-close" type="button" aria-label="Close" data-profile-edit-close>
+						<svg class="modal-close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+							stroke-linecap="round" stroke-linejoin="round">
+							<line x1="18" y1="6" x2="6" y2="18"></line>
+							<line x1="6" y1="6" x2="18" y2="18"></line>
+						</svg>
+					</button>
+				</div>
+				<div class="modal-body">
+					<form class="user-profile-edit-form" data-profile-edit-form>
+						<div class="user-profile-form-section">
+							<div class="field">
+								<label>Username</label>
+								<input name="user_name" placeholder="e.g. oceanman" value="${escapeHtml(userNameValue)}"
+									${userNameLocked ? 'disabled' : '' }>
+								<div class="user-profile-help">
+									${userNameLocked
+									? 'Username is permanent and cannot be changed.'
+									: usernameHint}
+								</div>
+							</div>
+							<div class="field">
+								<label>Display name</label>
+								<input name="display_name" placeholder="e.g. OceanMan"
+									value="${escapeHtml(profile?.display_name || '')}">
+								<div class="user-profile-help">Shown on your profile. You can use spaces and caps here.</div>
+							</div>
+						</div>
+
+						<div class="user-profile-form-section">
+							<div class="field">
+								<label>Bio</label>
+								<textarea name="about" rows="4"
+									placeholder="A short bio...">${escapeHtml(profile?.about || '')}</textarea>
+								<div class="user-profile-help">Keep it short and readable. Line breaks are allowed.</div>
+							</div>
+						</div>
+
+						<div class="user-profile-form-section">
+							<div class="field">
+								<label>Character</label>
+								<textarea name="character_description" rows="3"
+									placeholder="e.g. short, middle-aged Asian female with medium-length black hair">${escapeHtml(profile?.character_description || '')}</textarea>
+								<div class="user-profile-help">Used when others @mention you in AI prompts. Keep it brief so it
+									fits well in context. No line breaks.</div>
+							</div>
+						</div>
+
+						<div class="user-profile-form-section">
+							<div class="field">
+								<label>Avatar</label>
+								<div class="user-profile-upload" data-upload="avatar">
+									<input class="user-profile-file-input" type="file" name="avatar_file" accept="image/*"
+										data-upload-input="avatar">
+									<input type="hidden" name="avatar_remove" value="" data-upload-remove="avatar">
+									<input type="hidden" name="avatar_try_url" value="" data-avatar-try-url>
+									<div class="user-profile-avatar-actions">
+										<button class="user-profile-upload-button btn-secondary" type="button"
+											data-upload-trigger="avatar">Upload avatar</button>
+										<button class="user-profile-upload-button btn-secondary user-profile-generate-avatar-btn" type="button"
+											data-avatar-generate-from-character>
+											<span class="user-profile-generate-avatar-spinner" aria-hidden="true" hidden></span>
+											<span class="user-profile-generate-avatar-btn-text">Generate</span>
+										</button>
+									</div>
+									<div class="user-profile-upload-preview" data-upload-preview="avatar" hidden>
+										<img class="user-profile-upload-img" alt="Avatar preview" data-upload-img="avatar">
+										<div class="user-profile-avatar-generating-placeholder" data-avatar-generating-placeholder hidden aria-busy="true">
+											<div class="user-profile-avatar-generating-spinner" aria-hidden="true"></div>
+										</div>
+										<button class="user-profile-upload-remove" type="button" aria-label="Remove avatar"
+											data-upload-clear="avatar">✕</button>
+									</div>
+								</div>
+								${profile?.avatar_url ? html`
+								<div class="user-profile-upload-hydrate" data-upload-existing="avatar"
+									data-url="${escapeHtml(profile.avatar_url)}">
+								</div>
+								` : ''}
+							</div>
+							<div class="field">
+								<label>Cover</label>
+								<div class="user-profile-upload" data-upload="cover">
+									<input class="user-profile-file-input" type="file" name="cover_file" accept="image/*"
+										data-upload-input="cover">
+									<input type="hidden" name="cover_remove" value="" data-upload-remove="cover">
+									<button class="user-profile-upload-button btn-secondary" type="button"
+										data-upload-trigger="cover">Upload cover</button>
+									<div class="user-profile-upload-preview user-profile-upload-preview-cover"
+										data-upload-preview="cover" hidden>
+										<img class="user-profile-upload-img" alt="Cover preview" data-upload-img="cover">
+										<button class="user-profile-upload-remove" type="button" aria-label="Remove cover image"
+											data-upload-clear="cover">✕</button>
+									</div>
+								</div>
+								${profile?.cover_image_url ? html`
+								<div class="user-profile-upload-hydrate" data-upload-existing="cover"
+									data-url="${escapeHtml(profile.cover_image_url)}">
+								</div>
+								` : ''}
+							</div>
+						</div>
+
+						<div class="user-profile-form-section">
+							<h3 class="user-profile-form-section-title">Social networks</h3>
+							${renderSocialEditFieldsHtml(profile?.socials)}
+							<div class="user-profile-help">Add a full URL for each site. Only valid links are saved, and only filled links show as icons on your profile.</div>
+						</div>
+
+						<div class="user-profile-form-section user-profile-account-section" data-account-email-section ${(isAdmin && !isSelf) ? 'style="display: none;"' : ''}>
+							<h3 class="user-profile-form-section-title">Account</h3>
+							<div class="field">
+								<label>Current email</label>
+								<div class="user-profile-email-readonly" data-account-current-email>${escapeHtml(user?.email ||
+				'')}</div>
+							</div>
+							<div class="field">
+								<label>New email</label>
+								<input type="email" name="new_email" data-account-new-email placeholder="new@example.com"
+									autocomplete="email">
+							</div>
+							<div class="field">
+								<label>Current password</label>
+								<input type="password" name="account_password" data-account-password
+									placeholder="Required to change email" autocomplete="current-password">
+							</div>
+							<button type="button" class="btn-secondary" data-account-email-submit>Update email</button>
+							<div class="user-profile-account-message" data-account-email-message style="display: none;"></div>
+						</div>
+
+						<div class="alert error" data-profile-edit-error style="display: none;"></div>
+					</form>
+				</div>
+				<div class="modal-footer">
+					<button class="btn-secondary" type="button" data-profile-edit-cancel>Cancel</button>
+					<button class="btn-primary" type="button" data-profile-edit-save>Save</button>
+				</div>
+				<div class="user-profile-edit-generating-overlay" data-profile-edit-generating-overlay hidden aria-busy="true" aria-live="polite">
+					<div class="user-profile-edit-generating-spinner" aria-hidden="true"></div>
+				</div>
+			</div>
+			<div class="user-profile-generate-confirm-overlay" data-profile-generate-confirm-overlay hidden>
+				<div class="modal user-profile-generate-confirm-modal">
+					<div class="modal-header">
+						<h3>Generate avatar</h3>
+						<button class="modal-close" type="button" aria-label="Close" data-profile-generate-confirm-close>
+							<svg class="modal-close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+								<line x1="18" y1="6" x2="6" y2="18"></line>
+								<line x1="6" y1="6" x2="18" y2="18"></line>
+							</svg>
+						</button>
+					</div>
+					<div class="modal-body" data-profile-generate-confirm-body>
+						<p>This costs <strong>3 credits</strong> and requires the <strong>Character</strong> field to be filled out (at least 12 characters) in the form behind this dialog.</p>
+						<div class="alert error" data-profile-generate-confirm-error style="display: none;"></div>
+					</div>
+					<div class="modal-footer">
+						<button class="btn-secondary" type="button" data-profile-generate-confirm-cancel>Cancel</button>
+						<button class="btn-primary user-profile-generate-confirm-cta" type="button" data-profile-generate-confirm-cta>
+							<span class="user-profile-generate-confirm-cta-text">Generate avatar</span>
+							<span class="user-profile-generate-confirm-cta-spinner" aria-hidden="true" hidden role="status"></span>
+						</button>
+					</div>
+				</div>
+			</div>
+		</div>
+		`;
+}
+
+function setModalOpen(overlay, open) {
+	if (!overlay) return;
+	overlay.classList.toggle('open', Boolean(open));
+	if (open) {
+
+
+	} else {
+
+
+	}
+}
+
+function renderImageGrid(
+	grid,
+	images,
+	showBadge = false,
+	emptyTitle = 'No published creations yet',
+	emptyMessage = "When this user publishes creations, they'll show up here.",
+	options = {}
+) {
+	if (!grid) return;
+
+	grid.removeAttribute('aria-busy');
+	grid.removeAttribute('aria-label');
+
+	const list = Array.isArray(images) ? images : [];
+	if (list.length === 0) {
+		grid.innerHTML = renderEmptyState({
+			className: 'route-empty-image-grid',
+			title: emptyTitle,
+			message: emptyMessage,
+		});
+		return;
+	}
+
+	grid.innerHTML = '';
+
+	const personaPromote = options?.personaAvatarPromote;
+	const showPersonaAvatarBtn = Boolean(personaPromote?.tag);
+
+	// Lazy load images into route-media tiles.
+	const observer = new OwnedIntersectionObserver((entries) => {
+		entries.forEach((entry) => {
+			if (!entry.isIntersecting) return;
+			const el = entry.target;
+			const url = el.dataset.bgUrl;
+			if (!url) return;
+			observer.unobserve(el);
+			setRouteMediaBackgroundImage(el, url);
+		});
+	}, { root: null, rootMargin: '600px 0px', threshold: 0.01 });
+
+	list.forEach((item) => {
+		const card = document.createElement('div');
+		card.className = 'route-card route-card-image'
+			+ (showPersonaAvatarBtn ? ' route-card-image--persona-mentions-avatar' : '');
+		card.style.cursor = 'pointer';
+		card.addEventListener('click', () => {
+			navigateToCreation(`/creations/${item.id}`);
+		});
+
+		const isPublished = item.published === true || item.published === 1;
+		const userDeleted = Boolean(item.user_deleted);
+		let publishedBadge = '';
+		let userDeletedBadge = '';
+
+		if (userDeleted) {
+			userDeletedBadge = userDeletedBadgeHtml();
+		}
+
+		if (isPublished && showBadge) {
+			publishedBadge = publishedBadgeHtml();
+		}
+
+		const isVideo = item.media_type === 'video' || (item.meta && item.meta.media_type === 'video');
+		const itemMeta = item.meta && typeof item.meta === 'object' ? item.meta : null;
+		const inChallenge =
+			Boolean(creationMetaHasChallengeAnnotation?.(itemMeta)) ||
+			(Array.isArray(itemMeta?.challenge_organizer_refs) &&
+				itemMeta.challenge_organizer_refs.length > 0) ||
+			(Array.isArray(itemMeta?.challenge_submissions) &&
+				itemMeta.challenge_submissions.length > 0);
+		const isAudio =
+			item.media_type === 'audio' || (item.meta && item.meta.media_type === 'audio');
+		const challengeBlur = inChallenge && !item.nsfw && !isAudio;
+		const challengeLockedBadge =
+			inChallenge && typeof challengeLockedBadgeHtml === 'function'
+				? challengeLockedBadgeHtml('Locked to a challenge')
+				: '';
+		const mediaAttrs = isVideo ? ' data-media-type="video"' : isAudio ? ' data-media-type="audio"' : '';
+		const creationId = Number(item.id);
+		const personaAvatarBtn =
+			showPersonaAvatarBtn && !isVideo && Number.isFinite(creationId) && creationId > 0
+				? html`<button type="button" class="persona-mentions-set-avatar-btn" aria-label="Use this image as the persona avatar" data-persona-set-avatar-from-creation="${creationId}">
+					<svg class="persona-mentions-set-avatar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+						<rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+						<circle cx="8.5" cy="8.5" r="1.5"/>
+						<polyline points="21 15 16 10 5 21"/>
+					</svg>
+				</button>`
+				: '';
+		card.innerHTML = html`
+			<div class="route-media${item.nsfw ? ' nsfw' : ''}${challengeBlur ? ' route-media--challenge-pending' : ''}" aria-hidden="true"${mediaAttrs}>
+				${challengeBlur ? html`<span class="route-media-challenge-blur-overlay" aria-hidden="true"></span>${challengeEnteredBadgeHtml()}` : ''}
+				${personaAvatarBtn}
+			</div>
+			${userDeletedBadge}
+			${publishedBadge}
+			${challengeLockedBadge}
+			${routeCardGroupBadgeHtml(item)}
+		`;
+
+		const avatarBtnEl = card.querySelector('.persona-mentions-set-avatar-btn');
+		if (avatarBtnEl && personaPromote?.tag) {
+			const personaTag = String(personaPromote.tag).trim().toLowerCase();
+			const cid = creationId;
+			avatarBtnEl.addEventListener('click', (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				const page = grid.closest('.user-profile-page');
+				if (!page || !personaTag) return;
+				void runPersonaSetAvatarFromCreation(page, personaTag, cid, avatarBtnEl);
+			});
+		}
+
+		const mediaEl = card.querySelector('.route-media');
+		if (mediaEl && typeof hydrateRouteCardMedia === 'function') {
+			hydrateRouteCardMedia(mediaEl, item, {
+				preferThumbnail: !isVideo,
+				observer,
+			});
+		}
+
+		grid.appendChild(card);
+	});
+}
+
+/** Appends image cards without clearing the grid (avoids flash on load-more). */
+function appendImageGridCards(grid, items, showBadge = false) {
+	if (!grid || !Array.isArray(items) || items.length === 0) return;
+	const observer = new OwnedIntersectionObserver((entries) => {
+		entries.forEach((entry) => {
+			if (!entry.isIntersecting) return;
+			const el = entry.target;
+			const url = el.dataset.bgUrl;
+			if (!url) return;
+			observer.unobserve(el);
+			setRouteMediaBackgroundImage(el, url);
+		});
+	}, { root: null, rootMargin: '600px 0px', threshold: 0.01 });
+
+	items.forEach((item) => {
+		const card = document.createElement('div');
+		card.className = 'route-card route-card-image';
+		card.style.cursor = 'pointer';
+		card.addEventListener('click', () => { navigateToCreation(`/creations/${item.id}`); });
+
+		const isPublished = item.published === true || item.published === 1;
+		const userDeleted = Boolean(item.user_deleted);
+		let publishedBadge = '';
+		let userDeletedBadge = '';
+		if (userDeleted) {
+			userDeletedBadge = userDeletedBadgeHtml();
+		}
+		if (isPublished && showBadge) {
+			publishedBadge = publishedBadgeHtml();
+		}
+		const isVideo = item.media_type === 'video' || (item.meta && item.meta.media_type === 'video');
+		const isAudio = item.media_type === 'audio' || (item.meta && item.meta.media_type === 'audio');
+		const itemMeta = item.meta && typeof item.meta === 'object' ? item.meta : null;
+		const inChallenge =
+			Boolean(creationMetaHasChallengeAnnotation?.(itemMeta)) ||
+			(Array.isArray(itemMeta?.challenge_organizer_refs) &&
+				itemMeta.challenge_organizer_refs.length > 0) ||
+			(Array.isArray(itemMeta?.challenge_submissions) &&
+				itemMeta.challenge_submissions.length > 0);
+		const mediaAttrs = {};
+		if (isVideo) {
+			mediaAttrs['data-media-type'] = 'video';
+		}
+		if (isAudio) {
+			mediaAttrs['data-media-type'] = 'audio';
+		}
+		const challengeLockedBadge =
+			inChallenge && typeof challengeLockedBadgeHtml === 'function'
+				? challengeLockedBadgeHtml('Locked to a challenge')
+				: '';
+		card.innerHTML = buildCreationCardShell({
+			mediaAttrs,
+			badgesHtml: userDeletedBadge + publishedBadge + challengeLockedBadge + routeCardGroupBadgeHtml(item),
+			nsfw: Boolean(item.nsfw),
+			challengeGridBlur: inChallenge && !item.nsfw && !isAudio,
+		});
+		const mediaEl = card.querySelector('.route-media');
+		if (mediaEl && typeof hydrateRouteCardMedia === 'function') {
+			hydrateRouteCardMedia(mediaEl, item, {
+				preferThumbnail: !isVideo,
+				observer,
+			});
+		}
+		grid.appendChild(card);
+	});
+}
+
+/** Appends user list items to the existing ul (avoids flash on load-more). */
+function appendUserListItems(container, users, options = {}) {
+	const ul = container?.querySelector('.user-profile-list');
+	if (!ul || !Array.isArray(users) || users.length === 0) return;
+	users.forEach((u) => {
+		const li = document.createElement('li');
+		li.className = 'user-profile-list-item';
+		li.innerHTML = buildUserListRowHtml(u, options);
+		ul.appendChild(li);
+	});
+}
+
+/** Appends comment blocks to the existing list (avoids flash on load-more). */
+function appendCommentsListItems(container, comments) {
+	const listEl = container?.querySelector('.user-profile-comments-list');
+	if (!listEl || !Array.isArray(comments) || comments.length === 0) return;
+
+	function renderUserCell(u) {
+		const id = u?.user_id ?? u?.id;
+		const name = (u?.display_name || u?.user_name || '').trim() || 'User';
+		const handle = u?.user_name ? `@${u.user_name}` : '';
+		const avatarUrl = typeof u?.avatar_url === 'string' ? u.avatar_url.trim() : '';
+		const color = getAvatarColor(u?.user_name || u?.user_id || name);
+		const initial = name.charAt(0).toUpperCase() || '?';
+		const href = buildProfilePath({ userName: u?.user_name, userId: id }) || '#';
+		const avatarContent = avatarUrl
+			? html`<img class="user-profile-comment-avatar-img" src="${escapeHtml(avatarUrl)}" alt="">`
+			: html`<span class="user-profile-comment-avatar-fallback" style="--user-profile-avatar-bg: ${color};" aria-hidden="true">${escapeHtml(initial)}</span>`;
+		return html`<a href="${escapeHtml(href)}" class="user-profile-comment-user"><span
+		class="user-profile-comment-avatar">${avatarContent}</span><span class="user-profile-comment-user-info"><span
+			class="user-profile-comment-user-name">${escapeHtml(name)}</span>${handle ? html`<span
+			class="user-profile-comment-user-handle">${escapeHtml(handle)}</span>` : ''}</span></a>`;
+	}
+
+	comments.forEach((c) => {
+		const creationId = c?.created_image_id;
+		const title = (c?.created_image_title || 'Creation').trim() || 'Creation';
+		const text = (c?.text || '').trim() || '';
+		const createdAt = c?.created_at ? formatRelativeTime(new Date(c.created_at)) : '';
+		const creationHref = Number.isFinite(creationId) && creationId > 0 ? `/creations/${creationId}` : '#';
+		const thumbUrl = (c?.created_image_thumbnail_url || c?.created_image_url || '').trim();
+		const creator = { user_id: c?.created_image_user_id, display_name: c?.creator_display_name, user_name: c?.creator_user_name, avatar_url: c?.creator_avatar_url };
+		const commenter = { user_id: c?.user_id, display_name: c?.commenter_display_name, user_name: c?.commenter_user_name, avatar_url: c?.commenter_avatar_url };
+		const div = document.createElement('div');
+		div.className = 'user-profile-comment-block';
+		div.innerHTML = html`
+			<a href="${escapeHtml(creationHref)}" class="user-profile-comment-thumb">${thumbUrl ? html`<img
+					src="${escapeHtml(thumbUrl)}" alt="" class="user-profile-comment-thumb-img" loading="lazy">` : html`<span
+					class="user-profile-comment-thumb-placeholder">?</span>`}</a>
+			<div class="user-profile-comment-title-creator">
+				<a href="${escapeHtml(creationHref)}" class="user-profile-comment-name">${escapeHtml(title)}</a>
+				<div class="user-profile-comment-creator">${renderUserCell(creator)}</div>
+			</div>
+			<div class="user-profile-comment-text">${escapeHtml(text)}</div>
+			<div class="user-profile-comment-footer">${renderUserCell(commenter)}${createdAt ? html`<span
+					class="user-profile-comment-date">${escapeHtml(createdAt)}</span>` : ''}</div>
+		`;
+		listEl.appendChild(div);
+	});
+}
+
+async function loadProfileSummary(target) {
+	const apiBase = buildTargetUserApiBase(target);
+	if (!apiBase) throw new Error('Invalid target user');
+	const result = await fetchJsonWithStatusDeduped(`${apiBase}/profile`, {
+		credentials: 'include'
+	}, { windowMs: 1000 });
+	if (!result.ok) {
+		throw new Error('Failed to load profile');
+	}
+	return result.data;
+}
+
+const PROFILE_PAGE_SIZE = {
+	creations: 24,
+	mentions: 24,
+	likes: 24,
+	comments: 20,
+	follows: 20,
+	following: 20
+};
+
+async function loadUserImages(target, { includeAll = false, limit = PROFILE_PAGE_SIZE.creations, offset = 0 } = {}) {
+	const apiBase = buildTargetUserApiBase(target);
+	if (!apiBase) throw new Error('Invalid target user');
+	const params = new URLSearchParams();
+	if (includeAll) params.set('include', 'all');
+	params.set('limit', String(limit));
+	params.set('offset', String(offset));
+	const url = `${apiBase}/created-images?${params.toString()}`;
+	const result = await fetchJsonWithStatusDeduped(url, { credentials: 'include' }, { windowMs: 800 });
+	if (!result.ok) {
+		throw new Error('Failed to load images');
+	}
+	const images = Array.isArray(result.data?.images) ? result.data.images : [];
+	const has_more = Boolean(result.data?.has_more);
+	return { images, has_more };
+}
+
+function renderUserList(container, users, emptyTitle, emptyMessage, options = {}) {
+	if (!container) return;
+	const { showUnfollow = false, showFollow = false, viewerFollowsByUserId = new Set(), viewerUserId = null } = options;
+	const list = Array.isArray(users) ? users : [];
+	if (list.length === 0) {
+		container.innerHTML = html`
+			<div class="route-empty">
+				<div class="route-empty-title">${escapeHtml(emptyTitle)}</div>
+				<div class="route-empty-message">${escapeHtml(emptyMessage)}</div>
+			</div>
+		`;
+		return;
+	}
+	container.innerHTML = html`
+		<ul class="user-profile-list">
+			${list.map((u) => html`<li class="user-profile-list-item">${buildUserListRowHtml(u, { showUnfollow, showFollow, viewerFollowsByUserId, viewerUserId })}</li>`).join('')}
+		</ul>
+	`;
+}
+
+function renderCommentsList(container, comments, emptyMessage) {
+	if (!container) return;
+	const list = Array.isArray(comments) ? comments : [];
+	if (list.length === 0) {
+		container.innerHTML = html`
+			<div class="route-empty">
+				<div class="route-empty-title">No comments yet</div>
+				<div class="route-empty-message">${escapeHtml(emptyMessage)}</div>
+			</div>
+		`;
+		return;
+	}
+	function renderUserCell(u, prefix) {
+		const id = u?.user_id ?? u?.id;
+		const name = (u?.display_name || u?.user_name || '').trim() || 'User';
+		const handle = u?.user_name ? `@${u.user_name}` : '';
+		const avatarUrl = typeof u?.avatar_url === 'string' ? u.avatar_url.trim() : '';
+		const color = getAvatarColor(u?.user_name || u?.user_id || name);
+		const initial = name.charAt(0).toUpperCase() || '?';
+		const href = buildProfilePath({ userName: u?.user_name, userId: id }) || '#';
+		const avatarContent = avatarUrl
+			? html`<img class="user-profile-comment-avatar-img" src="${escapeHtml(avatarUrl)}" alt="">`
+			: html`<span class="user-profile-comment-avatar-fallback" style="--user-profile-avatar-bg: ${color};" aria-hidden="true">${escapeHtml(initial)}</span>`;
+		return html`
+			<a href="${escapeHtml(href)}" class="user-profile-comment-user">
+				<span class="user-profile-comment-avatar">${avatarContent}</span>
+				<span class="user-profile-comment-user-info">
+					<span class="user-profile-comment-user-name">${escapeHtml(name)}</span>
+					${handle ? html`<span class="user-profile-comment-user-handle">${escapeHtml(handle)}</span>` : ''}
+				</span>
+			</a>
+		`;
+	}
+	container.innerHTML = html`
+		<div class="user-profile-comments-list">
+			${list.map((c) => {
+			const creationId = c?.created_image_id;
+			const title = (c?.created_image_title || 'Creation').trim() || 'Creation';
+			const text = (c?.text || '').trim() || '';
+			const createdAt = c?.created_at ? formatRelativeTime(new Date(c.created_at)) : '';
+			const creationHref = Number.isFinite(creationId) && creationId > 0 ? `/creations/${creationId}` : '#';
+			const thumbUrl = (c?.created_image_thumbnail_url || c?.created_image_url || '').trim();
+			const creator = {
+			user_id: c?.created_image_user_id,
+			display_name: c?.creator_display_name,
+			user_name: c?.creator_user_name,
+			avatar_url: c?.creator_avatar_url
+			};
+			const commenter = {
+			user_id: c?.user_id,
+			display_name: c?.commenter_display_name,
+			user_name: c?.commenter_user_name,
+			avatar_url: c?.commenter_avatar_url
+			};
+			const reactions = c?.reactions && typeof c.reactions === 'object' ? c.reactions : {};
+			const reactionChips = REACTION_ORDER
+				.filter((key) => {
+					const arr = Array.isArray(reactions[key]) ? reactions[key] : [];
+					const last = arr[arr.length - 1];
+					const others = typeof last === 'number' ? last : 0;
+					const strings = typeof last === 'number' ? arr.slice(0, -1) : arr;
+					return strings.length + others > 0;
+				})
+				.map((key) => {
+					const arr = Array.isArray(reactions[key]) ? reactions[key] : [];
+					const last = arr[arr.length - 1];
+					const others = typeof last === 'number' ? last : 0;
+					const strings = (typeof last === 'number' ? arr.slice(0, -1) : arr).filter((s) => typeof s === 'string');
+					const count = strings.length + others;
+					const countLabel = count > 99 ? '99+' : String(count);
+					const tooltip = strings.length > 0 || others > 0
+						? [...strings, others > 0 ? `and ${others} ${others === 1 ? 'other' : 'others'}` : ''].filter(Boolean).join(', ')
+						: '';
+					const iconFn = REACTION_ICONS[key];
+					const iconHtml = iconFn ? iconFn('comment-reaction-icon') : '';
+					const tooltipAttr = tooltip ? ` data-tooltip="${escapeHtml(tooltip)}"` : '';
+					return html`<span class="comment-reaction-chip" aria-label="${escapeHtml(key)}: ${escapeHtml(countLabel)}"${tooltipAttr}><span class="comment-reaction-icon-wrap" aria-hidden="true">${iconHtml}</span><span class="comment-reaction-count">${escapeHtml(countLabel)}</span></span>`;
+				})
+				.join('');
+			return html`
+			<div class="user-profile-comment-block">
+				<a href="${escapeHtml(creationHref)}" class="user-profile-comment-thumb">
+					${thumbUrl ? html`<img src="${escapeHtml(thumbUrl)}" alt="" class="user-profile-comment-thumb-img"
+						loading="lazy">` : html`<span class="user-profile-comment-thumb-placeholder">?</span>`}
+				</a>
+				<div class="user-profile-comment-title-creator">
+					<a href="${escapeHtml(creationHref)}" class="user-profile-comment-name">${escapeHtml(title)}</a>
+					<div class="user-profile-comment-creator">${renderUserCell(creator, 'creator')}</div>
+				</div>
+				<div class="user-profile-comment-text">${escapeHtml(text)}</div>
+				${reactionChips ? html`<div class="comment-reactions comment-reactions-readonly">${reactionChips}</div>` : ''}
+				<div class="user-profile-comment-footer">
+					${renderUserCell(commenter, 'commenter')}
+					${createdAt ? html`<span class="user-profile-comment-date">${escapeHtml(createdAt)}</span>` : ''}
+				</div>
+			</div>
+			`;
+			}).join('')}
+		</div>
+	`;
+	if (typeof setupWhoTooltips === 'function') {
+		setupWhoTooltips(container);
+	} else {
+		if (typeof setupReactionTooltipTap === 'function') setupReactionTooltipTap(container);
+		if (typeof setupFloatingWhoTooltips === 'function') setupFloatingWhoTooltips(container);
+	}
+}
+
+async function loadPersonalityCreations(personality, { limit = 100, offset = 0 } = {}) {
+	const normalized = String(personality || '').trim().toLowerCase();
+	const url = `/api/personalities/${encodeURIComponent(normalized)}/creations?limit=${encodeURIComponent(String(limit))}&offset=${encodeURIComponent(String(offset))}`;
+	const result = await fetchJsonWithStatusDeduped(url, { credentials: 'include' }, { windowMs: 1200 });
+	if (!result.ok) {
+		throw new Error('Failed to search personality creations');
+	}
+	const items = Array.isArray(result.data?.images) ? result.data.images : [];
+	return { items, hasMore: Boolean(result.data?.has_more) };
+}
+
+async function loadTagCreations(tag, { limit = 100, offset = 0 } = {}) {
+	const normalized = String(tag || '').trim().toLowerCase();
+	const url = `/api/tags/${encodeURIComponent(normalized)}/creations?limit=${encodeURIComponent(String(limit))}&offset=${encodeURIComponent(String(offset))}`;
+	const result = await fetchJsonWithStatusDeduped(url, { credentials: 'include' }, { windowMs: 1200 });
+	if (!result.ok) {
+		throw new Error('Failed to search tag creations');
+	}
+	const items = Array.isArray(result.data?.images) ? result.data.images : [];
+	return { items, hasMore: Boolean(result.data?.has_more) };
+}
+
+function renderPersonaLibraryEditModalHtml(personaCatalog, slugDisplayFallback, modalOpts = {}) {
+	const variant = modalOpts?.variant === 'promote' ? 'promote' : 'edit';
+	const cat = personaCatalog && typeof personaCatalog === 'object' ? personaCatalog : {};
+	const titleRaw = typeof cat.title === 'string' ? cat.title.trim() : '';
+	const descRaw = typeof cat.description === 'string' ? cat.description.trim() : '';
+	const charRaw = typeof cat.character_description === 'string' ? cat.character_description.trim() : '';
+	const avatarUrl = typeof cat.avatar_url === 'string' ? cat.avatar_url.trim() : '';
+	const titleValue = titleRaw || (typeof slugDisplayFallback === 'string' ? slugDisplayFallback.trim() : '');
+	const modalHeading = variant === 'promote' ? 'Add to Prompt Library' : 'Edit persona';
+	const primaryLabel = variant === 'promote' ? 'Add to library' : 'Save';
+	const promoteAttrs = variant === 'promote' ? ' data-persona-promote-setup="1"' : '';
+	const promoteLede =
+		variant === 'promote'
+			? html`<p class="user-profile-help user-profile-persona-promote-lede">Set a display name, optional about text, and a <strong>character description</strong> (required for @mentions and for generating an avatar). You can change these anytime from Edit persona.</p>`
+			: '';
+	return html`
+		<div class="modal-overlay" data-persona-library-edit-overlay${promoteAttrs}>
+			<div class="modal modal-large">
+				<div class="modal-header">
+					<h2>${modalHeading}</h2>
+					<button class="modal-close" type="button" aria-label="Close" data-persona-library-edit-close>
+						<svg class="modal-close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+							stroke-linecap="round" stroke-linejoin="round">
+							<line x1="18" y1="6" x2="6" y2="18"></line>
+							<line x1="6" y1="6" x2="18" y2="18"></line>
+						</svg>
+					</button>
+				</div>
+				<div class="modal-body">
+					${promoteLede}
+					<form class="user-profile-edit-form" data-persona-library-edit-form>
+						<div class="user-profile-form-section">
+							<div class="field">
+								<label for="persona-library-title">Display name</label>
+								<input id="persona-library-title" name="title" type="text" maxlength="200"
+									placeholder="Name shown on this page"
+									value="${escapeHtml(titleValue)}">
+								<div class="user-profile-help">Title for this Prompt Library persona (not the @handle).</div>
+							</div>
+						</div>
+						<div class="user-profile-form-section">
+							<div class="field">
+								<label for="persona-library-description">About</label>
+								<textarea id="persona-library-description" name="description" rows="4"
+									placeholder="Who is this persona for visitors…">${escapeHtml(descRaw)}</textarea>
+								<div class="user-profile-help">Shown on this page under About. Mentions and links expand after save, like a profile bio.</div>
+							</div>
+						</div>
+						<div class="user-profile-form-section">
+							<div class="field">
+								<label for="persona-library-character">Character</label>
+								<textarea id="persona-library-character" name="character_description" rows="4"
+									placeholder="e.g. short, middle-aged Asian female with medium-length black hair">${escapeHtml(charRaw)}</textarea>
+								<div class="user-profile-help">Used when people @mention this persona in prompts — same idea as a user's character field. Required.</div>
+							</div>
+						</div>
+						<div class="user-profile-form-section">
+							<div class="field">
+								<label>Avatar</label>
+								<div class="user-profile-upload" data-upload="avatar">
+									<input class="user-profile-file-input" type="file" name="avatar_file" accept="image/*"
+										data-upload-input="avatar">
+									<input type="hidden" name="avatar_remove" value="" data-upload-remove="avatar">
+									<input type="hidden" name="avatar_try_url" value="" data-persona-library-avatar-try-url>
+									<div class="user-profile-avatar-actions">
+										<button class="user-profile-upload-button btn-secondary" type="button"
+											data-upload-trigger="avatar">Upload avatar</button>
+										<button class="user-profile-upload-button btn-secondary user-profile-generate-avatar-btn" type="button"
+											data-persona-library-avatar-generate>
+											<span class="user-profile-generate-avatar-spinner" aria-hidden="true" hidden></span>
+											<span class="user-profile-generate-avatar-btn-text">Generate</span>
+										</button>
+									</div>
+									<div class="user-profile-upload-preview" data-upload-preview="avatar" hidden>
+										<img class="user-profile-upload-img" alt="Avatar preview" data-upload-img="avatar">
+										<button class="user-profile-upload-remove" type="button" aria-label="Remove avatar"
+											data-upload-clear="avatar">✕</button>
+									</div>
+								</div>
+								${avatarUrl ? html`
+								<div class="user-profile-upload-hydrate" data-upload-existing="avatar"
+									data-url="${escapeHtml(avatarUrl)}">
+								</div>
+								` : ''}
+							</div>
+						</div>
+						<div class="alert error" data-persona-library-edit-error style="display: none;"></div>
+					</form>
+				</div>
+				<div class="modal-footer">
+					<button class="btn-secondary" type="button" data-persona-library-edit-cancel>Cancel</button>
+					<button class="btn-primary" type="button" data-persona-library-edit-save>${primaryLabel}</button>
+				</div>
+			</div>
+			<div class="user-profile-generate-confirm-overlay" data-persona-library-generate-confirm-overlay hidden>
+				<div class="modal user-profile-generate-confirm-modal">
+					<div class="modal-header">
+						<h3>Generate avatar</h3>
+						<button class="modal-close" type="button" aria-label="Close" data-persona-library-generate-confirm-close>
+							<svg class="modal-close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+								<line x1="18" y1="6" x2="6" y2="18"></line>
+								<line x1="6" y1="6" x2="18" y2="18"></line>
+							</svg>
+						</button>
+					</div>
+					<div class="modal-body" data-persona-library-generate-confirm-body>
+						<p>This costs <strong>3 credits</strong> and uses the <strong>Character</strong> field in this form (at least 12 characters).</p>
+						<div class="alert error" data-persona-library-generate-confirm-error style="display: none;"></div>
+					</div>
+					<div class="modal-footer">
+						<button class="btn-secondary" type="button" data-persona-library-generate-confirm-cancel>Cancel</button>
+						<button class="btn-primary user-profile-generate-confirm-cta" type="button" data-persona-library-generate-confirm-cta>
+							<span class="user-profile-generate-confirm-cta-text">Generate avatar</span>
+							<span class="user-profile-generate-confirm-cta-spinner" aria-hidden="true" hidden role="status"></span>
+						</button>
+					</div>
+				</div>
+			</div>
+		</div>
+	`;
+}
+
+function renderPersonalityDiscoveryPage(
+	container,
+	personality,
+	items,
+	{
+		hasMore = false,
+		prefix = '@',
+		promoteEligibility = null,
+		personaInLibrary = false,
+		personaCatalog = null,
+		canEditPersonaCatalog = false
+	} = {}
+) {
+	const safePersonality = String(personality || '').trim().toLowerCase();
+	const token = `${prefix}${safePersonality}`;
+	const handleStr = `@${safePersonality}`;
+	const useLibraryShell = prefix === '@' && personaInLibrary === true;
+
+	let promoteButtonHtml = '';
+	if (
+		promoteEligibility
+		&& promoteEligibility.already_in_library !== true
+		&& promoteEligibility.can_promote === true
+	) {
+		promoteButtonHtml = html`<button type="button" class="btn-secondary user-profile-persona-promote-btn" data-promote-persona="${escapeHtml(safePersonality)}">Add to Prompt Library</button>`;
+	}
+
+	const editPersonaButtonHtml =
+		useLibraryShell && canEditPersonaCatalog
+			? html`<button type="button" class="btn-secondary user-profile-edit" data-persona-library-edit-open>Edit persona</button>`
+			: '';
+	const copyPersonaKeyButtonHtml = useLibraryShell
+		? html`<button type="button" class="btn-secondary user-profile-copy-key" data-persona-copy-key>Copy persona key</button><span class="user-profile-copy-key-status" data-persona-copy-key-status role="status" aria-live="polite"></span>`
+		: '';
+
+	const actionsInnerHtml =
+		promoteButtonHtml || editPersonaButtonHtml || copyPersonaKeyButtonHtml
+			? html`<div class="personality-discovery-actions">
+				${editPersonaButtonHtml}
+				${copyPersonaKeyButtonHtml}
+				${promoteButtonHtml}
+			</div>`
+			: '';
+
+	const promoteSetupModalHtml =
+		!useLibraryShell && canEditPersonaCatalog && promoteButtonHtml
+			? renderPersonaLibraryEditModalHtml({}, personalitySlugToDisplayTitle(safePersonality), {
+					variant: 'promote'
+				})
+			: '';
+
+	if (useLibraryShell) {
+		const catalogTitle =
+			personaCatalog && typeof personaCatalog.title === 'string' ? personaCatalog.title.trim() : '';
+		const displayTitle = catalogTitle || personalitySlugToDisplayTitle(safePersonality);
+		const descRaw = personaCatalog?.description;
+		const desc =
+			descRaw != null && String(descRaw).trim() ? String(descRaw).trim() : '';
+		const charRaw = personaCatalog?.character_description;
+		const char =
+			charRaw != null && String(charRaw).trim() ? String(charRaw).trim() : '';
+		const avatarUrl =
+			personaCatalog && typeof personaCatalog.avatar_url === 'string' ? personaCatalog.avatar_url.trim() : '';
+		const avatarInitial = displayTitle.trim().charAt(0).toUpperCase() || '?';
+		const avatarColor = getAvatarColor(safePersonality);
+		const avatarBlockHtml = avatarUrl
+			? html`<img class="user-profile-avatar-img" src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(displayTitle)}">`
+			: html`<div class="user-profile-avatar-fallback" style="--user-profile-avatar-bg: ${avatarColor};" aria-hidden="true">${escapeHtml(avatarInitial)}</div>`;
+
+		const aboutInner =
+			desc
+				? processUserText(desc)
+				: canEditPersonaCatalog
+					? '<span class="persona-library-notes-empty">No about text yet.</span>'
+					: '';
+		const aboutBlockHtml =
+			desc || canEditPersonaCatalog
+				? html`
+					<div class="user-profile-persona-detail">
+						<div class="user-profile-persona-detail-label">About</div>
+						<div class="user-profile-persona-detail-body user-profile-persona-bio${desc ? '' : ' user-profile-persona-bio--empty'}" data-persona-library-description>${aboutInner}</div>
+					</div>
+					`
+				: '';
+
+		const characterInner =
+			char
+				? processUserText(char)
+				: canEditPersonaCatalog
+					? '<span class="persona-library-notes-empty">Add character details in Edit persona.</span>'
+					: '';
+		const characterBlockHtml =
+			char || canEditPersonaCatalog
+				? html`
+					<div class="user-profile-persona-detail">
+						<div class="user-profile-persona-detail-label">Character</div>
+						<div class="user-profile-persona-detail-body user-profile-persona-character${char ? '' : ' user-profile-persona-bio--empty'}" data-persona-library-character>${characterInner}</div>
+					</div>
+					`
+				: '';
+
+		const identityExtraHtml =
+			aboutBlockHtml || characterBlockHtml
+				? html`<div class="user-profile-persona-details">${aboutBlockHtml}${characterBlockHtml}</div>`
+				: '';
+
+		const heroFooterHtml = html`
+			<div class="user-profile-hero-footer">
+				This is a Prompt Library persona, not a member account.
+				<a href="/prompt-library#personas">Browse all personas</a>.
+			</div>
+			`;
+
+		const heroHtml = renderSharedProfileHeroHtml({
+			bannerStyle: '',
+			avatarBlockHtml,
+			displayName: displayTitle,
+			handle: handleStr,
+			actionsInnerHtml,
+			actionsHostAttrs: ' data-persona-discovery-actions=""',
+			statsBlockHtml: '',
+			metaBlockHtml: '',
+			identityExtraHtml,
+			heroFooterHtml
+		});
+
+		const personaEditModalHtml = canEditPersonaCatalog
+			? renderPersonaLibraryEditModalHtml(personaCatalog, displayTitle)
+			: '';
+
+		container.innerHTML = html`
+			${heroHtml}
+			<div class="user-profile-content user-profile-persona-discovery-content">
+				<section class="persona-discovery-mentions-section" aria-labelledby="persona-mentions-heading">
+					<h2 class="persona-discovery-section-title" id="persona-mentions-heading">Mentions on parascene</h2>
+					<p class="persona-discovery-section-lede">Published creations that reference <code class="persona-discovery-handle-code">${escapeHtml(handleStr)}</code> or <code class="persona-discovery-handle-code">${escapeHtml(safePersonality)}</code> in the title, prompt, description, or comments.</p>
+					<div class="route-cards content-cards-image-grid" data-personality-grid>
+						<div class="route-empty route-empty-image-grid route-loading">
+							<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
+						</div>
+					</div>
+					${hasMore ? html`<div class="route-empty">
+						<div class="route-empty-message">Showing top results. Refine the personality name to narrow matches.</div>
+					</div>` : ''}
+				</section>
+			</div>
+			${personaEditModalHtml}
+		`;
+
+		container.dataset.personaLibraryTitle = displayTitle;
+		container.dataset.personaLibraryDescription = desc;
+		container.dataset.personaLibraryCharacter = char;
+		container.dataset.personaLibraryAvatarUrl = avatarUrl;
+		const copyPersonaKeyButton = container.querySelector('[data-persona-copy-key]');
+		copyPersonaKeyButton?.addEventListener('click', async () => {
+			const status = container.querySelector('[data-persona-copy-key-status]');
+			try {
+				const copied = await copyTextToClipboard(`@${safePersonality}`);
+				if (!copied) window.prompt('Copy persona key', `@${safePersonality}`);
+				if (status) status.textContent = copied ? 'Copied' : 'Copy the key from the prompt';
+			} catch {
+				if (status) status.textContent = 'Unable to copy';
+			}
+		});
+	} else {
+		container.innerHTML = html`
+		<div class="route-header">
+			<div class="route-header-title-row">
+				<h3>${escapeHtml(token)}</h3>
+				${actionsInnerHtml}
+			</div>
+		</div>
+		<div class="route-cards content-cards-image-grid" data-personality-grid>
+			<div class="route-empty route-empty-image-grid route-loading">
+				<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
+			</div>
+		</div>
+		${hasMore ? html`<div class="route-empty">
+			<div class="route-empty-message">Showing top results. Refine the personality name to narrow matches.</div>
+		</div>` : ''}
+		${promoteSetupModalHtml}
+	`;
+	}
+
+	const grid = container.querySelector('[data-personality-grid]');
+	const personaGridOpts =
+		useLibraryShell && canEditPersonaCatalog ? { personaAvatarPromote: { tag: safePersonality } } : {};
+	renderImageGrid(
+		grid,
+		items,
+		false,
+		'No results found',
+		`No creations currently match ${token}.`,
+		personaGridOpts
+	);
+	if (useLibraryShell) {
+		hydrateUserTextLinks(container);
+	}
+}
+
+function wirePersonaLibraryEditModal(container, personality) {
+	const overlay = container.querySelector('[data-persona-library-edit-overlay]');
+	if (!overlay) return;
+	const isPromoteSetup = overlay.getAttribute('data-persona-promote-setup') === '1';
+	const tag = String(personality || '').trim().toLowerCase();
+	const openBtn = container.querySelector('[data-persona-library-edit-open]');
+	const form = container.querySelector('[data-persona-library-edit-form]');
+	const titleInput = form?.querySelector('input[name="title"]');
+	const descTa = form?.querySelector('textarea[name="description"]');
+	const charTa = form?.querySelector('textarea[name="character_description"]');
+	const errorBox = container.querySelector('[data-persona-library-edit-error]');
+	const closeBtn = overlay.querySelector('[data-persona-library-edit-close]');
+	const cancelBtn = overlay.querySelector('[data-persona-library-edit-cancel]');
+	const saveBtn = overlay.querySelector('[data-persona-library-edit-save]');
+	const descEl = container.querySelector('[data-persona-library-description]');
+	const charEl = container.querySelector('[data-persona-library-character]');
+	const avatarTryUrlInput = form?.querySelector('[data-persona-library-avatar-try-url]');
+	const generateConfirmOverlay = overlay.querySelector('[data-persona-library-generate-confirm-overlay]');
+	const generateConfirmClose = overlay.querySelector('[data-persona-library-generate-confirm-close]');
+	const generateConfirmCancel = overlay.querySelector('[data-persona-library-generate-confirm-cancel]');
+	const generateConfirmCta = overlay.querySelector('[data-persona-library-generate-confirm-cta]');
+	const generateConfirmBody = overlay.querySelector('[data-persona-library-generate-confirm-body]');
+	const avatarInput = form?.querySelector('[data-upload-input="avatar"]');
+	const avatarRemoveField = form?.querySelector('[data-upload-remove="avatar"]');
+	const avatarClearBtn = form?.querySelector('[data-upload-clear="avatar"]');
+
+	function hideError() {
+		if (!errorBox) return;
+		errorBox.style.display = 'none';
+		errorBox.textContent = '';
+	}
+
+	function showError(msg) {
+		if (!errorBox) return;
+		errorBox.textContent = msg;
+		errorBox.style.display = '';
+	}
+
+	function closePersonaGenerateConfirm() {
+		if (generateConfirmOverlay) generateConfirmOverlay.hidden = true;
+		const confirmError = overlay.querySelector('[data-persona-library-generate-confirm-error]');
+		if (confirmError) {
+			confirmError.style.display = 'none';
+			confirmError.textContent = '';
+		}
+	}
+
+	function closeModal() {
+		closePersonaGenerateConfirm();
+		setModalOpen(overlay, false);
+		hideError();
+	}
+
+	const objectUrls = { avatar: null };
+	function revoke(kind) {
+		const current = objectUrls[kind];
+		if (current) {
+			try { URL.revokeObjectURL(current); } catch { /* ignore */ }
+			objectUrls[kind] = null;
+		}
+	}
+
+	function setUploadState(kind, { showPreview, src, removed }) {
+		const preview = container.querySelector(`[data-upload-preview="${kind}"]`);
+		const img = container.querySelector(`[data-upload-img="${kind}"]`);
+		const trigger = container.querySelector(`[data-upload-trigger="${kind}"]`);
+		const removeField = container.querySelector(`[data-upload-remove="${kind}"]`);
+		if (removeField) removeField.value = removed ? '1' : '';
+
+		if (img && typeof src === 'string') {
+			img.src = src;
+		}
+		if (preview) {
+			preview.hidden = !showPreview;
+		}
+		if (trigger) {
+			trigger.hidden = showPreview;
+		}
+		if (kind === 'avatar') {
+			const actions = form?.querySelector('[data-upload="avatar"] .user-profile-avatar-actions');
+			if (actions) {
+				actions.querySelectorAll('.user-profile-upload-button').forEach((btn) => { btn.hidden = showPreview; });
+			}
+		}
+	}
+
+	function hydrateExistingAvatarFromDataset() {
+		const url = container.dataset.personaLibraryAvatarUrl || '';
+		const existing = form?.querySelector('[data-upload-existing="avatar"]');
+		if (existing) {
+			if (url) existing.setAttribute('data-url', url);
+			else existing.removeAttribute('data-url');
+		}
+		if (url) {
+			setUploadState('avatar', { showPreview: true, src: url, removed: false });
+		} else {
+			setUploadState('avatar', { showPreview: false, src: '', removed: false });
+		}
+	}
+
+	function setupUpload(kind) {
+		const input = container.querySelector(`[data-upload-input="${kind}"]`);
+		const trigger = container.querySelector(`[data-upload-trigger="${kind}"]`);
+		const clear = container.querySelector(`[data-upload-clear="${kind}"]`);
+
+		if (trigger && input) {
+			trigger.addEventListener('click', () => input.click());
+		}
+
+		if (input) {
+			input.addEventListener('change', () => {
+				const file = input.files && input.files[0] ? input.files[0] : null;
+				revoke(kind);
+				if (!file) {
+					hydrateExistingAvatarFromDataset();
+					return;
+				}
+				const url = lifetime.objectUrl(file);
+				objectUrls[kind] = url;
+				setUploadState(kind, { showPreview: true, src: url, removed: false });
+				if (avatarTryUrlInput) avatarTryUrlInput.value = '';
+			});
+		}
+
+		if (clear && input) {
+			clear.addEventListener('click', () => {
+				revoke(kind);
+				try { input.value = ''; } catch { /* ignore */ }
+				setUploadState(kind, { showPreview: false, src: '', removed: true });
+				if (avatarTryUrlInput) avatarTryUrlInput.value = '';
+			});
+		}
+
+		hydrateExistingAvatarFromDataset();
+	}
+
+	setupUpload('avatar');
+
+	if (avatarInput) {
+		avatarInput.addEventListener('change', () => {
+			if (avatarTryUrlInput) avatarTryUrlInput.value = '';
+		});
+	}
+	if (avatarClearBtn) {
+		avatarClearBtn.addEventListener('click', () => {
+			if (avatarTryUrlInput) avatarTryUrlInput.value = '';
+		});
+	}
+
+	let isGeneratingPersonaAvatar = false;
+
+	function openPersonaGenerateConfirm() {
+		if (generateConfirmOverlay) generateConfirmOverlay.hidden = false;
+	}
+
+	function setPersonaGenerateConfirmLoading(loading) {
+		if (!generateConfirmCta) return;
+		const textEl = generateConfirmCta.querySelector('.user-profile-generate-confirm-cta-text');
+		const spinnerEl = generateConfirmCta.querySelector('.user-profile-generate-confirm-cta-spinner');
+		generateConfirmCta.disabled = loading;
+		if (textEl) textEl.hidden = loading;
+		if (spinnerEl) spinnerEl.hidden = !loading;
+		if (generateConfirmBody) generateConfirmBody.style.pointerEvents = loading ? 'none' : '';
+		if (generateConfirmBody) generateConfirmBody.style.opacity = loading ? '0.6' : '';
+		if (generateConfirmCancel) generateConfirmCancel.disabled = loading;
+		if (generateConfirmClose) {
+			generateConfirmClose.disabled = loading;
+			generateConfirmClose.setAttribute('aria-disabled', loading ? 'true' : 'false');
+		}
+		if (generateConfirmOverlay) {
+			if (loading) generateConfirmOverlay.classList.add('user-profile-generate-confirm-loading');
+			else generateConfirmOverlay.classList.remove('user-profile-generate-confirm-loading');
+		}
+	}
+
+	if (form) {
+		form.addEventListener('click', (e) => {
+			const genBtn = e.target.closest('[data-persona-library-avatar-generate]');
+			if (!genBtn || !form.contains(genBtn)) return;
+			e.preventDefault();
+			const characterField = form.querySelector('textarea[name="character_description"]');
+			const description = (characterField?.value || '').trim();
+			if (description.length < 12) {
+				showError('Add a character description (at least 12 characters) to generate an avatar.');
+				return;
+			}
+			hideError();
+			openPersonaGenerateConfirm();
+		});
+	}
+
+	if (generateConfirmClose) {
+		generateConfirmClose.addEventListener('click', () => closePersonaGenerateConfirm());
+	}
+	if (generateConfirmCancel) {
+		generateConfirmCancel.addEventListener('click', () => closePersonaGenerateConfirm());
+	}
+
+	if (generateConfirmCta) {
+		generateConfirmCta.addEventListener('click', async () => {
+			if (isGeneratingPersonaAvatar) return;
+			const characterField = form?.querySelector('textarea[name="character_description"]');
+			const description = (characterField?.value || '').trim();
+			const confirmErrorEl = overlay.querySelector('[data-persona-library-generate-confirm-error]');
+			if (description.length < 12) {
+				if (confirmErrorEl) {
+					confirmErrorEl.style.display = 'block';
+					confirmErrorEl.textContent = 'Character description must be at least 12 characters.';
+				}
+				return;
+			}
+			if (confirmErrorEl) {
+				confirmErrorEl.style.display = 'none';
+				confirmErrorEl.textContent = '';
+			}
+			isGeneratingPersonaAvatar = true;
+			setPersonaGenerateConfirmLoading(true);
+			try {
+				await ensureTryIdentityCookie();
+				const variationKey = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+				const prompt = buildAvatarPrompt(description, variationKey);
+				const created = await createTryImage(prompt, {
+					chargeCredits: 3,
+					context: PERSONA_LIBRARY_AVATAR_TRY_CONTEXT
+				});
+				if (!created.ok) {
+					const msg = created.data?.message || created.data?.error || 'Could not start generation.';
+					throw new Error(msg);
+				}
+				let url = null;
+				if (created.data?.status === 'completed' && typeof created.data?.url === 'string' && created.data.url.trim()) {
+					url = created.data.url.trim();
+				} else if (created.data?.id) {
+					const polled = await pollTryImageById(created.data.id);
+					if (polled.ok && polled.url) url = polled.url;
+					else throw new Error(polled.error || 'Generation failed.');
+				} else {
+					throw new Error('No image returned.');
+				}
+				if (avatarTryUrlInput) avatarTryUrlInput.value = url;
+				revoke('avatar');
+				if (avatarRemoveField) avatarRemoveField.value = '';
+				setUploadState('avatar', { showPreview: true, src: url, removed: false });
+				closePersonaGenerateConfirm();
+			} catch (err) {
+				const msg = String(err?.message || '').trim() || 'Generation failed.';
+				if (confirmErrorEl) {
+					confirmErrorEl.style.display = 'block';
+					confirmErrorEl.textContent = msg;
+				}
+			} finally {
+				isGeneratingPersonaAvatar = false;
+				setPersonaGenerateConfirmLoading(false);
+			}
+		});
+	}
+
+	if (openBtn) {
+		openBtn.addEventListener('click', () => {
+			if (titleInput) titleInput.value = container.dataset.personaLibraryTitle || '';
+			if (descTa) descTa.value = container.dataset.personaLibraryDescription || '';
+			if (charTa) charTa.value = container.dataset.personaLibraryCharacter || '';
+			if (avatarTryUrlInput) avatarTryUrlInput.value = '';
+			if (avatarInput) {
+				try { avatarInput.value = ''; } catch { /* ignore */ }
+			}
+			revoke('avatar');
+			hydrateExistingAvatarFromDataset();
+			hideError();
+			closePersonaGenerateConfirm();
+			setModalOpen(overlay, true);
+		});
+	}
+
+	const promoteDiscoveryBtn = container.querySelector('[data-promote-persona]');
+	if (isPromoteSetup && promoteDiscoveryBtn) {
+		promoteDiscoveryBtn.addEventListener('click', () => {
+			if (titleInput) titleInput.value = personalitySlugToDisplayTitle(tag);
+			if (descTa) descTa.value = '';
+			if (charTa) charTa.value = '';
+			if (avatarTryUrlInput) avatarTryUrlInput.value = '';
+			if (avatarInput) {
+				try { avatarInput.value = ''; } catch { /* ignore */ }
+			}
+			if (avatarRemoveField) avatarRemoveField.value = '';
+			revoke('avatar');
+			hydrateExistingAvatarFromDataset();
+			hideError();
+			closePersonaGenerateConfirm();
+			setModalOpen(overlay, true);
+		});
+	}
+
+	if (closeBtn) closeBtn.addEventListener('click', closeModal);
+	if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+
+	overlay.addEventListener('click', (e) => {
+		if (e.target !== overlay) return;
+		if (generateConfirmOverlay && !generateConfirmOverlay.hidden) {
+			closePersonaGenerateConfirm();
+			return;
+		}
+		closeModal();
+	});
+
+	async function buildPersonaCatalogFormData() {
+		const fd = new FormData();
+		for (const [name, value] of new FormData(form)) {
+			if (name === 'avatar_file' && value instanceof File && value.size > 0) {
+				try {
+					const blob = await resizeImageFile(value, {
+						maxWidth: 128,
+						maxHeight: 128,
+						quality: 0.9,
+						mimeType: 'image/jpeg'
+					});
+					fd.append(name, blob, 'avatar.jpg');
+				} catch {
+					fd.append(name, value);
+				}
+			} else if (name === 'avatar_file' && value instanceof File && value.size === 0) {
+				continue;
+			} else {
+				fd.append(name, value);
+			}
+		}
+		return fd;
+	}
+
+	if (saveBtn && form) {
+		saveBtn.addEventListener('click', async () => {
+			const character = (charTa?.value || '').trim();
+			if (!character) {
+				showError('Character description is required — it is used when this persona appears in prompts.');
+				return;
+			}
+			hideError();
+			saveBtn.disabled = true;
+			try {
+				if (isPromoteSetup) {
+					const promoteRes = await lifetime.fetch('/api/prompt-injections/personas/promote', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						credentials: 'include',
+						body: JSON.stringify({ tag })
+					});
+					const promoteData = await promoteRes.json().catch(() => ({}));
+					if (!promoteRes.ok && promoteRes.status !== 409) {
+						const msg =
+							typeof promoteData?.message === 'string' && promoteData.message.trim()
+								? promoteData.message.trim()
+								: typeof promoteData?.error === 'string'
+									? promoteData.error
+									: 'Could not add to library.';
+						showError(msg);
+						return;
+					}
+					const fd = await buildPersonaCatalogFormData();
+					const result = await fetchJsonWithStatusDeduped(
+						`/api/prompt-injections/personas/${encodeURIComponent(tag)}/catalog`,
+						{
+							method: 'POST',
+							credentials: 'include',
+							body: fd
+						},
+						{ windowMs: 0 }
+					);
+					if (!result.ok) {
+						const data = result.data || {};
+						const msg =
+							typeof data?.message === 'string' && data.message.trim()
+								? data.message.trim()
+								: typeof data?.error === 'string'
+									? data.error
+									: 'Persona was added but details could not be saved. Try Edit persona.';
+						showError(msg);
+						return;
+					}
+					window.location.reload();
+					return;
+				}
+
+				const fd = await buildPersonaCatalogFormData();
+				const result = await fetchJsonWithStatusDeduped(
+					`/api/prompt-injections/personas/${encodeURIComponent(tag)}/catalog`,
+					{
+						method: 'POST',
+						credentials: 'include',
+						body: fd
+					},
+					{ windowMs: 0 }
+				);
+				if (!result.ok) {
+					const data = result.data || {};
+					const msg =
+						typeof data?.message === 'string' && data.message.trim()
+							? data.message
+							: typeof data?.error === 'string'
+								? data.error
+								: 'Could not save.';
+					showError(msg);
+					return;
+				}
+				const p = result.data?.persona;
+				if (p && typeof p === 'object') {
+					if (typeof p.title === 'string') container.dataset.personaLibraryTitle = p.title.trim();
+					const d = p.description;
+					container.dataset.personaLibraryDescription =
+						d != null && String(d).trim() ? String(d).trim() : '';
+					const ch = p.character_description;
+					container.dataset.personaLibraryCharacter =
+						ch != null && String(ch).trim() ? String(ch).trim() : '';
+					const av = typeof p.avatar_url === 'string' ? p.avatar_url.trim() : '';
+					container.dataset.personaLibraryAvatarUrl = av;
+				}
+				if (descEl) {
+					const about = container.dataset.personaLibraryDescription || '';
+					if (about) {
+						descEl.innerHTML = processUserText(about);
+						descEl.classList.remove('user-profile-persona-bio--empty');
+						hydrateUserTextLinks(descEl);
+					} else {
+						descEl.innerHTML = '<span class="persona-library-notes-empty">No about text yet.</span>';
+						descEl.classList.add('user-profile-persona-bio--empty');
+					}
+				}
+				if (charEl) {
+					const ch = container.dataset.personaLibraryCharacter || '';
+					if (ch) {
+						charEl.innerHTML = processUserText(ch);
+						charEl.classList.remove('user-profile-persona-bio--empty');
+						hydrateUserTextLinks(charEl);
+					} else {
+						charEl.innerHTML = '<span class="persona-library-notes-empty">Add character details in Edit persona.</span>';
+						charEl.classList.add('user-profile-persona-bio--empty');
+					}
+				}
+				const nameEl = container.querySelector('.user-profile-name');
+				if (nameEl && typeof result.data?.persona?.title === 'string') {
+					nameEl.textContent = result.data.persona.title.trim();
+				}
+				if (result.data?.persona) {
+					applyPersonaHeroAvatarFromResponse(container, tag, result.data.persona);
+				}
+				closeModal();
+			} catch {
+				showError('Could not save.');
+			} finally {
+				saveBtn.disabled = false;
+			}
+		});
+	}
+}
+
+function applyPersonaHeroAvatarFromResponse(container, tag, persona) {
+	const au = persona && typeof persona.avatar_url === 'string' ? persona.avatar_url.trim() : '';
+	container.dataset.personaLibraryAvatarUrl = au;
+	const nameEl = container.querySelector('.user-profile-name');
+	const avSlot = container.querySelector('.user-profile-hero .user-profile-avatar');
+	if (!avSlot) return;
+	const disp = (nameEl?.textContent || container.dataset.personaLibraryTitle || '').trim() || '?';
+	if (au) {
+		avSlot.innerHTML = `<img class="user-profile-avatar-img" src="${escapeHtml(au)}" alt="${escapeHtml(disp)}">`;
+	} else {
+		const initial = disp.charAt(0).toUpperCase() || '?';
+		const avatarColor = getAvatarColor(tag);
+		avSlot.innerHTML = `<div class="user-profile-avatar-fallback" style="--user-profile-avatar-bg: ${avatarColor};" aria-hidden="true">${escapeHtml(initial)}</div>`;
+	}
+}
+
+async function runPersonaSetAvatarFromCreation(container, tag, creationId, btn) {
+	if (!Number.isFinite(creationId) || creationId <= 0) return;
+
+	const character = (container.dataset.personaLibraryCharacter || '').trim();
+	if (!character) {
+		window.alert('Add a character description for this persona (Edit persona) before setting an avatar.');
+		return;
+	}
+	let title = (container.dataset.personaLibraryTitle || '').trim();
+	if (!title) title = personalitySlugToDisplayTitle(tag);
+	const description = (container.dataset.personaLibraryDescription || '').trim();
+
+	btn.disabled = true;
+	btn.setAttribute('aria-busy', 'true');
+	try {
+		const fd = new FormData();
+		fd.append('title', title);
+		fd.append('description', description);
+		fd.append('character_description', character);
+		fd.append('avatar_creation_id', String(creationId));
+
+		const result = await fetchJsonWithStatusDeduped(
+			`/api/prompt-injections/personas/${encodeURIComponent(tag)}/catalog`,
+			{
+				method: 'POST',
+				credentials: 'include',
+				body: fd
+			},
+			{ windowMs: 0 }
+		);
+		if (!result.ok) {
+			const data = result.data || {};
+			const msg =
+				typeof data?.message === 'string' && data.message.trim()
+					? data.message.trim()
+					: typeof data?.error === 'string'
+						? data.error
+						: 'Could not update avatar.';
+			window.alert(msg);
+			return;
+		}
+		const p = result.data?.persona;
+		if (p && typeof p === 'object') {
+			applyPersonaHeroAvatarFromResponse(container, tag, p);
+		}
+	} catch {
+		window.alert('Could not update avatar.');
+	} finally {
+		btn.disabled = false;
+		btn.removeAttribute('aria-busy');
+	}
+}
+
+async function init() {
+	await loadDeps();
+if(!lifetime.active)return;
+const targetInfo=getPathUserTarget();
+if(targetInfo.mode==='username'){const found=await fetchJsonWithStatusDeduped('/api/users/by-username/'+encodeURIComponent(targetInfo.userName)+'/profile',{credentials:'include'});profileContext={requested:{type:'user-name',user_name:targetInfo.userName},resolved:{target_exists:found.status!==404}};}
+if(!lifetime.active)return;
+
+	const container = mountRoot;
+	if (!container) return;
+
+	container.innerHTML = renderProfilePageSkeleton();
+
+
+	const serverContext = getServerProfileContext();
+
+	const info = getPathUserTarget();
+	let target = { mode: info.mode, userId: info.userId, userName: info.userName };
+
+	if (info.kind === 'me') {
+		const me = await fetchJsonWithStatusDeduped('/api/profile', { credentials: 'include' }, { windowMs: 500 })
+			.catch(() => ({ ok: false, status: 0, data: null }));
+		if (!me.ok) {
+			renderProfileUnavailableState(container, {
+				title: 'Please log in',
+				message: 'Sign in to view your profile.',
+				icon: 'warning'
+			});
+			return;
+		}
+		target = { mode: 'id', userId: me.data?.id ?? null, userName: null };
+	}
+
+	// For server-sent /user/:id or /p/:personality routes where no backing user exists,
+	// render a stable "not found" profile state instead of surfacing a hard error.
+	const requestedType = typeof serverContext?.requested?.type === 'string' ? serverContext.requested.type : '';
+	const targetExists = serverContext?.resolved?.target_exists;
+	if (requestedType === 'user-id' && targetExists === false) {
+		renderProfileUnavailableState(container, {
+			title: 'User not found',
+			message: 'User not found!',
+			icon: 'user-not-found'
+		});
+		return;
+	}
+	if (requestedType === 'user-name' && targetExists === false) {
+		const personality = String(serverContext?.requested?.user_name || target?.userName || '').trim().toLowerCase();
+		if (!personality) {
+			renderProfileUnavailableState(container, {
+				title: 'Personality not found',
+				message: 'This personality could not be resolved.',
+				icon: 'warning'
+			});
+			return;
+		}
+		try {
+			const result = await loadPersonalityCreations(personality, { limit: 100, offset: 0 });
+			if (!Array.isArray(result.items) || result.items.length === 0) {
+				renderProfileUnavailableState(container, {
+					title: 'Personality not found',
+					message: `No results found for @${personality}.`,
+					icon: 'user-not-found'
+				});
+				return;
+			}
+			let promoteEligibility = null;
+			let personaInLibrary = false;
+			let personaCatalog = null;
+			let canEditPersonaCatalog = false;
+			try {
+				const [inLibRes, me] = await Promise.all([
+					lifetime.fetch(
+						`/api/prompt-injections/personas/in-library?tag=${encodeURIComponent(personality)}`,
+						{ credentials: 'include' }
+					),
+					fetchJsonWithStatusDeduped('/api/profile', { credentials: 'include' }, { windowMs: 500 })
+				]);
+				if (inLibRes.ok) {
+					const body = await inLibRes.json().catch(() => ({}));
+					personaInLibrary = body.in_library === true;
+					if (body.persona && typeof body.persona === 'object') {
+						personaCatalog = body.persona;
+					}
+				}
+				if (me.ok && me.data) {
+					canEditPersonaCatalog = me.data.role === 'admin' || me.data.plan === 'founder';
+				}
+				if (canEditPersonaCatalog) {
+					const el = await lifetime.fetch(
+						`/api/prompt-injections/personas/promote-eligibility?tag=${encodeURIComponent(personality)}`,
+						{ credentials: 'include' }
+					);
+					if (el.ok) {
+						promoteEligibility = await el.json();
+					}
+				}
+			} catch {
+				// ignore
+			}
+			renderPersonalityDiscoveryPage(container, personality, result.items, {
+				hasMore: result.hasMore,
+				promoteEligibility,
+				personaInLibrary,
+				personaCatalog,
+				canEditPersonaCatalog
+			});
+			wirePersonaLibraryEditModal(container, personality);
+		} catch {
+			renderProfileUnavailableState(container, {
+				title: 'Unable to load personality results',
+				message: 'An error occurred while searching creations for this personality.',
+				icon: 'warning'
+			});
+		}
+		return;
+	}
+	if (requestedType === 'tag') {
+		const tag = String(serverContext?.requested?.user_name || target?.userName || '').trim().toLowerCase();
+		if (!tag) {
+			renderProfileUnavailableState(container, {
+				title: 'Tag not found',
+				message: 'No results found.',
+				icon: 'warning'
+			});
+			return;
+		}
+		try {
+			const result = await loadTagCreations(tag, { limit: 100, offset: 0 });
+			if (!Array.isArray(result.items) || result.items.length === 0) {
+				renderProfileUnavailableState(container, {
+					title: 'Tag not found',
+					message: `No results found for #${tag}.`,
+					icon: 'user-not-found'
+				});
+				return;
+			}
+			renderPersonalityDiscoveryPage(container, tag, result.items, { hasMore: result.hasMore, prefix: '#' });
+		} catch {
+			renderProfileUnavailableState(container, {
+				title: 'Unable to load tag results',
+				message: 'An error occurred while searching creations for this tag.',
+				icon: 'warning'
+			});
+		}
+		return;
+	}
+
+	const targetApiBase = buildTargetUserApiBase(target);
+	if (!targetApiBase) {
+		renderProfileUnavailableState(container, {
+			title: 'User not found',
+			message: 'This profile could not be resolved.',
+			icon: 'user-not-found'
+		});
+		return;
+	}
+
+	let summary;
+	try {
+		summary = await loadProfileSummary(target);
+	} catch {
+		renderProfileUnavailableState(container, {
+			title: 'Unable to load profile',
+			message: 'An error occurred while loading this profile.',
+			icon: 'warning'
+		});
+		return;
+	}
+
+	const user = summary.user || {};
+	const profile = summary.profile || {};
+	const stats = summary.stats || {};
+	const isSelf = Boolean(summary.is_self);
+	const viewerFollows = Boolean(summary.viewer_follows);
+
+	// Get current user for admin role and to hide follow/unfollow on self in lists
+	let isAdmin = false;
+	let viewerUserId = null;
+	try {
+		const currentUser = await fetchJsonWithStatusDeduped('/api/profile', { credentials: 'include' }, { windowMs: 500 });
+		if (currentUser.ok && currentUser.data) {
+			isAdmin = currentUser.data.role === 'admin';
+			if (currentUser.data.id != null) viewerUserId = Number(currentUser.data.id);
+		}
+	} catch {
+		// ignore errors
+	}
+
+	// Normalize json fields in case API returned JSON strings
+	profile.socials = safeJsonParse(profile.socials, {});
+	profile.badges = safeJsonParse(profile.badges, []);
+	profile.meta = safeJsonParse(profile.meta, {});
+
+	renderProfilePage(container, {
+		user,
+		profile,
+		stats,
+		plan: summary.plan,
+		isSelf,
+		viewerFollows,
+		isAdmin,
+		viewerUserId
+	});
+
+	if (typeof bindProfileEmbedDmLinks === 'function') {
+		bindProfileEmbedDmLinks(container);
+	}
+
+	// Hydrate any links in user-generated content (e.g., About field)
+	hydrateUserTextLinks(container);
+
+	const grid = container.querySelector('[data-profile-grid]');
+	const overlay = container.querySelector('[data-profile-edit-overlay]');
+
+	// Show tab bar immediately so user sees Creations tab (grid skeleton) without waiting for loadUserImages
+	const tabsEl = container.querySelector('[data-profile-tabs]');
+	if (tabsEl) tabsEl.classList.remove('user-profile-tabs-pending');
+
+	// Keep last tab content height so we can set min-height when loading another tab (prevents scroll jump)
+	let lastTabContentHeight = 0;
+
+	// Tab state: { items, hasMore } per tab for pagination
+	const tabData = {
+		creations: { items: [], hasMore: false },
+		mentions: { items: [], hasMore: false },
+		likes: { items: [], hasMore: false },
+		follows: { items: [], hasMore: false },
+		following: { items: [], hasMore: false },
+		comments: { items: [], hasMore: false }
+	};
+
+	const profileUserName = (profile?.user_name ?? '').trim().toLowerCase();
+
+	const infiniteScrollByTab = {};
+
+	function updateLoadMore(containerEl, tabId, hasMore) {
+		const el = containerEl.querySelector(`[data-profile-load-more="${tabId}"]`);
+		if (!el) return;
+		if (hasMore) {
+			el.hidden = false;
+			el.innerHTML = html`<div class="user-profile-load-more-inner"><button type="button" class="btn-secondary user-profile-load-more-btn"
+		data-load-more-tab="${escapeHtml(tabId)}">Load more</button></div>`;
+		} else {
+			el.hidden = true;
+			el.innerHTML = '';
+		}
+		if (infiniteScrollByTab[tabId]) {
+			infiniteScrollByTab[tabId].setHasMore(hasMore);
+		}
+	}
+
+	function setupInfiniteScrollForTab(tabId, listContainer) {
+		if (!listContainer || infiniteScrollByTab[tabId]) return;
+		infiniteScrollByTab[tabId] = createInfiniteScroll({
+			listContainer,
+			rootMargin: '400px 0px',
+			onLoadMore: async () => {
+				await loadMoreForTab(tabId);
+				return { hasMore: tabData[tabId]?.hasMore ?? false };
+			}
+		});
+ lifetime.own(()=>infiniteScrollByTab[tabId]?.destroy());
+	}
+
+	function renderTabContent(tabId) {
+		const data = tabData[tabId];
+		if (!data) return;
+		if (tabId === 'creations') {
+			renderImageGrid(grid, data.items, showBadge);
+			updateLoadMore(container, 'creations', data.hasMore);
+		} else if (tabId === 'mentions') {
+			const panel = container.querySelector('[data-profile-mentions]');
+			if (panel) {
+				renderImageGrid(panel, data.items, false, 'No mentions yet', `Creations that mention @${escapeHtml(profileUserName)} will appear here.`);
+				updateLoadMore(container, 'mentions', data.hasMore);
+			}
+		} else if (tabId === 'likes') {
+			const panel = container.querySelector('[data-profile-likes]');
+			if (panel) {
+				renderImageGrid(panel, data.items, false, 'No likes yet', 'Creations this user likes will appear here.');
+				updateLoadMore(container, 'likes', data.hasMore);
+			}
+		} else if (tabId === 'follows') {
+			const panel = container.querySelector('[data-profile-follows]');
+			if (panel) {
+				renderUserList(panel, data.items, isSelf ? "You're not following anyone yet" : "This user isn't following anyone yet", isSelf ? "When you follow others, they'll show up here." : "When this user follows others, they'll show up here.", { showUnfollow: true, viewerUserId });
+				updateLoadMore(container, 'follows', data.hasMore);
+			}
+		} else if (tabId === 'following') {
+			const panel = container.querySelector('[data-profile-following]');
+			if (panel) {
+				const viewerFollowsSet = new Set((data.items || []).filter((u) => u?.viewer_follows === true).map((u) => Number(u?.user_id ?? u?.id)).filter(Number.isFinite));
+				renderUserList(panel, data.items, isSelf ? "No one follows you yet" : "No followers yet", isSelf ? "When others follow you, they'll show up here." : "When others follow this user, they'll show up here.", { showFollow: true, viewerFollowsByUserId: viewerFollowsSet, viewerUserId });
+				updateLoadMore(container, 'following', data.hasMore);
+			}
+		} else if (tabId === 'comments') {
+			const panel = container.querySelector('[data-profile-comments]');
+			if (panel) {
+				renderCommentsList(panel, data.items, 'Comments this user has left will appear here.');
+				updateLoadMore(container, 'comments', data.hasMore);
+			}
+		}
+	}
+
+	// Creations tab: initial load with limit
+	const includeAllForAdmin = isAdmin;
+	const showBadge = isAdmin;
+	try {
+		const result = await loadUserImages(target, { includeAll: includeAllForAdmin, limit: PROFILE_PAGE_SIZE.creations, offset: 0 });
+		tabData.creations = { items: result.images, hasMore: result.has_more };
+	} catch {
+		tabData.creations = { items: [], hasMore: false };
+	}
+	renderImageGrid(grid, tabData.creations.items, showBadge);
+	updateLoadMore(container, 'creations', tabData.creations.hasMore);
+	setupInfiniteScrollForTab('creations', grid);
+	const creationsWrapper = container.querySelector('[data-profile-tab-content="creations"]');
+	if (creationsWrapper) lastTabContentHeight = creationsWrapper.offsetHeight;
+
+	// Lazy-load Likes, Follows, Following, Comments when user switches to that tab
+	const loadedTabs = new Set(['creations']);
+	const loadingHtml = html`<div class="route-empty route-loading">
+	<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
+</div>`;
+
+	async function loadTabContent(tabId, forceRefresh = false) {
+		if (!forceRefresh && loadedTabs.has(tabId)) return;
+		const selectors = {
+			mentions: '[data-profile-mentions]',
+			likes: '[data-profile-likes]',
+			follows: '[data-profile-follows]',
+			following: '[data-profile-following]',
+			comments: '[data-profile-comments]'
+		};
+		const panel = container.querySelector(selectors[tabId]);
+		if (!panel) return;
+		const tabContentWrapper = panel.closest('[data-profile-tab-content]');
+		if (!forceRefresh) {
+			if (tabContentWrapper && lastTabContentHeight > 0) {
+				tabContentWrapper.style.minHeight = `${lastTabContentHeight}px`;
+			}
+			panel.innerHTML = loadingHtml;
+			loadedTabs.add(tabId);
+		}
+		try {
+			if (tabId === 'mentions') {
+				const limit = PROFILE_PAGE_SIZE.mentions;
+				const result = await loadPersonalityCreations(profileUserName, { limit, offset: 0 });
+				tabData.mentions = { items: result.items, hasMore: result.hasMore };
+				panel.className = 'route-cards content-cards-image-grid';
+				panel.setAttribute('data-profile-mentions', '');
+				panel.innerHTML = '';
+				renderImageGrid(panel, tabData.mentions.items, false, 'No mentions yet', `Creations that mention @${escapeHtml(profileUserName)} will appear here.`);
+				updateLoadMore(container, 'mentions', tabData.mentions.hasMore);
+				setupInfiniteScrollForTab('mentions', panel);
+			} else if (tabId === 'likes') {
+				const limit = PROFILE_PAGE_SIZE.likes;
+				const res = await fetchJsonWithStatusDeduped(`${targetApiBase}/liked-creations?limit=${limit}&offset=0`, { credentials: 'include' }, { windowMs: 800 });
+				const images = Array.isArray(res?.data?.images) ? res.data.images : [];
+				tabData.likes = { items: images, hasMore: Boolean(res?.data?.has_more) };
+				panel.className = 'route-cards content-cards-image-grid';
+				panel.setAttribute('data-profile-likes', '');
+				panel.innerHTML = '';
+				renderImageGrid(panel, tabData.likes.items, false, 'No likes yet', 'Creations this user likes will appear here.');
+				updateLoadMore(container, 'likes', tabData.likes.hasMore);
+				setupInfiniteScrollForTab('likes', panel);
+			} else if (tabId === 'follows') {
+				const limit = PROFILE_PAGE_SIZE.follows;
+				const res = await fetchJsonWithStatusDeduped(`${targetApiBase}/following?limit=${limit}&offset=0`, { credentials: 'include' }, { windowMs: 800 });
+				const users = Array.isArray(res?.data?.following) ? res.data.following : [];
+				tabData.follows = { items: users, hasMore: Boolean(res?.data?.has_more) };
+				const followsEmptyTitle = isSelf ? "You're not following anyone yet" : 'This user isn\'t following anyone yet';
+				const followsEmptyMsg = isSelf ? "When you follow others, they'll show up here." : "When this user follows others, they'll show up here.";
+				renderUserList(panel, users, followsEmptyTitle, followsEmptyMsg, { showUnfollow: true, viewerUserId });
+				updateLoadMore(container, 'follows', tabData.follows.hasMore);
+				setupInfiniteScrollForTab('follows', panel);
+			} else if (tabId === 'following') {
+				const limit = PROFILE_PAGE_SIZE.following;
+				const res = await fetchJsonWithStatusDeduped(`${targetApiBase}/followers?limit=${limit}&offset=0`, { credentials: 'include' }, { windowMs: 800 });
+				const users = Array.isArray(res?.data?.followers) ? res.data.followers : [];
+				tabData.following = { items: users, hasMore: Boolean(res?.data?.has_more) };
+				const viewerFollowsSet = new Set(
+					(users || []).filter((u) => u?.viewer_follows === true).map((u) => Number(u?.user_id ?? u?.id)).filter(Number.isFinite)
+				);
+				const followingEmptyTitle = isSelf ? "No one follows you yet" : 'No followers yet';
+				const followingEmptyMsg = isSelf ? "When others follow you, they'll show up here." : "When others follow this user, they'll show up here.";
+				renderUserList(panel, users, followingEmptyTitle, followingEmptyMsg, { showFollow: true, viewerFollowsByUserId: viewerFollowsSet, viewerUserId });
+				updateLoadMore(container, 'following', tabData.following.hasMore);
+				setupInfiniteScrollForTab('following', panel);
+			} else if (tabId === 'comments') {
+				const limit = PROFILE_PAGE_SIZE.comments;
+				const res = await fetchJsonWithStatusDeduped(`${targetApiBase}/comments?limit=${limit}&offset=0`, { credentials: 'include' }, { windowMs: 800 });
+				const comments = Array.isArray(res?.data?.comments) ? res.data.comments : [];
+				tabData.comments = { items: comments, hasMore: Boolean(res?.data?.has_more) };
+				renderCommentsList(panel, comments, 'Comments this user has left will appear here.');
+				updateLoadMore(container, 'comments', tabData.comments.hasMore);
+				setupInfiniteScrollForTab('comments', panel);
+			}
+			if (tabContentWrapper) {
+				requestAnimationFrame(() => {
+					tabContentWrapper.style.minHeight = '';
+					lastTabContentHeight = tabContentWrapper.offsetHeight;
+				});
+			}
+		} catch {
+			if (tabContentWrapper) tabContentWrapper.style.minHeight = '';
+			panel.innerHTML = renderEmptyState({
+				title: 'Unable to load',
+				message: 'Something went wrong. Try again later.',
+			});
+			loadedTabs.delete(tabId);
+		}
+	}
+
+	async function loadMoreForTab(tabId) {
+		const data = tabData[tabId];
+		if (!data || !data.hasMore) return;
+		const offset = data.items.length;
+		const limit = PROFILE_PAGE_SIZE[tabId] ?? 20;
+		const loadMoreEl = container.querySelector(`[data-profile-load-more="${tabId}"]`);
+		const btn = loadMoreEl?.querySelector('.user-profile-load-more-btn');
+		if (btn) btn.disabled = true;
+		try {
+			if (tabId === 'creations') {
+				const result = await loadUserImages(target, { includeAll: includeAllForAdmin, limit, offset });
+				data.items = data.items.concat(result.images);
+				data.hasMore = result.has_more;
+				appendImageGridCards(grid, result.images, showBadge);
+			} else if (tabId === 'mentions') {
+				const result = await loadPersonalityCreations(profileUserName, { limit, offset });
+				data.items = data.items.concat(result.items);
+				data.hasMore = result.hasMore;
+				const panel = container.querySelector('[data-profile-mentions]');
+				if (panel) appendImageGridCards(panel, result.items, false);
+			} else if (tabId === 'likes') {
+				const res = await fetchJsonWithStatusDeduped(`${targetApiBase}/liked-creations?limit=${limit}&offset=${offset}`, { credentials: 'include' }, { windowMs: 800 });
+				const images = Array.isArray(res?.data?.images) ? res.data.images : [];
+				data.items = data.items.concat(images);
+				data.hasMore = Boolean(res?.data?.has_more);
+				const panel = container.querySelector('[data-profile-likes]');
+				if (panel) appendImageGridCards(panel, images, false);
+			} else if (tabId === 'follows') {
+				const res = await fetchJsonWithStatusDeduped(`${targetApiBase}/following?limit=${limit}&offset=${offset}`, { credentials: 'include' }, { windowMs: 800 });
+				const users = Array.isArray(res?.data?.following) ? res.data.following : [];
+				data.items = data.items.concat(users);
+				data.hasMore = Boolean(res?.data?.has_more);
+				const panel = container.querySelector('[data-profile-follows]');
+				if (panel) appendUserListItems(panel, users, { showUnfollow: true, viewerUserId });
+			} else if (tabId === 'following') {
+				const res = await fetchJsonWithStatusDeduped(`${targetApiBase}/followers?limit=${limit}&offset=${offset}`, { credentials: 'include' }, { windowMs: 800 });
+				const users = Array.isArray(res?.data?.followers) ? res.data.followers : [];
+				data.items = data.items.concat(users);
+				data.hasMore = Boolean(res?.data?.has_more);
+				const panel = container.querySelector('[data-profile-following]');
+				const viewerFollowsSet = new Set((data.items || []).filter((u) => u?.viewer_follows === true).map((u) => Number(u?.user_id ?? u?.id)).filter(Number.isFinite));
+				if (panel) appendUserListItems(panel, users, { showFollow: true, viewerFollowsByUserId: viewerFollowsSet, viewerUserId });
+			} else if (tabId === 'comments') {
+				const res = await fetchJsonWithStatusDeduped(`${targetApiBase}/comments?limit=${limit}&offset=${offset}`, { credentials: 'include' }, { windowMs: 800 });
+				const comments = Array.isArray(res?.data?.comments) ? res.data.comments : [];
+				data.items = data.items.concat(comments);
+				data.hasMore = Boolean(res?.data?.has_more);
+				const panel = container.querySelector('[data-profile-comments]');
+				if (panel) appendCommentsListItems(panel, comments);
+			}
+			updateLoadMore(container, tabId, data.hasMore);
+		} finally {
+			if (btn) btn.disabled = false;
+		}
+	}
+
+	if (tabsEl) {
+		tabsEl.addEventListener('tab-change', (e) => {
+			const id = e.detail?.id;
+			if (id && ['mentions', 'likes', 'follows', 'following', 'comments'].includes(id)) {
+				void loadTabContent(id);
+			}
+			// Remember tab in URL so refresh keeps the same tab
+			if (id) {
+				const base = `${routeUrl.pathname}${routeUrl.search}`;
+				const newUrl = `${base}#${id}`;
+				if (routeUrl.hash !== `#${id}`) {
+					actions.navigate(newUrl, { replace: true });
+				}
+			}
+		});
+
+		// Restore tab from URL hash on load
+		const hashTab = (routeUrl.hash || '').replace(/^#/, '');
+		if (hashTab && ['creations', 'mentions', 'likes', 'follows', 'following', 'comments'].includes(hashTab) && hashTab !== 'creations') {
+			tabsEl.setActiveTab(hashTab, { focus: false });
+			void loadTabContent(hashTab);
+		}
+	}
+
+	// Load more button (event delegation)
+	container.addEventListener('click', async (e) => {
+		const loadMoreBtn = e.target?.closest?.('.user-profile-load-more-btn');
+		if (loadMoreBtn && loadMoreBtn instanceof HTMLButtonElement) {
+			const tabId = loadMoreBtn.getAttribute('data-load-more-tab');
+			if (tabId) {
+				e.preventDefault();
+				await loadMoreForTab(tabId);
+			}
+			return;
+		}
+
+		const btn = e.target?.closest?.('[data-action="unfollow"], [data-action="follow"]');
+		if (!btn || !(btn instanceof HTMLButtonElement)) return;
+		e.preventDefault();
+		const userId = Number.parseInt(btn.getAttribute('data-user-id') || '', 10);
+		if (!Number.isFinite(userId) || userId <= 0) return;
+		const action = btn.getAttribute('data-action');
+		const panel = btn.closest('[data-profile-follows], [data-profile-following]');
+		const tabId = panel?.hasAttribute('data-profile-follows') ? 'follows' : panel?.hasAttribute('data-profile-following') ? 'following' : null;
+		if (!tabId) return;
+		btn.disabled = true;
+		const method = action === 'unfollow' ? 'DELETE' : 'POST';
+		const result = await fetchJsonWithStatusDeduped(`/api/users/${userId}/follow`, {
+			method,
+			credentials: 'include'
+		}, { windowMs: 0 }).catch(() => ({ ok: false }));
+		btn.disabled = false;
+		if (result?.ok) {
+			await loadTabContent(tabId, true);
+		}
+	});
+
+	const shareButton = container.querySelector('.user-profile-share');
+	if (shareButton) {
+		shareButton.addEventListener('click', async () => {
+			const link = window.location.href;
+			const ok = await copyTextToClipboard(link);
+			shareButton.textContent = ok ? 'Copied' : 'Copy failed';
+			setTimeout(() => { shareButton.textContent = 'Share'; }, 1200);
+		});
+	}
+
+	const followButton = container.querySelector('[data-follow-button]');
+	if (followButton && !isSelf) {
+		let busy = false;
+		let following = viewerFollows;
+
+		function updateButton() {
+			followButton.textContent = following ? 'Unfollow' : 'Follow';
+			followButton.classList.toggle('btn-secondary', following);
+			followButton.classList.toggle('btn-primary', !following);
+			followButton.disabled = busy;
+		}
+
+		updateButton();
+
+		followButton.addEventListener('click', async () => {
+			if (busy) return;
+			const targetIdRaw = followButton.getAttribute('data-follow-user-id') || '';
+			const targetId = Number.parseInt(targetIdRaw, 10);
+			if (!Number.isFinite(targetId) || targetId <= 0) return;
+
+			busy = true;
+			const prev = following;
+			// Optimistic toggle
+			following = !following;
+			updateButton();
+
+			const method = prev ? 'DELETE' : 'POST';
+			const result = await fetchJsonWithStatusDeduped(`/api/users/${targetId}/follow`, {
+				method,
+				credentials: 'include'
+			}, { windowMs: 0 }).catch(() => ({ ok: false, status: 0, data: null }));
+
+			if (!result.ok) {
+				// Roll back optimistic change
+				following = prev;
+			}
+			busy = false;
+			updateButton();
+		});
+	}
+
+	const editButton = container.querySelector('.user-profile-edit');
+	if (editButton && overlay) {
+		editButton.addEventListener('click', () => setModalOpen(overlay, true));
+	}
+
+	const closeButton = container.querySelector('[data-profile-edit-close]');
+	const cancelButton = container.querySelector('[data-profile-edit-cancel]');
+	const saveButton = container.querySelector('[data-profile-edit-save]');
+	const form = container.querySelector('[data-profile-edit-form]');
+	const errorBox = container.querySelector('[data-profile-edit-error]');
+	const generatingOverlay = container.querySelector('[data-profile-edit-generating-overlay]');
+	const avatarGeneratingPlaceholder = container.querySelector('[data-avatar-generating-placeholder]');
+	const generateConfirmOverlay = container.querySelector('[data-profile-generate-confirm-overlay]');
+	const generateConfirmClose = container.querySelector('[data-profile-generate-confirm-close]');
+	const generateConfirmCancel = container.querySelector('[data-profile-generate-confirm-cancel]');
+	const generateConfirmCta = container.querySelector('[data-profile-generate-confirm-cta]');
+	const generateConfirmBody = container.querySelector('[data-profile-generate-confirm-body]');
+	const avatarTryUrlInput = container.querySelector('[data-avatar-try-url]');
+
+	// Banner strip aspect (width/height) and max output size. Matches .user-profile-banner (180px height, wide).
+	const BANNER_ASPECT = 7; // 1260/180
+	const BANNER_MAX_WIDTH = 1260;
+	const BANNER_MAX_HEIGHT = 180;
+
+	// Crop image to the top strip (banner aspect) then resize. Only the strip is uploaded.
+	function resizeCoverToBannerStrip(file, { quality = 0.85, mimeType = 'image/jpeg' } = {}) {
+		if (!(file instanceof File) || !file.type.startsWith('image/')) {
+			return Promise.reject(new Error('Not an image file'));
+		}
+		return new Promise((resolve, reject) => {
+			const img = new Image();
+			const url = lifetime.objectUrl(file);
+			img.onload = () => {
+				URL.revokeObjectURL(url);
+				const w = img.naturalWidth;
+				const h = img.naturalHeight;
+				// Always take the top strip only: full width, height = just enough for banner aspect.
+				const sx = 0;
+				const sy = 0;
+				const sw = w;
+				const sh = Math.max(1, Math.min(h, Math.round(w / BANNER_ASPECT)));
+				// Scale crop to max banner size.
+				let targetW = sw;
+				let targetH = sh;
+				if (sw > BANNER_MAX_WIDTH || sh > BANNER_MAX_HEIGHT) {
+					const r = Math.min(BANNER_MAX_WIDTH / sw, BANNER_MAX_HEIGHT / sh);
+					targetW = Math.round(sw * r);
+					targetH = Math.round(sh * r);
+				}
+				const canvas = document.createElement('canvas');
+				canvas.width = targetW;
+				canvas.height = targetH;
+				const ctx = canvas.getContext('2d');
+				if (!ctx) {
+					reject(new Error('Canvas not supported'));
+					return;
+				}
+				ctx.drawImage(img, sx, sy, sw, sh, 0, 0, targetW, targetH);
+				canvas.toBlob(
+					(blob) => (blob ? resolve(blob) : reject(new Error('Resize failed'))),
+					mimeType,
+					quality
+				);
+			};
+			img.onerror = () => {
+				URL.revokeObjectURL(url);
+				reject(new Error('Failed to load image'));
+			};
+			img.src = url;
+		});
+	}
+
+	let generatedAvatarBlob = null;
+	let generatedAvatarObjectUrl = null;
+	let isGeneratingAvatar = false;
+
+	function revokeGeneratedAvatar() {
+		if (generatedAvatarObjectUrl) {
+			try { URL.revokeObjectURL(generatedAvatarObjectUrl); } catch { /* ignore */ }
+			generatedAvatarObjectUrl = null;
+		}
+		generatedAvatarBlob = null;
+	}
+
+	// Image upload UX (avatar/cover): button -> file picker, preview -> remove X
+	const objectUrls = { avatar: null, cover: null };
+	function revoke(kind) {
+		const current = objectUrls[kind];
+		if (current) {
+			try { URL.revokeObjectURL(current); } catch { /* ignore */ }
+			objectUrls[kind] = null;
+		}
+	}
+
+	function setUploadState(kind, { showPreview, src, removed }) {
+		const preview = container.querySelector(`[data-upload-preview="${kind}"]`);
+		const img = container.querySelector(`[data-upload-img="${kind}"]`);
+		const trigger = container.querySelector(`[data-upload-trigger="${kind}"]`);
+		const removeField = container.querySelector(`[data-upload-remove="${kind}"]`);
+		if (removeField) removeField.value = removed ? '1' : '';
+
+		if (img && typeof src === 'string') {
+			img.src = src;
+		}
+		if (preview) {
+			preview.hidden = !showPreview;
+		}
+		if (trigger) {
+			trigger.hidden = showPreview;
+		}
+		// Avatar: both buttons hidden when preview is showing.
+		if (kind === 'avatar') {
+			const actions = container.querySelector('.user-profile-avatar-actions');
+			if (actions) {
+				actions.querySelectorAll('.user-profile-upload-button').forEach((btn) => { btn.hidden = showPreview; });
+			}
+		}
+	}
+
+	function hydrateExisting(kind) {
+		const existing = container.querySelector(`[data-upload-existing="${kind}"]`);
+		const url = existing?.getAttribute('data-url') || '';
+		if (url) {
+			setUploadState(kind, { showPreview: true, src: url, removed: false });
+		}
+	}
+
+	function setupUpload(kind) {
+		const input = container.querySelector(`[data-upload-input="${kind}"]`);
+		const trigger = container.querySelector(`[data-upload-trigger="${kind}"]`);
+		const clear = container.querySelector(`[data-upload-clear="${kind}"]`);
+
+		if (trigger && input) {
+			trigger.addEventListener('click', () => input.click());
+		}
+
+		if (input) {
+			input.addEventListener('change', () => {
+				const file = input.files && input.files[0] ? input.files[0] : null;
+				revoke(kind);
+				if (!file) {
+					// If no file selected, keep existing preview (if any) and don't mark removed.
+					hydrateExisting(kind);
+					return;
+				}
+				const url = lifetime.objectUrl(file);
+				objectUrls[kind] = url;
+				setUploadState(kind, { showPreview: true, src: url, removed: false });
+			});
+		}
+
+		if (clear && input) {
+			clear.addEventListener('click', () => {
+				revoke(kind);
+				// Clear selected file
+				try { input.value = ''; } catch { /* ignore */ }
+				// Mark removal; hide preview and show button again
+				setUploadState(kind, { showPreview: false, src: '', removed: true });
+			});
+		}
+
+		hydrateExisting(kind);
+	}
+
+	setupUpload('avatar');
+	setupUpload('cover');
+
+	const avatarInput = container.querySelector('[data-upload-input="avatar"]');
+	const avatarRemoveField = container.querySelector('[data-upload-remove="avatar"]');
+	const avatarClearBtn = container.querySelector('[data-upload-clear="avatar"]');
+
+	if (avatarInput) {
+		avatarInput.addEventListener('change', () => revokeGeneratedAvatar());
+	}
+	if (avatarClearBtn) {
+		avatarClearBtn.addEventListener('click', () => revokeGeneratedAvatar());
+	}
+
+	// Delegate generate-from-character clicks to the form so the handler runs even if the button ref wasn’t found at setup.
+	if (form) {
+		form.addEventListener('click', async (e) => {
+			const avatarActions = form.querySelector('[data-upload="avatar"] .user-profile-avatar-actions');
+			const avatarActionButtons = avatarActions?.querySelectorAll?.('.user-profile-upload-button') ?? [];
+			const btn = avatarActionButtons[1];
+			if (!btn || !btn.contains(e.target)) return;
+			e.preventDefault();
+			const characterField = form.querySelector('textarea[name="character_description"]');
+			if (!characterField) return;
+			const description = (characterField.value || '').trim();
+			if (description.length < 12) {
+				if (errorBox) {
+					errorBox.style.display = 'block';
+					errorBox.textContent = 'Add a character description (at least 12 characters) to generate an avatar.';
+				}
+				return;
+			}
+			if (errorBox) {
+				errorBox.style.display = 'none';
+				errorBox.textContent = '';
+			}
+			openGenerateConfirmModal();
+		});
+	}
+
+	function openGenerateConfirmModal() {
+		if (generateConfirmOverlay) generateConfirmOverlay.hidden = false;
+	}
+
+	function closeGenerateConfirmModal() {
+		if (generateConfirmOverlay) generateConfirmOverlay.hidden = true;
+		const confirmError = container.querySelector('[data-profile-generate-confirm-error]');
+		if (confirmError) {
+			confirmError.style.display = 'none';
+			confirmError.textContent = '';
+		}
+	}
+
+	function setGenerateConfirmLoading(loading) {
+		if (!generateConfirmCta) return;
+		const textEl = generateConfirmCta.querySelector('.user-profile-generate-confirm-cta-text');
+		const spinnerEl = generateConfirmCta.querySelector('.user-profile-generate-confirm-cta-spinner');
+		generateConfirmCta.disabled = loading;
+		if (textEl) textEl.hidden = loading;
+		if (spinnerEl) spinnerEl.hidden = !loading;
+		if (generateConfirmBody) generateConfirmBody.style.pointerEvents = loading ? 'none' : '';
+		if (generateConfirmBody) generateConfirmBody.style.opacity = loading ? '0.6' : '';
+		if (generateConfirmCancel) generateConfirmCancel.disabled = loading;
+		if (generateConfirmClose) {
+			generateConfirmClose.disabled = loading;
+			generateConfirmClose.setAttribute('aria-disabled', loading ? 'true' : 'false');
+		}
+		if (generateConfirmOverlay) {
+			if (loading) generateConfirmOverlay.classList.add('user-profile-generate-confirm-loading');
+			else generateConfirmOverlay.classList.remove('user-profile-generate-confirm-loading');
+		}
+	}
+
+	if (generateConfirmClose) {
+		generateConfirmClose.addEventListener('click', () => closeGenerateConfirmModal());
+	}
+	if (generateConfirmCancel) {
+		generateConfirmCancel.addEventListener('click', () => closeGenerateConfirmModal());
+	}
+
+	if (generateConfirmCta) {
+		generateConfirmCta.addEventListener('click', async () => {
+			if (isGeneratingAvatar) return;
+			const characterField = form?.querySelector('textarea[name="character_description"]');
+			if (!characterField) return;
+			const description = (characterField.value || '').trim();
+			if (description.length < 12) {
+				const confirmError = container.querySelector('[data-profile-generate-confirm-error]');
+				if (confirmError) {
+					confirmError.style.display = 'block';
+					confirmError.textContent = 'Character description must be at least 12 characters.';
+				}
+				return;
+			}
+			const confirmErrorEl = container.querySelector('[data-profile-generate-confirm-error]');
+			if (confirmErrorEl) {
+				confirmErrorEl.style.display = 'none';
+				confirmErrorEl.textContent = '';
+			}
+			isGeneratingAvatar = true;
+			setGenerateConfirmLoading(true);
+			try {
+				await ensureTryIdentityCookie();
+				const variationKey = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+				const prompt = buildAvatarPrompt(description, variationKey);
+				const created = await createTryImage(prompt, { chargeCredits: 3 });
+				if (!created.ok) {
+					const msg = created.data?.message || created.data?.error || 'Could not start generation.';
+					throw new Error(msg);
+				}
+				let url = null;
+				if (created.data?.status === 'completed' && typeof created.data?.url === 'string' && created.data.url.trim()) {
+					url = created.data.url.trim();
+				} else if (created.data?.id) {
+					const polled = await pollTryImageById(created.data.id);
+					if (polled.ok && polled.url) url = polled.url;
+					else throw new Error(polled.error || 'Generation failed.');
+				} else {
+					throw new Error('No image returned.');
+				}
+				if (avatarTryUrlInput) avatarTryUrlInput.value = url;
+				revoke('avatar');
+				if (avatarRemoveField) avatarRemoveField.value = '';
+				setUploadState('avatar', { showPreview: true, src: url, removed: false });
+				closeGenerateConfirmModal();
+				// Do not save here; created_image is created only when user clicks Save (profile POST promotes try URL).
+			} catch (err) {
+				const msg = String(err?.message || '').trim() || 'Generation failed.';
+				if (confirmErrorEl) {
+					confirmErrorEl.style.display = 'block';
+					confirmErrorEl.textContent = msg;
+				}
+			} finally {
+				isGeneratingAvatar = false;
+				setGenerateConfirmLoading(false);
+			}
+		});
+	}
+
+	function closeModal() {
+		setModalOpen(overlay, false);
+	}
+
+	if (overlay) {
+		overlay.addEventListener('click', (e) => {
+			if (e.target === overlay) closeModal();
+		});
+	}
+
+	[closeButton, cancelButton].forEach((btn) => {
+		if (!btn) return;
+		btn.addEventListener('click', closeModal);
+	});
+
+	async function saveProfile(opts) {
+		const keepEditOpen = opts && opts.keepEditOpen === true;
+		if (!form || !saveButton) return;
+		if (errorBox) {
+			errorBox.style.display = 'none';
+			errorBox.textContent = '';
+		}
+
+		const socialCheck = validateProfileSocialForm(form);
+		if (!socialCheck.ok) {
+			if (errorBox) {
+				errorBox.style.display = 'block';
+				errorBox.textContent = socialCheck.error || 'Enter a valid URL for that site.';
+			}
+			return;
+		}
+
+		saveButton.disabled = true;
+		let result;
+
+		if (isAdmin && !isSelf && user?.id) {
+			const fd = new FormData();
+			for (const [name, value] of new FormData(form)) {
+				if (name === 'avatar_file' && value instanceof File && value.size > 0) {
+					try {
+						const blob = await resizeImageFile(value, {
+							maxWidth: 128,
+							maxHeight: 128,
+							quality: 0.9,
+							mimeType: 'image/jpeg'
+						});
+						fd.append(name, blob, 'avatar.jpg');
+					} catch {
+						fd.append(name, value);
+					}
+				} else if (name === 'avatar_file' && value instanceof File && value.size === 0) {
+					continue;
+				} else if (name === 'cover_file' && value instanceof File && value.size > 0) {
+					try {
+						const blob = await resizeCoverToBannerStrip(value, {
+							quality: 0.85,
+							mimeType: 'image/jpeg'
+						});
+						fd.append(name, blob, 'cover.jpg');
+					} catch {
+						fd.append(name, value);
+					}
+				} else {
+					fd.append(name, value);
+				}
+			}
+			try {
+				result = await fetchJsonWithStatusDeduped(`/admin/users/${user.id}/profile`, {
+					method: 'POST',
+					credentials: 'include',
+					body: fd,
+				}, { windowMs: 0 });
+			} catch {
+				result = { ok: false, status: 0, data: null };
+			}
+		} else {
+			const fd = new FormData();
+			for (const [name, value] of new FormData(form)) {
+				if (name === 'avatar_file' && value instanceof File && value.size > 0) {
+					try {
+						const blob = await resizeImageFile(value, {
+							maxWidth: 128,
+							maxHeight: 128,
+							quality: 0.9,
+							mimeType: 'image/jpeg'
+						});
+						fd.append(name, blob, 'avatar.jpg');
+					} catch {
+						fd.append(name, value);
+					}
+				} else if (name === 'avatar_file' && value instanceof File && value.size === 0) {
+					continue;
+				} else if (name === 'cover_file' && value instanceof File && value.size > 0) {
+					try {
+						const blob = await resizeCoverToBannerStrip(value, {
+							quality: 0.85,
+							mimeType: 'image/jpeg'
+						});
+						fd.append(name, blob, 'cover.jpg');
+					} catch {
+						fd.append(name, value);
+					}
+				} else {
+					fd.append(name, value);
+				}
+			}
+			try {
+				result = await fetchJsonWithStatusDeduped('/api/profile', {
+					method: 'POST',
+					credentials: 'include',
+					body: fd,
+				}, { windowMs: 0 });
+			} catch {
+				result = { ok: false, status: 0, data: null };
+			}
+		}
+
+		saveButton.disabled = false;
+
+		if (!result.ok) {
+			const message = result.status === 0
+				? 'Network error. Check your connection and try again.'
+				: (result.data?.error || 'Failed to save profile.');
+			if (errorBox) {
+				errorBox.style.display = 'block';
+				errorBox.textContent = message;
+			}
+			return;
+		}
+
+		if (keepEditOpen) {
+			return;
+		}
+		closeModal();
+		window.location.reload();
+	}
+
+	if (saveButton) {
+		saveButton.addEventListener('click', () => { void saveProfile(); });
+	}
+
+	// Change email (account section in edit modal)
+	const accountEmailSection = container.querySelector('[data-account-email-section]');
+	const accountNewEmailInput = container.querySelector('[data-account-new-email]');
+	const accountPasswordInput = container.querySelector('[data-account-password]');
+	const accountEmailSubmit = container.querySelector('[data-account-email-submit]');
+	const accountCurrentEmailEl = container.querySelector('[data-account-current-email]');
+	const accountEmailMessage = container.querySelector('[data-account-email-message]');
+
+	if (accountEmailSubmit && accountNewEmailInput && accountPasswordInput && accountEmailMessage) {
+		accountEmailSubmit.addEventListener('click', async () => {
+			const newEmail = (accountNewEmailInput.value || '').trim();
+			const password = accountPasswordInput.value || '';
+
+			accountEmailMessage.style.display = 'none';
+			accountEmailMessage.textContent = '';
+			accountEmailMessage.classList.remove('error', 'success');
+
+			if (!newEmail) {
+				accountEmailMessage.textContent = 'Enter a new email address.';
+				accountEmailMessage.classList.add('error');
+				accountEmailMessage.style.display = 'block';
+				return;
+			}
+			if (!password) {
+				accountEmailMessage.textContent = 'Enter your current password to change email.';
+				accountEmailMessage.classList.add('error');
+				accountEmailMessage.style.display = 'block';
+				return;
+			}
+
+			accountEmailSubmit.disabled = true;
+			const result = await fetchJsonWithStatusDeduped('/api/account/email', {
+				method: 'PUT',
+				credentials: 'include',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ new_email: newEmail, password })
+			}, { windowMs: 0 }).catch(() => ({ ok: false, status: 0, data: null }));
+
+			accountEmailSubmit.disabled = false;
+
+			if (result.ok) {
+				accountEmailMessage.textContent = 'Email updated.';
+				accountEmailMessage.classList.add('success');
+				accountEmailMessage.style.display = 'block';
+				if (accountCurrentEmailEl) accountCurrentEmailEl.textContent = result.data?.email ?? newEmail;
+				accountNewEmailInput.value = '';
+				accountPasswordInput.value = '';
+			} else {
+				const message = result.data?.message || result.data?.error || 'Could not update email.';
+				accountEmailMessage.textContent = message;
+				accountEmailMessage.classList.add('error');
+				accountEmailMessage.style.display = 'block';
+			}
+		});
+	}
+}
+
+
+lifetime.listen(mountRoot,'click',event=>{const anchor=event.target.closest('a[href]');if(!anchor||event.defaultPrevented||event.metaKey||event.ctrlKey||event.shiftKey||anchor.target==='_blank')return;const target=new URL(anchor.href,location.origin);if(target.origin===location.origin){event.preventDefault();actions.navigate(target.pathname+target.search+target.hash)}});
+lifetime.listen(document,'keydown',event=>{if(event.key!=='Escape')return;const dialog=mountRoot.querySelector('[data-profile-generate-confirm-overlay]:not([hidden]),[data-persona-library-generate-confirm-overlay]:not([hidden]),[data-persona-library-edit-overlay].open,[data-profile-edit-overlay].open');if(dialog){dialog.hidden=true;dialog.classList.remove('open');event.preventDefault();event.stopImmediatePropagation()}},{capture:true});
+const backgroundReady=init().catch(error=>{if(lifetime.active){console.error(error);renderProfileUnavailableState(mountRoot,{message:'Could not load profile.'})}});
+return {backgroundReady,update({url}){if(url){routeUrl=new URL(url,location.origin);const tab=routeUrl.hash.slice(1);const tabs=mountRoot.querySelector('app-tabs');if(tab&&tabs?.activeTab!==tab)tabs?.setActiveTab?.(tab)}},destroy(){lifetime.destroy()}};
+}});

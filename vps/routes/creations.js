@@ -62,7 +62,7 @@ function withLineageProof(value, parentId) {
 	return `${value}${separator}lineage_of=${encodeURIComponent(String(parentId))}`;
 }
 
-function serializeCreation(row) {
+export function serializeCreation(row) {
 	const key = creationMediaKey(row);
 	// A video's still-image row is often a transparent placeholder. Never expose
 	// that still as video_url; only a real video object may be used for playback

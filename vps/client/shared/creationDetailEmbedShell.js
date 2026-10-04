@@ -237,7 +237,7 @@ export function patchCreationCardPublishedInDocument(creationId, published, root
 			if (!(card instanceof HTMLElement)) return;
 			card.dataset.published = val;
 			const badges = card.querySelectorAll('.creation-published-badge');
-			if (published) {
+			if (published && card.dataset.hidePublishedBadge !== '1') {
 				if (badges.length === 0) {
 					const media = card.querySelector('.route-media');
 					if (media instanceof HTMLElement) {

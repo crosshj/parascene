@@ -47,6 +47,8 @@ const queries = {
 					.eq("is_active", true);
 				if (sort === "usage_count") {
 					query = query.order("usage_count", { ascending: false }).order("id", { ascending: false });
+				} else if (sort === "created_at_asc") {
+					query = query.order("created_at", { ascending: true }).order("id", { ascending: true });
 				} else if (sort === "created_at") {
 					query = query.order("created_at", { ascending: false }).order("id", { ascending: false });
 				} else {
@@ -806,9 +808,14 @@ selectLatestCreatedImageComments: {
 				let commentsQuery = serviceClient
 					.from(prefixedTable("comments_created_image"))
 					.select("id, user_id, created_image_id, text, created_at, updated_at, meta")
-					.order("created_at", { ascending: false });
+					.order("created_at", { ascending: false }).order("id", { ascending: false });
 				if (before) {
-					commentsQuery = commentsQuery.lt("created_at", before);
+					const beforeId = Number(options?.before_id);
+					if (!Number.isFinite(Date.parse(before))) throw new Error("Invalid comment cursor");
+					const timestamp = new Date(before).toISOString();
+					commentsQuery = Number.isInteger(beforeId) && beforeId > 0
+						? commentsQuery.or(`created_at.lt.${timestamp},and(created_at.eq.${timestamp},id.lt.${beforeId})`)
+						: commentsQuery.lt("created_at", timestamp);
 				}
 				const { data: rawComments, error: commentsError } = await commentsQuery.limit(fetchLimit);
 				if (commentsError) throw commentsError;
@@ -1002,7 +1009,7 @@ selectLatestCreatedImageComments: {
 					);
 				}
 
-				return trimmed.map((row) => {
+				const enriched = trimmed.map((row) => {
 					const profile = row?.user_id !== null && row?.user_id !== undefined
 						? profileByUserId.get(String(row.user_id)) ?? null
 						: null;
@@ -1019,6 +1026,11 @@ selectLatestCreatedImageComments: {
 						created_image_owner_plan
 					};
 				});
+				if (options.page) {
+					const tail = comments.at(-1);
+					return { rows: enriched, has_more: comments.length === fetchLimit, next_cursor: tail ? { before: tail.created_at, before_id: tail.id } : null };
+				}
+				return enriched;
 			}
 		},
 updateCreatedImage: {

@@ -1,3 +1,8 @@
+import {createAvatarGenerationQueries} from './avatarGeneration.js';
+import {createAccountQueries} from './account.js';
+import { createLibraryQueries } from './library.js';
+import { createExploreStore } from './explore.js';
+import { createCommentsStore } from './comments.js';
 import { createSuggestionsStore } from './suggestions.js';
 import { createProfileFilesStore } from "./profileFiles.js";
 import { createGenericFilesStore } from "./genericFiles.js";
@@ -15,9 +20,16 @@ import { createCreateStore } from './create.js';
 export function createDb() {
 	const context = createSupabaseContext();
 	const users = createUsersStore(context.client);
+	const create = createCreateStore(context);
+	const creations = createCreationsStore(context);
+	const library = { queries: { ...create.queries, ...createLibraryQueries(context.client) }, storage: create.storage };
 
 	return {
-		create: createCreateStore(context),
+ account:{queries:{...library.queries,...createAccountQueries(context.client),...createAvatarGenerationQueries(context.client)},storage:create.storage,users,client:context.client},
+		library,
+		explore: createExploreStore(context.client),
+		create,
+		comments: createCommentsStore(context.client, { creations, queries: create.queries || create }),
   suggestions: createSuggestionsStore(context.client),
 		users,
 		threads: createThreadsStore(context.client, users),
@@ -27,7 +39,7 @@ export function createDb() {
 		sessions: createSessionsStore(context.client),
 		profileFiles: createProfileFilesStore(context),
 		genericFiles: createGenericFilesStore(context),
-		creations: createCreationsStore(context),
+		creations,
 		notifications: createNotificationsStore(context.client)
 	};
 }

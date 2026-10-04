@@ -139,7 +139,17 @@ export function buildConnectChatMsgMetaElement(m, opts = {}) {
 		const nameSpan = textSpan.firstElementChild;
 		nameSpan.className = `comment-author-name${senderIsFounder ? ' founder-name' : ''}`;
 		nameSpan.textContent = handleLabel;
-		textSpan.appendChild(nameSpan);
+		if (profileHref) {
+			const nameLink = document.createElement('a');
+			nameLink.className = 'user-link connect-chat-msg-profile-link';
+			nameLink.href = profileHref;
+			nameLink.dataset.profileLink = '';
+			nameLink.setAttribute('aria-label', `View ${handleLabel} profile`);
+			nameLink.appendChild(nameSpan);
+			textSpan.appendChild(nameLink);
+		} else {
+			textSpan.appendChild(nameSpan);
+		}
 		if (when) {
 			const sepSpan = clone('separator');
 			textSpan.appendChild(sepSpan);
@@ -536,4 +546,3 @@ export function createChatMessageRowElement(m, i, messages, viewerId, rowOpts) {
 		}
 		return row;
 	}
-

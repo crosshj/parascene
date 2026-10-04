@@ -2,6 +2,7 @@ import './layout.css';
 import { createRightSidebar } from './rightSidebar.js';
 import { createPopupMenu } from '../components/PopupMenu/PopupMenu.js';
 import { iconMarkup } from '../components/Icon/Icon.js';
+import { createSearchComposerElement } from '../components/SearchComposer/SearchComposer.js';
 import { createMessageComposerElement } from '../components/Messages/Composer.js';
 import { mountCreateComposer } from '../components/CreateComposer/CreateComposer.js';
 import '../components/CreateComposer/CreateComposer.css';
@@ -46,7 +47,8 @@ export function createLayout({ root, views, services } = {}) {
 	const pageIcon = pageRegion.querySelector('.beta-outlet__icon');
 	const composer = createMessageComposerElement();
 	const frame = pageRegion.querySelector('.beta-outlet__frame');
-	frame.append(composer);
+	const searchComposer = createSearchComposerElement();
+	frame.append(composer, searchComposer);
 	const creationComposer = pageRegion.querySelector('[data-layout-creation-composer]');
 	const creationComposerHost = creationComposer.querySelector('[data-create-composer-host]');
 	const measureComposer = () => frame.style.setProperty('--creation-composer-height', `${creationComposer.hidden ? 0 : creationComposer.getBoundingClientRect().height}px`);
@@ -55,6 +57,8 @@ export function createLayout({ root, views, services } = {}) {
 	const measureMessageComposer = () => frame.style.setProperty('--message-composer-height', `${composer.hidden ? 0 : composer.getBoundingClientRect().height}px`);
 	const messageComposerResize = new ResizeObserver(measureMessageComposer);
 	messageComposerResize.observe(composer);
+	const searchComposerResize = new ResizeObserver(() => frame.style.setProperty('--search-composer-height', `${searchComposer.hidden ? 0 : searchComposer.getBoundingClientRect().height}px`));
+	searchComposerResize.observe(searchComposer);
 	const menuButton = pageRegion.querySelector('.beta-outlet__more');
 	let menu = null;
 	let actions = {};
@@ -94,7 +98,7 @@ export function createLayout({ root, views, services } = {}) {
 		headerAccessories.replaceChildren();
 		for (const item of items) {
 			const button = document.createElement('button');
-			button.type = 'button'; button.className = 'beta-outlet__pin chat-page-topbar-pinned-canvas-btn';
+			button.type = 'button'; button.className = item.kind === 'action' ? 'beta-outlet__header-button' : 'beta-outlet__pin chat-page-topbar-pinned-canvas-btn';
 			button.textContent = item.label; button.setAttribute('aria-label', item.ariaLabel || item.label);
 			button.addEventListener('click', item.onClick); headerAccessories.append(button);
 		}
@@ -139,6 +143,7 @@ export function createLayout({ root, views, services } = {}) {
 		pageIcon.innerHTML = iconMarkup(chrome.icon || 'home');
 		composer.hidden = chrome.composer !== 'message';
 		creationComposer.hidden = chrome.composer !== 'creation';
+		searchComposer.hidden = chrome.composer !== 'search';
 		frame.dataset.composer = chrome.composer || 'none';
 		measureComposer();
 		measureMessageComposer();
@@ -175,12 +180,30 @@ export function createLayout({ root, views, services } = {}) {
 			setHeaderMenu,
 			setHeaderAccessories,
 			rightSidebar,
-			setConversationIdentity({ title, avatarHtml }) {
-				pageTitle.textContent = title;
+			setConversationIdentity({ title, avatarHtml, href }) {
+				pageTitle.replaceChildren();
 				pageIcon.innerHTML = avatarHtml;
+				if (href) {
+					const titleLink = document.createElement('a');
+					titleLink.className = 'beta-outlet__profile-link';
+					titleLink.href = href;
+					titleLink.dataset.profileLink = '';
+					titleLink.textContent = title;
+					pageTitle.append(titleLink);
+					const avatarLink = document.createElement('a');
+					avatarLink.className = 'beta-outlet__profile-avatar-link';
+					avatarLink.href = href;
+					avatarLink.dataset.profileLink = '';
+					avatarLink.setAttribute('aria-label', `View ${title} profile`);
+					while (pageIcon.firstChild) avatarLink.append(pageIcon.firstChild);
+					pageIcon.append(avatarLink);
+				} else {
+					pageTitle.textContent = title;
+				}
 				document.title = `${title} - parascene beta`;
 			},
 			composer,
+			searchComposer,
 			...extra,
 		};
 	}
@@ -352,6 +375,7 @@ export function createLayout({ root, views, services } = {}) {
 	function destroy() {
 		composerResize.disconnect();
 		messageComposerResize.disconnect();
+		searchComposerResize.disconnect();
 		backgroundRevision++;
 		setHeaderAccessories();
 		unmount('overlay', overlayContent);

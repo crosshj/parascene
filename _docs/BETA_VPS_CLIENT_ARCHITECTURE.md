@@ -214,3 +214,64 @@ and issue explicit image actions; omitted/unsupported fields remain saved. Basic
 shows and submits only the first image while preserving the full list.
 
 The [client data and state contract](BETA_VPS_CLIENT_DATA_AND_STATE.md#create-provider-draft-contract) defines the shared Create draft behavior.
+
+### Native account and Library fragments (2026-10-04)
+
+The active WWW SPA opens Library, style/audio detail, Profile and Connections
+through its page-overlay machinery. Their embedded implementations are the
+reference for this port. VPS mounts equivalent content inside its own page or
+app-level overlay, with static VPS imports, route-local URLs, native navigation
+callbacks and one lifetime per mount. Library retains styles/personas/audio tabs
+and recording/edit dialogs; Profile retains its full tabs and editing behavior;
+Connections retains credential and application management. Help is served as a
+standalone VPS document from VPS-owned Markdown, with the active WWW page structure
+and styling ported into the Help route; it is not an SPA view. In-app Help links
+open that document in a new tab. Each embedded fragment aborts requests, removes
+owned document listeners/observers, and releases media and recording tracks on
+teardown.
+
+The Sidebar owns the account menu, Settings and About modal hosts. The menu calls
+explicit native navigation/session callbacks. Reports retains the existing
+localhost-only link to the separate development analytics server on port 2367;
+it is not a production report-service migration.
+
+### Browse grids, search composer and shared lightbox (2026-10-04)
+
+At the user's request, Files and Library use the same `CreationGrid` lane,
+columns, gaps and square skeletons as My Creations. Library's personas/styles
+catalog reveals additional cached rows on scroll; audio clips fetch successive
+pages. The outlet header owns the title and tab-specific buttons (Add style when
+permitted on Styles; Record clip on Audio clips); Refresh remains in its menu.
+
+Explore declares `composer: 'search'`. Layout owns and measures its bottom
+composer host, using the normal composer placement, sizing, shell and viewport
+padding. The mounted Explore view binds search, clear and query updates and
+releases those bindings at teardown. Search is not a sticky element in the grid.
+
+`components/MediaLightbox` exposes a view-owned handle to the existing chat
+lightbox renderer. Files and Library use the same image/video/audio frames,
+playback controls, dismissal behavior and styles as chat. Optional title text
+sits at the upper left of the backdrop; explainer text sits below the item and
+above custom footer actions. Destroying a handle only closes its owned preview,
+never a newer preview opened elsewhere. Unknown files retain their generic file
+graphic, on a solid square backing in both grid and preview; they never request
+the audio artwork fallback. File audio/video tiles use `creationTypeBadgeMarkup`.
+
+Loading browse views show shared square skeletons; Comments uses the existing
+chat-thread skeleton. Status text is reserved for empty, error and recovery
+states rather than duplicating loading placeholders.
+
+### Library details and Explore publication chrome (2026-10-04)
+
+Styles open their full details directly in a standard native dialog with Copy
+style key; the redundant See All Styles link is removed. Add style and Record
+clip also use standard dialog chrome over Library. Audio clip cards and direct
+clip links open the full clip details in a single native dialog, attempt playback
+once loaded, and release playback and pending requests on dismissal. Style and
+audio detail URLs use Library as their page instead of app-overlay presentation.
+Library requests audio clips oldest first; the server orders by creation time
+and ID before pagination. Other audio pickers retain their existing defaults.
+
+Explore suppresses publication badges in both grid and large-card modes. The
+shared card publication updater respects that per-card setting while retaining
+published state and the normal badges on other surfaces.

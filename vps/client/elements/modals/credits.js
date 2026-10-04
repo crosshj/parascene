@@ -531,7 +531,7 @@ class AppModalCredits extends HTMLElement {
             <div class="credits-section">
               <h3>Run a server</h3>
               <p>Run a server and earn credits for supporting the community.</p>
-              <a class="btn-secondary" href="${getHelpHref("/help/credits/run-a-server")}">
+              <a class="btn-secondary" href="${getHelpHref("/help/credits/run-a-server")}" target="_blank" rel="noopener noreferrer">
                 ${helpIcon('icon')}
                 Learn More
               </a>

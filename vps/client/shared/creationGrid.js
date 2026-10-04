@@ -250,11 +250,18 @@ function filledAdornmentIcon(name) {
 	return `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">${paths[name] || ''}</svg>`;
 }
 
+/** Shared creation-type corner badges, also used by uploaded-file tiles. */
+export function creationTypeBadgeMarkup(type) {
+ if (type === 'audio') return `<span class="creation-music-badge" title="Music" aria-label="Music">${iconMarkup('music')}</span>`;
+ if (type === 'video') return `<span class="creation-video-badge" title="Video" aria-label="Video">${iconMarkup('video')}</span>`;
+ return '';
+}
+
 function badges(item, { hideChallengeCorner = false, hidePublished = false } = {}) {
 	const groupBadge = isGroupCreation(item) ? '<span class="creation-group-badge" title="Group creation" aria-label="Group creation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="6.5" width="9.5" height="9.5" rx="2"></rect><rect x="10.5" y="10.5" width="10" height="10" rx="2"></rect></svg></span>' : '';
 	const published = !hidePublished && (item?.published === true || item?.published === 1) ? `<span class="creation-published-badge" title="Published" aria-label="Published">${iconMarkup('globe')}</span>` : '';
-	const music = creationMediaType(item) === 'audio' ? `<span class="creation-music-badge" title="Music" aria-label="Music">${iconMarkup('music')}</span>` : '';
-	const video = creationMediaType(item) === 'video' ? `<span class="creation-video-badge" title="Video" aria-label="Video">${iconMarkup('video')}</span>` : '';
+	const music = creationMediaType(item) === 'audio' ? creationTypeBadgeMarkup('audio') : '';
+	const video = creationMediaType(item) === 'video' ? creationTypeBadgeMarkup('video') : '';
 	const challenge = isChallengeLocked(item) && !hideChallengeCorner
 		? `<span class="creation-challenge-locked-badge" title="Locked to a challenge" aria-label="Locked to a challenge">${iconMarkup('trophy')}</span>` : '';
 	return `${published}${challenge}${groupBadge}${music}${video}`;
@@ -296,6 +303,7 @@ export function creationCardMarkup(item, { hidePublishedBadge = false } = {}) {
 		(hasCreationId || item.__optimistic) ? `data-creation-id="${escapeHtml(creationId)}"` : '',
 		hasCreationId ? `data-image-id="${escapeHtml(creationId)}"` : '',
 		`data-published="${published ? '1' : '0'}"`,
+		hidePublishedBadge ? 'data-hide-published-badge="1"' : '',
 		`data-media-type="${escapeHtml(type)}"`,
 		`data-group-creation="${isGroup ? '1' : '0'}"`,
 		isGroup && groupSourceCount > 0 ? `data-group-source-count="${groupSourceCount}"` : '',

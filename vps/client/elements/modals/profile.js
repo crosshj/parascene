@@ -39,6 +39,7 @@ class AppModalProfile extends HTMLElement {
 	}
 
 	connectedCallback() {
+ this._controller=new AbortController();
 		this.setAttribute('data-modal', '');
 		this.render();
 		this.setupEventListeners();
@@ -46,6 +47,7 @@ class AppModalProfile extends HTMLElement {
 	}
 
 	disconnectedCallback() {
+ this.close();this._controller?.abort();if(this._prefetchId!=null){if(window.cancelIdleCallback)window.cancelIdleCallback(this._prefetchId);else clearTimeout(this._prefetchId);}
 		document.removeEventListener('keydown', this.handleEscape);
 		document.removeEventListener('open-settings-modal', this.handleOpenSettingsEvent);
 		document.removeEventListener('close-profile', this.handleCloseEvent);
@@ -117,7 +119,7 @@ class AppModalProfile extends HTMLElement {
 			try {
 				const res = await fetchJsonWithStatusDeduped('/api/profile', {
 					method: 'PATCH',
-					credentials: 'include',
+					credentials: 'include',signal:this._controller?.signal,
 					headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify({ enableNsfw: enabled })
 				}, { windowMs: 0 });
@@ -159,7 +161,7 @@ class AppModalProfile extends HTMLElement {
 					'/api/presence/settings',
 					{
 						method: 'PATCH',
-						credentials: 'include',
+						credentials: 'include',signal:this._controller?.signal,
 						headers: { 'Content-Type': 'application/json' },
 						body: JSON.stringify({ appear_offline: appearOffline })
 					},
@@ -193,7 +195,7 @@ class AppModalProfile extends HTMLElement {
 					'/api/profile',
 					{
 						method: 'PATCH',
-						credentials: 'include',
+						credentials: 'include',signal:this._controller?.signal,
 						headers: { 'Content-Type': 'application/json' },
 						body: JSON.stringify({ audibleNotifications: on })
 					},
@@ -228,7 +230,7 @@ class AppModalProfile extends HTMLElement {
 					'/api/profile',
 					{
 						method: 'PATCH',
-						credentials: 'include',
+						credentials: 'include',signal:this._controller?.signal,
 						headers: { 'Content-Type': 'application/json' },
 						body: JSON.stringify({ showOwnPostsInFeed })
 					},
@@ -270,7 +272,7 @@ class AppModalProfile extends HTMLElement {
 					'/api/profile',
 					{
 						method: 'PATCH',
-						credentials: 'include',
+						credentials: 'include',signal:this._controller?.signal,
 						headers: { 'Content-Type': 'application/json' },
 						body: JSON.stringify({ forceLegacyFeed })
 					},
@@ -383,7 +385,7 @@ class AppModalProfile extends HTMLElement {
 		try {
 			this.profileLoading = true;
 			const result = await fetchJsonWithStatusDeduped('/api/profile', {
-				credentials: 'include'
+				credentials: 'include',signal:this._controller?.signal
 			}, { windowMs: 2000 });
 			if (!result.ok) {
 				if (result.status === 401) {
@@ -395,6 +397,7 @@ class AppModalProfile extends HTMLElement {
 				throw new Error('Failed to load profile');
 			}
 
+			if(!this.isConnected)return;
 			const user = result.data;
 			const nextKey = user
 				? `${user.id}|${user.hasApiKey ? '1' : '0'}|${user.apiKeyPrefix || ''}|${user.hasVynlyToken ? '1' : '0'}|${user.vynlyTokenPrefix || ''}|${user.enableNsfw ? '1' : '0'}|${user.showOwnPostsInFeed ? '1' : '0'}|${user.audibleNotifications !== false ? '1' : '0'}|${user.appear_offline ? '1' : '0'}|${user.forceLegacyFeed ? '1' : '0'}`
@@ -802,7 +805,8 @@ class AppModalProfile extends HTMLElement {
 		const schedule = window.requestIdleCallback
 			? window.requestIdleCallback.bind(window)
 			: (cb) => setTimeout(cb, 200);
-		schedule(() => {
+		this._prefetchId=schedule(() => {
+ if(!this.isConnected)return;
 			this.loadProfile({ silent: true, force: true });
 		});
 	}

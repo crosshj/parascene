@@ -12,8 +12,6 @@ import {
 	statsBarsIcon,
 } from '../../icons/svg-strings.js';
 import { confirmAndHardReloadAfterClearingCaches } from '../../shared/clearClientCaches.js';
-import * as spaPageOverlay from '../../shared/spaPageOverlay.js';
-import { openAboutModal } from './about.js';
 
 function clearLogoutSideEffects() {
 	try {
@@ -65,14 +63,16 @@ class AppAccountMenu extends HTMLElement {
 		this._onPanelClick = this._onPanelClick.bind(this);
 	}
 
-	connectedCallback() {
+	disconnectedCallback() { this.close(); }
+
+connectedCallback() {
 		this.renderShell();
 		this._initPromise = Promise.resolve();
 	}
 
 	renderShell() {
 		if (this.shadowRoot.querySelector('.account-menu-panel')) return;
-		const helpHref = typeof getHelpHref === 'function' ? getHelpHref('/help') : '/help';
+		const helpHref = typeof getHelpHref === 'function' ? getHelpHref('/help') : 'https://www.parascene.com/help';
 		this.shadowRoot.innerHTML = html`
 			<style>
 				:host {
@@ -175,7 +175,7 @@ class AppAccountMenu extends HTMLElement {
 					${gearIcon('account-menu-svg')}
 					<span class="account-menu-label">Settings</span>
 				</button>
-				<a class="account-menu-link" href="${helpHref}" role="menuitem">
+				<a class="account-menu-link" href="${helpHref}" target="_blank" rel="noopener noreferrer" role="menuitem">
 					${helpIcon('account-menu-svg')}
 					<span class="account-menu-label">Help</span>
 				</a>
@@ -216,11 +216,6 @@ class AppAccountMenu extends HTMLElement {
 	}
 
 	async _onPanelClick(e) {
-		const helpLink = e.target.closest?.('a.account-menu-link');
-		if (helpLink) {
-			this.close();
-			return;
-		}
 		const btn = e.target.closest?.('[data-action]');
 		if (!btn) return;
 		const action = btn.getAttribute('data-action');
@@ -235,48 +230,44 @@ class AppAccountMenu extends HTMLElement {
 							userName: res.data.profile?.user_name,
 							userId: res.data.id
 						}) || '/user';
-					spaPageOverlay.navigateToSpaPageFromSpa(href);
+					this.onNavigate?.(href);
 					return;
 				}
 			} catch {
 				// fall through
 			}
-			spaPageOverlay.navigateToSpaPageFromSpa('/user');
+			this.onNavigate?.('/user');
 			return;
 		}
 		if (action === 'settings') {
 			e.preventDefault();
 			this.close();
-			document.dispatchEvent(new CustomEvent('open-settings-modal'));
+			this.onSettings?.();
 			return;
 		}
 		if (action === 'integrations') {
 			e.preventDefault();
 			this.close();
-			spaPageOverlay.navigateToSpaPageFromSpa('/integrations');
+			this.onNavigate?.('/integrations');
 			return;
 		}
 		if (action === 'logout') {
 			e.preventDefault();
 			this.close();
 			clearLogoutSideEffects();
-			const form = document.createElement('form');
-			form.method = 'post';
-			form.action = '/logout';
-			document.body.appendChild(form);
-			form.submit();
+			await this.onLogout?.();
 			return;
 		}
 		if (action === 'about') {
 			e.preventDefault();
 			this.close();
-			await openAboutModal();
+			await this.onAbout?.();
 			return;
 		}
 		if (action === 'reports') {
 			e.preventDefault();
 			this.close();
-			window.location.assign('/reports/');
+			window.location.assign('http://localhost:2367/reports/');
 			return;
 		}
 		if (action === 'clear-cache') {
@@ -348,21 +339,3 @@ class AppAccountMenu extends HTMLElement {
 }
 
 customElements.define('app-account-menu', AppAccountMenu);
-
-function ensureAccountMenuHost() {
-	let el = document.querySelector('app-account-menu');
-	if (!el) {
-		el = document.createElement('app-account-menu');
-		document.body.appendChild(el);
-	}
-	return el;
-}
-
-document.addEventListener('open-account-menu', (ev) => {
-	const anchor = ev.detail?.anchor;
-	void ensureAccountMenuHost().open(anchor);
-});
-
-document.addEventListener('close-profile', () => {
-	document.querySelector('app-account-menu')?.close?.();
-});

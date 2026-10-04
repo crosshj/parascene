@@ -1073,3 +1073,15 @@ body.beta-layout .chat-inline-image-lightbox-audio-slot .chat-inline-image-light
 		transform: scaleY(1);
 	}
 }
+
+/* Optional feature-provided chrome around the shared chat item view. */
+.chat-inline-image-lightbox-title { position: absolute; z-index: 4; top: max(16px, env(safe-area-inset-top)); left: max(16px, env(safe-area-inset-left)); max-width: calc(100% - 90px); margin: 0; color: #fff; font-size: 1rem; font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; }
+.chat-inline-image-lightbox--titled { padding-top: max(54px, calc(38px + env(safe-area-inset-top))); }
+.chat-inline-image-lightbox-explainer { flex-basis: 100%; margin: 4px 0 10px; color: rgb(255 255 255 / 82%); font-size: .8125rem; line-height: 1.5; text-align: center; white-space: pre-line; overflow-wrap: anywhere; }
+.chat-inline-image-lightbox-action-status { flex-basis: 100%; color: #fff; text-align: center; font-size: .8125rem; }
+.chat-inline-image-lightbox-action-status[hidden] { display: none; }
+.chat-inline-image-lightbox-file { display: grid; place-items: center; width: 104px; height: 128px; border: 1px solid rgb(255 255 255 / 24%); border-radius: 14px; color: rgb(255 255 255 / 75%); font-size: 1.3rem; font-weight: 800; letter-spacing: .12em; }
+.chat-inline-image-lightbox-audio-artwork { width: 100%; height: 100%; object-fit: contain; }
+
+.chat-inline-image-lightbox-file-card { display: grid; place-items: center; flex: 0 1 auto; width: min(720px, calc(100dvh - 220px), 100%); aspect-ratio: 1 / 1; border-radius: 11px; corner-shape: squircle; color: var(--text); background: var(--skeleton, #e2e3e6); pointer-events: auto; }
+.chat-inline-image-lightbox-file-card .chat-inline-image-lightbox-file { color: var(--text-muted); border-color: color-mix(in srgb, currentColor 24%, transparent); }

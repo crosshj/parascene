@@ -169,6 +169,7 @@ export function mapCreatedImageRowMediaFields(img, { storage = null, includeMeta
 		audio_url: media.audio_url,
 		media_type: media.media_type
 	};
+ for(const key of ['url','thumbnail_url','fit_thumbnail_url','video_url']){const value=out[key];if(typeof value==='string'&&/\/api\/(images|videos)\/created\//.test(value)&&Number.isInteger(creationId)&&creationId>0){const url=new URL(value,'http://beta.local');url.searchParams.set('creation_id',String(creationId));out[key]=url.pathname+url.search;}}
 	if (includeMeta) {
 		out.meta = meta && typeof meta === "object" ? meta : null;
 	}

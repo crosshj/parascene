@@ -1,0 +1,24 @@
+.library-view app-tabs { display: block; }
+.library-view .app-tabs { display: flex; gap: 4px; margin-bottom: 12px; border-bottom: 1px solid var(--border); }
+.library-view [data-tab-button] { padding: 10px 14px; border: 0; border-bottom: 2px solid transparent; color: var(--text-muted); background: transparent; font: inherit; cursor: pointer; }
+.library-view [data-tab-button][aria-selected="true"] { color: var(--text); border-bottom-color: var(--focus); }
+.library-view__preview { position: relative; width: 100%; aspect-ratio: 1 / 1; overflow: hidden; border-radius: 11px; corner-shape: squircle; background: var(--library-fallback, var(--skeleton)); }
+.library-view__preview img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; }
+.library-view__fallback { position: absolute; inset: 0; display: grid; place-items: center; color: #fff; font-size: 3rem; }
+.library-view__label { position: absolute; bottom: 0; left: 0; right: 0; padding: 10px 12px; color: #fff; background: linear-gradient(transparent, rgb(0 0 0 / 75%)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .8125rem; text-align: left; }
+.library-view__status { padding: 24px 0; color: var(--text-muted); }
+.library-view__status.is-error { color: var(--danger, #b91c1c); }
+.library-view__more { display: block; margin: 24px auto; }
+.library-view [hidden] { display: none !important; }
+
+.library-style-modal .style-detail-panel { border: 0; box-shadow: none; background: transparent; padding: 0; }
+.library-style-modal .style-detail-title--form { display: none; }
+.library-style-modal .style-detail-footer--form { margin-bottom: 0; }
+
+.library-audio-clip-modal .audio-clip-detail-route { padding: 0; }
+.library-audio-clip-modal .audio-clip-detail-panel { border: 0; box-shadow: none; background: transparent; padding: 0; }
+.library-style-modal .app-dialog__body,
+.library-audio-clip-modal .app-dialog__body { box-sizing: border-box; min-height: min(380px, calc(92dvh - 140px)); }
+.library-audio-clip-modal .audio-clip-detail-view { padding: 0; }
+
+.library-style-modal .style-detail-route { padding: 0; }

@@ -15,13 +15,13 @@ const accountItems = [
 	{ label: 'View Profile', icon: 'user', href: '/user' },
 	{ label: 'Connections', icon: 'globe', href: '/integrations' },
 	{ label: 'Settings', icon: 'settings', action: 'settings' },
-	{ label: 'Help', icon: 'help', href: '/help' }
+	{ label: 'Help', icon: 'help', href: '/help', external: true }
 ];
 
 function accountMarkup() {
 	return accountItems.map((item) => item.separator
 		? '<div class="ps-overlay__divider" role="separator"></div>'
-		: `<a class="ps-account-item${item.danger ? ' is-danger' : ''}" ${item.href ? `href="${escapeHtml(item.href)}" data-spa-link` : `href="#" data-account-action="${escapeHtml(item.action)}"`}>
+		: `<a class="ps-account-item${item.danger ? ' is-danger' : ''}" ${item.href ? `href="${escapeHtml(item.href)}"${item.external ? ' target="_blank" rel="noopener noreferrer"' : ' data-spa-link'}` : `href="#" data-account-action="${escapeHtml(item.action)}"`}>
 			${iconMarkup(item.icon, 'ps-account-item__icon')}<span>${escapeHtml(item.label)}</span>
 		</a>`).join('');
 }

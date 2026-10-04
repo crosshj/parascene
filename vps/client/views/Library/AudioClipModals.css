@@ -1,0 +1,70 @@
+.audio-clip-edit-modal-overlay { display: none; position: fixed; inset: 0; z-index: 100050; padding: 24px; background: rgb(0 0 0 / 65%); align-items: center; justify-content: center; }
+.audio-clip-edit-modal-overlay.open { display: flex; }
+.audio-clip-edit-modal { display: flex; flex-direction: column; width: min(560px, 100%); max-height: calc(100dvh - 48px); overflow: auto; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); color: var(--text); }
+.audio-clip-edit-modal .modal-header, .audio-clip-edit-modal .modal-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 20px; }
+.audio-clip-edit-modal .modal-body { padding: 20px; }
+.audio-clip-edit-modal .modal-close { border: 0; background: transparent; color: inherit; cursor: pointer; }
+.audio-clip-edit-modal .modal-close-icon { width: 20px; height: 20px; }
+.audio-clip-edit-modal .form-input, .audio-clip-ingest-modal .form-input { box-sizing: border-box; width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-muted); color: var(--text); font: inherit; }
+.audio-clip-edit-modal .form-group, .audio-clip-ingest-modal .form-group { display: grid; gap: 6px; margin-bottom: 16px; }
+.audio-clip-edit-modal img { max-width: 100%; max-height: 180px; object-fit: contain; }
+.audio-clip-edit-modal [hidden], .audio-clip-ingest-modal [hidden] { display: none !important; }
+
+/* Original Library recording dialog styles belong to the modal, not the grid. */
+.audio-clip-ingest-hint {
+	margin: 0 0 12px;
+	font-size: 0.875rem;
+	color: var(--text-muted);
+}
+.audio-clip-ingest-duration-field {
+	margin-bottom: 12px;
+}
+.audio-clip-ingest-duration-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.audio-clip-ingest-duration-row .form-input {
+	max-width: 120px;
+}
+.audio-clip-ingest-duration-suffix {
+	font-size: 0.875rem;
+	color: var(--text-muted);
+}
+.audio-clip-ingest-record-timer {
+	margin-bottom: 10px;
+}
+.audio-clip-ingest-timer-text {
+	margin: 0 0 6px;
+	font-size: 1.125rem;
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+}
+.audio-clip-ingest-timer-bar {
+	height: 6px;
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--text) 10%, transparent);
+	overflow: hidden;
+}
+.audio-clip-ingest-timer-fill {
+	height: 100%;
+	width: 0%;
+	border-radius: 999px;
+	background: var(--accent);
+	transition: width 0.15s linear;
+}
+.audio-clip-ingest-preview {
+	display: block;
+	width: 100%;
+	margin-bottom: 12px;
+}
+.audio-clip-ingest-actions {
+	display: flex;
+	gap: 8px;
+	margin-bottom: 12px;
+}
+.audio-clip-ingest-error {
+	margin: 0 0 12px;
+	font-size: 0.875rem;
+	color: var(--color-amber-fg, #b45309);
+}

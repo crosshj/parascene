@@ -75,6 +75,7 @@ const { initLikeButton } = likesMod;
 const { getAvatarColor } = avatarMod;
 const { buildProfilePath } = profileLinksMod;
 const { getHelpHref } = helpUrlMod;
+const { isHelpHref } = helpUrlMod;
 const { creationMetaHasChallengeSubmission, creationMetaHasChallengeAnnotation } = challengeSubmitMetaMod;
 const { challengeEnteredBadgeHtml, challengeLockedBadgeHtml, publishedBadgeHtml, musicBadgeHtml, videoImportBadgeHtml } = creationBadgesMod;
 
@@ -717,6 +718,10 @@ function escapeHtmlFeedCardText(s) {
  */
 function navigateEngagementFeedCardHref(href, e, performShellNavigation) {
 	e.preventDefault();
+	if (isHelpHref(href)) {
+		window.open(href, "_blank", "noopener,noreferrer");
+		return;
+	}
 	if (typeof performShellNavigation === "function") {
 		performShellNavigation(href, e);
 		return;
@@ -850,7 +855,8 @@ function buildEngagementFeedCard(item, performShellNavigation = null) {
 						${statsBlock}
 						${hasThumb ? "" : hookBlock}
 					</div>`;
-				return html`<a class="feed-card-challenge-board-track${idx === 0 ? " is-primary" : ""}" href="${trackHref}" data-challenge-board-track data-challenge-board-track-link data-challenge-id="${escapeHtmlFeedCardText(challengeId)}">
+				const helpTargetAttr = isHelpHref(trackHref) ? ' target="_blank" rel="noopener noreferrer"' : "";
+				return html`<a class="feed-card-challenge-board-track${idx === 0 ? " is-primary" : ""}" href="${trackHref}"${helpTargetAttr} data-challenge-board-track data-challenge-board-track-link data-challenge-id="${escapeHtmlFeedCardText(challengeId)}">
 					<div class="feed-card-engagement-content-row${hasThumb ? " feed-card-engagement-content-row-challenge-grid" : ""}">
 						${hasThumb ? html`${thumbBlock}${main}${hookBlock}` : html`${main}`}
 					</div>
@@ -863,7 +869,7 @@ function buildEngagementFeedCard(item, performShellNavigation = null) {
 				<div class="feed-card-engagement-kicker">${kicker}</div>
 				${tracksHtml}
 				<div class="feed-card-engagement-actions">
-					<a class="route-empty-button feed-card-engagement-cta" href="${ctaRoute}" data-engagement-board-cta>${trophyIcon("feed-card-engagement-cta-icon")}${ctaLabel}</a>
+					<a class="route-empty-button feed-card-engagement-cta" href="${ctaRoute}"${isHelpHref(ctaRoute) ? ' target="_blank" rel="noopener noreferrer"' : ""} data-engagement-board-cta>${trophyIcon("feed-card-engagement-cta-icon")}${ctaLabel}</a>
 				</div>
 			</div>
 		`;
@@ -1143,7 +1149,9 @@ function buildEngagementFeedCard(item, performShellNavigation = null) {
 			const secondaryClass =
 				"route-empty-button feed-card-engagement-cta feed-card-engagement-cta--text";
 			const viewEntriesLabel = escapeHtmlFeedCardText("View Entries");
-			const titleLink = html`<a class="feed-card-engagement-title feed-card-engagement-title-link" href="${challengeTitleHref}" data-challenge-title-link>${title}</a>`;
+			const titleLink = html`<a class="feed-card-engagement-title feed-card-engagement-title-link" href="${challengeTitleHref}"${isHelpHref(challengeTitleHref) ? ' target="_blank" rel="noopener noreferrer"' : ""} data-challenge-title-link>${title}</a>`;
+			const voteTargetAttr = isHelpHref(voteRoute) ? ' target="_blank" rel="noopener noreferrer"' : "";
+			const enterTargetAttr = isHelpHref(enterRoute) ? ' target="_blank" rel="noopener noreferrer"' : "";
 
 			const thumbBlock = heroImageUrl
 				? html`<div class="feed-card-engagement-thumb-wrap is-loading" data-engagement-thumb-wrap>
@@ -1161,12 +1169,12 @@ function buildEngagementFeedCard(item, performShellNavigation = null) {
 			const enterLeadingIcon = sparkleIcon("feed-card-engagement-cta-icon");
 			const actionsBlock = voteIsPrimary
 				? html`<div class="feed-card-engagement-actions feed-card-engagement-actions-dual">
-						<a class="${primaryClass}" href="${voteRoute}" data-engagement-vote-cta data-engagement-vote-action="${voteActionAttr}">${voteLeadingIcon}${voteLabel}</a>
-						<a class="${secondaryClass}" href="${enterRoute}" data-engagement-enter-cta>${enterLabel}</a>
+						<a class="${primaryClass}" href="${voteRoute}"${voteTargetAttr} data-engagement-vote-cta data-engagement-vote-action="${voteActionAttr}">${voteLeadingIcon}${voteLabel}</a>
+						<a class="${secondaryClass}" href="${enterRoute}"${enterTargetAttr} data-engagement-enter-cta>${enterLabel}</a>
 					</div>`
 				: html`<div class="feed-card-engagement-actions feed-card-engagement-actions-dual">
-						<a class="${primaryClass}" href="${enterRoute}" data-engagement-enter-cta>${enterLeadingIcon}${enterLabel}</a>
-						<a class="${secondaryClass}" href="${voteRoute}" data-engagement-vote-cta data-engagement-vote-action="${voteActionAttr}">${viewEntriesLabel}</a>
+						<a class="${primaryClass}" href="${enterRoute}"${enterTargetAttr} data-engagement-enter-cta>${enterLeadingIcon}${enterLabel}</a>
+						<a class="${secondaryClass}" href="${voteRoute}"${voteTargetAttr} data-engagement-vote-cta data-engagement-vote-action="${voteActionAttr}">${viewEntriesLabel}</a>
 					</div>`;
 			const mainStackNoThumb = html`<div class="feed-card-engagement-main">
 					<div class="feed-card-engagement-title-copy">
@@ -1331,7 +1339,7 @@ function buildFeedTipCard(item) {
 	const rawCta = (item.ctaRoute || "/explore").trim();
 	const ctaRoute = rawCta.startsWith("/help") ? getHelpHref(rawCta) : rawCta;
 	const isExternal = ctaRoute.startsWith("http://") || ctaRoute.startsWith("https://");
-	const openInNewTab = isExternal && (item.ctaTarget === "_blank" || item.ctaRoute?.startsWith("http"));
+	const openInNewTab = isExternal && (isHelpHref(ctaRoute) || item.ctaTarget === "_blank" || item.ctaRoute?.startsWith("http"));
 	const targetAttr = openInNewTab ? ' target="_blank" rel="noopener noreferrer"' : "";
 	card.innerHTML = html`
 		<div class="feed-card-tip-inner">
@@ -1531,10 +1539,13 @@ function buildFeedCreationCard(
 	creationsBulkChrome = false,
 	resolveCreationCardHref = null,
 	performCreationNavigation = null,
-	enableComposerDragSource = false
+	enableComposerDragSource = false,
+	performShellNavigation = null,
+	hidePublishedBadge = false
 ) {
 	const card = document.createElement("div");
 	card.dataset.published = item.published === true || item.published === 1 ? "1" : "0";
+	if (hidePublishedBadge) card.dataset.hidePublishedBadge = "1";
 	const mediaType = typeof item.media_type === "string" ? item.media_type : "image";
 	const isVideo = mediaType === "video" && typeof item.video_url === "string" && item.video_url;
 
@@ -1625,7 +1636,7 @@ function buildFeedCreationCard(
 				? "feed-card feed-card--image-only feed-card--editorial-pin"
 				: "feed-card feed-card--image-only";
 		const isPublished = item.published === true || item.published === 1;
-		const publishedOverlay = isPublished ? publishedBadgeHtml() : '';
+		const publishedOverlay = isPublished && !hidePublishedBadge ? publishedBadgeHtml() : '';
 		const isGroupCreation = parsedMeta?.group?.kind === 'group_creations';
 		const groupOverlay = isGroupCreation ? groupCreationBadgeHtml(item) : '';
 		const musicOverlay = feedCardAudioBadgeHtml(mediaType, item);
@@ -1672,7 +1683,7 @@ function buildFeedCreationCard(
 			performCreationNavigation,
 			enableComposerDragSource
 		);
-		attachFeedImpressionBeacon(card, item);
+		{ const disposeBeacon = attachFeedImpressionBeacon(card, item); const previousDispose = card.__disposeFeedCard; card.__disposeFeedCard = () => { previousDispose?.(); disposeBeacon?.(); }; }
 		return card;
 	}
 
@@ -1824,7 +1835,9 @@ function buildFeedCreationCard(
 		});
 	}
 
-	setupWhoTooltips(card);
+	const tooltipLifetime = new window.AbortController();
+	setupWhoTooltips(card, { signal: tooltipLifetime.signal });
+	card.__disposeFeedCard = () => { tooltipLifetime.abort(); card.querySelectorAll('.feed-card-image').forEach(image => getFeedGroupVideoPlayer(image)?.teardown()); };
 
 	const detailsButton = card.querySelector('button[data-details-button]');
 	if (detailsButton && item.created_image_id) {
@@ -1845,7 +1858,8 @@ function buildFeedCreationCard(
 		creatorButton.addEventListener('click', (e) => {
 			e.preventDefault();
 			e.stopPropagation();
-			window.location.href = profileHref;
+			if (typeof performShellNavigation === 'function') performShellNavigation(profileHref, e);
+			else window.location.href = profileHref;
 		});
 	}
 
@@ -1866,6 +1880,9 @@ function buildFeedCreationCard(
 	}
 
 	if (moreButton && menu && hideButton && itemId) {
+		let menuTimer;
+		const previousDispose = card.__disposeFeedCard;
+		card.__disposeFeedCard = () => { previousDispose?.(); clearTimeout(menuTimer); document.removeEventListener('click', closeMenu); };
 		// Close any open menus when clicking outside
 		const closeMenu = (e) => {
 			if (!menu.contains(e.target) && !moreButton.contains(e.target)) {
@@ -1897,8 +1914,8 @@ function buildFeedCreationCard(
 				menu.style.zIndex = '1000';
 
 				// Add click listener to close on outside click
-				setTimeout(() => {
-					document.addEventListener('click', closeMenu);
+				menuTimer = setTimeout(() => {
+					if (card.isConnected) document.addEventListener('click', closeMenu);
 				}, 0);
 			} else {
 				document.removeEventListener('click', closeMenu);
@@ -1941,7 +1958,7 @@ function buildFeedCreationCard(
 		performCreationNavigation,
 		enableComposerDragSource
 	);
-	attachFeedImpressionBeacon(card, item);
+	{ const disposeBeacon = attachFeedImpressionBeacon(card, item); const previousDispose = card.__disposeFeedCard; card.__disposeFeedCard = () => { previousDispose?.(); disposeBeacon?.(); }; }
 	return card;
 }
 
@@ -2199,7 +2216,9 @@ export function createFeedItemCard(item, itemIndex, options = {}) {
 		creationsBulkChrome,
 		resolveCreationCardHref,
 		performCreationNavigation,
-		enableComposerDragSource
+		enableComposerDragSource,
+		performShellNavigation,
+		options.hidePublishedBadge === true
 	);
 }
 

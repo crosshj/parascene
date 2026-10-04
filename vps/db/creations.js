@@ -1,3 +1,5 @@
+import {creationEligibleForLatestCommentsStream} from '../services/create/latestCommentsVisibility.js';
+import {getActiveEditorialPins} from '../services/feed/editorialPin.js';
 import path from "node:path";
 
 const IMAGE_BUCKET = "prsn_created-images";
@@ -115,7 +117,8 @@ export function createCreationsStore({ client, supabaseUrl, serviceRoleKey }) {
 			const owner = Number(data.user_id) === Number(userId);
 			const published = data.published === true || data.published === 1;
 			const unavailable = data.unavailable_at != null && data.unavailable_at !== "";
-			if ((!owner && !published && !isAdmin) || (unavailable && !isAdmin)) return null;
+			let discussable=published;if(!owner&&!published&&!isAdmin&&!unavailable){let activeEditorialPinCreationIds=new Set();if(!creationEligibleForLatestCommentsStream(data)){const pins=await getActiveEditorialPins({selectPolicyByKey:{get:async key=>{const {data,error}=await client.from('prsn_policies').select('value').eq('key',key).maybeSingle();if(error)throw error;return data;}}});activeEditorialPinCreationIds=new Set(pins.map(pin=>Number(pin.created_image_id)).filter(Number.isFinite));}discussable=creationEligibleForLatestCommentsStream(data,{activeEditorialPinCreationIds});}
+if ((!owner && !discussable && !isAdmin) || (unavailable && !isAdmin)) return null;
 			return data;
 		},
 		async lineageAncestorForViewer(userId, creationId, parentId, { isAdmin = false } = {}) {
@@ -185,61 +188,7 @@ export function createCreationsStore({ client, supabaseUrl, serviceRoleKey }) {
 				.range(safeOffset, safeOffset + safeLimit - 1);
 			if (error) throw error;
 			const comments = data || [];
-			const commentIds = positiveIds(comments.map((row) => row.id), 200);
-			let reactionRows = [];
-			if (commentIds.length) {
-				const result = await client.from("prsn_comment_reactions").select("comment_id, emoji_key, user_id").in("comment_id", commentIds);
-				if (result.error) throw result.error;
-				reactionRows = result.data || [];
-			}
-			const userIds = positiveIds([
-				...comments.map((row) => row.user_id),
-				...reactionRows.map((row) => row.user_id)
-			], 400);
-			let profiles = [];
-			let users = [];
-			if (userIds.length) {
-				const [profilesResult, usersResult] = await Promise.all([
-					client.from("prsn_user_profiles").select("user_id, user_name, display_name, avatar_url").in("user_id", userIds),
-					client.from("prsn_users").select("id, meta").in("id", userIds)
-				]);
-				if (profilesResult.error) throw profilesResult.error;
-				if (usersResult.error) throw usersResult.error;
-				profiles = profilesResult.data || [];
-				users = usersResult.data || [];
-			}
-			const profileByUser = new Map(profiles.map((row) => [Number(row.user_id), row]));
-			const planByUser = new Map(users.map((row) => [Number(row.id), row?.meta?.plan === "founder" ? "founder" : "free"]));
-			const reactionsByComment = new Map();
-			for (const reaction of reactionRows) {
-				const commentId = Number(reaction.comment_id);
-				const emojiKey = String(reaction.emoji_key || "");
-				if (!emojiKey) continue;
-				if (!reactionsByComment.has(commentId)) reactionsByComment.set(commentId, { reactions: {}, viewer_reactions: [], counts: {} });
-				const entry = reactionsByComment.get(commentId);
-				if (!entry.reactions[emojiKey]) entry.reactions[emojiKey] = [];
-				entry.counts[emojiKey] = (entry.counts[emojiKey] || 0) + 1;
-				const label = whoLabel(profileByUser.get(Number(reaction.user_id)));
-				if (label) entry.reactions[emojiKey].push(label);
-				if (Number(reaction.user_id) === Number(viewerId)) entry.viewer_reactions.push(emojiKey);
-			}
-			for (const entry of reactionsByComment.values()) {
-				entry.viewer_reactions = [...new Set(entry.viewer_reactions)];
-				for (const [emojiKey, labels] of Object.entries(entry.reactions)) {
-					const total = entry.counts[emojiKey] || 0;
-					const visible = labels.slice(0, 5);
-					entry.reactions[emojiKey] = total > visible.length ? [...visible, total - visible.length] : visible;
-				}
-				delete entry.counts;
-			}
-			return {
-				commentCount: Number(count) || 0,
-				rows: comments.map((row) => {
-					const profile = profileByUser.get(Number(row.user_id));
-					const reactionMeta = reactionsByComment.get(Number(row.id));
-					return { ...row, meta: row.meta || {}, user_name: profile?.user_name ?? null, display_name: profile?.display_name ?? null, avatar_url: profile?.avatar_url ?? null, plan: planByUser.get(Number(row.user_id)) || "free", reactions: reactionMeta?.reactions || {}, viewer_reactions: reactionMeta?.viewer_reactions || [] };
-				})
-			};
+			return { commentCount: Number(count) || 0, rows: await enrichCreationComments(client, comments, viewerId) };
 		},
 		async related(creationId, { limit = 10, excludeIds = [], viewerEnableNsfw = false, seenCount = 0, forceRandom = false } = {}) {
 			const seedId = Number(creationId);
@@ -654,4 +603,61 @@ export function creationMediaKeys(row) {
 		values.push(creationMediaKey(source), creationVideoMediaKey(source));
 	}
 	return [...new Set(values.filter(Boolean))];
+}
+
+
+export async function enrichCreationComments(client, comments, viewerId) {
+			const commentIds = positiveIds(comments.map((row) => row.id), 200);
+			let reactionRows = [];
+			if (commentIds.length) {
+				const result = await client.from("prsn_comment_reactions").select("comment_id, emoji_key, user_id").in("comment_id", commentIds);
+				if (result.error) throw result.error;
+				reactionRows = result.data || [];
+			}
+			const userIds = positiveIds([
+				...comments.map((row) => row.user_id),
+				...reactionRows.map((row) => row.user_id)
+			], 400);
+			let profiles = [];
+			let users = [];
+			if (userIds.length) {
+				const [profilesResult, usersResult] = await Promise.all([
+					client.from("prsn_user_profiles").select("user_id, user_name, display_name, avatar_url").in("user_id", userIds),
+					client.from("prsn_users").select("id, meta").in("id", userIds)
+				]);
+				if (profilesResult.error) throw profilesResult.error;
+				if (usersResult.error) throw usersResult.error;
+				profiles = profilesResult.data || [];
+				users = usersResult.data || [];
+			}
+			const profileByUser = new Map(profiles.map((row) => [Number(row.user_id), row]));
+			const planByUser = new Map(users.map((row) => [Number(row.id), row?.meta?.plan === "founder" ? "founder" : "free"]));
+			const reactionsByComment = new Map();
+			for (const reaction of reactionRows) {
+				const commentId = Number(reaction.comment_id);
+				const emojiKey = String(reaction.emoji_key || "");
+				if (!emojiKey) continue;
+				if (!reactionsByComment.has(commentId)) reactionsByComment.set(commentId, { reactions: {}, viewer_reactions: [], counts: {} });
+				const entry = reactionsByComment.get(commentId);
+				if (!entry.reactions[emojiKey]) entry.reactions[emojiKey] = [];
+				entry.counts[emojiKey] = (entry.counts[emojiKey] || 0) + 1;
+				const label = whoLabel(profileByUser.get(Number(reaction.user_id)));
+				if (label) entry.reactions[emojiKey].push(label);
+				if (Number(reaction.user_id) === Number(viewerId)) entry.viewer_reactions.push(emojiKey);
+			}
+			for (const entry of reactionsByComment.values()) {
+				entry.viewer_reactions = [...new Set(entry.viewer_reactions)];
+				for (const [emojiKey, labels] of Object.entries(entry.reactions)) {
+					const total = entry.counts[emojiKey] || 0;
+					const visible = labels.slice(0, 5);
+					entry.reactions[emojiKey] = total > visible.length ? [...visible, total - visible.length] : visible;
+				}
+				delete entry.counts;
+			}
+	const replyIds=positiveIds(comments.map(row=>parseMeta(row.meta)?.reply?.referenced_id),200);let existingReplies=new Set();if(replyIds.length){const {data,error}=await client.from('prsn_comments_created_image').select('id').in('id',replyIds);if(error)throw error;existingReplies=new Set((data||[]).map(row=>Number(row.id)));}
+return comments.map((row) => {
+					const profile = profileByUser.get(Number(row.user_id));
+					const reactionMeta = reactionsByComment.get(Number(row.id));
+					return { ...row,...(parseMeta(row.meta)?.reply?{reply_parent_exists:existingReplies.has(Number(parseMeta(row.meta).reply.referenced_id))}:{}), meta: row.meta || {}, user_name: profile?.user_name ?? null, display_name: profile?.display_name ?? null, avatar_url: profile?.avatar_url ?? null, plan: planByUser.get(Number(row.user_id)) || "free", reactions: reactionMeta?.reactions || {}, viewer_reactions: reactionMeta?.viewer_reactions || [] };
+				})
 }

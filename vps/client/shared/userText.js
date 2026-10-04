@@ -104,7 +104,8 @@ function renderPlainUserTextSegmentBase(text) {
 		} else if (sigil === '#' && /^[a-z0-9][a-z0-9_-]{1,31}$/.test(normalized)) {
 			const specialHashtagHref = SPECIAL_HASHTAG_HREFS[normalized] || '';
 			const href = specialHashtagHref || `/t/${normalized}`;
-			out += `<a href="${escapeHtml(href)}" class="user-link mention-link">#${escapeHtml(rawToken)}</a>`;
+			const helpTarget = href === '/help' ? ' target="_blank" rel="noopener noreferrer"' : '';
+			out += `<a href="${escapeHtml(href)}"${helpTarget} class="user-link mention-link">#${escapeHtml(rawToken)}</a>`;
 		} else if (sigil === '$' && /^(?=.*[a-z])[a-z0-9][a-z0-9_-]{0,63}$/.test(normalized)) {
 			out += `<a href="/styles/${escapeHtml(normalized)}" class="user-link mention-link mention-link--style">$${escapeHtml(rawToken)}</a>`;
 		} else {

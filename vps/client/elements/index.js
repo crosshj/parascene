@@ -1,3 +1,4 @@
+import './tabs.js';
 // Bundle-wide custom-element registration. Views only mount the tags they need.
 import './modals/profile.js';
 import './modals/account-menu.js';

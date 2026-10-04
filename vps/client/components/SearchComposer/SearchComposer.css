@@ -1,0 +1,5 @@
+/* Placement, lane width, padding and shell are the normal outlet composer rules. */
+.beta-outlet__search-composer input { flex: 1 1 auto; min-width: 0; box-sizing: border-box; height: 44px; margin: 0; padding: 10px 6px 10px 2px; border: 0; border-radius: 0; color: var(--text); background: transparent; box-shadow: none; font-family: inherit; font-size: .9375rem; line-height: 1.45; }
+.beta-outlet__search-composer input:focus { outline: none; }
+.beta-outlet__search-composer input::-webkit-search-cancel-button { display: none; }
+.beta-outlet__search-composer [hidden] { display: none; }

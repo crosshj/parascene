@@ -4,7 +4,7 @@ import jwt from "jsonwebtoken";
 export const COOKIE_NAME = "ps_session";
 export const SESSION_MS = 7 * 24 * 60 * 60 * 1000;
 
-function getSecret() {
+export function getSecret() {
 	const value = String(process.env.SESSION_SECRET || "").trim();
 	if (!value) throw new Error("SESSION_SECRET is required");
 	return value;

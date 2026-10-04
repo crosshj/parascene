@@ -1,3 +1,7 @@
+import {UserProfileView} from './UserProfile/UserProfileView.js';
+import {ConnectionsView} from './Connections/ConnectionsView.js';
+import { StyleDetailView } from './StyleDetail/StyleDetailView.js';
+import { AudioClipDetailView } from './AudioClipDetail/AudioClipDetailView.js';
 import { mobileNavigationItems } from '../config/sidebar.js';
 import { renderCreationDetailView } from './CreationDetail/CreationDetailView.js';
 import { renderCreationsView } from './Creations/CreationsView.js';
@@ -25,6 +29,9 @@ function cleanup(outlet, dispose) {
 }
 
 export const appViews = Object.freeze({
+ UserProfile:UserProfileView, Connections:ConnectionsView,
+	StyleDetail: StyleDetailView,
+	AudioClipDetail: AudioClipDetailView,
 	Sidebar: { mount: mountSidebarView },
 	MobileNavigation: {
 		mount({ outlet }) {

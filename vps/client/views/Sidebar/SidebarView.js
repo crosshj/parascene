@@ -459,13 +459,13 @@ function mountSidebarPresentation({ outlet, model = {}, onAction }) {
 	};
 }
 
-export function mountSidebarView({ outlet, services } = {}) {
+export function mountSidebarView({ outlet, services, actions } = {}) {
 	let controller = null;
 	const view = mountSidebarPresentation({
 		outlet,
 		onAction: (action) => controller?.handleAction(action),
 	});
-	controller = createSidebarController({ view, services });
+	controller = createSidebarController({ view, services, actions });
 	return {
 		root: view.root,
 		update() {},

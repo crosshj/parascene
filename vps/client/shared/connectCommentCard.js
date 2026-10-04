@@ -1,0 +1,270 @@
+/**
+ * Single "Connect / Latest comments" row: thumbnail, creation title + creator, comment text,
+ * reactions, commenter footer. Shared by Connect tab and chat #comments pseudo-channel.
+ */
+
+import { formatRelativeTime } from './datetime.js';
+import { getAvatarColor } from './avatar.js';
+import { buildProfilePath } from './profileLinks.js';
+import { renderCommentAvatarHtml } from './commentItem.js';
+import { processUserText } from './userText.js';
+import { REACTION_ORDER, REACTION_ICONS } from '../icons/svg-strings.js';
+import { createReplyIndicatorElement } from './replyIndicatorUi.js';
+
+function escapeHtml(str) {
+	return String(str ?? '')
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;')
+		.replace(/'/g, '&#039;');
+}
+
+/**
+ * @param {object} comment — row from GET /api/comments/latest (plus reactions from API)
+ * @param {{ extraRootClass?: string }} [opts]
+ * @returns {HTMLDivElement}
+ */
+export function createConnectCommentRowElement(comment, opts = {}) {
+	const extraRootClass = typeof opts.extraRootClass === 'string' ? opts.extraRootClass.trim() : '';
+
+	const createdImageId = Number(comment?.created_image_id);
+	const href = (Number.isFinite(createdImageId) && createdImageId > 0) ? `/creations/${createdImageId}` : null;
+	const thumbUrl = typeof comment?.created_image_thumbnail_url === 'string' ? comment.created_image_thumbnail_url.trim() : '';
+	const imageUrl = typeof comment?.created_image_url === 'string' ? comment.created_image_url.trim() : '';
+	const resolvedThumb = thumbUrl || imageUrl || '';
+
+	const displayName = (typeof comment?.display_name === 'string' && comment.display_name.trim())
+		? comment.display_name.trim()
+		: '';
+	const userName = (typeof comment?.user_name === 'string' && comment.user_name.trim())
+		? comment.user_name.trim()
+		: '';
+	const fallbackName = userName ? userName : 'User';
+	const commenterName = displayName || fallbackName;
+	const commenterHandle = userName ? `@${userName}` : '';
+
+	const createdImageTitle = (typeof comment?.created_image_title === 'string' && comment.created_image_title.trim())
+		? comment.created_image_title.trim()
+		: (Number.isFinite(createdImageId) && createdImageId > 0 ? `Creation ${createdImageId}` : 'Creation');
+
+	const isChallengeMedia =
+		comment?.created_image_is_challenge_media === true ||
+		/^(monthly|weekly|music)\s+challenge\s*:/i.test(createdImageTitle) ||
+		(Array.isArray(comment?.created_image_meta?.challenge_feed_pins) &&
+			comment.created_image_meta.challenge_feed_pins.length > 0) ||
+		(Array.isArray(comment?.created_image_meta?.challenge_organizer_refs) &&
+			comment.created_image_meta.challenge_organizer_refs.length > 0);
+
+	const creatorDisplayName = (typeof comment?.created_image_display_name === 'string' && comment.created_image_display_name.trim())
+		? comment.created_image_display_name.trim()
+		: '';
+	const creatorUserName = (typeof comment?.created_image_user_name === 'string' && comment.created_image_user_name.trim())
+		? comment.created_image_user_name.trim()
+		: '';
+
+	const row = document.createElement('div');
+	const rootClasses = ['connect-comment'];
+	if (extraRootClass) {
+		rootClasses.push(extraRootClass);
+	}
+	if (isChallengeMedia) {
+		rootClasses.push('connect-comment--challenge-media');
+	}
+	if (!href) {
+		rootClasses.push('is-disabled');
+	}
+	row.className = rootClasses.join(' ');
+	if (href) {
+		row.setAttribute('role', 'link');
+		row.tabIndex = 0;
+		row.dataset.href = href;
+		row.dataset.creationId = String(createdImageId);
+		const creatorUid = Number(comment?.created_image_user_id);
+		if (Number.isFinite(creatorUid) && creatorUid > 0) row.dataset.userId = String(creatorUid);
+		const pub = comment?.created_image_published;
+		if (pub === true || pub === 1) row.dataset.published = '1';
+		else if (pub === false || pub === 0) row.dataset.published = '0';
+		const mediaType =
+			typeof comment?.created_image_media_type === 'string'
+				? comment.created_image_media_type.trim().toLowerCase()
+				: '';
+		if (mediaType === 'video' || mediaType === 'audio') row.dataset.mediaType = mediaType;
+		const previewFull = imageUrl || resolvedThumb;
+		if (previewFull) row.dataset.previewImageUrl = previewFull;
+		row.setAttribute('aria-label', `Open ${createdImageTitle}`);
+		row.addEventListener('click', (e) => {
+			const target = e.target;
+			if (target instanceof Element && target.closest('a, button')) return;
+			if (target instanceof HTMLElement && target.closest('.msg-reply-indicator-inner')) return;
+			opts.navigate?.(href, { seed: comment.creation || null });
+		});
+		row.addEventListener('keydown', (e) => {
+			if (e.target === row && (e.key === 'Enter' || e.key === ' ')) {
+				e.preventDefault();
+				opts.navigate?.(href, { seed: comment.creation || null });
+			}
+		});
+	}
+
+	const thumbWrap = document.createElement('div');
+	thumbWrap.className = `connect-comment-thumb${comment.nsfw ? ' nsfw' : ''}`;
+	if (comment.created_image_media_type === 'video') {
+		thumbWrap.setAttribute('data-media-type', 'video');
+	}
+	thumbWrap.setAttribute('aria-hidden', 'true');
+	if (resolvedThumb) {
+		const img = document.createElement('img');
+		img.src = resolvedThumb;
+		img.alt = '';
+		img.loading = 'lazy';
+		img.decoding = 'async';
+		img.className = 'connect-comment-thumb-img';
+		thumbWrap.appendChild(img);
+	}
+
+	const creationTitle = document.createElement('div');
+	creationTitle.className = 'connect-comment-creation-title';
+	creationTitle.textContent = createdImageTitle;
+
+	/** @type {HTMLDivElement | null} */
+	let creatorRow = null;
+	if (!isChallengeMedia) {
+		creatorRow = document.createElement('div');
+		creatorRow.className = 'connect-comment-creator';
+
+		const creatorId = Number(comment?.created_image_user_id ?? 0);
+		const creatorProfileHref = buildProfilePath({ userName: creatorUserName, userId: creatorId });
+		const creatorName = creatorDisplayName || (creatorUserName ? creatorUserName : 'User');
+		const creatorHandle = creatorUserName ? `@${creatorUserName}` : '';
+		const creatorSeed = creatorUserName || String(creatorId || '') || creatorName;
+		const creatorColor = getAvatarColor(creatorSeed);
+		const creatorAvatarUrl = typeof comment?.created_image_avatar_url === 'string' ? comment.created_image_avatar_url.trim() : '';
+		const creatorPlan = comment?.created_image_owner_plan === 'founder';
+		const creatorAvatarHtml = renderCommentAvatarHtml({
+			avatarUrl: creatorAvatarUrl,
+			displayName: creatorName,
+			color: creatorColor,
+			href: creatorProfileHref,
+			isFounder: creatorPlan,
+			flairSize: 'xs',
+		});
+
+		creatorRow.innerHTML = `
+		<div class="connect-comment-creator-left">
+			${creatorAvatarHtml}
+			<div class="connect-comment-creator-who">
+				${creatorProfileHref ? `<a class="user-link connect-comment-profile-link" href="${escapeHtml(creatorProfileHref)}" data-profile-link aria-label="View ${escapeHtml(creatorName)} profile"><span class="comment-author-name${creatorPlan ? ' founder-name' : ''}">${escapeHtml(creatorName)}</span>${creatorHandle ? ` <span class="comment-author-handle${creatorPlan ? ' founder-name' : ''}">${escapeHtml(creatorHandle)}</span>` : ''}</a>` : `<span><span class="comment-author-name${creatorPlan ? ' founder-name' : ''}">${escapeHtml(creatorName)}</span>${creatorHandle ? ` <span class="comment-author-handle${creatorPlan ? ' founder-name' : ''}">${escapeHtml(creatorHandle)}</span>` : ''}</span>`}
+			</div>
+		</div>
+	`;
+	}
+	const commenterId = Number(comment?.user_id ?? 0);
+	const profileHref = buildProfilePath({ userName, userId: commenterId });
+	const seed = userName || String(comment?.user_id ?? '') || commenterName;
+	const color = getAvatarColor(seed);
+	const avatarUrl = typeof comment?.avatar_url === 'string' ? comment.avatar_url.trim() : '';
+	const commenterPlan = comment?.plan === 'founder';
+	const avatarHtml = renderCommentAvatarHtml({
+		avatarUrl,
+		displayName: commenterName,
+		color,
+		href: profileHref,
+		isFounder: commenterPlan,
+		flairSize: 'xs',
+	});
+
+	const timeAgo = comment?.created_at ? (formatRelativeTime(comment.created_at) || '') : '';
+	const safeText = processUserText(comment?.text ?? '', { messageMarkdown: true });
+	const createdMs = comment?.created_at ? Date.parse(String(comment.created_at)) : NaN;
+	const updatedMs = comment?.updated_at ? Date.parse(String(comment.updated_at)) : NaN;
+	const isEditedComment =
+		Number.isFinite(createdMs) &&
+		Number.isFinite(updatedMs) &&
+		updatedMs - createdMs >= 1000;
+
+	const commentText = document.createElement('div');
+	commentText.className = 'comment-text';
+	commentText.innerHTML = `${safeText}${isEditedComment ? '<span class="comment-text-edited-inline"> (edited)</span>' : ''}`;
+
+	const replyMetaRaw = comment?.meta?.reply;
+	const replyMeta =
+		replyMetaRaw && typeof replyMetaRaw === 'object' && !Array.isArray(replyMetaRaw)
+			? replyMetaRaw
+			: null;
+	const replyRefId = Number(replyMeta?.referenced_id);
+	let replyIndicatorEl = null;
+	if (replyMeta && Number.isFinite(replyRefId) && replyRefId > 0) {
+		replyIndicatorEl = createReplyIndicatorElement(replyMeta, true, { kind: 'comment', omitAvatar: true });
+		replyIndicatorEl.classList.add('connect-comment-reply');
+		row.classList.add('has-reply-indicator');
+	}
+
+	const reactions = comment?.reactions && typeof comment.reactions === 'object' ? comment.reactions : {};
+	let chipsWithCount = [];
+	let reactionsEl = null;
+	try {
+		chipsWithCount = Array.isArray(REACTION_ORDER) ? REACTION_ORDER.filter((key) => {
+			const arr = Array.isArray(reactions[key]) ? reactions[key] : [];
+			const last = arr[arr.length - 1];
+			const others = typeof last === 'number' ? last : 0;
+			const strings = typeof last === 'number' ? arr.slice(0, -1) : arr;
+			return strings.length + others > 0;
+		}) : [];
+	} catch (e) {
+		console.error('[connectCommentCard] Error filtering reaction chips:', e);
+	}
+	if (chipsWithCount.length > 0) {
+		reactionsEl = document.createElement('div');
+		reactionsEl.className = 'comment-reactions comment-reactions-readonly';
+		try {
+			const pillsHtml = chipsWithCount.map((key) => {
+				const arr = Array.isArray(reactions[key]) ? reactions[key] : [];
+				const last = arr[arr.length - 1];
+				const others = typeof last === 'number' ? last : 0;
+				const strings = (typeof last === 'number' ? arr.slice(0, -1) : arr).filter((s) => typeof s === 'string');
+				const count = strings.length + others;
+				const countLabel = count > 99 ? '99+' : String(count);
+				const tooltip = strings.length > 0 || others > 0
+					? [...strings, others > 0 ? `and ${others} ${others === 1 ? 'other' : 'others'}` : ''].filter(Boolean).join(', ')
+					: '';
+				const iconFn = REACTION_ICONS?.[key];
+				const iconHtml = (typeof iconFn === 'function' ? iconFn('comment-reaction-icon') : '') || '';
+				const tooltipAttr = tooltip ? ` data-tooltip="${escapeHtml(tooltip)}"` : '';
+				return `<span class="comment-reaction-pill" aria-label="${escapeHtml(key)}: ${escapeHtml(countLabel)}"${tooltipAttr}><span class="comment-reaction-icon-wrap" aria-hidden="true">${iconHtml}</span><span class="comment-reaction-count">${escapeHtml(countLabel)}</span></span>`;
+			}).join('');
+			reactionsEl.innerHTML = `<div class="comment-reaction-pills"><div class="comment-reaction-pills-inner">${pillsHtml}</div></div>`;
+		} catch (e) {
+			console.error('[connectCommentCard] Error rendering reaction chips for comment:', comment?.id, e);
+		}
+	}
+
+	const footer = document.createElement('div');
+	footer.className = 'connect-comment-footer';
+	footer.innerHTML = `
+		<div class="connect-comment-footer-left">
+			${avatarHtml}
+			<div class="connect-comment-footer-who">
+				<span class="connect-comment-footer-name-handle-time">
+					${profileHref ? `<a class="user-link connect-comment-profile-link" href="${escapeHtml(profileHref)}" data-profile-link aria-label="View ${escapeHtml(commenterName)} profile"><span class="comment-author-name${commenterPlan ? ' founder-name' : ''}">${escapeHtml(commenterName)}</span>${commenterHandle ? ` <span class="comment-author-handle${commenterPlan ? ' founder-name' : ''}">${escapeHtml(commenterHandle)}</span>` : ''}</a>` : `<span><span class="comment-author-name${commenterPlan ? ' founder-name' : ''}">${escapeHtml(commenterName)}</span>${commenterHandle ? ` <span class="comment-author-handle${commenterPlan ? ' founder-name' : ''}">${escapeHtml(commenterHandle)}</span>` : ''}</span>`}
+					${timeAgo ? `<span class="comment-time">&nbsp;·&nbsp;${escapeHtml(timeAgo)}</span>` : ''}
+				</span>
+			</div>
+		</div>
+	`;
+
+	row.appendChild(thumbWrap);
+	row.appendChild(creationTitle);
+	if (creatorRow) row.appendChild(creatorRow);
+	row.appendChild(commentText);
+	if (replyIndicatorEl) {
+		row.appendChild(replyIndicatorEl);
+	}
+	row.appendChild(footer);
+	if (reactionsEl?.innerHTML) {
+		row.classList.add('has-reactions');
+		row.appendChild(reactionsEl);
+	}
+
+	return row;
+}

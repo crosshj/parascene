@@ -68,7 +68,7 @@ export function createAppRoutes({ definitions = [] } = {}) {
 		return {
 			key: `route:${route.path}:${Object.values(params).join(':')}`,
 			view: route.view,
-			props: { title: resolvedTitle, viewName: route.viewName || route.title || resolvedTitle, ...(route.slug ? { slug: route.slug } : {}), ...params },
+			props: { url: `${url.pathname}${url.search}${url.hash}`, search: url.search, hash: url.hash, title: resolvedTitle, viewName: route.viewName || route.title || resolvedTitle, ...(route.slug ? { slug: route.slug } : {}), ...params },
 			chrome: {
 				title: resolvedTitle,
 				icon: route.icon || defaults.icon,
@@ -108,6 +108,7 @@ export function createAppRoutes({ definitions = [] } = {}) {
 				key: `overlay:${route.path}:${Object.values(route.params).join(':')}`,
 				view: route.view,
 				props: {
+					url: canonicalUrl,
 					...Object.fromEntries(Object.entries(route.params).filter(([key]) => key !== 'id')),
 					...(route.params.creationId ? { creationId: route.params.creationId } : {}),
 					viewName: route.viewName || route.title || 'Details',

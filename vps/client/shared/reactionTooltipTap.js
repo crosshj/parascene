@@ -31,7 +31,7 @@ function closeTooltipsIn(container, onOutsideClick) {
  * Tap-to-show for readonly chips and like counts (data-who-tap="1").
  * Dismiss: tap again on the chip, or tap anywhere else.
  */
-export function setupReactionTooltipTap(container) {
+export function setupReactionTooltipTap(container, { signal } = {}) {
 	if (!container || container.dataset.reactionTooltipAttached === 'true') return;
 	container.dataset.reactionTooltipAttached = 'true';
 
@@ -55,9 +55,10 @@ export function setupReactionTooltipTap(container) {
 		closeTooltipsIn(container, onDismissTap);
 		if (!wasVisible) {
 			chip.classList.add('is-tooltip-visible');
-			requestAnimationFrame(() => document.addEventListener('click', onDismissTap));
+			requestAnimationFrame(() => { if (!signal?.aborted && container.isConnected) document.addEventListener('click', onDismissTap); });
 		}
 	});
+	signal?.addEventListener('abort', onDismissTap, { once: true });
 }
 
 /**
@@ -65,7 +66,7 @@ export function setupReactionTooltipTap(container) {
  * Short tap is left to existing handlers (toggle / navigate).
  * Dismiss: tap anywhere (or scroll) after it opens.
  */
-export function setupReactionTooltipLongPress(container) {
+export function setupReactionTooltipLongPress(container, { signal } = {}) {
 	if (!container || container.dataset.reactionLongPressAttached === 'true') return;
 	container.dataset.reactionLongPressAttached = 'true';
 
@@ -81,6 +82,7 @@ export function setupReactionTooltipLongPress(container) {
 
 	const armDismiss = () => {
 		requestAnimationFrame(() => {
+			if (signal?.aborted || !container.isConnected) return;
 			document.addEventListener('click', onDismissTap);
 			document.addEventListener('scroll', onDismissScroll, true);
 		});
@@ -169,13 +171,14 @@ export function setupReactionTooltipLongPress(container) {
 		onEnd(e);
 	});
 	container.addEventListener('pointercancel', clear);
+	signal?.addEventListener('abort', () => { clear(); onDismissTap(); }, { once: true });
 }
 
 /**
  * Attach both tap and long-press who-tooltip handlers + floating hover layer.
  */
-export function setupWhoTooltips(container) {
-	setupReactionTooltipTap(container);
-	setupReactionTooltipLongPress(container);
-	setupFloatingWhoTooltips(container);
+export function setupWhoTooltips(container, options = {}) {
+	setupReactionTooltipTap(container, options);
+	setupReactionTooltipLongPress(container, options);
+	setupFloatingWhoTooltips(container, options);
 }
