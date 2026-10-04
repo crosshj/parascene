@@ -35,6 +35,7 @@ export const appViews = Object.freeze({
 		mount({ outlet, services, actions, setHeaderMenu }) {
 			return cleanup(outlet, renderCreationsView({
 				outlet,
+				creationsProvider: services.providers.creations,
 				creationsApi: services.providers.creations.api,
 				creationsQuery: services.providers.creations.query,
     pendingCreations: services.providers.creations.pending,

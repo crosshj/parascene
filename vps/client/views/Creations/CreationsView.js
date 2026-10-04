@@ -66,7 +66,7 @@ function updateCreationCard(card, item, markup) {
 	return false;
 }
 
-export function renderCreationsView({ outlet, creationsApi, creationsQuery, pendingCreations, onUnauthorized, setHeaderMenu, onOpenCreation }) {
+export function renderCreationsView({ outlet, creationsProvider, creationsApi, creationsQuery, pendingCreations, onUnauthorized, setHeaderMenu, onOpenCreation }) {
 	const root = mountTemplate(outlet, template);
 	const refs = bindRefs(root);
 	let offset = 0;
@@ -220,7 +220,7 @@ export function renderCreationsView({ outlet, creationsApi, creationsQuery, pend
 			const results = await Promise.all(batches.map((batch) => creationsApi.list({ ids: batch })));
 			const creations = results.flatMap((result) => result.creations || []);
 			if (root.isConnected && creations.length) {
-				persistServerRows(creations);
+				mergeServerRows(creations);
 				const previouslyInFlight = new Set(ids);
 				const completed = creations.filter((item) => previouslyInFlight.has(creationId(item)) && !IN_FLIGHT_STATUSES.has(String(item?.status || '').toLowerCase()));
 				render({ creations, has_more: false }, true);
@@ -242,7 +242,7 @@ export function renderCreationsView({ outlet, creationsApi, creationsQuery, pend
 				const data = await creationsApi.list({ ids: [id] });
 				const item = data.creations?.[0];
 				if (!item) return;
-				persistServerRows([item]);
+				mergeServerRows([item]);
 				const oldCard = refs.grid.querySelector(`.creation-grid__card[data-creation-id="${id}"]`);
 				const oldUrl = oldCard?.querySelector('.feed-card-image')?.dataset.bgUrl;
 				const nextCard = makeCreationCard(item);
@@ -262,9 +262,24 @@ export function renderCreationsView({ outlet, creationsApi, creationsQuery, pend
 		} else syncInFlightPolling();
 	}
 
+	function hydratePromotedPendingRows() {
+		if (!root.isConnected) return;
+		if (typeof creationsProvider?.syncPendingRows !== 'function') return;
+		// A composer submit can navigate here before the first-page creations cache
+		// expires. Resolve promoted placeholders by ID so a stale cached page cannot
+		// hide the newly accepted row until a manual refresh.
+		void creationsProvider.syncPendingRows({ beforePublish: next => { lastQueryData = next; } }).then(rows => {
+			if (!root.isConnected || !rows?.length) return;
+			render({ creations: rows, has_more: false }, true);
+		}).catch(error => {
+			if (error?.status === 401) onUnauthorized?.();
+		});
+	}
+
  function onPendingCreationsUpdated() {
   if (!root.isConnected) return;
   render({ creations: [], has_more: hasMore }, true);
+		hydratePromotedPendingRows();
  }
 
 	async function onCreationDetailMutation(event) {
@@ -274,7 +289,7 @@ export function renderCreationsView({ outlet, creationsApi, creationsQuery, pend
 		try {
 			const data = await creationsApi.list({ ids: [String(id)] });
 			if (root.isConnected && data.creations?.length) {
-				persistServerRows(data.creations);
+				mergeServerRows(data.creations);
 				render({ creations: data.creations, has_more: false }, true);
 			}
 		} catch (error) {
@@ -282,15 +297,8 @@ export function renderCreationsView({ outlet, creationsApi, creationsQuery, pend
 		}
 	}
 
-	function persistServerRows(rows) {
-		const cached = creationsQuery?.data;
-		if (!cached?.creations) return;
-		const updates = new Map(rows.map(item => [creationId(item), item]));
-		const next = { ...cached, creations: cached.creations.map(item => updates.get(creationId(item)) || item) };
-		// Keep the mounted paginated grid intact; these rows are rendered below.
-		lastQueryData = next;
-		const updated = creationsQuery.getSnapshot().updatedAt;
-		creationsQuery.setData(next, { updated });
+	function mergeServerRows(rows) {
+		creationsProvider?.mergeRows?.(rows, { beforePublish: next => { lastQueryData = next; } });
 	}
 
 	function onQueryState(snapshot) {
@@ -356,6 +364,7 @@ export function renderCreationsView({ outlet, creationsApi, creationsQuery, pend
 	updateScrollTopVisibility();
 	sentinelObserver.observe(refs.sentinel);
 	unsubscribe = creationsQuery?.subscribe(onQueryState);
+	hydratePromotedPendingRows();
 	if (creationsQuery) {
 		const cachedInFlight = creationsQuery.data?.creations?.some(item => IN_FLIGHT_STATUSES.has(String(item.status || '').toLowerCase()));
 		void (cachedInFlight ? creationsQuery.refresh() : creationsQuery.loadIfNeeded()).catch(() => undefined);
