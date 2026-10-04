@@ -1405,7 +1405,7 @@ function buildFeedBlogPostCard(item) {
 			: "";
 	const handleForLabel = authorUserName ? `@${authorUserName}` : emailPrefix ? `@${emailPrefix}` : "";
 	const initialSource = authorUserName || emailPrefix || "user";
-	const avatarUrl = typeof item.author_avatar_url === "string" ? item.author_avatar_url.trim() : "";
+	const avatarUrl = avatarMod.normalizeAvatarUrl(item.author_avatar_url);
 	const avatarInitial = initialSource.replace(/^@/, "").trim().charAt(0).toUpperCase() || "?";
 	const authorUserId = item.user_id != null ? Number(item.user_id) : null;
 	const colorSeed = authorUserName || emailPrefix || String(authorUserId || "") || "blog";
@@ -1413,7 +1413,7 @@ function buildFeedBlogPostCard(item) {
 	const relativeTime = formatRelativeTime(item.created_at) || "recently";
 	const profileHref = buildProfilePath({ userName: authorUserName, userId: authorUserId });
 	const isFounder = item.author_plan === "founder";
-	const avatarContent = avatarUrl ? html`<img src="${avatarUrl}" alt="">` : avatarInitial;
+	const avatarContent = avatarUrl ? html`<img data-avatar-src="${avatarUrl}" alt="">` : avatarInitial;
 	const avatarBlock = isFounder
 		? html`
           <div class="avatar-with-founder-flair avatar-with-founder-flair--sm">
@@ -1426,7 +1426,7 @@ function buildFeedBlogPostCard(item) {
         `
 		: html`
           <div class="feed-card-avatar feed-card-blog-avatar-chip" style="--feed-card-avatar-bg: ${avatarColor};" aria-hidden="true">
-            ${avatarUrl ? html`<img class="feed-card-avatar-img" src="${avatarUrl}" alt="">` : avatarInitial}
+	            ${avatarUrl ? html`<img class="feed-card-avatar-img" data-avatar-src="${avatarUrl}" alt="">` : avatarInitial}
           </div>
         `;
 	const safeHandleForHtml = handleForLabel
@@ -1703,7 +1703,7 @@ function buildFeedCreationCard(
 		.toLowerCase()
 		.slice(0, 48) || "user";
 	const displayName = authorDisplayName || authorUserName || emailPrefix || author;
-	const avatarUrl = typeof item.author_avatar_url === "string" ? item.author_avatar_url.trim() : "";
+	const avatarUrl = avatarMod.normalizeAvatarUrl(item.author_avatar_url);
 	const avatarInitial = displayName.trim().charAt(0).toUpperCase() || "?";
 	const authorUserId = item.user_id != null ? Number(item.user_id) : null;
 	const colorSeed = authorUserName || emailPrefix || String(authorUserId || '') || displayName;
@@ -1712,7 +1712,7 @@ function buildFeedCreationCard(
 	const { text: title, untitled: titleUntitled } = creationTitleDisplay(item);
 	const profileHref = buildProfilePath({ userName: authorUserName, userId: authorUserId });
 	const isFounder = item.author_plan === "founder";
-	const avatarContent = avatarUrl ? html`<img src="${avatarUrl}" alt="">` : avatarInitial;
+	const avatarContent = avatarUrl ? html`<img data-avatar-src="${avatarUrl}" alt="">` : avatarInitial;
 	const avatarBlock = isFounder
 		? html`
           <div class="avatar-with-founder-flair avatar-with-founder-flair--md">
@@ -1725,7 +1725,7 @@ function buildFeedCreationCard(
         `
 		: html`
           <div class="feed-card-avatar" style="--feed-card-avatar-bg: ${avatarColor};" aria-hidden="true">
-            ${avatarUrl ? html`<img class="feed-card-avatar-img" src="${avatarUrl}" alt="">` : avatarInitial}
+	            ${avatarUrl ? html`<img class="feed-card-avatar-img" data-avatar-src="${avatarUrl}" alt="">` : avatarInitial}
           </div>
         `;
 

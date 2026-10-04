@@ -916,7 +916,8 @@ function renderPopup(textarea, mode) {
 				// Icon rendered from shared sidebar pseudo-channel set.
 			} else if (item?.icon_url) {
 				const img = document.createElement("img");
-				img.src = item.icon_url;
+				if (item.type === 'user') img.dataset.avatarSrc = item.icon_url;
+				else img.src = item.icon_url;
 				img.alt = "";
 				img.className = "triggered-suggest-item-avatar";
 				let triedAssetThumb = false;

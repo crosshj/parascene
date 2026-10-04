@@ -511,7 +511,7 @@ function renderProfilePage(
 	const about = typeof profile?.about === 'string' ? profile.about.trim() : '';
 	const characterDescription = typeof profile?.character_description === 'string' ? profile.character_description.trim() : '';
 	const socialsHtml = renderProfileSocialsHtml(profile?.socials);
-	const avatarUrl = typeof profile?.avatar_url === 'string' ? profile.avatar_url.trim() : '';
+	const avatarUrl = avatarMod.normalizeAvatarUrl(profile?.avatar_url);
 	const coverUrl = typeof profile?.cover_image_url === 'string' ? profile.cover_image_url.trim() : '';
 	const userNameValue = profile?.user_name && String(profile.user_name).trim() ? String(profile.user_name).trim() : '';
 	const userNameLocked = Boolean(userNameValue);
@@ -525,7 +525,7 @@ function renderProfilePage(
 	const likesReceived = Number(stats?.likes_received ?? 0);
 
 	const avatarContent = avatarUrl
-		? html`<img class="user-profile-avatar-img" src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(displayName)}">`
+		? html`<img class="user-profile-avatar-img" data-avatar-src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(displayName)}">`
 : html`<div class="user-profile-avatar-fallback" style="--user-profile-avatar-bg: ${avatarColor};" aria-hidden="true">${escapeHtml(avatarInitial)}</div>`;
 
 	const avatarBlockHtml = isFounder
@@ -1052,12 +1052,12 @@ function appendCommentsListItems(container, comments) {
 		const id = u?.user_id ?? u?.id;
 		const name = (u?.display_name || u?.user_name || '').trim() || 'User';
 		const handle = u?.user_name ? `@${u.user_name}` : '';
-		const avatarUrl = typeof u?.avatar_url === 'string' ? u.avatar_url.trim() : '';
+		const avatarUrl = avatarMod.normalizeAvatarUrl(u?.avatar_url);
 		const color = getAvatarColor(u?.user_name || u?.user_id || name);
 		const initial = name.charAt(0).toUpperCase() || '?';
 		const href = buildProfilePath({ userName: u?.user_name, userId: id }) || '#';
 		const avatarContent = avatarUrl
-			? html`<img class="user-profile-comment-avatar-img" src="${escapeHtml(avatarUrl)}" alt="">`
+			? html`<img class="user-profile-comment-avatar-img" data-avatar-src="${escapeHtml(avatarUrl)}" alt="">`
 			: html`<span class="user-profile-comment-avatar-fallback" style="--user-profile-avatar-bg: ${color};" aria-hidden="true">${escapeHtml(initial)}</span>`;
 		return html`<a href="${escapeHtml(href)}" class="user-profile-comment-user"><span
 		class="user-profile-comment-avatar">${avatarContent}</span><span class="user-profile-comment-user-info"><span
@@ -1166,12 +1166,12 @@ function renderCommentsList(container, comments, emptyMessage) {
 		const id = u?.user_id ?? u?.id;
 		const name = (u?.display_name || u?.user_name || '').trim() || 'User';
 		const handle = u?.user_name ? `@${u.user_name}` : '';
-		const avatarUrl = typeof u?.avatar_url === 'string' ? u.avatar_url.trim() : '';
+		const avatarUrl = avatarMod.normalizeAvatarUrl(u?.avatar_url);
 		const color = getAvatarColor(u?.user_name || u?.user_id || name);
 		const initial = name.charAt(0).toUpperCase() || '?';
 		const href = buildProfilePath({ userName: u?.user_name, userId: id }) || '#';
 		const avatarContent = avatarUrl
-			? html`<img class="user-profile-comment-avatar-img" src="${escapeHtml(avatarUrl)}" alt="">`
+			? html`<img class="user-profile-comment-avatar-img" data-avatar-src="${escapeHtml(avatarUrl)}" alt="">`
 			: html`<span class="user-profile-comment-avatar-fallback" style="--user-profile-avatar-bg: ${color};" aria-hidden="true">${escapeHtml(initial)}</span>`;
 		return html`
 			<a href="${escapeHtml(href)}" class="user-profile-comment-user">
@@ -1286,7 +1286,7 @@ function renderPersonaLibraryEditModalHtml(personaCatalog, slugDisplayFallback, 
 	const titleRaw = typeof cat.title === 'string' ? cat.title.trim() : '';
 	const descRaw = typeof cat.description === 'string' ? cat.description.trim() : '';
 	const charRaw = typeof cat.character_description === 'string' ? cat.character_description.trim() : '';
-	const avatarUrl = typeof cat.avatar_url === 'string' ? cat.avatar_url.trim() : '';
+	const avatarUrl = avatarMod.normalizeAvatarUrl(cat.avatar_url);
 	const titleValue = titleRaw || (typeof slugDisplayFallback === 'string' ? slugDisplayFallback.trim() : '');
 	const modalHeading = variant === 'promote' ? 'Add to Prompt Library' : 'Edit persona';
 	const primaryLabel = variant === 'promote' ? 'Add to library' : 'Save';
@@ -1463,12 +1463,11 @@ function renderPersonalityDiscoveryPage(
 		const charRaw = personaCatalog?.character_description;
 		const char =
 			charRaw != null && String(charRaw).trim() ? String(charRaw).trim() : '';
-		const avatarUrl =
-			personaCatalog && typeof personaCatalog.avatar_url === 'string' ? personaCatalog.avatar_url.trim() : '';
+		const avatarUrl = avatarMod.normalizeAvatarUrl(personaCatalog?.avatar_url);
 		const avatarInitial = displayTitle.trim().charAt(0).toUpperCase() || '?';
 		const avatarColor = getAvatarColor(safePersonality);
 		const avatarBlockHtml = avatarUrl
-			? html`<img class="user-profile-avatar-img" src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(displayTitle)}">`
+			? html`<img class="user-profile-avatar-img" data-avatar-src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(displayTitle)}">`
 			: html`<div class="user-profile-avatar-fallback" style="--user-profile-avatar-bg: ${avatarColor};" aria-hidden="true">${escapeHtml(avatarInitial)}</div>`;
 
 		const aboutInner =
@@ -2014,7 +2013,7 @@ function wirePersonaLibraryEditModal(container, personality) {
 					const ch = p.character_description;
 					container.dataset.personaLibraryCharacter =
 						ch != null && String(ch).trim() ? String(ch).trim() : '';
-					const av = typeof p.avatar_url === 'string' ? p.avatar_url.trim() : '';
+					const av = avatarMod.normalizeAvatarUrl(p.avatar_url);
 					container.dataset.personaLibraryAvatarUrl = av;
 				}
 				if (descEl) {
@@ -2057,14 +2056,14 @@ function wirePersonaLibraryEditModal(container, personality) {
 }
 
 function applyPersonaHeroAvatarFromResponse(container, tag, persona) {
-	const au = persona && typeof persona.avatar_url === 'string' ? persona.avatar_url.trim() : '';
+	const au = avatarMod.normalizeAvatarUrl(persona?.avatar_url);
 	container.dataset.personaLibraryAvatarUrl = au;
 	const nameEl = container.querySelector('.user-profile-name');
 	const avSlot = container.querySelector('.user-profile-hero .user-profile-avatar');
 	if (!avSlot) return;
 	const disp = (nameEl?.textContent || container.dataset.personaLibraryTitle || '').trim() || '?';
 	if (au) {
-		avSlot.innerHTML = `<img class="user-profile-avatar-img" src="${escapeHtml(au)}" alt="${escapeHtml(disp)}">`;
+		avSlot.innerHTML = `<img class="user-profile-avatar-img" data-avatar-src="${escapeHtml(au)}" alt="${escapeHtml(disp)}">`;
 	} else {
 		const initial = disp.charAt(0).toUpperCase() || '?';
 		const avatarColor = getAvatarColor(tag);

@@ -1,4 +1,5 @@
 import { avatarMarkup } from '../../components/Avatar/Avatar.js';
+import { normalizeAvatarUrl } from '../../shared/avatar.js';
 import { iconMarkup } from '../../components/Icon/Icon.js';
 import { createPopupMenu } from '../../components/PopupMenu/PopupMenu.js';
 import { bindRefs, escapeHtml, htmlFragment, mountTemplate } from '../../utils/dom.js';
@@ -81,7 +82,11 @@ function patchRosterRow(current, next) {
 		const liveImage = liveAvatar.querySelector('img');
 		const nextImage = nextAvatar.querySelector('img');
 		if (nextImage && liveImage) {
-			if (liveImage.getAttribute('src') !== nextImage.getAttribute('src')) liveImage.setAttribute('src', nextImage.getAttribute('src'));
+			const nextSource = nextImage.getAttribute('data-avatar-src');
+			if (nextSource && liveImage.getAttribute('data-avatar-src') !== nextSource) {
+				liveImage.removeAttribute('src');
+				liveImage.setAttribute('data-avatar-src', nextSource);
+			}
 		} else if (nextImage || liveImage) liveAvatar.replaceChildren(...[...nextAvatar.childNodes].map((node) => node.cloneNode(true)));
 		else if (liveAvatar.innerHTML !== nextAvatar.innerHTML) liveAvatar.replaceChildren(...[...nextAvatar.childNodes].map(node => node.cloneNode(true)));
 	}
@@ -431,7 +436,7 @@ function mountSidebarPresentation({ outlet, model = {}, onAction }) {
 		updateAccount(user) {
 			const profile = user?.profile || {};
 			const label = profile.display_name || profile.user_name || user?.email || 'Signed in';
-			const avatarUrl = profile.avatar_url || '';
+			const avatarUrl = normalizeAvatarUrl(profile.avatar_url);
 			refs.account.textContent = label;
 			refs.avatar.setAttribute('aria-label', label);
 			refs.avatar.classList.toggle('is-founder', user?.plan === 'founder' || user?.meta?.plan === 'founder');
@@ -442,8 +447,13 @@ function mountSidebarPresentation({ outlet, model = {}, onAction }) {
 			// Session/profile refreshes can arrive while the sidebar is mounted. Avoid
 			// reassigning an unchanged src: browsers may restart/repaint the image even
 			// when the response is already in the HTTP cache.
-			if (!avatarUrl) refs.avatarImage.removeAttribute('src');
-			else if (refs.avatarImage.getAttribute('src') !== avatarUrl) refs.avatarImage.src = avatarUrl;
+			if (!avatarUrl) {
+				refs.avatarImage.removeAttribute('data-avatar-src');
+				refs.avatarImage.removeAttribute('src');
+				delete refs.avatarImage.dataset.avatarResolved;
+			} else if (refs.avatarImage.dataset.avatarSrc !== avatarUrl) {
+				refs.avatarImage.dataset.avatarSrc = avatarUrl;
+			}
 		},
 		destroy() {
 			if (resizeFrame) cancelAnimationFrame(resizeFrame);

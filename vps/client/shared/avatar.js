@@ -17,6 +17,12 @@ const AVATAR_COLORS = [
 	'#0ea5e9'
 ];
 
+export function normalizeAvatarUrl(value) {
+	const url = typeof value === 'string' ? value.trim() : '';
+	if (!url || /^(?:null|undefined|false)$/i.test(url) || /^\/(?:null|undefined)$/i.test(url)) return '';
+	return url;
+}
+
 function hashString(input) {
 	const str = String(input ?? '');
 	let hash = 5381;

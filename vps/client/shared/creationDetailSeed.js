@@ -4,6 +4,7 @@
  */
 
 import { groupActionSupportedWhenKnown } from './creationGroupMedia.js';
+import { normalizeAvatarUrl } from './avatar.js';
 import {
 	audioCoverWaveformHtml,
 	creationNeedsAudioWaveformCover,
@@ -593,7 +594,7 @@ export function creationDetailSeedFromClick(ev, creationId) {
 		? card.querySelector('.connect-comment-creator .comment-avatar-img, .connect-comment-creator img, .feed-card-avatar-img, .founder-flair-avatar-inner img, .creation-detail-author-avatar')
 		: null;
 	const avatarUrl =
-		avatarImg instanceof HTMLImageElement ? String(avatarImg.currentSrc || avatarImg.src || '').trim() : '';
+		avatarImg instanceof HTMLImageElement ? String(avatarImg.dataset.avatarSrc || avatarImg.currentSrc || avatarImg.src || '').trim() : '';
 	const publishedAttr = card instanceof Element ? card.dataset.published : undefined;
 	const published =
 		publishedAttr === '1' ? true : publishedAttr === '0' ? false : null;
@@ -1046,7 +1047,7 @@ function seedShowComments(seed) {
 }
 
 function seedViewerComposerReady(seed) {
-	const avatar = typeof seed?.viewer_avatar_url === 'string' ? seed.viewer_avatar_url.trim() : '';
+	const avatar = normalizeAvatarUrl(seed?.viewer_avatar_url);
 	const name = pickSeedString(seed?.viewer_display_name, seed?.viewer_user_name);
 	return Boolean(avatar || name);
 }
@@ -1063,14 +1064,14 @@ function seedCommentComposerHtml(seed) {
 				</div>
 			</div>`;
 	}
-	const avatarUrl = typeof seed.viewer_avatar_url === 'string' ? seed.viewer_avatar_url.trim() : '';
+	const avatarUrl = normalizeAvatarUrl(seed.viewer_avatar_url);
 	const display = pickSeedString(seed.viewer_display_name, seed.viewer_user_name);
 	const initial = (display || '?').charAt(0).toUpperCase();
 	const founder = seed.viewer_plan === 'founder';
 	const plusSvg = '<svg class="comment-input-attach-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>';
 	const sendSvg = '<svg class="comment-send-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3.4 20.6 21 12 3.4 3.4 3 10l11 2L3 14l.4 6.6Z"></path></svg>';
 	const avatarInner = avatarUrl
-		? `<img class="comment-avatar-img" src="${esc(avatarUrl)}" alt="">`
+		? `<img class="comment-avatar-img" data-avatar-src="${esc(avatarUrl)}" alt="">`
 		: esc(initial);
 	const avatarHtml = founder
 		? `<div class="avatar-with-founder-flair avatar-with-founder-flair--sm">
@@ -1259,8 +1260,7 @@ export function creationDetailChromeHtmlFromSeed(seed) {
 	const display =
 		(typeof seed.author_display_name === 'string' && seed.author_display_name.trim()) ||
 		handle;
-	const avatarUrl =
-		typeof seed.author_avatar_url === 'string' ? seed.author_avatar_url.trim() : '';
+	const avatarUrl = normalizeAvatarUrl(seed.author_avatar_url);
 	const userId = numId(seed.user_id);
 	const likes = Number(seed.like_count) || 0;
 	const liked = Boolean(seed.viewer_liked);
@@ -1269,7 +1269,7 @@ export function creationDetailChromeHtmlFromSeed(seed) {
 	const profileHref = handle ? `/p/${encodeURIComponent(handle)}` : userId ? `/user/${userId}` : '';
 	const initial = (display || handle || '?').charAt(0).toUpperCase();
 	const avatarInner = avatarUrl
-		? `<img class="creation-detail-author-avatar" src="${esc(avatarUrl)}" alt="">`
+		? `<img class="creation-detail-author-avatar" data-avatar-src="${esc(avatarUrl)}" alt="">`
 		: esc(initial);
 	const avatarHtml = founder
 		? `<div class="avatar-with-founder-flair avatar-with-founder-flair--sm"><div class="founder-flair-avatar-ring"><div class="founder-flair-avatar-inner" style="background: ${avatarUrl ? 'var(--surface-strong)' : 'var(--surface)'};">${avatarInner}</div></div></div>`

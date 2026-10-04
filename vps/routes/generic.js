@@ -146,6 +146,10 @@ export function createGenericRoutes(genericFiles, users) {
 		const key = String(req.params.key || "");
 		if (!key || key.includes("..") || key.startsWith("/") || key.includes("\\")) return res.status(400).json({ error: "Invalid key" });
 		const publicRead = key.startsWith("profile/") || key.startsWith("edited/");
+		// Processed profile avatars have unique timestamp/random storage keys, so
+		// changing an avatar always produces a new URL. Let each client keep those
+		// exact bytes for a year; mutable/legacy profile assets retain the shorter TTL.
+		const immutableProfileAvatar = /^profile\/\d+\/avatar_[a-z0-9_-]+\.webp$/i.test(key);
 		if (!publicRead && !req.auth?.userId) return res.status(401).json({ error: "Unauthorized" });
 		const controller = new AbortController();
 		res.on("close", () => { if (!res.writableEnded) controller.abort(); });
@@ -156,11 +160,14 @@ export function createGenericRoutes(genericFiles, users) {
 			res.status(upstream.status);
 			setResponseHeaders(res, upstream, key, type);
 			if (publicRead) {
-				// Profile and edited images are shareable site assets. Keep the browser
-				// copy for a day and let Cloudflare retain it for a week while allowing
-				// a stale response during background revalidation.
-				res.set("Cache-Control", "public, max-age=86400, stale-while-revalidate=86400");
-				res.set("Cloudflare-CDN-Cache-Control", "public, max-age=604800, stale-while-revalidate=86400");
+				if (immutableProfileAvatar) {
+					res.set("Cache-Control", "public, max-age=31536000, immutable");
+					res.set("Cloudflare-CDN-Cache-Control", "public, max-age=31536000, immutable");
+				} else {
+					// Other profile and edited images may use older mutable URLs.
+					res.set("Cache-Control", "public, max-age=86400, stale-while-revalidate=86400");
+					res.set("Cloudflare-CDN-Cache-Control", "public, max-age=604800, stale-while-revalidate=86400");
+				}
 			} else {
 				res.set("Cache-Control", "private, no-store");
 			}

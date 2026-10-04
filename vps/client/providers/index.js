@@ -4,6 +4,7 @@ import { createThreadsProvider } from './threads/index.js';
 import { createCreationsProvider } from './creations/index.js';
 import { createFilesProvider } from './files/index.js';
 import { createCreditsProvider } from './credits/index.js';
+import { createAvatarsProvider } from './avatars/index.js';
 
 export function createAppProviders({ bootstrap = {} } = {}) {
 	const viewerId = Number(bootstrap.user?.id) || null;
@@ -15,6 +16,7 @@ export function createAppProviders({ bootstrap = {} } = {}) {
 		creations,
 		files: createFilesProvider({ viewerId, registry, origin: bootstrap.filesOrigin || '' }),
 		credits: createCreditsProvider({ viewerId, registry }),
+		avatars: createAvatarsProvider(),
 	};
 
 	return {

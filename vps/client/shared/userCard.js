@@ -2,7 +2,7 @@
  * Shared user list row HTML. Used by user-profile (follows/following lists).
  */
 
-import {getAvatarColor} from './avatar.js';
+import {getAvatarColor, normalizeAvatarUrl} from './avatar.js';
 import {buildProfilePath} from './profileLinks.js';
 
 const html = String.raw;
@@ -34,13 +34,13 @@ export function buildUserListRowHtml(user, options = {}) {
 	const id = user?.user_id ?? user?.id;
 	const name = (user?.display_name || user?.user_name || '').trim() || 'User';
 	const handle = user?.user_name ? `@${user.user_name}` : '';
-	const avatarUrl = typeof user?.avatar_url === 'string' ? user.avatar_url.trim() : '';
+	const avatarUrl = normalizeAvatarUrl(user?.avatar_url);
 	const color = getAvatarColor(user?.user_name || user?.user_id || name);
 	const initial = name.charAt(0).toUpperCase() || '?';
 	const href = buildProfilePath({ userName: user?.user_name, userId: id }) || '#';
 
 	const avatarContent = avatarUrl
-		? html`<img class="user-profile-list-avatar-img" src="${escapeHtml(avatarUrl)}" alt="">`
+		? html`<img class="user-profile-list-avatar-img" data-avatar-src="${escapeHtml(avatarUrl)}" alt="">`
 		: html`<div class="user-profile-list-avatar-fallback" style="--user-profile-avatar-bg: ${color};" aria-hidden="true">${escapeHtml(initial)}</div>`;
 
 	const viewerFollows = (uid) => viewerFollowsByUserId instanceof Set

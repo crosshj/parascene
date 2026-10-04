@@ -592,8 +592,11 @@ function patchCreationDetailStripChild(sticky, next) {
 		const nextImg = next.querySelector('img');
 		const stickyImg = sticky.querySelector('img');
 		if (nextImg instanceof HTMLImageElement && stickyImg instanceof HTMLImageElement) {
-			const src = nextImg.getAttribute('src');
-			if (src && stickyImg.getAttribute('src') !== src) stickyImg.setAttribute('src', src);
+			const source = nextImg.getAttribute('data-avatar-src');
+			if (source && stickyImg.getAttribute('data-avatar-src') !== source) {
+				stickyImg.removeAttribute('src');
+				stickyImg.setAttribute('data-avatar-src', source);
+			}
 		} else if (nextImg instanceof HTMLImageElement && !stickyImg) {
 			sticky.replaceChildren(...next.childNodes);
 		}
@@ -5424,7 +5427,7 @@ async function loadCreation() {
 			? `@${creatorUserName}`
 			: (creation.creator?.email ? `@${creatorEmailPrefix}` : '@user');
 		const creatorInitial = creatorName.charAt(0).toUpperCase();
-		const creatorAvatarUrl = typeof creation?.creator?.avatar_url === 'string' ? creation.creator.avatar_url.trim() : '';
+		const creatorAvatarUrl = avatarMod.normalizeAvatarUrl(creation?.creator?.avatar_url);
 		const creatorId = Number(creation?.creator?.id ?? creation?.user_id ?? 0);
 		const creatorColor = getAvatarColor(creatorUserName || creatorEmailPrefix || String(creatorId || '') || creatorName);
 		const creatorProfileHref = buildProfilePath({ userName: creatorUserName, userId: creatorId });
@@ -5469,11 +5472,11 @@ async function loadCreation() {
 			: 'You';
 		const viewerName = viewerDisplayName || viewerUserName || viewerEmailPrefix || 'You';
 		const viewerInitial = viewerName.charAt(0).toUpperCase();
-		const viewerAvatarUrl = typeof currentUserProfile?.avatar_url === 'string' ? currentUserProfile.avatar_url.trim() : '';
+		const viewerAvatarUrl = avatarMod.normalizeAvatarUrl(currentUserProfile?.avatar_url);
 		const viewerColor = getAvatarColor(viewerUserName || viewerEmailPrefix || String(currentUserId || '') || viewerName);
 		const viewerPlan = currentUser?.plan === 'founder';
 
-		const creatorAvatarContent = creatorAvatarUrl ? html`<img class="creation-detail-author-avatar" src="${creatorAvatarUrl}" alt="">` : creatorInitial;
+		const creatorAvatarContent = creatorAvatarUrl ? html`<img class="creation-detail-author-avatar" data-avatar-src="${creatorAvatarUrl}" alt="">` : creatorInitial;
 		const authorAvatar = creatorPlan ? html`
 			<div class="avatar-with-founder-flair avatar-with-founder-flair--sm">
 				<div class="founder-flair-avatar-ring">
@@ -6266,13 +6269,13 @@ async function loadCreation() {
 				? `@${creatorUserName}`
 				: (cr?.email ? `@${creatorEmailPrefix}` : '');
 			const creatorInitial = creatorName.charAt(0).toUpperCase();
-			const creatorAvatarUrl = typeof cr?.avatar_url === 'string' ? cr.avatar_url.trim() : '';
+			const creatorAvatarUrl = avatarMod.normalizeAvatarUrl(cr?.avatar_url);
 			const creatorId = Number(cr?.id ?? c.user_id ?? 0);
 			const creatorColor = getAvatarColor(creatorUserName || creatorEmailPrefix || String(creatorId || '') || creatorName);
 			const creatorProfileHref = buildProfilePath({ userName: creatorUserName, userId: creatorId });
 			const creatorPlan = cr?.plan === 'founder';
 			const avatarInner = creatorAvatarUrl
-				? `<img class="creation-detail-author-avatar" src="${escapeHtml(creatorAvatarUrl)}" alt="">`
+				? `<img class="creation-detail-author-avatar" data-avatar-src="${escapeHtml(creatorAvatarUrl)}" alt="">`
 				: escapeHtml(creatorInitial);
 			const avatarSlot = creatorPlan
 				? `<div class="avatar-with-founder-flair avatar-with-founder-flair--sm"><div class="founder-flair-avatar-ring"><div class="founder-flair-avatar-inner" style="background: ${escapeHtml(creatorColor)};" aria-hidden="true">${avatarInner}</div></div></div>`

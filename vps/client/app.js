@@ -201,6 +201,8 @@ const routeDefinitions = [
 const bootstrap = window.__PARASCENE_BOOTSTRAP__ || {};
 const state = createApplicationState({ bootstrap });
 const providers = createAppProviders({ bootstrap });
+// Avatar-bearing dialogs and overlays can be mounted beside the app shell.
+providers.avatars.start(document.documentElement);
 const session = createSession({
 	initialUser: bootstrap.user,
 	onChange: (user) => state.actions.sessionChanged({ status: 'ready', user }),

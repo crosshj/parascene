@@ -19,12 +19,12 @@ import * as userTextMod from './userText.js';
 import * as autogrowMod from './autogrow.js';
 import * as suggestMod from './triggeredSuggest.js';
 import * as profileLinksMod from './profileLinks.js';
+import * as avatarMod from './avatar.js';
 import * as iconsMod from '../icons/svg-strings.js';
 import * as replyPreviewMod from './plainTextReplyPreview.js';
 import * as emptyStateMod from './emptyState.js';
 import * as commentItemMod from './commentItem.js';
 import * as createSubmitMod from '../providers/create/transport.js';
-import * as avatarMod from './avatar.js';
 import * as tooltipTapMod from './reactionTooltipTap.js';
 
 const commentsThreadDeps = Object.freeze({
@@ -199,7 +199,7 @@ export async function mountCreationCommentsThread(container, options) {
 	const currentUserId = Number(viewerRaw.id);
 	const viewerUserName = typeof viewerRaw.userName === 'string' ? viewerRaw.userName.trim() : '';
 	const viewerDisplayName = typeof viewerRaw.displayName === 'string' ? viewerRaw.displayName.trim() : '';
-	const viewerAvatarUrl = typeof viewerRaw.avatarUrl === 'string' ? viewerRaw.avatarUrl.trim() : '';
+	const viewerAvatarUrl = avatarMod.normalizeAvatarUrl(viewerRaw.avatarUrl);
 	const viewerPlan = viewerRaw.plan === 'founder';
 	const viewerName = viewerDisplayName || viewerUserName || 'You';
 	const viewerInitial = typeof viewerRaw.initial === 'string' && viewerRaw.initial
@@ -266,11 +266,11 @@ export async function mountCreationCommentsThread(container, options) {
 						? `<div class="avatar-with-founder-flair avatar-with-founder-flair--sm">
 							<div class="founder-flair-avatar-ring">
 								<div class="founder-flair-avatar-inner" data-founder-flair-avatar-bg aria-hidden="true">
-									${viewerAvatarUrl ? `<img class="comment-avatar-img" src="${escapeHtml(viewerAvatarUrl)}" alt="">` : escapeHtml(viewerInitial)}
+									${viewerAvatarUrl ? `<img class="comment-avatar-img" data-avatar-src="${escapeHtml(viewerAvatarUrl)}" alt="">` : escapeHtml(viewerInitial)}
 								</div>
 							</div>
 						</div>`
-						: (viewerAvatarUrl ? `<img class="comment-avatar-img" src="${escapeHtml(viewerAvatarUrl)}" alt="">` : escapeHtml(viewerInitial))}
+						: (viewerAvatarUrl ? `<img class="comment-avatar-img" data-avatar-src="${escapeHtml(viewerAvatarUrl)}" alt="">` : escapeHtml(viewerInitial))}
 				</div>
 				<div class="comment-input-body">
 					<div class="comment-composer-row">
@@ -673,12 +673,12 @@ export async function mountCreationCommentsThread(container, options) {
 						? `<div class="avatar-with-founder-flair avatar-with-founder-flair--sm">
 							<div class="founder-flair-avatar-ring">
 								<div class="founder-flair-avatar-inner" data-founder-flair-avatar-bg aria-hidden="true">
-									${viewerAvatarUrl ? `<img class="comment-avatar-img" src="${escapeHtml(viewerAvatarUrl)}" alt="">` : `${escapeHtml(viewerInitial)}`}
+									${viewerAvatarUrl ? `<img class="comment-avatar-img" data-avatar-src="${escapeHtml(viewerAvatarUrl)}" alt="">` : `${escapeHtml(viewerInitial)}`}
 								</div>
 							</div>
 						</div>`
 						: viewerAvatarUrl
-							? `<img class="comment-avatar-img" src="${escapeHtml(viewerAvatarUrl)}" alt="">`
+							? `<img class="comment-avatar-img" data-avatar-src="${escapeHtml(viewerAvatarUrl)}" alt="">`
 							: `${escapeHtml(viewerInitial)}`
 				}</div>`
 			: '';
@@ -700,7 +700,7 @@ export async function mountCreationCommentsThread(container, options) {
 				const fallbackName = userName ? userName : 'User';
 				const name = displayName || fallbackName;
 				const handle = userName ? `@${userName}` : '';
-				const avatarUrl = typeof t?.avatar_url === 'string' ? t.avatar_url.trim() : '';
+				const avatarUrl = avatarMod.normalizeAvatarUrl(t?.avatar_url);
 				const tipperId = Number(t?.user_id ?? 0);
 				const profileHref = buildProfilePath({ userName, userId: tipperId });
 				const seed = userName || String(t?.user_id ?? '') || name;
@@ -764,7 +764,7 @@ export async function mountCreationCommentsThread(container, options) {
 			const fallbackName = userName ? userName : 'User';
 			const name = displayName || fallbackName;
 			const handle = userName ? `@${userName}` : '';
-			const avatarUrl = typeof c?.avatar_url === 'string' ? c.avatar_url.trim() : '';
+				const avatarUrl = avatarMod.normalizeAvatarUrl(c?.avatar_url);
 			const commenterId = Number(c?.user_id ?? 0);
 			const profileHref = buildProfilePath({ userName, userId: commenterId });
 			const seed = userName || String(c?.user_id ?? '') || name;
