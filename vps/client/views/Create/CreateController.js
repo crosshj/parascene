@@ -60,6 +60,11 @@ export function createCreateController({ root, creationId, markup, providers, ac
   disposeTriggeredSuggestFields(root);
   root.querySelectorAll('[data-image-picker-modal], [data-audio-clip-picker-modal], [data-import-suno-modal]').forEach(modal => modal.__disposeCreate?.());
  }
+ function shouldUseBasicEditor() {
+  const prefersBasic = /(?:^|;\s*)create_editor=simple(?:;|$)/i.test(document.cookie);
+  const outputMode = providers.create.draft.read().outputMode || 'image';
+  return prefersBasic && outputMode === 'image';
+ }
  function mountMode() {
   const mountGeneration = ++generation;
   disposeDomWork();
@@ -74,7 +79,7 @@ export function createCreateController({ root, creationId, markup, providers, ac
    unmount = mutate.destroy;
    return mutate.ready;
   }
-  const basic = /(?:^|;\s*)create_editor=simple(?:;|$)/i.test(document.cookie);
+  const basic = shouldUseBasicEditor();
   currentMode = basic;
   root.classList.toggle('create-page', basic);
   root.classList.toggle('create-page-advanced', !basic);
@@ -98,7 +103,7 @@ export function createCreateController({ root, creationId, markup, providers, ac
   update() {
    if (!alive) return;
    if (workflow.consumeEditorTransition(workflowHref())) handingOff = false;
-   const basic = /(?:^|;\s*)create_editor=simple(?:;|$)/i.test(document.cookie);
+   const basic = shouldUseBasicEditor();
    const nextSourceKey = readMutateSourceKey();
    if (creationId ? nextSourceKey === mutateSourceKey : basic === currentMode) return;
    mutateSourceKey = nextSourceKey;

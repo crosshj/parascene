@@ -16,6 +16,26 @@ export function createMessageComposerElement() {
 	return form;
 }
 
+function clipboardImageFiles(clipboardData) {
+	const files = [];
+	const seen = new Set();
+	for (const item of Array.from(clipboardData?.items || [])) {
+		if (item?.kind !== 'file' || !String(item.type || '').startsWith('image/')) continue;
+		const file = item.getAsFile?.();
+		if (file && !seen.has(file)) {
+			seen.add(file);
+			files.push(file);
+		}
+	}
+	for (const file of Array.from(clipboardData?.files || [])) {
+		if (file?.type?.startsWith('image/') && !seen.has(file)) {
+			seen.add(file);
+			files.push(file);
+		}
+	}
+	return files;
+}
+
 // Shared shell composer binding. Controllers supply send intent and own its lifetime.
 export function bindMessageComposer({ form, onSend, onReplyChange }) {
 	const input = form.querySelector('textarea');
@@ -196,6 +216,13 @@ export function bindMessageComposer({ form, onSend, onReplyChange }) {
 		if (event.key === 'Escape' && reply) { event.preventDefault(); clearReply(); return; }
 		if (event.key === 'Enter' && !event.shiftKey && !event.isComposing && matchMedia('(hover: hover) and (pointer: fine)').matches) submit(event);
 	}
+	function paste(event) {
+		if (!ready || submitting) return;
+		const files = clipboardImageFiles(event.clipboardData);
+		if (!files.length) return;
+		event.preventDefault();
+		addFiles(files);
+	}
 	function onPickFiles() {
 		if (!ready || submitting) return;
 		openImagePickerModal({
@@ -213,6 +240,7 @@ export function bindMessageComposer({ form, onSend, onReplyChange }) {
 	attachmentButton.addEventListener('click', onPickFiles);
 	input.addEventListener('input', sync);
 	input.addEventListener('keydown', keydown);
+	input.addEventListener('paste', paste);
 	form.addEventListener('submit', submit);
 	input.maxLength = MAX_BODY_CHARS;
 	sync();
@@ -231,6 +259,7 @@ export function bindMessageComposer({ form, onSend, onReplyChange }) {
 			attachmentButton.removeEventListener('click', onPickFiles);
 			input.removeEventListener('input', sync);
 			input.removeEventListener('keydown', keydown);
+			input.removeEventListener('paste', paste);
 			form.removeEventListener('submit', submit);
 			for (const item of attachments.values()) if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
 			attachments.clear();

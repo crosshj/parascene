@@ -49,9 +49,10 @@ function postToParentOverlay(payload) {
 export function setCreateEditorMode(mode) {
 	if (mode === 'basic') {
 		document.cookie = `${CREATE_EDITOR_COOKIE}=simple; path=/; max-age=31536000`;
-		return;
+	} else {
+		document.cookie = `${CREATE_EDITOR_COOKIE}=; path=/; max-age=0`;
 	}
-	document.cookie = `${CREATE_EDITOR_COOKIE}=; path=/; max-age=0`;
+	document.dispatchEvent(new CustomEvent('create-editor-mode-change', { detail: { mode } }));
 }
 
 /**

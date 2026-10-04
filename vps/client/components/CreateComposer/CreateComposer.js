@@ -2005,9 +2005,24 @@ export function mountCreateComposer(host, opts = {}) {
 		}
 		syncAspectFooterState();
 		syncAudioToolbarChrome();
+		syncEditorLink();
 		updateSubmitButtonState();
 		syncComposerAccentFlow();
 		updateComposerCostDisplay();
+	}
+
+	function composerEditorTarget() {
+		const basicPreferred = /(?:^|;\s*)create_editor=simple(?:;|$)/i.test(document.cookie);
+		return outputMode === 'image' && basicPreferred ? 'basic' : 'advanced';
+	}
+
+	function syncEditorLink() {
+		if (!(advancedLink instanceof HTMLAnchorElement)) return;
+		const target = composerEditorTarget();
+		const label = target === 'basic' ? 'Basic' : 'Advanced';
+		const text = advancedLink.querySelector('span');
+		if (text) text.textContent = label;
+		advancedLink.setAttribute('aria-label', `Open ${label.toLowerCase()} create form`);
 	}
 
 	function savePrompt() {
@@ -3320,6 +3335,7 @@ export function mountCreateComposer(host, opts = {}) {
 		const onAdvanced = async (e) => {
 			e.preventDefault();
 			if (attachmentUploadingCount > 0) return;
+			const editorTarget = composerEditorTarget();
 			savePrompt();
 			saveAspectRatio(selectedAspect);
 			const attachments = saveAttachmentsToStorage();
@@ -3342,8 +3358,10 @@ export function mountCreateComposer(host, opts = {}) {
 					imageChange: { type: 'replace', images: attachments.urls },
 					imageSources,
 				});
-				createProvider?.workflow?.prepareEditorTransition('advanced');
-				setCreateEditorMode('advanced');
+				createProvider?.workflow?.prepareEditorTransition(editorTarget);
+				// Keep the image editor preference across audio/video handoffs. Those
+				// modes always open Advanced; the saved preference applies to images.
+				if (outputMode === 'image') setCreateEditorMode(editorTarget);
 				window.dispatchEvent(new CustomEvent('prsn:navigate', { detail: { href: '/create', event: e } }));
 			} catch {
 				window.location.assign('/create');
@@ -3352,6 +3370,9 @@ export function mountCreateComposer(host, opts = {}) {
 		advancedLink.addEventListener('click', onAdvanced);
 		teardownFns.push(() => advancedLink.removeEventListener('click', onAdvanced));
 	}
+	const onCreateEditorModeChange = () => syncEditorLink();
+	document.addEventListener('create-editor-mode-change', onCreateEditorModeChange);
+	teardownFns.push(() => document.removeEventListener('create-editor-mode-change', onCreateEditorModeChange));
 
 	if (modelBtn instanceof HTMLButtonElement) {
 		const onModelClick = (e) => {

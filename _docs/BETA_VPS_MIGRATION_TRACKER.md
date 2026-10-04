@@ -32,6 +32,8 @@ Current outstanding migration scope. Update this checklist as items are verified
 - [ ] Inventory external integrations and callbacks: storage/CDN, generation providers, billing, email, OAuth, and webhooks
 - [ ] Migrate the full admin surface and its permissions; refactor into VPS-owned modules where useful without dropping existing actions
 
+Likely future direction for rich links: have the client ask the server for a preview card. The server should return a translated card when it recognizes the URL, or an explicit result explaining that it could not translate the request. This keeps provider-specific URL interpretation out of individual client renderers.
+
 ## Conversation follow-up
 
 - [ ] Private channel creation and invitations
