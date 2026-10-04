@@ -5,6 +5,7 @@ import express from "express";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
+import { createFaviconRoutes } from "./routes/favicon.js";
 import { createAuthRoutes } from "./routes/auth.js";
 import { createCdnRoutes } from "./routes/cdn.js";
 import { createGenericRoutes } from "./routes/generic.js";
@@ -39,6 +40,7 @@ app.use("/api/auth", express.json({ limit: "1mb" }));
 app.use("/api", express.json({ limit: "1mb" }));
 app.use("/api/notifications", express.urlencoded({ extended: false }));
 app.use(cookieParser());
+app.use(createFaviconRoutes({ publicDir: path.join(__dirname, "public") }));
 app.use(createAuthMiddleware(db.sessions, db.users));
 // The beta application also serves the public profile/edited-image compatibility
 // path. The CDN host serves the same VPS-owned route through createCdnRoutes.
