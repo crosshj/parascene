@@ -20,6 +20,7 @@ These are the two major end-user surfaces still to port. Smaller follow-ups and 
 
 - [ ] Serve the pricing view inside the app.
 - [ ] Finish the sidebar plus controls and gear/settings control.
+- [ ] Investigate and fix publishing issues on the VPS beta.
 
 ## Public pages and discoverability
 
