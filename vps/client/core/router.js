@@ -35,7 +35,8 @@ export function createRouter({ routes, state, layout } = {}) {
 		};
 	}
 
-	function backgroundForOverlay(route, { fromHistory = false } = {}) {
+	function backgroundForOverlay(route, { fromHistory = false, initial = false } = {}) {
+		if (initial && route.restoreBackgroundOnLoad === false) return route.defaultBackground;
 		const stored = typeof history.state?.[BACKGROUND_KEY] === 'string' ? history.state[BACKGROUND_KEY] : null;
 		if (stored) return stored;
 		if (!fromHistory && currentComposition) {
@@ -44,13 +45,13 @@ export function createRouter({ routes, state, layout } = {}) {
 		return route.defaultBackground;
 	}
 
-	async function reconcile({ fromHistory = false } = {}) {
+	async function reconcile({ fromHistory = false, initial = false } = {}) {
 		const url = currentUrl();
 		const route = routes.match(url);
 		const backgroundUrl = route.presentation === 'overlay'
-			? backgroundForOverlay(route, { fromHistory })
+			? backgroundForOverlay(route, { fromHistory, initial })
 			: url;
-		if (route.presentation === 'overlay' && typeof history.state?.[BACKGROUND_KEY] !== 'string') {
+		if (route.presentation === 'overlay' && history.state?.[BACKGROUND_KEY] !== backgroundUrl) {
 			history.replaceState(historyStateFor(url, backgroundUrl), '', url);
 		}
 		const seed = route.params.creationId ? creationSeeds.get(route.params.creationId) || null : null;
@@ -75,7 +76,7 @@ export function createRouter({ routes, state, layout } = {}) {
 				: currentComposition?.url || route.defaultBackground;
 		}
 		const currentRoute = currentComposition ? routes.match(currentComposition.url) : null;
-		const previousCreationUrl = route.presentation === 'overlay' && route.params.creationId
+		const previousCreationUrl = Object.hasOwn(options, 'previousCreationUrl') ? options.previousCreationUrl : route.presentation === 'overlay' && route.params.creationId
 			? options.replace
 				? history.state?.[PREVIOUS_CREATION_KEY]
 				: currentRoute?.presentation === 'overlay' && currentRoute.params.creationId
@@ -107,6 +108,18 @@ export function createRouter({ routes, state, layout } = {}) {
 
 	async function dismissOverlay() {
 		if (!currentComposition?.overlay) return;
+		const route = routes.match(currentComposition.url);
+		const previousUrl = history.state?.[PREVIOUS_CREATION_KEY];
+		if (route.dismissToPreviousOverlay && typeof previousUrl === 'string') {
+			try {
+				const previousRoute = routes.match(pathFor(previousUrl));
+				if (previousRoute.presentation === 'overlay' && !previousRoute.dismissToPreviousOverlay && previousRoute.params.creationId) {
+					return navigate(previousUrl, { replace: true, previousCreationUrl: null });
+				}
+			} catch {
+				// Invalid return metadata: use the normal background dismissal.
+			}
+		}
 		const target = currentComposition.backgroundUrl || '/creations';
 		history.replaceState(historyStateFor(target), '', target);
 		return reconcile();
@@ -157,7 +170,7 @@ export function createRouter({ routes, state, layout } = {}) {
 			document.addEventListener('parascene:dismiss-overlay', onDismissOverlayRequest);
 			document.addEventListener('parascene:lightbox-history', onLightboxHistoryRequest);
 			window.addEventListener('popstate', onPopState);
-			await reconcile({ fromHistory: true });
+			await reconcile({ fromHistory: true, initial: true });
 		},
 		navigate,
 		dismissOverlay,

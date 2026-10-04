@@ -36,7 +36,7 @@ export function createAppRoutes({ definitions = [] } = {}) {
 		for (const definition of definitions) {
 			const params = matchPattern(definition.path, pathname);
 			if (!params) continue;
-			if (definition.path === '/creations/:creationId' || definition.path === '/feed/doom/:creationId') {
+			if (Object.hasOwn(params, 'creationId')) {
 				const creationId = Number(params.creationId);
 				if (!Number.isFinite(creationId) || creationId <= 0) continue;
 				params.creationId = creationId;

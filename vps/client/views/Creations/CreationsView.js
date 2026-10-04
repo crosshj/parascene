@@ -16,6 +16,7 @@ function makeGridSkeleton() {
 }
 
 function creationId(item) {
+ if (String(item?.id).startsWith("pending-")) return String(item.id);
 	const id = Number(item?.created_image_id ?? item?.id);
 	return Number.isFinite(id) && id > 0 ? String(id) : '';
 }
@@ -65,7 +66,7 @@ function updateCreationCard(card, item, markup) {
 	return false;
 }
 
-export function renderCreationsView({ outlet, creationsApi, creationsQuery, onUnauthorized, setHeaderMenu, onOpenCreation }) {
+export function renderCreationsView({ outlet, creationsApi, creationsQuery, pendingCreations, onUnauthorized, setHeaderMenu, onOpenCreation }) {
 	const root = mountTemplate(outlet, template);
 	const refs = bindRefs(root);
 	let offset = 0;
@@ -86,6 +87,7 @@ export function renderCreationsView({ outlet, creationsApi, creationsQuery, onUn
 	refs.grid.addEventListener('click', onGridClick);
 	document.addEventListener('visibilitychange', onVisibilityChange);
 	document.addEventListener('creation-detail:mutation', onCreationDetailMutation);
+ document.addEventListener('creations-pending-updated', onPendingCreationsUpdated);
 	refs.grid.addEventListener('keydown', (event) => {
 		if (event.key !== 'Enter' && event.key !== ' ') return;
 		const card = event.target.closest?.('[data-creation-id]');
@@ -123,7 +125,7 @@ export function renderCreationsView({ outlet, creationsApi, creationsQuery, onUn
 		const currentCards = [...refs.grid.querySelectorAll('.creation-grid__card')];
 		const currentById = new Map(currentCards.map((card) => [card.dataset.creationId, card]).filter(([id]) => id));
 		const desiredItems = append
-			? currentCards.map((card) => card.__creationRecord).filter(Boolean)
+			? currentCards.map((card) => card.__creationRecord).filter(item => item && !item.__optimistic)
 			: [];
 		const desiredIndexById = new Map(desiredItems.map((item, index) => [creationId(item), index]).filter(([id]) => id));
 		for (const item of items) {
@@ -136,6 +138,8 @@ export function renderCreationsView({ outlet, creationsApi, creationsQuery, onUn
 			}
 		}
 
+  const optimistic = pendingCreations?.reconcile(desiredItems) || [];
+  desiredItems.unshift(...optimistic);
 		const desiredCards = [];
 		const cardsToHydrate = [];
 		const retainedCards = new Set();
@@ -185,7 +189,7 @@ export function renderCreationsView({ outlet, creationsApi, creationsQuery, onUn
 	function inFlightIds() {
 		return [...refs.grid.querySelectorAll('.creation-grid__card[data-creation-id][data-creation-status]')]
 			.filter((card) => IN_FLIGHT_STATUSES.has(String(card.dataset.creationStatus || '').toLowerCase()))
-			.map((card) => card.dataset.creationId);
+			.map((card) => card.dataset.creationId).filter(id => Number.isInteger(Number(id)) && Number(id) > 0);
 	}
 
 	function scheduleInFlightPoll(delay = IN_FLIGHT_POLL_MS) {
@@ -216,6 +220,7 @@ export function renderCreationsView({ outlet, creationsApi, creationsQuery, onUn
 			const results = await Promise.all(batches.map((batch) => creationsApi.list({ ids: batch })));
 			const creations = results.flatMap((result) => result.creations || []);
 			if (root.isConnected && creations.length) {
+				persistServerRows(creations);
 				const previouslyInFlight = new Set(ids);
 				const completed = creations.filter((item) => previouslyInFlight.has(creationId(item)) && !IN_FLIGHT_STATUSES.has(String(item?.status || '').toLowerCase()));
 				render({ creations, has_more: false }, true);
@@ -237,6 +242,7 @@ export function renderCreationsView({ outlet, creationsApi, creationsQuery, onUn
 				const data = await creationsApi.list({ ids: [id] });
 				const item = data.creations?.[0];
 				if (!item) return;
+				persistServerRows([item]);
 				const oldCard = refs.grid.querySelector(`.creation-grid__card[data-creation-id="${id}"]`);
 				const oldUrl = oldCard?.querySelector('.feed-card-image')?.dataset.bgUrl;
 				const nextCard = makeCreationCard(item);
@@ -256,16 +262,35 @@ export function renderCreationsView({ outlet, creationsApi, creationsQuery, onUn
 		} else syncInFlightPolling();
 	}
 
+ function onPendingCreationsUpdated() {
+  if (!root.isConnected) return;
+  render({ creations: [], has_more: hasMore }, true);
+ }
+
 	async function onCreationDetailMutation(event) {
 		const id = Number(event.detail?.creationId);
 		if (!Number.isInteger(id) || id <= 0 || !root.isConnected) return;
 		if (!refs.grid.querySelector(`.creation-grid__card[data-creation-id="${id}"]`)) return;
 		try {
 			const data = await creationsApi.list({ ids: [String(id)] });
-			if (root.isConnected && data.creations?.length) render({ creations: data.creations, has_more: false }, true);
+			if (root.isConnected && data.creations?.length) {
+				persistServerRows(data.creations);
+				render({ creations: data.creations, has_more: false }, true);
+			}
 		} catch (error) {
 			if (error?.status === 401) onUnauthorized?.();
 		}
+	}
+
+	function persistServerRows(rows) {
+		const cached = creationsQuery?.data;
+		if (!cached?.creations) return;
+		const updates = new Map(rows.map(item => [creationId(item), item]));
+		const next = { ...cached, creations: cached.creations.map(item => updates.get(creationId(item)) || item) };
+		// Keep the mounted paginated grid intact; these rows are rendered below.
+		lastQueryData = next;
+		const updated = creationsQuery.getSnapshot().updatedAt;
+		creationsQuery.setData(next, { updated });
 	}
 
 	function onQueryState(snapshot) {
@@ -290,6 +315,10 @@ export function renderCreationsView({ outlet, creationsApi, creationsQuery, onUn
 		loading = true;
 		try {
 			const data = await creationsApi.list({ limit: PAGE_SIZE, offset: 0 });
+			if (creationsQuery) {
+				lastQueryData = data;
+				creationsQuery.setData(data);
+			}
 			offset = Array.isArray(data.creations) ? data.creations.length : 0;
 			render(data);
 		} catch (error) {
@@ -331,8 +360,11 @@ export function renderCreationsView({ outlet, creationsApi, creationsQuery, onUn
 	updateScrollTopVisibility();
 	sentinelObserver.observe(refs.sentinel);
 	unsubscribe = creationsQuery?.subscribe(onQueryState);
-	if (creationsQuery) void creationsQuery.loadIfNeeded().catch(() => undefined);
+	if (creationsQuery) {
+		const cachedInFlight = creationsQuery.data?.creations?.some(item => IN_FLIGHT_STATUSES.has(String(item.status || '').toLowerCase()));
+		void (cachedInFlight ? creationsQuery.refresh() : creationsQuery.loadIfNeeded()).catch(() => undefined);
+	}
 	else void refresh(true);
 
-	return () => { unsubscribe?.(); mediaLoader?.disconnect(); sentinelObserver.disconnect(); window.clearTimeout(pollTimer); pollTimer = 0; document.removeEventListener('visibilitychange', onVisibilityChange); document.removeEventListener('creation-detail:mutation', onCreationDetailMutation); refs.grid.removeEventListener('click', onGridClick); refs.scrollTop.removeEventListener('click', onScrollTopClick); refs.scrollBottom.removeEventListener('click', onScrollBottomClick); scrollRegion?.removeEventListener('scroll', updateScrollTopVisibility); setHeaderMenu?.(); };
+	return () => { unsubscribe?.(); mediaLoader?.disconnect(); sentinelObserver.disconnect(); window.clearTimeout(pollTimer); pollTimer = 0; document.removeEventListener('visibilitychange', onVisibilityChange); document.removeEventListener('creation-detail:mutation', onCreationDetailMutation); document.removeEventListener('creations-pending-updated', onPendingCreationsUpdated); refs.grid.removeEventListener('click', onGridClick); refs.scrollTop.removeEventListener('click', onScrollTopClick); refs.scrollBottom.removeEventListener('click', onScrollBottomClick); scrollRegion?.removeEventListener('scroll', updateScrollTopVisibility); setHeaderMenu?.(); };
 }

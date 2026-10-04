@@ -1,3 +1,4 @@
+import { createCreateDraftStore } from '../providers/create/draft.js';
 /**
  * Bidirectional sync for shared create settings (composer ↔ /create).
  */
@@ -76,7 +77,6 @@ export function isPromptLikeFieldKey(fieldKey, field) {
  */
 export function readSharedCreateSettings() {
 	const ls = getLocalStorage();
-	if (!ls) return {};
 	const outputModeRaw = readString(ls, CREATE_SETTINGS_STORAGE_KEYS.outputMode);
 	const outputMode = normalizeCreateOutputMode(outputModeRaw);
 	const modelKey =
@@ -85,7 +85,7 @@ export function readSharedCreateSettings() {
 			: outputMode === 'audio'
 				? CREATE_SETTINGS_STORAGE_KEYS.composerAudioModel
 				: CREATE_SETTINGS_STORAGE_KEYS.model;
-	return {
+	const settings = {
 		prompt: readString(ls, CREATE_SETTINGS_STORAGE_KEYS.prompt),
 		promptText: readString(ls, CREATE_SETTINGS_STORAGE_KEYS.promptText),
 		promptImageEdit: readString(ls, CREATE_SETTINGS_STORAGE_KEYS.promptImageEdit),
@@ -96,6 +96,17 @@ export function readSharedCreateSettings() {
 		styleIndex: readString(ls, CREATE_SETTINGS_STORAGE_KEYS.styleIndex),
 		outputMode,
 	};
+	const draft = readSavedCreateForm();
+	if (Object.hasOwn(draft.fieldValues, 'prompt')) {
+		settings.prompt = settings.promptText = settings.promptImageEdit = draft.fieldValues.prompt;
+	}
+	if (typeof draft.fieldValues.aspect_ratio === 'string') settings.aspectRatio = draft.fieldValues.aspect_ratio;
+	if (draft.outputMode) settings.outputMode = draft.outputMode;
+ if (draft.styleKey !== undefined) settings.styleSelected = draft.styleKey;
+	if (draft.serverId && draft.methodKey && draft.fieldValues.model) {
+		settings.modelRoute = encodeSharedModelRoute(draft.serverId, draft.methodKey, draft.fieldValues.model);
+	}
+	return settings;
 }
 
 /**
@@ -163,37 +174,10 @@ export function persistSharedPrompt(prompt, { notify = true } = {}) {
  * @param {{ notify?: boolean }} [options]
  */
 export function clearSharedCreatePrompt({ notify = true } = {}) {
-	persistSharedPrompt('', { notify: false });
-
-	const ss = getSessionStorage();
-	if (ss) {
-		try {
-			const stored = ss.getItem(CREATE_PAGE_SELECTIONS_SESSION_KEY);
-			if (stored) {
-				const selections = JSON.parse(stored);
-				if (selections && typeof selections === 'object') {
-					const fv =
-						selections.fieldValues && typeof selections.fieldValues === 'object'
-							? { ...selections.fieldValues }
-							: {};
-					for (const key of Object.keys(fv)) {
-						if (/prompt/i.test(key)) fv[key] = '';
-					}
-					selections.fieldValues = fv;
-					const adv =
-						selections.advancedOptions && typeof selections.advancedOptions === 'object'
-							? { ...selections.advancedOptions, prompt: '' }
-							: { prompt: '' };
-					selections.advancedOptions = adv;
-					ss.setItem(CREATE_PAGE_SELECTIONS_SESSION_KEY, JSON.stringify(selections));
-				}
-			}
-		} catch {
-			// ignore storage errors
-		}
-	}
-
-	if (notify) notifyCreateSettingsUpdated();
+ const saved = readSavedCreateForm();
+ const fieldValues = { prompt: '' };
+ for (const key of Object.keys(saved.fieldValues)) if (/prompt/i.test(key)) fieldValues[key] = '';
+ persistSavedCreateForm({ fieldValues, advancedOptions: { ...saved.advancedOptions, prompt: '' } }, { notify });
 }
 
 /**
@@ -375,6 +359,7 @@ export function mergeSharedSettingsIntoSessionSelections(
 	try {
 		const stored = ss.getItem(sessionKey);
 		if (stored) selections = JSON.parse(stored);
+  if (selections?.draftVersion === 2) return;
 	} catch {
 		selections = {};
 	}
@@ -554,10 +539,48 @@ export function syncCreatePageSelectionsToSharedStorage(state = {}, { notify = t
 	}
 	if (numericServerId >= 1 && methodKey && modelValue) {
 		persistSharedModelRoute(encodeSharedModelRoute(numericServerId, methodKey, modelValue), {
-			outputMode: outputMode === 'video' ? 'video' : 'image',
+			outputMode: normalizeCreateOutputMode(outputMode),
 			notify: false,
 		});
 	}
 
 	if (notify) notifyCreateSettingsUpdated();
+}
+
+// The canonical saved draft lives in the Create domain. Legacy keys are mirrors.
+let draftStore;
+export function getSavedCreateDraftStore() {
+ if (!draftStore) {
+  const storage = getSessionStorage();
+  let previous = {};
+  try { previous = JSON.parse(storage?.getItem(CREATE_PAGE_SELECTIONS_SESSION_KEY) || '{}'); } catch {}
+  draftStore = createCreateDraftStore({ storage });
+  if (previous.draftVersion !== 2) {
+   const local = getLocalStorage();
+   const fields = { ...(previous.fieldValues || {}) };
+   if (!Object.hasOwn(fields, 'prompt')) fields.prompt = readString(local, CREATE_SETTINGS_STORAGE_KEYS.prompt) || readString(local, CREATE_SETTINGS_STORAGE_KEYS.promptImageEdit) || readString(local, CREATE_SETTINGS_STORAGE_KEYS.promptText);
+   if (!fields.aspect_ratio) fields.aspect_ratio = readString(local, CREATE_SETTINGS_STORAGE_KEYS.aspectRatio) || '1:1';
+   const route = parseSharedModelRoute(readString(local, CREATE_SETTINGS_STORAGE_KEYS.model));
+   if (!fields.model && route) fields.model = route.model;
+   let images = draftStore.read().inputImages;
+   if (!images.length) {
+    const raw = readString(local, 'create_page_image_edit_carryover') || readString(local, 'create_page_image_edit_selection');
+    try { const parsed = JSON.parse(raw); images = Array.isArray(parsed) ? parsed : []; } catch { if (raw) images = [raw]; }
+   }
+   draftStore.update({ ...(route ? { serverId: route.serverId, methodKey: route.methodKey } : {}), ...previous,
+    fieldValues: fields, styleKey: readString(local, CREATE_SETTINGS_STORAGE_KEYS.styleSelected),
+    imageChange: { type: 'replace', images } });
+  }
+ }
+ return draftStore;
+}
+export function readSavedCreateForm() { return getSavedCreateDraftStore().read(); }
+export function persistSavedCreateForm(change = {}, { notify = true } = {}) {
+ const selections = getSavedCreateDraftStore().update(change);
+ const outputMode = selections.outputMode || 'image';
+ persistSharedOutputMode(outputMode, { notify: false });
+ syncCreatePageSelectionsToSharedStorage({ serverId: selections.serverId, methodKey: selections.methodKey,
+  fieldValues: selections.fieldValues, advancedPrompt: selections.fieldValues.prompt, outputMode }, { notify: false });
+ if (notify) notifyCreateSettingsUpdated();
+ return selections;
 }

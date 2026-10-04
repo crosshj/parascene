@@ -1,9 +1,11 @@
+import { createPendingCreationsStore } from './pending.js';
 import { createQuery } from '../../core/query.js';
 import { createStorageCache } from '../../core/storageCache.js';
 import { createCreationsApi } from './api.js';
 
 export function createCreationsProvider({ viewerId, registry } = {}) {
 	const api = createCreationsApi();
+ const pending = createPendingCreationsStore(viewerId);
 	const cache = viewerId ? createStorageCache(`prsn-vps-creations-v1:${viewerId}`, {
 		validate: (data) => Array.isArray(data?.creations) && typeof data?.has_more === 'boolean'
 	}) : null;
@@ -15,6 +17,7 @@ export function createCreationsProvider({ viewerId, registry } = {}) {
 
 	return {
 		api,
+  pending,
 		query,
 		preload() { if (query) void query.loadIfNeeded().catch(() => undefined); },
 		syncExternalCache(event) {
@@ -23,6 +26,6 @@ export function createCreationsProvider({ viewerId, registry } = {}) {
 			if (entry) query.setData(entry.data, { persist: false, updated: entry.updatedAt });
 			else void query.refresh({ force: true }).catch(() => undefined);
 		},
-		clearCache() { cache?.clear(); },
+		clearCache() { cache?.clear(); pending.clear(); },
 	};
 }

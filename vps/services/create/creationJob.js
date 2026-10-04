@@ -1,0 +1,2636 @@
+import { buildProviderHeaders } from "./providerAuth.js";
+import { scheduleProviderPollJob } from "./scheduleCreationJob.js";
+import {
+	dimensionsForAspectRatioLongEdge,
+	isReferenceToVideoMethod,
+	parseAspectRatioString,
+} from "../../client/shared/aspectRatio.js";
+import { letterboxImageBuffer } from "./editedImageUpload.js";
+import { UPLOAD_IMAGE_METHOD_KEY } from "../../client/shared/generationDefaults.js";
+import { normalizeProviderArgsForAspectRatio } from "./normalizeProviderInputImages.js";
+import { resolveEphemeralStillProviderArgs } from "./importEphemeralStill.js";
+import sharp from "sharp";
+import {
+	buildAudioClipCreationSnapshot,
+	materializeBlueProviderAudioArgs,
+	resolveClipIdFromOutputMeta,
+} from "./audioClips.js";
+import {
+	creationMethodMayReturnAudioBytes,
+	isVoiceTrainSuccessBody,
+	persistGeneratedAudioToCdn,
+	extensionForAudioContentType,
+} from "./persistGeneratedAudio.js";
+import {
+	buildProceduralAudioCoverBuffer,
+	resolveAudioCoverKind,
+	seedAudioCover,
+} from "./audioCoverProcedural.js";
+import { refreshGroupV2MemberView } from "./groupV2Ops.js";
+import {
+	gpuWaitMetaPatch,
+	isCreationGpuInFlight,
+	gpuWaitFromProviderStatus,
+	isRecoverableTimedOutCreation,
+	isTerminalCompletedProviderStatus,
+	isTerminalFailedProviderStatus,
+	isProviderPollHardCapped,
+	providerPollBackoffSeconds,
+	shouldKeepProviderPoll,
+} from "./creationGpuWait.js";
+
+const PROVIDER_TIMEOUT_MS = 50_000;
+/** When the provider returns finished video bytes (sync or async poll), allow long downloads. Override with CREATION_PROVIDER_VIDEO_FETCH_TIMEOUT_MS (ms, min 10000). */
+const PROVIDER_VIDEO_FETCH_TIMEOUT_MS = (() => {
+	const n = Number(process.env.CREATION_PROVIDER_VIDEO_FETCH_TIMEOUT_MS);
+	return Number.isFinite(n) && n >= 10_000 ? n : 600_000;
+})();
+const DEFAULT_WIDTH = 1024;
+const DEFAULT_HEIGHT = 1024;
+const PROVIDER_POLL_LOCK_MS = 45_000;
+const PROVIDER_POLL_SCHEDULED_GRACE_MS = 2_000;
+
+function logCreation(...args) {
+	console.log("[Creation]", ...args);
+}
+
+function logCreationError(...args) {
+	console.error("[Creation]", ...args);
+}
+
+function logCreationWarn(...args) {
+	console.warn("[Creation]", ...args);
+}
+
+function parseMeta(raw) {
+	if (raw == null) return null;
+	if (typeof raw === "object") return raw;
+	if (typeof raw !== "string") return null;
+	try {
+		return JSON.parse(raw);
+	} catch {
+		return null;
+	}
+}
+
+function mergeMeta(existing, patch) {
+	const base = existing && typeof existing === "object" ? existing : {};
+	const next = { ...base, ...(patch && typeof patch === "object" ? patch : {}) };
+	return next;
+}
+
+async function persistGpuWaitStatus({
+	queries,
+	imageId,
+	userId,
+	existingMeta,
+	providerStatus,
+	method,
+	extra,
+	anon = false,
+}) {
+	const built = gpuWaitMetaPatch(existingMeta, providerStatus, method, extra);
+	if (!built) return existingMeta;
+	const nextMeta = mergeMeta(existingMeta, built.patch);
+	if (anon) {
+		if (queries.updateCreatedImageAnonMeta?.run) {
+			await queries.updateCreatedImageAnonMeta.run(imageId, nextMeta);
+		}
+	} else if (queries.updateCreatedImageMeta?.run) {
+		await queries.updateCreatedImageMeta.run(imageId, userId, nextMeta);
+	}
+	if (!anon && queries.updateCreatedImageStatus?.run) {
+		await queries.updateCreatedImageStatus.run(imageId, userId, built.mapped.creationStatus);
+	}
+	return nextMeta;
+}
+
+function lineExtraFromBody(asyncBody) {
+	const extra = {};
+	const place = Number(asyncBody?.place);
+	const ahead = Number(asyncBody?.ahead);
+	if (Number.isFinite(place) && place > 0) extra.line_place = place;
+	if (Number.isFinite(ahead) && ahead >= 0) extra.line_ahead = ahead;
+	return extra;
+}
+
+function creationMethodMayReturnVideoBytes(method) {
+	const m = String(method || "").toLowerCase();
+	return m.includes("video") || m.includes("i2v") || m.includes("ltx");
+}
+
+function creationMethodNeedsLongFetch(method) {
+	return creationMethodMayReturnVideoBytes(method) || creationMethodMayReturnAudioBytes(method);
+}
+
+function isRemoteAsyncEnv() {
+	return !!process.env.VERCEL && !!process.env.UPSTASH_QSTASH_TOKEN;
+}
+
+function isProviderJobGoneMessage(message) {
+	return /job not found|unknown job|no such job|job does not exist/i.test(String(message || ""));
+}
+
+function isTransientProviderPollError(err) {
+	if (!err) return false;
+	if (err.code === "PROVIDER_JOB_FAILED" || err.code === "PROVIDER_UNEXPECTED_JSON") {
+		return false;
+	}
+	if (err.name === "AbortError") return true;
+	const status = Number(err.provider?.status);
+	if (err.code === "PROVIDER_NON_2XX" && [408, 429, 500, 502, 503, 504].includes(status)) {
+		return true;
+	}
+	const msg = String(err.message || "");
+	return /network|fetch|ECONNRESET|ETIMEDOUT|UND_ERR|socket/i.test(msg);
+}
+
+const localProviderPollQueued = new Set();
+
+export function isProviderPollRunLocked(meta, now = Date.now()) {
+	const until = Number(meta?.provider_poll_lock_until_ms);
+	return Number.isFinite(until) && until > now;
+}
+
+export function isProviderPollAlreadyScheduled(meta, now = Date.now(), graceMs = PROVIDER_POLL_SCHEDULED_GRACE_MS) {
+	const nextAt = Date.parse(meta?.provider_next_poll_at);
+	return Number.isFinite(nextAt) && nextAt > now + graceMs;
+}
+
+async function claimProviderPollRunLock({ queries, imageId, userId, existingMeta }) {
+	if (isProviderPollRunLocked(existingMeta)) {
+		return { claimed: false, meta: existingMeta };
+	}
+	const now = Date.now();
+	const nextMeta = mergeMeta(existingMeta, {
+		provider_poll_lock_until_ms: now + PROVIDER_POLL_LOCK_MS,
+	});
+	const claimFn = queries.claimCreatedImageProviderPollLock?.run;
+	if (typeof claimFn === "function") {
+		try {
+			const result = await claimFn(imageId, userId, nextMeta, now);
+			if (!result?.changes) {
+				return { claimed: false, meta: existingMeta };
+			}
+			return { claimed: true, meta: nextMeta };
+		} catch (err) {
+			logCreationWarn("Provider poll lock claim failed; falling back", safeErrorMessage(err));
+		}
+	}
+	if (queries.updateCreatedImageMeta?.run) {
+		await queries.updateCreatedImageMeta.run(imageId, userId, nextMeta);
+	}
+	return { claimed: true, meta: nextMeta };
+}
+
+async function enqueueProviderPollFollowUp({
+	queries,
+	storage,
+	imageId,
+	userId,
+	server_id,
+	credit_cost,
+	delaySeconds,
+	useBackoff = delaySeconds == null,
+}) {
+	const asyncEnv = isRemoteAsyncEnv();
+	let latestMeta = null;
+	if (queries?.selectCreatedImageById?.get) {
+		try {
+			const row = await queries.selectCreatedImageById.get(imageId, userId);
+			latestMeta = parseMeta(row?.meta);
+		} catch {
+			latestMeta = null;
+		}
+	}
+	if (isProviderPollAlreadyScheduled(latestMeta)) {
+		logCreation("Provider poll already scheduled; skip enqueue", { imageId, userId });
+		return { ok: true, reason: "async_poll_already_scheduled" };
+	}
+	const wait = useBackoff
+		? providerPollBackoffSeconds(latestMeta)
+		: Math.max(0, Number(delaySeconds) || 0);
+	if (queries?.updateCreatedImageMeta?.run && latestMeta && typeof latestMeta === "object") {
+		const nextPollAtIso = new Date(Date.now() + wait * 1000).toISOString();
+		await queries.updateCreatedImageMeta.run(
+			imageId,
+			userId,
+			mergeMeta(latestMeta, { provider_next_poll_at: nextPollAtIso }),
+		);
+	}
+	if (asyncEnv) {
+		await scheduleProviderPollJob({
+			payload: {
+				job_type: "poll_provider",
+				created_image_id: imageId,
+				user_id: userId,
+				server_id,
+				credit_cost,
+			},
+			delaySeconds: wait,
+			log: console,
+		});
+		return { ok: true, reason: "async_poll_scheduled" };
+	}
+	const key = String(imageId);
+	if (localProviderPollQueued.has(key)) {
+		return { ok: true, reason: "async_poll_already_scheduled_local" };
+	}
+	localProviderPollQueued.add(key);
+	setTimeout(() => {
+		localProviderPollQueued.delete(key);
+		Promise.resolve(
+			runProviderPollJob({
+				queries,
+				storage,
+				payload: {
+					created_image_id: imageId,
+					user_id: userId,
+					server_id,
+					credit_cost,
+				},
+			}),
+		).catch((err) => {
+			void err;
+		});
+	}, wait * 1000);
+	return { ok: true, reason: "async_poll_scheduled_local" };
+}
+
+async function markProviderPollFailed({
+	queries,
+	imageId,
+	userId,
+	existingMeta,
+	credit_cost,
+	providerError,
+}) {
+	const startedAtMs = existingMeta && existingMeta.started_at ? Date.parse(existingMeta.started_at) : NaN;
+	const failedAtIso = new Date().toISOString();
+	const failedAtMs = Date.parse(failedAtIso);
+	const durationMs =
+		Number.isFinite(startedAtMs) && Number.isFinite(failedAtMs) && failedAtMs >= startedAtMs
+			? failedAtMs - startedAtMs
+			: null;
+
+	const errorCode = inferErrorCode(providerError);
+	const providerDetails =
+		providerError && typeof providerError === "object" && providerError.provider && typeof providerError.provider === "object"
+			? providerError.provider
+			: null;
+	const errorMsg = safeErrorMessage(providerError);
+	const providerMsg = providerDetails ? providerBodyToMessage(providerDetails.body) : "";
+
+	logCreationError(`Poll: marking job as failed`, {
+		imageId,
+		error_code: errorCode,
+		error: errorMsg,
+		duration_ms: durationMs,
+	});
+
+	const nextMetaBase = mergeMeta(existingMeta, {
+		failed_at: failedAtIso,
+		error_code: errorCode,
+		error: providerMsg || errorMsg,
+		...(providerDetails ? { provider_error: providerDetails } : {}),
+		...(Number.isFinite(durationMs) && durationMs >= 0 ? { duration_ms: durationMs } : {}),
+		provider_status: "failed",
+	});
+
+	await queries.updateCreatedImageJobFailed.run(imageId, userId, { meta: nextMetaBase });
+
+	if (credit_cost && !(nextMetaBase && nextMetaBase.credits_refunded)) {
+		logCreation(`Poll: refunding ${credit_cost} credits to user ${userId}`);
+		await queries.updateUserCreditsBalance.run(userId, Number(credit_cost));
+		await queries.updateCreatedImageJobFailed.run(imageId, userId, {
+			meta: mergeMeta(nextMetaBase, { credits_refunded: true }),
+		});
+	}
+
+	return { ok: false, reason: "provider_failed" };
+}
+
+async function continueOrTimeoutPoll({
+	queries,
+	storage,
+	imageId,
+	userId,
+	server_id,
+	credit_cost,
+	creationStatus,
+	meta,
+}) {
+	if (shouldKeepProviderPoll(creationStatus, meta)) {
+		return enqueueProviderPollFollowUp({
+			queries,
+			storage,
+			imageId,
+			userId,
+			server_id,
+			credit_cost,
+		});
+	}
+	const timeoutErr = new Error("Timed out waiting for generation to finish.");
+	timeoutErr.name = "AbortError";
+	return markProviderPollFailed({
+		queries,
+		imageId,
+		userId,
+		existingMeta: meta,
+		credit_cost,
+		providerError: timeoutErr,
+	});
+}
+
+/** Resume or continue provider polling. Local uses in-process timers; Vercel uses QStash. */
+export async function kickStaleProviderPollIfNeeded({
+	queries,
+	storage,
+	image,
+	userId,
+	force = false,
+}) {
+	if (!image || !isCreationGpuInFlight(image.status)) return { kicked: false };
+	const meta = parseMeta(image.meta) || {};
+	if (!meta.provider_async) return { kicked: false };
+	const imageId = Number(image.id);
+	const uid = Number(userId ?? image.user_id);
+	const serverId = Number(meta.server_id);
+	if (!Number.isFinite(imageId) || imageId < 1) return { kicked: false };
+	if (!Number.isFinite(uid) || uid < 1) return { kicked: false };
+	if (!Number.isFinite(serverId) || serverId < 1) return { kicked: false };
+
+	if (isProviderPollHardCapped(meta)) return { kicked: false };
+	if (isProviderPollRunLocked(meta)) return { kicked: false };
+	if (isProviderPollAlreadyScheduled(meta)) return { kicked: false };
+
+	const nextAt = Date.parse(meta.provider_next_poll_at);
+	const stale = !Number.isFinite(nextAt) || Date.now() > nextAt + 15_000;
+	if (!force && !stale) return { kicked: false };
+
+	try {
+		await enqueueProviderPollFollowUp({
+			queries,
+			storage,
+			imageId,
+			userId: uid,
+			server_id: serverId,
+			credit_cost: Number(meta.credit_cost ?? 0) || 0,
+			delaySeconds: 0,
+		});
+		logCreation("Kicked stale provider poll", { imageId, userId: uid, local: !isRemoteAsyncEnv() });
+		return { kicked: true };
+	} catch (err) {
+		logCreationWarn("Kick stale provider poll failed", safeErrorMessage(err));
+		return { kicked: false };
+	}
+}
+
+/** Local nodemon/restart: DB rows still in-flight, in-process timers are gone. */
+export async function resumeLocalProviderPolls({ queries, storage }) {
+	if (isRemoteAsyncEnv() || process.env.VERCEL) return { resumed: 0 };
+	const listFn = queries.selectCreatedImagesGpuInFlight?.all;
+	if (typeof listFn !== "function") {
+		logCreationWarn("Local provider poll resume skipped: missing selectCreatedImagesGpuInFlight");
+		return { resumed: 0 };
+	}
+	let rows = [];
+	try {
+		rows = await listFn({ limit: 80 });
+	} catch (err) {
+		logCreationWarn("Local provider poll resume query failed", safeErrorMessage(err));
+		return { resumed: 0 };
+	}
+	const list = Array.isArray(rows) ? rows : [];
+	let resumed = 0;
+	for (const image of list) {
+		const result = await kickStaleProviderPollIfNeeded({
+			queries,
+			storage,
+			image,
+			userId: image.user_id,
+			force: true,
+		});
+		if (result.kicked) resumed += 1;
+	}
+	logCreation("Local provider poll resume", { resumed, candidates: list.length });
+	return { resumed };
+}
+
+async function reviveTimedOutProviderPollIfNeeded({
+	queries,
+	storage,
+	image,
+	userId,
+	force = false,
+	kick = true,
+}) {
+	const meta = parseMeta(image.meta) || {};
+	if (!isRecoverableTimedOutCreation(image.status, meta, Date.now(), { force })) {
+		return { revived: false, kicked: false };
+	}
+	const imageId = Number(image.id);
+	const uid = Number(userId ?? image.user_id);
+	if (!Number.isFinite(imageId) || imageId < 1 || !Number.isFinite(uid) || uid < 1) {
+		return { revived: false, kicked: false };
+	}
+
+	const nextMeta = mergeMeta(meta, {
+		error_code: null,
+		error: null,
+		failed_at: null,
+		provider_status:
+			meta.provider_status && meta.provider_status !== "failed"
+				? meta.provider_status
+				: "pending",
+		revived_from_timeout_at: new Date().toISOString(),
+	});
+	if (queries.updateCreatedImageStatus?.run) {
+		await queries.updateCreatedImageStatus.run(imageId, uid, "queued");
+	}
+	if (queries.updateCreatedImageMeta?.run) {
+		await queries.updateCreatedImageMeta.run(imageId, uid, nextMeta);
+	}
+	logCreation("Revived timed-out creation; resuming provider poll", { imageId, userId: uid });
+	if (!kick) return { revived: true, kicked: false };
+	const kicked = await kickStaleProviderPollIfNeeded({
+		queries,
+		storage,
+		image: { ...image, status: "queued", meta: nextMeta },
+		userId: uid,
+		force: true,
+	});
+	return { revived: true, kicked: Boolean(kicked.kicked) };
+}
+
+/** List/detail GET: keep a live poller, or un-fail a timeout if Blue still has the job. */
+export async function healProviderPollOnRead({
+	queries,
+	storage,
+	image,
+	userId,
+	force = false,
+}) {
+	if (!image) return { kicked: false, revived: false };
+	const meta = parseMeta(image.meta) || {};
+	if (isRecoverableTimedOutCreation(image.status, meta, Date.now(), { force })) {
+		return reviveTimedOutProviderPollIfNeeded({
+			queries,
+			storage,
+			image,
+			userId,
+			force,
+		});
+	}
+	if (!isCreationGpuInFlight(image.status)) return { kicked: false, revived: false };
+	const kicked = await kickStaleProviderPollIfNeeded({
+		queries,
+		storage,
+		image,
+		userId,
+	});
+	return { kicked: Boolean(kicked.kicked), revived: false };
+}
+
+/**
+ * Owner Check again: un-fail a timeout (no 120s cooldown) and await one Blue peek.
+ * Does not POST a new create.
+ */
+export async function recheckCreationProviderPoll({
+	queries,
+	storage,
+	image,
+	userId,
+}) {
+	if (!image) return { ok: false, reason: "not_found" };
+	const uid = Number(userId ?? image.user_id);
+	const imageId = Number(image.id);
+	if (!Number.isFinite(imageId) || imageId < 1 || !Number.isFinite(uid) || uid < 1) {
+		return { ok: false, reason: "invalid" };
+	}
+
+	const meta = parseMeta(image.meta) || {};
+	let row = image;
+	if (isRecoverableTimedOutCreation(image.status, meta, Date.now(), { force: true })) {
+		await reviveTimedOutProviderPollIfNeeded({
+			queries,
+			storage,
+			image,
+			userId: uid,
+			force: true,
+			kick: false,
+		});
+		row = (await queries.selectCreatedImageById.get(imageId, uid)) || image;
+	} else if (!isCreationGpuInFlight(image.status)) {
+		return {
+			ok: false,
+			reason: "not_recheckable",
+			status: image.status || null,
+			id: imageId,
+		};
+	}
+
+	const nextMeta = parseMeta(row.meta) || {};
+	const serverId = Number(nextMeta.server_id);
+	if (!Number.isFinite(serverId) || serverId < 1) {
+		return {
+			ok: false,
+			reason: "missing_server",
+			status: row.status || null,
+			id: imageId,
+		};
+	}
+
+	await runProviderPollJob({
+		queries,
+		storage,
+		payload: {
+			created_image_id: imageId,
+			user_id: uid,
+			server_id: serverId,
+			credit_cost: Number(nextMeta.credit_cost ?? 0) || 0,
+		},
+	});
+
+	const refreshed = await queries.selectCreatedImageById.get(imageId, uid);
+	return {
+		ok: true,
+		id: imageId,
+		status: refreshed?.status || row.status || null,
+	};
+}
+
+function isAsyncAckBody(body, fallbackMethod) {
+	if (!body || typeof body !== "object") return false;
+	if (body.async !== true) return false;
+	if (typeof body.job_id !== "string" || !body.job_id) return false;
+	if (typeof body.status !== "string" || !body.status) return false;
+	const status = body.status.toLowerCase();
+	// Treat any non-terminal async status as an ack; only reject obviously
+	// terminal statuses so providers can use custom progress strings like "starting".
+	if (["failed", "error"].includes(status)) return false;
+	if (body.method && typeof body.method !== "string") return false;
+	// If provided, method should match or at least not contradict the requested method.
+	if (typeof body.method === "string" && fallbackMethod && body.method !== fallbackMethod) {
+		return false;
+	}
+	return true;
+}
+
+function inferErrorCode(err) {
+	if (!err) return "unknown";
+	if (err.name === "AbortError") return "timeout";
+	if (err.code === "AUDIO_RESOLVE_FAILED") return "audio_resolve_failed";
+	return "provider_error";
+}
+
+function safeErrorMessage(err) {
+	if (!err) return "Unknown error";
+	if (typeof err === "string") return err;
+	if (err instanceof Error) return err.message || "Error";
+	try {
+		return JSON.stringify(err);
+	} catch {
+		return "Error";
+	}
+}
+
+function isPng(buffer) {
+	return (
+		buffer &&
+		Buffer.isBuffer(buffer) &&
+		buffer.length >= 8 &&
+		buffer[0] === 0x89 &&
+		buffer[1] === 0x50 &&
+		buffer[2] === 0x4e &&
+		buffer[3] === 0x47 &&
+		buffer[4] === 0x0d &&
+		buffer[5] === 0x0a &&
+		buffer[6] === 0x1a &&
+		buffer[7] === 0x0a
+	);
+}
+
+async function ensurePngBuffer(buffer) {
+	if (isPng(buffer)) return buffer;
+	try {
+		return await sharp(buffer, { failOn: "none" }).png().toBuffer();
+	} catch (err) {
+		const msg = safeErrorMessage(err);
+		const e = new Error(`Failed to convert image to PNG: ${msg}`);
+		e.code = "IMAGE_ENCODE_FAILED";
+		throw e;
+	}
+}
+
+
+async function readProviderErrorPayload(response) {
+	if (!response) return { ok: false, body: null, contentType: "" };
+	const contentType = response.headers?.get?.("content-type") || "";
+	let text = "";
+	try {
+		text = await response.text();
+	} catch {
+		text = "";
+	}
+	if (typeof text === "string" && text.length > 20_000) {
+		text = `${text.slice(0, 20_000)}…`;
+	}
+	if (contentType.includes("application/json")) {
+		try {
+			return { ok: true, body: JSON.parse(text || "null"), contentType };
+		} catch {
+			return { ok: true, body: text, contentType };
+		}
+	}
+	return { ok: true, body: text, contentType };
+}
+
+function providerBodyToMessage(body) {
+	if (body == null) return "";
+	if (typeof body === "string") return body.trim();
+	if (typeof body === "object") {
+		const err = typeof body.error === "string" ? body.error.trim() : "";
+		if (err) return err;
+		const nestedErr =
+			body.result && typeof body.result === "object" && typeof body.result.error === "string"
+				? body.result.error.trim()
+				: "";
+		if (nestedErr) return nestedErr;
+		const msg = typeof body.message === "string" ? body.message.trim() : "";
+		if (msg) return msg;
+		try {
+			return JSON.stringify(body);
+		} catch {
+			return "[provider_error]";
+		}
+	}
+	return String(body);
+}
+
+async function fetchImageBufferFromUrl(imageUrl) {
+	if (!imageUrl || typeof imageUrl !== "string") {
+		const err = new Error("Missing image_url for video thumbnail");
+		err.code = "MISSING_IMAGE_URL";
+		throw err;
+	}
+	let response;
+	try {
+		response = await fetch(imageUrl, {
+			method: "GET",
+			headers: { Accept: "image/*" },
+			signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS)
+		});
+	} catch (err) {
+		const e = new Error(`Failed to fetch source image for video: ${safeErrorMessage(err)}`);
+		e.code = "SOURCE_IMAGE_FETCH_FAILED";
+		throw e;
+	}
+	if (!response.ok) {
+		const e = new Error(`Failed to fetch source image for video: ${response.status} ${response.statusText}`);
+		e.code = "SOURCE_IMAGE_FETCH_FAILED";
+		throw e;
+	}
+	const arrayBuffer = await response.arrayBuffer();
+	const rawBuffer = Buffer.from(arrayBuffer);
+	return ensurePngBuffer(rawBuffer);
+}
+
+async function createPlaceholderImageBuffer(width = DEFAULT_WIDTH, height = DEFAULT_HEIGHT) {
+	return await createPlaceholderImageBufferInternal(width, height);
+}
+
+function firstInputImageUrlFromArgs(args) {
+	if (!args || typeof args !== "object") return null;
+	if (typeof args.image_url === "string" && args.image_url) return args.image_url;
+	if (typeof args.image === "string" && args.image) return args.image;
+	if (Array.isArray(args.input_images) && typeof args.input_images[0] === "string") {
+		return args.input_images[0];
+	}
+	return null;
+}
+
+/** Character sheets are not start frames — r2v stores a placeholder until a first-frame poster is saved. */
+function videoPosterSourceImageUrl(method, args, extraCandidate = null) {
+	if (isReferenceToVideoMethod(method, args?.model)) return null;
+	return firstInputImageUrlFromArgs(args) || extraCandidate || null;
+}
+
+/** Transparent PNG sized for video pending poster (aspect_ratio from job args when set). */
+async function createVideoPlaceholderImageBuffer(aspectRatioRaw) {
+	const { width, height } = dimensionsForAspectRatioLongEdge(aspectRatioRaw, DEFAULT_WIDTH);
+	return await createPlaceholderImageBufferInternal(width, height);
+}
+
+/**
+ * Poster + stored width/height for completed video jobs.
+ * When aspect_ratio is set, letterbox the source into that frame (no crop) and store target pixels.
+ * @param {{
+ *   args?: Record<string, unknown> | null,
+ *   sourceImageUrl?: string | null,
+ *   fetchBuffer?: (url: string) => Promise<Buffer>,
+ *   logWarn?: (msg: string, detail?: string) => void,
+ * }} params
+ */
+async function resolveVideoJobPosterAndDimensions({
+	args,
+	sourceImageUrl,
+	fetchBuffer = fetchImageBufferFromUrl,
+	logWarn = (msg, detail) => logCreationWarn(msg, detail),
+}) {
+	const argsObj = args && typeof args === "object" ? args : {};
+	const aspectRaw = argsObj.aspect_ratio;
+	const hasTargetAspect = Boolean(parseAspectRatioString(aspectRaw));
+
+	if (hasTargetAspect) {
+		const { width: targetW, height: targetH } = dimensionsForAspectRatioLongEdge(
+			aspectRaw,
+			DEFAULT_WIDTH
+		);
+		const url = typeof sourceImageUrl === "string" ? sourceImageUrl.trim() : "";
+		let imageBuffer;
+		if (url) {
+			try {
+				const raw = await fetchBuffer(url);
+				imageBuffer = await letterboxImageBuffer(raw, aspectRaw, DEFAULT_WIDTH);
+			} catch (err) {
+				logWarn(
+					"Failed to letterbox source image for video poster; using placeholder",
+					safeErrorMessage(err)
+				);
+				imageBuffer = await createVideoPlaceholderImageBuffer(aspectRaw);
+			}
+		} else {
+			logWarn("No source image for video poster; using aspect placeholder");
+			imageBuffer = await createVideoPlaceholderImageBuffer(aspectRaw);
+		}
+		return { imageBuffer, width: targetW, height: targetH };
+	}
+
+	const url = typeof sourceImageUrl === "string" ? sourceImageUrl.trim() : "";
+	if (url) {
+		try {
+			const imageBuffer = await fetchBuffer(url);
+			let width = DEFAULT_WIDTH;
+			let height = DEFAULT_HEIGHT;
+			try {
+				const meta = await sharp(imageBuffer, { failOn: "none" }).metadata();
+				if (typeof meta.width === "number" && meta.width > 0) width = meta.width;
+				if (typeof meta.height === "number" && meta.height > 0) height = meta.height;
+			} catch {
+				// keep defaults
+			}
+			return { imageBuffer, width, height };
+		} catch (err) {
+			logWarn("Failed to fetch source image for video thumbnail", safeErrorMessage(err));
+		}
+	}
+
+	const imageBuffer = await createVideoPlaceholderImageBuffer(null);
+	return { imageBuffer, width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT };
+}
+
+async function createPlaceholderImageBufferInternal(width = DEFAULT_WIDTH, height = DEFAULT_HEIGHT) {
+	try {
+		return await sharp({
+			create: { width, height, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+		})
+			.png()
+			.toBuffer();
+	} catch (err) {
+		const e = new Error(`Failed to generate placeholder image: ${safeErrorMessage(err)}`);
+		e.code = "PLACEHOLDER_IMAGE_FAILED";
+		throw e;
+	}
+}
+
+async function applyAudioClipUsageOnFinalize({ queries, imageId, existingMeta, completedMeta }) {
+	const clipId = await resolveClipIdFromOutputMeta(queries, existingMeta);
+	if (!Number.isFinite(clipId) || clipId <= 0) return completedMeta;
+	const clip = await queries.selectAudioClipById?.get(clipId);
+	if (!clip) return completedMeta;
+	const args = existingMeta?.args;
+	const snapshot = buildAudioClipCreationSnapshot(clip);
+	const nextMeta = mergeMeta(completedMeta, { audio_clip: snapshot });
+	try {
+		await queries.insertAudioClipUsage?.run({
+			audioClipId: clipId,
+			createdImageId: imageId,
+			meta: {
+				audio_url:
+					typeof args?.audio_url === "string"
+						? args.audio_url
+						: typeof args?.input_audio_urls === "string"
+							? args.input_audio_urls
+							: null
+			}
+		});
+		await queries.incrementAudioClipUsage?.run(clipId);
+	} catch (err) {
+		const msg = String(err?.message || "");
+		if (err?.code !== "23505" && !msg.includes("duplicate key") && !msg.includes("UNIQUE constraint")) {
+			logCreationWarn("Failed to record audio clip usage", safeErrorMessage(err));
+		}
+	}
+	return nextMeta;
+}
+
+async function finalizeCreationJob({
+	queries,
+	storage,
+	imageId,
+	userId,
+	server,
+	existingMeta,
+	credit_cost,
+	imageBuffer,
+	color,
+	width,
+	height,
+	isVideo,
+	videoBuffer,
+	videoContentType,
+	sourceImageUrlForMeta,
+	isAudio = false,
+	audioBuffer = null,
+	audioContentType = null,
+	voiceId = null,
+}) {
+	let audioMeta = null;
+	let audioCoverPlaceholder = false;
+	let audioCoverSource = "";
+	const trimmedVoiceId = typeof voiceId === "string" && voiceId.trim() ? voiceId.trim() : "";
+	const audioMethod = existingMeta?.method;
+	if (isAudio) {
+		if (audioBuffer) {
+			const persisted = await persistGeneratedAudioToCdn({
+				queries,
+				audioBuffer,
+				contentType: audioContentType || "audio/mpeg",
+				filename: `generated.${extensionForAudioContentType(audioContentType)}`,
+				createPlaceholder: () => createPlaceholderImageBuffer(),
+				createFallbackCover: async () => {
+					const args = existingMeta?.args && typeof existingMeta.args === "object" ? existingMeta.args : {};
+					const prompt = typeof args.prompt === "string" ? args.prompt : "";
+					const built = await buildProceduralAudioCoverBuffer({
+						seed: seedAudioCover({
+							creationId: imageId,
+							userId,
+							title: prompt,
+							prompt,
+						}),
+						title: prompt,
+						kind: resolveAudioCoverKind(audioMethod),
+					});
+					return built.buffer;
+				},
+			});
+			imageBuffer = persisted.coverBuffer;
+			width = persisted.width;
+			height = persisted.height;
+			audioCoverPlaceholder = persisted.usedPlaceholder === true;
+			audioCoverSource = typeof persisted.coverSource === "string" ? persisted.coverSource : "";
+			audioMeta = {
+				...persisted.audio,
+				...(trimmedVoiceId ? { voice_id: trimmedVoiceId } : {}),
+			};
+		} else if (trimmedVoiceId) {
+			try {
+				const args = existingMeta?.args && typeof existingMeta.args === "object" ? existingMeta.args : {};
+				const prompt = typeof args.prompt === "string" ? args.prompt : "";
+				const built = await buildProceduralAudioCoverBuffer({
+					seed: seedAudioCover({
+						creationId: imageId,
+						userId,
+						title: prompt,
+						prompt,
+						extra: trimmedVoiceId,
+					}),
+					title: prompt,
+					kind: resolveAudioCoverKind(audioMethod || "speech"),
+				});
+				imageBuffer = built.buffer;
+				width = built.width;
+				height = built.height;
+				audioCoverSource = "procedural";
+				audioCoverPlaceholder = false;
+			} catch {
+				if (!imageBuffer) {
+					imageBuffer = await createPlaceholderImageBuffer();
+					width = DEFAULT_WIDTH;
+					height = DEFAULT_HEIGHT;
+				}
+				audioCoverPlaceholder = true;
+			}
+			audioMeta = { voice_id: trimmedVoiceId };
+		} else {
+			const err = new Error("Audio completion requested but no audio bytes or voice_id were available.");
+			err.code = "AUDIO_STORAGE_FAILED";
+			throw err;
+		}
+	}
+
+	// Upload after audio cover persist so we store the real still, not the temp placeholder.
+	logCreation("Uploading image to storage");
+	const timestamp = Date.now();
+	const random = Math.random().toString(36).substring(2, 9);
+	const filename = `${userId}_${imageId}_${timestamp}_${random}.png`;
+
+	const uploadStartTime = Date.now();
+	const imageUrl = await storage.uploadImage(imageBuffer, filename);
+	const uploadDuration = Date.now() - uploadStartTime;
+	logCreation(`Image uploaded in ${uploadDuration}ms`, { filename, url: imageUrl });
+
+	let videoFilename = null;
+	let videoUrl = null;
+	if (isVideo && videoBuffer && typeof storage.uploadVideo === "function") {
+		try {
+			const baseExt =
+				typeof videoContentType === "string" && videoContentType.startsWith("video/") && videoContentType.split("/")[1]
+					? videoContentType.split("/")[1]
+					: "mp4";
+			const safeExt = baseExt.split("+")[0].split(";")[0].trim() || "mp4";
+			videoFilename = `video/${userId}_${imageId}_${timestamp}_${random}.${safeExt}`;
+			videoUrl = await storage.uploadVideo(videoBuffer, videoFilename, {
+				contentType: videoContentType || "video/mp4",
+			});
+			logCreation("Video uploaded for creation", { imageId, videoFilename, videoUrl, contentType: videoContentType });
+		} catch (err) {
+			logCreationError(
+				`Failed to upload video for creation; refusing to mark job complete without meta.video (${videoBuffer?.length ?? 0} bytes from provider)`,
+				safeErrorMessage(err),
+			);
+			videoFilename = null;
+			videoUrl = null;
+		}
+	}
+
+	if (isVideo && !videoUrl) {
+		const detail =
+			!videoBuffer
+				? "Video completion requested but no video bytes were available to store."
+				: typeof storage.uploadVideo !== "function"
+					? "Video bytes were returned but storage.uploadVideo is not configured."
+					: "Video bytes could not be uploaded to storage.";
+		const err = new Error(`${detail} Refusing to mark creation ${imageId} completed as video.`);
+		err.code = "VIDEO_STORAGE_FAILED";
+		throw err;
+	}
+
+	const completedAtIso = new Date().toISOString();
+	const startedAtMs = existingMeta && existingMeta.started_at ? Date.parse(existingMeta.started_at) : NaN;
+	const completedAtMs = Date.parse(completedAtIso);
+	const durationMs =
+		Number.isFinite(startedAtMs) && Number.isFinite(completedAtMs) && completedAtMs >= startedAtMs
+			? completedAtMs - startedAtMs
+			: null;
+
+	const rechargeCredits =
+		existingMeta?.credits_refunded === true && Number(credit_cost) > 0;
+	if (rechargeCredits) {
+		try {
+			logCreation(`Re-charging ${credit_cost} credits after timeout recovery`, {
+				imageId,
+				userId,
+			});
+			await queries.updateUserCreditsBalance.run(userId, -Number(credit_cost));
+		} catch (err) {
+			logCreationWarn("Failed to re-charge credits after timeout recovery", safeErrorMessage(err));
+		}
+	}
+
+	const completedMeta = mergeMeta(existingMeta, {
+		completed_at: completedAtIso,
+		...(rechargeCredits ? { credits_refunded: false } : {}),
+		...(Number.isFinite(durationMs) && durationMs >= 0 ? { duration_ms: durationMs } : {}),
+		media_type: isAudio ? "audio" : isVideo ? "video" : "image",
+		...(isVideo && videoUrl
+			? {
+				video: {
+					filename: videoFilename,
+					file_path: videoUrl,
+					content_type: videoContentType || "video/mp4",
+				},
+				source_image_url: sourceImageUrlForMeta,
+			}
+			: {}),
+		...(isAudio && audioMeta ? { audio: audioMeta } : {}),
+		...(isAudio && audioCoverSource ? { cover_source: audioCoverSource } : {}),
+		...(isAudio && audioCoverPlaceholder ? { cover_placeholder: true } : {}),
+	});
+
+	const completedMetaWithClip = await applyAudioClipUsageOnFinalize({
+		queries,
+		imageId,
+		existingMeta,
+		completedMeta,
+	});
+
+	logCreation(`Updating database - marking job as completed`, {
+		imageId,
+		filename,
+		duration_ms: durationMs,
+	});
+
+	await queries.updateCreatedImageJobCompleted.run(imageId, userId, {
+		filename,
+		file_path: imageUrl,
+		width,
+		height,
+		color,
+		meta: completedMetaWithClip,
+	});
+
+	try {
+		const completedRow = await queries.selectCreatedImageById.get(imageId, userId);
+		if (completedRow) {
+			await refreshGroupV2MemberView(queries, userId, completedRow);
+		}
+	} catch (err) {
+		logCreationError("group v2 member view refresh failed", {
+			imageId,
+			error: safeErrorMessage(err),
+		});
+	}
+
+	// Credit server owner (30% of what user was charged), best-effort.
+	const ownerCredits = Number(credit_cost || 0) * 0.3;
+	if (server.user_id && ownerCredits > 0) {
+		try {
+			logCreation(`Crediting server owner ${server.user_id} with ${ownerCredits} credits`);
+			let ownerCreditsRecord = await queries.selectUserCredits.get(server.user_id);
+			if (!ownerCreditsRecord) {
+				await queries.insertUserCredits.run(server.user_id, 0, null);
+				ownerCreditsRecord = await queries.selectUserCredits.get(server.user_id);
+			}
+			if (ownerCreditsRecord) {
+				await queries.updateUserCreditsBalance.run(server.user_id, ownerCredits);
+			}
+		} catch (e) {
+			logCreationWarn("Failed to credit server owner:", e?.message || e);
+		}
+	}
+
+	logCreation(`Job completed successfully`, {
+		imageId,
+		filename,
+		width,
+		height,
+		color,
+		total_duration_ms: durationMs,
+	});
+
+	return { ok: true, id: imageId, filename, url: imageUrl, width, height, color };
+}
+
+// Cover unexpected preparation/storage errors as well as provider responses.
+// This keeps accepted rows from remaining charged and creating after a rejected worker promise.
+export async function runCreationJob(context) {
+ try { return await runCreationJobInternal(context); }
+ catch (error) {
+  const { queries, payload } = context;
+  const imageId = Number(payload?.created_image_id);
+  const userId = Number(payload?.user_id);
+  if (!imageId || !userId) throw error;
+  const row = await queries.selectCreatedImageById.get(imageId, userId);
+  if (!row || ['completed', 'failed'].includes(row.status)) throw error;
+  return markProviderPollFailed({
+   queries, imageId, userId,
+   existingMeta: parseMeta(row.meta) || {},
+   credit_cost: Number(parseMeta(row.meta)?.credit_cost ?? payload.credit_cost) || 0,
+   providerError: error,
+  });
+ }
+}
+
+async function runCreationJobInternal({ queries, storage, payload }) {
+	const {
+		created_image_id,
+		user_id,
+		server_id,
+		method,
+		args,
+		credit_cost,
+		async: asyncRequestedFlag,
+	} = payload || {};
+
+	logCreation("runCreationJob started", {
+		created_image_id,
+		user_id,
+		server_id,
+		method,
+		credit_cost,
+		args_keys: args ? Object.keys(args) : []
+	});
+
+	if (!created_image_id || !user_id || !server_id || !method) {
+		const error = new Error("runCreationJob: missing required payload fields");
+		logCreationError("Missing required fields", { created_image_id, user_id, server_id, method });
+		throw error;
+	}
+
+	const userId = Number(user_id);
+	const imageId = Number(created_image_id);
+
+	logCreation(`Fetching image ${imageId} for user ${userId}`);
+	const image = await queries.selectCreatedImageById.get(imageId, userId);
+	if (!image) {
+		logCreationWarn(`Image ${imageId} not found for user ${userId} - may have been deleted`);
+		// Nothing to do (deleted / wrong user).
+		return { ok: false, reason: "not_found" };
+	}
+
+	logCreation(`Image ${imageId} found, status: ${image.status || "null"}`);
+
+	// Idempotency: only start when still creating. queued/processing are poll.
+	if (image.status && image.status !== "creating") {
+		logCreation(`Skipping job - image ${imageId} already ${image.status}`);
+		return { ok: true, skipped: true, status: image.status };
+	}
+
+	const existingMeta = parseMeta(image.meta);
+
+	logCreation(`Fetching server ${server_id}`);
+	const server = await queries.selectServerById.get(server_id);
+	if (!server || server.status !== "active") {
+		const errorMsg = !server ? "Server not found" : "Server is not active";
+		logCreationError(`Server validation failed: ${errorMsg}`, {
+			server_id,
+			server_found: !!server,
+			server_status: server?.status
+		});
+
+		const nextMeta = mergeMeta(existingMeta, {
+			failed_at: new Date().toISOString(),
+			error_code: "provider_error",
+			error: errorMsg,
+		});
+		await queries.updateCreatedImageJobFailed.run(imageId, userId, { meta: nextMeta });
+
+		// Refund if needed.
+		if (credit_cost && !(nextMeta && nextMeta.credits_refunded)) {
+			logCreation(`Refunding ${credit_cost} credits to user ${userId}`);
+			await queries.updateUserCreditsBalance.run(userId, Number(credit_cost));
+			await queries.updateCreatedImageJobFailed.run(imageId, userId, {
+				meta: mergeMeta(nextMeta, { credits_refunded: true }),
+			});
+		}
+
+		return { ok: false, reason: "invalid_server" };
+	}
+
+	logCreation(`Server ${server_id} validated`, {
+		server_url: server.server_url,
+		server_status: server.status,
+		has_auth_token: !!server.auth_token
+	});
+
+	let imageBuffer;
+	let color = null;
+	let width = DEFAULT_WIDTH;
+	let height = DEFAULT_HEIGHT;
+	let providerError = null;
+	let isVideo = false;
+	let videoBuffer = null;
+	let videoContentType = null;
+	let sourceImageUrlForMeta = null;
+	let isAudio = false;
+	let audioBuffer = null;
+	let audioContentType = null;
+	let voiceId = null;
+
+	let argsForProvider = args && typeof args === "object" ? { ...args } : {};
+	{
+		const stillOut = await resolveEphemeralStillProviderArgs(argsForProvider, {
+			userId,
+			queries,
+		});
+		if (!stillOut.ok) {
+			const err = new Error(stillOut.error || "Could not resolve ephemeral still.");
+			err.code = "STILL_RESOLVE_FAILED";
+			throw err;
+		}
+		argsForProvider = stillOut.args;
+	}
+	if (method !== UPLOAD_IMAGE_METHOD_KEY) {
+		try {
+			argsForProvider = await normalizeProviderArgsForAspectRatio({
+				args: argsForProvider,
+				storage,
+				userId,
+				fetchBuffer: fetchImageBufferFromUrl,
+			});
+		} catch (normErr) {
+			logCreationWarn("Input aspect normalization failed; sending original args", {
+				message: safeErrorMessage(normErr),
+			});
+		}
+	}
+	const asyncRequested = asyncRequestedFlag === true;
+	const providerFetchTimeoutMs =
+		asyncRequested ? PROVIDER_TIMEOUT_MS : creationMethodNeedsLongFetch(method) ? PROVIDER_VIDEO_FETCH_TIMEOUT_MS : PROVIDER_TIMEOUT_MS;
+
+	try {
+		const methodFields = server.server_config?.methods?.[method]?.fields || null;
+		const audioOut = await materializeBlueProviderAudioArgs(queries, userId, argsForProvider, {
+			methodFields,
+		});
+		if (!audioOut.ok) {
+			const err = new Error(audioOut.error || "Could not create a CDN link for this audio range.");
+			err.code = "AUDIO_RESOLVE_FAILED";
+			throw err;
+		}
+		argsForProvider = audioOut.args;
+		if (audioOut.handled || args?.audio_creation_id != null) {
+			logCreation("audio materialize for provider", {
+				method,
+				handled: Boolean(audioOut.handled),
+				has_input_audio_urls: Array.isArray(argsForProvider.input_audio_urls)
+					? argsForProvider.input_audio_urls.length
+					: 0,
+				stripped_audio_creation_id: argsForProvider.audio_creation_id == null,
+			});
+		}
+
+		const providerPayload = asyncRequested
+			? { method, args: argsForProvider, async: true }
+			: { method, args: argsForProvider };
+
+		console.log("[Creation] Sending to provider:", JSON.stringify(providerPayload, null, 2));
+
+		const providerResponse = await fetch(server.server_url, {
+			method: "POST",
+			headers: buildProviderHeaders(
+				{
+					"Content-Type": "application/json",
+					Accept: "image/png",
+				},
+				server.auth_token,
+				server.server_config?.custom_headers
+			),
+			body: JSON.stringify(providerPayload),
+			signal: AbortSignal.timeout(providerFetchTimeoutMs),
+		});
+
+		const providerContentType = String(providerResponse.headers.get("content-type") || "").toLowerCase();
+
+		if (!providerResponse.ok) {
+			const payload = await readProviderErrorPayload(providerResponse);
+			const providerMessage = providerBodyToMessage(payload.body);
+			const err = new Error(providerMessage || `Provider error: ${providerResponse.status} ${providerResponse.statusText}`);
+			err.code = "PROVIDER_NON_2XX";
+			err.provider = {
+				status: providerResponse.status,
+				statusText: providerResponse.statusText,
+				contentType: payload.contentType,
+				body: payload.body
+			};
+			throw err;
+		}
+
+		// Async JSON path: provider acknowledges async job instead of returning bytes.
+		if (providerContentType.includes("application/json")) {
+			let body = null;
+			try {
+				body = await providerResponse.json().catch(() => null);
+			} catch {
+				body = null;
+			}
+
+			if (asyncRequested && isAsyncAckBody(body, method)) {
+				const asyncEnv = isRemoteAsyncEnv();
+				const asyncBody = body || {};
+				const jobId = asyncBody.job_id;
+				const status = asyncBody.status || "pending";
+				const startedAtMs = existingMeta && existingMeta.started_at ? Date.parse(existingMeta.started_at) : NaN;
+				const ackAtIso = new Date().toISOString();
+				const ackAtMs = Date.parse(ackAtIso);
+				const durationMs =
+					Number.isFinite(startedAtMs) && Number.isFinite(ackAtMs) && ackAtMs >= startedAtMs
+						? ackAtMs - startedAtMs
+						: null;
+
+				const priorAttempts = Number(existingMeta?.provider_poll_attempts ?? 0);
+
+				let nextMeta = mergeMeta(existingMeta, {
+					provider_async: true,
+					provider_method: asyncBody.method || method,
+					provider_job_id: jobId,
+					provider_status: status,
+					provider_poll_attempts: priorAttempts,
+					provider_last_payload: asyncBody,
+					...(Number.isFinite(durationMs) && durationMs >= 0 ? { duration_ms: durationMs } : {}),
+				});
+				nextMeta = await persistGpuWaitStatus({
+					queries,
+					imageId,
+					userId,
+					existingMeta: nextMeta,
+					providerStatus: status,
+					method: asyncBody.method || method,
+					extra: lineExtraFromBody(asyncBody),
+				});
+
+				logCreation("Async provider ack received; scheduling first poll", {
+					imageId,
+					userId,
+					job_id: jobId,
+					status,
+				});
+				if (queries.updateCreatedImageMeta?.run) {
+					await queries.updateCreatedImageMeta.run(imageId, userId, nextMeta);
+				}
+
+				if (asyncEnv) {
+					// Cloud: schedule polling via QStash worker.
+					await enqueueProviderPollFollowUp({
+						queries,
+						storage,
+						imageId,
+						userId,
+						server_id,
+						credit_cost,
+					});
+
+					return { ok: true, reason: "async_queued" };
+				}
+
+				// Local: run the same polling state machine in-process so dev
+				// mirrors cloud behavior without requiring QStash.
+
+				// Fire-and-forget first poll; subsequent polls schedule themselves.
+				queueMicrotask(() => {
+					Promise.resolve(
+						runProviderPollJob({
+							queries,
+							storage,
+							payload: {
+								created_image_id: imageId,
+								user_id: userId,
+								server_id,
+								credit_cost,
+							},
+						}),
+					).catch((err) => {
+						void err;
+					});
+				});
+
+				return { ok: true, reason: "async_queued_local" };
+			}
+
+			if (isVoiceTrainSuccessBody(body)) {
+				isAudio = true;
+				voiceId = String(body.voice_id).trim();
+			} else {
+				const providerMessage = providerBodyToMessage(body);
+				const err = new Error(providerMessage || "Provider returned JSON instead of image/video.");
+				err.code = "PROVIDER_UNEXPECTED_JSON";
+				err.provider = {
+					status: providerResponse.status,
+					statusText: providerResponse.statusText,
+					contentType: providerContentType,
+					body,
+				};
+				throw err;
+			}
+		} else if (providerContentType.startsWith("video/")) {
+			isVideo = true;
+			videoContentType = providerContentType || "video/mp4";
+			const arrayBuffer = await providerResponse.arrayBuffer();
+			videoBuffer = Buffer.from(arrayBuffer);
+
+			sourceImageUrlForMeta = firstInputImageUrlFromArgs(argsForProvider);
+
+			const posterResolved = await resolveVideoJobPosterAndDimensions({
+				args: argsForProvider,
+				sourceImageUrl: videoPosterSourceImageUrl(method, argsForProvider),
+				fetchBuffer: fetchImageBufferFromUrl,
+			});
+			imageBuffer = posterResolved.imageBuffer;
+			width = posterResolved.width;
+			height = posterResolved.height;
+		} else if (providerContentType.startsWith("audio/")) {
+			isAudio = true;
+			audioContentType = providerContentType || "audio/mpeg";
+			audioBuffer = Buffer.from(await providerResponse.arrayBuffer());
+			const headerVoice = providerResponse.headers.get("X-Voice-Id");
+			if (headerVoice) voiceId = headerVoice.trim();
+			imageBuffer = await createPlaceholderImageBuffer();
+		} else {
+			if (providerContentType && !providerContentType.includes("image/png")) {
+				logCreationWarn("Provider returned non-PNG; converting to PNG", { providerContentType });
+			}
+
+			const rawBuffer = Buffer.from(await providerResponse.arrayBuffer());
+			imageBuffer = await ensurePngBuffer(rawBuffer);
+
+			const headerColor = providerResponse.headers.get("X-Image-Color");
+			const headerWidth = providerResponse.headers.get("X-Image-Width");
+			const headerHeight = providerResponse.headers.get("X-Image-Height");
+
+			if (headerColor) color = headerColor;
+			if (headerWidth) width = Number.parseInt(headerWidth, 10) || width;
+			if (headerHeight) height = Number.parseInt(headerHeight, 10) || height;
+		}
+	} catch (err) {
+		providerError = err;
+	}
+
+	if (providerError) {
+		const startedAtMs = existingMeta && existingMeta.started_at ? Date.parse(existingMeta.started_at) : NaN;
+		const failedAtIso = new Date().toISOString();
+		const failedAtMs = Date.parse(failedAtIso);
+		const durationMs =
+			Number.isFinite(startedAtMs) && Number.isFinite(failedAtMs) && failedAtMs >= startedAtMs
+				? failedAtMs - startedAtMs
+				: null;
+
+		const errorCode = inferErrorCode(providerError);
+		const providerDetails =
+			providerError && typeof providerError === "object" && providerError.provider && typeof providerError.provider === "object"
+				? providerError.provider
+				: null;
+		const errorMsg = safeErrorMessage(providerError);
+		const providerMsg = providerDetails ? providerBodyToMessage(providerDetails.body) : "";
+
+		logCreationError(`Marking job as failed`, {
+			imageId,
+			error_code: errorCode,
+			error: errorMsg,
+			duration_ms: durationMs
+		});
+
+		const nextMetaBase = mergeMeta(existingMeta, {
+			failed_at: failedAtIso,
+			error_code: errorCode,
+			error: providerMsg || errorMsg,
+			...(providerDetails ? { provider_error: providerDetails } : {}),
+			...(Number.isFinite(durationMs) && durationMs >= 0 ? { duration_ms: durationMs } : {}),
+		});
+
+		await queries.updateCreatedImageJobFailed.run(imageId, userId, { meta: nextMetaBase });
+
+		// Refund once.
+		if (credit_cost && !(nextMetaBase && nextMetaBase.credits_refunded)) {
+			logCreation(`Refunding ${credit_cost} credits to user ${userId}`);
+			await queries.updateUserCreditsBalance.run(userId, Number(credit_cost));
+			await queries.updateCreatedImageJobFailed.run(imageId, userId, {
+				meta: mergeMeta(nextMetaBase, { credits_refunded: true }),
+			});
+		}
+
+		return { ok: false, reason: "provider_failed" };
+	}
+
+	return await finalizeCreationJob({
+		queries,
+		storage,
+		imageId,
+		userId,
+		server,
+		existingMeta,
+		credit_cost,
+		imageBuffer,
+		color,
+		width,
+		height,
+		isVideo,
+		videoBuffer,
+		videoContentType,
+		sourceImageUrlForMeta,
+		isAudio,
+		audioBuffer,
+		audioContentType,
+		voiceId,
+	});
+}
+
+/** Anonymous (try) creation job: same provider flow, anon table + anon storage, no credits. */
+export async function runAnonCreationJob({ queries, storage, payload }) {
+	const { created_image_anon_id, server_id, method, args } = payload || {};
+
+	logCreation("runAnonCreationJob started", {
+		created_image_anon_id,
+		server_id,
+		method,
+		args_keys: args ? Object.keys(args) : []
+	});
+
+	if (!created_image_anon_id || !server_id || !method) {
+		const error = new Error("runAnonCreationJob: missing required payload fields");
+		logCreationError("Missing required fields", {
+			created_image_anon_id,
+			server_id,
+			method
+		});
+		throw error;
+	}
+
+	const imageId = Number(created_image_anon_id);
+
+	const image = await queries.selectCreatedImageAnonById.get(imageId);
+	if (!image) {
+		logCreationWarn(`Anon image ${imageId} not found`);
+		return { ok: false, reason: "not_found" };
+	}
+	if (image.status && image.status !== "creating") {
+		logCreation(`Skipping anon job - image ${imageId} already ${image.status}`);
+		return { ok: true, skipped: true, status: image.status };
+	}
+
+	const existingMeta = parseMeta(image.meta);
+
+	const server = await queries.selectServerById.get(server_id);
+	if (!server || server.status !== "active") {
+		const errorMsg = !server ? "Server not found" : "Server is not active";
+		logCreationError(`Anon server validation failed: ${errorMsg}`, { server_id });
+		const nextMeta = mergeMeta(existingMeta, {
+			failed_at: new Date().toISOString(),
+			error_code: "provider_error",
+			error: errorMsg
+		});
+		await queries.updateCreatedImageAnonJobFailed.run(imageId, { meta: nextMeta });
+		return { ok: false, reason: "invalid_server" };
+	}
+
+	let imageBuffer;
+	let width = DEFAULT_WIDTH;
+	let height = DEFAULT_HEIGHT;
+
+	try {
+		const providerResponse = await fetch(server.server_url, {
+			method: "POST",
+			headers: buildProviderHeaders(
+				{ "Content-Type": "application/json", Accept: "image/png" },
+				server.auth_token,
+				server.server_config?.custom_headers
+			),
+			body: JSON.stringify({ method, args: args || {} }),
+			signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
+		});
+
+		if (!providerResponse.ok) {
+			const payloadErr = await readProviderErrorPayload(providerResponse);
+			const providerMessage = providerBodyToMessage(payloadErr.body);
+			const err = new Error(providerMessage || `Provider error: ${providerResponse.status} ${providerResponse.statusText}`);
+			err.code = "PROVIDER_NON_2XX";
+			err.provider = {
+				status: providerResponse.status,
+				statusText: providerResponse.statusText,
+				contentType: payloadErr.contentType,
+				body: payloadErr.body
+			};
+			throw err;
+		}
+
+		const providerContentType = String(providerResponse.headers.get("content-type") || "").toLowerCase();
+		if (providerContentType && !providerContentType.includes("image/png")) {
+			logCreationWarn("Provider returned non-PNG; converting to PNG", { providerContentType });
+		}
+		const rawBuffer = Buffer.from(await providerResponse.arrayBuffer());
+		imageBuffer = await ensurePngBuffer(rawBuffer);
+
+		const headerWidth = providerResponse.headers.get("X-Image-Width");
+		const headerHeight = providerResponse.headers.get("X-Image-Height");
+		if (headerWidth) width = Number.parseInt(headerWidth, 10) || width;
+		if (headerHeight) height = Number.parseInt(headerHeight, 10) || height;
+	} catch (err) {
+		const startedAtMs = existingMeta?.started_at ? Date.parse(existingMeta.started_at) : NaN;
+		const failedAtIso = new Date().toISOString();
+		const failedAtMs = Date.parse(failedAtIso);
+		const durationMs =
+			Number.isFinite(startedAtMs) && Number.isFinite(failedAtMs) && failedAtMs >= startedAtMs
+				? failedAtMs - startedAtMs
+				: null;
+		const errorCode = inferErrorCode(err);
+		const providerDetails =
+			err && typeof err === "object" && err.provider && typeof err.provider === "object" ? err.provider : null;
+		const errorMsg = safeErrorMessage(err);
+		const providerMsg = providerDetails ? providerBodyToMessage(providerDetails.body) : "";
+		const nextMeta = mergeMeta(existingMeta, {
+			failed_at: failedAtIso,
+			error_code: errorCode,
+			error: providerMsg || errorMsg,
+			...(providerDetails ? { provider_error: providerDetails } : {}),
+			...(Number.isFinite(durationMs) && durationMs >= 0 ? { duration_ms: durationMs } : {}),
+		});
+		await queries.updateCreatedImageAnonJobFailed.run(imageId, { meta: nextMeta });
+		return { ok: false, reason: "provider_failed" };
+	}
+
+	const timestamp = Date.now();
+	const random = Math.random().toString(36).substring(2, 9);
+	const filename = `anon_${imageId}_${timestamp}_${random}.png`;
+
+	const imageUrl = await storage.uploadImageAnon(imageBuffer, filename);
+	const completedAtIso = new Date().toISOString();
+	const startedAtMs = existingMeta?.started_at ? Date.parse(existingMeta.started_at) : NaN;
+	const completedAtMs = Date.parse(completedAtIso);
+	const durationMs =
+		Number.isFinite(startedAtMs) && Number.isFinite(completedAtMs) && completedAtMs >= startedAtMs
+			? completedAtMs - startedAtMs
+			: null;
+	const completedMeta = mergeMeta(existingMeta, {
+		completed_at: completedAtIso,
+		...(Number.isFinite(durationMs) && durationMs >= 0 ? { duration_ms: durationMs } : {}),
+	});
+
+	await queries.updateCreatedImageAnonJobCompleted.run(imageId, {
+		filename,
+		file_path: imageUrl,
+		width,
+		height,
+		meta: completedMeta,
+	});
+
+	await queries.updateTryRequestFulfilledByCreatedImageAnonId?.run?.(imageId, completedAtIso);
+
+	logCreation("Anon job completed", { imageId, filename, width, height });
+	return { ok: true, id: imageId, filename, url: imageUrl, width, height };
+}
+
+export async function runProviderPollJob({ queries, storage, payload }) {
+	const { created_image_id, user_id, server_id, credit_cost } = payload || {};
+
+	logCreation("runProviderPollJob started", {
+		created_image_id,
+		user_id,
+		server_id,
+		credit_cost,
+	});
+
+	if (!created_image_id || !user_id || !server_id) {
+		const error = new Error("runProviderPollJob: missing required payload fields");
+		logCreationError("Missing required fields (poll)", { created_image_id, user_id, server_id });
+		throw error;
+	}
+
+	const userId = Number(user_id);
+	const imageId = Number(created_image_id);
+
+	const image = await queries.selectCreatedImageById.get(imageId, userId);
+	if (!image) {
+		logCreationWarn(`Poll: image ${imageId} not found for user ${userId} - may have been deleted`);
+		return { ok: false, reason: "not_found" };
+	}
+
+	if (image.status && !isCreationGpuInFlight(image.status)) {
+		logCreation(`Poll: skipping job - image ${imageId} already ${image.status}`);
+		return { ok: true, skipped: true, status: image.status };
+	}
+
+	const existingMeta = parseMeta(image.meta) || {};
+	if (!existingMeta.provider_async || !existingMeta.provider_last_payload) {
+		logCreationWarn("Poll: provider_async meta missing; nothing to do", { imageId });
+		return { ok: false, reason: "not_async" };
+	}
+
+	if (!shouldKeepProviderPoll(image.status, existingMeta)) {
+		logCreation("Poll: hard cap reached; marking failed", {
+			imageId,
+			userId,
+			status: image.status,
+			timeout_at: existingMeta.timeout_at || null,
+			started_at: existingMeta.started_at || null,
+		});
+		const timeoutErr = new Error("Timed out waiting for generation to finish.");
+		timeoutErr.name = "AbortError";
+		return markProviderPollFailed({
+			queries,
+			imageId,
+			userId,
+			existingMeta,
+			credit_cost,
+			providerError: timeoutErr,
+		});
+	}
+
+	const lock = await claimProviderPollRunLock({
+		queries,
+		imageId,
+		userId,
+		existingMeta,
+	});
+	if (!lock.claimed) {
+		logCreation("Poll: skip, another poll is already running", { imageId, userId });
+		return { ok: true, skipped: true, reason: "poll_already_running" };
+	}
+	const lockedMeta = lock.meta || existingMeta;
+
+	const server = await queries.selectServerById.get(server_id);
+	if (!server || server.status !== "active") {
+		const errorMsg = !server ? "Server not found" : "Server is not active";
+		logCreationError(`Poll: server validation failed: ${errorMsg}`, {
+			server_id,
+			server_found: !!server,
+			server_status: server?.status,
+		});
+
+		const nextMeta = mergeMeta(existingMeta, {
+			failed_at: new Date().toISOString(),
+			error_code: "provider_error",
+			error: errorMsg,
+			provider_status: "failed",
+		});
+		await queries.updateCreatedImageJobFailed.run(imageId, userId, { meta: nextMeta });
+
+		if (credit_cost && !(nextMeta && nextMeta.credits_refunded)) {
+			logCreation(`Poll: refunding ${credit_cost} credits to user ${userId}`);
+			await queries.updateUserCreditsBalance.run(userId, Number(credit_cost));
+			await queries.updateCreatedImageJobFailed.run(imageId, userId, {
+				meta: mergeMeta(nextMeta, { credits_refunded: true }),
+			});
+		}
+
+		return { ok: false, reason: "invalid_server" };
+	}
+
+	const argsPayload = lockedMeta.provider_last_payload;
+	let imageBuffer;
+	let color = null;
+	let width = DEFAULT_WIDTH;
+	let height = DEFAULT_HEIGHT;
+	let providerError = null;
+	let isVideo = false;
+	let videoBuffer = null;
+	let videoContentType = null;
+	let sourceImageUrlForMeta = null;
+	let isAudio = false;
+	let audioBuffer = null;
+	let audioContentType = null;
+	let voiceId = null;
+
+	try {
+		const pollMethod = lockedMeta.provider_method || lockedMeta.method || payload?.method;
+		const pollJobId =
+			(argsPayload && typeof argsPayload.job_id === "string" && argsPayload.job_id) ||
+			(lockedMeta && typeof lockedMeta.provider_job_id === "string" && lockedMeta.provider_job_id) ||
+			null;
+
+		const pollBody = {
+			method: pollMethod,
+			async: true,
+			args: pollJobId ? { job_id: pollJobId } : {},
+		};
+
+		const maxFetches = 2;
+		for (let fetchAttempt = 1; fetchAttempt <= maxFetches; fetchAttempt += 1) {
+		const providerResponse = await fetch(server.server_url, {
+			method: "POST",
+			headers: buildProviderHeaders(
+				{
+					"Content-Type": "application/json",
+					Accept: "image/png",
+				},
+				server.auth_token,
+				server.server_config?.custom_headers
+			),
+			body: JSON.stringify(pollBody),
+			signal: AbortSignal.timeout(PROVIDER_VIDEO_FETCH_TIMEOUT_MS),
+		});
+
+		const providerContentType = String(providerResponse.headers.get("content-type") || "").toLowerCase();
+
+		if (!providerResponse.ok) {
+			const payloadErr = await readProviderErrorPayload(providerResponse);
+			const providerMessage = providerBodyToMessage(payloadErr.body);
+			const err = new Error(providerMessage || `Provider error: ${providerResponse.status} ${providerResponse.statusText}`);
+			err.code = "PROVIDER_NON_2XX";
+			err.provider = {
+				status: providerResponse.status,
+				statusText: providerResponse.statusText,
+				contentType: payloadErr.contentType,
+				body: payloadErr.body,
+			};
+			throw err;
+		}
+
+		if (providerContentType.includes("application/json")) {
+			let body = null;
+			try {
+				body = await providerResponse.json().catch(() => null);
+			} catch {
+				body = null;
+			}
+
+			if (body && body.async === true && isTerminalFailedProviderStatus(body.status)) {
+				const providerMessage = providerBodyToMessage(body);
+				const err = new Error(providerMessage || "Provider job failed.");
+				err.code = "PROVIDER_JOB_FAILED";
+				err.provider = {
+					status: providerResponse.status,
+					statusText: providerResponse.statusText,
+					contentType: providerContentType,
+					body,
+				};
+				return markProviderPollFailed({
+					queries,
+					imageId,
+					userId,
+					existingMeta: lockedMeta,
+					credit_cost,
+					providerError: err,
+				});
+			}
+
+			if (isAsyncAckBody(body, lockedMeta.method)) {
+				const asyncBody = body || {};
+				const jobId = asyncBody.job_id;
+				const status = asyncBody.status || "pending";
+
+				if (isTerminalCompletedProviderStatus(status)) {
+					if (fetchAttempt < maxFetches) {
+						logCreation("Poll: provider JSON says done; fetching artifact bytes", {
+							imageId,
+							job_id: jobId,
+							status,
+						});
+						continue;
+					}
+
+					const jsonDonePolls = Number(lockedMeta.provider_json_completed_polls ?? 0) + 1;
+					const nextMeta = mergeMeta(lockedMeta, {
+						provider_job_id: jobId,
+						provider_status: status,
+						provider_last_payload: asyncBody,
+						provider_json_completed_at:
+							lockedMeta.provider_json_completed_at || new Date().toISOString(),
+						provider_json_completed_polls: jsonDonePolls,
+					});
+					if (queries.updateCreatedImageMeta?.run) {
+						await queries.updateCreatedImageMeta.run(imageId, userId, nextMeta);
+					}
+					if (jsonDonePolls > 30) {
+						const err = new Error("Provider finished but did not return media bytes.");
+						err.code = "PROVIDER_UNEXPECTED_JSON";
+						throw err;
+					}
+					logCreation("Poll: still JSON after done; scheduling another bytes fetch", {
+						imageId,
+						job_id: jobId,
+						json_completed_polls: jsonDonePolls,
+					});
+					return enqueueProviderPollFollowUp({
+						queries,
+						storage,
+						imageId,
+						userId,
+						server_id,
+						credit_cost,
+						delaySeconds: 1,
+					});
+				}
+
+				const generating =
+					gpuWaitFromProviderStatus(status)?.phase === "generating";
+				const nextAttempts = generating
+					? Number(lockedMeta.provider_poll_attempts ?? 0) + 1
+					: Number(lockedMeta.provider_poll_attempts ?? 0);
+
+				let nextMeta = mergeMeta(lockedMeta, {
+					provider_job_id: jobId,
+					provider_status: status,
+					provider_poll_attempts: nextAttempts,
+					provider_last_payload: asyncBody,
+				});
+				nextMeta = await persistGpuWaitStatus({
+					queries,
+					imageId,
+					userId,
+					existingMeta: nextMeta,
+					providerStatus: status,
+					method: lockedMeta.method,
+					extra: lineExtraFromBody(asyncBody),
+				});
+
+				logCreation("Poll: async provider still processing; scheduling another poll", {
+					imageId,
+					userId,
+					job_id: jobId,
+					status,
+					poll_attempts: nextAttempts,
+				});
+
+				if (queries.updateCreatedImageMeta?.run) {
+					await queries.updateCreatedImageMeta.run(imageId, userId, nextMeta);
+				}
+
+				const waitStatus =
+					gpuWaitFromProviderStatus(status)?.creationStatus || image.status;
+				return continueOrTimeoutPoll({
+					queries,
+					storage,
+					imageId,
+					userId,
+					server_id,
+					credit_cost,
+					creationStatus: waitStatus,
+					meta: nextMeta,
+				});
+			}
+
+			if (isVoiceTrainSuccessBody(body)) {
+				isAudio = true;
+				voiceId = String(body.voice_id).trim();
+			} else {
+				const providerMessage = providerBodyToMessage(body);
+				if (isProviderJobGoneMessage(providerMessage)) {
+					const err = new Error(providerMessage || "Provider job is gone.");
+					err.code = "PROVIDER_JOB_FAILED";
+					err.provider = {
+						status: providerResponse.status,
+						statusText: providerResponse.statusText,
+						contentType: providerContentType,
+						body,
+					};
+					return markProviderPollFailed({
+						queries,
+						imageId,
+						userId,
+						existingMeta: lockedMeta,
+						credit_cost,
+						providerError: err,
+					});
+				}
+				const err = new Error(providerMessage || "Provider returned unexpected JSON during poll.");
+				err.code = "PROVIDER_UNEXPECTED_JSON";
+				err.provider = {
+					status: providerResponse.status,
+					statusText: providerResponse.statusText,
+					contentType: providerContentType,
+					body,
+				};
+				throw err;
+			}
+		} else if (providerContentType.startsWith("video/")) {
+			isVideo = true;
+			videoContentType = providerContentType || "video/mp4";
+			const arrayBuffer = await providerResponse.arrayBuffer();
+			videoBuffer = Buffer.from(arrayBuffer);
+
+			// Use original request args (existingMeta.args) for thumbnail; argsPayload is the provider ack (job_id, status), not the request.
+			const originalArgs = existingMeta.args && typeof existingMeta.args === "object" ? existingMeta.args : {};
+			sourceImageUrlForMeta =
+				firstInputImageUrlFromArgs(originalArgs) || firstInputImageUrlFromArgs(argsPayload);
+
+			const posterResolved = await resolveVideoJobPosterAndDimensions({
+				args: originalArgs,
+				sourceImageUrl: videoPosterSourceImageUrl(
+					lockedMeta.method || existingMeta.method,
+					originalArgs,
+					firstInputImageUrlFromArgs(argsPayload)
+				),
+				logWarn: (msg, detail) =>
+					logCreationWarn(
+						detail ? `Poll: ${msg}: ${detail}` : `Poll: ${msg}`
+					),
+			});
+			imageBuffer = posterResolved.imageBuffer;
+			width = posterResolved.width;
+			height = posterResolved.height;
+		} else if (providerContentType.startsWith("audio/")) {
+			isAudio = true;
+			audioContentType = providerContentType || "audio/mpeg";
+			audioBuffer = Buffer.from(await providerResponse.arrayBuffer());
+			const headerVoice = providerResponse.headers.get("X-Voice-Id");
+			if (headerVoice) voiceId = headerVoice.trim();
+			imageBuffer = await createPlaceholderImageBuffer();
+		} else {
+			if (providerContentType && !providerContentType.includes("image/png")) {
+				logCreationWarn("Poll: provider returned non-PNG; converting to PNG", { providerContentType });
+			}
+
+			const rawBuffer = Buffer.from(await providerResponse.arrayBuffer());
+			imageBuffer = await ensurePngBuffer(rawBuffer);
+
+			const headerColor = providerResponse.headers.get("X-Image-Color");
+			const headerWidth = providerResponse.headers.get("X-Image-Width");
+			const headerHeight = providerResponse.headers.get("X-Image-Height");
+
+			if (headerColor) color = headerColor;
+			if (headerWidth) width = Number.parseInt(headerWidth, 10) || width;
+			if (headerHeight) height = Number.parseInt(headerHeight, 10) || height;
+		}
+		break;
+		}
+	} catch (err) {
+		providerError = err;
+	}
+
+	if (providerError) {
+		const waitStatus = image.status;
+		if (isTransientProviderPollError(providerError) && shouldKeepProviderPoll(waitStatus, existingMeta)) {
+			logCreationWarn("Poll: transient provider error; scheduling retry", {
+				imageId,
+				error: safeErrorMessage(providerError),
+				status: waitStatus,
+			});
+			const nextMeta = mergeMeta(existingMeta, {
+				provider_last_error: safeErrorMessage(providerError),
+				provider_last_error_at: new Date().toISOString(),
+			});
+			if (queries.updateCreatedImageMeta?.run) {
+				await queries.updateCreatedImageMeta.run(imageId, userId, nextMeta);
+			}
+			return enqueueProviderPollFollowUp({
+				queries,
+				storage,
+				imageId,
+				userId,
+				server_id,
+				credit_cost,
+			});
+		}
+		return markProviderPollFailed({
+			queries,
+			imageId,
+			userId,
+			existingMeta,
+			credit_cost,
+			providerError,
+		});
+	}
+
+	return await finalizeCreationJob({
+		queries,
+		storage,
+		imageId,
+		userId,
+		server,
+		existingMeta,
+		credit_cost,
+		imageBuffer,
+		color,
+		width,
+		height,
+		isVideo,
+		videoBuffer,
+		videoContentType,
+		sourceImageUrlForMeta,
+		isAudio,
+		audioBuffer,
+		audioContentType,
+		voiceId,
+	});
+}
+
+const DEFAULT_REPAIR_VIDEO_TIMEOUT_MS = PROVIDER_VIDEO_FETCH_TIMEOUT_MS;
+const DEFAULT_REPAIR_MAX_VIDEO_BYTES = 150 * 1024 * 1024;
+
+/**
+ * Resolve DB rows + poll body for async provider jobs (probe / repair).
+ * @returns {Promise<
+ *   | { ok: false; reason: string; message?: string; server_id?: number }
+ *   | {
+ * 			ok: true;
+ * 			image: object;
+ * 			server: object;
+ * 			existingMeta: Record<string, unknown>;
+ * 			pollBody: { method: string; async: boolean; args: { job_id: string } };
+ * 			imageId: number;
+ * 			serverId: number;
+ * 			baseOut: Record<string, unknown>;
+ * 		}
+ * >}
+ */
+async function resolveProviderAsyncPollContext(queries, createdImageId) {
+	const imageId = Number(createdImageId);
+	if (!Number.isFinite(imageId) || imageId < 1) {
+		return { ok: false, reason: "invalid_id" };
+	}
+	const getAny = queries.selectCreatedImageByIdAnyUser?.get;
+	if (typeof getAny !== "function") {
+		return { ok: false, reason: "missing_db_query" };
+	}
+	const image = await getAny(imageId);
+	if (!image) {
+		return { ok: false, reason: "not_found" };
+	}
+	const existingMeta = parseMeta(image.meta) || {};
+	const serverId = Number(existingMeta.server_id);
+	if (!Number.isFinite(serverId) || serverId < 1) {
+		return {
+			ok: false,
+			reason: "missing_server_id",
+			message: "meta.server_id is missing; cannot reach the provider for this creation.",
+		};
+	}
+	const getServer = queries.selectServerById?.get;
+	if (typeof getServer !== "function") {
+		return { ok: false, reason: "missing_db_query" };
+	}
+	const server = await getServer(serverId);
+	if (!server?.server_url) {
+		return { ok: false, reason: "server_not_found", server_id: serverId };
+	}
+	const argsPayload = existingMeta.provider_last_payload;
+	const pollJobId =
+		(argsPayload && typeof argsPayload.job_id === "string" && argsPayload.job_id) ||
+		(typeof existingMeta.provider_job_id === "string" && existingMeta.provider_job_id) ||
+		null;
+	if (!pollJobId) {
+		return {
+			ok: false,
+			reason: "missing_job_id",
+			message: "meta.provider_job_id (or provider_last_payload.job_id) is missing.",
+		};
+	}
+	const pollMethod = existingMeta.provider_method || existingMeta.method;
+	if (!pollMethod || typeof pollMethod !== "string") {
+		return { ok: false, reason: "missing_method", message: "meta.provider_method / meta.method missing." };
+	}
+	const pollBody = {
+		method: pollMethod,
+		async: true,
+		args: { job_id: pollJobId },
+	};
+	const baseOut = {
+		ok: true,
+		created_image_id: imageId,
+		poll_body: pollBody,
+		server_id: serverId,
+		server_url: server.server_url,
+		server_row_status: server.status || null,
+		creation_row_status: image.status || null,
+	};
+	return {
+		ok: true,
+		image,
+		server,
+		existingMeta,
+		pollBody,
+		imageId,
+		serverId,
+		baseOut,
+	};
+}
+
+async function completeRepairAfterVideoBytes({
+	baseOut,
+	image,
+	existingMeta,
+	imageId,
+	userId,
+	queries,
+	storage,
+	maxVideoBytes,
+	videoBuf,
+	contentType,
+	provider_http_status,
+}) {
+	const httpStatus = provider_http_status ?? 200;
+	const ctLower = String(contentType || "").toLowerCase();
+	if (!videoBuf || videoBuf.length === 0) {
+		return {
+			...baseOut,
+			repaired: false,
+			provider_http_status: httpStatus,
+			provider_content_type: ctLower,
+			summary: "Empty video body.",
+		};
+	}
+	if (videoBuf.length > maxVideoBytes) {
+		return {
+			...baseOut,
+			repaired: false,
+			provider_http_status: httpStatus,
+			video_byte_length: videoBuf.length,
+			summary: `Body (${videoBuf.length} B) exceeds maxVideoBytes (${maxVideoBytes} B).`,
+		};
+	}
+
+	const baseCt = (ctLower.split(";")[0] || "video/mp4").trim() || "video/mp4";
+	const baseExt =
+		typeof baseCt === "string" && baseCt.startsWith("video/") && baseCt.split("/")[1]
+			? baseCt.split("/")[1]
+			: "mp4";
+	const safeExt = (baseExt.split("+")[0].split(";")[0].trim() || "mp4").replace(/[^a-z0-9]/gi, "") || "mp4";
+	const timestamp = Date.now();
+	const random = Math.random().toString(36).substring(2, 9);
+	const videoFilename = `video/${userId}_${imageId}_${timestamp}_${random}.${safeExt}`;
+	let videoUrl;
+	try {
+		videoUrl = await storage.uploadVideo(videoBuf, videoFilename, {
+			contentType: baseCt,
+		});
+	} catch (err) {
+		return {
+			...baseOut,
+			repaired: false,
+			provider_http_status: httpStatus,
+			provider_content_type: ctLower,
+			video_byte_length: videoBuf.length,
+			summary: "Failed to upload video to storage.",
+			upload_error: safeErrorMessage(err),
+		};
+	}
+
+	const argsObj = existingMeta.args && typeof existingMeta.args === "object" ? existingMeta.args : {};
+	const sourceFromArgs =
+		(typeof argsObj.image_url === "string" && argsObj.image_url) ||
+		(typeof argsObj.image === "string" && argsObj.image) ||
+		(Array.isArray(argsObj.input_images) && typeof argsObj.input_images[0] === "string" && argsObj.input_images[0]) ||
+		null;
+
+	const metaPatch = {
+		media_type: "video",
+		completed_at: existingMeta.completed_at || new Date().toISOString(),
+		video: {
+			filename: videoFilename,
+			file_path: videoUrl,
+			content_type: baseCt,
+		},
+		provider_status: "succeeded",
+		provider_video_repaired_at: new Date().toISOString(),
+		...(!existingMeta.source_image_url && sourceFromArgs
+			? { source_image_url: String(sourceFromArgs).trim() }
+			: {}),
+	};
+
+	const mergedMeta = mergeMeta(existingMeta, metaPatch);
+
+	const upMeta = queries.updateCreatedImageMeta?.run;
+	if (typeof upMeta !== "function") {
+		return {
+			...baseOut,
+			repaired: false,
+			video_url: videoUrl,
+			summary: "Video uploaded but updateCreatedImageMeta is unavailable — orphan object may exist in storage.",
+		};
+	}
+	const up = await upMeta(imageId, userId, mergedMeta);
+	const changes = Number(up?.changes ?? 0);
+	if (!up || changes === 0) {
+		return {
+			...baseOut,
+			repaired: false,
+			video_url: videoUrl,
+			summary: "Video uploaded but meta update affected 0 rows.",
+		};
+	}
+
+	if (image.status === "failed" && typeof queries.updateCreatedImageStatus?.run === "function") {
+		try {
+			await queries.updateCreatedImageStatus.run(imageId, userId, "completed");
+		} catch {
+			// best-effort
+		}
+	}
+
+	return {
+		...baseOut,
+		repaired: true,
+		provider_http_status: httpStatus,
+		provider_content_type: ctLower,
+		video_byte_length: videoBuf.length,
+		video_url: videoUrl,
+		video_filename: videoFilename,
+		summary: "meta.video patched via admin repair (single provider request; no polling).",
+	};
+}
+
+/**
+ * Admin/diagnostic: send the same async poll POST as runProviderPollJob without
+ * updating the database. Does not download full video bodies (cancels stream when content-type is video/*).
+ */
+export async function probeProviderAsyncJob({ queries, createdImageId }) {
+	const ctx = await resolveProviderAsyncPollContext(queries, createdImageId);
+	if (!ctx.ok) {
+		return ctx;
+	}
+	const { server, pollBody, baseOut } = ctx;
+	let providerResponse;
+	try {
+		providerResponse = await fetch(server.server_url, {
+			method: "POST",
+			headers: buildProviderHeaders(
+				{
+					"Content-Type": "application/json",
+					Accept: "image/png",
+				},
+				server.auth_token,
+				server.server_config?.custom_headers
+			),
+			body: JSON.stringify(pollBody),
+			signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
+		});
+	} catch (err) {
+		return {
+			...baseOut,
+			ok: false,
+			reason: "fetch_error",
+			message: safeErrorMessage(err),
+		};
+	}
+	const httpStatus = providerResponse.status;
+	const contentType = String(providerResponse.headers.get("content-type") || "").toLowerCase();
+	const contentLengthHdr = providerResponse.headers.get("content-length");
+	const parsedLen = contentLengthHdr != null && contentLengthHdr !== "" ? Number(contentLengthHdr) : NaN;
+	const contentLength = Number.isFinite(parsedLen) ? parsedLen : null;
+
+	if (!providerResponse.ok) {
+		const payloadErr = await readProviderErrorPayload(providerResponse);
+		return {
+			...baseOut,
+			provider_http_status: httpStatus,
+			provider_content_type: contentType,
+			provider_error_body: payloadErr.body,
+			recoverable_video: false,
+			summary: "Provider returned a non-2xx response for the poll request.",
+		};
+	}
+
+	if (contentType.includes("application/json")) {
+		let body = null;
+		try {
+			body = await providerResponse.json().catch(() => null);
+		} catch {
+			body = null;
+		}
+		let jsonStringTruncated = false;
+		let jsonStringPreview = null;
+		try {
+			const s = JSON.stringify(body);
+			if (s.length > 20000) {
+				jsonStringTruncated = true;
+				jsonStringPreview = `${s.slice(0, 20000)}…`;
+			}
+		} catch {
+			jsonStringPreview = "[unserializable]";
+			jsonStringTruncated = true;
+		}
+		const statusLower = typeof body?.status === "string" ? body.status.toLowerCase() : "";
+		const stillRunning = ["processing", "pending", "running", "queued", "starting"].includes(statusLower);
+		const terminalCompleted = ["completed", "succeeded", "done"].includes(statusLower);
+		return {
+			...baseOut,
+			provider_http_status: httpStatus,
+			provider_content_type: contentType,
+			kind: "json",
+			provider_json: jsonStringTruncated ? null : body,
+			provider_json_string_preview: jsonStringTruncated ? jsonStringPreview : null,
+			json_string_truncated: jsonStringTruncated,
+			async_job_status: typeof body?.status === "string" ? body.status : null,
+			still_in_progress: stillRunning,
+			terminal_completed_json: terminalCompleted,
+			recoverable_video: false,
+			summary: stillRunning
+				? "Provider still reports in-progress JSON (job may still be running; a later poll might return video/* bytes)."
+				: terminalCompleted
+					? "Provider reports a terminal completed status in JSON only. Parascene normally expects video bytes on a different poll; if the row is already completed without meta.video, this JSON-only terminal response may indicate a provider/worker mismatch."
+					: "Provider returned JSON (see provider_json).",
+		};
+	}
+
+	if (contentType.startsWith("video/")) {
+		try {
+			await providerResponse.body?.cancel?.();
+		} catch {
+			// ignore
+		}
+		return {
+			...baseOut,
+			provider_http_status: httpStatus,
+			provider_content_type: contentType,
+			provider_content_length: contentLength,
+			kind: "video",
+			recoverable_video: true,
+			summary:
+				"Provider returned video/* (headers only; body not downloaded). A full recovery flow could upload this stream to storage and patch meta.video — not done by this probe.",
+		};
+	}
+
+	if (Number.isFinite(contentLength) && contentLength > 5 * 1024 * 1024) {
+		try {
+			await providerResponse.body?.cancel?.();
+		} catch {
+			// ignore
+		}
+		return {
+			...baseOut,
+			provider_http_status: httpStatus,
+			provider_content_type: contentType,
+			provider_content_length: contentLength,
+			kind: "binary_skipped",
+			recoverable_video: false,
+			summary: "Large non-JSON response skipped in probe to avoid loading entire body into memory.",
+		};
+	}
+
+	const rawBuffer = Buffer.from(await providerResponse.arrayBuffer());
+	return {
+		...baseOut,
+		provider_http_status: httpStatus,
+		provider_content_type: contentType,
+		kind: "binary",
+		provider_body_bytes: rawBuffer.length,
+		recoverable_video: false,
+		summary: "Provider returned a small non-JSON body (e.g. PNG). Unexpected for a video poll unless the job already finished with an image.",
+	};
+}
+
+/**
+ * Admin: one POST to the provider (same poll body as runProviderPollJob). If the response is video/*,
+ * uploads to storage and patches meta.video. No QStash scheduling and no multi-step polling loop.
+ * Does not run when meta.video.file_path is already set unless options.force === true.
+ */
+export async function repairProviderAsyncVideoJob({ queries, storage, createdImageId, options = {} }) {
+	const force = options.force === true;
+	const maxVideoBytes =
+		Number.isFinite(Number(options.maxVideoBytes)) && Number(options.maxVideoBytes) > 0
+			? Number(options.maxVideoBytes)
+			: DEFAULT_REPAIR_MAX_VIDEO_BYTES;
+	const repairTimeoutMs =
+		Number.isFinite(Number(options.repairTimeoutMs)) && Number(options.repairTimeoutMs) >= 5000
+			? Number(options.repairTimeoutMs)
+			: DEFAULT_REPAIR_VIDEO_TIMEOUT_MS;
+
+	if (!storage || typeof storage.uploadVideo !== "function") {
+		return {
+			ok: false,
+			reason: "storage_upload_video_unavailable",
+			message: "storage.uploadVideo is not configured.",
+		};
+	}
+
+	const ctx = await resolveProviderAsyncPollContext(queries, createdImageId);
+	if (!ctx.ok) {
+		return ctx;
+	}
+	const { image, server, existingMeta, pollBody, imageId, baseOut } = ctx;
+	const userId = Number(image.user_id);
+	if (!Number.isFinite(userId) || userId < 1) {
+		return { ...baseOut, ok: false, reason: "invalid_user_id", message: "creation.user_id missing." };
+	}
+
+	const existingVideoPath =
+		existingMeta &&
+		typeof existingMeta.video === "object" &&
+		existingMeta.video &&
+		typeof existingMeta.video.file_path === "string" &&
+		existingMeta.video.file_path.trim();
+	if (existingVideoPath && !force) {
+		return {
+			...baseOut,
+			repaired: false,
+			skipped: true,
+			reason: "already_has_video",
+			existing_video_url: String(existingMeta.video.file_path).trim(),
+			summary: "meta.video.file_path is already set. Pass options.force=true (or JSON body.force) to replace.",
+		};
+	}
+
+	let providerResponse;
+	try {
+		providerResponse = await fetch(server.server_url, {
+			method: "POST",
+			headers: buildProviderHeaders(
+				{
+					"Content-Type": "application/json",
+					Accept: "image/png",
+				},
+				server.auth_token,
+				server.server_config?.custom_headers
+			),
+			body: JSON.stringify(pollBody),
+			signal: AbortSignal.timeout(repairTimeoutMs),
+		});
+	} catch (err) {
+		return {
+			...baseOut,
+			ok: false,
+			reason: "fetch_error",
+			message: safeErrorMessage(err),
+		};
+	}
+
+	const httpStatus = providerResponse.status;
+	const contentType = String(providerResponse.headers.get("content-type") || "").toLowerCase();
+	const contentLengthHdr = providerResponse.headers.get("content-length");
+	const parsedLen = contentLengthHdr != null && contentLengthHdr !== "" ? Number(contentLengthHdr) : NaN;
+	const contentLength = Number.isFinite(parsedLen) ? parsedLen : null;
+
+	if (!providerResponse.ok) {
+		const payloadErr = await readProviderErrorPayload(providerResponse);
+		return {
+			...baseOut,
+			repaired: false,
+			provider_http_status: httpStatus,
+			provider_content_type: contentType,
+			provider_error_body: payloadErr.body,
+			summary: "Provider returned non-2xx; database unchanged.",
+		};
+	}
+
+	if (contentType.includes("application/json")) {
+		let body = null;
+		try {
+			body = await providerResponse.json().catch(() => null);
+		} catch {
+			body = null;
+		}
+		const statusLower = typeof body?.status === "string" ? body.status.toLowerCase() : "";
+		const stillRunning = ["processing", "pending", "running", "queued", "starting"].includes(statusLower);
+		return {
+			...baseOut,
+			repaired: false,
+			provider_http_status: httpStatus,
+			provider_content_type: contentType,
+			kind: "json",
+			provider_json: body,
+			still_in_progress: stillRunning,
+			summary: stillRunning
+				? "Provider still in progress (JSON). Retry repair later when the job may return video/*."
+				: "Provider returned JSON without video bytes; cannot repair from this response.",
+		};
+	}
+
+	if (!contentType.startsWith("video/")) {
+		if (Number.isFinite(contentLength) && contentLength > 5 * 1024 * 1024) {
+			try {
+				await providerResponse.body?.cancel?.();
+			} catch {
+				// ignore
+			}
+			return {
+				...baseOut,
+				repaired: false,
+				provider_http_status: httpStatus,
+				provider_content_type: contentType,
+				provider_content_length: contentLength,
+				summary: "Unexpected large non-video body; skipped read. Database unchanged.",
+			};
+		}
+		let byteLen = 0;
+		try {
+			const rawBuffer = Buffer.from(await providerResponse.arrayBuffer());
+			byteLen = rawBuffer.length;
+		} catch {
+			byteLen = 0;
+		}
+		return {
+			...baseOut,
+			repaired: false,
+			provider_http_status: httpStatus,
+			provider_content_type: contentType,
+			provider_body_bytes: byteLen,
+			summary: "Provider did not return video/*; no repair applied.",
+		};
+	}
+
+	if (Number.isFinite(contentLength) && contentLength > maxVideoBytes) {
+		try {
+			await providerResponse.body?.cancel?.();
+		} catch {
+			// ignore
+		}
+		return {
+			...baseOut,
+			repaired: false,
+			provider_http_status: httpStatus,
+			provider_content_type: contentType,
+			provider_content_length: contentLength,
+			video_byte_length: contentLength,
+			summary: `Content-Length (${contentLength} B) exceeds maxVideoBytes (${maxVideoBytes} B).`,
+		};
+	}
+
+	const videoBuf = Buffer.from(await providerResponse.arrayBuffer());
+	if (videoBuf.length > maxVideoBytes) {
+		return {
+			...baseOut,
+			repaired: false,
+			provider_http_status: httpStatus,
+			provider_content_type: contentType,
+			video_byte_length: videoBuf.length,
+			summary: `Downloaded body (${videoBuf.length} B) exceeds maxVideoBytes (${maxVideoBytes} B).`,
+		};
+	}
+	if (videoBuf.length === 0) {
+		return {
+			...baseOut,
+			repaired: false,
+			provider_http_status: httpStatus,
+			provider_content_type: contentType,
+			summary: "Provider returned empty video body.",
+		};
+	}
+
+	return completeRepairAfterVideoBytes({
+		baseOut,
+		image,
+		existingMeta,
+		imageId,
+		userId,
+		queries,
+		storage,
+		maxVideoBytes,
+		videoBuf,
+		contentType,
+		provider_http_status: httpStatus,
+	});
+}
+
+export { PROVIDER_TIMEOUT_MS, PROVIDER_VIDEO_FETCH_TIMEOUT_MS, fetchImageBufferFromUrl, createPlaceholderImageBuffer };
+

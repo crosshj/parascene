@@ -23,7 +23,7 @@ import * as iconsMod from '../icons/svg-strings.js';
 import * as replyPreviewMod from './plainTextReplyPreview.js';
 import * as emptyStateMod from './emptyState.js';
 import * as commentItemMod from './commentItem.js';
-import * as createSubmitMod from './createSubmit.js';
+import * as createSubmitMod from '../providers/create/transport.js';
 import * as avatarMod from './avatar.js';
 import * as tooltipTapMod from './reactionTooltipTap.js';
 

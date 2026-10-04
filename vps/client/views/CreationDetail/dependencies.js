@@ -15,7 +15,7 @@ import * as challengeSubmitMeta from '../../shared/challengeSubmitMeta.js';
 import * as challengeOrganizerRefMeta from '../../shared/challengeOrganizerRefMeta.js';
 import * as routeCardGroupMedia from '../../shared/routeCardGroupMedia.js';
 import * as commentItem from '../../shared/commentItem.js';
-import * as createSubmit from '../../shared/createSubmit.js';
+import * as createSubmit from '../../providers/create/transport.js';
 import * as audioCoverWaveform from '../../shared/audioCoverWaveform.js';
 
 export const creationDetailDependencies = Object.freeze({

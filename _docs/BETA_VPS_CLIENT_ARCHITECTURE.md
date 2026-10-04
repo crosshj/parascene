@@ -203,3 +203,14 @@ so the outgoing controller cannot close the incoming rail or erase its state.
 ### Feed placeholder exception (2026-10-02)
 
 At the user’s request, the beta Feed placeholder is a minimal progress overview rather than a port of the WWW feed. Its native template and scoped styles belong to `views/Feed`. It presents the main areas already in place and the remaining work; the activity feed will replace it later.
+
+### Shared Create form contract
+
+Basic, Image Edit, Mutate, image-to-video, Advanced and the future creation
+composer edit one retained draft. The Create domain owns its reducer, persistence,
+projection and subscriptions. `providers.create.draft` exposes the editor API;
+`persistSavedCreateForm` maintains compatibility settings. Editors patch values
+and issue explicit image actions; omitted/unsupported fields remain saved. Basic
+shows and submits only the first image while preserving the full list.
+
+The [shared draft contract](BETA_VPS_CREATE_DRAFT.md) defines exceptions and tests.

@@ -254,7 +254,8 @@ export function creationCardMarkup(item, { hidePublishedBadge = false } = {}) {
 	const pending = status !== 'completed' && status !== 'failed';
 	const type = creationMediaType(item);
 	const meta = parseCreationMeta(item);
-	const creationId = Number(item?.created_image_id ?? item?.id);
+	const rawId = item?.created_image_id ?? item?.id;
+ const creationId = String(rawId).startsWith("pending-") ? String(rawId) : Number(rawId);
 	const hasCreationId = Number.isFinite(creationId) && creationId > 0;
 	const nsfw = Boolean(item?.nsfw || meta?.nsfw);
 	const challengeBlur = shouldBlurChallengeMedia(item);
@@ -280,7 +281,7 @@ export function creationCardMarkup(item, { hidePublishedBadge = false } = {}) {
 	const published = item?.published === true || item?.published === 1;
 	const processingStatus = failed || ['creating', 'pending', 'queued', 'processing', 'running'].includes(status) ? status : '';
 	const attributes = [
-		hasCreationId ? `data-creation-id="${escapeHtml(creationId)}"` : '',
+		(hasCreationId || item.__optimistic) ? `data-creation-id="${escapeHtml(creationId)}"` : '',
 		hasCreationId ? `data-image-id="${escapeHtml(creationId)}"` : '',
 		`data-published="${published ? '1' : '0'}"`,
 		`data-media-type="${escapeHtml(type)}"`,

@@ -1,10 +1,115 @@
-/* CSS-only component shim. Behavior currently comes from shared/triggeredSuggest. */
-.triggered-suggest-popup { position: fixed; z-index: 100000; min-width: 240px; max-width: min(420px, calc(100vw - 24px)); overflow: auto; padding: 6px; border: 1px solid var(--border); border-radius: 10px; color: var(--text); background: var(--surface); box-shadow: var(--shadow); }
-.triggered-suggest-item { display: flex; align-items: center; gap: 9px; width: 100%; padding: 8px; border: 0; border-radius: 7px; color: inherit; background: transparent; text-align: left; cursor: pointer; }
-.triggered-suggest-item:hover,
-.triggered-suggest-item--selected { background: var(--surface-strong); }
-.triggered-suggest-item-icon { display: grid; flex: 0 0 30px; width: 30px; height: 30px; place-items: center; overflow: hidden; border-radius: 50%; }
-.triggered-suggest-item-icon img { width: 100%; height: 100%; object-fit: cover; }
-.triggered-suggest-item-text { min-width: 0; }
-.triggered-suggest-item-label { display: block; overflow: hidden; font-size: .875rem; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
-.triggered-suggest-item-sublabel { display: block; overflow: hidden; color: var(--text-muted); font-size: .75rem; text-overflow: ellipsis; white-space: nowrap; }
+/* Triggered suggest popup (mentions, tags, etc.) – reusable, source-agnostic; above modals (99999) */
+.triggered-suggest-popup {
+	position: absolute;
+	z-index: 100000;
+	display: flex;
+	flex-direction: column;
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	box-shadow: var(--shadow);
+	max-height: 280px;
+	overflow-y: auto;
+	padding: 6px 0;
+}
+
+/* When open above the input, keep normal top-to-bottom reading order. */
+.triggered-suggest-popup--above {
+	flex-direction: column;
+}
+
+.triggered-suggest-section {
+	padding: 4px 12px 2px;
+	font-size: 0.65rem;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--text-muted);
+	pointer-events: none;
+	user-select: none;
+}
+
+.triggered-suggest-section--special {
+	margin-top: 4px;
+	padding-top: 6px;
+	border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.triggered-suggest-item {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 6px 12px;
+	cursor: pointer;
+	color: var(--text);
+	font-size: 0.95rem;
+	border-radius: 6px;
+	margin: 0 4px;
+}
+
+.triggered-suggest-item:hover {
+	background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+}
+
+.triggered-suggest-item--selected {
+	background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+}
+
+.triggered-suggest-item-icon {
+	width: 36px;
+	height: 36px;
+	border-radius: 50%;
+	background: var(--surface-muted);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-weight: 600;
+	font-size: 0.9rem;
+	flex-shrink: 0;
+	overflow: hidden;
+}
+
+/* Style rows: large sharp square (fills typical two-line row height; no rounding) */
+.triggered-suggest-item-icon.triggered-suggest-item-icon--square {
+	width: 56px;
+	height: 56px;
+	flex: 0 0 56px;
+	border-radius: 0;
+	font-size: 1.1rem;
+}
+
+.triggered-suggest-item-text {
+	min-width: 0;
+	flex: 1;
+}
+
+.triggered-suggest-item-avatar {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.triggered-suggest-item-label {
+	font-weight: 500;
+}
+
+.triggered-suggest-item-sublabel {
+	font-size: 0.85rem;
+	color: var(--text-muted);
+	margin-top: 2px;
+}
+
+.triggered-suggest-item-badge {
+	font-size: 0.75rem;
+	color: var(--text-muted);
+	background: var(--surface-muted);
+	padding: 2px 6px;
+	border-radius: 4px;
+}
+
+.triggered-suggest-item--loading,
+.triggered-suggest-item--empty {
+	cursor: default;
+	color: var(--text-muted);
+	pointer-events: none;
+}

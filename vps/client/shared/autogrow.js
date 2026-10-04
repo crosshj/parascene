@@ -5,6 +5,7 @@
 import { getPromptEditorMaxHeightPx } from './viewport.js';
 
 const DEFAULT_MAX_HEIGHT_PX = 1200;
+const attachedTextareas = new WeakMap();
 
 const minHeightCache = new WeakMap();
 const rafTokenCache = new WeakMap();
@@ -83,6 +84,10 @@ export function resizeAutoGrowTextarea(textarea, { maxHeightPx = DEFAULT_MAX_HEI
 
 export function attachAutoGrowTextarea(textarea, { maxHeightPx = DEFAULT_MAX_HEIGHT_PX } = {}) {
 	if (!(textarea instanceof HTMLTextAreaElement)) return () => {};
+ if (attachedTextareas.has(textarea)) return attachedTextareas.get(textarea);
+ let alive = true;
+ let observer;
+ const timers = [];
 
 	textarea.dataset.autogrow = textarea.dataset.autogrow || 'true';
 	const isPromptEditor = textarea.classList.contains('prompt-editor');
@@ -95,28 +100,40 @@ export function attachAutoGrowTextarea(textarea, { maxHeightPx = DEFAULT_MAX_HEI
 	}
 
 	const getMaxPx = () => (isPromptEditor ? getPromptEditorMaxHeightPx() : maxHeightPx);
-	const refresh = () => schedule(textarea, () => resizeAutoGrowTextarea(textarea, { maxHeightPx: getMaxPx() }));
+	const refresh = () => { if (alive) schedule(textarea, () => { if (alive) resizeAutoGrowTextarea(textarea, { maxHeightPx: getMaxPx() }); }); };
 
 	textarea.addEventListener('input', refresh);
 	textarea.addEventListener('change', refresh);
 	textarea.addEventListener('focus', refresh);
 
 	refresh();
-	setTimeout(refresh, 0);
-	setTimeout(refresh, 60);
-	setTimeout(refresh, 250);
+	timers.push(setTimeout(refresh, 0), setTimeout(refresh, 60), setTimeout(refresh, 250));
 
 	if (typeof ResizeObserver !== 'undefined') {
-		const ro = new ResizeObserver(() => {
+		const ro = observer = new ResizeObserver(() => {
 			if (programmaticResizeTextareas.has(textarea)) return;
 			minHeightCache.delete(textarea);
 			refresh();
 		});
 		ro.observe(textarea);
-		textarea.addEventListener('blur', () => {});
 	}
 
-	return refresh;
+ refresh.destroy = () => {
+  if (!alive) return;
+  alive = false;
+  observer?.disconnect();
+  timers.forEach(clearTimeout);
+  cancelAnimationFrame(rafTokenCache.get(textarea));
+  rafTokenCache.delete(textarea);
+  ['input', 'change', 'focus'].forEach(type => textarea.removeEventListener(type, refresh));
+  attachedTextareas.delete(textarea);
+ };
+ attachedTextareas.set(textarea, refresh);
+ return refresh;
+}
+
+export function disposeAutoGrowTextareas(root) {
+ root.querySelectorAll('textarea').forEach(field => attachedTextareas.get(field)?.destroy());
 }
 
 /**

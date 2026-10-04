@@ -1,6 +1,6 @@
 /**
  * VPS mention and suggestion UI.
- * Wired via `CHAT_BUNDLE_SHARED_OVERRIDES` in `src/rollup.config.mjs`.
+ * Owned by mounted fields; styles live in components/TriggeredSuggest.
  *
  * Public API preserved:
  * - addPageUsers(items)
@@ -1414,6 +1414,23 @@ export function attachTriggeredSuggest(textarea, options) {
 	textarea.addEventListener("pointerdown", onPointerDown);
 	// Capture phase so Enter/Tab accept runs before composer Enter-to-submit bubble handlers.
 	textarea.addEventListener("keydown", onKeydown, true);
+ state.destroy = () => {
+  closePopupFor(textarea);
+  clearTimeout(state.debounceTimer);
+  state.requestController?.abort();
+  state.requestToken++;
+  textarea.removeEventListener('input', onInput);
+  textarea.removeEventListener('focus', onFocus);
+  textarea.removeEventListener('blur', onBlur);
+  textarea.removeEventListener('pointerdown', onPointerDown);
+  textarea.removeEventListener('keydown', onKeydown, true);
+  textarea.removeAttribute(ATTR_ATTACHED);
+  stateByTextarea.delete(textarea);
+ };
+}
+
+export function disposeTriggeredSuggestFields(root) {
+ root.querySelectorAll(`[${ATTR_ATTACHED}]`).forEach(field => stateByTextarea.get(field)?.destroy?.());
 }
 
 export function attachMentionSuggest(textarea) {

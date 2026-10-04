@@ -1,3 +1,4 @@
+import { requestCreate } from '../providers/create/api.js';
 import { PARASCENE_BLUE_SERVER_ID } from './generationDefaults.js';
 
 /**
@@ -331,6 +332,7 @@ function idleBid(occupancy, lane) {
 }
 
 export function showOccupancyConfirm(occupancy, opts = {}) {
+ if (opts.signal?.aborted) return Promise.resolve(null);
 	const lane = opts.lane || 'product';
 	const method = typeof opts.method === 'string' ? opts.method : '';
 	const peek = typeof opts.peek === 'function' ? opts.peek : null;
@@ -349,19 +351,25 @@ export function showOccupancyConfirm(occupancy, opts = {}) {
 		root.setAttribute('data-occupancy-dialog', '');
 		root.setAttribute('role', 'presentation');
 
+		let finished = false;
 		const finish = (value) => {
-			window.removeEventListener('keydown', onKey);
+   if (finished) return; finished = true;
+   opts.signal?.removeEventListener('abort', onAbort);
+			window.removeEventListener('keydown', onKey, true);
 			root.remove();
 			resolve(value);
 		};
+		const onAbort = () => finish(null);
 		const onKey = (e) => {
 			if (e.key === 'Escape' && !confirming) {
 				e.preventDefault();
+    e.stopImmediatePropagation();
 				finish(null);
 			}
 		};
 
 		const render = () => {
+   if (finished) return;
 			const model = occupancyDialogModel(current, { lane, proposedMax, alwaysNext });
 			const range = productBoostRange(current.cost);
 			const boost = proposedMax;
@@ -470,7 +478,8 @@ export function showOccupancyConfirm(occupancy, opts = {}) {
 			if (e.target === root && downOnBackdrop && !confirming) finish(null);
 			downOnBackdrop = false;
 		});
-		window.addEventListener('keydown', onKey);
+		window.addEventListener('keydown', onKey, true);
+  opts.signal?.addEventListener('abort', onAbort, { once: true });
 		document.body.appendChild(root);
 		render();
 	});
@@ -481,7 +490,7 @@ export async function queryCreateOccupancy({ serverId, method, args } = {}) {
 	const methodKey = typeof method === 'string' ? method.trim() : '';
 	if (!Number.isFinite(sid) || sid <= 0 || !methodKey) return null;
 	try {
-		const res = await fetch('/api/create/query', {
+		const res = await requestCreate('/api/create/query', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			credentials: 'include',
@@ -503,7 +512,9 @@ export async function confirmGpuOccupancyIfNeeded({
 	serverId,
 	method,
 	args,
-	lane = 'product'
+	lane = 'product',
+ signal,
+ confirm = showOccupancyConfirm
 } = {}) {
 	if (Number(serverId) !== Number(PARASCENE_BLUE_SERVER_ID)) {
 		return { ok: true, bid: { maxBid: 0, alwaysNext: false } };
@@ -512,9 +523,10 @@ export async function confirmGpuOccupancyIfNeeded({
 	if (!occupancyIsBusy(occupancy)) {
 		return { ok: true, bid: idleBid(occupancy, lane) };
 	}
-	const bid = await showOccupancyConfirm(occupancy, {
+ if (signal?.aborted) return { ok: false };
+	const bid = await confirm(occupancy, {
 		lane,
-		method,
+		method, signal,
 		peek: () => queryCreateOccupancy({ serverId, method, args })
 	});
 	if (!bid) return { ok: false };

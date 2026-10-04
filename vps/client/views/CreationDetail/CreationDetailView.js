@@ -143,6 +143,7 @@ function isCreationDetailEmbed() {
 let activeCreationDetailId = null;
 let activeCreationDetailSeed = null;
 let activeCreationDetailNavigate = null;
+let activeCreateProvider = null;
 const creationDetailDocumentListeners = [];
 
 function addCreationDetailDocumentListener(type, listener, options) {
@@ -1312,9 +1313,9 @@ async function handleRecreateInAdvanced() {
 		recreateMeta.style && typeof recreateMeta.style === 'object' ? recreateMeta.style : null;
 	const styleKey = typeof styleMeta?.key === 'string' ? styleMeta.key.trim() : '';
 
-	const mutateQueueSyncMod = mutateQueueSyncBundledMod;
 	const createPageRuntimeMod = createPageRuntimeBundledMod;
-	const synced = mutateQueueSyncMod.syncCreationDetailToAdvancedCreate({
+	let synced;
+ try { synced = activeCreateProvider.workflow.recreate({
 		serverId: recreateMeta.server_id,
 		methodKey: typeof recreateMeta.method === 'string' ? recreateMeta.method : '',
 		args:
@@ -1322,9 +1323,11 @@ async function handleRecreateInAdvanced() {
 				? recreateMeta.args
 				: null,
 		userPrompt: userPromptFromRecreateMeta(recreateMeta),
+  parentIds: recreateMeta.direct_parent_ids,
+  mutateOfId: recreateMeta.mutate_of_id,
 		outputMode,
 		styleKey,
-	});
+	}); } catch (error) { alert(error.message); return; }
 
 	if (!synced) {
 		alert('Cannot recreate this creation because server or method information is missing.');
@@ -8382,7 +8385,7 @@ let creationDetailViewMounted = false;
  * The full legacy fragment is mounted first; the existing page runtime then boots
  * against the document as it did when this was a standalone page.
  */
-export function renderCreationDetailView({ outlet, creationId, initialSeed = null, onNavigate } = {}) {
+export function renderCreationDetailView({ outlet, creationId, initialSeed = null, onNavigate, createProvider } = {}) {
 	if (!(outlet instanceof HTMLElement)) return { destroy() {} };
 	const id = Number(creationId);
 	if (!Number.isFinite(id) || id <= 0) return { destroy() {} };
@@ -8391,6 +8394,7 @@ export function renderCreationDetailView({ outlet, creationId, initialSeed = nul
 	activeCreationDetailId = id;
 	activeCreationDetailSeed = initialSeed;
 	activeCreationDetailNavigate = onNavigate || null;
+ activeCreateProvider = createProvider || null;
 	window.__VPS_CREATION_DETAIL_SEED__ = initialSeed;
 	document.body.classList.add('creation-detail-page');
 	outlet.innerHTML = template;
@@ -8413,6 +8417,7 @@ export function renderCreationDetailView({ outlet, creationId, initialSeed = nul
 		stopCreationDetailGroupMemberPoll();
 		clearCreationDetailSunoPlayer(outlet.querySelector('.creation-detail-image-wrapper'));
 		creationDetailViewMounted = false;
+  activeCreateProvider = null;
 		activeCreationDetailId = null;
 		activeCreationDetailSeed = null;
 		activeCreationDetailNavigate = null;

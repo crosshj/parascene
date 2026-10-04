@@ -9,6 +9,25 @@ import { createRouter } from './core/router.js';
 import { createSession } from './core/session.js';
 import { appViews as views } from './views/index.js';
 
+const legacyThreadRoutes = [
+	// TODO: Deprecate these legacy thread URLs in favor of the /ch/ channel route pattern;
+	// migrate private-channel URL generation when replacing these routes.
+	{
+		path: '/chat/t/:threadId/:threadName',
+		view: views.Channel,
+		titleMode: 'thread',
+		icon: 'comments',
+		composer: 'message',
+	},
+	{
+		path: '/chat/t/:threadId',
+		view: views.Channel,
+		titleMode: 'thread',
+		icon: 'comments',
+		composer: 'message',
+	},
+];
+
 const routeDefinitions = [
 	{
 		path: '/',
@@ -75,8 +94,6 @@ const routeDefinitions = [
 		icon: 'comments',
 		composer: 'message',
 	},
-	{ path: '/chat/t/:threadId/:threadName', view: views.Channel, titleMode: 'thread', icon: 'comments', composer: 'message' },
-	{ path: '/chat/t/:threadId', view: views.Channel, titleMode: 'thread', icon: 'comments', composer: 'message' },
 	{
 		path: '/dm/:slug',
 		view: views.DirectMessage,
@@ -125,7 +142,8 @@ const routeDefinitions = [
 		path: '/create',
 		view: views.Create,
 		presentation: 'overlay',
-		defaultBackground: '/feed',
+		defaultBackground: '/creations',
+		restoreBackgroundOnLoad: false,
 		title: 'Create',
 		icon: 'plus',
 		composer: 'none',
@@ -137,6 +155,29 @@ const routeDefinitions = [
 		presentation: 'overlay',
 		defaultBackground: '/creations',
 	},
+	{
+		path: '/creations/:creationId/edit',
+		dismissToPreviousOverlay: true,
+		view: views.Create,
+		presentation: 'overlay',
+		defaultBackground: '/creations',
+		restoreBackgroundOnLoad: false,
+		title: 'Mutate',
+		icon: 'plus',
+		composer: 'none',
+	},
+	{
+		path: '/creations/:creationId/mutate',
+		dismissToPreviousOverlay: true,
+		view: views.Create,
+		presentation: 'overlay',
+		defaultBackground: '/creations',
+		restoreBackgroundOnLoad: false,
+		title: 'Mutate',
+		icon: 'plus',
+		composer: 'none',
+	},
+	...legacyThreadRoutes,
 	{
 		path: '*',
 		view: views.NotFound,

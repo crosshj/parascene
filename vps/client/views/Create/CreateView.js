@@ -1,12 +1,27 @@
+import { documentHasNestedEscapeLayer } from '../../shared/escapeLayers.js';
+import template from './CreateView.html';
+import '../../components/ProviderFields/ProviderModals.css';
+import '../../components/ProviderFields/ProviderFields.css';
 import './CreateView.css';
+import { createTemplateFactory } from '../../utils/dom.js';
+import { basicCreateMarkup } from './BasicCreateMarkup.js';
+import { createCreateController } from './CreateController.js';
 
+const createFragment = createTemplateFactory(template);
 export const CreateView = Object.freeze({
-	mount({ outlet }) {
-		outlet.innerHTML = `<section class="create-view">
-			<div class="create-view__art" role="img" aria-label="Coming soon"><svg viewBox="0 0 240 180" aria-hidden="true"><ellipse cx="120" cy="91" rx="93" ry="59"/><rect x="76" y="46" width="90" height="91" rx="20" transform="rotate(-6 76 46)"/><circle cx="120" cy="92" r="15"/><path d="m112 92 6 6 12-14"/></svg></div>
-			<h2>Create</h2><nav aria-label="Create navigation"><a href="/feed" data-spa-link>Back to Feed</a><a href="/creations/1" data-spa-link>Open a creation</a></nav>
-		</section>`;
-		document.title = 'Create - parascene beta';
-		return { backgroundReady: Promise.resolve(), destroy() { outlet.replaceChildren(); } };
-	},
+ mount({ outlet, services, actions, creationId }) {
+  outlet.append(createFragment('create-workflow'));
+  const root = outlet.querySelector('.create-workflow-root');
+  document.title = `${creationId ? 'Mutate' : 'Create'} - parascene beta`;
+  const controller = createCreateController({
+   root, creationId, markup: basicCreateMarkup(), providers: services.providers, actions,
+   renderError(error) { const message = document.createElement('p'); message.setAttribute('role', 'alert'); message.textContent = error.message || 'Could not load Create.'; root.replaceChildren(message); },
+  });
+  return {
+   backgroundReady: controller.ready,
+   hasOpenEscapeTarget: () => documentHasNestedEscapeLayer(root),
+   update: controller.update,
+   destroy: controller.destroy,
+  };
+ },
 });

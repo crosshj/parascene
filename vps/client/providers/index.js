@@ -1,3 +1,4 @@
+import { createCreateProvider } from './create/index.js';
 import { createQueryRegistry } from '../core/queryRegistry.js';
 import { createThreadsProvider } from './threads/index.js';
 import { createCreationsProvider } from './creations/index.js';
@@ -8,6 +9,7 @@ export function createAppProviders({ bootstrap = {} } = {}) {
 	const viewerId = Number(bootstrap.user?.id) || null;
 	const registry = createQueryRegistry();
 	const providers = {
+		create: createCreateProvider({ viewerId }),
 		threads: createThreadsProvider({ viewerId, registry }),
 		creations: createCreationsProvider({ viewerId, registry }),
 		files: createFilesProvider({ viewerId, registry, origin: bootstrap.filesOrigin || '' }),

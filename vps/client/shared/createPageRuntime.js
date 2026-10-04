@@ -23,7 +23,7 @@ function postToParentOverlay(payload) {
 	const host = getCreateWorkflowHost();
 	if (!host) return false;
 	if (payload?.type === ROUTE_MESSAGE && typeof host.onNavigate === 'function') {
-		host.onNavigate(payload.href, { forceReload: Boolean(payload.forceReload) });
+		host.onNavigate(payload.href, { forceReload: Boolean(payload.forceReload), replace: Boolean(payload.replace) });
 		return true;
 	}
 	if (payload?.type === SHELL_OUT_MESSAGE && typeof host.onShellOut === 'function') {
@@ -63,6 +63,8 @@ export function switchCreateEditorMode(mode, ev) {
 	if (ev && typeof ev.preventDefault === 'function') ev.preventDefault();
 	setCreateEditorMode(mode);
 	if (isCreateWorkflowNativeHost()) {
+		const host = getCreateWorkflowHost();
+  if (host?.onSwitchEditor) { host.onSwitchEditor(mode); return; }
 		postToParentOverlay({ type: ROUTE_MESSAGE, href: '/create', forceReload: true });
 		return;
 	}
@@ -99,6 +101,7 @@ export function navigate(href, options = {}) {
 			type: ROUTE_MESSAGE,
 			href: raw,
 			forceReload: Boolean(options.forceReload),
+			replace: Boolean(options.replace),
 		});
 		return;
 	}
@@ -164,7 +167,7 @@ export function refreshAfterSubmit(options = {}) {
 		});
 	}
 
-	postToParentOverlay({ type: DISMISS_MESSAGE });
+	navigate('/creations', { replace: true });
 }
 
 function shouldInterceptEmbedLink(link, e) {
@@ -180,59 +183,28 @@ function shouldInterceptEmbedLink(link, e) {
 	return true;
 }
 
+const bindings = new WeakMap();
+
 export function bindCreatePageEmbedNavigation() {
-	if (!isCreateWorkflowNativeHost()) return;
-	if (document.documentElement.dataset.prsnCreateEmbedNavBound === '1') return;
-	document.documentElement.dataset.prsnCreateEmbedNavBound = '1';
-	document.addEventListener(
-		'click',
-		(e) => {
-			const link = e.target?.closest?.('a[href]');
-			if (!shouldInterceptEmbedLink(link, e)) return;
-			const href = link.getAttribute('href') || '';
-			if (/^\/create\/blog\//.test(href)) {
-				e.preventDefault();
-				e.stopPropagation();
-				shellOut(href);
-				return;
-			}
-			if (link.classList.contains('create-switch-to-advanced')) {
-				e.preventDefault();
-				e.stopPropagation();
-				switchCreateEditorMode('advanced', e);
-				return;
-			}
-			if (
-				link.classList.contains('create-switch-to-basic') ||
-				link.hasAttribute('data-create-switch-to-basic')
-			) {
-				return;
-			}
-			e.preventDefault();
-			e.stopPropagation();
-			navigate(href);
-		},
-		true
-	);
+ const root = getCreateWorkflowHost()?.root;
+ if (!root || bindings.has(root)) return;
+ const controller = new AbortController();
+ bindings.set(root, controller);
+ root.addEventListener('click', (e) => {
+  const link = e.target?.closest?.('a[href]');
+  if (!shouldInterceptEmbedLink(link, e)) return;
+  if (link.hasAttribute('data-create-switch-to-basic') || link.classList.contains('create-switch-to-basic')) return;
+  e.preventDefault();
+  e.stopPropagation();
+  if (link.classList.contains('create-switch-to-advanced')) switchCreateEditorMode('advanced', e);
+  else navigate(link.getAttribute('href'));
+ }, { signal: controller.signal });
 }
 
-/**
- * @param {() => boolean} hasOpenEscapeTarget
- */
-export function bindCreatePageEmbedEscape(hasOpenEscapeTarget) {
-	if (!isCreateWorkflowNativeHost()) return;
-	if (document.documentElement.dataset.prsnCreateEmbedEscBound === '1') return;
-	document.documentElement.dataset.prsnCreateEmbedEscBound = '1';
-	document.addEventListener(
-		'keydown',
-		(e) => {
-			if (e.key !== 'Escape' || e.defaultPrevented) return;
-			if (typeof hasOpenEscapeTarget === 'function' && hasOpenEscapeTarget()) return;
-			if (documentHasNestedEscapeLayer()) return;
-			if (!requestCloseOverlay()) return;
-			e.preventDefault();
-			e.stopPropagation();
-		},
-		true
-	);
+// Layout owns Escape and overlay dismissal. Nested feature dialogs handle Escape first.
+export function bindCreatePageEmbedEscape() {}
+
+export function releaseCreatePageBindings(root) {
+ bindings.get(root)?.abort();
+ bindings.delete(root);
 }

@@ -10,3 +10,5 @@
 .feed-overview li span { display: block; margin-top: 4px; color: var(--text-muted); font-size: .8125rem; line-height: 1.6; }
 .feed-overview__footer { margin: 40px 0 0; padding-top: 20px; border-top: 1px solid var(--border); color: var(--text-muted); font-size: .75rem; line-height: 1.6; }
 @media (max-width: 600px) { .feed-overview__sections { grid-template-columns: 1fr; gap: 32px; } }
+
+.feed-overview__create { display: inline-flex; padding: 8px 16px; border-radius: 10px; background: var(--accent); color: var(--accent-text); text-decoration: none; font-weight: 600; }

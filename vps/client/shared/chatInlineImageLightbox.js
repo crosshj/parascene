@@ -211,7 +211,7 @@ export function closeChatInlineImageLightbox(options = {}) {
 	runChatVideoGalleryLightboxTeardown();
 	restoreInlineVideoFromLightbox();
 	if (typeof chatInlineImageLightboxKeydown === 'function') {
-		document.removeEventListener('keydown', chatInlineImageLightboxKeydown);
+		document.removeEventListener('keydown', chatInlineImageLightboxKeydown, true);
 		chatInlineImageLightboxKeydown = null;
 	}
 	if (chatInlineImageLightboxEl?.parentNode) {
@@ -578,6 +578,7 @@ export function openChatInlineImageLightbox(src, creationMeta, hooks) {
 	chatInlineImageLightboxKeydown = (e) => {
 		if (e.key === 'Escape') {
 			e.preventDefault();
+			e.stopImmediatePropagation();
 			closeChatInlineImageLightbox();
 			return;
 		}
@@ -587,7 +588,7 @@ export function openChatInlineImageLightbox(src, creationMeta, hooks) {
 			else applyGalleryIndex(activeGalleryIndex + 1);
 		}
 	};
-	document.addEventListener('keydown', chatInlineImageLightboxKeydown);
+	document.addEventListener('keydown', chatInlineImageLightboxKeydown, true);
 
 	attachChatInlineImageLightboxBackdropClose(overlay);
 	closeBtn.addEventListener('click', () => closeChatInlineImageLightbox());
@@ -1153,6 +1154,7 @@ export function openChatVideoGalleryLightbox(slides, hooks) {
 	chatInlineImageLightboxKeydown = (e) => {
 		if (e.key === 'Escape') {
 			e.preventDefault();
+			e.stopImmediatePropagation();
 			closeChatInlineImageLightbox();
 			return;
 		}
@@ -1165,7 +1167,7 @@ export function openChatVideoGalleryLightbox(slides, hooks) {
 			}
 		}
 	};
-	document.addEventListener('keydown', chatInlineImageLightboxKeydown);
+	document.addEventListener('keydown', chatInlineImageLightboxKeydown, true);
 
 	attachChatInlineImageLightboxBackdropClose(overlay);
 	closeBtn.addEventListener('click', () => closeChatInlineImageLightbox());
@@ -1678,6 +1680,7 @@ function openChatMixedMediaGalleryLightbox(slides, hooks) {
 	chatInlineImageLightboxKeydown = (e) => {
 		if (e.key === 'Escape') {
 			e.preventDefault();
+			e.stopImmediatePropagation();
 			closeChatInlineImageLightbox();
 			return;
 		}
@@ -1690,7 +1693,7 @@ function openChatMixedMediaGalleryLightbox(slides, hooks) {
 			}
 		}
 	};
-	document.addEventListener('keydown', chatInlineImageLightboxKeydown);
+	document.addEventListener('keydown', chatInlineImageLightboxKeydown, true);
 
 	attachChatInlineImageLightboxBackdropClose(overlay);
 	closeBtn.addEventListener('click', () => closeChatInlineImageLightbox());
@@ -1875,9 +1878,10 @@ export function openChatAttachmentPreviewLightbox(src, kind, hooks) {
 	chatInlineImageLightboxKeydown = (e) => {
 		if (e.key !== 'Escape') return;
 		e.preventDefault();
+		e.stopImmediatePropagation();
 		closeChatInlineImageLightbox();
 	};
-	document.addEventListener('keydown', chatInlineImageLightboxKeydown);
+	document.addEventListener('keydown', chatInlineImageLightboxKeydown, true);
 
 	attachChatInlineImageLightboxBackdropClose(overlay);
 	closeBtn.addEventListener('click', () => closeChatInlineImageLightbox());

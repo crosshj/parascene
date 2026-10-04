@@ -1,0 +1,226 @@
+/* WWW shared modal foundations; load before picker-specific styles. */
+
+:where(.create-workflow-root) .modal-overlay,
+:where(.create-workflow-root) .image-picker-modal-overlay,
+:where(.create-workflow-root) .audio-clip-picker-modal-overlay,
+:where(.create-workflow-root) .audio-clip-edit-modal-overlay,
+:where(.create-workflow-root) [data-image-picker-modal],
+:where(.create-workflow-root) [data-audio-clip-picker-modal],
+:where(.create-workflow-root) [data-audio-clip-edit-modal] {
+	position: fixed !important;
+	top: 0 !important;
+	left: 0 !important;
+	right: 0 !important;
+	bottom: 0 !important;
+	background: rgba(0, 0, 0, 0.5) !important;
+	display: flex !important;
+	align-items: center !important;
+	justify-content: center !important;
+	z-index: 99999 !important;
+	opacity: 0;
+	visibility: hidden;
+	pointer-events: none;
+	transition: opacity 0.2s, visibility 0.2s;
+}
+
+:where(.create-workflow-root) .modal-overlay.open,
+:where(.create-workflow-root) .image-picker-modal-overlay.open,
+:where(.create-workflow-root) .audio-clip-picker-modal-overlay.open,
+:where(.create-workflow-root) .audio-clip-edit-modal-overlay.open,
+:where(.create-workflow-root) [data-image-picker-modal].open,
+:where(.create-workflow-root) [data-audio-clip-picker-modal].open,
+:where(.create-workflow-root) [data-audio-clip-edit-modal].open {
+	opacity: 1;
+	visibility: visible;
+	pointer-events: auto;
+}
+
+@media (max-width: 768px) {
+	:where(.create-workflow-root) .modal-overlay,
+	:where(.create-workflow-root) .image-picker-modal-overlay,
+	:where(.create-workflow-root) .audio-clip-picker-modal-overlay,
+	:where(.create-workflow-root) .audio-clip-edit-modal-overlay,
+	:where(.create-workflow-root) [data-image-picker-modal],
+	:where(.create-workflow-root) [data-audio-clip-picker-modal],
+	:where(.create-workflow-root) [data-audio-clip-edit-modal] {
+		padding-top: max(8px, env(safe-area-inset-top, 0px));
+		padding-right: max(8px, env(safe-area-inset-right, 0px));
+		padding-bottom: max(8px, env(safe-area-inset-bottom, 0px));
+		padding-left: max(8px, env(safe-area-inset-left, 0px));
+	}
+}
+:where(.create-workflow-root) .modal,
+:where(.create-workflow-root) .image-picker-modal,
+:where(.create-workflow-root) .audio-clip-picker-modal,
+:where(.create-workflow-root) .audio-clip-edit-modal {
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: 14px;
+	box-shadow: var(--shadow);
+	max-width: 500px;
+	width: 90%;
+	max-height: 90vh;
+	max-height: 90dvh;
+	overflow: hidden;
+	transform: scale(0.95);
+	transition: transform 0.2s;
+	display: flex;
+	flex-direction: column;
+	pointer-events: auto;
+	position: relative;
+	z-index: 1;
+}
+
+:where(.create-workflow-root) .modal-overlay.open .modal,
+:where(.create-workflow-root) .image-picker-modal-overlay.open .image-picker-modal,
+:where(.create-workflow-root) .audio-clip-picker-modal-overlay.open .audio-clip-picker-modal,
+:where(.create-workflow-root) .audio-clip-edit-modal-overlay.open .audio-clip-edit-modal,
+:where(.create-workflow-root) [data-image-picker-modal].open .image-picker-modal,
+:where(.create-workflow-root) [data-audio-clip-picker-modal].open .audio-clip-picker-modal,
+:where(.create-workflow-root) [data-audio-clip-edit-modal].open .audio-clip-edit-modal {
+	transform: scale(1);
+}
+:where(.create-workflow-root) .modal-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 18px 20px;
+	border-bottom: 1px solid var(--border);
+	flex-shrink: 0;
+}
+
+:where(.create-workflow-root) .modal-header h2,
+:where(.create-workflow-root) .modal-header h3 {
+	margin: 0;
+	font-size: 1.5rem;
+	font-weight: 600;
+}
+
+:where(.create-workflow-root) .modal-header h3 {
+	font-size: 1.2rem;
+}
+:where(.create-workflow-root) .modal-dismiss {
+	background: transparent;
+	border: none;
+	color: var(--text-muted);
+	cursor: pointer;
+	padding: 6px;
+	margin: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 6px;
+	transition: background-color 0.15s ease, color 0.15s ease;
+	-webkit-tap-highlight-color: transparent;
+}
+
+:where(.create-workflow-root) .modal-dismiss:hover {
+	background: var(--surface-strong);
+	color: var(--text);
+}
+
+:where(.create-workflow-root) .modal-dismiss:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
+}
+
+:where(.create-workflow-root) .modal-dismiss-icon {
+	width: 22px;
+	height: 22px;
+	flex-shrink: 0;
+}
+
+:where(.create-workflow-root) .modal-close {
+	background: transparent;
+	border: none;
+	color: var(--text);
+	cursor: pointer;
+	padding: 8px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 6px;
+	transition: background-color 0.2s;
+	min-width: 32px;
+	min-height: 32px;
+	font-size: 1.2rem;
+	line-height: 1;
+}
+
+:where(.create-workflow-root) .modal-close:hover {
+	background: var(--surface-strong);
+}
+
+:where(.create-workflow-root) .modal-close-icon {
+	width: 24px;
+	height: 24px;
+}
+:where(.create-workflow-root) .modal-body {
+	padding: 20px;
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	-webkit-overflow-scrolling: touch;
+	overscroll-behavior: contain;
+}
+:where(.create-workflow-root) .modal-footer {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 18px 20px;
+	border-top: 1px solid var(--border);
+	gap: 12px;
+	flex-shrink: 0;
+}
+:where(.create-workflow-root) .modal-loading {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background: rgba(0, 0, 0, 0.7);
+	display: none;
+	align-items: center;
+	justify-content: center;
+	z-index: 10;
+	border-radius: 14px;
+}
+
+:where(.create-workflow-root) .modal-loading.active {
+	display: flex;
+}
+
+:where(.create-workflow-root) .modal-spinner {
+	width: 40px;
+	height: 40px;
+	border: 4px solid var(--border);
+	border-top-color: var(--accent);
+	border-radius: 50%;
+	animation: spin 0.8s linear infinite;
+}
+:where(.create-workflow-root) .modal.modal-small {
+	max-width: 400px;
+}
+
+:where(.create-workflow-root) .modal.modal-medium {
+	max-width: 500px;
+}
+
+:where(.create-workflow-root) .modal.modal-large {
+	max-width: 700px;
+}
+
+:where(.create-workflow-root) .modal.modal-extra-large {
+	max-width: 900px;
+}
+
+:where(.create-workflow-root) .modal.modal-full-height {
+	height: 90vh;
+	max-height: 90vh;
+}
+
+/* Closed pickers stay out of the field layout, including before styles settle. */
+:where(.create-workflow-root) [data-image-picker-modal][hidden],
+:where(.create-workflow-root) [data-audio-clip-picker-modal][hidden] {
+ display: none !important;
+}

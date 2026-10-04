@@ -4,6 +4,7 @@ const GENERIC_BUCKET = "prsn_generic-images";
 const MISC_BUCKET = "prsn_misc";
 
 function bucketForKey(key) {
+ if (key.startsWith("prompt-audio/") || key.startsWith("share-audio/")) return MISC_BUCKET;
 	return /^profile\/\d+\/misc_[^/]+$/i.test(key) ? MISC_BUCKET : GENERIC_BUCKET;
 }
 

@@ -37,6 +37,7 @@ export const appViews = Object.freeze({
 				outlet,
 				creationsApi: services.providers.creations.api,
 				creationsQuery: services.providers.creations.query,
+    pendingCreations: services.providers.creations.pending,
 				onUnauthorized: services.session.redirectToLogin,
 				setHeaderMenu,
 				onOpenCreation: (id, seed) => actions.navigate(`/creations/${id}`, { seed }),
@@ -65,11 +66,12 @@ export const appViews = Object.freeze({
 	DoomScroll: DoomScrollView,
 	NotFound: NotFoundView,
 	CreationDetail: {
-		mount({ outlet, creationId, seed, actions }) {
+		mount({ outlet, creationId, seed, actions, services }) {
 			return renderCreationDetailView({
 				outlet,
 				creationId,
 				initialSeed: seed,
+    createProvider: services.providers.create,
 				onNavigate: actions.navigate,
 				onDismiss: actions.dismissOverlay,
 			});

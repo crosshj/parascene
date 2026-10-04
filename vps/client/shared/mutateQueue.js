@@ -59,8 +59,8 @@ function readQueue() {
  * @param {{ reason?: string, skipNotify?: boolean }} [options]
  */
 function writeQueue(items, options = {}) {
+	const safe = Array.isArray(items) ? items : [];
 	try {
-		const safe = Array.isArray(items) ? items : [];
 		window.localStorage?.setItem(QUEUE_KEY, JSON.stringify(safe));
 	} catch {
 		// Ignore storage errors (quota, privacy mode, etc.)

@@ -1,3 +1,4 @@
+import createSuggestRoutes from './routes/suggestions.js';
 import "dotenv/config";
 import cookieParser from "cookie-parser";
 import express from "express";
@@ -19,6 +20,9 @@ import { createRealtimeAuthRoutes } from './routes/realtimeAuth.js';
 import createYoutubeRoutes from './routes/youtube.js';
 import createSunoRoutes from './routes/suno.js';
 import createXRoutes from './routes/x.js';
+import createCreateRoutes from './routes/create.js';
+import { createAudioClipPickerRoutes } from './routes/audioClipPicker.js';
+import { resumeLocalProviderPolls } from './services/create/creationJob.js';
 
 // Supabase Realtime needs a WebSocket implementation on Node 20.
 if (!globalThis.WebSocket) globalThis.WebSocket = WebSocket;
@@ -46,6 +50,9 @@ app.use(createYoutubeRoutes());
 app.use(createSunoRoutes());
 app.use(createXRoutes());
 app.use(createAppDataRoutes({ users: db.users, credits: db.credits, notifications: db.notifications, servers: db.servers }));
+app.use(createCreateRoutes(db.create));
+app.use(createAudioClipPickerRoutes(db.create));
+app.use(createSuggestRoutes({ queries: db.suggestions }));
 app.use(createCreationsRoutes({ creations: db.creations, users: db.users }));
 app.use(createAuthRoutes({ users: db.users, sessions: db.sessions }));
 app.use(createPageRoutes({ pagesDir, users: db.users }));
@@ -59,4 +66,5 @@ app.use((error, req, res, next) => {
 app.listen(port, bindHost, () => {
 	console.log(`Parascene beta dev server: http://localhost:${port}/`);
 	console.log(`[beta] bound to ${bindHost}:${port}`);
+ void resumeLocalProviderPolls(db.create).catch(error => console.error("[beta] Create poll recovery failed", error));
 });

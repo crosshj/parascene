@@ -1,6 +1,8 @@
-import { fetchJsonWithStatusDeduped } from './api.js';
-import { clearSharedCreatePrompt } from './createSettingsSync.js';
-import { applyGpuBid, confirmGpuOccupancyIfNeeded } from './gpuOccupancy.js';
+import { requestCreate } from './api.js';
+import { getCreateWorkflowHost } from '../../shared/createWorkflowHost.js';
+import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
+import { clearSharedCreatePrompt } from '../../shared/createSettingsSync.js';
+import { applyGpuBid, confirmGpuOccupancyIfNeeded } from '../../shared/gpuOccupancy.js';
 
 const CDN_GENERIC_UPLOAD_ORIGIN = 'https://cdn.parascene.com';
 
@@ -227,10 +229,13 @@ function addPendingCreation({ creationToken }) {
 		creation_token: creationToken
 	};
 
-	const pendingKey = 'pendingCreations';
-	const pendingList = JSON.parse(sessionStorage.getItem(pendingKey) || '[]');
-	pendingList.unshift(pendingItem);
-	sessionStorage.setItem(pendingKey, JSON.stringify(pendingList));
+	const pendingKey = getCreateWorkflowHost()?.pendingCreations?.key || 'pendingCreations';
+ try {
+ const stored = JSON.parse(sessionStorage.getItem(pendingKey) || '[]');
+ const pendingList = Array.isArray(stored) ? stored : [];
+ pendingList.unshift(pendingItem);
+ sessionStorage.setItem(pendingKey, JSON.stringify(pendingList));
+ } catch { /* Storage must not prevent submission. */ }
 	document.dispatchEvent(new CustomEvent('creations-pending-updated'));
 
 	return { pendingKey, pendingId };
@@ -741,21 +746,27 @@ export async function submitCreationWithPending({
 	styleKey,
 	navigate = 'spa', // 'spa' | 'full' | 'creations' | 'none'
 	onInsufficientCredits,
-	onError
+	onError,
+	signal,
+	clearPrompt = true,
+	confirmOccupancy,
+	isCurrent = () => true
 }) {
 	if (!serverId || !methodKey) return null;
+	if (signal?.aborted) throw new DOMException('Cancelled', 'AbortError');
 
 	const occupancy = await confirmGpuOccupancyIfNeeded({
 		serverId,
 		method: methodKey,
 		args: args || {},
-		lane: 'product'
+		lane: 'product', signal, confirm: confirmOccupancy
 	});
 	if (!occupancy.ok) {
 		const err = new Error('Cancelled');
 		err.code = 'occupancy_cancelled';
 		throw err;
 	}
+	if (signal?.aborted) throw new DOMException('Cancelled', 'AbortError');
 	args = applyGpuBid(args || {}, occupancy.bid, 'product');
 	const billedCost =
 		Number(occupancy.bid?.charge) > 0
@@ -792,7 +803,7 @@ export async function submitCreationWithPending({
 	};
 
 	try {
-		const response = await fetch('/api/create', {
+		const response = await requestCreate('/api/create', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			credentials: 'include',
@@ -808,20 +819,21 @@ export async function submitCreationWithPending({
 
 		if (!response.ok) {
 			if (response.status === 402) {
-				document.dispatchEvent(new CustomEvent('credits-updated', {
+				if (isCurrent()) document.dispatchEvent(new CustomEvent('credits-updated', {
 					detail: { count: Number(data?.current ?? 0) }
 				}));
 				if (typeof onInsufficientCredits === 'function') {
 					await onInsufficientCredits(data);
 				}
-				throw new Error(data?.message || 'Insufficient credits');
+				throw Object.assign(new Error(data?.message || 'Insufficient credits'), { status: 402, code: 'insufficient_credits', details: data });
 			}
-			throw new Error(data?.error || data?.message || 'Failed to create image');
+			throw Object.assign(new Error(data?.message || data?.error || 'Failed to create image'), { status: response.status, code: data?.code || 'create_failed', details: data });
 		}
 
 		if (!isAcceptedCreationResponse(data)) {
-			throw new Error('Create did not start — unexpected response from server');
+			throw new Error(data?.meta?.error || 'Create did not start — unexpected response from server');
 		}
+		if (!isCurrent()) return { id: Number(data.id), status: String(data.status), creationToken: payload.creation_token };
 		if (typeof data?.credits_remaining === 'number') {
 			document.dispatchEvent(new CustomEvent('credits-updated', {
 				detail: { count: data.credits_remaining }
@@ -839,8 +851,9 @@ export async function submitCreationWithPending({
 		});
 
 		await waitUntilCreationListed({ id: serverId, creationToken });
+		if (!isCurrent()) return { id: serverId, status: String(data.status), creationToken };
 		invalidateRelatedDataCaches();
-		await clearComposerPromptDraftStorage();
+		if (clearPrompt) await clearComposerPromptDraftStorage();
 
 		if (navigate !== 'none') {
 			navigateToCreations({
@@ -882,7 +895,11 @@ export async function importCreationWithPending({
 	runImport,
 	navigate = 'spa',
 	onError,
+	signal,
+	clearPrompt = true,
+	isCurrent = () => true,
 }) {
+	if (signal?.aborted) throw new DOMException('Cancelled', 'AbortError');
 	if (typeof runImport !== 'function') {
 		throw new Error('Import function required');
 	}
@@ -897,6 +914,7 @@ export async function importCreationWithPending({
 			throw new Error('Import succeeded but no creation id was returned.');
 		}
 
+		if (!isCurrent()) return { ...result, id: serverId, creationToken };
 		// Keep `creating` until poll sees terminal status — same grid UX as generate.
 		promotePendingCreation({
 			pendingKey,
@@ -907,8 +925,9 @@ export async function importCreationWithPending({
 		});
 
 		await waitUntilCreationListed({ id: serverId, creationToken });
+  if (!isCurrent()) return { ...result, id: serverId, creationToken };
 		invalidateRelatedDataCaches();
-		await clearComposerPromptDraftStorage();
+		if (isCurrent() && clearPrompt) await clearComposerPromptDraftStorage();
 
 		if (navigate !== 'none') {
 			navigateToCreations({

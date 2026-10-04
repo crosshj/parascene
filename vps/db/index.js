@@ -1,3 +1,4 @@
+import { createSuggestionsStore } from './suggestions.js';
 import { createProfileFilesStore } from "./profileFiles.js";
 import { createGenericFilesStore } from "./genericFiles.js";
 import { createSessionsStore } from "./sessions.js";
@@ -9,12 +10,15 @@ import { createNotificationsStore } from "./notifications.js";
 import { createThreadsStore } from './threads.js';
 import { createServersStore } from './servers.js';
 import { createRealtimeAuthStore } from './realtimeAuth.js';
+import { createCreateStore } from './create.js';
 
 export function createDb() {
 	const context = createSupabaseContext();
 	const users = createUsersStore(context.client);
 
 	return {
+		create: createCreateStore(context),
+  suggestions: createSuggestionsStore(context.client),
 		users,
 		threads: createThreadsStore(context.client, users),
 		servers: createServersStore(context.client, users),

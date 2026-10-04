@@ -1,3 +1,4 @@
+import { createModeChange, createSourceChange } from '../providers/create/model.js';
 /**
  * Sync mutate queue ↔ create attachment storage and lineage helpers.
  */
@@ -8,7 +9,7 @@ import {
 	replaceMutateQueueFromImageUrls,
 	replaceMutateQueueHead,
 	removeMutateQueueHead,
-	addToMutateQueue,
+	replaceMutateQueueSingleItem,
 } from './mutateQueue.js';
 import {
 	CREATE_PAGE_SELECTIONS_SESSION_KEY,
@@ -20,6 +21,8 @@ import {
 	persistSharedOutputMode,
 	persistSharedPrompt,
 	persistSharedStyleSelected,
+	persistSavedCreateForm,
+	readSavedCreateForm,
 } from './createSettingsSync.js';
 import {
 	MUTATE_DEFAULT_METHOD_KEY,
@@ -247,6 +250,7 @@ export function syncMutateQueueOrderFromImageUrls(orderedUrls) {
  * @param {Array<number | null | undefined>} [sourceIds]
  */
 export function syncMutateQueueFromComposerAttachments(orderedUrls, sourceIds = []) {
+	persistSavedCreateForm({ imageChange: { type: 'replace', images: orderedUrls }, imageSources: Object.fromEntries(orderedUrls.map((url, index) => [url, { sourceId: Number(sourceIds[index]) > 0 ? Number(sourceIds[index]) : null }])) });
 	replaceMutateQueueFromImageUrls(orderedUrls, { sourceIds });
 }
 
@@ -298,15 +302,18 @@ export function planMutateQueueSyncFromProviderFields(fieldValues, fields) {
 export function syncMutateQueueFromProviderFieldValues(fieldValues, fields) {
 	const plan = planMutateQueueSyncFromProviderFields(fieldValues, fields);
 	if (plan.kind === 'full') {
+		persistSavedCreateForm({ imageChange: { type: 'replace', images: plan.urls } });
 		replaceMutateQueueFromImageUrls(plan.urls);
 		return;
 	}
 	if (plan.kind === 'head') {
+		persistSavedCreateForm({ imageChange: { type: 'replaceFirst', image: plan.url } });
 		replaceMutateQueueHead(plan.url);
 		return;
 	}
 	if (plan.kind === 'empty') {
-		replaceMutateQueueFromImageUrls([]);
+		// No visible attachment fields must not silently delete the shared list.
+		syncSavedCreateImagesToQueue();
 	}
 }
 
@@ -317,28 +324,8 @@ export function syncMutateQueueFromProviderFieldValues(fieldValues, fields) {
  * @returns {{ serverId: number, methodKey: string, model: string, outputMode: 'image' | 'video' }}
  */
 export function resolveMutateSubmitRoute(mode, i2vEngine = 'ltx') {
-	if (mode === 'image-to-video' && i2vEngine === 'ltx') {
-		return {
-			serverId: MUTATE_VIDEO_LTX_SERVER_ID,
-			methodKey: MUTATE_VIDEO_LTX_METHOD_KEY,
-			model: MUTATE_VIDEO_LTX_MODEL,
-			outputMode: 'video',
-		};
-	}
-	if (mode === 'image-to-video') {
-		return {
-			serverId: MUTATE_DEFAULT_SERVER_ID,
-			methodKey: MUTATE_VIDEO_DEFAULT_METHOD_KEY,
-			model: MUTATE_VIDEO_DEFAULT_MODEL,
-			outputMode: 'video',
-		};
-	}
-	return {
-		serverId: MUTATE_DEFAULT_SERVER_ID,
-		methodKey: MUTATE_DEFAULT_METHOD_KEY,
-		model: MUTATE_DEFAULT_MODEL,
-		outputMode: 'image',
-	};
+ const { fieldValues, ...route } = createModeChange({ mode: mode || 'mutate', engine: i2vEngine });
+ return { serverId: route.serverId, methodKey: route.methodKey, outputMode: route.outputMode, model: fieldValues.model };
 }
 
 /**
@@ -428,52 +415,16 @@ export function syncCreationDetailToAdvancedCreate(snapshot = {}) {
 		persistSharedStyleSelected(styleKey, { notify: false });
 	}
 
-	// Clear mutate queue / composer attachments so image fields restore from saved args only.
-	try {
-		replaceMutateQueueFromImageUrls([]);
-		persistCreateAttachmentUrls([]);
-	} catch {
-		// ignore storage errors
-	}
-
-	try {
-		const ss = typeof window !== 'undefined' ? window.sessionStorage : null;
-		if (ss) {
-			let selections = {};
-			try {
-				const stored = ss.getItem(CREATE_PAGE_SELECTIONS_SESSION_KEY);
-				if (stored) selections = JSON.parse(stored);
-			} catch {
-				selections = {};
-			}
-			if (!selections || typeof selections !== 'object') selections = {};
-			selections.serverId = serverId;
-			selections.methodKey = methodKey;
-			selections.tab = 'basic';
-			selections.fieldValues = { ...fieldValues };
-			const adv =
-				selections.advancedOptions && typeof selections.advancedOptions === 'object'
-					? selections.advancedOptions
-					: {};
-			selections.advancedOptions = {
-				...adv,
-				...(advancedPrompt ? { prompt: advancedPrompt } : {}),
-			};
-			ss.setItem(CREATE_PAGE_SELECTIONS_SESSION_KEY, JSON.stringify(selections));
-		}
-	} catch {
-		// ignore storage errors
-	}
-
-	try {
-		const ls = typeof window !== 'undefined' ? window.localStorage : null;
-		if (ls) {
-			ls.setItem(CREATE_SETTINGS_STORAGE_KEYS.serverId, String(serverId));
-			ls.setItem(CREATE_SETTINGS_STORAGE_KEYS.methodKey, methodKey);
-		}
-	} catch {
-		// ignore storage errors
-	}
+ // Reusing a creation's recipe is an explicit replacement of its input images;
+ // the creation output is never mistaken for an input attachment.
+ const images = Array.isArray(fieldValues.input_images) ? fieldValues.input_images
+  : typeof fieldValues.image_url === 'string' ? [fieldValues.image_url]
+  : typeof fieldValues.image === 'string' ? [fieldValues.image] : [];
+ const parentIds = [...new Set((Array.isArray(snapshot.parentIds) && snapshot.parentIds.length ? snapshot.parentIds : [snapshot.mutateOfId]).map(Number).filter(id => Number.isFinite(id) && id > 0))];
+ persistSavedCreateForm({ serverId, methodKey, outputMode, tab: 'basic', fieldValues,
+  imageSources: {}, recipeLineage: { images: [...images], parentIds },
+  imageChange: { type: 'replace', images } }, { notify: false });
+ syncSavedCreateImagesToQueue();
 
 	notifyCreateSettingsUpdated();
 	return { serverId, methodKey, model, outputMode };
@@ -511,8 +462,30 @@ function overwriteCreateImageFieldValues(fieldValues, url) {
 		if (looksLikeStoredImageValue(val)) next[key] = url;
 	}
 	next.image_url = url;
+	next.image = url;
 	next.input_images = [url];
 	return next;
+}
+
+/** Replace saved input images immediately when a Mutate source is resolved. */
+export function syncMutateSourceToCreateStorage({ imageUrl, sourceId, published } = {}) {
+	const url = typeof imageUrl === 'string' ? imageUrl.trim() : '';
+	if (!url) return;
+	persistSavedCreateForm(createSourceChange({ imageUrl: url, sourceId, published }), { notify: false });
+	persistCreateAttachmentUrls([url]);
+	replaceMutateQueueSingleItem({ imageUrl: url, sourceId, published });
+}
+
+/** Mutate edits change the saved form immediately, even without a mode switch. */
+export function persistMutateForm(snapshot = {}) {
+	const route = resolveMutateSubmitRoute(snapshot.mode, snapshot.i2vEngine);
+	const imageUrl = typeof snapshot.imageUrl === 'string' ? snapshot.imageUrl : '';
+	persistSavedCreateForm({ ...route, tab: 'basic', fieldValues: {
+		prompt: snapshot.prompt || '', model: route.model, aspect_ratio: snapshot.aspectRatio || '1:1',
+		image_url: imageUrl, image: imageUrl, input_images: imageUrl ? [imageUrl] : [],
+	} });
+	persistCreateAttachmentUrls(readSavedCreateForm().inputImages);
+	return route;
 }
 
 /**
@@ -530,72 +503,20 @@ function overwriteCreateImageFieldValues(fieldValues, url) {
  * }} snapshot
  */
 export function syncMutatePageToAdvancedCreate(snapshot = {}) {
-	const mode = snapshot.mode === 'image-to-video' ? 'image-to-video' : 'image-to-image';
-	const i2vEngine =
-		snapshot.i2vEngine === 'wan' || snapshot.i2vEngine === 'replicate' ? 'wan' : 'ltx';
-	const route = resolveMutateSubmitRoute(mode, i2vEngine);
-	const promptText = typeof snapshot.prompt === 'string' ? snapshot.prompt : '';
-	const aspect =
-		typeof snapshot.aspectRatio === 'string' && snapshot.aspectRatio.trim()
-			? snapshot.aspectRatio.trim()
-			: '1:1';
-	const url = typeof snapshot.imageUrl === 'string' ? snapshot.imageUrl.trim() : '';
-	const sourceIdNum = Number(snapshot.sourceId);
-
-	if (url) {
-		replaceMutateQueueFromImageUrls([]);
-		addToMutateQueue({
-			sourceId: Number.isFinite(sourceIdNum) && sourceIdNum > 0 ? sourceIdNum : null,
-			imageUrl: url,
-			published: snapshot.published === true || snapshot.published === 1,
-		});
-	}
-
-	persistSharedPrompt(promptText, { notify: false });
-	persistSharedAspectRatio(aspect, { notify: false });
-	persistSharedOutputMode(route.outputMode, { notify: false });
-	persistSharedModelRoute(encodeSharedModelRoute(route.serverId, route.methodKey, route.model), {
-		outputMode: route.outputMode,
-		notify: false,
-	});
-
-	try {
-		const ss = typeof window !== 'undefined' ? window.sessionStorage : null;
-		if (ss) {
-			let selections = {};
-			try {
-				const stored = ss.getItem(CREATE_PAGE_SELECTIONS_SESSION_KEY);
-				if (stored) selections = JSON.parse(stored);
-			} catch {
-				selections = {};
-			}
-			if (!selections || typeof selections !== 'object') selections = {};
-			selections.serverId = route.serverId;
-			selections.methodKey = route.methodKey;
-			selections.tab = 'basic';
-			const fv =
-				selections.fieldValues && typeof selections.fieldValues === 'object'
-					? selections.fieldValues
-					: {};
-			selections.fieldValues = {
-				...(url ? overwriteCreateImageFieldValues(fv, url) : fv),
-				prompt: promptText,
-				model: route.model,
-				aspect_ratio: aspect,
-			};
-			const adv =
-				selections.advancedOptions && typeof selections.advancedOptions === 'object'
-					? selections.advancedOptions
-					: {};
-			selections.advancedOptions = { ...adv, prompt: promptText };
-			ss.setItem(CREATE_PAGE_SELECTIONS_SESSION_KEY, JSON.stringify(selections));
-		}
-	} catch {
-		// ignore storage errors
-	}
-
-	notifyCreateSettingsUpdated();
-	return route;
+ const route = persistMutateForm(snapshot);
+ // Switching editors projects the current attachments; it does not replace them.
+ const images = readSavedCreateForm().inputImages;
+ persistCreateAttachmentUrls(images);
+ replaceMutateQueueFromImageUrls(images);
+ return route;
 }
 
 export { replaceMutateQueueHead, removeMutateQueueHead };
+
+/** Mirror all draft attachments, even when the active editor only displays one. */
+export function syncSavedCreateImagesToQueue() {
+ const saved = readSavedCreateForm();
+ const images = saved.inputImages;
+ persistCreateAttachmentUrls(images);
+ replaceMutateQueueFromImageUrls(images, { sourceIds: images.map(url => saved.imageSources?.[url]?.sourceId) });
+}

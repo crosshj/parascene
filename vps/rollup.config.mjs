@@ -10,6 +10,22 @@ import { nodeResolve } from '@rollup/plugin-node-resolve';
 const vpsDir = path.dirname(fileURLToPath(import.meta.url));
 const buildDir = path.join(vpsDir, "build");
 const isProduction = process.env.NODE_ENV === "production";
+let loggedSupabaseCircular = false;
+
+function sharedOnWarn(warning, warn) {
+	if (
+		warning.code === 'CIRCULAR_DEPENDENCY' &&
+		Array.isArray(warning.ids) &&
+		warning.ids.some((id) => id && id.includes('/webauthn'))
+	) {
+		if (!loggedSupabaseCircular) {
+			console.log('[rollup] suppressed circular dep warning for Supabase WebAuthn modules');
+			loggedSupabaseCircular = true;
+		}
+		return;
+	}
+	warn(warning);
+}
 
 function assertVpsClientBoundary() {
 	return {
@@ -103,7 +119,11 @@ function emitImportedCss() {
 			this.emitFile({ type: "asset", name: "app.css", source: minified.styles });
 		},
 		async writeBundle(_options, bundle) {
-			const jsFile = Object.keys(bundle).find((fileName) => fileName.endsWith(".js"));
+			const entry = Object.values(bundle).find((output) =>
+				output.type === "chunk" && output.isEntry &&
+				output.facadeModuleId === path.join(vpsDir, "client", "app.js")
+			);
+			const jsFile = entry?.fileName;
 			const cssFile = Object.keys(bundle).find((fileName) => fileName.endsWith(".css"));
 			if (!jsFile || !cssFile) throw new Error("Rollup did not produce the app JavaScript and CSS assets");
 			const appBuild = createHash("sha256").update(bundle[jsFile].code).digest("hex").slice(0, 12);
@@ -113,10 +133,12 @@ function emitImportedCss() {
 }
 
 export default {
+	onwarn: sharedOnWarn,
 	input: path.join(vpsDir, "client", "app.js"),
 	output: {
 		dir: buildDir,
 		format: "es",
+		inlineDynamicImports: true,
 		sourcemap: !isProduction,
 		entryFileNames: "app.[hash].js",
 		assetFileNames: "app.[hash][extname]"

@@ -27,7 +27,7 @@ function start(command, args, label) {
 }
 
 start(npmCommand, ["run", "build", "--", "--watch"], "Rollup watch");
-start(nodemonCommand, ["--watch", "server.js", "--watch", "routes", "--watch", "db", "server.js"], "Express server");
+start(nodemonCommand, ["--watch", "server.js", "--watch", "routes", "--watch", "db", "--watch", "services", "server.js"], "Express server");
 
 function stop() {
 	for (const child of children) {

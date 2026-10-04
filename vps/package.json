@@ -7,13 +7,17 @@
     "build": "npm run check:client-boundary && rollup -c rollup.config.mjs",
     "dev": "node scripts/dev.js",
     "test": "node --test",
+    "verify:create-draft": "node --experimental-vm-modules --test test/create-draft*.test.js",
     "verify:messages": "node --experimental-vm-modules --test test/messages-presentation-parity.test.js"
   },
   "dependencies": {
     "@rollup/plugin-node-resolve": "^16.0.3",
     "@rollup/plugin-terser": "^1.0.0",
     "@supabase/supabase-js": "^2.39.0",
+    "@upstash/qstash": "^2.12.0",
+    "@upstash/redis": "^1.39.0",
     "bcryptjs": "^2.4.3",
+    "busboy": "^1.6.0",
     "clean-css": "^5.3.3",
     "cookie-parser": "^1.4.6",
     "dotenv": "^16.4.5",
