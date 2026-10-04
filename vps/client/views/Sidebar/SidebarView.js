@@ -439,8 +439,11 @@ function mountSidebarPresentation({ outlet, model = {}, onAction }) {
 			refs.avatarInitial.textContent = (label.trim().slice(0, 1) || '?').toUpperCase();
 			refs.avatarInitial.hidden = Boolean(avatarUrl);
 			refs.avatarImage.hidden = !avatarUrl;
-			if (avatarUrl) refs.avatarImage.src = avatarUrl;
-			else refs.avatarImage.removeAttribute('src');
+			// Session/profile refreshes can arrive while the sidebar is mounted. Avoid
+			// reassigning an unchanged src: browsers may restart/repaint the image even
+			// when the response is already in the HTTP cache.
+			if (!avatarUrl) refs.avatarImage.removeAttribute('src');
+			else if (refs.avatarImage.getAttribute('src') !== avatarUrl) refs.avatarImage.src = avatarUrl;
 		},
 		destroy() {
 			if (resizeFrame) cancelAnimationFrame(resizeFrame);
