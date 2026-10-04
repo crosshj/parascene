@@ -1,5 +1,10 @@
 /* WWW shared modal foundations; load before picker-specific styles. */
 
+body:has(.image-picker-modal-overlay.open) {
+	overflow: hidden;
+	overscroll-behavior: none;
+}
+
 :where(.create-workflow-root) .modal-overlay,
 :where(.create-workflow-root) .image-picker-modal-overlay,
 :where(.create-workflow-root) .audio-clip-picker-modal-overlay,
@@ -69,6 +74,15 @@
 	pointer-events: auto;
 	position: relative;
 	z-index: 1;
+}
+
+/* WWW global.css applies border-box to the whole document. The VPS picker is
+   portaled outside the app overlay, so apply that same sizing model locally. */
+:where(.create-workflow-root) .image-picker-modal,
+:where(.create-workflow-root) .image-picker-modal *,
+:where(.create-workflow-root) .image-picker-modal *::before,
+:where(.create-workflow-root) .image-picker-modal *::after {
+	box-sizing: border-box;
 }
 
 :where(.create-workflow-root) .modal-overlay.open .modal,
@@ -223,4 +237,8 @@
 :where(.create-workflow-root) [data-image-picker-modal][hidden],
 :where(.create-workflow-root) [data-audio-clip-picker-modal][hidden] {
  display: none !important;
+}
+
+:where(.create-workflow-root) .image-picker-modal [hidden] {
+	display: none !important;
 }

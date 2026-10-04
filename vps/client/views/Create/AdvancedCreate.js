@@ -2174,6 +2174,7 @@ class AppRouteCreate extends HTMLElement {
 		return {
 			serverId: this.selectedServer?.id,
 			methodKey: this.getMethodKey(),
+			intent: this.selectedMethod?.intent,
 			modelValue: this.resolveEffectiveModelValue(),
 			fields: this.getRenderableMethodFields(),
 		};

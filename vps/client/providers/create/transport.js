@@ -850,11 +850,6 @@ export async function submitCreationWithPending({
 			status: 'creating',
 		});
 
-		await waitUntilCreationListed({ id: serverId, creationToken });
-		if (!isCurrent()) return { id: serverId, status: String(data.status), creationToken };
-		invalidateRelatedDataCaches();
-		if (clearPrompt) await clearComposerPromptDraftStorage();
-
 		if (navigate !== 'none') {
 			navigateToCreations({
 				mode: navigate,
@@ -865,6 +860,11 @@ export async function submitCreationWithPending({
 			refreshCreationsRoute();
 			document.dispatchEvent(new CustomEvent('creations-pending-updated'));
 		}
+
+		await waitUntilCreationListed({ id: serverId, creationToken });
+		if (!isCurrent()) return { id: serverId, status: String(data.status), creationToken };
+		invalidateRelatedDataCaches();
+		if (clearPrompt) await clearComposerPromptDraftStorage();
 
 		return { id: serverId, status: String(data.status), creationToken };
 	} catch (err) {
@@ -924,11 +924,6 @@ export async function importCreationWithPending({
 			status: 'creating',
 		});
 
-		await waitUntilCreationListed({ id: serverId, creationToken });
-  if (!isCurrent()) return { ...result, id: serverId, creationToken };
-		invalidateRelatedDataCaches();
-		if (isCurrent() && clearPrompt) await clearComposerPromptDraftStorage();
-
 		if (navigate !== 'none') {
 			navigateToCreations({
 				mode: navigate,
@@ -939,6 +934,11 @@ export async function importCreationWithPending({
 			refreshCreationsRoute();
 			document.dispatchEvent(new CustomEvent('creations-pending-updated'));
 		}
+
+		await waitUntilCreationListed({ id: serverId, creationToken });
+		if (!isCurrent()) return { ...result, id: serverId, creationToken };
+		invalidateRelatedDataCaches();
+		if (isCurrent() && clearPrompt) await clearComposerPromptDraftStorage();
 
 		return {
 			id: serverId,

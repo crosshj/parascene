@@ -1,8 +1,0 @@
-.explore-view { display: grid; min-height: min(56vh, 440px); place-items: center; align-content: center; gap: 8px; background: color-mix(in srgb, var(--beta-panel-background, #eef1f6) 94%, currentColor 6%); }
-.explore-view__art { width: min(240px, 62vw); color: color-mix(in srgb, currentColor 68%, transparent); }
-.explore-view__art svg { display: block; width: 100%; fill: none; stroke: currentColor; stroke-opacity: .15; stroke-width: 1.5; stroke-dasharray: 3 7; }
-.explore-view__art circle { fill: #8b72f8; fill-opacity: .13; stroke: #8b72f8; stroke-dasharray: none; }
-.explore-view__art path { stroke: #8b72f8; stroke-dasharray: none; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; }
-.explore-view h2 { margin: 0; font: 600 13px/1.4 var(--beta-font-family, system-ui, sans-serif); }
-.explore-view nav { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
-.explore-view nav a { padding: 8px 12px; border: 1px solid color-mix(in srgb, currentColor 18%, transparent); border-radius: 999px; color: inherit; font: 500 12px/1.2 var(--beta-font-family, system-ui, sans-serif); text-decoration: none; }

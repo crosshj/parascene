@@ -1,5 +1,7 @@
 # Plan: VPS as the canonical Parascene web runtime
 
+This document records the migration strategy and decision framework, not current task status. The [VPS migration tracker](BETA_VPS_MIGRATION_TRACKER.md) is the single current checklist; implementation requirements live in [VPS/Beta migration guidance](BETA_VPS_SPA_MIGRATION_SOURCE_OF_TRUTH.md).
+
 ## Why this document exists
 
 Parascene currently has working pieces split across the older hosted web deployment and a newer VPS runtime. The VPS can now accept and track large files, and it already connects to Supabase. The long-term goal is for the VPS to serve the canonical `www` site so that Vercel can eventually be retired or reduced to a temporary compatibility layer.
@@ -501,17 +503,13 @@ The VPS can be called canonical when all of the following are true:
 
 ## The next concrete step
 
-Do not start by asking an agent to copy the old site wholesale. Start by producing the route/capability matrix and selecting one vertical slice as the migration template. The first implementation pilot is the existing VPS file-management experience, documented separately in [BETA_PLAN_FRONTEND_PILOT.md](BETA_PLAN_FRONTEND_PILOT.md).
-
-That pilot will refactor the current VPS pages in place as an example of the new beta frontend pattern. It is intentionally not an attempt to migrate the old site. It should prove the source organization, component/view boundary, HTML/CSS import pipeline, API/data layer, caching conventions, and test approach that later beta surfaces will use.
-
-The candidate slices remain:
-
-1. large-file upload and retrieval;
-2. authenticated chat file sharing;
-3. creation media upload/processing;
-4. one complete creation-detail read path; or
-5. one complete chat lane with its API and realtime behavior.
+The file-management pilot established the initial VPS frontend pattern: native
+HTML/CSS modules, explicit view/provider boundaries, cache-backed data, and a
+repeatable VPS build. Current
+remaining surfaces and cross-cutting services are listed in the
+[VPS migration tracker](BETA_VPS_MIGRATION_TRACKER.md); client composition and
+resource ownership are documented in the [client architecture contract](BETA_VPS_CLIENT_ARCHITECTURE.md)
+and [client data/state contract](BETA_VPS_CLIENT_DATA_AND_STATE.md).
 
 The best immediate choice is probably **large-file upload plus authenticated sharing**, because it exercises identity, authorization, durable metadata, media delivery, UI integration, and failure recovery without requiring the entire generation system to move first.
 

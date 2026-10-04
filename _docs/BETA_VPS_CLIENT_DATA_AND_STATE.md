@@ -395,26 +395,22 @@ it only when a real second consumer appears.
 
 ## Current VPS status
 
-The VPS client now has a small centralized data foundation: a common JSON
-request/error boundary, observable resource lifecycle, app-scoped keyed resource
-registry, and versioned storage-cache helper. Domain behavior is grouped in
-`providers/chat/`, `providers/creations/`, `providers/files/`, and
-`providers/credits/`, with the generic resource lifecycle kept in `core/`. This is deliberately separate
-from `createAppState`, which remains a simple observable value holder rather
-than a bucket for every domain. Files, sidebar roster, and credits are the
-first resources. Files is cache-first and reconciles inline. Sidebar rows come
-from authenticated mock-backed `/api/chat/threads` and `/api/servers` endpoints
-with the `www` payload shapes, then cache per viewer; pin/hide/read actions
-update the resource locally, and keyed row reconciliation preserves stable DOM
-nodes. The credits modal/footer use `/api/credits` and `/api/credits/claim`,
-with a viewer-scoped cached balance and server-authoritative daily claims.
+The VPS client has a centralized data foundation: a common JSON request/error
+boundary, observable query lifecycle, app-scoped query registry, and versioned
+storage-cache helper. Domain providers live in `providers/create/`,
+`providers/threads/`, `providers/creations/`, `providers/files/`, and
+`providers/credits/`; generic query/cache mechanics live in `core/`. This stays
+separate from `createAppState`, which remains an observable app-state value,
+not a bucket for domain resources. The threads provider supplies the real
+conversation inbox and active message queries with realtime invalidation. The
+sidebar caches its viewer-scoped inbox and combines it with local preferences;
+the server directory endpoint remains mock-backed. Files and credits also use
+viewer-scoped cached queries, with server-authoritative mutations.
 
-The VPS roster API is currently a mock, so it does not yet receive actual
-message, presence, or challenge realtime events. Shared sidebar and credit
-resources revalidate on focus/visibility and periodically; live event
-subscriptions and server-backed roster mutations remain follow-up work. When
-adding them, route events through the roster resource's canonical update and
-reconcile policy rather than adding independent DOM mutation paths.
+When extending realtime-backed resources, treat events as invalidation hints:
+refresh the authoritative query, then reconcile subscribed views through that
+query. Keep server-directory mutations and event handling in the threads
+provider rather than adding independent DOM mutation paths.
 
 As real domains are brought over from `www`, preserve the proven behaviors:
 bootstrap for fast first paint, cache-then-network where stale display is safe,
@@ -439,3 +435,47 @@ letting each domain define its identity, freshness, and recovery semantics.
    reconciliation behavior.
 8. Test direct URL load, internal navigation, Back/Forward, empty response,
    slow response, failed response, reconnect, and account change where relevant.
+
+## Create provider draft contract
+
+The Create workflow and reusable composers share one retained draft. The Create
+domain owns the reducer, persistence, projection, and subscriptions. Views
+patch values and issue explicit image actions; omitted or unsupported fields
+remain saved. Basic shows and submits only the first image while preserving the
+full image list.
+
+Provider ownership:
+
+- `providers/create/draft.js`: versioned `create-page-selections`, memory and
+  storage, subscriptions, field merge, and explicit image actions.
+- `providers/create/model.js`: supported mode/field projections and ancestry.
+- `providers/create/workflow.js`: edits, modes, uploads, validation,
+  confirmations, submission, imports, Recreate, and transient edit context.
+- `providers/create/transport.js`: API submission and pending tracking.
+- Views render projections; controllers supply dialogs and mounted lifetime
+  signals. Legacy settings and queue are compatibility mirrors, not separate
+  form owners.
+
+| Action | Draft behavior |
+| --- | --- |
+| Basic ↔ Advanced | Preserve full images and hidden fields; Basic uses the first image |
+| Select text-to-image or fresh Create | Clear images and edit context; keep other saved fields |
+| Open Mutate | Replace images with resolved source and lineage |
+| Pick/remove Basic image | Replace/remove the first image; retain remaining images |
+| Edit Advanced image array | Explicit ordered replacement |
+| Close | Keep saved draft; clear edit context |
+| Accepted submission | Clear edit context; clear only an unchanged submitted prompt |
+| Failed/cancelled submission | Retain draft and edit context |
+| Recreate | Restore recipe inputs/direct parents; clear old edit context; hand off to Advanced |
+
+Ordinary field/mode changes preserve omitted values; empty prompt, false, and
+zero are edits. Mounting an editor is not explicit text-to-image selection.
+Edit context retains the exact Mutate URL, including group/source parameters,
+across editor switches. Refreshing `/create` starts fresh; a Mutate URL
+establishes edit context from the route. Changed recipe inputs drop recipe
+ancestry; output is not automatically an input or parent. Late uploads and
+completions cannot overwrite newer selections, prompts, or edit contexts.
+Cancellation before POST stops submission; accepted requests finish pending
+tracking.
+
+The focused contract check is `cd vps && npm run verify:create-draft`.

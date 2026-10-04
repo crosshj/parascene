@@ -220,6 +220,16 @@ export function feedItemCardImageUrl(item, preferThumbnail = false) {
 	return appendMediaVariant(appendCreationIdToMediaUrl(item.image_url || item.thumbnail_url || '', creationId), blur ? 'blur' : '');
 }
 
+export function feedItemCardOriginalImageUrl(item) {
+	if (!item) return '';
+	const creationId = Number(item?.created_image_id ?? item?.id);
+	const groupCover = resolveGroupCoverDisplayUrl(item, false);
+	if (groupCover) return groupCover;
+	const raw = item?.image_url || item?.url || item?.file_path || item?.filename;
+	if (typeof raw !== 'string' || !raw.trim()) return '';
+	return appendCreationIdToMediaUrl(raw.trim(), creationId);
+}
+
 function appendMediaVariant(url, variant) {
 	if (!url || !variant || !url.includes('/api/creations/media/')) return url;
 	const parsed = new URL(url, 'http://localhost');
@@ -1499,9 +1509,8 @@ function stampChatCreationsBulkDatasetOnFeedCard(card, item, preferThumbnail) {
 	if (isGroupCreation && groupSourceCount > 0) card.dataset.groupSourceCount = String(groupSourceCount);
 	const imageUrlRaw = feedItemCardImageUrl(item, preferThumbnail);
 	card.dataset.imageUrl = typeof imageUrlRaw === 'string' ? imageUrlRaw.trim() : '';
-	const fullImageUrlRaw = feedItemCardImageUrl(item, false);
-	card.dataset.imageUrlFull =
-		typeof fullImageUrlRaw === 'string' ? fullImageUrlRaw.trim() : card.dataset.imageUrl;
+	const fullImageUrlRaw = feedItemCardOriginalImageUrl(item);
+	card.dataset.imageUrlFull = typeof fullImageUrlRaw === 'string' ? fullImageUrlRaw.trim() : '';
 	const seedCommentCount = Number(item?.comment_count);
 	if (
 		item?.comment_count != null &&

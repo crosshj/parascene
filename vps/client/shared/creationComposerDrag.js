@@ -10,11 +10,7 @@ export const PRSN_FEED_CREATION_DRAG_MIME = 'application/x-parascene-creation+js
 export function attachFeedCardCreationDragSource(card) {
 	if (!(card instanceof HTMLElement)) return;
 	const idRaw = card.dataset.imageId || card.getAttribute('data-creation-id');
-	const imageUrl = (
-		card.dataset.imageUrlFull ||
-		card.dataset.imageUrl ||
-		''
-	).trim();
+	const imageUrl = (card.dataset.imageUrlFull || '').trim();
 	const mediaType = (card.dataset.mediaType || 'image').trim().toLowerCase();
 	const status = (card.dataset.creationStatus || '').trim().toLowerCase();
 	const creationId = idRaw != null && idRaw !== '' ? Number(idRaw) : NaN;

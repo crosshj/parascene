@@ -1,6 +1,6 @@
 # VPS/Beta migration guidance
 
-This is the canonical home for migration and cutover requirements. Plans, feature documents and agent instructions reference this policy rather than restating it.
+This is the canonical home for migration and cutover requirements. The [VPS migration tracker](BETA_VPS_MIGRATION_TRACKER.md) is the current checklist of remaining scope; plans, feature documents and agent instructions reference this policy rather than restating requirements.
 
 For client ownership, composition, controllers, and overlay routing, follow
 [VPS client architecture and cleanup contract](BETA_VPS_CLIENT_ARCHITECTURE.md).
@@ -18,8 +18,7 @@ Before writing or moving VPS frontend code:
 2. Find the shared SPA builders and behavior modules that produce that hierarchy.
 3. Trace the active SPA parent-to-child CSS chain, including containing widths, gaps, padding, breakpoints, and container queries.
 4. Port that structure and behavior into VPS, replacing only API, resource, navigation, and build seams.
-5. If no active SPA equivalent exists, document the exception before introducing a new pattern.
-5. If there is no active SPA equivalent, document the exception and the new decision.
+5. If no active SPA equivalent exists, document the exception and the new decision before introducing a pattern.
 
 ## Deployment and build boundary
 
@@ -36,14 +35,20 @@ When shared behavior is needed:
 
 ## Creations example
 
-The active SPA creations browse surface is the chat/pseudo-channel implementation:
+The Creations browse feature is a completed port of the active WWW SPA chat/pseudo-channel surface. It is not a port of the deprecated standalone `app-route-creations` page or the abandoned `prsn_creations` table. The VPS `/api/creations` endpoint is canonical for `prsn_created_images`; the view owns list loading, offset pagination, optimistic pending cards, status polling, bounded lazy media loading, media selection, grouped covers/carousels/playlists, badges/privacy/status presentation, refresh/filter state, and grid markup/styles. Create workflow/composers and Creation Detail have separate owners and are not missing pieces of the browse view.
+
+The active source surface is:
 
 - route construction: `src/chat/chatPage.js`
 - card construction: `public/shared/feedCardBuild.js`
 - browse layout: `public/global.css` around `.chat-page--pseudo-browse-view`
 - shared media/group/badge helpers under `public/shared/`
 
-The deprecated standalone `app-route-creations` implementation and its older fixed `content-cards-image-grid` rules are not the VPS Creations source of truth.
+The feature replaces WWW network/navigation seams with the VPS request/resource client and route hooks, scopes WWW global CSS to VPS feature CSS, and uses VPS-owned events. Do not import the deprecated `public/components/routes/creations.js` module or its older fixed `content-cards-image-grid` rules.
+
+`GET /api/creations?limit=50&offset=0&challenge_only=0` returns `{ creations: [], has_more, limit, offset }`. Each row supplies the media and presentation fields consumed by the grid, including `id`, `filename`, `file_path`, media URLs/type, dimensions, status, timestamps, title/description, metadata, NSFW, and moderation state. The API owns visibility filtering and pagination; the client must not paginate a broad local list.
+
+The Creations browse migration is complete. Its regression checklist covers loading strategy, pagination, media thumbnail selection, badges/privacy, infinite scrolling, grouped items, and header/empty-state behavior.
 
 ## Import adaptation
 
@@ -65,13 +70,13 @@ Routing and overlay state are one system:
 - Navigating between details must update overlay history and content without tearing down the app shell.
 - The detail view must be mounted into the layout's app-level overlay region, not by `CreationsView` and not as a normal router outlet page. There is no separate overlay controller; region occupancy is the overlay lifecycle.
 
-Do not continue the beta creation-detail migration until the www SPA routing/overlay lifecycle has been traced clearly enough to reproduce these behaviors. If any part of the www implementation, deep-link defaulting, history ownership, or seed handoff is unclear, stop and resolve that detail before adapting code.
+The creation-detail overlay requirements above describe the completed VPS ownership contract and remain regression criteria for future changes.
 
 ## Completion and cutover
 
 - Preserve the requested feature scope. No silent deletion or replacement of behavior during cleanup.
 - A shell, static imports or successful initial load do not establish a completed feature port.
 - Resolve document-wide selectors, delayed listeners and navigation globals into mounted feature lifetimes; verify action-specific API contracts and teardown.
-- The architecture refactor recorded incomplete creation-detail lifecycle seams on 2026-10-01. Treat them as unresolved until verified; do not claim full completion while they remain. Dated API observations remain in the [cutover log](BETA_CUTOVER_LOG.md#creation-detail-api-observations-2026-10-01).
+- Dated Creation Detail API observations remain in the [cutover log](BETA_CUTOVER_LOG.md#creation-detail-api-observations-2026-10-01).
 - Review deep links, seed handoff, Back/Forward, dismiss/reopen, dismissal during loading, scroll retention and session expiry. Retained controllers must survive overlays without duplicate subscriptions; unmount must dispose owned work.
 - Building alone does not verify browser behavior. Resolve unclear WWW behavior or ownership before continuing the affected migration step.

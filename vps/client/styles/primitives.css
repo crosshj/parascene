@@ -77,3 +77,4 @@
 	.skeleton-circle::after,
 	.skeleton-pill::after { animation: none; }
 }
+[hidden] { display: none !important; }

@@ -9,6 +9,9 @@
 	--border: #e2e8f0;
 	--accent: #7c3aed;
 	--accent-text: #ffffff;
+	--accent-switch: var(--accent);
+	--switch-track-off: var(--border);
+	--switch-thumb-off: var(--surface-strong);
 	--focus: #6d28d9;
 	--input-bg: #ffffff;
 	--error: #b91c1c;
@@ -20,6 +23,9 @@
 	--color-green: #16a34a;
 	--color-green-fg: color-mix(in srgb, var(--color-green) 80%, var(--text));
 	--color-green-bg-subtle: color-mix(in srgb, var(--color-green) 16%, var(--surface));
+	--color-amber: #d97706;
+	--color-amber-fg: color-mix(in srgb, var(--color-amber) 84%, var(--text));
+	--color-amber-bg-subtle: color-mix(in srgb, var(--color-amber) 18%, var(--surface));
 	--color-purple: #7c3aed;
 	--color-red-fg: #b91c1c;
 	--image-placeholder: rgba(15, 23, 42, 0.06);
@@ -40,6 +46,9 @@
 		--border: #3d3552;
 		--accent: #05c76f;
 		--accent-text: #0f0d1a;
+		--accent-switch: var(--focus);
+		--switch-track-off: #4d4560;
+		--switch-thumb-off: #6b6377;
 		--focus: #a78bfa;
 		--input-bg: #120f1d;
 		--error: #fca5a5;
@@ -48,6 +57,9 @@
 		--error-border: #5b1f35;
 		--danger: #fca5a5;
 		--state-danger-fg: #fca5a5;
+		--color-amber: #f59e0b;
+		--color-amber-fg: color-mix(in srgb, var(--color-amber) 78%, white);
+		--color-amber-bg-subtle: color-mix(in srgb, var(--color-amber) 30%, var(--surface));
 		--color-red-fg: #fca5a5;
 		--image-placeholder: rgba(237, 233, 254, 0.08);
 		--skeleton: color-mix(in srgb, var(--text) 8%, var(--surface));

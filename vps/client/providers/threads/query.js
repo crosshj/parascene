@@ -4,6 +4,59 @@ import { mergeThreadsInbox } from './model.js';
 
 // Real inbox data must not reuse the earlier mock roster snapshot.
 const CACHE_PREFIX = 'prsn-vps-threads-inbox-v3';
+const MESSAGE_CACHE_PREFIX = 'prsn-vps-thread-messages-v1';
+const MESSAGE_CACHE_LIMIT = 8;
+const MESSAGE_PAGE_LIMIT = 40;
+
+function createPublicThreadMessageCache(viewerId, threadId) {
+	const baseKey = `${MESSAGE_CACHE_PREFIX}:${viewerId}`;
+	const cacheKey = `${baseKey}:${threadId}`;
+	const cache = createStorageCache(cacheKey, {
+		validate: (data) => Array.isArray(data?.messages) && data.messages.length <= MESSAGE_PAGE_LIMIT
+			&& data.messages.every((message) => Number.isFinite(Number(message?.id)))
+	});
+	function touch() {
+		try {
+			const storage = localStorage;
+			const indexKey = `${baseKey}:index`;
+			const previous = JSON.parse(storage.getItem(indexKey) || '[]');
+			const ids = Array.isArray(previous) ? previous.filter((id) => /^\d+$/.test(String(id)) && Number(id) !== Number(threadId)) : [];
+			ids.push(String(threadId));
+			while (ids.length > MESSAGE_CACHE_LIMIT) storage.removeItem(`${baseKey}:${ids.shift()}`);
+			storage.setItem(indexKey, JSON.stringify(ids));
+		} catch { /* Browser storage is an optional warm cache. */ }
+	}
+	return {
+		read() { const entry = cache.read(); if (entry) touch(); return entry; },
+		write(entry) {
+			let data = entry.data;
+			if (data.messages.length > MESSAGE_PAGE_LIMIT) {
+				const messages = data.messages.slice(-MESSAGE_PAGE_LIMIT);
+				const first = messages[0];
+				let nextBefore = data.nextBefore;
+				if (first?.created_at && Number.isFinite(Number(first.id))) {
+					const cursor = btoa(JSON.stringify({ c: first.created_at, i: Number(first.id) }));
+					nextBefore = cursor.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+				}
+				data = { ...data, messages, hasMore: true, nextBefore };
+			}
+			cache.write({ ...entry, data }); touch();
+		},
+		clear() { cache.clear(); }
+	};
+}
+
+export function clearThreadMessagesCache(viewerId) {
+	if (!viewerId) return;
+	try {
+		const prefix = `${MESSAGE_CACHE_PREFIX}:${Number(viewerId)}`;
+		const storage = localStorage;
+		const indexKey = `${prefix}:index`;
+		const ids = JSON.parse(storage.getItem(indexKey) || '[]');
+		if (Array.isArray(ids)) for (const id of ids) storage.removeItem(`${prefix}:${id}`);
+		storage.removeItem(indexKey);
+	} catch { /* Browser storage is optional. */ }
+}
 
 export function createThreadsInboxQuery({ viewerId, api } = {}) {
 	const cacheKey = `${CACHE_PREFIX}:${viewerId}`;
@@ -27,11 +80,12 @@ export function createThreadsInboxQuery({ viewerId, api } = {}) {
 	};
 }
 
-export function createThreadMessagesQuery({ threadId, api, registry } = {}) {
-	const lease = registry.acquire(['thread-messages', Number(threadId)], () => {
+export function createThreadMessagesQuery({ threadId, api, registry, viewerId, persist = false } = {}) {
+	const create = () => {
 		let query;
 		query = createQuery({
 		key: ['thread-messages', Number(threadId)],
+		cache: persist && viewerId ? createPublicThreadMessageCache(Number(viewerId), Number(threadId)) : undefined,
 		maxAge: 0,
 		load: async ({ signal, current }) => {
 			const initialIds = new Set((current?.messages || []).map((row) => Number(row.id)));
@@ -56,6 +110,8 @@ export function createThreadMessagesQuery({ threadId, api, registry } = {}) {
 		},
 		});
 		return query;
-	});
-	return lease;
+	};
+	return registry
+		? registry.acquire(['thread-messages', Number(threadId)], create)
+		: { query: create(), release() {} };
 }

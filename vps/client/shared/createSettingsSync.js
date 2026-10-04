@@ -294,53 +294,6 @@ export function isSharedModelRouteComposerRepresentable(routeKey, representableR
 }
 
 /**
- * @param {{
- *   prompt?: string,
- *   aspectRatio?: string,
- *   outputMode?: 'image' | 'video' | 'audio',
- *   modelRoute?: string,
- *   styleSelected?: string,
- *   notify?: boolean,
- * }} snapshot
- */
-export function writeSharedCreateSettingsFromComposerSnapshot(snapshot = {}) {
-	const { notify = true } = snapshot;
-	if (typeof snapshot.prompt === 'string') {
-		persistSharedPrompt(snapshot.prompt, { notify: false });
-	}
-	if (typeof snapshot.aspectRatio === 'string') {
-		persistSharedAspectRatio(snapshot.aspectRatio, { notify: false });
-	}
-	if (
-		snapshot.outputMode === 'image' ||
-		snapshot.outputMode === 'video' ||
-		snapshot.outputMode === 'audio'
-	) {
-		persistSharedOutputMode(snapshot.outputMode, { notify: false });
-	}
-	if (typeof snapshot.modelRoute === 'string') {
-		persistSharedModelRoute(snapshot.modelRoute, {
-			outputMode: normalizeCreateOutputMode(snapshot.outputMode),
-			notify: false,
-		});
-		const parsed = parseSharedModelRoute(snapshot.modelRoute);
-		const ls = getLocalStorage();
-		if (parsed && ls) {
-			try {
-				ls.setItem(CREATE_SETTINGS_STORAGE_KEYS.serverId, String(parsed.serverId));
-				ls.setItem(CREATE_SETTINGS_STORAGE_KEYS.methodKey, parsed.methodKey);
-			} catch {
-				// ignore storage errors
-			}
-		}
-	}
-	if (typeof snapshot.styleSelected === 'string') {
-		persistSharedStyleSelected(snapshot.styleSelected, { notify: false });
-	}
-	if (notify) notifyCreateSettingsUpdated();
-}
-
-/**
  * Merge localStorage shared settings into sessionStorage create-page-selections.
  * Shared settings win for prompt, aspect_ratio, and model route server/method.
  *

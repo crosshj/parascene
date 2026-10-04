@@ -247,7 +247,10 @@ export function wireImagePickerModal(refs, options) {
 	} = refs;
 
 	const detachOnClose = options.detachOnClose === true;
+	const allowAnyFile = options.allowAnyFile === true;
+	if (allowAnyFile) fileInput.multiple = true;
 	const onPick = options.onPick;
+	const onClose = options.onClose;
 	const setModalAlert =
 		typeof options.setModalAlert === 'function'
 			? options.setModalAlert
@@ -311,6 +314,17 @@ export function wireImagePickerModal(refs, options) {
 			document.removeEventListener('keydown', handleEscape, true);
 			modalOverlay.remove();
 		}
+		onClose?.();
+	}
+
+	function selectAndClose(value) {
+		closeModal();
+		try {
+			const result = onPick?.(value);
+			result?.catch?.((error) => console.error('[imagePickerModal] selection failed:', error));
+		} catch (error) {
+			console.error('[imagePickerModal] selection failed:', error);
+		}
 	}
 
 	function openModal() {
@@ -346,8 +360,7 @@ export function wireImagePickerModal(refs, options) {
 				const file = item.getAsFile();
 				if (file) {
 					setModalAlert('');
-					onPick(file);
-					closeModal();
+					selectAndClose(file);
 				}
 				return;
 			}
@@ -368,14 +381,12 @@ export function wireImagePickerModal(refs, options) {
 		const v = (pasteInput.value || '').trim();
 		if (!isValidImageUrl(v)) return;
 		e.preventDefault();
-		onPick(v);
-		closeModal();
+		selectAndClose(v);
 	});
 	pasteSubmitBtn.addEventListener('click', () => {
 		const v = (pasteInput.value || '').trim();
 		if (!isValidImageUrl(v)) return;
-		onPick(v);
-		closeModal();
+		selectAndClose(v);
 	});
 
 	urlInput.addEventListener('paste', (e) => {
@@ -387,8 +398,7 @@ export function wireImagePickerModal(refs, options) {
 				const file = item.getAsFile();
 				if (file) {
 					setModalAlert('');
-					onPick(file);
-					closeModal();
+					selectAndClose(file);
 				}
 				return;
 			}
@@ -397,8 +407,7 @@ export function wireImagePickerModal(refs, options) {
 		const next = typeof text === 'string' ? text.trim() : '';
 		if (next) {
 			e.preventDefault();
-			onPick(next);
-			closeModal();
+			selectAndClose(next);
 		}
 	});
 	urlInput.addEventListener('keydown', (e) => {
@@ -406,13 +415,11 @@ export function wireImagePickerModal(refs, options) {
 		const v = (urlInput.value || '').trim();
 		if (!v) return;
 		e.preventDefault();
-		onPick(v);
-		closeModal();
+		selectAndClose(v);
 	});
 	pasteAttachBtn.addEventListener('click', () => {
 		if (pendingPasteFile) {
-			onPick(pendingPasteFile);
-			closeModal();
+			selectAndClose(pendingPasteFile);
 		}
 	});
 
@@ -426,14 +433,14 @@ export function wireImagePickerModal(refs, options) {
 	linkAttachBtn.addEventListener('click', () => {
 		const v = (urlInput.value || '').trim();
 		if (v) {
-			onPick(v);
-			closeModal();
+			selectAndClose(v);
 		}
 	});
 
 	fileInput.addEventListener('change', () => {
-		const file = fileInput.files?.[0];
-		if (!file || !file.type.startsWith('image/')) {
+		const files = Array.from(fileInput.files || []);
+		const file = files[0];
+		if (!file || (!allowAnyFile && !file.type.startsWith('image/'))) {
 			if (file) {
 				setModalAlert('Please choose an image file.');
 			}
@@ -442,18 +449,20 @@ export function wireImagePickerModal(refs, options) {
 			uploadReady.hidden = true;
 			return;
 		}
+		if (allowAnyFile && files.length > 1) {
+			selectAndClose(files);
+			return;
+		}
 		pendingUploadFile = file;
 		uploadReadyText.textContent = `Selected: ${file.name}`;
 		uploadReady.hidden = false;
 		uploadAttachBtn.disabled = false;
 		setModalAlert('');
-		onPick(file);
-		closeModal();
+		selectAndClose(file);
 	});
 	uploadAttachBtn.addEventListener('click', () => {
 		if (pendingUploadFile) {
-			onPick(pendingUploadFile);
-			closeModal();
+			selectAndClose(pendingUploadFile);
 		}
 	});
 

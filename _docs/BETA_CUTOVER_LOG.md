@@ -1,18 +1,17 @@
 # Beta cutover log
 
-Dated observations and decisions. Current requirements live in [migration guidance](BETA_VPS_SPA_MIGRATION_SOURCE_OF_TRUTH.md); implementation plans are linked below.
+Dated observations and decisions. The current outstanding scope is tracked in the [VPS migration tracker](BETA_VPS_MIGRATION_TRACKER.md); requirements live in [migration guidance](BETA_VPS_SPA_MIGRATION_SOURCE_OF_TRUTH.md).
 
 ## 2026-09-30
 
-- My Creations is improving. Creation Detail and overlays are the next useful slice: they establish how views open over the app.
+- At the time, My Creations was improving and Creation Detail/overlays were selected as the next useful implementation slice.
 - The VPS should replace Vercel once the main flows work. Beta provides room to encounter failures before production cutover.
 - Open concerns: mobile, crash recovery, logging, deployment reliability, and clear shared modules that support both web and desktop.
 
 ## 2026-10-01
 
-- My Creations and core Creation Detail media flows are working; full lifecycle and action parity still need review.
-- Chat is the next slice: channels, DMs, Notes, servers, and shared conversation behavior.
-- Initial sequence considered: chat → composers → creation → remaining views.
+- At the time, My Creations and core Creation Detail media flows were working; chat was selected as the next implementation slice.
+- The initial sequence considered was chat → composers → Create workflow → remaining views. Create and reusable composer migration are now complete (see 2026-10-04).
 - Longer-term direction: center Parascene on developing characters and worlds. Social features should support that creative work.
 - Future ideas: reusable character/world resources, user-controlled organization and compaction, and less prominent server UI while retaining the underlying architecture.
 
@@ -26,13 +25,14 @@ Dated observations and decisions. Current requirements live in [migration guidan
 - Threads is the broader foundation for conversations and sidebar activity.
 - Core channel/DM flows, message hydration, shared media, lightbox and canvas/right-sidebar behavior are in place.
 - Known remaining conversation work: private channel creation/invitations and canvas notification parity.
-- Profiles remain to be brought over. Right sidebars could show profiles, notes and creation details while retaining the current view; mobile would use overlays.
-- Related images in compact creation detail remain undecided.
+- At that point, profile surfaces and right-sidebar profile/note/detail content were still planned; see the current tracker for what remains.
 - A focused mobile pass is deferred until the main desktop flows are working.
 
 ## 2026-10-03
 
-- **Decision: bring Create over before composers.** Both need the same creation services; Create establishes submission, provider configuration, credits, settings and completion handling first. The creation composer’s Advanced action also needs a working Create destination.
-- Port the full Create workflow faithfully, excluding reusable composers. Add a basic Create entry point on Feed.
-- Then port composers using the completed Create services. Conversation composer work is largely independent.
-- Plans: [Create](BETA_VPS_CREATE_PLAN.md) → [composers](BETA_VPS_COMPOSERS_PLAN.md).
+- The implementation sequence was to complete Create services before reusable composers, then port both workflows into VPS. This sequence is complete; the active tracker records the completion and remaining site scope.
+
+## 2026-10-04
+
+- Create workflow and reusable composers are complete. Their old port plans are retained as completed implementation references, not active migration tasks.
+- The [VPS migration tracker](BETA_VPS_MIGRATION_TRACKER.md) is the single current list for remaining product surfaces, public pages, crawler support, APIs, background services, administration, and cutover work.

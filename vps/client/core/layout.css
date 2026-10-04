@@ -49,14 +49,14 @@ body.beta-layout main#app-outlet {
 	background: var(--beta-panel-background);
 }
 
-.beta-outlet__frame { position: relative; width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; }
-.beta-outlet__scroll { position: absolute; inset: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; -ms-overflow-style: none; }
+.beta-outlet__frame { position: relative; display: flex; flex-direction: column; width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; }
+.beta-outlet__scroll { position: relative; flex: 1 1 auto; min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; -ms-overflow-style: none; }
 .beta-outlet__scroll::-webkit-scrollbar { display: none; }
-.beta-outlet__content { box-sizing: border-box; min-height: 100%; padding: 60px var(--beta-page-gutter) 78px; }
+.beta-outlet__content { box-sizing: border-box; min-height: 100%; padding: 60px var(--beta-page-gutter) 24px; }
 .beta-outlet__header { position: absolute; z-index: 3; inset: 0 0 auto; display: flex; align-items: center; gap: 8px; box-sizing: border-box; width: 100%; min-height: 0; height: var(--beta-chrome-row-height); padding: 0 12px; border: 0; border-radius: 0; background: color-mix(in srgb, var(--beta-panel-background) 94%, transparent); -webkit-backdrop-filter: none; backdrop-filter: none; }
 .beta-outlet__identity { display: flex; flex: 0 1 auto; align-items: center; gap: 8px; min-width: 0; }
 .beta-outlet__icon { display: grid; flex: 0 0 24px; width: 24px; height: 24px; place-items: center; color: inherit; }
-.beta-outlet__icon svg { width: 18px; height: 18px; }
+.beta-outlet__icon svg { display: block; flex: none; width: 18px !important; height: 18px !important; max-width: 18px; max-height: 18px; }
 .beta-outlet__title { overflow: hidden; margin: 0; font-size: 1.0625rem; font-weight: 600; line-height: 1; text-overflow: ellipsis; white-space: nowrap; }
 .beta-outlet__title-text--breadcrumb { display: inline-flex; align-items: center; gap: 0; min-width: 0; overflow: hidden; }
 .beta-outlet__breadcrumb-link { flex-shrink: 0; color: var(--text-muted); font-weight: 500; text-decoration: none; }
@@ -69,17 +69,37 @@ body.beta-layout main#app-outlet {
 .beta-outlet__action:hover, .beta-outlet__action:focus-visible { background: color-mix(in srgb, currentColor 8%, transparent); outline: none; }
 .beta-outlet__action svg { width: 18px; height: 18px; }
 .beta-outlet__more svg { transform: rotate(90deg); }
-.beta-outlet__composer { position: absolute; z-index: 3; inset: auto var(--beta-page-gutter) 0; display: flex; align-items: center; gap: 8px; box-sizing: border-box; min-height: 60px; padding: 8px 0 calc(8px + env(safe-area-inset-bottom)); background: color-mix(in srgb, var(--beta-panel-background) 94%, transparent); }
-.beta-outlet__composer[hidden] { display: none; }
-.beta-outlet__composer textarea { flex: 1 1 auto; min-width: 0; min-height: 44px; max-height: 120px; resize: none; box-sizing: border-box; padding: 10px 8px; border: 1px solid color-mix(in srgb, currentColor 14%, transparent); border-radius: 10px; color: inherit; background: color-mix(in srgb, var(--beta-panel-background) 74%, transparent); font: inherit; font-size: .9375rem; }
-.beta-outlet__composer button { display: grid; flex: 0 0 40px; width: 40px; height: 40px; place-items: center; padding: 0; border: 0; border-radius: 8px; color: inherit; background: transparent; }
-.beta-outlet__composer button:last-child { color: white; background: #7c3aed; }
-.beta-outlet__composer button:disabled { opacity: .45; }
-.beta-outlet__composer button svg { width: 18px; height: 18px; }
-body.is-resizing-sidebar .beta-outlet__composer { background: var(--beta-panel-background); }
-body.is-resizing-sidebar .beta-outlet__composer textarea { background: var(--beta-panel-background); }
-body.is-resizing-viewport .beta-outlet__composer { background: var(--beta-panel-background); }
-body.is-resizing-viewport .beta-outlet__composer textarea { background: var(--beta-panel-background); }
+/* WWW route > thread body + composer siblings. Creation overlays the route;
+   conversation consumes space below its thread body. The VPS outlet already
+   stops above mobile navigation, so neither surface is viewport-fixed. */
+.beta-outlet__thread-body { position: relative; isolation: isolate; flex: 1 1 auto; min-height: 0; min-width: 0; }
+.beta-outlet__thread-body > .beta-outlet__scroll { position: absolute; inset: 0; }
+.beta-outlet__frame[data-composer="creation"] .beta-outlet__content { padding-bottom: calc(var(--creation-composer-height, 200px) + 12px); }
+.beta-outlet__composer, .beta-outlet__creation-composer { box-sizing: border-box; min-width: 0; width: 100%; padding: 8px 12px calc(8px + env(safe-area-inset-bottom)); }
+.beta-outlet__composer { position: absolute; z-index: 3; inset: auto 0 0; display: flex; flex-direction: column; align-items: stretch; gap: 0; border: none; background: transparent; }
+.beta-outlet__creation-composer { position: absolute; z-index: 3; inset: auto 0 0; max-width: 720px; margin-inline: auto; overflow: visible; background: transparent; pointer-events: none; }
+.beta-outlet__creation-composer > .chat-page-create-composer-host { width: 100%; min-width: 0; box-sizing: border-box; pointer-events: auto; }
+.beta-outlet__composer[hidden], .beta-outlet__creation-composer[hidden] { display: none; }
+.beta-outlet__composer-shell { display: flex; flex-direction: column; align-items: stretch; flex: 1 1 auto; min-width: 0; width: 100%; gap: 0; padding: 0; border: 1px solid var(--border); border-radius: 10px; background: var(--input-bg); box-sizing: border-box; overflow: hidden; transition: border-top-color .15s ease; }
+.beta-outlet__composer-shell:focus-within { border-color: var(--focus); }
+.beta-outlet__composer-input-row { display: flex; flex-direction: row; align-items: flex-end; flex: 1 1 auto; min-width: 0; gap: 8px; padding: 4px 4px 4px 8px; box-sizing: border-box; }
+.beta-outlet__composer .chat-page-composer-attach-slot { flex-shrink: 0; align-self: flex-end; display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; margin-bottom: 2px; box-sizing: border-box; }
+.beta-outlet__composer textarea { flex: 1 1 auto; min-width: 0; margin: 0; border: none; border-radius: 0; background: transparent; box-shadow: none; resize: none; min-height: 44px; max-height: 160px; padding: 10px 6px 10px 2px; line-height: 1.45; font-size: .9375rem; font-family: inherit; color: var(--text); box-sizing: border-box; }
+.beta-outlet__composer textarea:focus { outline: none; }
+.beta-outlet__composer-input-row button { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; align-self: flex-end; width: 40px; height: 40px; margin: 0 0 2px; padding: 0; border: none; border-radius: 8px; background: transparent; color: var(--text-muted); cursor: pointer; }
+.beta-outlet__composer-input-row button[type="submit"] { width: 44px; height: 44px; margin: 0; color: var(--focus); }
+.beta-outlet__composer-input-row button:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.beta-outlet__composer-input-row button:disabled { opacity: .45; }
+.beta-outlet__composer-input-row button svg { width: 22px; height: 22px; }
+.beta-outlet__composer-input-row button[type="submit"] svg { width: 20px; height: 20px; }
+@media (min-width: 1024px) {
+ .beta-outlet__composer, .beta-outlet__creation-composer { max-width: none; padding-inline: max(12px, calc((100% - 720px) / 2 + 12px)); }
+}
+@media (max-width: 768px) {
+ .beta-outlet__creation-composer { max-width: none; padding: 0 8px; border: none; border-radius: 0; background: transparent; box-shadow: none; }
+ .beta-outlet__composer { padding: 0 8px; border: none; border-radius: 0; background: transparent; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
+ .beta-outlet__composer-shell { border: 1px solid var(--border); box-shadow: none; background: var(--input-bg); }
+}
 
 .beta-app-overlay-host { position: fixed; z-index: 100; inset: 0; pointer-events: none; }
 .beta-app-overlay-host[hidden] { display: none; }

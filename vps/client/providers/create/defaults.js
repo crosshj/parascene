@@ -434,6 +434,11 @@ export const DEFAULT_CREATE_SERVERS = [
 							"type": "text",
 							"label": "Prompt",
 							"required": true
+						},
+						"lyrics": {
+							"type": "text",
+							"label": "Lyrics",
+							"required": false
 						}
 					}
 				},

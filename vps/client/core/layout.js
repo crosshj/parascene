@@ -2,6 +2,11 @@ import './layout.css';
 import { createRightSidebar } from './rightSidebar.js';
 import { createPopupMenu } from '../components/PopupMenu/PopupMenu.js';
 import { iconMarkup } from '../components/Icon/Icon.js';
+import { createMessageComposerElement } from '../components/Messages/Composer.js';
+import { mountCreateComposer } from '../components/CreateComposer/CreateComposer.js';
+import '../components/CreateComposer/CreateComposer.css';
+import { refreshAutoGrowTextareas } from '../shared/autogrow.js';
+import { attachCreateComposerSuggest, isTriggeredSuggestPopupOpen } from '../shared/triggeredSuggest.js';
 
 function getRegion(root, name) {
 	const region = root.querySelector(`[data-layout-region="${name}"]`);
@@ -23,6 +28,7 @@ export function createLayout({ root, views, services } = {}) {
 	pageRegion.classList.add('beta-outlet');
 	pageRegion.innerHTML = `
 		<div class="beta-outlet__frame">
+			<div class="beta-outlet__thread-body">
 			<header class="beta-outlet__header">
 				<div class="beta-outlet__identity"><span class="beta-outlet__icon"></span><h1 class="beta-outlet__title"></h1></div>
 				<div class="beta-outlet__actions">
@@ -30,18 +36,25 @@ export function createLayout({ root, views, services } = {}) {
 				</div>
 			</header>
 			<div class="beta-outlet__scroll"><div class="beta-outlet__content"></div></div>
-			<form class="beta-outlet__composer" aria-label="Message composer">
-				<textarea rows="1" aria-label="Write a message" placeholder="Write a message…"></textarea>
-				<button type="button" aria-label="Add attachment">${iconMarkup('plus')}</button>
-				<button type="submit" aria-label="Send message" disabled>${iconMarkup('send')}</button>
-			</form>
+			</div>
+			<div class="beta-outlet__creation-composer" data-layout-creation-composer hidden><div class="chat-page-create-composer-host" data-create-composer-host></div></div>
 		</div>`;
 
 	const outletRegion = pageRegion.querySelector('.beta-outlet__content');
 	const scrollRegion = pageRegion.querySelector('.beta-outlet__scroll');
 	const pageTitle = pageRegion.querySelector('.beta-outlet__title');
 	const pageIcon = pageRegion.querySelector('.beta-outlet__icon');
-	const composer = pageRegion.querySelector('.beta-outlet__composer');
+	const composer = createMessageComposerElement();
+	const frame = pageRegion.querySelector('.beta-outlet__frame');
+	frame.append(composer);
+	const creationComposer = pageRegion.querySelector('[data-layout-creation-composer]');
+	const creationComposerHost = creationComposer.querySelector('[data-create-composer-host]');
+	const measureComposer = () => frame.style.setProperty('--creation-composer-height', `${creationComposer.hidden ? 0 : creationComposer.getBoundingClientRect().height}px`);
+	const composerResize = new ResizeObserver(measureComposer);
+	composerResize.observe(creationComposer);
+	const measureMessageComposer = () => frame.style.setProperty('--message-composer-height', `${composer.hidden ? 0 : composer.getBoundingClientRect().height}px`);
+	const messageComposerResize = new ResizeObserver(measureMessageComposer);
+	messageComposerResize.observe(composer);
 	const menuButton = pageRegion.querySelector('.beta-outlet__more');
 	let menu = null;
 	let actions = {};
@@ -49,6 +62,7 @@ export function createLayout({ root, views, services } = {}) {
 	let backgroundRevision = 0;
 	let viewportResizeTimer = 0;
 	let sidebarLayoutReady = false;
+	let creationComposerHandle = null;
 
 	const overlayHost = document.createElement('div');
 	overlayHost.className = 'beta-app-overlay-host';
@@ -123,7 +137,35 @@ export function createLayout({ root, views, services } = {}) {
 			pageTitle.textContent = chrome.title ?? 'Feed';
 		}
 		pageIcon.innerHTML = iconMarkup(chrome.icon || 'home');
-		composer.hidden = chrome.composer === 'none';
+		composer.hidden = chrome.composer !== 'message';
+		creationComposer.hidden = chrome.composer !== 'creation';
+		frame.dataset.composer = chrome.composer || 'none';
+		measureComposer();
+		measureMessageComposer();
+	}
+
+	async function reconcileCreationComposer(chrome, revision) {
+		const wants = chrome?.composer === 'creation';
+		if (!wants) {
+			if (creationComposerHandle) destroyHandle(creationComposerHandle);
+			creationComposerHandle = null;
+			creationComposerHost.replaceChildren();
+			return;
+		}
+		if (creationComposerHandle) return;
+		const result = mountCreateComposer(creationComposerHost, {
+			refreshAutoGrowTextareas,
+			attachPromptSuggest: attachCreateComposerSuggest,
+			isTriggeredSuggestPopupOpen,
+			navigate: 'creations',
+			createProvider: services.providers.create,
+		});
+		creationComposerHandle = result && typeof result.then === 'function' ? await result : result;
+		if (revision !== backgroundRevision) {
+			destroyHandle(creationComposerHandle);
+			creationComposerHandle = null;
+			creationComposerHost.replaceChildren();
+		}
 	}
 
 	function mountContext(extra = {}) {
@@ -239,6 +281,8 @@ export function createLayout({ root, views, services } = {}) {
 			setHeaderMenu();
 			setPage(composition.outlet?.chrome);
 		}
+		await reconcileCreationComposer(composition.outlet?.chrome, revision);
+		if (revision !== backgroundRevision) return;
 		await reconcileRegion('outlet', outletRegion, composition.outlet, { sidebarRoute: composition.backgroundUrl || composition.url });
 		if (revision !== backgroundRevision) return;
 		if (outletChanged) {
@@ -300,12 +344,20 @@ export function createLayout({ root, views, services } = {}) {
 		if (!Number.isSafeInteger(id) || id <= 0) return;
 		void actions.navigate?.(`/creations/${id}`);
 	}
+	function onComposerNavigate(event) {
+		const href = event.detail?.href;
+		if (typeof href === 'string') actions.navigate?.(href);
+	}
 
 	function destroy() {
+		composerResize.disconnect();
+		messageComposerResize.disconnect();
 		backgroundRevision++;
 		setHeaderAccessories();
 		unmount('overlay', overlayContent);
 		unmount('outlet', outletRegion);
+		destroyHandle(creationComposerHandle);
+		creationComposerHandle = null;
 		rightSidebar.destroy();
 		unmount('mobile', mobileRegion);
 		unmount('sidebar', sidebarRegion);
@@ -315,6 +367,7 @@ export function createLayout({ root, views, services } = {}) {
 		document.removeEventListener('keydown', onDocumentKeydown);
 		window.removeEventListener('resize', onViewportResize);
 		window.removeEventListener('message', onEmbeddedCreationNavigate);
+		window.removeEventListener('prsn:navigate', onComposerNavigate);
 		window.clearTimeout(viewportResizeTimer);
 		viewportResizeTimer = 0;
 		document.documentElement.classList.remove('beta-overlay-route-pending');
@@ -332,6 +385,7 @@ export function createLayout({ root, views, services } = {}) {
 	document.addEventListener('keydown', onDocumentKeydown);
 	window.addEventListener('resize', onViewportResize, { passive: true });
 	window.addEventListener('message', onEmbeddedCreationNavigate);
+	window.addEventListener('prsn:navigate', onComposerNavigate);
 	document.body.classList.add('beta-layout');
 	setSidebarLayoutReady(false);
 

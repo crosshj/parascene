@@ -8,6 +8,7 @@ import * as audioClipPickerFieldModule from '../../shared/audioClipPickerField.j
 import * as createWorkflowHostModule from '../../shared/createWorkflowHost.js';
 import * as providerFormFieldVisibilityModule from '../../shared/providerFormFieldVisibility.js';
 import * as chatInlineImageLightboxModule from '../../shared/chatInlineImageLightbox.js';
+import { PARASCENE_BLUE_SERVER_ID, REPLICATE_MUSIC_METHOD_KEY } from '../../shared/generationDefaults.js';
 import './ProviderModals.css';
 import { disposeAutoGrowTextareas } from '../../shared/autogrow.js';
 import { disposeTriggeredSuggestFields } from '../../shared/triggeredSuggest.js';
@@ -96,6 +97,13 @@ function createLabel(fieldKey, field, { labelClassName, requiredClassName, field
 		label.appendChild(required);
 	}
 	return label;
+}
+
+function isTextToMusicPromptField(fieldKey, formContext) {
+	if (fieldKey !== 'prompt') return false;
+	if (String(formContext?.methodKey || '') === REPLICATE_MUSIC_METHOD_KEY) return true;
+	return Number(formContext?.serverId) === PARASCENE_BLUE_SERVER_ID &&
+		String(formContext?.intent || '') === 'audio_generate';
 }
 
 // --- Field type handlers ---
@@ -818,13 +826,36 @@ function createImageArrayField(fieldKey, field, context) {
  * Call onSelect with the chosen image as string (URL) or File, then closes the modal.
  * @param {{ onSelect: (value: string | File) => void }} options
  */
-export function openImagePickerModal({ onSelect }) {
+export function openImagePickerModal({ onSelect, modalParent, allowAnyFile = false }) {
 	const refs = createImagePickerModalDom('form-input');
-	getCreateWorkflowModalParent().appendChild(refs.modalOverlay);
+	if (allowAnyFile) {
+		refs.modalTitle.textContent = 'Add Attachment';
+		refs.addFromFileBtn.setAttribute('aria-label', 'Choose files');
+		refs.methodHelp.innerHTML = [
+			'<span class="image-picker-method-help-item">Use <strong>+</strong> to upload files.</span>',
+			'<span class="image-picker-method-help-item">Paste an image in the input.</span>',
+			'<span class="image-picker-method-help-item">Enter an image URL in the input.</span>'
+		].join('');
+		refs.fileInput.accept = '*/*';
+	}
+	const requestedParent = modalParent instanceof HTMLElement ? modalParent : getCreateWorkflowModalParent();
+	const parent = requestedParent.matches('.create-workflow-root')
+		? requestedParent
+		: document.createElement('div');
+	if (parent !== requestedParent) {
+		parent.className = 'create-workflow-root';
+		parent.dataset.modalPortal = '';
+		requestedParent.appendChild(parent);
+	}
+	parent.appendChild(refs.modalOverlay);
 	const { openModal } = wireImagePickerModal(refs, {
 		detachOnClose: true,
-		onPick: onSelect
+		allowAnyFile,
+		onPick: onSelect,
+		onClose: () => { if (parent.dataset.modalPortal !== undefined) parent.remove(); },
 	});
+	const dispose = refs.modalOverlay.__disposeCreate;
+	refs.modalOverlay.__disposeCreate = () => { dispose?.(); parent.remove(); };
 	openModal();
 }
 
@@ -976,7 +1007,16 @@ export function renderFields(container, fields, options = {}) {
 			fieldGroup.setAttribute('data-field-hidden', 'true');
 		}
 
-		const label = createLabel(fieldKey, type === 'image' ? { ...field, label: 'Image' } : type === 'image_array' ? { ...field, label: field?.label || 'Images' } : type === 'audio_clip' ? { ...field, label: field?.label || 'Audio clip' } : field, {
+		const labelField = isTextToMusicPromptField(fieldKey, formContext)
+			? { ...field, label: 'Style' }
+			: type === 'image'
+				? { ...field, label: 'Image' }
+				: type === 'image_array'
+					? { ...field, label: field?.label || 'Images' }
+					: type === 'audio_clip'
+						? { ...field, label: field?.label || 'Audio clip' }
+						: field;
+		const label = createLabel(fieldKey, labelField, {
 			labelClassName: opts.labelClassName,
 			requiredClassName: opts.requiredClassName,
 			fieldIdPrefix: opts.fieldIdPrefix

@@ -60,8 +60,7 @@ export function createConversationChrome({ services, setHeaderMenu, setHeaderAcc
  async function refresh() {
   if (!eligible() || destroyed) { updateHeader(); return; }
   const version = ++revision;
-  try {
-   const data = await provider.api.loadCanvases(thread.id, { signal: abort.signal });
+  const apply = data => {
    if (destroyed || version !== revision) return;
    canvases = data.canvases || []; pinned = data.pinned_message_id;
    if (activeId && !canvases.some(row => Number(row.id) === Number(activeId))) rail?.close();
@@ -77,6 +76,13 @@ export function createConversationChrome({ services, setHeaderMenu, setHeaderAcc
     }
    }
    updateHeader();
+  };
+  const cached = provider.getCanvases(thread.id);
+  if (cached) apply(cached);
+  try {
+   const data = await provider.refreshCanvases(thread.id, { signal: abort.signal });
+   if (destroyed || version !== revision) return;
+   apply(data);
   } catch (error) { if (rightSidebar.restoration) rightSidebar.close({ forget: false }); failure(error); }
  }
  function openCanvas(id, { remember = true } = {}) {

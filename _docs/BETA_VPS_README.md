@@ -18,8 +18,8 @@ storage credentials server-side. The CDN also exposes the www-compatible
 `/api/images/generic` contract, and browser generic/edited/chat uploads use it
 by default. A temporary `legacyGenericUploads=1` URL flag or
 `parascene:generic-upload-transport=legacy` local-storage value rolls a
-browser back to the www path. Remaining production validation and server-side
-media-helper work is summarized in [`BETA_VPS_MIGRATION_PLAN.md`](BETA_VPS_MIGRATION_PLAN.md).
+browser back to the www path. Remaining production validation and hardening is
+tracked in [`BETA_VPS_MIGRATION_TRACKER.md`](BETA_VPS_MIGRATION_TRACKER.md).
 
 The VPS image includes `ffmpeg`/`ffprobe`; video uploads are normalized to
 browser-streamable H.264/AAC MP4 with fast-start metadata while retaining the

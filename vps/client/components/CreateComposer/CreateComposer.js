@@ -1,0 +1,3535 @@
+/**
+ * Basic create page composer — unified card UI (attach, prompt, toolbar, style overflow).
+ *
+ * Loaded via `import(\`/shared/createComposer.js${qs}\`)`. Direct siblings must use the same
+ * asset-version query; static `/shared/*.js` imports can resolve stale copies (missing exports).
+ */
+import { sendIcon } from '../../icons/svg-strings.js';
+import * as aspectRatioMod from '../../shared/aspectRatio.js';
+import * as generationDefaultsMod from '../../shared/generationDefaults.js';
+import * as createSubmitMod from '../../providers/create/transport.js';
+import * as triggeredSuggestMod from '../../shared/triggeredSuggest.js';
+import * as autogrowMod from '../../shared/autogrow.js';
+import * as creationComposerDragMod from '../../shared/creationComposerDrag.js';
+import * as importMediaMod from '../../shared/importMedia.js';
+import * as importSunoModalMod from '../../shared/importSunoModal.js';
+import * as toastMod from '../../shared/toast.js';
+import * as mutateQueueMod from '../../shared/mutateQueue.js';
+import * as mutateQueueSyncMod from '../../shared/mutateQueueSync.js';
+import * as createSettingsSyncMod from '../../shared/createSettingsSync.js';
+import * as promptFieldClearMod from '../../shared/promptFieldClear.js';
+import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
+import { loadMutateServerOptions } from '../../shared/mutateOptions.js';
+import { openImagePickerModal } from '../../components/ProviderFields/ProviderFields.js';
+import { openChatInlineImageLightbox } from '../../shared/chatInlineImageLightbox.js';
+import { setCreateEditorMode } from '../../shared/createPageRuntime.js';
+import '../../components/ProviderFields/ProviderModals.css';
+import '../../components/ProviderFields/ProviderFields.css';
+import { showOccupancyConfirm } from '../../shared/gpuOccupancy.js';
+
+const {
+	ASPECT_RATIO_PRESETS,
+	ASPECT_RATIO_SELECTOR_LABELS,
+	parseAspectRatioString,
+	dimensionsMatchAspectRatio,
+	shouldUseAspectRatioSelector,
+	closestAspectRatioPreset,
+} = aspectRatioMod;
+const {
+	MUTATE_DEFAULT_METHOD_KEY,
+	MUTATE_DEFAULT_SERVER_ID,
+	MUTATE_VIDEO_DEFAULT_METHOD_KEY,
+	MUTATE_VIDEO_DEFAULT_MODEL,
+	MUTATE_VIDEO_LTX_METHOD_KEY,
+	MUTATE_VIDEO_LTX_MODEL,
+	PARASCENE_BLUE_SERVER_ID,
+	REPLICATE_SPEECH_METHOD_KEY,
+	REPLICATE_MUSIC_METHOD_KEY,
+	BASIC_AUDIO_DEFAULT_METHOD_KEY,
+	BASIC_AUDIO_DEFAULT_MODEL,
+} = generationDefaultsMod;
+const {
+	formatMentionsFailureForDialog,
+	readImageUrlDimensions,
+	readRasterFileDimensions,
+	uploadImageFile,
+} = createSubmitMod;
+const { isTriggeredSuggestPopupOpen, attachCreateComposerSuggest } = triggeredSuggestMod;
+const { composerEnterKeySubmits } = autogrowMod;
+const { bindCreateComposerCreationDropTargets } = creationComposerDragMod;
+	const { extractSoloMediaImport } = importMediaMod;
+const { openImportMediaConfirmModal } = importSunoModalMod;
+const { showToast } = toastMod;
+const { addToMutateQueue, loadMutateQueue, removeFromMutateQueueByImageUrl } = mutateQueueMod;
+const {
+	MUTATE_QUEUE_UPDATED_EVENT,
+	buildAttachmentSnapshotFromQueue,
+	mutateQueueImageUrlsMatch,
+	syncMutateQueueFromComposerAttachments,
+} = mutateQueueSyncMod;
+const {
+	CREATE_SETTINGS_STORAGE_KEYS,
+	CREATE_SETTINGS_UPDATED_EVENT,
+	readSharedCreateSettings,
+	resolveSharedPrompt,
+} = createSettingsSyncMod;
+const { attachPromptFieldClear } = promptFieldClearMod;
+
+const BASIC_CREATE_DEFAULT_SERVER_ID = 1;
+const BASIC_CREATE_DEFAULT_METHOD_KEY = 'replicate';
+const BASIC_CREATE_DEFAULT_MODEL = 'xai/grok-imagine-image';
+const BASIC_MODEL_DISPLAY = 'Z-Image Turbo';
+
+const MVP_ASPECT_RATIOS = ['1:1', '9:16', '4:5', '16:9'];
+
+function buildAspectRatioMismatchMessage({
+	targetAspect,
+	detectedAspect,
+	uploadAspect,
+	context = 'this job',
+}) {
+	const target = String(targetAspect || '').trim();
+	if (!target) return '';
+	const upload = String(uploadAspect || '').trim();
+	const detected = String(detectedAspect || '').trim();
+	if (upload && upload !== target) {
+		return `The image was prepared for ${upload}, but ${context} is set to ${target}.`;
+	}
+	if (detected && detected !== target) {
+		return `The image looks like ${detected}, but ${context} is set to ${target}.`;
+	}
+	return '';
+}
+
+function dimensionsMatchAspectRatioLocal(width, height, aspectKey) {
+	const w = Number(width);
+	const h = Number(height);
+	const preset = parseAspectRatioString(aspectKey);
+	if (!preset || w <= 0 || h <= 0) return null;
+	const actual = w / h;
+	const expected = preset[0] / preset[1];
+	return Math.abs(actual - expected) <= 0.04 * expected;
+}
+
+const STORAGE_KEYS = {
+	prompt: 'create_page_prompt',
+	promptText: 'create_page_prompt_text',
+	promptImageEdit: 'create_page_prompt_image_edit',
+	aspectRatio: 'create_page_aspect_ratio',
+	model: CREATE_SETTINGS_STORAGE_KEYS.composerModel,
+	modelLabel: CREATE_SETTINGS_STORAGE_KEYS.composerModelLabel,
+	styleIndex: 'create_page_style_index',
+	styleSelected: 'create_page_style_selected',
+	imageEditSelection: 'create_page_image_edit_selection',
+	imageEditCarryover: 'create_page_image_edit_carryover',
+	outputMode: 'create_page_output_mode',
+	videoModel: CREATE_SETTINGS_STORAGE_KEYS.composerVideoModel,
+	audioModel: CREATE_SETTINGS_STORAGE_KEYS.composerAudioModel,
+	methodCredits: 'create_page_method_credits',
+};
+
+/** @typedef {{ selectValue: string, value: string, label: string, serverId: number, methodKey: string, methodLabel: string }} ComposerModelRouteOption */
+
+/** @typedef {ComposerModelRouteOption} VideoModelOption */
+
+/** @typedef {ComposerModelRouteOption} ImageModelOption */
+
+/** @typedef {ComposerModelRouteOption} AudioModelOption */
+
+function isComposerVideoMethodKey(methodKey) {
+	return methodKey === MUTATE_VIDEO_DEFAULT_METHOD_KEY || methodKey === MUTATE_VIDEO_LTX_METHOD_KEY;
+}
+
+/**
+ * @param {string} methodKey
+ * @param {unknown} [methodDef]
+ * @returns {boolean}
+ */
+function isComposerAudioMethod(methodKey, methodDef) {
+	const key = String(methodKey || '');
+	if (key === REPLICATE_SPEECH_METHOD_KEY || key === REPLICATE_MUSIC_METHOD_KEY) return true;
+	const intent =
+		methodDef && typeof methodDef === 'object'
+			? String(/** @type {{ intent?: unknown }} */ (methodDef).intent || '')
+			: '';
+	if (intent === 'audio_generate') return true;
+	if (intent === 'voice_train') return false;
+	const lower = key.toLowerCase();
+	return lower.includes('speech') || lower.includes('music');
+}
+
+function isComposerAudioInputField(fieldKey, field) {
+	const type = String(field?.type || '').toLowerCase();
+	if (
+		type === 'audio_url' ||
+		type === 'audio_url_array' ||
+		type === 'audio' ||
+		type === 'audio_file'
+	) {
+		return true;
+	}
+	const key = String(fieldKey || '').toLowerCase();
+	return /^(voice_file|audio_url|audio_file|input_audio|source_audio|reference_audio)/.test(key);
+}
+
+/**
+ * Composer audio mode is prompt-only — skip methods/models that need a source clip.
+ * @param {Record<string, unknown> | null | undefined} fields
+ */
+function fieldsRequireAudioInput(fields) {
+	if (!fields || typeof fields !== 'object') return false;
+	for (const [key, field] of Object.entries(fields)) {
+		if (key === 'model' || key === 'prompt') continue;
+		if (!field || typeof field !== 'object') continue;
+		if (isComposerAudioInputField(key, field)) return true;
+	}
+	return false;
+}
+
+function composerAudioMethodNeedsSource(methodDef) {
+	if (!methodDef || typeof methodDef !== 'object') return false;
+	return fieldsRequireAudioInput(/** @type {{ fields?: Record<string, unknown> }} */ (methodDef).fields);
+}
+
+function composerAudioOptionNeedsSource(rawOpt, methodKey, methodDef) {
+	if (!rawOpt || typeof rawOpt !== 'object') return false;
+	const rec = /** @type {{ label?: unknown, name?: unknown, value?: unknown, id?: unknown, fields?: unknown }} */ (
+		rawOpt
+	);
+	if (fieldsRequireAudioInput(rec.fields && typeof rec.fields === 'object' ? rec.fields : null)) {
+		return true;
+	}
+	const optText = `${rec.label || ''} ${rec.name || ''} ${rec.value || ''} ${rec.id || ''}`.toLowerCase();
+	const methodText = `${methodKey || ''} ${
+		methodDef && typeof methodDef === 'object'
+			? /** @type {{ name?: unknown }} */ (methodDef).name || ''
+			: ''
+	}`.toLowerCase();
+	if (/\byue\b/.test(optText) && /cover/.test(optText)) return true;
+	if (/\byue\b/.test(methodText) && /cover/.test(optText)) return true;
+	if (/\byue\b/.test(methodText) && /cover/.test(methodText)) return true;
+	if (/ltx\s*2\.5/.test(optText)) return true;
+	if (/ltx\s*2\.5/.test(methodText) && /(text\s*to\s*audio|text2audio)/.test(methodText)) return true;
+	return false;
+}
+
+function toAudioModelOption(serverId, methodKey, model, label, methodLabel) {
+	const groupLabel = Number(serverId) === PARASCENE_BLUE_SERVER_ID
+		? 'Text to Music'
+		: methodLabel;
+	return toImageModelOption(serverId, methodKey, model, label, groupLabel);
+}
+
+function encodeComposerRouteKey(serverId, methodKey, model) {
+	return `${serverId}\x1e${methodKey}\x1e${model}`;
+}
+
+function encodeVideoRouteKey(serverId, methodKey, model) {
+	return encodeComposerRouteKey(serverId, methodKey, model);
+}
+
+/**
+ * @param {string} key
+ * @returns {{ serverId: number, methodKey: string, model: string } | null}
+ */
+function parseComposerRouteKey(key) {
+	const parts = String(key).split('\x1e');
+	if (parts.length < 3) return null;
+	const serverId = Number(parts[0]);
+	const methodKey = parts[1];
+	const model = parts.slice(2).join('\x1e');
+	if (!Number.isFinite(serverId) || serverId < 1 || !methodKey || !model) return null;
+	return { serverId, methodKey, model };
+}
+
+function parseVideoRouteKey(key) {
+	return parseComposerRouteKey(key);
+}
+
+/**
+ * @param {number} serverId
+ * @param {string} methodKey
+ * @param {string} model
+ * @param {string} label
+ * @param {string} [methodLabel]
+ * @returns {ImageModelOption}
+ */
+function toImageModelOption(serverId, methodKey, model, label, methodLabel) {
+	const value = String(model || '').trim();
+	const display = String(label || value).trim() || value;
+	const key = String(methodKey);
+	return {
+		selectValue: encodeComposerRouteKey(serverId, key, value),
+		value,
+		label: display,
+		serverId: Number(serverId),
+		methodKey: key,
+		methodLabel: String(methodLabel || '').trim() || getComposerMethodGroupLabel(null, key),
+	};
+}
+
+/**
+ * @param {unknown} methodDef
+ * @param {string} methodKey
+ * @returns {string}
+ */
+function getComposerMethodGroupLabel(methodDef, methodKey) {
+	if (methodDef && typeof methodDef === 'object') {
+		const name = /** @type {{ name?: unknown }} */ (methodDef).name;
+		if (typeof name === 'string' && name.trim()) return name.trim();
+	}
+	const key = String(methodKey || '').trim();
+	if (key === MUTATE_VIDEO_LTX_METHOD_KEY) return 'LTX Self-hosted';
+	if (key === MUTATE_VIDEO_DEFAULT_METHOD_KEY) return 'WAN Cloud';
+	return formatMethodKeyLabel(key);
+}
+
+/**
+ * @param {string} methodKey
+ * @returns {string}
+ */
+function formatMethodKeyLabel(methodKey) {
+	const key = String(methodKey || '').trim();
+	if (!key) return 'Other';
+	return key
+		.replace(/[_-]+/g, ' ')
+		.replace(/\b\w/g, (ch) => ch.toUpperCase());
+}
+
+/**
+ * @param {ComposerModelRouteOption[]} routeOptions
+ * @returns {{ groupLabel: string, options: ComposerModelRouteOption[] }[]}
+ */
+function groupComposerRouteOptions(routeOptions) {
+	/** @type {Map<string, { groupLabel: string, options: ComposerModelRouteOption[] }>} */
+	const groups = new Map();
+	/** @type {string[]} */
+	const order = [];
+	for (const opt of routeOptions) {
+		const groupKey = `${opt.serverId}:${opt.methodKey}`;
+		if (!groups.has(groupKey)) {
+			order.push(groupKey);
+			groups.set(groupKey, {
+				groupLabel: opt.methodLabel || formatMethodKeyLabel(opt.methodKey),
+				options: [],
+			});
+		}
+		groups.get(groupKey).options.push(opt);
+	}
+	return order
+		.map((key) => groups.get(key))
+		.filter((group) => Boolean(group?.options.length));
+}
+
+function readStoredOutputMode() {
+	try {
+		const v = localStorage.getItem(STORAGE_KEYS.outputMode);
+		if (v === 'video' || v === 'audio') return v;
+		return 'image';
+	} catch {
+		return 'image';
+	}
+}
+
+function readStoredModelValue() {
+	try {
+		const composer = localStorage.getItem(STORAGE_KEYS.model);
+		return typeof composer === 'string' && composer.trim() ? composer.trim() : '';
+	} catch {
+		return '';
+	}
+}
+
+function readStoredModelLabel() {
+	try {
+		const composer = localStorage.getItem(STORAGE_KEYS.modelLabel);
+		return typeof composer === 'string' && composer.trim() ? composer.trim() : '';
+	} catch {
+		return '';
+	}
+}
+
+/**
+ * Pick the first stored route key that exists in the composer's model list.
+ * Composer key wins over shared /create route so a fallback UI default never clobbers advanced.
+ *
+ * @param {ComposerModelRouteOption[]} routeOptions
+ * @param {string[]} storedKeys
+ * @returns {string}
+ */
+function resolveComposerRouteFromStorage(routeOptions, storedKeys) {
+	for (const saved of storedKeys) {
+		if (typeof saved !== 'string' || !saved.trim()) continue;
+		const key = saved.trim();
+		if (routeOptions.some((o) => o.selectValue === key)) return key;
+		const byValue = routeOptions.find((o) => o.value === key);
+		if (byValue?.selectValue) return byValue.selectValue;
+	}
+	return '';
+}
+
+/**
+ * @returns {string[]}
+ */
+function readStoredAttachmentUrls() {
+	try {
+		const raw = localStorage.getItem(STORAGE_KEYS.imageEditSelection);
+		if (!raw || !String(raw).trim()) return [];
+		const trimmed = String(raw).trim();
+		if (trimmed.startsWith('[')) {
+			const parsed = JSON.parse(trimmed);
+			if (!Array.isArray(parsed)) return [];
+			return parsed
+				.map((v) => (typeof v === 'string' ? v.trim() : ''))
+				.filter(Boolean);
+		}
+		return [trimmed];
+	} catch {
+		return [];
+	}
+}
+
+/**
+ * @param {unknown} raw — string[], { value, label }[], or { [modelId]: label } map from server_config.
+ * @returns {CreateComposerModelOption[]}
+ */
+function normalizeModelOptions(raw) {
+	if (raw == null) return [];
+	if (Array.isArray(raw)) {
+		return raw
+			.map((item) => {
+				if (typeof item === 'string') {
+					const value = item.trim();
+					return value ? { value, label: value } : null;
+				}
+				if (Array.isArray(item) && item.length > 0) {
+					const value = String(item[0] ?? '').trim();
+					if (!value) return null;
+					const label = String(item[1] ?? item[0] ?? '').trim() || value;
+					return { value, label };
+				}
+				if (item && typeof item === 'object') {
+					const value = String(
+						item.value ?? item.id ?? item.name ?? item.label ?? ''
+					).trim();
+					if (!value) return null;
+					const label =
+						String(item.label ?? item.name ?? item.value ?? item.id ?? value).trim() ||
+						value;
+					return { value, label };
+				}
+				return null;
+			})
+			.filter(Boolean);
+	}
+	if (typeof raw === 'object') {
+		return Object.entries(/** @type {Record<string, unknown>} */ (raw))
+			.map(([key, val]) => {
+				if (val && typeof val === 'object' && !Array.isArray(val)) {
+					const rec = /** @type {{ value?: unknown, id?: unknown, label?: unknown, name?: unknown }} */ (
+						val
+					);
+					const value = String(rec.value ?? rec.id ?? key).trim();
+					if (!value) return null;
+					const label =
+						String(rec.label ?? rec.name ?? rec.value ?? value).trim() || value;
+					return { value, label };
+				}
+				const value = String(key).trim();
+				if (!value) return null;
+				const label = typeof val === 'string' ? val.trim() : value;
+				return { value, label: label || value };
+			})
+			.filter(Boolean);
+	}
+	return [];
+}
+
+/**
+ * @param {VideoModelOption | null | undefined} option
+ * @returns {string}
+ */
+function getVideoOptionLabel(option) {
+	if (!option) return 'Video model';
+	const label = String(option.label || '').trim();
+	if (label) return label;
+	if (
+		option.methodKey === MUTATE_VIDEO_LTX_METHOD_KEY &&
+		option.value === MUTATE_VIDEO_LTX_MODEL
+	) {
+		return 'LTX Self-hosted';
+	}
+	if (option.methodKey === MUTATE_VIDEO_LTX_METHOD_KEY) return 'LTX';
+	if (option.methodKey === MUTATE_VIDEO_DEFAULT_METHOD_KEY) return 'WAN Cloud';
+	const parsed = parseVideoRouteKey(option.selectValue);
+	if (parsed?.model) return parsed.model;
+	return 'Video model';
+}
+
+/**
+ * @param {unknown} server
+ * @returns {Record<string, unknown> | null}
+ */
+function parseServerConfig(server) {
+	if (!server || typeof server !== 'object') return null;
+	let cfg = /** @type {{ server_config?: unknown }} */ (server).server_config;
+	if (typeof cfg === 'string') {
+		try {
+			cfg = JSON.parse(cfg);
+		} catch {
+			return null;
+		}
+	}
+	return cfg && typeof cfg === 'object' ? /** @type {Record<string, unknown>} */ (cfg) : null;
+}
+
+/**
+ * Image model options on a server, each tied to the method that owns the model field.
+ * @param {unknown} server
+ * @returns {ImageModelOption[]}
+ */
+function collectImageModelOptionsFromServer(server) {
+	const cfg = parseServerConfig(server);
+	const methods =
+		cfg?.methods && typeof cfg.methods === 'object'
+			? /** @type {Record<string, { fields?: Record<string, { options?: unknown, choices?: unknown, enum?: unknown }> }>} */ (
+					cfg.methods
+				)
+			: null;
+	if (!methods || !server) return [];
+	const serverId = Number(/** @type {{ id?: unknown }} */ (server).id);
+	if (!Number.isFinite(serverId) || serverId < 1) return [];
+	const seen = new Set();
+	/** @type {ImageModelOption[]} */
+	const out = [];
+	for (const [methodKey, methodDef] of Object.entries(methods)) {
+		if (isComposerVideoMethodKey(methodKey) || isComposerAudioMethod(methodKey, methodDef)) {
+			continue;
+		}
+		const field = methodDef?.fields?.model;
+		if (!field) continue;
+		const methodLabel = getComposerMethodGroupLabel(methodDef, methodKey);
+		const opts = normalizeModelOptions(field.options ?? field.choices ?? field.enum);
+		for (const opt of opts) {
+			if (!opt.value) continue;
+			const row = toImageModelOption(serverId, methodKey, opt.value, opt.label, methodLabel);
+			if (seen.has(row.selectValue)) continue;
+			seen.add(row.selectValue);
+			out.push(row);
+		}
+	}
+	return out;
+}
+
+/**
+ * @param {unknown} methodDef
+ * @returns {number | null}
+ */
+function parseMethodCredits(methodDef) {
+	if (!methodDef || typeof methodDef !== 'object') return null;
+	const credits = /** @type {{ credits?: unknown }} */ (methodDef).credits;
+	if (typeof credits === 'number' && Number.isFinite(credits)) return credits;
+	if (credits != null && credits !== '') {
+		const parsed = parseFloat(String(credits));
+		if (Number.isFinite(parsed)) return parsed;
+	}
+	return null;
+}
+
+/**
+ * @param {number} value
+ * @returns {string}
+ */
+function formatCreditAmount(value) {
+	if (!Number.isFinite(value)) return '';
+	const rounded = Math.round(value * 10) / 10;
+	return rounded % 1 === 0 ? String(Math.round(rounded)) : String(rounded);
+}
+
+const STYLE_FAILURE_LABELS = {
+	style_not_found: 'Style not found',
+};
+
+/** Format $style validation failure for alert dialogs (composer blocks submit). */
+function formatStylesFailureForDialog(data) {
+	const failed = Array.isArray(data?.failed_styles) ? data.failed_styles : [];
+	if (failed.length === 0) {
+		return data?.message || data?.error || 'Invalid style references';
+	}
+	const lines = failed.map((f) => {
+		const token = typeof f?.token === 'string' ? f.token : '';
+		const r = STYLE_FAILURE_LABELS[f?.reason] || f?.reason || 'Unknown';
+		return token ? `• ${token} — ${r}` : `• ${r}`;
+	}).filter(Boolean);
+	return `Some $styles couldn't be found:\n\n${lines.join('\n')}\n\nPick a style from the list or remove the $token.`;
+}
+
+function getAssetQuery() {
+	const v = document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() || '';
+	return v ? `?v=${encodeURIComponent(v)}` : '';
+}
+
+const COMPOSER_SERVERS_FETCH_KEY = 'create-composer:GET /api/servers';
+
+/** Fresh /api/servers for model lists (avoid reusing a failed chat-page dedupe cache). */
+async function fetchServersForComposer() {
+	return fetchJsonWithStatusDeduped(
+		'/api/servers',
+		{ credentials: 'include' },
+		{ windowMs: 0, dedupeKey: COMPOSER_SERVERS_FETCH_KEY }
+	);
+}
+
+/**
+ * @param {unknown[]} servers
+ * @returns {VideoModelOption[]}
+ */
+function collectVideoModelOptionsFromServers(servers) {
+	const ltxFallback = {
+		selectValue: encodeVideoRouteKey(
+			PARASCENE_BLUE_SERVER_ID,
+			MUTATE_VIDEO_LTX_METHOD_KEY,
+			MUTATE_VIDEO_LTX_MODEL
+		),
+		value: MUTATE_VIDEO_LTX_MODEL,
+		label: 'LTX Self-hosted',
+		serverId: PARASCENE_BLUE_SERVER_ID,
+		methodKey: MUTATE_VIDEO_LTX_METHOD_KEY,
+		methodLabel: getComposerMethodGroupLabel(null, MUTATE_VIDEO_LTX_METHOD_KEY),
+	};
+
+	/** @type {VideoModelOption[]} */
+	const options = [];
+	const seen = new Set();
+
+	const addMethodModels = (server, methodKey, fallbackModel, fallbackLabel) => {
+		if (!server) return;
+		const cfg = parseServerConfig(server);
+		const methods =
+			cfg?.methods && typeof cfg.methods === 'object'
+				? /** @type {Record<string, { fields?: Record<string, { options?: unknown, choices?: unknown, enum?: unknown }> }>} */ (
+						cfg.methods
+					)
+				: null;
+		const methodDef = methods?.[methodKey];
+		const field = methodDef?.fields?.model;
+		const methodLabel = getComposerMethodGroupLabel(methodDef, methodKey);
+		let opts = normalizeModelOptions(field?.options ?? field?.choices ?? field?.enum);
+		if (opts.length === 0 && fallbackModel) {
+			opts = [{ value: fallbackModel, label: fallbackLabel || fallbackModel }];
+		}
+		for (const opt of opts) {
+			const selectValue = encodeVideoRouteKey(Number(server.id), methodKey, opt.value);
+			if (seen.has(selectValue)) continue;
+			seen.add(selectValue);
+			/** @type {VideoModelOption} */
+			const row = {
+				selectValue,
+				value: opt.value,
+				label: opt.label,
+				serverId: Number(server.id),
+				methodKey,
+				methodLabel,
+			};
+			row.label = getVideoOptionLabel(row);
+			options.push(row);
+		}
+	};
+
+	addMethodModels(
+		servers.find((s) => Number(s?.id) === Number(PARASCENE_BLUE_SERVER_ID)),
+		MUTATE_VIDEO_LTX_METHOD_KEY,
+		MUTATE_VIDEO_LTX_MODEL,
+		'LTX Self-hosted'
+	);
+	addMethodModels(
+		servers.find((s) => Number(s?.id) === Number(MUTATE_DEFAULT_SERVER_ID)),
+		MUTATE_VIDEO_DEFAULT_METHOD_KEY,
+		MUTATE_VIDEO_DEFAULT_MODEL,
+		'WAN Cloud'
+	);
+
+	if (!options.some((o) => o.serverId === MUTATE_DEFAULT_SERVER_ID)) {
+		const wanKey = encodeVideoRouteKey(
+			MUTATE_DEFAULT_SERVER_ID,
+			MUTATE_VIDEO_DEFAULT_METHOD_KEY,
+			MUTATE_VIDEO_DEFAULT_MODEL
+		);
+		if (!seen.has(wanKey)) {
+			/** @type {VideoModelOption} */
+			const wan = {
+				selectValue: wanKey,
+				value: MUTATE_VIDEO_DEFAULT_MODEL,
+				label: 'WAN Cloud',
+				serverId: MUTATE_DEFAULT_SERVER_ID,
+				methodKey: MUTATE_VIDEO_DEFAULT_METHOD_KEY,
+				methodLabel: getComposerMethodGroupLabel(null, MUTATE_VIDEO_DEFAULT_METHOD_KEY),
+			};
+			wan.label = getVideoOptionLabel(wan);
+			options.push(wan);
+		}
+	}
+
+	ltxFallback.label = getVideoOptionLabel(ltxFallback);
+	return sortVideoModelOptions(options.length > 0 ? options : [ltxFallback]);
+}
+
+/**
+ * @param {unknown} server
+ * @returns {AudioModelOption[]}
+ */
+function collectAudioModelOptionsFromServer(server) {
+	const cfg = parseServerConfig(server);
+	const methods =
+		cfg?.methods && typeof cfg.methods === 'object'
+			? /** @type {Record<string, { fields?: Record<string, { options?: unknown, choices?: unknown, enum?: unknown }> }>} */ (
+					cfg.methods
+				)
+			: null;
+	if (!methods || !server) return [];
+	const serverId = Number(/** @type {{ id?: unknown }} */ (server).id);
+	if (!Number.isFinite(serverId) || serverId < 1) return [];
+	const seen = new Set();
+	/** @type {AudioModelOption[]} */
+	const out = [];
+	for (const [methodKey, methodDef] of Object.entries(methods)) {
+		if (!isComposerAudioMethod(methodKey, methodDef)) continue;
+		if (composerAudioMethodNeedsSource(methodDef)) continue;
+		const field = methodDef?.fields?.model;
+		if (!field) continue;
+		const methodLabel = getComposerMethodGroupLabel(methodDef, methodKey);
+		const rawList = field.options ?? field.choices ?? field.enum;
+		const opts = normalizeModelOptions(rawList);
+		const rawOpts = Array.isArray(rawList) ? rawList : [];
+		for (const opt of opts) {
+			if (!opt.value) continue;
+			const raw =
+				rawOpts.find((item) => {
+					if (typeof item === 'string') return item === opt.value;
+					if (!item || typeof item !== 'object') return false;
+					const rec = /** @type {{ value?: unknown, id?: unknown, name?: unknown, label?: unknown }} */ (
+						item
+					);
+					const value = String(rec.value ?? rec.id ?? rec.name ?? rec.label ?? '').trim();
+					return value === opt.value;
+				}) || opt;
+			if (composerAudioOptionNeedsSource(raw, methodKey, methodDef)) continue;
+			const row = toAudioModelOption(serverId, methodKey, opt.value, opt.label, methodLabel);
+			if (seen.has(row.selectValue)) continue;
+			seen.add(row.selectValue);
+			out.push(row);
+		}
+	}
+	return out;
+}
+
+/**
+ * @param {AudioModelOption[]} options
+ * @returns {AudioModelOption[]}
+ */
+function sortAudioModelOptions(options) {
+	return [...options].sort((a, b) => {
+		const rank = (o) => {
+			if (o.serverId === PARASCENE_BLUE_SERVER_ID) return 0;
+			if (o.methodKey === REPLICATE_MUSIC_METHOD_KEY) return 1;
+			if (o.methodKey === REPLICATE_SPEECH_METHOD_KEY) return 2;
+			return 3;
+		};
+		const diff = rank(a) - rank(b);
+		if (diff !== 0) return diff;
+		return String(a.label || '').localeCompare(String(b.label || ''));
+	});
+}
+
+function isTextToMusicComposerRoute(route) {
+	return Boolean(
+		route &&
+		(route.serverId === PARASCENE_BLUE_SERVER_ID || route.methodKey === REPLICATE_MUSIC_METHOD_KEY)
+	);
+}
+
+async function fetchComposerServers() {
+	try {
+		const result = await fetchServersForComposer();
+		if (!result?.ok) return [];
+		return Array.isArray(result.data?.servers) ? result.data.servers : [];
+	} catch {
+		return [];
+	}
+}
+
+/**
+ * @param {unknown[]} servers
+ * @param {number} serverId
+ * @param {string} methodKey
+ * @returns {Record<string, unknown> | null}
+ */
+function resolveMethodFieldsFromServers(servers, serverId, methodKey) {
+	const server = servers.find((s) => Number(s?.id) === Number(serverId));
+	const cfg = parseServerConfig(server);
+	const methods = cfg?.methods;
+	if (!methods || typeof methods !== 'object') return null;
+	const methodDef = /** @type {Record<string, { fields?: Record<string, unknown> }>} */ (methods)[methodKey];
+	const fields = methodDef?.fields;
+	return fields && typeof fields === 'object' ? fields : null;
+}
+
+async function fetchBasicModelOptions() {
+	const fallback = [
+		toImageModelOption(
+			BASIC_CREATE_DEFAULT_SERVER_ID,
+			BASIC_CREATE_DEFAULT_METHOD_KEY,
+			BASIC_CREATE_DEFAULT_MODEL,
+			BASIC_MODEL_DISPLAY
+		),
+	];
+	try {
+		const result = await fetchServersForComposer();
+		if (!result?.ok) return fallback;
+		const servers = Array.isArray(result.data?.servers) ? result.data.servers : [];
+		const server = servers.find((s) => Number(s?.id) === BASIC_CREATE_DEFAULT_SERVER_ID);
+		const opts = collectImageModelOptionsFromServer(server);
+		return opts.length > 0 ? opts : fallback;
+	} catch {
+		return fallback;
+	}
+}
+
+/**
+ * LTX (Parascene Blue / image2video) first, then WAN (replicateVideo).
+ * @param {VideoModelOption[]} options
+ * @returns {VideoModelOption[]}
+ */
+function sortVideoModelOptions(options) {
+	return [...options].sort((a, b) => {
+		const rank = (o) => {
+			if (
+				o.methodKey === MUTATE_VIDEO_LTX_METHOD_KEY &&
+				o.value === MUTATE_VIDEO_LTX_MODEL
+			) {
+				return 0;
+			}
+			if (o.methodKey === MUTATE_VIDEO_LTX_METHOD_KEY) return 1;
+			if (o.methodKey === MUTATE_VIDEO_DEFAULT_METHOD_KEY) return 2;
+			return 3;
+		};
+		const diff = rank(a) - rank(b);
+		if (diff !== 0) return diff;
+		return String(a.label || '').localeCompare(String(b.label || ''));
+	});
+}
+
+/**
+ * @returns {Promise<VideoModelOption[]>}
+ */
+async function fetchVideoModelOptions() {
+	const ltxFallback = {
+		selectValue: encodeVideoRouteKey(
+			PARASCENE_BLUE_SERVER_ID,
+			MUTATE_VIDEO_LTX_METHOD_KEY,
+			MUTATE_VIDEO_LTX_MODEL
+		),
+		value: MUTATE_VIDEO_LTX_MODEL,
+		label: 'LTX Self-hosted',
+		serverId: PARASCENE_BLUE_SERVER_ID,
+		methodKey: MUTATE_VIDEO_LTX_METHOD_KEY,
+		methodLabel: getComposerMethodGroupLabel(null, MUTATE_VIDEO_LTX_METHOD_KEY),
+	};
+	try {
+		const result = await fetchServersForComposer();
+		if (!result?.ok) return [ltxFallback];
+		const servers = Array.isArray(result.data?.servers) ? result.data.servers : [];
+		return collectVideoModelOptionsFromServers(servers);
+	} catch {
+		return [ltxFallback];
+	}
+}
+
+function buildFallbackAudioOption() {
+	return toAudioModelOption(
+		BASIC_CREATE_DEFAULT_SERVER_ID,
+		BASIC_AUDIO_DEFAULT_METHOD_KEY,
+		BASIC_AUDIO_DEFAULT_MODEL,
+		'Lyria 3'
+	);
+}
+
+/**
+ * @returns {Promise<AudioModelOption[]>}
+ */
+async function fetchAudioModelOptions() {
+	const fallback = [buildFallbackAudioOption()];
+	try {
+		const result = await fetchServersForComposer();
+		if (!result?.ok) return fallback;
+		const servers = Array.isArray(result.data?.servers) ? result.data.servers : [];
+		const seen = new Set();
+		/** @type {AudioModelOption[]} */
+		const out = [];
+		for (const server of servers) {
+			for (const row of collectAudioModelOptionsFromServer(server)) {
+				if (seen.has(row.selectValue)) continue;
+				seen.add(row.selectValue);
+				out.push(row);
+			}
+		}
+		return out.length > 0 ? sortAudioModelOptions(out) : fallback;
+	} catch {
+		return fallback;
+	}
+}
+
+function aspectShapeDimensions(w, h, max = 32) {
+	if (w >= h) {
+		return { width: max, height: Math.max(4, Math.round((max * h) / w)) };
+	}
+	return { width: Math.max(4, Math.round((max * w) / h)), height: max };
+}
+
+function extractMentions(prompt) {
+	const text = typeof prompt === 'string' ? prompt : '';
+	if (!text) return [];
+	const out = [];
+	const seen = new Set();
+	const re = /@([a-zA-Z0-9_]+)/g;
+	let match;
+	while ((match = re.exec(text)) !== null) {
+		const full = `@${match[1]}`;
+		if (seen.has(full)) continue;
+		seen.add(full);
+		out.push(full);
+	}
+	return out;
+}
+
+async function validateMentionsSimple(args) {
+	const prompt = typeof args?.prompt === 'string' ? args.prompt : '';
+	const mentions = extractMentions(prompt);
+	if (mentions.length === 0) return { ok: true, mentions };
+	const res = await fetch('/api/create/validate', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		credentials: 'include',
+		body: JSON.stringify({ args: args || {} }),
+	});
+	const data = await res.json().catch(() => ({}));
+	if (res.ok) return { ok: true, mentions, data };
+	return { ok: false, mentions, data, status: res.status };
+}
+
+/** @param {DataTransfer | null | undefined} cd */
+function clipboardImageFiles(cd) {
+	if (!cd) return [];
+	const imageFiles = [];
+	for (const it of cd.items || []) {
+		if (it.kind !== 'file') continue;
+		const f = it.getAsFile();
+		if (f && (!f.type || f.type.startsWith('image/'))) imageFiles.push(f);
+	}
+	if (imageFiles.length === 0 && cd.files?.length) {
+		for (const f of cd.files) {
+			if (f instanceof File && (!f.type || f.type.startsWith('image/'))) imageFiles.push(f);
+		}
+	}
+	return imageFiles;
+}
+
+/**
+ * @param {Record<string, unknown>} baseArgs
+ * @param {string | undefined} aspectRatio
+ * @param {{ serverId: number, methodKey: string, modelValue: string }} formContext
+ */
+function buildSubmitArgs(baseArgs, aspectRatio, formContext) {
+	const args = { ...baseArgs };
+	if (aspectRatio && shouldUseAspectRatioSelector(formContext)) {
+		args.aspect_ratio = aspectRatio;
+	}
+	return args;
+}
+
+/**
+ * @param {HTMLElement} host
+ * @param {{
+ *   refreshAutoGrowTextareas?: (root?: Document|HTMLElement) => void,
+ *   navigate?: 'none' | 'creations' | 'full',
+ *   attachPromptSuggest?: (textarea: HTMLTextAreaElement) => void,
+ *   isTriggeredSuggestPopupOpen?: (field: EventTarget | null) => boolean,
+ * }} [opts]
+ * @returns {{ destroy: () => void, refreshModelOptions: () => Promise<void> }}
+ */
+export function mountCreateComposer(host, opts = {}) {
+	if (!(host instanceof HTMLElement)) {
+		return { destroy() {}, async refreshModelOptions() {} };
+	}
+
+	const navigate = opts.navigate === 'none' || opts.navigate === 'creations' ? opts.navigate : 'full';
+	const refreshAutoGrow = opts.refreshAutoGrowTextareas || (() => {});
+	const checkSuggestPopupOpen =
+		typeof opts.isTriggeredSuggestPopupOpen === 'function'
+			? opts.isTriggeredSuggestPopupOpen
+			: isTriggeredSuggestPopupOpen;
+
+	const createProvider = opts.createProvider;
+	const initialDraft = createProvider?.draft?.read?.() || {};
+	const savedComposerSettings = createProvider?.composer?.read?.() || {};
+	const initialOutputMode = savedComposerSettings.outputMode || readStoredOutputMode();
+	const storedModelValue = savedComposerSettings.modelRoutes?.[initialOutputMode] || readStoredModelValue();
+	const storedModelLabel = readStoredModelLabel();
+	const initialModelValue = storedModelValue || BASIC_CREATE_DEFAULT_MODEL;
+	const initialModelLabel =
+		storedModelLabel || (storedModelValue ? storedModelValue : BASIC_MODEL_DISPLAY);
+
+	host.innerHTML = `
+		<div class="create-composer" data-composer-flow="t2i">
+			<div class="create-composer-card">
+				<div class="create-composer-input-shell">
+					<div class="create-composer-attachments" data-create-attachments>
+						<div class="create-composer-attachments-row">
+							<div class="create-composer-attachments-list" data-create-attachments-list>
+								<button type="button" class="create-composer-attach-add" data-create-add
+									aria-label="Add image">
+									<svg class="create-composer-attach-add-icon" xmlns="http://www.w3.org/2000/svg"
+										viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+										stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+										<line x1="12" y1="5" x2="12" y2="19" />
+										<line x1="5" y1="12" x2="19" y2="12" />
+									</svg>
+								</button>
+							</div>
+							<div class="create-composer-head">
+								<div class="create-composer-mode" role="tablist" aria-label="Output type">
+									<button type="button" class="create-composer-mode-btn is-active"
+										data-create-mode="image" role="tab" aria-selected="true">Image</button>
+									<button type="button" class="create-composer-mode-btn" data-create-mode="video"
+										role="tab" aria-selected="false">Video</button>
+									<button type="button" class="create-composer-mode-btn" data-create-mode="audio"
+										role="tab" aria-selected="false">Audio</button>
+								</div>
+							</div>
+						</div>
+					</div>
+					<div class="create-composer-input-row">
+						<textarea class="create-composer-input prompt-editor"
+							placeholder="Describe what you want to create…"
+							rows="1" data-autogrow="true" data-create-composer-prompt
+							aria-label="Prompt"></textarea>
+						<button type="button" class="prompt-field-clear-icon" data-prompt-clear
+							data-create-composer-prompt-clear hidden aria-label="Clear prompt">
+							<svg class="prompt-field-clear-icon-svg" viewBox="0 0 24 24" fill="none"
+								stroke="currentColor" stroke-width="2" stroke-linecap="round"
+								stroke-linejoin="round" aria-hidden="true">
+								<path d="M18 6L6 18M6 6l12 12"/>
+							</svg>
+						</button>
+					</div>
+					<div class="create-composer-toolbar" role="toolbar" aria-label="Create options">
+						<div class="create-composer-toolbar-primary">
+							<div class="create-composer-model-wrap">
+								<button type="button" class="create-composer-model-btn" data-create-model-btn
+									aria-haspopup="listbox" aria-expanded="false" aria-label="Model">
+									<span class="create-composer-model-label" data-create-model-label
+										aria-hidden="true">${initialModelLabel}</span>
+								</button>
+							</div>
+							<span class="create-composer-toolbar-divider" aria-hidden="true"></span>
+							<div class="create-composer-aspect-wrap" data-create-aspect-wrap>
+								<button type="button" class="create-composer-toolbar-chip create-composer-aspect-btn"
+									data-create-aspect-btn aria-haspopup="dialog" aria-expanded="false"
+									aria-label="Aspect ratio: 1:1">
+									<svg class="create-composer-toolbar-chip-icon create-composer-aspect-icon-svg"
+										xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+										stroke="currentColor" stroke-width="2" aria-hidden="true">
+										<rect x="5" y="5" width="14" height="14" rx="2"/>
+									</svg>
+									<span data-create-aspect-label>1:1</span>
+								</button>
+							</div>
+							<span class="create-composer-toolbar-divider" aria-hidden="true"></span>
+							<button type="button" class="create-composer-toolbar-chip create-composer-lyrics-btn" data-create-audio-lyrics-open hidden
+								aria-haspopup="dialog" aria-expanded="false">Lyrics</button>
+							<span class="create-composer-toolbar-divider create-composer-lyrics-divider" data-create-lyrics-divider aria-hidden="true" hidden></span>
+							<a href="/create" class="create-composer-toolbar-chip create-composer-advanced"
+								data-create-composer-advanced>
+								<svg class="create-composer-toolbar-chip-icon" xmlns="http://www.w3.org/2000/svg"
+									viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+									stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+									<path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .962 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.964 0z"/>
+									<path d="M20 3v4M22 5h-4M4 17v4M2 19h4"/>
+								</svg>
+								<span>Advanced</span>
+							</a>
+						</div>
+						<div class="create-composer-toolbar-trail">
+							<p class="create-composer-cost" data-create-composer-cost aria-live="polite"></p>
+							<span class="create-composer-toolbar-divider create-composer-toolbar-divider--send"
+								aria-hidden="true"></span>
+							<button type="button" class="create-composer-send-btn" disabled
+								data-create-composer-submit aria-label="Create">
+								${sendIcon('create-composer-send-icon')}
+								<span class="create-composer-send-spinner" aria-hidden="true"></span>
+							</button>
+						</div>
+					</div>
+					<div class="create-composer-model-popover" data-create-model-popover hidden
+						role="listbox" tabindex="-1" aria-label="Model"></div>
+					<div class="create-composer-aspect-popover" data-create-aspect-popover hidden
+						role="dialog" aria-label="Aspect ratio">
+						<div class="create-composer-aspect-popover-header">
+							<span class="create-composer-aspect-popover-title">Aspect ratio</span>
+							<button type="button" class="create-composer-aspect-popover-close"
+								data-create-aspect-popover-close aria-label="Close">×</button>
+						</div>
+						<div class="create-composer-aspect-popover-body" data-create-aspect-popover-body></div>
+					</div>
+				</div>
+			</div>
+		</div>
+	`;
+
+	const attachmentsEl = host.querySelector('[data-create-attachments]');
+	const attachmentsList = host.querySelector('[data-create-attachments-list]');
+	const addBtn = host.querySelector('[data-create-add]');
+	const promptInput = host.querySelector('[data-create-composer-prompt]');
+	const audioLyricsButton = host.querySelector('[data-create-audio-lyrics-open]');
+	const audioLyricsDivider = host.querySelector('[data-create-lyrics-divider]');
+	const audioLyricsInput = document.createElement('textarea');
+	audioLyricsInput.id = 'create-composer-audio-lyrics';
+	audioLyricsInput.className = 'create-composer-lyrics-dialog-input';
+	audioLyricsInput.rows = 8;
+	audioLyricsInput.placeholder = 'Add lyrics for the song…';
+	audioLyricsInput.setAttribute('aria-label', 'Lyrics (optional)');
+	const audioLyricsOverlay = document.createElement('div');
+	audioLyricsOverlay.className = 'create-composer-lyrics-overlay';
+	audioLyricsOverlay.hidden = true;
+	audioLyricsOverlay.innerHTML = `
+		<section class="create-composer-lyrics-dialog" role="dialog" aria-modal="true" aria-labelledby="create-composer-lyrics-title">
+			<header class="create-composer-lyrics-dialog-header">
+				<h2 id="create-composer-lyrics-title">Song lyrics</h2>
+				<button type="button" class="create-composer-lyrics-dialog-close" data-create-lyrics-close aria-label="Close">×</button>
+			</header>
+			<div data-create-lyrics-input-slot></div>
+			<footer class="create-composer-lyrics-dialog-footer">
+				<button type="button" class="create-composer-lyrics-clear" data-create-lyrics-clear>clear</button>
+				<button type="button" class="create-composer-lyrics-dialog-done" data-create-lyrics-done>Done</button>
+			</footer>
+		</section>`;
+	document.body.append(audioLyricsOverlay);
+	audioLyricsOverlay.querySelector('[data-create-lyrics-input-slot]')?.append(audioLyricsInput);
+	const audioLyricsClose = audioLyricsOverlay.querySelector('[data-create-lyrics-close]');
+	const audioLyricsClear = audioLyricsOverlay.querySelector('[data-create-lyrics-clear]');
+	const audioLyricsDone = audioLyricsOverlay.querySelector('[data-create-lyrics-done]');
+	const submitBtn = host.querySelector('[data-create-composer-submit]');
+	const advancedLink = host.querySelector('[data-create-composer-advanced]');
+	const modelLabel = host.querySelector('[data-create-model-label]');
+	const modelBtn = host.querySelector('[data-create-model-btn]');
+	const modelPopover = host.querySelector('[data-create-model-popover]');
+	const aspectWrap = host.querySelector('[data-create-aspect-wrap]');
+	const aspectBtn = host.querySelector('[data-create-aspect-btn]');
+	const aspectPopover = host.querySelector('[data-create-aspect-popover]');
+	const aspectPopoverBody = host.querySelector('[data-create-aspect-popover-body]');
+	const aspectPopoverClose = host.querySelector('[data-create-aspect-popover-close]');
+	const aspectLabel = host.querySelector('[data-create-aspect-label]');
+	const modeBtns = host.querySelectorAll('[data-create-mode]');
+	const composerRoot = host.querySelector('.create-composer');
+	const composerDropSurface =
+		host.querySelector('.create-composer-input-shell') || composerRoot;
+	const costEl = host.querySelector('[data-create-composer-cost]');
+
+	/** @type {(string|File)[]} */
+	let attachmentItems = [];
+	/** Parallel to attachmentItems: source creation id when attached via mutate/drop. */
+	/** @type {(number|null)[]} */
+	let attachmentMutateSourceIds = [];
+	/** Parallel to attachmentItems: aspect used for early `edited` upload (null when unknown). */
+	/** @type {(string|null)[]} */
+	let attachmentUploadAspects = [];
+	/** @type {Map<number, string>} */
+	const attachmentBlobUrls = new Map();
+	let attachmentUploadingCount = 0;
+	let selectedAspect = '1:1';
+	let aspectMismatchCount = 0;
+	let aspectMismatchRevision = 0;
+	const aspectDimensionCache = new Map();
+	/** @type {'image' | 'video' | 'audio'} */
+	let outputMode = initialOutputMode;
+	/** @type {ImageModelOption[]} */
+	let imageModelOptions = [
+		toImageModelOption(
+			BASIC_CREATE_DEFAULT_SERVER_ID,
+			BASIC_CREATE_DEFAULT_METHOD_KEY,
+			initialModelValue || BASIC_CREATE_DEFAULT_MODEL,
+			initialModelLabel || BASIC_MODEL_DISPLAY
+		),
+	];
+	/** @type {VideoModelOption[]} */
+	let videoModelOptions = [];
+	/** @type {AudioModelOption[]} */
+	let audioModelOptions = [buildFallbackAudioOption()];
+	/** @type {{ value: string, label: string }[]} */
+	let modelOptions = imageModelOptions.map((o) => ({ value: o.selectValue, label: o.label }));
+	let selectedModel = initialModelValue;
+	const mutateOptions = {
+		serverId: MUTATE_DEFAULT_SERVER_ID,
+		methodKey: MUTATE_DEFAULT_METHOD_KEY,
+	};
+	/** @type {unknown[]} */
+	let composerServers = [];
+	/** @type {Map<string, number>} */
+	const methodCreditByKey = new Map();
+	let methodCreditsFetchStarted = false;
+	/** @type {number | null} */
+	let creditsBalance = null;
+	let promptSaveTimer;
+	let syncPromptClearVisibility = () => {};
+	let toolbarPopoverIgnoreDocClose = false;
+	let submitInFlight = false;
+	const teardownFns = [];
+	function editProviderDraft(change) {
+		if (typeof createProvider?.workflow?.edit !== 'function') return null;
+		try { return createProvider.workflow.edit(change); } catch (_) { return null; }
+	}
+	function editComposerSettings(change) {
+		if (typeof createProvider?.composer?.edit !== 'function') return null;
+		try { return createProvider.composer.edit(change); } catch (_) { return null; }
+	}
+	const modelPopoverId = `create-composer-model-${Math.random().toString(36).slice(2, 9)}`;
+	if (aspectPopover instanceof HTMLElement) {
+		aspectPopover.setAttribute('aria-hidden', aspectPopover.hidden ? 'true' : 'false');
+	}
+	if (modelPopover instanceof HTMLElement) {
+		modelPopover.id = modelPopoverId;
+		modelPopover.setAttribute('aria-hidden', 'true');
+	}
+	if (modelBtn instanceof HTMLButtonElement) {
+		modelBtn.setAttribute('aria-controls', modelPopoverId);
+	}
+
+	function isVideoMode() {
+		return outputMode === 'video';
+	}
+
+	function isAudioMode() {
+		return outputMode === 'audio';
+	}
+
+	function normalizeAttachmentUrlForQueueMatch(raw) {
+		if (typeof raw !== 'string') return '';
+		const value = raw.trim();
+		if (!value) return '';
+		try {
+			const origin = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : '';
+			const parsed = new URL(value, origin);
+			if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
+			return `${parsed.origin}${parsed.pathname}${parsed.search}${parsed.hash}`;
+		} catch {
+			return '';
+		}
+	}
+
+	function getMutateLineageForSubmit() {
+		const ids = attachmentMutateSourceIds.filter((id) => Number.isFinite(id) && id > 0);
+		const unique = [...new Set(ids)];
+		if (unique.length === 0) return {};
+		return {
+			mutateOfId: unique.length === 1 ? unique[0] : undefined,
+			mutateParentIds: unique,
+		};
+	}
+
+	function hydrateAttachmentMutateSourcesFromQueue() {
+		try {
+			const queueItems = loadMutateQueue();
+			if (!Array.isArray(queueItems) || queueItems.length === 0) return;
+			const byUrl = new Map();
+			for (const item of queueItems) {
+				const url = typeof item?.imageUrl === 'string' ? item.imageUrl.trim() : '';
+				const sid = Number(item?.sourceId);
+				if (!url || !Number.isFinite(sid) || sid <= 0) continue;
+				const norm = normalizeAttachmentUrlForQueueMatch(url);
+				if (norm && !byUrl.has(norm)) byUrl.set(norm, sid);
+				if (url && !byUrl.has(url)) byUrl.set(url, sid);
+			}
+			if (byUrl.size === 0) return;
+			if (attachmentUploadAspects.length < attachmentItems.length) {
+				attachmentUploadAspects = attachmentItems.map(
+					(_, i) => attachmentUploadAspects[i] ?? null
+				);
+			}
+			attachmentMutateSourceIds = attachmentItems.map((item) => {
+				if (typeof item !== 'string') return null;
+				const trimmed = item.trim();
+				if (!trimmed) return null;
+				return (
+					byUrl.get(trimmed) ??
+					byUrl.get(normalizeAttachmentUrlForQueueMatch(trimmed)) ??
+					null
+				);
+			});
+		} catch {
+			// ignore storage errors
+		}
+	}
+
+	function setMutateAttachmentFromCreation(url, creationId, published) {
+		const trimmed = typeof url === 'string' ? url.trim() : '';
+		const cid = Number(creationId);
+		if (!trimmed || !Number.isFinite(cid) || cid <= 0) return;
+		try {
+			addToMutateQueue({
+				sourceId: cid,
+				imageUrl: trimmed,
+				published: published === true,
+			});
+		} catch {
+			// ignore storage errors
+		}
+	}
+
+	function applyQueueSnapshotToAttachments(options = {}) {
+		const snapshots = buildAttachmentSnapshotFromQueue();
+		if (snapshots.length === 0 && !options.allowEmpty) return;
+		revokeAttachmentBlobUrls();
+		attachmentItems = snapshots.map((item) => item.imageUrl);
+		attachmentMutateSourceIds = snapshots.map((item) =>
+			Number.isFinite(item.sourceId) && item.sourceId > 0 ? item.sourceId : null
+		);
+		attachmentUploadAspects = snapshots.map(() => null);
+		saveAttachmentsToStorage();
+		renderAttachmentStrip();
+		syncModeChrome();
+	}
+
+	function isUrlInMutateQueue(url) {
+		const trimmed = typeof url === 'string' ? url.trim() : '';
+		if (!trimmed) return false;
+		return loadMutateQueue().some((item) => {
+			const itemUrl = typeof item?.imageUrl === 'string' ? item.imageUrl.trim() : '';
+			return itemUrl && mutateQueueImageUrlsMatch(trimmed, itemUrl);
+		});
+	}
+
+	function getFormFieldContext() {
+		if (isVideoMode()) {
+			const route = getSelectedVideoRoute();
+			return {
+				serverId: route?.serverId ?? BASIC_CREATE_DEFAULT_SERVER_ID,
+				methodKey: route?.methodKey ?? BASIC_CREATE_DEFAULT_METHOD_KEY,
+				modelValue: route?.value ?? '',
+				fields: route
+					? resolveMethodFieldsFromServers(composerServers, route.serverId, route.methodKey)
+					: null,
+			};
+		}
+		if (isAudioMode()) {
+			const route = getSelectedAudioRoute();
+			return {
+				serverId: route?.serverId ?? BASIC_CREATE_DEFAULT_SERVER_ID,
+				methodKey: route?.methodKey ?? BASIC_AUDIO_DEFAULT_METHOD_KEY,
+				modelValue: route?.value ?? '',
+				fields: route
+					? resolveMethodFieldsFromServers(composerServers, route.serverId, route.methodKey)
+					: null,
+			};
+		}
+		const route = getSelectedImageRoute();
+		const serverId = route?.serverId ?? BASIC_CREATE_DEFAULT_SERVER_ID;
+		const methodKey = route?.methodKey ?? BASIC_CREATE_DEFAULT_METHOD_KEY;
+		return {
+			serverId,
+			methodKey,
+			modelValue: route?.value ?? selectedModel,
+			fields: resolveMethodFieldsFromServers(composerServers, serverId, methodKey),
+		};
+	}
+
+	function isLtxVideoRoute(route) {
+		return (
+			route &&
+			route.methodKey === MUTATE_VIDEO_LTX_METHOD_KEY &&
+			Number(route.serverId) === Number(PARASCENE_BLUE_SERVER_ID)
+		);
+	}
+
+	function shouldShowAspectSelector() {
+		if (isAudioMode()) return false;
+		if (isVideoMode()) {
+			return isLtxVideoRoute(getSelectedVideoRoute());
+		}
+		return shouldUseAspectRatioSelector(getFormFieldContext());
+	}
+
+	/** User can pick output ratio (image models or LTX video). */
+	function canSelectAspectRatio() {
+		return shouldShowAspectSelector();
+	}
+
+	async function readPrimaryAttachmentDimensions() {
+		const first = attachmentItems[0];
+		if (!first) return null;
+		if (first instanceof File) {
+			return readRasterFileDimensions(first);
+		}
+		if (typeof first === 'string' && first.trim()) {
+			return readImageUrlDimensions(first.trim());
+		}
+		return null;
+	}
+
+	function readAspectDimensions(item) {
+		if (!aspectDimensionCache.has(item)) {
+			const read = item instanceof File
+				? readRasterFileDimensions(item)
+				: typeof item === 'string' && item.trim()
+					? readImageUrlDimensions(item.trim())
+					: Promise.resolve(null);
+			aspectDimensionCache.set(item, Promise.resolve(read).catch(() => null));
+		}
+		return aspectDimensionCache.get(item);
+	}
+
+	function applyAspectMismatchUi() {
+		if (!(aspectBtn instanceof HTMLButtonElement)) return;
+		const selectable = canSelectAspectRatio();
+		const ratio = selectable ? selectedAspect : '1:1';
+		const warning = selectable && aspectMismatchCount > 0;
+		const message = warning
+			? `${aspectMismatchCount} input image${aspectMismatchCount === 1 ? '' : 's'} do not match ${ratio}`
+			: '';
+		aspectBtn.classList.toggle('has-aspect-mismatch', warning);
+		aspectBtn.title = message;
+		aspectBtn.setAttribute('aria-label', selectable
+			? `Aspect ratio: ${ratio}${warning ? `. Warning: ${message}.` : ''}`
+			: isAudioMode()
+				? 'Aspect ratio not used for audio'
+				: isVideoMode()
+					? 'Aspect ratio not configurable for this video model'
+					: 'Aspect ratio: 1:1 (square only for this model)');
+	}
+
+	async function syncAspectMismatchIndicator() {
+		const revision = ++aspectMismatchRevision;
+		const target = shouldShowAspectSelector() ? selectedAspect : '';
+		const items = target
+			? attachmentItems.filter((item) => item instanceof File || (typeof item === 'string' && item.trim()))
+			: [];
+		if (!target || items.length === 0) {
+			aspectMismatchCount = 0;
+			applyAspectMismatchUi();
+			return;
+		}
+		const sizes = await Promise.all(items.map(readAspectDimensions));
+		if (revision !== aspectMismatchRevision) return;
+		aspectMismatchCount = sizes.filter((size) =>
+			size?.width > 0 && size?.height > 0 &&
+			dimensionsMatchAspectRatio(size.width, size.height, target) === false
+		).length;
+		applyAspectMismatchUi();
+	}
+
+	async function confirmAspectMismatchBeforeSubmit() {
+		// Aspect ratio is applied when the job is submitted (server letterbox), not at attach time.
+		return true;
+	}
+
+	function getActiveModelList() {
+		if (isVideoMode()) {
+			return videoModelOptions.map((o) => ({ value: o.selectValue, label: o.label }));
+		}
+		if (isAudioMode()) {
+			return audioModelOptions.map((o) => ({ value: o.selectValue, label: o.label }));
+		}
+		return imageModelOptions.map((o) => ({ value: o.selectValue, label: o.label }));
+	}
+
+	function getActiveRouteOptions() {
+		if (isVideoMode()) return videoModelOptions;
+		if (isAudioMode()) return audioModelOptions;
+		return imageModelOptions;
+	}
+
+	function saveModelSelection(value) {
+		editComposerSettings({ modelRoutes: { [outputMode]: value } });
+		const route = parseComposerRouteKey(value);
+		if (route) editProviderDraft({ serverId: route.serverId, methodKey: route.methodKey, fieldValues: { model: route.model } });
+		try {
+			if (isVideoMode()) {
+				localStorage.setItem(STORAGE_KEYS.videoModel, value);
+			} else if (isAudioMode()) {
+				localStorage.setItem(STORAGE_KEYS.audioModel, value);
+			} else {
+				localStorage.setItem(STORAGE_KEYS.model, value);
+				const match =
+					imageModelOptions.find((o) => o.selectValue === value) ||
+					imageModelOptions.find((o) => o.value === value);
+				const label = match?.label || match?.value || value;
+				if (label) localStorage.setItem(STORAGE_KEYS.modelLabel, label);
+			}
+		} catch (_) {}
+	}
+
+	function getDefaultVideoSelectValue() {
+		const ltx =
+			videoModelOptions.find(
+				(o) =>
+					o.methodKey === MUTATE_VIDEO_LTX_METHOD_KEY && o.value === MUTATE_VIDEO_LTX_MODEL
+			) ||
+			videoModelOptions.find((o) => o.methodKey === MUTATE_VIDEO_LTX_METHOD_KEY) ||
+			videoModelOptions[0];
+		return ltx?.selectValue || '';
+	}
+
+	function getSelectedVideoRoute() {
+		const match = videoModelOptions.find((o) => o.selectValue === selectedModel);
+		if (match) return match;
+		const fallbackKey = getDefaultVideoSelectValue();
+		return videoModelOptions.find((o) => o.selectValue === fallbackKey) || videoModelOptions[0];
+	}
+
+	function getDefaultAudioSelectValue() {
+		const preferred =
+			audioModelOptions.find(
+				(o) =>
+					o.serverId === BASIC_CREATE_DEFAULT_SERVER_ID &&
+					o.methodKey === BASIC_AUDIO_DEFAULT_METHOD_KEY &&
+					o.value === BASIC_AUDIO_DEFAULT_MODEL
+			) ||
+			audioModelOptions.find((o) => o.methodKey === REPLICATE_MUSIC_METHOD_KEY) ||
+			audioModelOptions[0];
+		return preferred?.selectValue || '';
+	}
+
+	function getSelectedAudioRoute() {
+		const match = audioModelOptions.find((o) => o.selectValue === selectedModel);
+		if (match) return match;
+		const fallbackKey = getDefaultAudioSelectValue();
+		return audioModelOptions.find((o) => o.selectValue === fallbackKey) || audioModelOptions[0];
+	}
+
+	function getDefaultImageSelectValue() {
+		const preferred = imageModelOptions.find(
+			(o) =>
+				o.serverId === BASIC_CREATE_DEFAULT_SERVER_ID &&
+				o.methodKey === BASIC_CREATE_DEFAULT_METHOD_KEY &&
+				o.value === BASIC_CREATE_DEFAULT_MODEL
+		);
+		return preferred?.selectValue || imageModelOptions[0]?.selectValue || '';
+	}
+
+	function getSelectedImageRoute() {
+		const bySelect = imageModelOptions.find((o) => o.selectValue === selectedModel);
+		if (bySelect) return bySelect;
+		const parsed = parseComposerRouteKey(selectedModel);
+		if (parsed) {
+			const byRoute = imageModelOptions.find(
+				(o) =>
+					o.serverId === parsed.serverId &&
+					o.methodKey === parsed.methodKey &&
+					o.value === parsed.model
+			);
+			if (byRoute) return byRoute;
+		}
+		const byModel = imageModelOptions.find((o) => o.value === selectedModel);
+		if (byModel) return byModel;
+		const fallbackKey = getDefaultImageSelectValue();
+		return imageModelOptions.find((o) => o.selectValue === fallbackKey) || imageModelOptions[0];
+	}
+
+	function syncModelLabel() {
+		const list = getActiveModelList();
+		const match = list.find((o) => o.value === selectedModel);
+		let text = match?.label || '';
+		if (isVideoMode()) {
+			text = getVideoOptionLabel(getSelectedVideoRoute()) || text || 'LTX Self-hosted';
+		} else if (isAudioMode()) {
+			text = getSelectedAudioRoute()?.label || text || 'Lyria 3';
+		} else {
+			text = getSelectedImageRoute()?.label || text || selectedModel || BASIC_MODEL_DISPLAY;
+		}
+		if (modelLabel) modelLabel.textContent = text;
+		if (modelBtn instanceof HTMLButtonElement) {
+			modelBtn.setAttribute('aria-label', `Model: ${text}`);
+		}
+		try {
+			if (match?.label) localStorage.setItem(STORAGE_KEYS.modelLabel, match.label);
+		} catch (_) {}
+	}
+
+	function populateModelSelect() {
+		const prev = selectedModel;
+		const list = getActiveModelList();
+		let next;
+		if (isVideoMode()) {
+			try {
+				const providerSaved = createProvider?.composer?.read?.().modelRoutes?.video;
+				const composerSaved = localStorage.getItem(STORAGE_KEYS.videoModel);
+				const sharedSaved = localStorage.getItem(CREATE_SETTINGS_STORAGE_KEYS.videoModel);
+				next = resolveComposerRouteFromStorage(videoModelOptions, [providerSaved, composerSaved, sharedSaved]);
+				if (!next && list.some((o) => o.value === prev)) {
+					next = prev;
+				}
+				if (!next) {
+					next = getDefaultVideoSelectValue();
+				}
+			} catch {
+				next = getDefaultVideoSelectValue();
+			}
+		} else if (isAudioMode()) {
+			try {
+				const providerSaved = createProvider?.composer?.read?.().modelRoutes?.audio;
+				const composerSaved = localStorage.getItem(STORAGE_KEYS.audioModel);
+				next = resolveComposerRouteFromStorage(audioModelOptions, [providerSaved, composerSaved]);
+				if (!next && list.some((o) => o.value === prev)) next = prev;
+				if (!next) next = getDefaultAudioSelectValue();
+			} catch {
+				next = getDefaultAudioSelectValue();
+			}
+		} else {
+			try {
+				const providerSaved = createProvider?.composer?.read?.().modelRoutes?.image;
+				const composerSaved = localStorage.getItem(STORAGE_KEYS.model);
+				const sharedSaved = localStorage.getItem(CREATE_SETTINGS_STORAGE_KEYS.model);
+				next = resolveComposerRouteFromStorage(imageModelOptions, [providerSaved, composerSaved, sharedSaved]);
+			} catch (_) {}
+			if (!next) {
+				const parsed = parseComposerRouteKey(prev);
+				if (parsed) {
+					const legacy = imageModelOptions.find(
+						(o) =>
+							o.serverId === parsed.serverId &&
+							o.methodKey === parsed.methodKey &&
+							o.value === parsed.model
+					);
+					next = legacy?.selectValue;
+				}
+			}
+			if (!next && list.some((o) => o.value === prev)) next = prev;
+			if (!next) next = getDefaultImageSelectValue() || list[0]?.value || '';
+		}
+		selectedModel = next;
+		syncModelLabel();
+		if (modelPopover instanceof HTMLElement && !modelPopover.hidden) buildModelPopover();
+	}
+
+	function applySelectedModel(value) {
+		const list = getActiveModelList();
+		if (!value || !list.some((o) => o.value === value)) return;
+		selectedModel = value;
+		syncModelLabel();
+		saveModelSelection(value);
+		syncModeChrome();
+		buildAspectPopover();
+		if (modelPopover instanceof HTMLElement && !modelPopover.hidden) buildModelPopover();
+	}
+
+	async function refreshModelOptions() {
+		const [imageOpts, videoOpts, audioOpts, servers] = await Promise.all([
+			fetchBasicModelOptions(),
+			fetchVideoModelOptions(),
+			fetchAudioModelOptions(),
+			fetchComposerServers(),
+		]);
+		composerServers = servers;
+		imageModelOptions =
+			Array.isArray(imageOpts) && imageOpts.length > 0
+				? imageOpts
+				: [
+						toImageModelOption(
+							BASIC_CREATE_DEFAULT_SERVER_ID,
+							BASIC_CREATE_DEFAULT_METHOD_KEY,
+							BASIC_CREATE_DEFAULT_MODEL,
+							BASIC_MODEL_DISPLAY
+						),
+					];
+		videoModelOptions = sortVideoModelOptions(
+			Array.isArray(videoOpts) && videoOpts.length > 0 ? videoOpts : [buildBootstrapVideoOption()]
+		);
+		audioModelOptions =
+			Array.isArray(audioOpts) && audioOpts.length > 0 ? audioOpts : [buildFallbackAudioOption()];
+		if (isVideoMode()) {
+			const stillValid = videoModelOptions.some((o) => o.selectValue === selectedModel);
+			if (!stillValid) selectedModel = getDefaultVideoSelectValue();
+		} else if (isAudioMode()) {
+			const stillValid =
+				audioModelOptions.some((o) => o.selectValue === selectedModel) ||
+				audioModelOptions.some((o) => o.value === selectedModel);
+			if (!stillValid) selectedModel = getDefaultAudioSelectValue();
+		} else {
+			const stillValid =
+				imageModelOptions.some((o) => o.selectValue === selectedModel) ||
+				imageModelOptions.some((o) => o.value === selectedModel) ||
+				parseComposerRouteKey(selectedModel) != null;
+			if (!stillValid) {
+				const fallback =
+					imageModelOptions.find(
+						(o) =>
+							o.serverId === BASIC_CREATE_DEFAULT_SERVER_ID &&
+							o.methodKey === BASIC_CREATE_DEFAULT_METHOD_KEY &&
+							o.value === BASIC_CREATE_DEFAULT_MODEL
+					) || imageModelOptions[0];
+				if (fallback) selectedModel = fallback.selectValue;
+			}
+		}
+		modelOptions = getActiveModelList();
+		populateModelSelect();
+		syncFromSharedSettings();
+		editComposerSettings({ modelRoutes: { [outputMode]: selectedModel } });
+		syncModeChrome();
+		buildAspectPopover();
+		void ensureMethodCreditsCache();
+	}
+
+	function revokeAttachmentBlobUrls() {
+		attachmentBlobUrls.forEach((url) => {
+			if (url?.startsWith('blob:')) URL.revokeObjectURL(url);
+		});
+		attachmentBlobUrls.clear();
+	}
+
+	function hasAttachment() {
+		return attachmentItems.length > 0 || attachmentUploadingCount > 0;
+	}
+
+	/** @returns {'t2i' | 'i2i' | 'i2v' | 't2v' | 't2a'} */
+	function getComposerFlow() {
+		if (isAudioMode()) return 't2a';
+		if (isVideoMode()) {
+			return hasAttachment() ? 'i2v' : 't2v';
+		}
+		return hasAttachment() ? 'i2i' : 't2i';
+	}
+
+	function syncComposerAccentFlow() {
+		if (!(composerRoot instanceof HTMLElement)) return;
+		composerRoot.setAttribute('data-composer-flow', getComposerFlow());
+	}
+
+	/**
+	 * @returns {{ serverId: number, methodKey: string } | null}
+	 */
+	function getComposerSubmitRoute() {
+		if (isVideoMode()) {
+			const route = getSelectedVideoRoute();
+			if (!route) return null;
+			return { serverId: route.serverId, methodKey: route.methodKey };
+		}
+		if (isAudioMode()) {
+			const route = getSelectedAudioRoute();
+			if (!route) return null;
+			return { serverId: route.serverId, methodKey: route.methodKey };
+		}
+		if (hasAttachment()) {
+			if (!mutateOptions.serverId || !mutateOptions.methodKey) return null;
+			return { serverId: mutateOptions.serverId, methodKey: mutateOptions.methodKey };
+		}
+		const route = getSelectedImageRoute();
+		if (!route) return null;
+		return { serverId: route.serverId, methodKey: route.methodKey };
+	}
+
+	function methodCreditCacheKey(serverId, methodKey) {
+		return `${serverId}:${methodKey}`;
+	}
+
+	function hydrateMethodCreditsFromStorage() {
+		try {
+			const raw = localStorage.getItem(STORAGE_KEYS.methodCredits);
+			if (!raw || !String(raw).trim()) return;
+			const parsed = JSON.parse(raw);
+			if (!parsed || typeof parsed !== 'object') return;
+			for (const [key, value] of Object.entries(parsed)) {
+				const n = typeof value === 'number' ? value : parseFloat(String(value));
+				if (Number.isFinite(n) && n >= 0) methodCreditByKey.set(key, n);
+			}
+		} catch (_) {}
+	}
+
+	function persistMethodCreditsToStorage() {
+		/** @type {Record<string, number>} */
+		const obj = {};
+		for (const [key, value] of methodCreditByKey) {
+			if (Number.isFinite(value)) obj[key] = value;
+		}
+		try {
+			localStorage.setItem(STORAGE_KEYS.methodCredits, JSON.stringify(obj));
+		} catch (_) {}
+	}
+
+	/** @returns {VideoModelOption} */
+	function buildBootstrapVideoOption() {
+		const ltxKey = encodeVideoRouteKey(
+			PARASCENE_BLUE_SERVER_ID,
+			MUTATE_VIDEO_LTX_METHOD_KEY,
+			MUTATE_VIDEO_LTX_MODEL
+		);
+		/** @type {VideoModelOption} */
+		let option = {
+			selectValue: ltxKey,
+			value: MUTATE_VIDEO_LTX_MODEL,
+			label: 'LTX Self-hosted',
+			serverId: PARASCENE_BLUE_SERVER_ID,
+			methodKey: MUTATE_VIDEO_LTX_METHOD_KEY,
+			methodLabel: getComposerMethodGroupLabel(null, MUTATE_VIDEO_LTX_METHOD_KEY),
+		};
+		try {
+			const saved = localStorage.getItem(STORAGE_KEYS.videoModel);
+			const parsed = saved ? parseVideoRouteKey(saved) : null;
+			if (parsed) {
+				option = {
+					selectValue: saved,
+					value: parsed.model,
+					label: '',
+					serverId: parsed.serverId,
+					methodKey: parsed.methodKey,
+					methodLabel: getComposerMethodGroupLabel(null, parsed.methodKey),
+				};
+				option.label = getVideoOptionLabel(option);
+			}
+		} catch (_) {}
+		return option;
+	}
+
+	function bootstrapVideoModelOptions() {
+		const option = buildBootstrapVideoOption();
+		videoModelOptions = [option];
+		if (isVideoMode()) {
+			selectedModel = option.selectValue;
+			modelOptions = getActiveModelList();
+		}
+	}
+
+	function getComposerCreditCost() {
+		const route = getComposerSubmitRoute();
+		if (!route) return undefined;
+		const cached = methodCreditByKey.get(methodCreditCacheKey(route.serverId, route.methodKey));
+		return Number.isFinite(cached) ? cached : undefined;
+	}
+
+	function isComposerCreditCostReady() {
+		return Number.isFinite(getComposerCreditCost());
+	}
+
+	function updateComposerCostDisplay() {
+		if (!(costEl instanceof HTMLElement)) return;
+		const cost = getComposerCreditCost();
+		costEl.classList.remove('insufficient');
+		if (!Number.isFinite(cost)) {
+			costEl.textContent = '';
+			updateSubmitButtonState();
+			return;
+		}
+		const label = formatCreditAmount(cost);
+		costEl.textContent = `${label} credit${cost === 1 ? '' : 's'}`;
+		if (creditsBalance != null && creditsBalance < cost) {
+			costEl.classList.add('insufficient');
+		}
+		updateSubmitButtonState();
+	}
+
+	async function ensureMethodCreditsCache() {
+		if (methodCreditsFetchStarted) return;
+		methodCreditsFetchStarted = true;
+		try {
+			const servers = await loadMutateServerOptions(createProvider);
+			for (const server of servers) {
+				const cfg = parseServerConfig(server);
+				const methods =
+					cfg?.methods && typeof cfg.methods === 'object'
+						? /** @type {Record<string, unknown>} */ (cfg.methods)
+						: null;
+				if (!methods) continue;
+				const serverId = Number(server.id);
+				for (const [methodKey, methodDef] of Object.entries(methods)) {
+					const credits = parseMethodCredits(methodDef);
+					if (!Number.isFinite(credits)) continue;
+					methodCreditByKey.set(methodCreditCacheKey(serverId, methodKey), credits);
+				}
+			}
+			persistMethodCreditsToStorage();
+		} catch (_) {
+			// keep hydrated storage values
+		}
+		updateComposerCostDisplay();
+	}
+
+	function loadComposerCreditsBalance() {
+		const CACHE_KEY = 'create-credits-cache';
+		try {
+			const cached = localStorage.getItem(CACHE_KEY);
+			if (cached) {
+				const parsed = JSON.parse(cached);
+				const balance = parsed?.balance;
+				if (typeof balance === 'number' && Number.isFinite(balance)) {
+					creditsBalance = Math.max(0, Math.round(balance * 10) / 10);
+					updateComposerCostDisplay();
+				}
+			}
+		} catch (_) {}
+
+		Promise.resolve(fetchJsonWithStatusDeduped('/api/credits', { credentials: 'include' }, { windowMs: 2000 })
+			)
+			.then((result) => {
+				if (result?.ok && typeof result.data?.balance === 'number') {
+					creditsBalance = Math.max(0, Math.round(result.data.balance * 10) / 10);
+					try {
+						localStorage.setItem(
+							CACHE_KEY,
+							JSON.stringify({ balance: creditsBalance, ts: Date.now() })
+						);
+					} catch (_) {}
+				} else {
+					creditsBalance = creditsBalance ?? 0;
+				}
+				updateComposerCostDisplay();
+			})
+			.catch(() => {
+				try {
+					const stored = localStorage.getItem('credits-balance');
+					if (stored !== null) {
+						const n = parseFloat(stored);
+						if (Number.isFinite(n)) creditsBalance = Math.max(0, Math.round(n * 10) / 10);
+					}
+				} catch (_) {}
+				updateComposerCostDisplay();
+			});
+	}
+
+	const onCreditsUpdated = (event) => {
+		const count = event?.detail?.count;
+		if (typeof count === 'number' && Number.isFinite(count)) {
+			creditsBalance = Math.max(0, Math.round(count * 10) / 10);
+			updateComposerCostDisplay();
+		} else {
+			loadComposerCreditsBalance();
+		}
+	};
+	document.addEventListener('credits-updated', onCreditsUpdated);
+	teardownFns.push(() => document.removeEventListener('credits-updated', onCreditsUpdated));
+
+	function isAttachmentUploading() {
+		return attachmentUploadingCount > 0 || attachmentItems.some((item) => item instanceof File);
+	}
+
+	function getAspectRatioForSubmit() {
+		return shouldShowAspectSelector() ? selectedAspect : undefined;
+	}
+
+	function syncAspectFooterState() {
+		const selectable = canSelectAspectRatio();
+		const displayRatio = selectable ? selectedAspect : '1:1';
+		updateAspectBtnLabel(displayRatio);
+		if (aspectBtn instanceof HTMLButtonElement) {
+			aspectBtn.classList.toggle('is-readonly', !selectable);
+			aspectBtn.setAttribute('aria-haspopup', 'dialog');
+		}
+		void syncAspectMismatchIndicator();
+		applyAspectMismatchUi();
+	}
+
+	function syncAudioToolbarChrome() {
+		const audio = isAudioMode();
+		const route = audio ? getSelectedAudioRoute() : null;
+		const music = isTextToMusicComposerRoute(route);
+		if (audioLyricsButton instanceof HTMLButtonElement) audioLyricsButton.hidden = !music;
+		if (audioLyricsDivider instanceof HTMLElement) audioLyricsDivider.hidden = !music;
+		if (promptInput instanceof HTMLTextAreaElement) {
+			promptInput.setAttribute('aria-label', music ? 'Style prompt' : 'Prompt');
+		}
+		if (aspectWrap instanceof HTMLElement) {
+			aspectWrap.hidden = audio;
+			const prev = aspectWrap.previousElementSibling;
+			if (prev instanceof HTMLElement && prev.classList.contains('create-composer-toolbar-divider')) {
+				prev.hidden = audio;
+			}
+		}
+		if (audio) setAspectPopoverOpen(false);
+	}
+
+	function getPromptPlaceholder() {
+		if (isAudioMode()) {
+			return isTextToMusicComposerRoute(getSelectedAudioRoute())
+				? 'Describe the musical style, mood, instruments, and sound…'
+				: 'Enter the words to speak…';
+		}
+		if (isVideoMode()) {
+			return hasAttachment()
+				? 'Describe the motion or camera movement…'
+				: 'Add an image, then describe the motion…';
+		}
+		return hasAttachment()
+			? 'Describe what you want to change…'
+			: 'Describe what you want to create…';
+	}
+
+	function syncModeToggleUi() {
+		modeBtns.forEach((btn) => {
+			if (!(btn instanceof HTMLButtonElement)) return;
+			const mode = btn.getAttribute('data-create-mode');
+			const on = mode === outputMode;
+			btn.classList.toggle('is-active', on);
+			btn.setAttribute('aria-selected', on ? 'true' : 'false');
+		});
+		if (promptInput instanceof HTMLTextAreaElement) {
+			promptInput.placeholder = getPromptPlaceholder();
+		}
+	}
+
+	function setOutputMode(mode, { persistSelection = true } = {}) {
+		if (mode !== 'image' && mode !== 'video' && mode !== 'audio') return;
+		if (outputMode === mode) return;
+		outputMode = mode;
+		editComposerSettings({ outputMode });
+		try {
+			localStorage.setItem(STORAGE_KEYS.outputMode, mode);
+		} catch (_) {}
+		setAspectPopoverOpen(false);
+		setModelPopoverOpen(false);
+		modelOptions = getActiveModelList();
+		populateModelSelect();
+		if (persistSelection) saveModelSelection(selectedModel);
+		syncModeToggleUi();
+		syncModeChrome();
+		buildAspectPopover();
+	}
+
+	function syncModeChrome() {
+		const attached = hasAttachment();
+		syncModeToggleUi();
+		if (submitBtn) {
+			if (isVideoMode()) {
+				submitBtn.setAttribute('aria-label', 'Animate');
+			} else if (isAudioMode()) {
+				submitBtn.setAttribute('aria-label', 'Create audio');
+			} else {
+				submitBtn.setAttribute('aria-label', attached ? 'Edit image' : 'Create');
+			}
+		}
+		syncAspectFooterState();
+		syncAudioToolbarChrome();
+		updateSubmitButtonState();
+		syncComposerAccentFlow();
+		updateComposerCostDisplay();
+	}
+
+	function savePrompt() {
+		const value = promptInput?.value || '';
+		editProviderDraft({ fieldValues: { prompt: value } });
+		try {
+			localStorage.setItem(STORAGE_KEYS.prompt, value);
+			localStorage.setItem(STORAGE_KEYS.promptText, value);
+			localStorage.setItem(STORAGE_KEYS.promptImageEdit, value);
+		} catch (_) {}
+	}
+
+	function saveStyleSelected(value) {
+		editProviderDraft({ styleKey: String(value ?? '') });
+		try {
+			localStorage.setItem(STORAGE_KEYS.styleSelected, String(value ?? ''));
+		} catch (_) {}
+	}
+
+	function saveAspectRatio(value) {
+		editProviderDraft({ fieldValues: { aspect_ratio: String(value ?? '') } });
+		try {
+			localStorage.setItem(STORAGE_KEYS.aspectRatio, String(value ?? ''));
+		} catch (_) {}
+	}
+
+	function syncFromSharedSettings() {
+		try {
+			const settings = readSharedCreateSettings();
+			const draft = createProvider?.draft?.read?.();
+			if (audioLyricsInput instanceof HTMLTextAreaElement) {
+				const lyrics = typeof draft?.fieldValues?.lyrics === 'string' ? draft.fieldValues.lyrics : '';
+				if (audioLyricsInput.value !== lyrics) {
+					audioLyricsInput.value = lyrics;
+					syncAudioLyricsButton();
+				}
+			}
+			const prompt = resolveSharedPrompt(settings);
+			if (promptInput instanceof HTMLTextAreaElement && promptInput.value !== prompt) {
+				promptInput.value = prompt;
+				syncStyleSelectionFromPrompt();
+				updateSubmitButtonState();
+				syncPromptClearVisibility();
+				try {
+					refreshAutoGrow(host);
+				} catch (_) {}
+			}
+			const savedAspect = settings.aspectRatio?.trim();
+			if (savedAspect && MVP_ASPECT_RATIOS.includes(savedAspect) && savedAspect !== selectedAspect) {
+				selectedAspect = savedAspect;
+				syncAspectFooterState();
+				buildAspectPopover();
+			}
+			const storedMode = settings.outputMode;
+			if (
+				(storedMode === 'video' || storedMode === 'image' || storedMode === 'audio') &&
+				storedMode !== outputMode
+			) {
+				setOutputMode(storedMode, { persistSelection: false });
+			}
+			const modelRoute = settings.modelRoute?.trim();
+			if (modelRoute) {
+				const routeOptions = getActiveRouteOptions();
+				if (
+					routeOptions.some((option) => option.selectValue === modelRoute) &&
+					modelRoute !== selectedModel
+				) {
+					applySelectedModel(modelRoute);
+				}
+			}
+		} catch (_) {}
+	}
+
+	function saveAttachmentsToStorage() {
+		const urls = [];
+		const sourceIds = [];
+		for (let i = 0; i < attachmentItems.length; i++) {
+			const item = attachmentItems[i];
+			if (typeof item !== 'string' || !item.trim()) continue;
+			urls.push(item.trim());
+			const sid = attachmentMutateSourceIds[i];
+			sourceIds.push(Number.isFinite(sid) && sid > 0 ? sid : null);
+		}
+		try {
+			if (urls.length > 0) {
+				localStorage.setItem(STORAGE_KEYS.imageEditSelection, JSON.stringify(urls));
+			} else {
+				localStorage.removeItem(STORAGE_KEYS.imageEditSelection);
+			}
+		} catch (_) {}
+		try {
+			syncMutateQueueFromComposerAttachments(urls, sourceIds);
+		} catch (_) {}
+		if (createProvider?.draft?.read && createProvider?.workflow?.edit) {
+			const current = createProvider.draft.read();
+			const sourcesUnchanged = urls.every((url, index) => current.imageSources?.[url]?.sourceId === (Number(sourceIds[index]) > 0 ? Number(sourceIds[index]) : null));
+			if (JSON.stringify(current.inputImages) !== JSON.stringify(urls) || !sourcesUnchanged) {
+				const imageSources = {};
+				urls.forEach((url, index) => {
+					const existing = current.imageSources?.[url];
+					const sourceId = Number(sourceIds[index]);
+					imageSources[url] = existing || { sourceId: Number.isFinite(sourceId) && sourceId > 0 ? sourceId : null, published: false };
+				});
+				editProviderDraft({ imageChange: { type: 'replace', images: urls }, imageSources });
+			}
+		}
+		return { urls, sourceIds };
+	}
+
+	function getAttachmentPreviewSrc(item, index) {
+		if (typeof item === 'string' && item.trim()) return item.trim();
+		if (item instanceof File) {
+			let blob = attachmentBlobUrls.get(index);
+			if (!blob) {
+				blob = URL.createObjectURL(item);
+				attachmentBlobUrls.set(index, blob);
+			}
+			return blob;
+		}
+		return '';
+	}
+
+	function renderAttachmentStrip() {
+		if (!attachmentsList || !attachmentsEl) return;
+		const hasMedia = hasAttachment();
+		attachmentsEl.classList.toggle('create-composer-attachments--has-media', hasMedia);
+
+		attachmentsList.querySelectorAll('.create-composer-attachment').forEach((el) => el.remove());
+		revokeAttachmentBlobUrls();
+
+		const insertBefore = addBtn instanceof HTMLElement ? addBtn : null;
+		attachmentItems.forEach((item, index) => {
+			const wrap = document.createElement('div');
+			wrap.className = 'create-composer-attachment';
+			const uploading = item instanceof File;
+
+			if (uploading) {
+				const uploadingEl = document.createElement('span');
+				uploadingEl.className = 'create-composer-attachment-uploading';
+				uploadingEl.innerHTML =
+					'<span class="create-composer-attachment-spinner" aria-hidden="true"></span>';
+				wrap.appendChild(uploadingEl);
+			} else {
+				const src = getAttachmentPreviewSrc(item, index);
+				const preview = document.createElement('img');
+				preview.className =
+					'create-composer-attachment-preview create-composer-attachment-preview--clickable';
+				preview.alt = '';
+				if (src) preview.src = src;
+				preview.addEventListener('click', () => openAttachmentLightbox(src, preview));
+				wrap.appendChild(preview);
+
+				const remove = document.createElement('button');
+				remove.type = 'button';
+				remove.className = 'create-composer-attachment-remove';
+				remove.setAttribute('aria-label', 'Remove image');
+				remove.textContent = '×';
+				remove.addEventListener('click', (e) => {
+					e.stopPropagation();
+					removeAttachmentAt(index);
+				});
+				wrap.appendChild(remove);
+			}
+
+			if (insertBefore) attachmentsList.insertBefore(wrap, insertBefore);
+			else attachmentsList.appendChild(wrap);
+		});
+	}
+
+	function clearAttachments() {
+		revokeAttachmentBlobUrls();
+		attachmentItems = [];
+		attachmentMutateSourceIds = [];
+		attachmentUploadAspects = [];
+		attachmentUploadingCount = 0;
+		saveAttachmentsToStorage();
+		renderAttachmentStrip();
+		syncModeChrome();
+	}
+
+	function removeAttachmentAt(index) {
+		if (index < 0 || index >= attachmentItems.length) return;
+		const removed = attachmentItems[index];
+		if (typeof removed === 'string' && removed.trim() && isUrlInMutateQueue(removed.trim())) {
+			try {
+				removeFromMutateQueueByImageUrl(removed.trim());
+			} catch {
+				// ignore storage errors
+			}
+			return;
+		}
+		attachmentItems.splice(index, 1);
+		attachmentMutateSourceIds.splice(index, 1);
+		attachmentUploadAspects.splice(index, 1);
+		saveAttachmentsToStorage();
+		renderAttachmentStrip();
+		syncModeChrome();
+	}
+
+	function addAttachmentUrl(url, options = {}) {
+		const trimmed = typeof url === 'string' ? url.trim() : '';
+		if (!trimmed) return;
+		const cid = Number(options?.mutateSourceCreationId);
+		attachmentItems.push(trimmed);
+		attachmentMutateSourceIds.push(Number.isFinite(cid) && cid > 0 ? cid : null);
+		attachmentUploadAspects.push(null);
+		saveAttachmentsToStorage();
+		renderAttachmentStrip();
+		syncModeChrome();
+	}
+
+	function getEarlyUploadAspectRatio() {
+		return shouldShowAspectSelector() ? selectedAspect : '1:1';
+	}
+
+	async function addAttachmentFromFile(file) {
+		if (!(file instanceof File)) return;
+		const index = attachmentItems.length;
+		const uploadAspect = getEarlyUploadAspectRatio();
+		attachmentItems.push(file);
+		attachmentMutateSourceIds.push(null);
+		attachmentUploadAspects.push(null);
+		attachmentUploadingCount += 1;
+		renderAttachmentStrip();
+		syncModeChrome();
+		try {
+			const uploaded = await uploadImageFile(file);
+			if (typeof uploaded === 'string' && uploaded.trim()) {
+				attachmentItems[index] = uploaded.trim();
+				attachmentUploadAspects[index] = null;
+				saveAttachmentsToStorage();
+			} else {
+				attachmentItems.splice(index, 1);
+				attachmentMutateSourceIds.splice(index, 1);
+				attachmentUploadAspects.splice(index, 1);
+			}
+		} catch (err) {
+			attachmentItems.splice(index, 1);
+			attachmentMutateSourceIds.splice(index, 1);
+			attachmentUploadAspects.splice(index, 1);
+			alert(err?.message || 'Image upload failed');
+		} finally {
+			attachmentUploadingCount = Math.max(0, attachmentUploadingCount - 1);
+			renderAttachmentStrip();
+			syncModeChrome();
+		}
+	}
+
+	function restoreAttachments(urls, sourceIds = []) {
+		revokeAttachmentBlobUrls();
+		attachmentItems = urls
+			.map((v) => (typeof v === 'string' ? v.trim() : ''))
+			.filter(Boolean);
+		attachmentMutateSourceIds = attachmentItems.map((_, index) => {
+			const saved = Number(sourceIds[index]);
+			return Number.isFinite(saved) && saved > 0 ? saved : null;
+		});
+		attachmentUploadAspects = attachmentItems.map(() => null);
+		hydrateAttachmentMutateSourcesFromQueue();
+		renderAttachmentStrip();
+		syncModeChrome();
+	}
+
+	function openImagePicker() {
+		Promise.resolve().then(() => {
+				openImagePickerModal({
+					modalParent: document.body,
+					async onSelect(value) {
+						if (value instanceof File) {
+							await addAttachmentFromFile(value);
+							return;
+						}
+						if (typeof value === 'string' && value.trim()) {
+							addAttachmentUrl(value.trim());
+						}
+					},
+				});
+			})
+			.catch((err) => {
+				console.error('[createComposer] image picker failed to load:', err);
+			});
+	}
+
+	function openAttachmentLightbox(src, previewEl) {
+		if (!src) return;
+		Promise.resolve().then(() => openChatInlineImageLightbox(src, {
+				sourceImg: previewEl instanceof HTMLImageElement ? previewEl : null,
+			}));
+	}
+
+	function extractStyleSigilKeys(text) {
+		const out = [];
+		const re = /\$([a-zA-Z][a-zA-Z0-9_-]*)/g;
+		let match;
+		while ((match = re.exec(String(text || ''))) !== null) {
+			if (match[1]) out.push(match[1].toLowerCase());
+		}
+		return out;
+	}
+
+	function resolveSubmitStyleKey(promptText) {
+		const sigils = extractStyleSigilKeys(promptText);
+		if (sigils.length > 0) return sigils[sigils.length - 1];
+		return undefined;
+	}
+
+	function getSelectedStyleKey() {
+		try {
+			const saved = createProvider?.draft?.read?.().styleKey ?? localStorage.getItem(STORAGE_KEYS.styleSelected);
+			return (saved || 'none').trim();
+		} catch {
+			return 'none';
+		}
+	}
+
+	function syncStyleSelectionFromPrompt() {
+		if (!(promptInput instanceof HTMLTextAreaElement)) return;
+		const sigils = extractStyleSigilKeys(promptInput.value);
+		if (sigils.length === 0) {
+			saveStyleSelected('none');
+			return;
+		}
+		saveStyleSelected(sigils[sigils.length - 1]);
+	}
+
+	function setComposerSubmitting(active) {
+		submitInFlight = Boolean(active);
+		if (composerRoot instanceof HTMLElement) {
+			composerRoot.classList.toggle('is-submitting', submitInFlight);
+			if (submitInFlight) {
+				composerRoot.setAttribute('aria-busy', 'true');
+			} else {
+				composerRoot.removeAttribute('aria-busy');
+			}
+		}
+		if (submitBtn instanceof HTMLButtonElement) {
+			submitBtn.classList.toggle('is-loading', submitInFlight);
+			if (submitInFlight) {
+				submitBtn.setAttribute('aria-busy', 'true');
+				submitBtn.setAttribute('aria-label', 'Creating…');
+			} else {
+				submitBtn.removeAttribute('aria-busy');
+				submitBtn.setAttribute('aria-label', isVideoMode() ? 'Animate' : isAudioMode() ? 'Create audio' : hasAttachment() ? 'Edit image' : 'Create');
+			}
+		}
+		if (promptInput instanceof HTMLTextAreaElement) {
+			if (submitInFlight) {
+				promptInput.setAttribute('aria-busy', 'true');
+			} else {
+				promptInput.removeAttribute('aria-busy');
+			}
+		}
+		if (addBtn instanceof HTMLButtonElement) {
+			addBtn.disabled = submitInFlight || attachmentUploadingCount > 0;
+		}
+		if (modelBtn instanceof HTMLButtonElement) {
+			modelBtn.disabled = submitInFlight;
+		}
+		if (submitInFlight) setModelPopoverOpen(false);
+		modeBtns.forEach((btn) => {
+			if (btn instanceof HTMLButtonElement) btn.disabled = submitInFlight;
+		});
+		updateSubmitButtonState();
+	}
+
+	function clearComposerState() {
+		if (promptInput instanceof HTMLTextAreaElement) {
+			promptInput.value = '';
+		}
+		if (audioLyricsInput instanceof HTMLTextAreaElement) audioLyricsInput.value = '';
+		syncAudioLyricsButton();
+		editProviderDraft({ fieldValues: { prompt: '', lyrics: '' }, imageChange: { type: 'clear' }, imageSources: {} });
+		try {
+			localStorage.setItem(STORAGE_KEYS.prompt, '');
+			localStorage.setItem(STORAGE_KEYS.promptText, '');
+			localStorage.setItem(STORAGE_KEYS.promptImageEdit, '');
+		} catch (_) {}
+		revokeAttachmentBlobUrls();
+		attachmentItems = [];
+		attachmentMutateSourceIds = [];
+		attachmentUploadAspects = [];
+		attachmentUploadingCount = 0;
+		try {
+			localStorage.removeItem(STORAGE_KEYS.imageEditSelection);
+			localStorage.removeItem(STORAGE_KEYS.imageEditCarryover);
+		} catch (_) {}
+		renderAttachmentStrip();
+		syncModeChrome();
+		try {
+			refreshAutoGrow(host);
+		} catch (_) {}
+	}
+
+	function syncAudioLyricsButton() {
+		if (!(audioLyricsButton instanceof HTMLButtonElement)) return;
+		const hasLyrics = Boolean(audioLyricsInput?.value.trim());
+		audioLyricsButton.textContent = hasLyrics ? 'Lyrics' : 'Instrumental';
+		audioLyricsButton.classList.toggle('has-lyrics', hasLyrics);
+		audioLyricsButton.setAttribute('aria-label', hasLyrics ? 'Edit song lyrics' : 'Add song lyrics');
+	}
+
+	function closeAudioLyrics({ restoreFocus = true } = {}) {
+		if (!audioLyricsOverlay || audioLyricsOverlay.hidden) return;
+		audioLyricsOverlay.hidden = true;
+		document.body.classList.remove('create-composer-lyrics-open');
+		audioLyricsButton?.setAttribute('aria-expanded', 'false');
+		if (restoreFocus && audioLyricsButton instanceof HTMLButtonElement) audioLyricsButton.focus();
+	}
+
+	function openAudioLyrics() {
+		if (!(audioLyricsOverlay instanceof HTMLElement) || !(audioLyricsButton instanceof HTMLButtonElement)) return;
+		audioLyricsOverlay.hidden = false;
+		document.body.classList.add('create-composer-lyrics-open');
+		audioLyricsButton.setAttribute('aria-expanded', 'true');
+		requestAnimationFrame(() => audioLyricsInput.focus());
+	}
+
+	async function dispatchCreationSubmit(payload) {
+		try {
+			if (!createProvider?.workflow?.submit) throw new Error('Create provider is unavailable');
+			const route = parseComposerRouteKey(selectedModel);
+			const draftChange = {
+				fieldValues: {
+					prompt: promptInput?.value || '',
+					...(outputMode === 'audio' ? { lyrics: audioLyricsInput?.value || '' } : {}),
+					...(payload.args?.model ? { model: payload.args.model } : {}),
+				},
+				outputMode,
+				styleKey: payload.styleKey || getSelectedStyleKey(),
+				...(route ? { serverId: route.serverId, methodKey: route.methodKey } : {}),
+			};
+			const submittedImages = payload.args?.input_images || payload.args?.images ||
+				[payload.args?.image_url || payload.args?.image].filter(Boolean);
+			if (submittedImages.length) draftChange.imageChange = { type: 'replace', images: submittedImages };
+			editProviderDraft(draftChange);
+			const mode = outputMode === 'video' ? 'image-to-video' : outputMode === 'image' && hasAttachment() ? 'image-to-image' : 'basic';
+			await createProvider.workflow.submit({
+				...payload,
+				mode,
+				args: payload.args,
+				validateMentions: false,
+				navigate: navigate === 'creations' ? 'creations' : navigate === 'none' ? 'none' : 'spa',
+			}, {
+				confirm: question => question.kind === 'occupancy'
+					? showOccupancyConfirm(question.occupancy, question.options)
+					: window.confirm(question.message || 'Continue?'),
+			});
+			clearComposerState();
+		} catch (err) {
+			if (err?.code !== 'occupancy_cancelled' && err?.name !== 'AbortError' && err?.message) alert(err.message);
+		} finally {
+			setComposerSubmitting(false);
+		}
+	}
+
+	function updateSubmitButtonState() {
+		if (!(submitBtn instanceof HTMLButtonElement)) return;
+		if (submitInFlight) {
+			submitBtn.disabled = true;
+			return;
+		}
+		const workflowPhase = createProvider?.workflow?.getSnapshot?.().phase;
+		if (workflowPhase && !['idle', 'error'].includes(workflowPhase)) {
+			submitBtn.disabled = true;
+			return;
+		}
+		if (isAttachmentUploading()) {
+			submitBtn.disabled = true;
+			return;
+		}
+		const promptText = (promptInput?.value || '').trim();
+		const soloMedia = !hasAttachment() && Boolean(extractSoloMediaImport(promptText));
+		// Media import is free — don't wait on credit-cost readiness.
+		if (soloMedia) {
+			submitBtn.disabled = false;
+			return;
+		}
+		if (!isComposerCreditCostReady()) {
+			submitBtn.disabled = true;
+			return;
+		}
+		if (isVideoMode()) {
+			submitBtn.disabled = !hasAttachment();
+			return;
+		}
+		if (isAudioMode()) {
+			submitBtn.disabled = promptText.length === 0;
+			return;
+		}
+		const hasPrompt = promptText.length > 0;
+		if (hasAttachment()) {
+			const hasMutate = Boolean(mutateOptions.serverId && mutateOptions.methodKey);
+			submitBtn.disabled = !hasPrompt || !hasMutate;
+		} else {
+			submitBtn.disabled = !hasPrompt;
+		}
+	}
+
+	function positionAspectPopover() {
+		if (!aspectPopover || !aspectBtn || aspectPopover.hidden) return;
+		const rect = aspectBtn.getBoundingClientRect();
+		aspectPopover.style.left = `${Math.round(rect.left)}px`;
+		aspectPopover.style.top = `${Math.round(rect.top)}px`;
+	}
+
+	function setAspectPopoverOpen(open) {
+		if (!aspectPopover || !aspectBtn) return;
+		const on = Boolean(open);
+		if (on) setModelPopoverOpen(false);
+		aspectPopover.hidden = !on;
+		aspectPopover.setAttribute('aria-hidden', on ? 'false' : 'true');
+		aspectBtn.setAttribute('aria-expanded', on ? 'true' : 'false');
+		if (on) {
+			buildAspectPopover();
+			positionAspectPopover();
+		}
+	}
+
+	function getModelOptionLabel(opt) {
+		if (isVideoMode()) return getVideoOptionLabel(opt) || opt.label || opt.value;
+		return opt.label || opt.value;
+	}
+
+	function getModelPopoverOptions() {
+		if (!(modelPopover instanceof HTMLElement)) return [];
+		return [...modelPopover.querySelectorAll('[data-create-model-option]')];
+	}
+
+	function setModelPopoverActive(value, { scroll = true } = {}) {
+		const options = getModelPopoverOptions();
+		let active = null;
+		for (const el of options) {
+			const on = el.getAttribute('data-value') === value;
+			el.classList.toggle('is-active', on);
+			if (on) active = el;
+		}
+		if (active instanceof HTMLElement && modelPopover instanceof HTMLElement) {
+			modelPopover.setAttribute('aria-activedescendant', active.id);
+			if (scroll) {
+				const popRect = modelPopover.getBoundingClientRect();
+				const optRect = active.getBoundingClientRect();
+				if (optRect.top < popRect.top) {
+					modelPopover.scrollTop -= popRect.top - optRect.top;
+				} else if (optRect.bottom > popRect.bottom) {
+					modelPopover.scrollTop += optRect.bottom - popRect.bottom;
+				}
+			}
+		}
+	}
+
+	function moveModelPopoverActive(key) {
+		const options = getModelPopoverOptions();
+		if (options.length === 0) return;
+		const current = options.findIndex((el) => el.classList.contains('is-active'));
+		let next = current;
+		if (key === 'Home') next = 0;
+		else if (key === 'End') next = options.length - 1;
+		else if (key === 'ArrowDown') next = current < 0 ? 0 : Math.min(options.length - 1, current + 1);
+		else if (key === 'ArrowUp') next = current < 0 ? options.length - 1 : Math.max(0, current - 1);
+		const el = options[next];
+		const value = el?.getAttribute('data-value');
+		if (value) setModelPopoverActive(value);
+	}
+
+	function commitModelPopoverActive() {
+		const active = getModelPopoverOptions().find((el) => el.classList.contains('is-active'));
+		const value = active?.getAttribute('data-value');
+		if (value) applySelectedModel(value);
+		setModelPopoverOpen(false);
+		if (modelBtn instanceof HTMLButtonElement) modelBtn.focus();
+	}
+
+	function positionModelPopover() {
+		if (!modelPopover || !modelBtn || modelPopover.hidden) return;
+		const rect = modelBtn.getBoundingClientRect();
+		const gap = 8;
+		const spaceAbove = Math.max(8, Math.floor(rect.top - gap - 8));
+		modelPopover.style.maxHeight = `min(32rem, 56vh, ${spaceAbove}px)`;
+		modelPopover.style.top = `${Math.round(rect.top)}px`;
+		modelPopover.style.left = `${Math.round(rect.left)}px`;
+		const popWidth = modelPopover.offsetWidth;
+		const left = Math.min(rect.left, window.innerWidth - popWidth - 8);
+		modelPopover.style.left = `${Math.max(8, Math.round(left))}px`;
+	}
+
+	function setModelPopoverOpen(open) {
+		if (!modelPopover || !modelBtn) return;
+		const on = Boolean(open);
+		if (on) setAspectPopoverOpen(false);
+		modelPopover.hidden = !on;
+		modelPopover.setAttribute('aria-hidden', on ? 'false' : 'true');
+		modelBtn.setAttribute('aria-expanded', on ? 'true' : 'false');
+		if (on) {
+			buildModelPopover();
+			positionModelPopover();
+			setModelPopoverActive(selectedModel);
+			modelPopover.focus({ preventScroll: true });
+		} else {
+			modelPopover.removeAttribute('aria-activedescendant');
+		}
+	}
+
+	function buildModelPopover() {
+		if (!(modelPopover instanceof HTMLElement)) return;
+		const routeOptions = getActiveRouteOptions();
+		const groups = groupComposerRouteOptions(routeOptions);
+		modelPopover.innerHTML = '';
+		let optionIndex = 0;
+		for (const group of groups) {
+			if (!group?.options.length) continue;
+			const groupEl = document.createElement('div');
+			groupEl.className = 'create-composer-model-group';
+			groupEl.setAttribute('role', 'group');
+			groupEl.setAttribute('aria-label', group.groupLabel);
+
+			const labelEl = document.createElement('div');
+			labelEl.className = 'create-composer-model-group-label';
+			labelEl.setAttribute('aria-hidden', 'true');
+			labelEl.textContent = group.groupLabel;
+			groupEl.appendChild(labelEl);
+
+			for (const opt of group.options) {
+				const value = opt.selectValue;
+				const label = getModelOptionLabel(opt);
+				const isSelected = value === selectedModel;
+				const btn = document.createElement('button');
+				btn.type = 'button';
+				btn.id = `${modelPopoverId}-opt-${optionIndex++}`;
+				btn.className = 'create-composer-model-option';
+				btn.setAttribute('role', 'option');
+				btn.setAttribute('data-create-model-option', '');
+				btn.setAttribute('data-value', value);
+				btn.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+				if (isSelected) btn.classList.add('is-selected');
+				btn.textContent = label;
+				btn.addEventListener('click', () => {
+					applySelectedModel(value);
+					setModelPopoverOpen(false);
+					if (modelBtn instanceof HTMLButtonElement) modelBtn.focus();
+				});
+				btn.addEventListener('pointerenter', () => setModelPopoverActive(value, { scroll: false }));
+				groupEl.appendChild(btn);
+			}
+			modelPopover.appendChild(groupEl);
+		}
+	}
+
+	function updateAspectBtnLabel(ratio) {
+		const label = ratio || selectedAspect;
+		if (aspectLabel) aspectLabel.textContent = label;
+		if (aspectBtn) aspectBtn.setAttribute('aria-label', `Aspect ratio: ${label}`);
+		syncAspectToolbarIcon(label);
+	}
+
+	function syncAspectToolbarIcon(ratio) {
+		const svg = aspectBtn?.querySelector('.create-composer-aspect-icon-svg');
+		const rect = svg?.querySelector('rect');
+		if (!rect) return;
+		const parsed = parseAspectRatioString(ratio);
+		const [w, h] = parsed || ASPECT_RATIO_PRESETS[ratio] || [1, 1];
+		const max = 17;
+		const minSide = 7;
+		let rw = max;
+		let rh = max;
+		if (w >= h) {
+			rh = Math.max(minSide, Math.round((max * h) / w));
+		} else {
+			rw = Math.max(minSide, Math.round((max * w) / h));
+		}
+		rect.setAttribute('x', String((24 - rw) / 2));
+		rect.setAttribute('y', String((24 - rh) / 2));
+		rect.setAttribute('width', String(rw));
+		rect.setAttribute('height', String(rh));
+	}
+
+	function buildAspectPopover() {
+		if (!aspectPopoverBody) return;
+		const selectable = canSelectAspectRatio();
+		const activeRatio = selectable ? selectedAspect : '1:1';
+		aspectPopoverBody.innerHTML = '';
+		const group = document.createElement('div');
+		group.className = 'aspect-ratio-selector create-composer-aspect-grid';
+		group.setAttribute('role', 'radiogroup');
+		group.setAttribute('aria-label', 'Aspect ratio');
+
+		for (const value of MVP_ASPECT_RATIOS) {
+			const preset = parseAspectRatioString(value) || ASPECT_RATIO_PRESETS[value];
+			if (!preset) continue;
+			const [w, h] = preset;
+			const dims = aspectShapeDimensions(w, h, 28);
+			const shortLabel = ASPECT_RATIO_SELECTOR_LABELS[value] || value;
+			const isSelected = value === activeRatio;
+
+			const btn = document.createElement('button');
+			btn.type = 'button';
+			btn.className = 'aspect-ratio-option';
+			btn.setAttribute('role', 'radio');
+			btn.setAttribute('data-value', value);
+			btn.setAttribute('aria-checked', isSelected ? 'true' : 'false');
+			btn.disabled = !selectable;
+			if (!selectable) btn.setAttribute('aria-disabled', 'true');
+			if (isSelected) btn.classList.add('is-selected');
+
+			const ratioEl = document.createElement('span');
+			ratioEl.className = 'aspect-ratio-option-ratio';
+			ratioEl.textContent = value;
+
+			const shapeEl = document.createElement('span');
+			shapeEl.className = 'aspect-ratio-option-shape';
+			shapeEl.setAttribute('aria-hidden', 'true');
+			const shapeInner = document.createElement('span');
+			shapeInner.className = 'aspect-ratio-option-shape-inner';
+			shapeInner.style.width = `${dims.width}px`;
+			shapeInner.style.height = `${dims.height}px`;
+			shapeEl.appendChild(shapeInner);
+
+			const labelEl = document.createElement('span');
+			labelEl.className = 'aspect-ratio-option-label';
+			labelEl.textContent = shortLabel;
+
+			btn.append(ratioEl, shapeEl, labelEl);
+			if (selectable) {
+				btn.addEventListener('click', () => {
+					selectedAspect = value;
+					saveAspectRatio(value);
+					syncAspectFooterState();
+					group.querySelectorAll('.aspect-ratio-option').forEach((el) => {
+						const sel = el.getAttribute('data-value') === value;
+						el.classList.toggle('is-selected', sel);
+						el.setAttribute('aria-checked', sel ? 'true' : 'false');
+					});
+					setAspectPopoverOpen(false);
+				});
+			}
+			group.appendChild(btn);
+		}
+		aspectPopoverBody.appendChild(group);
+	}
+
+	async function resolveAttachmentUrls(uploadFn) {
+		const imageUrls = [];
+		for (let i = 0; i < attachmentItems.length; i++) {
+			const item = attachmentItems[i];
+			if (typeof item === 'string' && item.trim()) {
+				imageUrls.push(item.trim());
+				continue;
+			}
+			if (item instanceof File) {
+				let uploadAspect =
+					(typeof attachmentUploadAspects[i] === 'string' && attachmentUploadAspects[i].trim()) ||
+					getEarlyUploadAspectRatio();
+				if (!shouldShowAspectSelector()) {
+					const dims = await readRasterFileDimensions(item);
+					if (dims) {
+						uploadAspect = closestAspectRatioPreset(dims.width, dims.height);
+					}
+				}
+				const uploaded = await uploadFn(item);
+				if (typeof uploaded === 'string' && uploaded.trim()) {
+					imageUrls.push(uploaded.trim());
+					attachmentUploadAspects[i] = null;
+				}
+			}
+		}
+		return imageUrls;
+	}
+
+	function handleMediaImportSubmit(detected) {
+		openImportMediaConfirmModal({
+			url: detected.url,
+			provider: detected.provider,
+			onConfirm: async ({ provider, url: importUrl, existing_id: existingId }) => {
+				const alreadyNoted =
+					Number.isFinite(Number(existingId)) && Number(existingId) > 0;
+				setComposerSubmitting(true);
+				try {
+					const result = await createProvider.workflow.importMedia({
+						provider,
+						url: importUrl,
+						navigate: navigate === 'creations' ? 'creations' : navigate === 'none' ? 'none' : 'spa',
+					});
+					clearComposerState();
+					if (
+						alreadyNoted ||
+						result?.warning?.code === 'duplicate_import'
+					) {
+						showToast(
+							result?.warning?.message ||
+								(provider === 'youtube'
+									? 'You already imported this video'
+									: 'You already imported this song'),
+							{ durationMs: 4000 }
+						);
+					}
+				} catch (err) {
+					const message =
+						err instanceof Error && err.message
+							? err.message
+							: 'Could not import that media.';
+					alert(message);
+				} finally {
+					setComposerSubmitting(false);
+				}
+			},
+			onError: (message) => {
+				if (message) alert(message);
+			},
+		});
+	}
+
+	async function handleSubmit() {
+		if (submitInFlight) return;
+		const userPrompt = (promptInput?.value || '').trim();
+
+		// Solo Suno/YouTube URL → confirm + import. Don't hijack when attachments are present.
+		if (!hasAttachment()) {
+			const soloMedia = extractSoloMediaImport(userPrompt);
+			if (soloMedia) {
+				handleMediaImportSubmit(soloMedia);
+				return;
+			}
+		}
+
+		if (isVideoMode()) {
+			if (!hasAttachment()) return;
+			if (!userPrompt) return;
+			const route = getSelectedVideoRoute();
+			if (!route) return;
+			if (!(await confirmAspectMismatchBeforeSubmit())) return;
+			setComposerSubmitting(true);
+			let imageUrls;
+			try {
+				imageUrls = await resolveAttachmentUrls(uploadImageFile);
+			} catch (err) {
+				setComposerSubmitting(false);
+				alert(err?.message || 'Image upload failed');
+				return;
+			}
+			if (imageUrls.length === 0) {
+				setComposerSubmitting(false);
+				alert('Please choose an image.');
+				return;
+			}
+			const primaryImage = imageUrls[0];
+			const ltxVideo = isLtxVideoRoute(route);
+			const videoAspect = ltxVideo ? getAspectRatioForSubmit() || selectedAspect : undefined;
+			const args = ltxVideo
+				? {
+						seed: '',
+						model: route.value,
+						prompt: userPrompt,
+						input_images: imageUrls,
+						...(videoAspect ? { aspect_ratio: videoAspect } : {}),
+					}
+				: {
+						prompt: userPrompt,
+						image: primaryImage,
+						model: route.value,
+					};
+			const mutateLineage = getMutateLineageForSubmit();
+			const mentions = extractMentions(userPrompt);
+			if (mentions.length === 0) {
+				dispatchCreationSubmit({
+					serverId: route.serverId,
+					methodKey: route.methodKey,
+					args,
+					hydrateMentions: false,
+					...mutateLineage,
+				});
+				return;
+			}
+			const validateResult = await validateMentionsSimple({ args });
+			if (validateResult.ok) {
+				dispatchCreationSubmit({
+					serverId: route.serverId,
+					methodKey: route.methodKey,
+					args,
+					hydrateMentions: true,
+					...mutateLineage,
+				});
+				return;
+			}
+			const message = formatMentionsFailureForDialog(validateResult.data);
+			if (window.confirm(message + '\n\nSubmit anyway?')) {
+				dispatchCreationSubmit({
+					serverId: route.serverId,
+					methodKey: route.methodKey,
+					args,
+					hydrateMentions: false,
+					...mutateLineage,
+				});
+				return;
+			}
+			setComposerSubmitting(false);
+			return;
+		}
+
+		if (isAudioMode()) {
+			if (!userPrompt) return;
+			const route = getSelectedAudioRoute();
+			if (!route) return;
+			setComposerSubmitting(true);
+			const args = {
+				prompt: userPrompt,
+				model: route.value,
+			};
+			const lyrics = (audioLyricsInput?.value || '').trim();
+			if (isTextToMusicComposerRoute(route) && lyrics) args.lyrics = lyrics;
+			const mentions = extractMentions(userPrompt);
+			if (mentions.length === 0) {
+				dispatchCreationSubmit({
+					serverId: route.serverId,
+					methodKey: route.methodKey,
+					args,
+					hydrateMentions: false,
+				});
+				return;
+			}
+			const validateResult = await validateMentionsSimple({ args });
+			if (validateResult.ok) {
+				dispatchCreationSubmit({
+					serverId: route.serverId,
+					methodKey: route.methodKey,
+					args,
+					hydrateMentions: true,
+				});
+				return;
+			}
+			const message = formatMentionsFailureForDialog(validateResult.data);
+			if (window.confirm(message + '\n\nSubmit anyway?')) {
+				dispatchCreationSubmit({
+					serverId: route.serverId,
+					methodKey: route.methodKey,
+					args,
+					hydrateMentions: false,
+				});
+				return;
+			}
+			setComposerSubmitting(false);
+			return;
+		}
+
+		if (!userPrompt) return;
+
+		if (hasAttachment()) {
+			if (!mutateOptions.serverId || !mutateOptions.methodKey) {
+				return;
+			}
+			if (!(await confirmAspectMismatchBeforeSubmit())) {
+				return;
+			}
+		}
+
+		setComposerSubmitting(true);
+
+		if (hasAttachment()) {
+			let imageUrls;
+			try {
+				imageUrls = await resolveAttachmentUrls(uploadImageFile);
+			} catch (err) {
+				setComposerSubmitting(false);
+				alert(err?.message || 'Image upload failed');
+				return;
+			}
+			if (imageUrls.length === 0) {
+				setComposerSubmitting(false);
+				alert('Please choose an image.');
+				return;
+			}
+			const imageRoute = getSelectedImageRoute();
+			const mutateArgs = {
+				prompt: userPrompt,
+				model: imageRoute?.value || selectedModel,
+				input_images: imageUrls,
+			};
+			if (imageUrls.length === 1) mutateArgs.image_url = imageUrls[0];
+			const args = buildSubmitArgs(mutateArgs, getAspectRatioForSubmit(), getFormFieldContext());
+			const mutateLineage = getMutateLineageForSubmit();
+			const mentions = extractMentions(userPrompt);
+			if (mentions.length === 0) {
+				dispatchCreationSubmit({
+					serverId: mutateOptions.serverId,
+					methodKey: mutateOptions.methodKey,
+					args,
+					hydrateMentions: false,
+					...mutateLineage,
+				});
+				return;
+			}
+			const validateResult = await validateMentionsSimple({ args });
+			if (validateResult.ok) {
+				dispatchCreationSubmit({
+					serverId: mutateOptions.serverId,
+					methodKey: mutateOptions.methodKey,
+					args,
+					hydrateMentions: true,
+					...mutateLineage,
+				});
+				return;
+			}
+			const message = formatMentionsFailureForDialog(validateResult.data);
+			if (window.confirm(message + '\n\nSubmit anyway?')) {
+				dispatchCreationSubmit({
+					serverId: mutateOptions.serverId,
+					methodKey: mutateOptions.methodKey,
+					args,
+					hydrateMentions: false,
+					...mutateLineage,
+				});
+				return;
+			}
+			setComposerSubmitting(false);
+			return;
+		}
+
+		const imageRoute = getSelectedImageRoute();
+		const submitRoute = getComposerSubmitRoute();
+		if (!imageRoute || !submitRoute) {
+			setComposerSubmitting(false);
+			return;
+		}
+		const styleKey = resolveSubmitStyleKey(userPrompt);
+		const args = buildSubmitArgs(
+			{ prompt: userPrompt, model: imageRoute.value },
+			getAspectRatioForSubmit(),
+			getFormFieldContext()
+		);
+		const mutateLineage = getMutateLineageForSubmit();
+		const mentions = extractMentions(userPrompt);
+		const hasStyleSigils = extractStyleSigilKeys(userPrompt).length > 0;
+		if (mentions.length === 0 && !hasStyleSigils) {
+			dispatchCreationSubmit({
+				serverId: submitRoute.serverId,
+				methodKey: submitRoute.methodKey,
+				args,
+				styleKey,
+				hydrateMentions: false,
+				...mutateLineage,
+			});
+			return;
+		}
+		const validateResult = await validateMentionsSimple({ args: { prompt: userPrompt } });
+		if (!validateResult.ok) {
+			const failedStyles = Array.isArray(validateResult.data?.failed_styles)
+				? validateResult.data.failed_styles
+				: [];
+			if (failedStyles.length > 0) {
+				alert(formatStylesFailureForDialog(validateResult.data));
+				setComposerSubmitting(false);
+				return;
+			}
+			const message = formatMentionsFailureForDialog(validateResult.data);
+			if (window.confirm(message + '\n\nSubmit anyway?')) {
+				dispatchCreationSubmit({
+					serverId: submitRoute.serverId,
+					methodKey: submitRoute.methodKey,
+					args,
+					styleKey,
+					hydrateMentions: false,
+					...mutateLineage,
+				});
+				return;
+			}
+			setComposerSubmitting(false);
+			return;
+		}
+		dispatchCreationSubmit({
+			serverId: submitRoute.serverId,
+			methodKey: submitRoute.methodKey,
+			args,
+			styleKey,
+			hydrateMentions: mentions.length > 0,
+			...mutateLineage,
+		});
+	}
+
+	// Restore state
+	hydrateMethodCreditsFromStorage();
+	bootstrapVideoModelOptions();
+	try {
+		const savedAspect = initialDraft.fieldValues?.aspect_ratio || localStorage.getItem(STORAGE_KEYS.aspectRatio);
+		if (savedAspect && MVP_ASPECT_RATIOS.includes(savedAspect)) selectedAspect = savedAspect;
+	} catch (_) {}
+	syncAspectFooterState();
+	buildAspectPopover();
+
+	populateModelSelect();
+	updateComposerCostDisplay();
+
+	void refreshModelOptions();
+
+	const onServersUpdated = () => {
+		void refreshModelOptions();
+	};
+	document.addEventListener('servers-updated', onServersUpdated);
+	teardownFns.push(() => document.removeEventListener('servers-updated', onServersUpdated));
+
+	if (promptInput instanceof HTMLTextAreaElement) {
+		let restored = '';
+		try {
+			restored = initialDraft.draftVersion === 2 && Object.hasOwn(initialDraft.fieldValues || {}, 'prompt')
+				? initialDraft.fieldValues.prompt || ''
+				: localStorage.getItem(STORAGE_KEYS.prompt) || '';
+			if (!restored.trim()) {
+				const carried = localStorage.getItem(STORAGE_KEYS.imageEditCarryover);
+				const savedImage = localStorage.getItem(STORAGE_KEYS.imageEditSelection);
+				const hadImage =
+					(typeof carried === 'string' && carried.trim()) ||
+					(typeof savedImage === 'string' && savedImage.trim());
+				restored = hadImage
+					? localStorage.getItem(STORAGE_KEYS.promptImageEdit) || ''
+					: localStorage.getItem(STORAGE_KEYS.promptText) || '';
+			}
+		} catch (_) {}
+		promptInput.value = typeof restored === 'string' ? restored : '';
+	}
+	if (audioLyricsInput instanceof HTMLTextAreaElement) {
+		audioLyricsInput.value = typeof initialDraft.fieldValues?.lyrics === 'string' ? initialDraft.fieldValues.lyrics : '';
+	}
+
+	try {
+		if (initialDraft.draftVersion === 2) {
+			restoreAttachments(initialDraft.inputImages || [], (initialDraft.inputImages || []).map(url => initialDraft.imageSources?.[url]?.sourceId));
+		} else {
+		const carried = localStorage.getItem(STORAGE_KEYS.imageEditCarryover);
+		if (typeof carried === 'string' && carried.trim()) {
+			restoreAttachments([carried.trim()]);
+			try {
+				localStorage.setItem(STORAGE_KEYS.imageEditSelection, JSON.stringify([carried.trim()]));
+			} catch (_) {}
+			localStorage.removeItem(STORAGE_KEYS.imageEditCarryover);
+		} else {
+			const saved = readStoredAttachmentUrls();
+			if (saved.length > 0) restoreAttachments(saved);
+		}
+		applyQueueSnapshotToAttachments();
+		}
+	} catch (_) {}
+
+	syncFromSharedSettings();
+
+	const onMutateQueueUpdated = () => {
+		applyQueueSnapshotToAttachments({ allowEmpty: true });
+	};
+	document.addEventListener(MUTATE_QUEUE_UPDATED_EVENT, onMutateQueueUpdated);
+	teardownFns.push(() => document.removeEventListener(MUTATE_QUEUE_UPDATED_EVENT, onMutateQueueUpdated));
+
+	const onCreateSettingsUpdated = () => syncFromSharedSettings();
+	document.addEventListener(CREATE_SETTINGS_UPDATED_EVENT, onCreateSettingsUpdated);
+	teardownFns.push(() =>
+		document.removeEventListener(CREATE_SETTINGS_UPDATED_EVENT, onCreateSettingsUpdated)
+	);
+
+	syncModeChrome();
+	if (typeof createProvider?.workflow?.subscribe === 'function') {
+		teardownFns.push(createProvider.workflow.subscribe(() => updateSubmitButtonState()));
+	}
+	void ensureMethodCreditsCache();
+	loadComposerCreditsBalance();
+	try {
+		refreshAutoGrow(host);
+	} catch (_) {}
+
+	const schedulePromptSave = () => {
+		clearTimeout(promptSaveTimer);
+		promptSaveTimer = setTimeout(savePrompt, 300);
+	};
+
+	if (addBtn instanceof HTMLButtonElement) {
+		const onAdd = () => openImagePicker();
+		addBtn.addEventListener('click', onAdd);
+		teardownFns.push(() => addBtn.removeEventListener('click', onAdd));
+	}
+
+	if (promptInput) {
+		const onPromptInput = () => {
+			// Persist the visible text before the style update notifies other provider views;
+			// otherwise their shared-settings sync can restore the previous keystroke.
+			savePrompt();
+			syncStyleSelectionFromPrompt();
+			clearTimeout(promptSaveTimer);
+			updateSubmitButtonState();
+			try {
+				refreshAutoGrow(host);
+			} catch (_) {}
+		};
+		const onPaste = (ev) => {
+			const imageFiles = clipboardImageFiles(ev.clipboardData);
+			if (imageFiles.length === 0) return;
+			ev.preventDefault();
+			for (const file of imageFiles) void addAttachmentFromFile(file);
+		};
+		const onPromptKeydown = (ev) => {
+			if (ev.key !== 'Enter' || ev.isComposing) return;
+			if (!composerEnterKeySubmits()) return;
+			if (ev.shiftKey) return;
+			if (checkSuggestPopupOpen(promptInput)) return;
+			ev.preventDefault();
+			void handleSubmit();
+		};
+		promptInput.addEventListener('input', onPromptInput);
+		promptInput.addEventListener('change', schedulePromptSave);
+		promptInput.addEventListener('paste', onPaste);
+		promptInput.addEventListener('keydown', onPromptKeydown);
+		teardownFns.push(() => {
+			promptInput.removeEventListener('input', onPromptInput);
+			promptInput.removeEventListener('change', schedulePromptSave);
+			promptInput.removeEventListener('paste', onPaste);
+			promptInput.removeEventListener('keydown', onPromptKeydown);
+		});
+		const promptInputRow = promptInput.closest('.create-composer-input-row');
+		const promptClear = attachPromptFieldClear(promptInput, {
+			variant: 'icon',
+			wrap: promptInputRow instanceof HTMLElement ? promptInputRow : null,
+			trackEmpty: false,
+			afterClear: () => {
+				syncStyleSelectionFromPrompt();
+				schedulePromptSave();
+				updateSubmitButtonState();
+				try {
+					refreshAutoGrow(host);
+				} catch (_) {}
+			},
+		});
+		if (promptClear?.update) {
+			syncPromptClearVisibility = promptClear.update;
+		}
+	}
+	if (audioLyricsInput instanceof HTMLTextAreaElement) {
+		syncAudioLyricsButton();
+		const onLyricsInput = () => {
+			editProviderDraft({ fieldValues: { lyrics: audioLyricsInput.value } });
+			syncAudioLyricsButton();
+		};
+		audioLyricsInput.addEventListener('input', onLyricsInput);
+		teardownFns.push(() => audioLyricsInput.removeEventListener('input', onLyricsInput));
+	}
+	const onOpenAudioLyrics = () => openAudioLyrics();
+	const onCloseAudioLyrics = () => closeAudioLyrics();
+	const onClearAudioLyrics = () => {
+		audioLyricsInput.value = '';
+		audioLyricsInput.dispatchEvent(new Event('input', { bubbles: true }));
+		audioLyricsInput.focus();
+	};
+	const onAudioLyricsBackdrop = (event) => {
+		if (event.target === audioLyricsOverlay) closeAudioLyrics();
+	};
+	const onAudioLyricsEscape = (event) => {
+		if (event.key === 'Escape' && !audioLyricsOverlay.hidden) {
+			event.preventDefault();
+			event.stopPropagation();
+			closeAudioLyrics();
+		}
+	};
+	audioLyricsButton?.addEventListener('click', onOpenAudioLyrics);
+	audioLyricsClose?.addEventListener('click', onCloseAudioLyrics);
+	audioLyricsClear?.addEventListener('click', onClearAudioLyrics);
+	audioLyricsDone?.addEventListener('click', onCloseAudioLyrics);
+	audioLyricsOverlay.addEventListener('click', onAudioLyricsBackdrop);
+	document.addEventListener('keydown', onAudioLyricsEscape, true);
+	teardownFns.push(() => {
+		audioLyricsButton?.removeEventListener('click', onOpenAudioLyrics);
+		audioLyricsClose?.removeEventListener('click', onCloseAudioLyrics);
+		audioLyricsClear?.removeEventListener('click', onClearAudioLyrics);
+		audioLyricsDone?.removeEventListener('click', onCloseAudioLyrics);
+		audioLyricsOverlay.removeEventListener('click', onAudioLyricsBackdrop);
+		document.removeEventListener('keydown', onAudioLyricsEscape, true);
+		closeAudioLyrics({ restoreFocus: false });
+		audioLyricsOverlay.remove();
+		document.body.classList.remove('create-composer-lyrics-open');
+	});
+
+	if (composerRoot instanceof HTMLElement) {
+		const onComposerPaste = (ev) => {
+			if (ev.target === promptInput) return;
+			const imageFiles = clipboardImageFiles(ev.clipboardData);
+			if (imageFiles.length === 0) return;
+			ev.preventDefault();
+			for (const file of imageFiles) void addAttachmentFromFile(file);
+		};
+		composerRoot.addEventListener('paste', onComposerPaste);
+		teardownFns.push(() => composerRoot.removeEventListener('paste', onComposerPaste));
+	}
+
+	if (composerRoot instanceof HTMLElement && composerDropSurface instanceof HTMLElement) {
+		const unbindDrop = bindCreateComposerCreationDropTargets(composerRoot, composerDropSurface, {
+			isDisabled: () => submitInFlight,
+			onAttachImageUrl: (url, detail) => {
+				if (outputMode !== 'image') setOutputMode('image');
+				const cid = Number(detail?.creationId);
+				if (Number.isFinite(cid) && cid > 0) {
+					setMutateAttachmentFromCreation(url, cid, detail?.published === true);
+					return;
+				}
+				addAttachmentUrl(url);
+			},
+		});
+		teardownFns.push(unbindDrop);
+	}
+
+	if (promptInput instanceof HTMLTextAreaElement) {
+		if (typeof opts.attachPromptSuggest === 'function') {
+			opts.attachPromptSuggest(promptInput);
+		} else {
+			attachCreateComposerSuggest(promptInput);
+		}
+	}
+
+	if (advancedLink) {
+		const onAdvanced = async (e) => {
+			e.preventDefault();
+			if (attachmentUploadingCount > 0) return;
+			savePrompt();
+			saveAspectRatio(selectedAspect);
+			const attachments = saveAttachmentsToStorage();
+			saveModelSelection(selectedModel);
+			try {
+				const route = parseComposerRouteKey(selectedModel);
+				const current = createProvider?.draft?.read?.() || {};
+				const imageSources = Object.fromEntries(attachments.urls.map((url, index) => [
+					url,
+					current.imageSources?.[url] || {
+						sourceId: Number(attachments.sourceIds[index]) > 0 ? Number(attachments.sourceIds[index]) : null,
+						published: false,
+					},
+				]));
+				editProviderDraft({
+					...(route ? { serverId: route.serverId, methodKey: route.methodKey } : {}),
+					fieldValues: { prompt: promptInput?.value || '', aspect_ratio: selectedAspect, ...(route ? { model: route.model } : {}) },
+					outputMode,
+					styleKey: getSelectedStyleKey(),
+					imageChange: { type: 'replace', images: attachments.urls },
+					imageSources,
+				});
+				createProvider?.workflow?.prepareEditorTransition('advanced');
+				setCreateEditorMode('advanced');
+				window.dispatchEvent(new CustomEvent('prsn:navigate', { detail: { href: '/create', event: e } }));
+			} catch {
+				window.location.assign('/create');
+			}
+		};
+		advancedLink.addEventListener('click', onAdvanced);
+		teardownFns.push(() => advancedLink.removeEventListener('click', onAdvanced));
+	}
+
+	if (modelBtn instanceof HTMLButtonElement) {
+		const onModelClick = (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			if (modelBtn.disabled) return;
+			const willOpen = Boolean(modelPopover?.hidden);
+			toolbarPopoverIgnoreDocClose = true;
+			setModelPopoverOpen(willOpen);
+			requestAnimationFrame(() => {
+				toolbarPopoverIgnoreDocClose = false;
+			});
+		};
+		modelBtn.addEventListener('click', onModelClick);
+		const onModelKeydown = (e) => {
+			if (modelBtn.disabled) return;
+			if (modelPopover && !modelPopover.hidden) return;
+			if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+			e.preventDefault();
+			toolbarPopoverIgnoreDocClose = true;
+			setModelPopoverOpen(true);
+			requestAnimationFrame(() => {
+				toolbarPopoverIgnoreDocClose = false;
+			});
+		};
+		modelBtn.addEventListener('keydown', onModelKeydown);
+		teardownFns.push(() => {
+			modelBtn.removeEventListener('click', onModelClick);
+			modelBtn.removeEventListener('keydown', onModelKeydown);
+		});
+	}
+
+	modeBtns.forEach((btn) => {
+		if (!(btn instanceof HTMLButtonElement)) return;
+		const onMode = () => {
+			const mode = btn.getAttribute('data-create-mode');
+			if (mode === 'image' || mode === 'video' || mode === 'audio') setOutputMode(mode);
+		};
+		btn.addEventListener('click', onMode);
+		teardownFns.push(() => btn.removeEventListener('click', onMode));
+	});
+
+	if (outputMode === 'video' || outputMode === 'audio') {
+		modelOptions = getActiveModelList();
+		populateModelSelect();
+	}
+
+	if (aspectBtn) {
+		const onAspectClick = (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			const willOpen = Boolean(aspectPopover?.hidden);
+			toolbarPopoverIgnoreDocClose = true;
+			setAspectPopoverOpen(willOpen);
+			requestAnimationFrame(() => {
+				toolbarPopoverIgnoreDocClose = false;
+			});
+		};
+		aspectBtn.addEventListener('click', onAspectClick);
+		teardownFns.push(() => aspectBtn.removeEventListener('click', onAspectClick));
+	}
+	if (aspectPopoverClose) {
+		const onAspectClose = () => setAspectPopoverOpen(false);
+		aspectPopoverClose.addEventListener('click', onAspectClose);
+		teardownFns.push(() => aspectPopoverClose.removeEventListener('click', onAspectClose));
+	}
+
+	const onDocClickCloseToolbarPopovers = (e) => {
+		if (toolbarPopoverIgnoreDocClose) return;
+		const target = e.target instanceof Node ? e.target : null;
+		if (modelPopover && !modelPopover.hidden) {
+			if (
+				!target ||
+				(!modelPopover.contains(target) && !modelBtn?.contains(target))
+			) {
+				setModelPopoverOpen(false);
+			}
+		}
+		if (aspectPopover && !aspectPopover.hidden) {
+			if (
+				!target ||
+				(!aspectPopover.contains(target) &&
+					!aspectBtn?.contains(target) &&
+					!aspectWrap?.contains(target))
+			) {
+				setAspectPopoverOpen(false);
+			}
+		}
+	};
+	document.addEventListener('click', onDocClickCloseToolbarPopovers);
+	teardownFns.push(() => document.removeEventListener('click', onDocClickCloseToolbarPopovers));
+
+	const onDocFocusCloseToolbarPopovers = (e) => {
+		const target = e.target instanceof Node ? e.target : null;
+		if (modelPopover && !modelPopover.hidden) {
+			if (!target || (!modelPopover.contains(target) && !modelBtn?.contains(target))) {
+				setModelPopoverOpen(false);
+			}
+		}
+		if (aspectPopover && !aspectPopover.hidden) {
+			if (
+				!target ||
+				(!aspectPopover.contains(target) && !aspectBtn?.contains(target) && !aspectWrap?.contains(target))
+			) {
+				setAspectPopoverOpen(false);
+			}
+		}
+	};
+	document.addEventListener('focusin', onDocFocusCloseToolbarPopovers);
+	teardownFns.push(() => document.removeEventListener('focusin', onDocFocusCloseToolbarPopovers));
+
+	const onToolbarPopoverKeydown = (e) => {
+		if (modelPopover && !modelPopover.hidden) {
+			if (e.key === 'Escape') {
+				e.preventDefault();
+				e.stopPropagation();
+				setModelPopoverOpen(false);
+				if (modelBtn instanceof HTMLButtonElement) modelBtn.focus();
+				return;
+			}
+			if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Home' || e.key === 'End') {
+				e.preventDefault();
+				moveModelPopoverActive(e.key);
+				return;
+			}
+			if (e.key === 'Enter') {
+				const target = e.target instanceof Node ? e.target : null;
+				if (target && !modelPopover.contains(target) && !modelBtn?.contains(target)) return;
+				e.preventDefault();
+				e.stopPropagation();
+				commitModelPopoverActive();
+			}
+			return;
+		}
+		if (aspectPopover && !aspectPopover.hidden && e.key === 'Escape') {
+			e.preventDefault();
+			e.stopPropagation();
+			setAspectPopoverOpen(false);
+			if (aspectBtn instanceof HTMLButtonElement) aspectBtn.focus();
+		}
+	};
+	document.addEventListener('keydown', onToolbarPopoverKeydown, true);
+	teardownFns.push(() => document.removeEventListener('keydown', onToolbarPopoverKeydown, true));
+
+	const onRepositionToolbarPopovers = () => {
+		if (modelPopover && !modelPopover.hidden) positionModelPopover();
+		if (aspectPopover && !aspectPopover.hidden) positionAspectPopover();
+	};
+	window.addEventListener('resize', onRepositionToolbarPopovers);
+	window.addEventListener('scroll', onRepositionToolbarPopovers, true);
+	teardownFns.push(() => {
+		window.removeEventListener('resize', onRepositionToolbarPopovers);
+		window.removeEventListener('scroll', onRepositionToolbarPopovers, true);
+	});
+
+	if (submitBtn) {
+		const onSubmitClick = () => void handleSubmit();
+		submitBtn.addEventListener('click', onSubmitClick);
+		teardownFns.push(() => submitBtn.removeEventListener('click', onSubmitClick));
+	}
+
+	return {
+		refreshModelOptions,
+		syncFromMutateQueue: () => applyQueueSnapshotToAttachments({ allowEmpty: true }),
+		syncFromSharedSettings,
+		destroy() {
+		clearTimeout(promptSaveTimer);
+		aspectMismatchRevision++;
+		aspectDimensionCache.clear();
+		setModelPopoverOpen(false);
+			setAspectPopoverOpen(false);
+			for (const fn of teardownFns) {
+				try {
+					fn();
+				} catch (_) {}
+			}
+			revokeAttachmentBlobUrls();
+			host.innerHTML = '';
+		},
+	};
+}

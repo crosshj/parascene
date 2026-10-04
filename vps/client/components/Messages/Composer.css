@@ -1,0 +1,36 @@
+.beta-outlet__composer .chat-page-input-shell { transition: border-color .15s ease; }
+.beta-outlet__composer .chat-page-input-shell.is-at-limit,
+.beta-outlet__composer .chat-page-input-shell.is-at-limit:focus-within { border-color: var(--warning-text, #b45309); }
+.beta-outlet__composer .chat-page-composer-reply { flex: 0 0 auto; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; box-sizing: border-box; min-height: 38px; padding: 6px 10px; background: color-mix(in srgb, var(--text) 7%, var(--input-bg)); }
+.beta-outlet__composer .chat-page-composer-reply[hidden],
+.beta-outlet__composer .chat-page-composer-upload-error[hidden] { display: none !important; }
+.beta-outlet__composer .chat-page-composer-reply-text { min-width: 0; overflow: hidden; color: var(--text-muted); font-size: .8125rem; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
+.beta-outlet__composer .chat-page-composer-reply button { display: inline-flex; flex: 0 0 26px; align-items: center; justify-content: center; width: 26px; height: 26px; margin: 0; padding: 0; border: 0; border-radius: 50%; color: var(--text-muted); background: transparent; cursor: pointer; }
+.beta-outlet__composer .chat-page-composer-reply button:hover { color: var(--text); }
+.beta-outlet__composer .chat-page-composer-attachments { flex: 0 0 auto; }
+.beta-outlet__composer .chat-page-composer-attachments-row { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; box-sizing: border-box; padding: 6px 8px 6px 10px; }
+.beta-outlet__composer .chat-page-composer-attachments--has-media .chat-page-composer-attachments-row { padding-top: 8px; padding-bottom: 8px; }
+.beta-outlet__composer .chat-page-composer-attachments-list { display: flex; flex: 1 1 auto; flex-wrap: wrap; align-items: flex-start; min-width: 0; gap: 8px; }
+.beta-outlet__composer .chat-page-composer-attachment { position: relative; flex: 0 0 56px; width: 56px; height: 56px; overflow: hidden; border-radius: 8px; background: color-mix(in srgb, var(--border) 50%, var(--input-bg)); }
+.beta-outlet__composer .chat-page-composer-attachment-preview { display: block; width: 100%; height: 100%; object-fit: cover; }
+.beta-outlet__composer .chat-page-composer-attachment-preview-button { display: block; width: 100%; height: 100%; margin: 0; padding: 0; border: 0; background: transparent; cursor: zoom-in; }
+.beta-outlet__composer .chat-page-composer-attachment-preview-button:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.beta-outlet__composer .chat-page-composer-attachment-preview--file { display: flex; align-items: center; justify-content: center; padding: 5px; box-sizing: border-box; color: var(--text-muted); background: color-mix(in srgb, var(--border) 50%, var(--input-bg)); }
+.beta-outlet__composer .chat-page-composer-attachment-file-name { display: -webkit-box; overflow: hidden; font-size: .625rem; line-height: 1.2; text-align: center; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+.beta-outlet__composer .chat-page-composer-attachment-uploading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--bg) 55%, transparent); }
+.beta-outlet__composer .chat-page-composer-attachment-spinner { width: 22px; height: 22px; border: 2px solid color-mix(in srgb, var(--text-muted) 35%, transparent); border-top-color: var(--focus); border-radius: 50%; animation: chat-composer-spin .75s linear infinite; }
+@keyframes chat-composer-spin { to { transform: rotate(360deg); } }
+.beta-outlet__composer .chat-page-composer-attachment-remove { position: absolute; top: 2px; right: 2px; display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; margin: 0; padding: 0; border: 0; border-radius: 50%; color: var(--text); background: color-mix(in srgb, var(--bg) 88%, transparent); font-size: 14px; line-height: 1; cursor: pointer; box-shadow: 0 1px 3px color-mix(in srgb, var(--bg) 20%, #000); }
+.beta-outlet__composer .chat-page-composer-attachment-remove:hover { color: var(--error-text); background: var(--error-bg); }
+.beta-outlet__composer .chat-page-composer-attachment--error .chat-page-composer-attachment-preview { opacity: .35; }
+.beta-outlet__composer .chat-page-composer-attachment-error { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 4px; color: var(--error-text); background: color-mix(in srgb, var(--error-bg) 75%, transparent); font-size: .625rem; line-height: 1.2; text-align: center; }
+.beta-outlet__composer .chat-page-composer-upload-error { flex: 0 0 auto; margin: 0; padding: 5px 10px 7px; color: var(--error-text); font-size: .8125rem; line-height: 1.3; }
+.beta-outlet__composer .chat-page-composer-attach-inline { color: var(--text-muted); }
+.beta-outlet__composer .chat-page-composer-attach-inline:hover:not(:disabled) { color: var(--text); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.beta-outlet__composer .chat-page-composer-attach-inline:focus-visible,
+.beta-outlet__composer .chat-page-send-btn:focus-visible { outline: none; box-shadow: 0 0 0 1px color-mix(in srgb, var(--focus) 55%, transparent); }
+.beta-outlet__composer .chat-page-send-btn { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 44px; align-self: flex-end; width: 44px; height: 44px; margin: 0; padding: 0; border: 0; border-radius: 8px; color: var(--focus); background: transparent; cursor: pointer; transition: color .15s ease, background .15s ease, box-shadow .15s ease; -webkit-tap-highlight-color: transparent; }
+.beta-outlet__composer .chat-page-send-btn[hidden] { display: none !important; }
+.beta-outlet__composer .chat-page-send-btn:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.beta-outlet__composer .chat-page-send-btn:disabled { opacity: .35; cursor: not-allowed; }
+.beta-outlet__composer .chat-page-send-btn .chat-page-send-icon { display: block; flex-shrink: 0; width: 20px; height: 20px; }

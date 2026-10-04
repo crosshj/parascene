@@ -34,6 +34,21 @@ function makeWorkflow() {
   restoreRecipe: syncCreationDetailToAdvancedCreate, lineage: getMutateLineageForImageUrls, formatMentions: formatMentionsFailureForDialog });
 }
 let workflow = makeWorkflow();
+const composer = {
+ read() {
+  const saved = store.read();
+  return { ...(saved.composerSettings || {}), outputMode: saved.outputMode || 'image' };
+ },
+ edit(change = {}) {
+  const current = store.read().composerSettings || {};
+  const next = { ...current, ...change };
+  if (change.modelRoutes && typeof change.modelRoutes === 'object') {
+   next.modelRoutes = { ...(current.modelRoutes || {}), ...change.modelRoutes };
+  }
+  const { outputMode, ...settings } = next;
+  return workflow.edit({ composerSettings: settings, ...(outputMode ? { outputMode } : {}) });
+ },
+};
 let generation = 0;
 const cacheKey = `${CREATE_SERVERS_CACHE_KEY}:vps:${viewerId || "anonymous"}`;
 const CREATE_SERVERS_CACHE_TTL_MS = 15 * 60 * 1000;
@@ -172,6 +187,7 @@ async function refreshCreateServersFromNetwork() {
 return {
  api,
  draft,
+ composer,
  get workflow() { return workflow; },
  getCreateServersPaint,
  refreshCreateServersFromNetwork,

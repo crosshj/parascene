@@ -62,7 +62,12 @@ export function createCreationWorkflow({ draft, request, send, upload, importSen
    clearSubmittedPrompt(snapshot, snapshot.fieldValues.prompt, result);
    return result;
   }
-  let args = projectCreateMode(snapshot, intent);
+  // Composer controls build provider-specific arguments from the selected model's
+  // capabilities. Accept those explicit args while keeping upload, occupancy,
+  // lineage, pending-creation, and prompt-clear handling in this workflow.
+  let args = intent.args && typeof intent.args === 'object'
+   ? { ...intent.args }
+   : projectCreateMode(snapshot, intent);
   let creditCost = intent.creditCost;
   const serverId = intent.serverId ?? snapshot.serverId;
   const methodKey = intent.methodKey ?? snapshot.methodKey;
@@ -85,8 +90,8 @@ export function createCreationWorkflow({ draft, request, send, upload, importSen
    args = quoted.args; creditCost = quoted.creditCost; assertAlive(signal);
   }
   // The submitted snapshot is immutable; late completion cannot clear a newly edited prompt.
-  let hydrateMentions = false;
-  if (/@([a-zA-Z0-9_]+)/.test(args.prompt || '')) {
+  let hydrateMentions = intent.hydrateMentions === true;
+  if (intent.validateMentions !== false && /@([a-zA-Z0-9_]+)/.test(args.prompt || '')) {
    publish('validating');
    let valid;
    try {

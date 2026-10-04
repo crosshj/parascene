@@ -348,14 +348,10 @@ export function renderCreationsView({ outlet, creationsApi, creationsQuery, pend
 	const sentinelObserver = new IntersectionObserver(([entry]) => { if (entry?.isIntersecting) void loadMore(); }, { rootMargin: '1200px 0px' });
 	const updateScrollTopVisibility = () => {
 		const scrollTop = scrollRegion?.scrollTop || 0;
-		const canScroll = Boolean(scrollRegion && scrollRegion.scrollHeight - scrollRegion.clientHeight > 720);
 		refs.scrollTop.hidden = scrollTop < 720;
-		refs.scrollBottom.hidden = !canScroll || scrollTop >= 720;
 	};
 	const onScrollTopClick = () => scrollRegion?.scrollTo({ top: 0, behavior: 'auto' });
-	const onScrollBottomClick = () => scrollRegion?.scrollTo({ top: scrollRegion.scrollHeight, behavior: 'auto' });
 	refs.scrollTop.addEventListener('click', onScrollTopClick);
-	refs.scrollBottom.addEventListener('click', onScrollBottomClick);
 	scrollRegion?.addEventListener('scroll', updateScrollTopVisibility, { passive: true });
 	updateScrollTopVisibility();
 	sentinelObserver.observe(refs.sentinel);
@@ -366,5 +362,5 @@ export function renderCreationsView({ outlet, creationsApi, creationsQuery, pend
 	}
 	else void refresh(true);
 
-	return () => { unsubscribe?.(); mediaLoader?.disconnect(); sentinelObserver.disconnect(); window.clearTimeout(pollTimer); pollTimer = 0; document.removeEventListener('visibilitychange', onVisibilityChange); document.removeEventListener('creation-detail:mutation', onCreationDetailMutation); document.removeEventListener('creations-pending-updated', onPendingCreationsUpdated); refs.grid.removeEventListener('click', onGridClick); refs.scrollTop.removeEventListener('click', onScrollTopClick); refs.scrollBottom.removeEventListener('click', onScrollBottomClick); scrollRegion?.removeEventListener('scroll', updateScrollTopVisibility); setHeaderMenu?.(); };
+	return () => { unsubscribe?.(); mediaLoader?.disconnect(); sentinelObserver.disconnect(); window.clearTimeout(pollTimer); pollTimer = 0; document.removeEventListener('visibilitychange', onVisibilityChange); document.removeEventListener('creation-detail:mutation', onCreationDetailMutation); document.removeEventListener('creations-pending-updated', onPendingCreationsUpdated); refs.grid.removeEventListener('click', onGridClick); refs.scrollTop.removeEventListener('click', onScrollTopClick); scrollRegion?.removeEventListener('scroll', updateScrollTopVisibility); setHeaderMenu?.(); };
 }

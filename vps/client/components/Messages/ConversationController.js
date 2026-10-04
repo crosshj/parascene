@@ -29,11 +29,20 @@ export function createConversationController({ view, provider, route, viewerId, 
 	async function start() {
 		view.setStatus({ isLoading: true });
 		try {
-			let inbox = await provider.query.refresh();
+			let inbox = provider.query.data;
+			if (inbox) { if (provider.query.isStale()) void provider.query.refresh().catch(() => undefined); }
+			else inbox = await provider.query.loadIfNeeded();
 			if (destroyed) return;
 			thread = inbox.threads.find((row) => route.kind === 'channel'
 				? row.type === 'channel' && (route.threadId ? Number(row.id) === Number(route.threadId) : row.channel_slug === route.slug)
 				: row.type === 'dm' && (route.slug === 'self' ? Number(row.other_user_id) === Number(viewerId) : String(row.other_user_id) === route.slug || row.other_user?.user_name?.toLowerCase() === route.slug.toLowerCase()));
+			if (!thread && provider.query.data === inbox) {
+				inbox = await provider.query.refresh();
+				if (destroyed) return;
+				thread = inbox.threads.find((row) => route.kind === 'channel'
+					? row.type === 'channel' && (route.threadId ? Number(row.id) === Number(route.threadId) : row.channel_slug === route.slug)
+					: row.type === 'dm' && (route.slug === 'self' ? Number(row.other_user_id) === Number(viewerId) : String(row.other_user_id) === route.slug || row.other_user?.user_name?.toLowerCase() === route.slug.toLowerCase()));
+			}
 			if (!thread && route.kind === 'channel' && !route.threadId) {
 				await provider.api.openChannel(route.slug, { signal: abort.signal });
 				if (destroyed) return;
@@ -45,7 +54,7 @@ export function createConversationController({ view, provider, route, viewerId, 
 			view.setThread?.(thread, inbox);
 			lastRead = Number(thread.last_read_message_id) || 0;
 			view.setUnreadBoundary?.(lastRead);
-			lease = provider.acquireMessages(thread.id);
+			lease = provider.acquireMessages(thread.id, { persist: thread.type === 'channel' && thread.visibility !== 'private' });
 			unsubscribe = lease.query.subscribe((snapshot) => {
 				if (destroyed) return;
 				if (snapshot.error?.status === 401) return onUnauthorized?.();
@@ -53,7 +62,7 @@ export function createConversationController({ view, provider, route, viewerId, 
 				view.setStatus(snapshot);
 				view.setReady?.(!!snapshot.data && !snapshot.error);
 			});
-			await lease.query.loadIfNeeded();
+			void lease.query.refresh().catch(error);
 		} catch (reason) { error(reason); }
 	}
 	async function markRead(messageId) {

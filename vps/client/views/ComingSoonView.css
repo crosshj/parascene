@@ -1,0 +1,26 @@
+.coming-soon-view {
+	box-sizing: border-box;
+	display: grid;
+	min-height: calc(100vh - 132px);
+	place-content: center;
+	justify-items: center;
+	gap: 8px;
+	padding: 32px 20px;
+	color: inherit;
+	text-align: center;
+}
+.coming-soon-view__art { width: min(240px, 58vw); margin-bottom: 4px; color: color-mix(in srgb, currentColor 26%, transparent); }
+.coming-soon-view__art svg { display: block; width: 100%; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.coming-soon-view__orbit { stroke-dasharray: 2 7; opacity: .8; }
+.coming-soon-view__card { fill: var(--beta-canvas-background, #fff); stroke: color-mix(in srgb, currentColor 28%, transparent); }
+.coming-soon-view__line { stroke: color-mix(in srgb, currentColor 32%, transparent); }
+.coming-soon-view__spark { fill: color-mix(in srgb, var(--beta-accent, #8b72f8) 18%, transparent); stroke: var(--beta-accent, #8b72f8); }
+.coming-soon-view__dot { fill: var(--beta-accent, #8b72f8); stroke: none; opacity: .72; }
+.coming-soon-view__eyebrow { margin: 0; color: var(--beta-accent, #765ce8); font: 650 11px/1.4 var(--beta-font-family, system-ui, sans-serif); letter-spacing: .12em; text-transform: uppercase; }
+.coming-soon-view h1 { margin: 0; font: 650 clamp(22px, 3vw, 30px)/1.2 var(--beta-font-family, system-ui, sans-serif); }
+.coming-soon-view__description { max-width: 38ch; margin: 2px 0 0; color: var(--beta-text-muted, color-mix(in srgb, currentColor 68%, transparent)); font: 400 14px/1.55 var(--beta-font-family, system-ui, sans-serif); }
+
+@media (max-width: 768px) {
+	.coming-soon-view { min-height: calc(100vh - var(--beta-mobile-nav-height, 68px) - 104px); padding-inline: 16px; }
+	.coming-soon-view__art { width: min(208px, 55vw); }
+}

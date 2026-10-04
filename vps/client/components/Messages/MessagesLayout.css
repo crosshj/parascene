@@ -1,5 +1,4 @@
-/* The message DOM and presentation rules live in Messages.css. Only the VPS
-   shell seam belongs here: its header/composer overlay the thread viewport. */
+/* The header and chat composer overlay the thread viewport. */
 .beta-outlet__content:has(> .chat-page-messages) { display: contents; }
 .beta-outlet__scroll.chat-page-thread-body { overflow: hidden; }
 /* WWW's loading lock: the skeleton is a stationary, clipped placeholder. */
@@ -8,22 +7,40 @@
 	overscroll-behavior: none;
 	touch-action: none;
 }
+.chat-page-messages[data-chat-messages-scroll-lock='1'] .chat-thread-channel-loading {
+	position: relative;
+	height: 100%;
+	min-height: 100%;
+	box-sizing: border-box;
+	overflow: hidden;
+}
+.chat-page-messages[data-chat-messages-scroll-lock='1'] .skeleton-chat-thread {
+	position: absolute;
+	right: 0;
+	bottom: 0;
+	left: 0;
+}
+@media (min-width: 1024px) {
+	body.beta-layout .chat-page-messages[data-chat-messages-scroll-lock='1'] .skeleton-chat-thread {
+		padding-right: max(12px, calc((100% - 720px) / 2 + 12px));
+		padding-left: max(12px, calc((100% - 720px) / 2 + 12px));
+	}
+}
 .beta-outlet__scroll.chat-page-thread-body > .beta-outlet__content > .chat-page-messages {
 	position: absolute;
-	inset: 0 0 var(--messages-composer-height, 76px);
+	inset: 0;
 	box-sizing: border-box;
 	padding-top: calc(var(--beta-chrome-row-height) + 12px);
+	padding-bottom: calc(var(--message-composer-height, 0px) + 12px);
 	--founder-flair-name: #9657c2;
 	--link: var(--accent);
 }
-.beta-outlet__content > .chat-page-error { position: absolute; z-index: 4; bottom: var(--messages-composer-height, 76px); left: 12px; right: 12px; background: var(--surface); padding: 8px 12px; }
+.beta-outlet__content > .chat-page-error { position: absolute; z-index: 4; bottom: 0; left: 12px; right: 12px; background: var(--surface); padding: 8px 12px; }
 .beta-outlet__content > .chat-page-error[hidden] { display: none; }
 .chat-page-error .chat-page-pane-load-retry { margin-left: 8px; }
 /* The shared shell composer remains owned by layout; match the reply-strip
    composition without changing other routes' forms. */
-.beta-outlet__composer:has(.chat-page-composer-reply) { flex-wrap: wrap; }
-.beta-outlet__composer:has(.chat-page-composer-reply) textarea { flex: 1 1 0; }
-.beta-outlet__composer .chat-page-composer-reply { flex: 0 0 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; box-sizing: border-box; padding: 6px 10px; background: color-mix(in srgb, currentColor 7%, transparent); }
+.beta-outlet__composer .chat-page-composer-reply { flex: 0 0 auto; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; box-sizing: border-box; padding: 6px 10px; background: color-mix(in srgb, var(--text) 7%, var(--input-bg)); }
 .beta-outlet__composer .chat-page-composer-reply[hidden] { display: none; }
 .chat-page-composer-reply-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .8125rem; }
 .beta-outlet__composer .chat-page-composer-reply button { width: 26px; height: 26px; border-radius: 50%; background: transparent; color: inherit; }

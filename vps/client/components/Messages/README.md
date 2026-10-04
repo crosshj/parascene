@@ -69,9 +69,10 @@ Realtime refreshes fetch the currently loaded history range, so reactions and
 edits on older pages also update. This can require multiple page requests after
 loading a long history; room invalidations remain debounced and serialized.
 The hover toolbar supports copying and authorized deletion; deletion broadcasts
-invalidation and marks references to removed parents unavailable. Pins, dedicated
-canvas and invitation controls, and composer attachments remain part of the
-larger threads port. Missing conversations are
+invalidation and marks references to removed parents unavailable. The shared
+composer supports replies, pasted or selected file attachments, upload previews,
+and optimistic text-plus-attachment sends. Pins, dedicated canvas and invitation
+controls remain part of the larger threads port. Missing conversations are
 shown explicitly until thread creation is ported. The existing mock server roster
 is excluded from the real inbox until the server directory is ported.
 

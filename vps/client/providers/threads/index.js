@@ -1,5 +1,5 @@
 import { createThreadsApi } from './api.js';
-import { createThreadMessagesQuery, createThreadsInboxQuery } from './query.js';
+import { clearThreadMessagesCache, createThreadMessagesQuery, createThreadsInboxQuery } from './query.js';
 import { encryptThreadText } from './private.js';
 import { createThreadsRealtime } from './realtime.js';
 import { createQueryRefresh } from './refresh.js';
@@ -12,6 +12,12 @@ export function createThreadsProvider({ viewerId, registry, realtimeFactory = cr
 	const realtime = viewerId ? realtimeFactory({ viewerId }) : null;
 	const inboxRefresh = query ? createQueryRefresh(query) : null;
 	const rooms = new Map();
+	// Keep a small provider-scoped message window so route changes can paint
+	// immediately, then revalidate through the same query on the next visit.
+	const messageQueries = new Map();
+	const canvasSnapshots = new Map();
+	const MAX_CACHED_THREADS = 8;
+	const MAX_CACHED_CANVASES = 16;
 	let destroyed = false;
 	let stopUser = null;
 	const stopInbox = query?.subscribe((snapshot) => {
@@ -31,6 +37,8 @@ export function createThreadsProvider({ viewerId, registry, realtimeFactory = cr
 		stopInbox?.(); stopUser?.(); inboxRefresh?.destroy(); realtime?.destroy();
 		for (const room of rooms.values()) { room.refresh.destroy(); room.unsubscribe(); }
 		rooms.clear();
+		for (const entry of messageQueries.values()) entry.lease.release();
+		messageQueries.clear(); canvasSnapshots.clear();
 		if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', resume);
 		if (typeof window !== 'undefined') window.removeEventListener('online', resume);
 	}
@@ -39,16 +47,21 @@ export function createThreadsProvider({ viewerId, registry, realtimeFactory = cr
 		api,
 		query,
 		preload() { if (query) void query.loadIfNeeded().catch(() => undefined); },
-		acquireMessages(threadId) {
+		acquireMessages(threadId, { persist = false } = {}) {
 			if (destroyed) throw new Error('Threads provider has been destroyed');
-			const acquired = createThreadMessagesQuery({ threadId, api, registry });
 			const key = Number(threadId);
+			let cached = messageQueries.get(key);
+			if (!cached) {
+				cached = { lease: createThreadMessagesQuery({ threadId, api, viewerId, persist }), refs: 0, touched: Date.now() };
+				messageQueries.set(key, cached);
+			}
+			cached.refs++; cached.touched = Date.now();
 			let room = rooms.get(key);
 			if (!room) {
-				const refresh = createQueryRefresh(acquired.query);
+				const refresh = createQueryRefresh(cached.lease.query);
 				const unsubscribe = realtime.subscribe(`room:${key}`, () => refresh.request(), { onDeleted: () => {
 					inboxRefresh?.request();
-					acquired.query.refresh({ force: true }).catch(() => undefined);
+					cached.lease.query.refresh({ force: true }).catch(() => undefined);
 				} });
 				room = { refs: 0, refresh, unsubscribe };
 				rooms.set(key, room);
@@ -56,14 +69,30 @@ export function createThreadsProvider({ viewerId, registry, realtimeFactory = cr
 			room.refs++;
 			let released = false;
 			return {
-				query: acquired.query,
+				query: cached.lease.query,
 				release() {
 					if (released) return;
 					released = true;
 					if (--room.refs === 0) { room.refresh.destroy(); room.unsubscribe(); rooms.delete(key); }
-					acquired.release();
+					cached.refs = Math.max(0, cached.refs - 1); cached.touched = Date.now();
+					if (messageQueries.size > MAX_CACHED_THREADS) {
+						for (const [id, entry] of [...messageQueries].sort((a, b) => a[1].touched - b[1].touched)) {
+							if (messageQueries.size <= MAX_CACHED_THREADS) break;
+							if (!entry.refs) { entry.lease.release(); messageQueries.delete(id); }
+						}
+					}
 				},
 			};
+		},
+		getCanvases(threadId) { return canvasSnapshots.get(Number(threadId)) || null; },
+		async refreshCanvases(threadId, options = {}) {
+			const key = Number(threadId);
+			const data = await api.loadCanvases(key, options);
+			if (!destroyed) {
+				canvasSnapshots.delete(key); canvasSnapshots.set(key, data);
+				while (canvasSnapshots.size > MAX_CACHED_CANVASES) canvasSnapshots.delete(canvasSnapshots.keys().next().value);
+			}
+			return data;
 		},
 		async send(thread, body, reply) {
 			let wire = body;
@@ -108,7 +137,7 @@ export function createThreadsProvider({ viewerId, registry, realtimeFactory = cr
 			return response;
 		},
 		syncExternalCache(event) { inbox?.syncExternalCache(event); },
-		clearCache() { inbox?.clearCache(); destroy(); },
+		clearCache() { inbox?.clearCache(); clearThreadMessagesCache(viewerId); destroy(); },
 		destroy,
 	};
 }

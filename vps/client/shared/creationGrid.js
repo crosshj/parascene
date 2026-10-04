@@ -204,7 +204,19 @@ export function creationThumbnailUrl(item, { video = false } = {}) {
 }
 
 export function creationOriginalUrl(item) {
-	return mediaPath(item?.url || item?.video_url || item?.audio_url || item?.file_path || item?.filename, item);
+	const raw = item?.url || item?.image_url || item?.video_url || item?.audio_url || item?.file_path || item?.filename;
+	const url = mediaPath(raw, item);
+	if (!url || !/^\/api\/creations\/media\//.test(url)) return url;
+	try {
+		const parsed = new URL(url, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
+		if (['thumbnail', 'grid_thumbnail', 'fit'].includes(parsed.searchParams.get('variant') || '')) {
+			parsed.searchParams.delete('variant');
+			parsed.searchParams.delete('source_variant');
+		}
+		return `${parsed.pathname}${parsed.search}`;
+	} catch {
+		return url;
+	}
 }
 
 function waveform() {
@@ -290,7 +302,7 @@ export function creationCardMarkup(item, { hidePublishedBadge = false } = {}) {
 		Number.isFinite(Number(item?.user_id)) && Number(item.user_id) > 0 ? `data-user-id="${escapeHtml(item.user_id)}"` : '',
 		Number.isFinite(Number(item?.comment_count)) && Number(item.comment_count) >= 0 ? `data-comment-count="${escapeHtml(item.comment_count)}"` : '',
 		`data-image-url="${escapeHtml(thumbnail)}"`,
-		`data-image-url-full="${escapeHtml(original || thumbnail)}"`,
+		`data-image-url-full="${escapeHtml(original)}"`,
 		processingStatus ? `data-creation-status="${escapeHtml(processingStatus)}"` : ''
 	].filter(Boolean).join(' ');
 	return html`<div class="feed-card feed-card--image-only creation-grid__card" ${attributes} role="link" tabindex="0" aria-label="Open ${escapeHtml(title || `Creation ${creationId || ''}`)}">

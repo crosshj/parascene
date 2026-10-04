@@ -34,14 +34,14 @@ const routeDefinitions = [
 		view: views.Feed,
 		title: 'Feed',
 		icon: 'home',
-		composer: 'none',
+		composer: 'creation',
 	},
 	{
 		path: '/feed',
 		view: views.Feed,
 		title: 'Feed',
 		icon: 'home',
-		composer: 'none',
+		composer: 'creation',
 	},
 	{
 		path: '/feed/doom/:creationId',
@@ -57,14 +57,14 @@ const routeDefinitions = [
 		view: views.Explore,
 		title: 'Explore',
 		icon: 'globe',
-		composer: 'message',
+		composer: 'none',
 	},
 	{
 		path: '/challenges',
 		view: views.Challenges,
 		title: 'Challenges',
 		icon: 'trophy',
-		composer: 'message',
+		composer: 'none',
 	},
 	{
 		path: '/challenges/organize',
@@ -72,6 +72,7 @@ const routeDefinitions = [
 		title: 'Organize challenges',
 		viewName: 'Challenges · Organize',
 		icon: 'trophy',
+		composer: 'none',
 	},
 	{
 		path: '/challenges/details/:challengeId',
@@ -79,13 +80,14 @@ const routeDefinitions = [
 		title: 'Challenge details',
 		viewName: 'Challenges · Details',
 		icon: 'trophy',
+		composer: 'none',
 	},
 	{
 		path: '/comments',
 		view: views.Comments,
 		title: 'Comments',
 		icon: 'comments',
-		composer: 'message',
+		composer: 'none',
 	},
 	{
 		path: '/ch/:slug',
@@ -129,7 +131,7 @@ const routeDefinitions = [
 		view: views.Creations,
 		title: 'My Creations',
 		icon: 'picture',
-		composer: 'message',
+		composer: 'creation',
 	},
 	{
 		path: '/files',
