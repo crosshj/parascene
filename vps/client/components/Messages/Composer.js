@@ -27,10 +27,12 @@ function clipboardImageFiles(clipboardData) {
 			files.push(file);
 		}
 	}
-	for (const file of Array.from(clipboardData?.files || [])) {
-		if (file?.type?.startsWith('image/') && !seen.has(file)) {
-			seen.add(file);
-			files.push(file);
+	// Clipboard images are commonly exposed through both `items` and `files`.
+	// getAsFile() can return a different File object for the same payload, so
+	// identity-based de-duplication across both collections still uploads twice.
+	if (!files.length) {
+		for (const file of Array.from(clipboardData?.files || [])) {
+			if (file?.type?.startsWith('image/')) files.push(file);
 		}
 	}
 	return files;
