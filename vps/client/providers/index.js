@@ -8,10 +8,11 @@ import { createCreditsProvider } from './credits/index.js';
 export function createAppProviders({ bootstrap = {} } = {}) {
 	const viewerId = Number(bootstrap.user?.id) || null;
 	const registry = createQueryRegistry();
+	const creations = createCreationsProvider({ viewerId, registry });
 	const providers = {
-		create: createCreateProvider({ viewerId }),
+		create: createCreateProvider({ viewerId, pendingCreations: creations.pending }),
 		threads: createThreadsProvider({ viewerId, registry }),
-		creations: createCreationsProvider({ viewerId, registry }),
+		creations,
 		files: createFilesProvider({ viewerId, registry, origin: bootstrap.filesOrigin || '' }),
 		credits: createCreditsProvider({ viewerId, registry }),
 	};

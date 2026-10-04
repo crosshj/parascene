@@ -220,7 +220,7 @@ async function shrinkRasterImageFileForGenericUpload(file) {
 	}
 }
 
-function addPendingCreation({ creationToken }) {
+function addPendingCreation({ creationToken, pendingCreationKey }) {
 	const pendingId = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 	const pendingItem = {
 		id: pendingId,
@@ -229,7 +229,7 @@ function addPendingCreation({ creationToken }) {
 		creation_token: creationToken
 	};
 
-	const pendingKey = getCreateWorkflowHost()?.pendingCreations?.key || 'pendingCreations';
+	const pendingKey = pendingCreationKey || getCreateWorkflowHost()?.pendingCreations?.key || 'pendingCreations';
  try {
  const stored = JSON.parse(sessionStorage.getItem(pendingKey) || '[]');
  const pendingList = Array.isArray(stored) ? stored : [];
@@ -750,6 +750,7 @@ export async function submitCreationWithPending({
 	signal,
 	clearPrompt = true,
 	confirmOccupancy,
+	pendingKey: pendingCreationKey,
 	isCurrent = () => true
 }) {
 	if (!serverId || !methodKey) return null;
@@ -774,7 +775,7 @@ export async function submitCreationWithPending({
 			: creditCost;
 
 	const creationToken = generateCreationToken();
-	const { pendingKey, pendingId } = addPendingCreation({ creationToken });
+	const { pendingKey, pendingId } = addPendingCreation({ creationToken, pendingCreationKey });
 
 	let parentIds = [];
 	if (Array.isArray(mutateParentIds)) {
@@ -897,6 +898,7 @@ export async function importCreationWithPending({
 	onError,
 	signal,
 	clearPrompt = true,
+	pendingKey: pendingCreationKey,
 	isCurrent = () => true,
 }) {
 	if (signal?.aborted) throw new DOMException('Cancelled', 'AbortError');
@@ -905,7 +907,7 @@ export async function importCreationWithPending({
 	}
 
 	const creationToken = generateCreationToken();
-	const { pendingKey, pendingId } = addPendingCreation({ creationToken });
+	const { pendingKey, pendingId } = addPendingCreation({ creationToken, pendingCreationKey });
 
 	try {
 		const result = await runImport({ creationToken });

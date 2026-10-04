@@ -14,10 +14,11 @@ import {
 } from './defaults.js';
 import { isPublicGenerationServerId } from '../../shared/generationDefaults.js';
 
-export function createCreateProvider({ viewerId } = {}) {
+export function createCreateProvider({ viewerId, pendingCreations } = {}) {
 const api = createCreateApi();
 const store = getSavedCreateDraftStore();
 store.read();
+const pendingKey = pendingCreations?.key;
 const draft = {
  read: store.read,
  update(change, options) {
@@ -29,8 +30,11 @@ const draft = {
  subscribe: store.subscribe,
 };
 function makeWorkflow() {
- return createCreationWorkflow({ draft, request: api.request, send: submitCreationWithPending,
-  upload: uploadImageFile, importSend: importCreationWithPending, importer: importCreationMedia,
+ return createCreationWorkflow({ draft, request: api.request,
+  send: payload => submitCreationWithPending({ ...payload, pendingKey }),
+  upload: uploadImageFile,
+  importSend: options => importCreationWithPending({ ...options, pendingKey }),
+  importer: importCreationMedia,
   restoreRecipe: syncCreationDetailToAdvancedCreate, lineage: getMutateLineageForImageUrls, formatMentions: formatMentionsFailureForDialog });
 }
 let workflow = makeWorkflow();
