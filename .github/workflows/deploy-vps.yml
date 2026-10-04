@@ -28,5 +28,14 @@ jobs:
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY || vars.SUPABASE_ANON_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+          REPLICATE_API_TOKEN: ${{ secrets.REPLICATE_API_TOKEN }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          RESEND_SYSTEM_EMAIL: ${{ vars.RESEND_SYSTEM_EMAIL }}
+          UPSTASH_QSTASH_CURRENT_SIGNING_KEY: ${{ secrets.UPSTASH_QSTASH_CURRENT_SIGNING_KEY }}
+          UPSTASH_QSTASH_NEXT_SIGNING_KEY: ${{ secrets.UPSTASH_QSTASH_NEXT_SIGNING_KEY }}
+          UPSTASH_QSTASH_TOKEN: ${{ secrets.UPSTASH_QSTASH_TOKEN }}
+          UPSTASH_QSTASH_URL: ${{ vars.UPSTASH_QSTASH_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+          UPSTASH_REDIS_REST_URL: ${{ vars.UPSTASH_REDIS_REST_URL }}
           GITHUB_SHA: ${{ github.sha }}
         run: bash vps/scripts/deploy-from-ci.sh
