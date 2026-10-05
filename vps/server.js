@@ -1,3 +1,7 @@
+import createChallengeCreationRoutes from './routes/challengeCreations.js';
+import createChallengeActionsRoutes from './routes/challengeActions.js';
+import createChallengesRoutes from './routes/challenges.js';
+import { createChallengeQueries } from './db/challenges.js';
 import createAdminProfileRoutes from './routes/adminProfile.js';
 import {apiKeyBearerMiddleware,integrationBearerMiddleware} from './routes/middleware/bearer.js';
 import createHelpRoutes from './routes/help.js';
@@ -62,6 +66,11 @@ app.use(apiKeyBearerMiddleware(db.account.queries));app.use(integrationBearerMid
 // path. The CDN host serves the same VPS-owned route through createCdnRoutes.
 app.use("/api/images/generic", createFilesCors(), createGenericRoutes(db.genericFiles, db.users));
 app.use(createCdnHostBoundary(createCdnRoutes({ profileFiles: db.profileFiles, genericFiles: db.genericFiles, users: db.users })));
+const challengeDependencies = { ...db.account, queries: { ...db.account.queries, ...createChallengeQueries(db.account.client) } };
+app.use(createChallengeActionsRoutes(challengeDependencies));
+app.use(createChallengesRoutes(challengeDependencies));
+const challengeCreations = createChallengeCreationRoutes(challengeDependencies);
+app.use(challengeCreations);
 app.use(createThreadsRoutes({ threads: db.threads }));
 app.use(createRealtimeAuthRoutes({ realtimeAuth: db.realtimeAuth }));
 app.use(createYoutubeRoutes());
@@ -84,7 +93,7 @@ app.use(createAudioClipsRoutes(db.library));
 app.use(createSuggestRoutes({ queries: db.suggestions }));
 app.use(createExploreRoutes({ explore: db.explore, users: db.users }));
 app.use(createCommentsRoutes({ comments: db.comments, users: db.users }));
-app.use(createCreationsRoutes({ creations: db.creations, users: db.users }));
+app.use(createCreationsRoutes({ creations: db.creations, users: db.users, appendChallengeEligibility: challengeCreations.appendEligibility }));
 app.use(createAuthRoutes({ users: db.users, sessions: db.sessions }));
 app.use(createPageRoutes({ pagesDir, users: db.users }));
 app.use(express.static(path.join(__dirname, "public")));

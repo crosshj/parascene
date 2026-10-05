@@ -64,7 +64,7 @@ const routeDefinitions = [
 		view: views.Challenges,
 		title: 'Challenges',
 		icon: 'trophy',
-		composer: 'none',
+		composer: 'creation',
 	},
 	{
 		path: '/challenges/organize',

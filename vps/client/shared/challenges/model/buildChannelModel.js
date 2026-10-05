@@ -13,7 +13,7 @@ function isCanvasMessageRow(m) {
  * Fetch entire thread history oldest → newest (paginates `before`). Lives here so chat gets one fewer module request.
  * @param {number} threadId
  */
-export async function fetchAllChatThreadMessages(threadId) {
+export async function fetchAllChatThreadMessages(threadId, { signal } = {}) {
 	const tid = Number(threadId);
 	if (!Number.isFinite(tid) || tid <= 0) return [];
 
@@ -25,7 +25,7 @@ export async function fetchAllChatThreadMessages(threadId) {
 		qs.set('limit', '100');
 		if (before) qs.set('before', before);
 		const res = await fetch(`/api/chat/threads/${tid}/messages?${qs.toString()}`, {
-			credentials: 'include'
+			credentials: 'include', signal
 		});
 		const data = await res.json().catch(() => ({}));
 		if (!res.ok) {

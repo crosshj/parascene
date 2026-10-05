@@ -1,3 +1,4 @@
+import { challengeCreationForViewer, appendChallengeMediaProof, appendChallengeEntryState } from '../services/challenges/creationAccess.js';
 import express from "express";
 import { Readable } from "node:stream";
 import path from "node:path";
@@ -127,7 +128,7 @@ function gridThumbnail(input) {
 		.toBuffer();
 }
 
-export function createCreationsRoutes({ creations, users }) {
+export function createCreationsRoutes({ creations, users, appendChallengeEligibility }) {
 	const router = express.Router();
 	const noStore = (_req, res, next) => { res.set("Cache-Control", "private, no-store"); next(); };
 
@@ -166,7 +167,11 @@ export function createCreationsRoutes({ creations, users }) {
 				const ancestor = await creations.lineageAncestorForViewer(req.auth.userId, req.query.creation_id, req.query.lineage_of, { isAdmin: viewer?.role === "admin" });
 				allowed = Boolean(ancestor && creationMediaKeys(ancestor).some((value) => creations.safeKey(value) === key));
 			}
-			if (!allowed) return res.status(404).json({ error: "Media not found" });
+			if (!allowed) {
+    const entry = await challengeCreationForViewer({ creations, viewer, creationId: req.query.creation_id, query: req.query });
+    allowed = Boolean(entry && creationMediaKeys(entry).some(value => creations.safeKey(value) === key));
+   }
+   if (!allowed) return res.status(404).json({ error: "Media not found" });
 			const variant = String(req.query.variant || "").trim().toLowerCase();
 			if (variant === "grid_thumbnail") {
 				const response = await creations.fetchMedia(key, { method: "GET" });
@@ -300,6 +305,7 @@ export function createCreationsRoutes({ creations, users }) {
 			if (!row && req.query.lineage_of != null) {
 				row = await creations.lineageAncestorForViewer(req.auth.userId, req.params.id, req.query.lineage_of, { isAdmin: viewer.role === "admin" });
 			}
+			if (!row) row = await challengeCreationForViewer({ creations, viewer, creationId: req.params.id, query: req.query });
 			if (!row) return res.status(404).json({ error: "Image not found" });
 			const payload = await serializeWithCreator(row);
 			if (req.query.lineage_of != null) {
@@ -307,7 +313,10 @@ export function createCreationsRoutes({ creations, users }) {
 					payload[field] = withLineageProof(payload[field], req.query.lineage_of);
 				}
 			}
-			return res.json(payload);
+			appendChallengeMediaProof(payload, req.query.challenge_message_id ?? req.query.challenge_msg);
+   await appendChallengeEligibility?.(req, viewer, row, parseMeta(row.meta), payload);
+   await appendChallengeEntryState(parseMeta(row.meta), payload);
+   return res.json(payload);
 		} catch (error) { return next(error); }
 	});
 
@@ -412,6 +421,7 @@ export function createCreationsRoutes({ creations, users }) {
 			if (!row && req.query.lineage_of != null) {
 				row = await creations.lineageAncestorForViewer(req.auth.userId, req.params.id, req.query.lineage_of, { isAdmin: viewer?.role === "admin" });
 			}
+			if (!row) row = await challengeCreationForViewer({ creations, viewer, creationId: req.params.id, query: req.query });
 			if (!row) return res.status(404).json({ error: "Audio not found" });
 			const meta = parseMeta(row.meta);
 			if (meta.nsfw === true && viewer?.meta?.enableNsfw !== true && Number(row.user_id) !== Number(req.auth.userId) && viewer?.role !== "admin") {

@@ -37,7 +37,7 @@ export function createThreadsStore(client, users, { broadcast = broadcastThreadH
 				reactions[key] = anonymous ? voters.length : [...shown, ...(overflow ? [overflow] : [])];
 				if (voters.includes(Number(userId))) viewer_reactions.push(key);
 			}
-			return { ...row, reactions, viewer_reactions };
+			return { ...row, reactions, viewer_reactions, viewer_vote_intent: row.reactions?._challenge_vote_versions?.[userId] || null };
 		});
 	}
 	async function privateSecret(userId, threadId) {

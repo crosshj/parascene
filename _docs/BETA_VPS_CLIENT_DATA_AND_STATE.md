@@ -479,3 +479,38 @@ Cancellation before POST stops submission; accepted requests finish pending
 tracking.
 
 The focused contract check is `cd vps && npm run verify:create-draft`.
+
+### Challenges history and durable vote intent (2026-10-05)
+
+Challenges participant, details and organizer routes acquire the same Threads
+message query with `complete: true, persist: true`. The query fetches all pages
+at 100 messages per request, persists a viewer-scoped complete snapshot (up to
+3 MB), paints it synchronously on return/reload, and revalidates without blanking
+the view. It uses Threads' existing room leases, invalidation queue and reconnect
+handling, rather than a second realtime client or page-owned history cache.
+Organizer forms and open voting media stay mounted during reconciliation.
+
+`threads.votes` owns delivery beyond any route/modal lifetime. Each selected score
+is synchronously stored as a viewer-scoped, versioned intent under
+`prsn-vps-challenge-vote-v1:<viewer>:<message>:<intent>`. Network writes are
+coalesced per message and serialized; timeouts and transient failures retry with
+bounded backoff. Pending intents have no expiry and survive reload/logout;
+logout stops delivery and clears read caches, but preserves unsent user input.
+Permission, missing-entry and authentication failures are retained and surfaced,
+not presented as saved. Reauthentication resumes authentication-blocked intents.
+Storage failure is visible because only in-memory retry is possible in that case.
+
+The latest intent is projected over snapshots while pending and until an equal
+or newer server revision is observed. This is also the source for the remaining
+vote badges. UI distinguishes saving/pending from server-confirmed saved state.
+An old response or another tab's older acknowledgement cannot clear a newer
+selection. The API checks the intent's viewer against the current session to
+prevent queued work from being submitted under a different logged-in account.
+
+Score writes use a conditional JSONB update against the previously read reactions
+object and retry on contention. The score and per-viewer intent revision commit
+in the same update; replaying an intent is idempotent and older revisions cannot
+overwrite newer ones. Only the caller's revision is exposed alongside anonymous
+reaction counts. Both VPS and WWW reaction writers use the same algorithm because
+they share the underlying table; deploy both writer changes to remove the older
+WWW overwrite path. No database schema migration is required.

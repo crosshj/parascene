@@ -61,6 +61,9 @@ export function createThreadsApi() {
 		deleteMessage(messageId, options = {}) {
 			return requestJson(`/api/chat/messages/${encodeURIComponent(messageId)}`, { ...options, method: 'DELETE' });
 		},
+		saveChallengeVote(messageId, payload, options = {}) {
+			return requestJson(`/api/chat/messages/${encodeURIComponent(messageId)}/challenge-vote`, { ...options, method: 'PUT', body: payload });
+		},
 		toggleReaction(messageId, emoji, options = {}) {
 			return requestJson(`/api/chat/messages/${encodeURIComponent(messageId)}/reactions`, { ...options, method: 'POST', body: { emoji_key: emoji } });
 		},

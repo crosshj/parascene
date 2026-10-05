@@ -4,7 +4,7 @@ import { mergeThreadsInbox } from './model.js';
 
 // Real inbox data must not reuse the earlier mock roster snapshot.
 const CACHE_PREFIX = 'prsn-vps-threads-inbox-v3';
-const MESSAGE_CACHE_PREFIX = 'prsn-vps-thread-messages-v1';
+const MESSAGE_CACHE_PREFIX = 'prsn-vps-thread-messages-v2';
 const MESSAGE_CACHE_LIMIT = 8;
 const MESSAGE_PAGE_LIMIT = 40;
 
@@ -12,7 +12,7 @@ function createPublicThreadMessageCache(viewerId, threadId) {
 	const baseKey = `${MESSAGE_CACHE_PREFIX}:${viewerId}`;
 	const cacheKey = `${baseKey}:${threadId}`;
 	const cache = createStorageCache(cacheKey, {
-		validate: (data) => Array.isArray(data?.messages) && data.messages.length <= MESSAGE_PAGE_LIMIT
+		validate: (data) => Array.isArray(data?.messages) && data.messages.length <= (data.complete ? 20000 : MESSAGE_PAGE_LIMIT)
 			&& data.messages.every((message) => Number.isFinite(Number(message?.id)))
 	});
 	function touch() {
@@ -30,7 +30,7 @@ function createPublicThreadMessageCache(viewerId, threadId) {
 		read() { const entry = cache.read(); if (entry) touch(); return entry; },
 		write(entry) {
 			let data = entry.data;
-			if (data.messages.length > MESSAGE_PAGE_LIMIT) {
+			if (!data.complete && data.messages.length > MESSAGE_PAGE_LIMIT) {
 				const messages = data.messages.slice(-MESSAGE_PAGE_LIMIT);
 				const first = messages[0];
 				let nextBefore = data.nextBefore;
@@ -40,7 +40,7 @@ function createPublicThreadMessageCache(viewerId, threadId) {
 				}
 				data = { ...data, messages, hasMore: true, nextBefore };
 			}
-			cache.write({ ...entry, data }); touch();
+			if (JSON.stringify(data).length <= 3_000_000) { cache.write({ ...entry, data }); touch(); }
 		},
 		clear() { cache.clear(); }
 	};
@@ -80,7 +80,7 @@ export function createThreadsInboxQuery({ viewerId, api } = {}) {
 	};
 }
 
-export function createThreadMessagesQuery({ threadId, api, registry, viewerId, persist = false } = {}) {
+export function createThreadMessagesQuery({ threadId, api, registry, viewerId, persist = false, mode = {}, reconcile = value => value } = {}) {
 	const create = () => {
 		let query;
 		query = createQuery({
@@ -89,16 +89,21 @@ export function createThreadMessagesQuery({ threadId, api, registry, viewerId, p
 		maxAge: 0,
 		load: async ({ signal, current }) => {
 			const initialIds = new Set((current?.messages || []).map((row) => Number(row.id)));
-			let page = await api.loadMessages(threadId, { signal });
+			let page = await api.loadMessages(threadId, { signal, ...(mode.complete ? { limit: 100 } : {}) });
 			const loadedIds = (current?.messages || []).map((row) => Number(row.id)).filter((id) => Number.isSafeInteger(id) && id > 0);
 			const previousOldest = loadedIds.length ? Math.min(...loadedIds) : 0;
 			// Refresh the loaded range, including older reaction/edit/delete changes.
-			while (previousOldest && page.hasMore && page.nextBefore && Number(page.messages[0]?.id) > previousOldest) {
+			const cursors = new Set();
+			while (page.hasMore && page.nextBefore && (mode.complete || (previousOldest && Number(page.messages[0]?.id) > previousOldest))) {
 				const cursor = page.nextBefore;
-				const previous = await api.loadMessages(threadId, { signal, before: cursor });
+				if (cursors.has(cursor)) throw new Error('Message history cursor repeated');
+				cursors.add(cursor);
+				const previous = await api.loadMessages(threadId, { signal, before: cursor, ...(mode.complete ? { limit: 100 } : {}) });
 				if (previous.hasMore && previous.nextBefore === cursor) throw new Error('Message history cursor did not advance');
 				page = { ...previous, messages: [...previous.messages, ...page.messages] };
 			}
+			if (mode.complete && page.hasMore) throw new Error('Incomplete challenge history: pagination cursor missing');
+			if (mode.complete) return { ...page, complete: true, messages: reconcile(page.messages) };
 			// History loads and send responses can publish while this fetch runs.
 			// Merge against that live query state rather than its starting snapshot.
 			const live = query.data || current;
@@ -113,5 +118,5 @@ export function createThreadMessagesQuery({ threadId, api, registry, viewerId, p
 	};
 	return registry
 		? registry.acquire(['thread-messages', Number(threadId)], create)
-		: { query: create(), release() {} };
+		: (() => { const query = create(); return { query, release() { query.destroy(); } }; })();
 }

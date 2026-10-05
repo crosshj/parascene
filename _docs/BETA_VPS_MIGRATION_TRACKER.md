@@ -12,9 +12,9 @@ Current outstanding migration scope. Update this checklist as items are verified
 ## Main product surfaces remaining
 
 - [ ] Feed
-- [ ] Challenges
+- [ ] Challenges — first port implemented: participant/details/organizer UI and active SPA CSS, voting, submission/withdrawal, organizer media/pins and results/payout routes. Build and integration checks pass; browser acceptance and visual adjustments remain.
 
-These are the two major end-user surfaces still to port. Smaller follow-ups and migration-wide cutover checks are listed separately below. The dated [2026-10-04 review notes](BETA_CUTOVER_LOG.md#comments-explore-my-files-library-and-user-menu-2026-10-04) record the completed port details and validation.
+Feed remains to port; Challenges is ready for a first browser review. Smaller follow-ups and migration-wide cutover checks are listed separately below. The dated [2026-10-04 review notes](BETA_CUTOVER_LOG.md#comments-explore-my-files-library-and-user-menu-2026-10-04) record the completed port details and validation.
 
 ## Product follow-ups
 

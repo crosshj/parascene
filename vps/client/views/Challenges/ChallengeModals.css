@@ -1,0 +1,65 @@
+/* Overlay foundations owned by the challenge modal renderers themselves. */
+dialog[data-challenges-organizer-modal] {
+ position: fixed !important;
+ inset: 0 !important;
+ box-sizing: border-box;
+ width: 100%;
+ height: 100%;
+ max-width: none;
+ max-height: none;
+ margin: 0;
+ padding: 0;
+ border: 0;
+ color: var(--text);
+ background: rgb(0 0 0 / 50%) !important;
+ align-items: center;
+ justify-content: center;
+ overflow: hidden;
+}
+
+dialog[data-challenges-organizer-modal]:not([open]) {
+ display: none !important;
+}
+
+dialog[data-challenges-organizer-modal][open] {
+ display: flex !important;
+ opacity: 1;
+ visibility: visible;
+ pointer-events: auto;
+}
+
+dialog[data-challenges-organizer-modal]::backdrop {
+ background: transparent;
+}
+
+dialog[data-challenges-organizer-modal] > .modal {
+ display: flex;
+ flex-direction: column;
+ box-sizing: border-box;
+ width: min(720px, 94vw);
+ max-height: 100dvh;
+ overflow: hidden;
+ background: var(--surface);
+ border: 1px solid var(--border);
+ border-radius: 14px;
+ box-shadow: var(--shadow);
+}
+
+.challenge-vote-modal-overlay {
+ position: fixed;
+ inset: 0;
+ z-index: 100000;
+ display: flex;
+ align-items: center;
+ justify-content: center;
+ box-sizing: border-box;
+ background: rgb(0 0 0 / 62%);
+}
+
+body:has(dialog[data-challenges-organizer-modal][open]) .beta-outlet__scroll,
+body:has(.challenge-vote-modal-overlay) .beta-outlet__scroll {
+ overflow: hidden;
+}
+
+.challenge-vote-modal-delivery { display: block; min-height: 1.3em; color: var(--text-muted); font-size: .8rem; }
+.challenge-sync-status { margin: 8px 16px; color: var(--text-muted); font-size: .875rem; }

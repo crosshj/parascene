@@ -1,3 +1,4 @@
+import { saveChallengeVote } from './utils/challengeVoteStore.js';
 import express from "express";
 import crypto from "crypto";
 import { broadcastRoomDirty, broadcastUserInboxDirty } from "./utils/realtimeBroadcast.js";
@@ -4324,6 +4325,13 @@ function buildChannelInviteSystemBody({ inviterHandle, invitedHandles }) {
 				challengePayload && String(challengePayload.kind || "").trim() === "challenge_submission";
 			const isScoreKey = isChallengeScoreReactionKey(emojiKey);
 
+			if (isChallengeSubmission && isScoreKey) {
+    const saved = await saveChallengeVote({ sb, userId, messageId, emojiKey, op });
+    void broadcastRoomDirty(saved.thread_id, messageId);
+    void broadcastUserInboxDirty(saved.thread_id, [userId]);
+    return res.json(saved);
+   }
+   if (isChallengeSubmission) return res.status(400).json({ message: 'Use the challenge score controls for entries.' });
 			const bucket = normalizeChatReactionsBucket(msg.reactions);
 			const uid = Number(userId);
 			let arr = Array.isArray(bucket[emojiKey]) ? [...bucket[emojiKey]].map((x) => Number(x)) : [];
@@ -4353,15 +4361,6 @@ function buildChannelInviteSystemBody({ inviterHandle, invitedHandles }) {
 				added = true;
 			}
 
-			// Challenge submissions: at most one score reaction per voter.
-			if (isChallengeSubmission && isScoreKey) {
-				if (added) {
-					stripUserFromChallengeScoreReactions(bucket, uid, { keepKey: emojiKey });
-				} else {
-					stripUserFromChallengeScoreReactions(bucket, uid);
-				}
-			}
-
 			const { error: upErr } = await sb
 				.from("prsn_chat_messages")
 				.update({ reactions: bucket })
@@ -4373,7 +4372,7 @@ function buildChannelInviteSystemBody({ inviterHandle, invitedHandles }) {
 			return res.json({ added, count });
 		} catch (err) {
 			console.error("[POST /api/chat/messages/:messageId/reactions]", err);
-			return res.status(500).json({ error: "Server error", message: err?.message || "Failed" });
+			return res.status(err?.status || 500).json({ error: "Could not save reaction", message: err?.message || "Failed" });
 		}
 	});
 

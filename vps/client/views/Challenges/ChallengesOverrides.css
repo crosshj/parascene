@@ -1,0 +1,261 @@
+/* Active WWW SPA challenge cascade overrides. */
+.challenge-pane-organize-entry {
+	margin-top: 0;
+	margin-bottom: 14px;
+}
+
+.challenge-pane-organize-entry-btn {
+	box-sizing: border-box;
+	width: 100%;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 10px;
+	padding: 14px 22px;
+	font-size: 1.0625rem;
+	font-weight: 600;
+	line-height: 1.2;
+	text-decoration: none;
+	color: var(--text-muted);
+	border: 1px solid color-mix(in srgb, var(--border) 85%, var(--text) 15%);
+	border-radius: 12px;
+	cursor: pointer;
+	appearance: none;
+	-webkit-appearance: none;
+	background: transparent;
+	box-shadow: none;
+	transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.challenge-pane-organize-entry-btn:hover {
+	color: var(--text);
+	background: color-mix(in srgb, var(--text) 4%, transparent);
+	border-color: color-mix(in srgb, var(--border) 55%, var(--text) 45%);
+}
+
+.challenge-pane-organize-entry-btn:focus-visible {
+	outline: 2px solid color-mix(in srgb, var(--accent, #5eead4) 55%, transparent);
+	outline-offset: 3px;
+}
+
+.challenge-pane-hero-stat {
+	border: none;
+	background: var(--color-purple-bg-subtle, color-mix(in srgb, var(--color-purple, #a78bfa) 14%, transparent));
+}
+
+.challenge-pane-organizer-stats-totals {
+	margin: 0 0 4px;
+}
+
+.challenge-pane-organizer-stats-totals.challenge-pane-hero-stats {
+	margin-top: 0;
+}
+
+img.challenge-pane-hero-image {
+	display: block !important;
+	max-width: none !important;
+	width: 100% !important;
+	height: 100% !important;
+	min-height: 0 !important;
+	object-fit: cover !important;
+	object-position: center !important;
+}
+
+.challenge-pane-organizer-modal-body .challenge-pane-admin-config-form {
+	flex: 1 1 auto !important;
+	min-height: 0 !important;
+	display: flex !important;
+	flex-direction: column !important;
+}
+
+.challenge-pane-admin-form-main {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	-webkit-overflow-scrolling: touch;
+	overscroll-behavior: contain;
+}
+
+.challenge-pane-admin-form-footer {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	flex-shrink: 0;
+	margin-top: auto;
+	margin-left: -20px;
+	margin-right: -20px;
+	padding: 14px 20px max(20px, env(safe-area-inset-bottom, 0px));
+	border-top: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
+	background: var(--surface);
+}
+
+.challenge-pane-organizer-modal-body .challenge-pane-admin-form-footer > .challenge-pane-admin-submit {
+	align-self: flex-start;
+}
+
+.chat-page-challenges-organizer-modal-panel .challenge-pane-organizer-modal-body {
+	overflow: hidden;
+	padding-bottom: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+[data-challenges-organizer-modal] .modal-dismiss {
+	background: transparent;
+	border: none;
+	color: var(--text-muted);
+	cursor: pointer;
+	padding: 6px;
+	margin: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 6px;
+	transition: background-color 0.15s ease, color 0.15s ease;
+	-webkit-tap-highlight-color: transparent;
+}
+
+[data-challenges-organizer-modal] .modal-dismiss:hover {
+	background: var(--surface-strong);
+	color: var(--text);
+}
+
+[data-challenges-organizer-modal] .modal-dismiss:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
+}
+
+[data-challenges-organizer-modal] .modal-dismiss-icon {
+	width: 22px;
+	height: 22px;
+	flex-shrink: 0;
+}
+
+.challenge-vote-modal-media--suno {
+	background: #0b1220;
+}
+
+.challenge-vote-modal-media--suno .challenge-vote-modal-media-stage {
+	position: absolute;
+	inset: 0;
+	align-items: stretch;
+	justify-content: stretch;
+}
+
+.challenge-vote-modal-suno-stage {
+	position: relative;
+	display: block;
+	box-sizing: border-box;
+	width: 100%;
+	height: 100%;
+	min-width: 0;
+	min-height: 0;
+	border-radius: inherit;
+	overflow: hidden;
+	background: #0b1220;
+}
+
+.challenge-vote-modal-suno-art {
+	position: absolute;
+	inset: 0;
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	object-position: center;
+	pointer-events: auto;
+	touch-action: none;
+	user-select: none;
+	-webkit-user-drag: none;
+	z-index: 1;
+}
+
+.challenge-vote-modal-suno-art--empty {
+	background:
+		radial-gradient(ellipse at 30% 20%, color-mix(in srgb, var(--accent, #5eead4) 22%, transparent), transparent 55%),
+		linear-gradient(160deg, #0b1220 0%, #152038 100%);
+}
+
+.challenge-vote-modal-suno-dock {
+	position: absolute;
+	z-index: 2;
+	left: 50%;
+	bottom: 10px;
+	transform: translateX(-50%);
+	box-sizing: border-box;
+	width: 315px;
+	height: 100px;
+	max-width: none;
+	max-height: none;
+	aspect-ratio: unset;
+	border-radius: 10px;
+	overflow: hidden;
+	background: #0b1220;
+	box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
+}
+
+.challenge-vote-modal-suno-dock .challenge-vote-modal-suno-embed-iframe,
+.challenge-vote-modal-suno-embed-iframe {
+	display: block;
+	width: 100%;
+	height: 100%;
+	border: 0;
+	background: #0b1220;
+}
+
+.challenge-vote-modal-media-column > .feed-card-group-nav.challenge-vote-nav-out,
+.challenge-vote-modal-media-column > .feed-card-group-nav[data-challenge-vote-prev],
+.challenge-vote-modal-media-column > .feed-card-group-nav[data-challenge-vote-next] {
+	position: relative;
+	top: auto;
+	left: auto;
+	right: auto;
+	bottom: auto;
+	inset: auto;
+	transform: none;
+	flex-shrink: 0;
+	align-self: center;
+	margin-left: auto;
+	margin-right: auto;
+	z-index: 4;
+	pointer-events: auto;
+}
+
+.challenge-vote-modal-media-column > .feed-card-group-nav[data-challenge-vote-next] {
+	margin-bottom: 12px;
+}
+
+.challenge-vote-modal-media-column > .feed-card-group-nav.challenge-vote-nav-out:hover,
+.challenge-vote-modal-media-column > .feed-card-group-nav.challenge-vote-nav-out:active,
+.challenge-vote-modal-media-column > .feed-card-group-nav[data-challenge-vote-prev]:hover,
+.challenge-vote-modal-media-column > .feed-card-group-nav[data-challenge-vote-prev]:active,
+.challenge-vote-modal-media-column > .feed-card-group-nav[data-challenge-vote-next]:hover,
+.challenge-vote-modal-media-column > .feed-card-group-nav[data-challenge-vote-next]:active {
+	transform: none;
+}
+
+.challenge-vote-modal-media-column > .feed-card-group-nav:disabled {
+	opacity: 0.35;
+	cursor: default;
+}
+
+@media (max-width: 768px){.challenge-vote-modal-media--suno {
+		max-height: min(48vh, calc(100dvh - 280px));
+	}}
+
+.challenge-vote-modal {
+	overflow: hidden;
+	scrollbar-width: none;
+}
+
+.challenge-vote-modal::-webkit-scrollbar {
+	display: none;
+	width: 0;
+	height: 0;
+}
+
+.challenge-vote-modal-main,
+.challenge-vote-modal-media-column {
+	min-height: 0;
+	overflow: hidden;
+}

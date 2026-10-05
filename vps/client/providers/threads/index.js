@@ -1,3 +1,5 @@
+import { mergeThreadsInbox } from './model.js';
+import { createChallengeVotes } from '../challenges/votes.js';
 import { createThreadsApi } from './api.js';
 import { clearThreadMessagesCache, createThreadMessagesQuery, createThreadsInboxQuery } from './query.js';
 import { encryptThreadText } from './private.js';
@@ -19,6 +21,13 @@ export function createThreadsProvider({ viewerId, registry, realtimeFactory = cr
 	const MAX_CACHED_THREADS = 8;
 	const MAX_CACHED_CANVASES = 16;
 	let destroyed = false;
+ const votes = createChallengeVotes({ viewerId,
+  send: (messageId, payload, options) => api.saveChallengeVote(messageId, payload, options),
+  onChange() {
+   for (const cached of messageQueries.values()) if (cached.mode.complete && cached.lease.query.data) cached.lease.query.update(current => ({ ...current, messages: votes.project(current.messages) }), { updated: cached.lease.query.getSnapshot().updatedAt });
+  },
+  onSaved(threadId) { rooms.get(Number(threadId))?.refresh.request(); inboxRefresh?.request(); },
+ });
 	let stopUser = null;
 	const stopInbox = query?.subscribe((snapshot) => {
 		if (snapshot.data && !stopUser && !destroyed) stopUser = realtime.subscribe(`user:${viewerId}`, () => inboxRefresh.request(), { debounceMs: 280 });
@@ -34,7 +43,7 @@ export function createThreadsProvider({ viewerId, registry, realtimeFactory = cr
 	function destroy() {
 		if (destroyed) return;
 		destroyed = true;
-		stopInbox?.(); stopUser?.(); inboxRefresh?.destroy(); realtime?.destroy();
+		votes.destroy(); stopInbox?.(); stopUser?.(); inboxRefresh?.destroy(); realtime?.destroy();
 		for (const room of rooms.values()) { room.refresh.destroy(); room.unsubscribe(); }
 		rooms.clear();
 		for (const entry of messageQueries.values()) entry.lease.release();
@@ -45,16 +54,19 @@ export function createThreadsProvider({ viewerId, registry, realtimeFactory = cr
 
 	return {
 		api,
+		votes,
 		query,
 		preload() { if (query) void query.loadIfNeeded().catch(() => undefined); },
-		acquireMessages(threadId, { persist = false } = {}) {
+		acquireMessages(threadId, { persist = false, complete = false } = {}) {
 			if (destroyed) throw new Error('Threads provider has been destroyed');
 			const key = Number(threadId);
 			let cached = messageQueries.get(key);
 			if (!cached) {
-				cached = { lease: createThreadMessagesQuery({ threadId, api, viewerId, persist }), refs: 0, touched: Date.now() };
+				const mode = { complete };
+			cached = { mode, lease: createThreadMessagesQuery({ threadId, api, viewerId, persist, mode, reconcile: messages => votes.project(messages) }), refs: 0, touched: Date.now() };
 				messageQueries.set(key, cached);
 			}
+			if (complete) cached.mode.complete = true;
 			cached.refs++; cached.touched = Date.now();
 			let room = rooms.get(key);
 			if (!room) {
@@ -107,12 +119,7 @@ export function createThreadsProvider({ viewerId, registry, realtimeFactory = cr
 		},
 		async markRead(threadId, messageId, options) {
 			const response = await api.markRead(threadId, messageId, options);
-			query?.update((current) => current ? {
-				...current,
-				readMarkers: { ...current.readMarkers, [String(threadId)]: response.last_read_message_id },
-				threads: current.threads.map((row) => Number(row.id) === Number(threadId)
-					? { ...row, last_read_message_id: response.last_read_message_id, unread_count: Number(row.last_message?.id) > Number(response.last_read_message_id) ? row.unread_count : 0 } : row),
-			} : current);
+   query?.update(current => current ? mergeThreadsInbox(current, { ...current, readMarkers: { ...current.readMarkers, [String(threadId)]: response.last_read_message_id } }) : current);
 			void query?.refresh().catch(() => undefined);
 			return response;
 		},
@@ -136,8 +143,8 @@ export function createThreadsProvider({ viewerId, registry, realtimeFactory = cr
 			rooms.get(Number(thread.id))?.refresh.request(); inboxRefresh?.request();
 			return response;
 		},
-		syncExternalCache(event) { inbox?.syncExternalCache(event); },
-		clearCache() { inbox?.clearCache(); clearThreadMessagesCache(viewerId); destroy(); },
+		syncExternalCache(event) { inbox?.syncExternalCache(event); votes.syncExternalCache(event); },
+		clearCache() { votes.clear(); inbox?.clearCache(); clearThreadMessagesCache(viewerId); destroy(); },
 		destroy,
 	};
 }
