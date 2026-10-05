@@ -496,6 +496,9 @@ function getParasceneRelativePath(url) {
 		const path = parsed.pathname || '/';
 		const search = parsed.search || '';
 		const hash = parsed.hash || '';
+		// A site-root URL has no useful in-app path to show. Keep the hostname
+		// visible (for example, https://beta.parascene.com) instead of rendering it as "/".
+		if (path === '/' && !search && !hash) return null;
 		return path + search + hash;
 	} catch {
 		return null;
