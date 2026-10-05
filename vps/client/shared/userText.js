@@ -586,7 +586,7 @@ const SUNO_UUID_RE =
 	/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 
 function emptySunoLinkIds() {
-	return { songId: '', slug: '', hookId: '', playlistId: '' };
+	return { songId: '', slug: '', hookId: '', playlistId: '', albumId: '' };
 }
 
 function extractSunoLinkInfo(url) {
@@ -647,11 +647,22 @@ function extractSunoLinkInfo(url) {
 		};
 	}
 
+	const albumMatch = pathname.match(/^\/album\/([a-f0-9-]{36})\/?$/i);
+	if (albumMatch?.[1] && SUNO_UUID_RE.test(albumMatch[1])) {
+		return { kind: 'album', ...emptySunoLinkIds(), albumId: albumMatch[1].toLowerCase() };
+	}
+
+	const handleAlbumMatch = pathname.match(/^\/@([^/]+)\/album\/([a-f0-9-]{36})\/?$/i);
+	if (handleAlbumMatch?.[2] && SUNO_UUID_RE.test(handleAlbumMatch[2])) {
+		return { kind: 'album', ...emptySunoLinkIds(), albumId: handleAlbumMatch[2].toLowerCase() };
+	}
+
 	return null;
 }
 
-function sunoLinkLabel({ kind, songId, slug, hookId, playlistId }) {
+function sunoLinkLabel({ kind, songId, slug, hookId, playlistId, albumId }) {
 	if (kind === 'hook' && hookId) return `hook ${hookId.slice(0, 8)}`;
+	if (kind === 'album' && albumId) return `album ${albumId.slice(0, 8)}`;
 	if (kind === 'playlist' && playlistId) return `playlist ${playlistId.slice(0, 8)}`;
 	if (songId) return songId.slice(0, 8);
 	if (slug) return slug;
@@ -667,6 +678,12 @@ function formatSunoUnfurlTitle(rawTitle, kind) {
 		t = t.replace(/\s+by\s+@[A-Za-z0-9._-]+\s*$/i, '');
 		t = t.trim();
 		return t ? `${t} | Suno playlist` : '';
+	}
+	if (kind === 'album') {
+		t = t.replace(/\s+\|\s+Suno(?:\s+Album)?\s*$/i, '');
+		t = t.replace(/\s+by\s+@[A-Za-z0-9._-]+\s*$/i, '');
+		t = t.trim();
+		return t ? `${t} | Suno album` : '';
 	}
 
 	if (kind === 'hook') {
@@ -737,8 +754,8 @@ const CREATION_URL_RE = /https?:\/\/[^\s"'<>]+\/creations\/(\d+)\/?/g;
  * - Initial label is `youtube {videoId}`
  * - Call `hydrateYoutubeLinkTitles(rootEl)` to asynchronously replace the link text with `youtube @handle - {title...}`
  *
- * Also detects Suno URLs (`/s/…`, `/song/…`, `/embed/…`, `/hook/…`, `/playlist/…`) and converts them into links labeled `suno …`.
- * Call `hydrateSunoLinkTitles(rootEl)` and `hydrateSunoEmbeds(rootEl)` (or `hydrateRichUserTextEmbeds`) for titles, song iframes, and hook/playlist cards.
+ * Also detects Suno URLs (`/s/…`, `/song/…`, `/embed/…`, `/hook/…`, `/playlist/…`, `/album/…`) and converts them into links labeled `suno …`.
+ * Call `hydrateSunoLinkTitles(rootEl)` and `hydrateSunoEmbeds(rootEl)` (or `hydrateRichUserTextEmbeds`) for titles, song iframes, and hook/playlist/album cards.
  *
  * Also detects X/Twitter post URLs and converts them into links with a consistent label:
  * - Initial label is `x-twitter @{user}` (or `x-twitter {statusId}` when username not present)
@@ -802,7 +819,7 @@ function textWithCreationLinksCore(text, { inlineMarkdown = false } = {}) {
 		if (suno) {
 			const safeUrl = escapeHtml(url);
 			const label = sunoLinkLabel(suno);
-			const kind = suno.kind || 'song';
+		const kind = suno.kind || 'song';
 			const kindAttr = ` data-suno-kind="${escapeHtml(kind)}"`;
 			const songAttr = suno.songId
 				? ` data-suno-song-id="${escapeHtml(suno.songId)}"`
@@ -814,7 +831,8 @@ function textWithCreationLinksCore(text, { inlineMarkdown = false } = {}) {
 			const playlistAttr = suno.playlistId
 				? ` data-suno-playlist-id="${escapeHtml(suno.playlistId)}"`
 				: '';
-			out += `<a href="${safeUrl}" class="user-link creation-link" target="_blank" rel="noopener noreferrer" data-suno-url="${safeUrl}" data-suno-preview-pending="true"${kindAttr}${songAttr}${slugAttr}${hookAttr}${playlistAttr} aria-label="suno ${escapeHtml(label)}">suno ${escapeHtml(label)}</a>`;
+			const albumAttr = suno.albumId ? ` data-suno-album-id="${escapeHtml(suno.albumId)}"` : '';
+			out += `<a href="${safeUrl}" class="user-link creation-link" target="_blank" rel="noopener noreferrer" data-suno-url="${safeUrl}" data-suno-preview-pending="true"${kindAttr}${songAttr}${slugAttr}${hookAttr}${playlistAttr}${albumAttr} aria-label="suno ${escapeHtml(label)}">suno ${escapeHtml(label)}</a>`;
 			out += escapeHtml(trailing);
 			lastIndex = start + rawUrl.length;
 			continue;
@@ -1120,13 +1138,14 @@ export function hydrateYoutubeLinkTitles(rootEl) {
 	}
 }
 
-const SUNO_RESOLVE_CACHE_PREFIX = 'ps_suno_resolve_v3:';
+const SUNO_RESOLVE_CACHE_PREFIX = 'ps_suno_resolve_v4:';
 const SUNO_RESOLVE_TTL_MS = 1000 * 60 * 60 * 24 * 30;
 const sunoResolveInFlight = new Map();
 
 function sunoResolveCacheKeyFromInfo(url, info) {
 	if (info?.kind === 'hook' && info.hookId) return `hook:${info.hookId}`;
 	if (info?.kind === 'playlist' && info.playlistId) return `playlist:${info.playlistId}`;
+	if (info?.kind === 'album' && info.albumId) return `album:${info.albumId}`;
 	if (info?.kind === 'song' && info.songId) return `song:${info.songId}`;
 	return String(url || '').trim();
 }
@@ -1140,9 +1159,11 @@ function normalizeSunoResolvePayload(data) {
 	const hookId = typeof data?.hookId === 'string' ? data.hookId.trim() : '';
 	const playlistId =
 		typeof data?.playlistId === 'string' ? data.playlistId.trim() : '';
+	const albumId = typeof data?.albumId === 'string' ? data.albumId.trim() : '';
 	let kind = data?.kind;
-	if (kind !== 'song' && kind !== 'hook' && kind !== 'playlist') {
+	if (kind !== 'song' && kind !== 'hook' && kind !== 'playlist' && kind !== 'album') {
 		if (hookId && SUNO_UUID_RE.test(hookId)) kind = 'hook';
+		else if (albumId && SUNO_UUID_RE.test(albumId)) kind = 'album';
 		else if (playlistId && SUNO_UUID_RE.test(playlistId)) kind = 'playlist';
 		else if (songId && SUNO_UUID_RE.test(songId)) kind = 'song';
 		else return null;
@@ -1150,11 +1171,13 @@ function normalizeSunoResolvePayload(data) {
 	if (kind === 'song' && !SUNO_UUID_RE.test(songId)) return null;
 	if (kind === 'hook' && !SUNO_UUID_RE.test(hookId)) return null;
 	if (kind === 'playlist' && !SUNO_UUID_RE.test(playlistId)) return null;
+	if (kind === 'album' && !SUNO_UUID_RE.test(albumId)) return null;
 	return {
 		kind,
 		songId,
 		hookId,
 		playlistId,
+		albumId,
 		title: typeof data?.title === 'string' ? data.title.trim() : '',
 		creator: typeof data?.creator === 'string' ? data.creator.trim() : '',
 		ogImage: typeof data?.ogImage === 'string' ? data.ogImage.trim() : '',
@@ -1193,7 +1216,7 @@ function setCachedSunoResolve(cacheKey, payload) {
 	}
 }
 
-function formatSunoLabel({ title, creator, kind, songId, slug, hookId, playlistId }) {
+function formatSunoLabel({ title, creator, kind, songId, slug, hookId, playlistId, albumId }) {
 	const t = clipText(title, { max: 72 });
 	const c = clipText(creator, { max: 40 });
 	if (t && c) return `suno ${c} - ${t}`;
@@ -1202,6 +1225,7 @@ function formatSunoLabel({ title, creator, kind, songId, slug, hookId, playlistI
 	if (kind === 'playlist' && playlistId) {
 		return `suno playlist ${playlistId.slice(0, 8)}`;
 	}
+	if (kind === 'album' && albumId) return `suno album ${albumId.slice(0, 8)}`;
 	if (songId) return `suno ${songId.slice(0, 8)}`;
 	if (slug) return `suno ${slug}`;
 	return '';
@@ -1213,6 +1237,7 @@ function applySunoResolveToAnchor(a, payload) {
 	if (payload.songId) a.dataset.sunoSongId = payload.songId;
 	if (payload.hookId) a.dataset.sunoHookId = payload.hookId;
 	if (payload.playlistId) a.dataset.sunoPlaylistId = payload.playlistId;
+	if (payload.albumId) a.dataset.sunoAlbumId = payload.albumId;
 	if (payload.url) a.dataset.sunoCanonicalUrl = payload.url;
 }
 
@@ -1265,7 +1290,7 @@ export function hydrateSunoLinkTitles(rootEl) {
 			continue;
 		}
 		const kind = String(a.dataset.sunoKind || '').trim();
-		if (kind === 'hook' || kind === 'playlist') continue;
+		if (kind === 'hook' || kind === 'playlist' || kind === 'album') continue;
 
 		const url = String(a.dataset.sunoUrl || a.getAttribute('href') || '').trim();
 		if (!url) continue;
@@ -1277,7 +1302,7 @@ export function hydrateSunoLinkTitles(rootEl) {
 		const cached = getCachedSunoResolve(cacheKey) || getCachedSunoResolve(url);
 		if (cached) {
 			applySunoResolveToAnchor(a, cached);
-			if (cached.kind === 'hook' || cached.kind === 'playlist') continue;
+			if (cached.kind === 'hook' || cached.kind === 'playlist' || cached.kind === 'album') continue;
 			const label = formatSunoLabel({
 				title: cached.title,
 				creator: cached.creator,
@@ -1286,6 +1311,7 @@ export function hydrateSunoLinkTitles(rootEl) {
 				slug,
 				hookId: cached.hookId,
 				playlistId: cached.playlistId,
+				albumId: cached.albumId,
 			});
 			if (label) a.textContent = label;
 			a.dataset.sunoTitleHydrated = 'true';
@@ -1296,7 +1322,7 @@ export function hydrateSunoLinkTitles(rootEl) {
 			if (!payload) return;
 			if (a.dataset.sunoUrl !== url && a.getAttribute('href') !== url) return;
 			applySunoResolveToAnchor(a, payload);
-			if (payload.kind === 'hook' || payload.kind === 'playlist') return;
+			if (payload.kind === 'hook' || payload.kind === 'playlist' || payload.kind === 'album') return;
 			const label = formatSunoLabel({
 				title: payload.title,
 				creator: payload.creator,
@@ -1305,6 +1331,7 @@ export function hydrateSunoLinkTitles(rootEl) {
 				slug,
 				hookId: payload.hookId,
 				playlistId: payload.playlistId,
+				albumId: payload.albumId,
 			});
 			if (label) a.textContent = label;
 			a.dataset.sunoTitleHydrated = 'true';
@@ -2479,7 +2506,7 @@ function mountSunoEmbed(a, songId, titleText) {
 function markSunoPreviewBroken(wrap) {
 	wrap.classList.remove('is-loading');
 	wrap.classList.add('is-broken');
-	const label = wrap.dataset.sunoKind === 'playlist' ? 'Suno playlist preview unavailable' : 'Suno hook preview unavailable';
+	const label = wrap.dataset.sunoKind === 'album' ? 'Suno album preview unavailable' : wrap.dataset.sunoKind === 'playlist' ? 'Suno playlist preview unavailable' : 'Suno hook preview unavailable';
 	wrap.title = label;
 	wrap.setAttribute('aria-label', label);
 	if (!wrap.querySelector('.connect-chat-suno-preview-broken')) {
@@ -2498,7 +2525,7 @@ function mountBrokenSunoPreview(a, kind = 'hook') {
 function mountSunoPreviewCard(a, payload) {
 	if (!(a instanceof HTMLAnchorElement) || !payload) return;
 	if (a.dataset.sunoEmbedHydrated === 'true') return;
-	const kind = payload.kind === 'playlist' ? 'playlist' : 'hook';
+	const kind = payload.kind === 'playlist' || payload.kind === 'album' ? payload.kind : 'hook';
 	a.dataset.sunoEmbedHydrated = 'true';
 
 	const wrap = document.createElement('a');
@@ -2510,6 +2537,7 @@ function mountSunoPreviewCard(a, payload) {
 	wrap.dataset.sunoKind = kind;
 	if (payload.hookId) wrap.dataset.sunoHookId = payload.hookId;
 	if (payload.playlistId) wrap.dataset.sunoPlaylistId = payload.playlistId;
+	if (payload.albumId) wrap.dataset.sunoAlbumId = payload.albumId;
 
 	const media = document.createElement('span');
 	media.className = 'connect-chat-suno-preview-media';
@@ -2534,13 +2562,15 @@ function mountSunoPreviewCard(a, payload) {
 		payload.title ||
 			(kind === 'playlist' && payload.playlistId
 				? `playlist ${payload.playlistId.slice(0, 8)}`
+				: kind === 'album' && payload.albumId
+					? `album ${payload.albumId.slice(0, 8)}`
 				: payload.hookId
 					? `hook ${payload.hookId.slice(0, 8)}`
 					: ''),
 		kind
 	);
 	const creator = payload.creator || '';
-	const showCreator = kind !== 'playlist' && Boolean(creator);
+	const showCreator = kind === 'hook' && Boolean(creator);
 	if (title || showCreator) {
 		const meta = document.createElement('span');
 		meta.className = 'connect-chat-suno-preview-meta';
@@ -2558,11 +2588,11 @@ function mountSunoPreviewCard(a, payload) {
 		}
 		wrap.appendChild(meta);
 	}
-	const tooltip = kind === 'playlist' ? title : [title, creator].filter(Boolean).join(' · ');
+	const tooltip = kind !== 'hook' ? title : [title, creator].filter(Boolean).join(' · ');
 	if (tooltip) wrap.title = tooltip;
 	wrap.setAttribute(
 		'aria-label',
-		tooltip || (kind === 'playlist' ? 'Suno playlist' : 'Suno hook')
+		tooltip || (kind === 'playlist' ? 'Suno playlist' : kind === 'album' ? 'Suno album' : 'Suno hook')
 	);
 	if (payload.previewFailed || !payload.ogImage) markSunoPreviewBroken(wrap);
 	a.replaceWith(wrap);
@@ -2571,7 +2601,7 @@ function mountSunoPreviewCard(a, payload) {
 function mountSunoFromPayload(a, payload, titleText) {
 	if (!payload) return;
 	applySunoResolveToAnchor(a, payload);
-	if (payload.kind === 'hook' || payload.kind === 'playlist') {
+	if (payload.kind === 'hook' || payload.kind === 'playlist' || payload.kind === 'album') {
 		mountSunoPreviewCard(a, payload);
 		return;
 	}
@@ -2617,7 +2647,7 @@ export function hydrateSunoEmbeds(rootEl) {
 		const kind = String(a.dataset.sunoKind || '').trim();
 		let songId = String(a.dataset.sunoSongId || '').trim();
 		const titleText = a.textContent ? String(a.textContent).trim() : '';
-		const isPreviewKind = kind === 'hook' || kind === 'playlist';
+		const isPreviewKind = kind === 'hook' || kind === 'playlist' || kind === 'album';
 
 		if (isPreviewKind) {
 			if (!url) {

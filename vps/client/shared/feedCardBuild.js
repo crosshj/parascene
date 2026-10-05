@@ -3,6 +3,7 @@
  * `chatFeedMobilePartition.js` and are re-exported here.
  */
 import * as blogCampaignPathMod from './blogCampaignPath.js';
+import { iconMarkup } from '../components/Icon/Icon.js';
 import * as datetimeMod from './datetime.js';
 import * as likesMod from './likes.js';
 import * as avatarMod from './avatar.js';
@@ -232,7 +233,9 @@ export function feedItemCardOriginalImageUrl(item) {
 }
 
 function appendMediaVariant(url, variant) {
-	if (!url || !variant || !url.includes('/api/creations/media/')) return url;
+	if (!url || !variant) return url;
+	url = url.replace('/api/images/created/', '/api/creations/media/').replace('/api/videos/created/', '/api/creations/media/');
+	if (!url.includes('/api/creations/media/')) return url;
 	const parsed = new URL(url, 'http://localhost');
 	parsed.searchParams.set('variant', variant);
 	if (variant === 'blur') parsed.searchParams.set('source_variant', 'thumbnail');
@@ -428,6 +431,7 @@ export function getFeedItemGroupCarouselSources(item, preferThumbnail = false) {
 
 export function setupFeedCardGroupCarousel(imageContainer, item, options = {}) {
 	if (!(imageContainer instanceof HTMLElement)) return false;
+	if (imageContainer.classList.contains('nsfw') && !document.body.classList.contains('view-nsfw') && !imageContainer.classList.contains('nsfw-revealed')) return false;
 	if (imageContainer.querySelector('[data-feed-card-group-carousel]')) return true;
 	const preferThumbnail = options.preferThumbnail === true;
 	const sources = getFeedItemGroupCarouselSources(item, preferThumbnail);
@@ -1709,7 +1713,8 @@ function buildFeedCreationCard(
 	const colorSeed = authorUserName || emailPrefix || String(authorUserId || '') || displayName;
 	const avatarColor = getAvatarColor(colorSeed);
 	const relativeTime = formatRelativeTime(item.created_at) || "recently";
-	const { text: title, untitled: titleUntitled } = creationTitleDisplay(item);
+	const { text: title, untitled: missingTitle } = creationTitleDisplay(item);
+	const titleUntitled = missingTitle || title.trim().toLowerCase() === 'untitled';
 	const profileHref = buildProfilePath({ userName: authorUserName, userId: authorUserId });
 	const isFounder = item.author_plan === "founder";
 	const avatarContent = avatarUrl ? html`<img data-avatar-src="${avatarUrl}" alt="">` : avatarInitial;
@@ -1757,8 +1762,8 @@ function buildFeedCreationCard(
           <div class="feed-card-title${titleUntitled ? ' feed-card-title--untitled' : ''}">${title}</div>
           <div class="feed-card-metadata" title="${formatDateTime(item.created_at)}">
             ${profileHref
-			? html`<a class="user-link" href="${profileHref}" data-profile-link>${isFounder ? html`<span class="founder-name">${displayName}</span> <span class="founder-name">@${handle}</span>` : html`${displayName} @${handle}`}</a>`
-			: html`${isFounder ? html`<span class="founder-name">${displayName}</span> <span class="founder-name">@${handle}</span>` : html`${displayName} @${handle}`}`} • ${relativeTime}
+			? html`<a class="user-link" href="${profileHref}" data-profile-link>${isFounder ? html`<span class="founder-name">@${handle}</span>` : html`@${handle}`}</a>`
+			: html`${isFounder ? html`<span class="founder-name">@${handle}</span>` : html`@${handle}`}`} • ${relativeTime}
           </div>
         </div>
       </div>
@@ -1875,7 +1880,7 @@ function buildFeedCreationCard(
 			e.preventDefault();
 			e.stopPropagation();
 			menu.style.display = 'none';
-			openFeedBetaWhyModal(item.feed_beta_why);
+			openFeedBetaWhyModal(item.feed_beta_why, { signal: tooltipLifetime.signal });
 		});
 	}
 
@@ -2207,7 +2212,7 @@ export function createFeedItemCard(item, itemIndex, options = {}) {
 	if (item.type === "engagement") {
 		return buildEngagementFeedCard(item, performShellNavigation);
 	}
-	return buildFeedCreationCard(
+	const card = buildFeedCreationCard(
 		item,
 		itemIndex,
 		setupFeedVideo,
@@ -2220,6 +2225,33 @@ export function createFeedItemCard(item, itemIndex, options = {}) {
 		performShellNavigation,
 		options.hidePublishedBadge === true
 	);
+	if (options.inlineActions === true) {
+		card.querySelector('.feed-card-actions-left')?.remove();
+		const actions = card.querySelector('.feed-card-actions');
+		const footer = card.querySelector('.feed-card-footer-grid');
+		if (actions && footer) {
+			footer.classList.add('feed-card-footer-grid--inline-actions');
+			footer.append(actions);
+		}
+	}
+	if (options.nsfwIcon === true) {
+		const media = card.querySelector('.feed-card-image.nsfw');
+		if (media) {
+			const badge = document.createElement('span');
+			badge.className = 'feed-card-nsfw-badge';
+			badge.setAttribute('role', 'img');
+			badge.setAttribute('aria-label', 'NSFW');
+			badge.innerHTML = iconMarkup('eyeHidden');
+			media.append(badge);
+			if (parseFeedItemMeta(item)?.group?.kind === 'group_creations') {
+				media.classList.add('feed-card-image--nsfw-group');
+				if (!media.querySelector('.creation-group-badge')) {
+					media.insertAdjacentHTML('beforeend', groupCreationBadgeHtml(item));
+				}
+			}
+		}
+	}
+	return card;
 }
 
 /**
@@ -2306,6 +2338,14 @@ export function createFeedSpotlightVideoTile(item, itemIndex, options = {}) {
 	img.decoding = "async";
 
 	imageContainer.appendChild(img);
+	if (item.nsfw) {
+		const badge = document.createElement('span');
+		badge.className = 'feed-card-nsfw-badge';
+		badge.setAttribute('role', 'img');
+		badge.setAttribute('aria-label', 'NSFW');
+		badge.innerHTML = iconMarkup('eyeHidden');
+		imageContainer.append(badge);
+	}
 	if (titleRaw) {
 		const overlay = document.createElement("div");
 		overlay.className = "chat-feed-mobile-spotlight-overlay";

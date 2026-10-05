@@ -11,7 +11,7 @@ import './ChallengesOverrides.css';
 import './ChallengeModals.css';
 
 export const ChallengesView = Object.freeze({
- mount({ outlet, services, actions, setHeaderMenu, setConversationIdentity, title = 'Challenges' }) {
+ mount({ outlet, services, actions, setHeaderMenu, setHeaderBreadcrumb, setHeaderTitle, title = 'Challenges' }) {
   const threads = services.providers.threads;
   const viewer = { id: services.providers.viewerId, user_name: services.session.user?.profile?.user_name || '' };
   const organizing = location.pathname === '/challenges/organize';
@@ -69,7 +69,15 @@ export const ChallengesView = Object.freeze({
     setVote: (id, score) => threads.votes.set(threadId, id, score),
     getVoteDelivery: id => threads.votes.get(id), subscribeVotes: callback => threads.votes.subscribe(callback), onVoteClose: afterClose,
     reactionIconHtml: (key, cls) => REACTION_ICONS[key]?.(cls) || '',
-    onDetailsChrome: info => { if (info?.title) { document.title = `${info.title} · Challenges · Parascene beta`; setConversationIdentity?.({ title: info.title }); } },
+    onDetailsChrome: info => {
+     const headerTitle = typeof info?.title === 'string' && info.title.trim() ? info.title.trim() : title;
+     if (location.pathname.startsWith('/challenges/details/')) {
+      setHeaderBreadcrumb?.({ parent: 'Challenges', href: '/challenges', current: headerTitle });
+     } else {
+      setHeaderTitle?.(title);
+     }
+     document.title = info?.title ? `${headerTitle} · Challenges · Parascene beta` : `${title} · Parascene beta`;
+    },
    });
    participantPainted = true; fingerprint = next; header(eligible);
    const last = Number(messages.at(-1)?.id) || 0;

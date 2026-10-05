@@ -184,3 +184,12 @@ export function handleNsfwClick(e) {
 	window.location.href = `/creations/${creationId}`;
 	return true;
 }
+
+export function bindNsfwClicks(root, { signal } = {}) {
+	root.addEventListener('click', (event) => {
+		if (handleNsfwClick(event)) {
+			event.preventDefault();
+			event.stopPropagation();
+		}
+	}, { capture: true, signal });
+}

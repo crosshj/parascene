@@ -17,23 +17,11 @@
 			href="/favicon.svg"
 			type="image/svg+xml"
 		/>
-		<link
-			rel="preconnect"
-			href="https://fonts.googleapis.com"
-		/>
-		<link
-			rel="preconnect"
-			href="https://fonts.gstatic.com"
-			crossorigin
-		/>
-		<link
-			href="https://fonts.googleapis.com/css2?family=Inter:wght@200;400;600;700;800&display=optional"
-			rel="stylesheet"
-		/>
+		<link rel="stylesheet" href="/typography.css" />
 		<style>
 			:root {
 				color-scheme: light dark;
-				font-family: 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+				font-family: var(--font-family);
 				--beta-sidebar-width: 272px;
 				--beta-mobile-nav-height: 68px;
 				--beta-shell-inset: 6px;
@@ -68,7 +56,7 @@
 				height: auto;
 			}
 			.brand .logo-text {
-				font-family: 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+				font-family: var(--font-family);
 				font-size: 36px;
 				font-weight: 700;
 				font-style: italic;
@@ -98,7 +86,6 @@
 				margin: 0;
 				font-size: clamp(2rem, 5vw, 3.25rem);
 				letter-spacing: -0.045em;
-				line-height: 1.05;
 			}
 			.state {
 				margin: 18px 0 0;

@@ -925,6 +925,7 @@ export function openChallengeVoteModalFromMessages(opts) {
 		}
 	});
 	const cfg = item?.latestConfig || model.participant.latestConfig;
+	opts.onModal?.(voteModal);
 	voteModal.open(slides, {
 		challengeTitle,
 		track: pickChallengeTrack(cfg)

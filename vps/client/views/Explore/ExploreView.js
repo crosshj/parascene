@@ -63,6 +63,13 @@ export const ExploreView = Object.freeze({
    } catch (error) { if (current() && error.name !== 'AbortError') { if (error.status === 401) return services.session.redirectToLogin(); grid.querySelectorAll('.skeleton-grid-tile').forEach(tile => tile.remove()); show(error.message || 'Unable to load Explore.', true); more.hidden = false; more.textContent = 'Retry'; } }
    finally { if (current()) { busy = false; more.disabled = false; root.removeAttribute('aria-busy'); } }
   }
+  async function onCreationMutation(event) {
+   if (!['published', 'unpublished', 'edited'].includes(event.detail?.reason) || destroyed) return;
+   const scrollTop = scroll?.scrollTop ?? 0;
+   await load(true);
+   if (!destroyed && scroll) requestAnimationFrame(() => { if (!destroyed) scroll.scrollTop = scrollTop; });
+  }
+  document.addEventListener('creation-detail:mutation', onCreationMutation);
   function submit(value) { const params = new URLSearchParams(); if (value.trim()) params.set('q', value.trim()); void actions.navigate(`/explore${params.size ? `?${params}` : ''}`); }
   const searchBinding = bindSearchComposer({ form: searchComposer, onSearch: submit });
   grid.addEventListener('click', event => { if (large || event.target.closest('a,button')) return; const card = event.target.closest('.creation-grid__card[data-creation-id]'); if (card) void actions.navigate(`/creations/${card.dataset.creationId}`, { seed: card.__creationRecord }); });
@@ -70,6 +77,6 @@ export const ExploreView = Object.freeze({
   more.addEventListener('click', () => void load(!rows.length));
   const observer = typeof IntersectionObserver === 'function' ? new IntersectionObserver(entries => { if (entries.some(entry => entry.isIntersecting) && hasMore && !busy && !status.classList.contains('is-error')) void load(); }, { root: scroll, rootMargin: '1000px' }) : null;
   observer?.observe(more); menu(); void load(true);
-  return { update({ search = '' }) { const next = new URLSearchParams(search).get('q')?.trim() || ''; if (next !== q) { q = next; void load(true); } }, destroy() { searchBinding.destroy(); disposeCards(); destroyed = true; ++epoch; request?.abort(); observer?.disconnect(); media.disconnect(); root.querySelectorAll('audio,video').forEach(player => { player.pause(); player.removeAttribute('src'); player.load(); }); root.remove(); } };
+  return { update({ search = '' }) { const next = new URLSearchParams(search).get('q')?.trim() || ''; if (next !== q) { q = next; void load(true); } }, destroy() { document.removeEventListener('creation-detail:mutation', onCreationMutation); searchBinding.destroy(); disposeCards(); destroyed = true; ++epoch; request?.abort(); observer?.disconnect(); media.disconnect(); root.querySelectorAll('audio,video').forEach(player => { player.pause(); player.removeAttribute('src'); player.load(); }); root.remove(); } };
  }
 });

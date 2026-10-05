@@ -20,8 +20,14 @@ import * as iconsMod from '../../icons/svg-strings.js';
 import * as socialsMod from '../../shared/profileSocials.js';
 import * as tooltipTapMod from '../../shared/reactionTooltipTap.js';
 import * as whoLabelsMod from '../../shared/whoLabels.js';
-export const UserProfileView=Object.freeze({mount({outlet,actions,services,url}){
+export const UserProfileView=Object.freeze({mount({outlet,actions,services,url,restoreState}){
 const mountRoot=mountTemplate(outlet,template);mountRoot.classList.add('user-profile-view');const lifetime=createFragmentLifetime(mountRoot);const OwnedIntersectionObserver=class extends globalThis.IntersectionObserver{constructor(...args){super(...args);lifetime.own(()=>this.disconnect())}};let routeUrl=new URL(url||location.href,location.origin),profileContext=null;
+let captureRestoreState = () => null;
+let profileCreator = null;
+const profileProvider = services?.providers?.profile;
+const watchedProfileUrls = new Set();
+let applyProfileListUpdate = () => {};
+let syncProfileFollow = () => {};
 let formatDate;
 let formatDateTime;
 let formatRelativeTime;
@@ -57,8 +63,9 @@ let PROFILE_SOCIAL_NETWORKS = [];
 let validateSocialUrl;
 let socialIconFns = {};
 
-let navigateToCreation = (href) => {
-	actions.navigate(href);
+let navigateToCreation = (href, seed) => {
+	const creator = seed?.creator || (profileCreator && Number(seed?.user_id) === Number(profileCreator.id) ? profileCreator : null);
+	actions.navigate(href, { seed: creator ? { ...seed, creator } : seed });
 };
 /** @type {((root?: ParentNode) => void) | null} */
 let bindProfileEmbedDmLinks = null;
@@ -83,7 +90,26 @@ async function loadDeps() {
 		formatRelativeTime = datetimeMod.formatRelativeTime;
 
 
-		fetchJsonWithStatusDeduped = async (url,options={})=>{const response=await lifetime.fetch(url,{credentials:'include',...options});const data=await response.json().catch(()=>null);if(!lifetime.active)throw new DOMException('View closed','AbortError');return {ok:response.ok,status:response.status,data};};
+		fetchJsonWithStatusDeduped = async (url, options = {}) => {
+			const method = (options.method || 'GET').toUpperCase();
+			if (method === 'GET' && profileProvider) {
+				if (!watchedProfileUrls.has(url)) {
+					watchedProfileUrls.add(url);
+					lifetime.own(profileProvider.query(url).subscribe(({ data, status }) => {
+						if (status !== 'ready' || !data?.ok) return;
+						void backgroundReady.then(() => { if (lifetime.active) applyProfileListUpdate(url, data.data); });
+					}, { immediate: false }));
+				}
+				const result = await profileProvider.read(url);
+				if (!lifetime.active) throw new DOMException('View closed', 'AbortError');
+				return result;
+			}
+			const response = await lifetime.fetch(url, { credentials: 'include', ...options });
+			const data = await response.json().catch(() => null);
+			if (!lifetime.active) throw new DOMException('View closed', 'AbortError');
+			if (response.ok && method !== 'GET') profileProvider?.invalidate();
+			return { ok: response.ok, status: response.status, data };
+		};
 
 
 		getAvatarColor = avatarMod.getAvatarColor;
@@ -885,7 +911,7 @@ function renderImageGrid(
 			+ (showPersonaAvatarBtn ? ' route-card-image--persona-mentions-avatar' : '');
 		card.style.cursor = 'pointer';
 		card.addEventListener('click', () => {
-			navigateToCreation(`/creations/${item.id}`);
+			navigateToCreation(`/creations/${item.id}`, item);
 		});
 
 		const isPublished = item.published === true || item.published === 1;
@@ -982,7 +1008,7 @@ function appendImageGridCards(grid, items, showBadge = false) {
 		const card = document.createElement('div');
 		card.className = 'route-card route-card-image';
 		card.style.cursor = 'pointer';
-		card.addEventListener('click', () => { navigateToCreation(`/creations/${item.id}`); });
+		card.addEventListener('click', () => { navigateToCreation(`/creations/${item.id}`, item); });
 
 		const isPublished = item.published === true || item.published === 1;
 		const userDeleted = Boolean(item.user_deleted);
@@ -2334,6 +2360,34 @@ if(!lifetime.active)return;
 	// Hydrate any links in user-generated content (e.g., About field)
 	hydrateUserTextLinks(container);
 
+	if (profileProvider) {
+		const resource = profileProvider.query(`${targetApiBase}/profile`);
+		lifetime.own(resource.subscribe(({ data, status }) => {
+			if (!lifetime.active || status !== 'ready' || !data?.ok) return;
+			const fresh = structuredClone(data.data);
+			syncProfileFollow(Boolean(fresh.viewer_follows));
+			Object.assign(user, fresh.user || {});
+			Object.assign(profile, fresh.profile || {});
+			profile.socials = safeJsonParse(profile.socials, {});
+			profile.badges = safeJsonParse(profile.badges, []);
+			profile.meta = safeJsonParse(profile.meta, {});
+			const scratch = document.createElement('div');
+			renderProfilePage(scratch, { user, profile, stats: fresh.stats || {}, plan: fresh.plan, isSelf, viewerFollows: fresh.viewer_follows, isAdmin, viewerUserId });
+			// Keep action buttons, tabs, edit forms and their listeners mounted.
+			for (const selector of ['.user-profile-banner', '.user-profile-avatar', '.user-profile-name', '.user-profile-handle', '.user-profile-stats']) {
+				const existing = container.querySelector(selector), next = scratch.querySelector(selector);
+				if (existing && next) existing.replaceWith(next);
+			}
+			const identity = container.querySelector('.user-profile-identity');
+			for (const selector of ['.user-profile-meta', '.user-profile-socials']) {
+				container.querySelector(selector)?.remove();
+				const next = scratch.querySelector(selector);
+				if (next) identity?.append(next);
+			}
+			hydrateUserTextLinks(container);
+		}));
+	}
+
 	const grid = container.querySelector('[data-profile-grid]');
 	const overlay = container.querySelector('[data-profile-edit-overlay]');
 
@@ -2355,6 +2409,7 @@ if(!lifetime.active)return;
 	};
 
 	const profileUserName = (profile?.user_name ?? '').trim().toLowerCase();
+	profileCreator = { id: user?.id ?? profile?.user_id, user_name: profileUserName, avatar_url: profile?.avatar_url };
 
 	const infiniteScrollByTab = {};
 
@@ -2431,7 +2486,7 @@ if(!lifetime.active)return;
 	const includeAllForAdmin = isAdmin;
 	const showBadge = isAdmin;
 	try {
-		const result = await loadUserImages(target, { includeAll: includeAllForAdmin, limit: PROFILE_PAGE_SIZE.creations, offset: 0 });
+		const result = restoreState?.tabData?.creations ? { images: restoreState.tabData.creations.items, has_more: restoreState.tabData.creations.hasMore } : await loadUserImages(target, { includeAll: includeAllForAdmin, limit: PROFILE_PAGE_SIZE.creations, offset: 0 });
 		tabData.creations = { items: result.images, hasMore: result.has_more };
 	} catch {
 		tabData.creations = { items: [], hasMore: false };
@@ -2444,6 +2499,72 @@ if(!lifetime.active)return;
 
 	// Lazy-load Likes, Follows, Following, Comments when user switches to that tab
 	const loadedTabs = new Set(['creations']);
+	if (restoreState?.tabData) {
+		for (const id of restoreState.loadedTabs || []) {
+			if (!tabData[id] || !restoreState.tabData[id]) continue;
+			tabData[id] = structuredClone(restoreState.tabData[id]);
+			loadedTabs.add(id);
+			renderTabContent(id);
+			const panel = container.querySelector(id === 'creations' ? '[data-profile-grid]' : `[data-profile-${id}]`);
+			setupInfiniteScrollForTab(id, panel);
+		}
+	}
+	captureRestoreState = () => ({ tabData: structuredClone(tabData), loadedTabs: [...loadedTabs] });
+	applyProfileListUpdate = (requestUrl, data) => {
+		const parsed = new URL(requestUrl, location.origin);
+		const endpoints = { 'created-images': ['creations', 'images'], 'liked-creations': ['likes', 'images'], following: ['follows', 'following'], followers: ['following', 'followers'], comments: ['comments', 'comments'] };
+		const entry = endpoints[parsed.pathname.split('/').pop()];
+		if (!entry || !parsed.pathname.startsWith(`${targetApiBase}/`)) return;
+		const [id, field] = entry, items = data?.[field];
+		if (!loadedTabs.has(id) || !Array.isArray(items)) return;
+		const offset = Number(parsed.searchParams.get('offset') || 0);
+		const limit = Number(parsed.searchParams.get('limit') || items.length);
+		const previous = tabData[id];
+		if (offset > previous.items.length) return;
+		const tail = previous.items.slice(offset + limit);
+		tabData[id] = { items: [...previous.items.slice(0, offset), ...items, ...tail], hasMore: tail.length ? previous.hasMore : Boolean(data.has_more) };
+		renderTabContent(id);
+	};
+	const onCreationMutation = async (event) => {
+		const reason = event.detail?.reason;
+		const id = Number(event.detail?.creationId);
+		if (!['published', 'unpublished', 'edited'].includes(reason) || !Number.isInteger(id) || id <= 0) return;
+		if (!loadedTabs.has('creations')) return;
+		const current = tabData.creations.items || [];
+		const alreadyListed = current.some(item => Number(item?.id ?? item?.created_image_id) === id);
+		if (!isSelf && !alreadyListed) return;
+		const scroll = mountRoot.closest('.beta-outlet__scroll');
+		const scrollTop = scroll?.scrollTop ?? 0;
+		try {
+			const result = await loadUserImages(target, { includeAll: includeAllForAdmin, limit: Math.max(PROFILE_PAGE_SIZE.creations, current.length), offset: 0 });
+			if (!lifetime.active) return;
+			const fresh = Array.isArray(result.images) ? result.images : [];
+			const freshIds = new Set(fresh.map(item => Number(item?.id ?? item?.created_image_id)));
+			const tail = current.slice(fresh.length).filter(item => Number(item?.id ?? item?.created_image_id) !== id && !freshIds.has(Number(item?.id ?? item?.created_image_id)));
+			tabData.creations = { items: [...fresh, ...tail], hasMore: Boolean(result.has_more || tail.length) };
+			renderTabContent('creations');
+			if (scroll) requestAnimationFrame(() => { if (lifetime.active) scroll.scrollTop = scrollTop; });
+		} catch { /* Keep the already-rendered profile if the refresh fails. */ }
+	};
+	lifetime.listen(document, 'creation-detail:mutation', onCreationMutation);
+	if (profileProvider && restoreState?.tabData) {
+		for (const id of loadedTabs) {
+			const endpoints = { creations: ['created-images', 'images'], likes: ['liked-creations', 'images'], follows: ['following', 'following'], following: ['followers', 'followers'], comments: ['comments', 'comments'] };
+			const endpoint = endpoints[id];
+			if (!endpoint) continue;
+			const params = new URLSearchParams({ limit: String(Math.max(PROFILE_PAGE_SIZE[id], tabData[id].items.length)), offset: '0' });
+			if (id === 'creations' && isAdmin) params.set('include', 'all');
+			const resource = profileProvider.query(`${targetApiBase}/${endpoint[0]}?${params}`);
+			void resource.refresh().then(result => {
+				if (!lifetime.active || !result?.ok) return;
+				const items = result.data?.[endpoint[1]];
+				if (!Array.isArray(items)) return;
+				tabData[id] = { items, hasMore: Boolean(result.data.has_more) };
+				renderTabContent(id);
+			}).catch(() => undefined);
+		}
+	}
+
 	const loadingHtml = html`<div class="route-empty route-loading">
 	<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
 </div>`;
@@ -2672,7 +2793,10 @@ if(!lifetime.active)return;
 			followButton.disabled = busy;
 		}
 
+		syncProfileFollow = (value) => { if (!busy) { following = value; updateButton(); } };
 		updateButton();
+		const latestSummary = profileProvider?.query(`${targetApiBase}/profile`).data?.data;
+		if (latestSummary) syncProfileFollow(Boolean(latestSummary.viewer_follows));
 
 		followButton.addEventListener('click', async () => {
 			if (busy) return;
@@ -3206,5 +3330,5 @@ if(!lifetime.active)return;
 lifetime.listen(mountRoot,'click',event=>{const anchor=event.target.closest('a[href]');if(!anchor||event.defaultPrevented||event.metaKey||event.ctrlKey||event.shiftKey||anchor.target==='_blank')return;const target=new URL(anchor.href,location.origin);if(target.origin===location.origin){event.preventDefault();actions.navigate(target.pathname+target.search+target.hash)}});
 lifetime.listen(document,'keydown',event=>{if(event.key!=='Escape')return;const dialog=mountRoot.querySelector('[data-profile-generate-confirm-overlay]:not([hidden]),[data-persona-library-generate-confirm-overlay]:not([hidden]),[data-persona-library-edit-overlay].open,[data-profile-edit-overlay].open');if(dialog){dialog.hidden=true;dialog.classList.remove('open');event.preventDefault();event.stopImmediatePropagation()}},{capture:true});
 const backgroundReady=init().catch(error=>{if(lifetime.active){console.error(error);renderProfileUnavailableState(mountRoot,{message:'Could not load profile.'})}});
-return {backgroundReady,update({url}){if(url){routeUrl=new URL(url,location.origin);const tab=routeUrl.hash.slice(1);const tabs=mountRoot.querySelector('app-tabs');if(tab&&tabs?.activeTab!==tab)tabs?.setActiveTab?.(tab)}},destroy(){lifetime.destroy()}};
+return {backgroundReady,getRestoreState(){return captureRestoreState()},update({url}){if(url){routeUrl=new URL(url,location.origin);const tab=routeUrl.hash.slice(1);const tabs=mountRoot.querySelector('app-tabs');if(tab&&tabs?.activeTab!==tab)tabs?.setActiveTab?.(tab)}},destroy(){lifetime.destroy()}};
 }});

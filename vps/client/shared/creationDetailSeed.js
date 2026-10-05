@@ -4,6 +4,7 @@
  */
 
 import { groupActionSupportedWhenKnown } from './creationGroupMedia.js';
+import { creationLikeSpinnerHtml } from './creationLoadingChrome.js';
 import { normalizeAvatarUrl } from './avatar.js';
 import {
 	audioCoverWaveformHtml,
@@ -435,7 +436,7 @@ export function feedItemToCreationDetailSeed(item) {
 	});
 	const summary = typeof item.summary === 'string' ? item.summary.trim() : '';
 	const authorUserName =
-		typeof item.author_user_name === 'string' ? item.author_user_name.trim() : '';
+		typeof item.author_user_name === 'string' ? item.author_user_name.trim() : typeof item.creator?.user_name === 'string' ? item.creator.user_name.trim() : '';
 	const authorDisplay =
 		typeof item.author_display_name === 'string'
 			? item.author_display_name.trim()
@@ -468,7 +469,7 @@ export function feedItemToCreationDetailSeed(item) {
 		title_untitled: titleUntitled,
 		summary,
 		like_count: Number(item.like_count) || 0,
-		viewer_liked: Boolean(item.viewer_liked),
+		viewer_liked: typeof item.viewer_liked === 'boolean' ? item.viewer_liked : undefined,
 		comment_count: parseKnownCommentCount(item.comment_count),
 		group_source_count: seedGroupSourceCountFromMeta(meta),
 		group_source_thumbs: seedGroupThumbUrlsFromMeta(meta, id),
@@ -653,7 +654,7 @@ export function creationDetailSeedFromClick(ev, creationId) {
 		author_avatar_url: avatarUrl,
 		author_plan: founder ? 'founder' : '',
 		like_count: 0,
-		viewer_liked: false,
+		viewer_liked: undefined,
 		media_type: mediaType,
 		comment_count,
 		group_source_count,
@@ -1256,7 +1257,8 @@ function seedChallengeSlotHtml(seed) {
 export function creationDetailChromeHtmlFromSeed(seed) {
 	if (!seed || typeof seed !== 'object') return '';
 	const esc = escapeSeedHtml;
-	const handle = typeof seed.author_user_name === 'string' ? seed.author_user_name.trim() : '';
+	const userName = seed.author_user_name || seed.creator?.user_name;
+	const handle = typeof userName === 'string' ? userName.trim().replace(/^@/, '') : '';
 	const display =
 		(typeof seed.author_display_name === 'string' && seed.author_display_name.trim()) ||
 		handle;
@@ -1264,6 +1266,7 @@ export function creationDetailChromeHtmlFromSeed(seed) {
 	const userId = numId(seed.user_id);
 	const likes = Number(seed.like_count) || 0;
 	const liked = Boolean(seed.viewer_liked);
+	const likesLoading = typeof seed.viewer_liked !== 'boolean';
 	const nsfw = Boolean(seed.nsfw);
 	const founder = seed.author_plan === 'founder';
 	const profileHref = handle ? `/p/${encodeURIComponent(handle)}` : userId ? `/user/${userId}` : '';
@@ -1275,17 +1278,17 @@ export function creationDetailChromeHtmlFromSeed(seed) {
 		? `<div class="avatar-with-founder-flair avatar-with-founder-flair--sm"><div class="founder-flair-avatar-ring"><div class="founder-flair-avatar-inner" style="background: ${avatarUrl ? 'var(--surface-strong)' : 'var(--surface)'};">${avatarInner}</div></div></div>`
 		: `<span class="creation-detail-author-icon">${avatarInner}</span>`;
 	const avatarWrap = profileHref
-		? `<a class="creation-detail-action-strip-avatar" href="${esc(profileHref)}" aria-label="View ${esc(display || handle)} profile">${avatarHtml}</a>`
+		? `<a class="creation-detail-action-strip-avatar" href="${esc(profileHref)}" aria-label="View ${esc(handle ? `@${handle}` : 'user')} profile">${avatarHtml}</a>`
 		: `<div class="creation-detail-action-strip-avatar" aria-hidden="true">${avatarHtml}</div>`;
 	const followerCount = pickFollowerCount(seed.creator_follower_count, seed.follower_count);
 	const followerKnown = followerCount != null;
-	const creatorInfo = display
+	const creatorInfo = handle
 		? `<div class="creation-detail-action-strip-creator-info">
-						<div class="creation-detail-action-strip-creator-name">${esc(display)}</div>
+						<div class="creation-detail-action-strip-creator-name">${esc(`@${handle}`)}</div>
 						<div class="creation-detail-action-strip-creator-followers">${
 							followerKnown
 								? `${followerCount} Followers`
-								: `<span class="skeleton skeleton-line" style="width: 72px; height: 10px;" aria-hidden="true"></span>`
+								: `<span class="skeleton skeleton-line creation-detail-followers-skeleton" aria-hidden="true"></span>`
 						}</div>
 					</div>`
 		: '';
@@ -1409,9 +1412,14 @@ export function creationDetailChromeHtmlFromSeed(seed) {
 				<div class="creation-detail-action-strip-scroll">
 					${avatarWrap}
 					${creatorInfo}
-					${showLike ? `<button type="button" class="creation-detail-action-strip-pill${liked ? ' is-liked' : ''}" aria-label="Like" aria-pressed="${liked ? 'true' : 'false'}" data-like-button>
+					${showLike ? `<button type="button" class="creation-detail-action-strip-pill${likesLoading ? ' is-like-loading' : ''}${liked ? ' is-liked' : ''}" aria-label="Like" aria-busy="${likesLoading}"${likesLoading ? ' disabled' : ''} aria-pressed="${liked ? 'true' : 'false'}" data-like-button>
+						${creationLikeSpinnerHtml}
 						${SEED_HEART_SVG}
 						<span class="creation-detail-action-strip-pill-count" data-like-count>${likes}</span>
+					</button>` : ''}
+					${showTip ? `<button type="button" class="creation-detail-action-strip-pill" data-tip-creator-button aria-label="Tip">
+						<span class="creation-detail-action-strip-pill-icon">${SEED_CREDIT_SVG}</span>
+						<span>Tip</span>
 					</button>` : ''}
 					${showPublish ? `<button type="button" class="creation-detail-action-strip-pill" data-publish-btn>
 						<span class="creation-detail-action-strip-pill-icon">${SEED_PUBLISH_SVG}</span>
@@ -1428,10 +1436,6 @@ export function creationDetailChromeHtmlFromSeed(seed) {
 					${showEdit ? `<button type="button" class="creation-detail-action-strip-pill" data-edit-btn>
 						<span class="creation-detail-action-strip-pill-icon">${SEED_EDIT_SVG}</span>
 						Edit
-					</button>` : ''}
-					${showTip ? `<button type="button" class="creation-detail-action-strip-pill" data-tip-creator-button aria-label="Tip">
-						<span class="creation-detail-action-strip-pill-icon">${SEED_CREDIT_SVG}</span>
-						<span>Tip</span>
 					</button>` : ''}
 					<button type="button" class="creation-detail-more-btn" aria-label="More options" data-creation-more-btn>
 						<span class="creation-detail-more-dots" aria-hidden="true"></span>

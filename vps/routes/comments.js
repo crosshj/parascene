@@ -20,7 +20,21 @@ export function createCommentsRoutes({ comments, users }) {
    return { ...row, creation, created_image_url: creation.url, created_image_thumbnail_url: creation.video_thumbnail_url || creation.thumbnail_url };
   }) };
  }));
- router.post('/api/comments/:id/reactions', handle((req, viewer) => comments.react(viewer, positive(req.params.id), String(req.body?.emoji_key || '').trim())));
+ router.post('/api/comments/:id/reactions', async (req, res, next) => {
+  try {
+   const viewer = await users.byId(req.auth.userId);
+   if (!viewer) return res.status(401).json({ error: 'Unauthorized' });
+   res.json(await comments.react(viewer, positive(req.params.id), String(req.body?.emoji_key || '').trim(), req.body?.op));
+  } catch (error) {
+   console.error('[POST /api/comments/:id/reactions]', error);
+   const status = Number.isInteger(error.status) ? error.status : 500;
+   return res.status(status).json({
+    error: status >= 500 ? 'Could not save reaction' : error.message,
+    message: status >= 500 ? (error.message || 'The reaction could not be saved.') : error.message,
+    code: error.code || null,
+   });
+  }
+ });
  router.patch('/api/comments/:id', handle((req, viewer) => comments.update(viewer, positive(req.params.id), commentText(req.body?.text))));
  router.delete('/api/comments/:id', handle((req, viewer) => comments.remove(viewer, positive(req.params.id))));
  router.post('/api/created-images/:id/comments', handle((req, viewer) => comments.post(viewer, positive(req.params.id), commentText(req.body?.text), { ...req.body, ...(req.body?.referenced_comment_id != null ? { referenced_comment_id: positive(req.body.referenced_comment_id) } : {}), ...(req.body?.reply_to_comment_id != null ? { reply_to_comment_id: positive(req.body.reply_to_comment_id) } : {}) })));

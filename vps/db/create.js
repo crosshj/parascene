@@ -1054,6 +1054,77 @@ updateCreatedImage: {
 				return { changes: data?.length ?? 0 };
 			}
 		},
+publishCreatedImage: {
+			run: async (id, userId, title, description, isAdmin = false) => {
+				let query = serviceClient.from(prefixedTable("created_images"))
+					.update({ published: true, published_at: new Date().toISOString(), title, description })
+					.eq("id", id);
+				if (!isAdmin) query = query.eq("user_id", userId);
+				const { data, error } = await query.select("id");
+				if (error) throw error;
+				return { changes: data?.length ?? 0 };
+			}
+		},
+unpublishCreatedImage: {
+		run: async (id, userId, isAdmin = false) => {
+				let query = serviceClient.from(prefixedTable("created_images"))
+					.update({ published: false, published_at: null }).eq("id", id);
+				if (!isAdmin) query = query.eq("user_id", userId);
+				const { data, error } = await query.select("id");
+				if (error) throw error;
+				return { changes: data?.length ?? 0 };
+			}
+		},
+insertFeedItem: {
+		run: async (title, summary, author, tags, createdImageId) => {
+				const { data, error } = await serviceClient.from(prefixedTable("feed_items"))
+					.insert({ title, summary, author, tags: tags || null, created_image_id: createdImageId })
+					.select("id").single();
+				if (error) throw error;
+				return { insertId: data.id, changes: 1 };
+			}
+		},
+selectFeedItemByCreatedImageId: {
+			get: async (createdImageId) => {
+				const { data, error } = await serviceClient.from(prefixedTable("feed_items"))
+					.select("id, title, summary, author, tags, created_at, created_image_id")
+					.eq("created_image_id", createdImageId).order("created_at", { ascending: false }).limit(1).maybeSingle();
+				if (error) throw error;
+				return data ?? undefined;
+			}
+		},
+deleteFeedItemByCreatedImageId: {
+			run: async (createdImageId) => {
+				const { data, error } = await serviceClient.from(prefixedTable("feed_items"))
+					.delete().eq("created_image_id", createdImageId).select("id");
+				if (error) throw error;
+				return { changes: data?.length ?? 0 };
+			}
+		},
+updateFeedItem: {
+			run: async (createdImageId, title, summary) => {
+				const { data, error } = await serviceClient.from(prefixedTable("feed_items"))
+					.update({ title, summary }).eq("created_image_id", createdImageId).select("id");
+				if (error) throw error;
+				return { changes: data?.length ?? 0 };
+			}
+		},
+deleteAllLikesForCreatedImage: {
+		run: async (createdImageId) => {
+				const { data, error } = await serviceClient.from(prefixedTable("likes_created_image"))
+					.delete().eq("created_image_id", createdImageId).select("id");
+				if (error) throw error;
+				return { changes: data?.length ?? 0 };
+			}
+		},
+deleteAllCommentsForCreatedImage: {
+		run: async (createdImageId) => {
+				const { data, error } = await serviceClient.from(prefixedTable("comments_created_image"))
+					.delete().eq("created_image_id", createdImageId).select("id");
+				if (error) throw error;
+				return { changes: data?.length ?? 0 };
+			}
+		},
 selectUserCredits: {
 			get: async (userId) => {
 				// Use serviceClient to bypass RLS for backend operations

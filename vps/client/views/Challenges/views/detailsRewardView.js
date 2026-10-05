@@ -88,7 +88,7 @@ function svgPlacementMedal(metal, digit, uid) {
 				</defs>
 				<circle cx="32" cy="32" r="25.5" fill="url(#${gf})" stroke="${palettes.rim}" stroke-width="7" />
 				<circle cx="32" cy="32" r="25.5" fill="url(#${gh})" />
-				<text x="32" y="41" text-anchor="middle" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="26" font-weight="800" fill="${palettes.digit}">${digit}</text>
+				<text x="32" y="41" text-anchor="middle" font-family="var(--font-family, system-ui, sans-serif)" font-size="26" font-weight="800" fill="${palettes.digit}">${digit}</text>
 			</svg>
 		</div>`;
 }

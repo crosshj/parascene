@@ -1,6 +1,7 @@
 const HISTORY_FLAG = 'parasceneSpa';
 const OVERLAY_FLAG = 'parasceneOverlay';
 const BACKGROUND_KEY = 'parasceneBackgroundUrl';
+const RETURN_OVERLAY_KEY = 'parasceneReturnOverlayUrl';
 const PREVIOUS_CREATION_KEY = 'parascenePreviousCreationUrl';
 
 function currentUrl() {
@@ -16,13 +17,14 @@ function pathFor(value) {
 export function createRouter({ routes, state, layout } = {}) {
 	let started = false;
 	let currentComposition = null;
+	let activeDialog = null;
 	const creationSeeds = new Map();
 
 	function historyStateFor(url, backgroundUrl = null, previousCreationUrl = null) {
 		const prior = history.state && typeof history.state === 'object' ? history.state : {};
 		const route = routes.match(url);
 		if (route.presentation !== 'overlay') {
-			const { [BACKGROUND_KEY]: _background, [PREVIOUS_CREATION_KEY]: _previousCreation, ...base } = prior;
+			const { [RETURN_OVERLAY_KEY]: _returnOverlay, [BACKGROUND_KEY]: _background, [PREVIOUS_CREATION_KEY]: _previousCreation, ...base } = prior;
 			return { ...base, [HISTORY_FLAG]: true, [OVERLAY_FLAG]: false };
 		}
 		const { [PREVIOUS_CREATION_KEY]: _previousCreation, ...base } = prior;
@@ -83,8 +85,15 @@ export function createRouter({ routes, state, layout } = {}) {
 					? currentComposition.url
 					: null
 			: null;
+		const returnOverlayUrl = route.params.creationId && currentRoute?.returnFromCreation
+			? currentComposition.url
+			: route.params.creationId && currentRoute?.params.creationId
+				? history.state?.[RETURN_OVERLAY_KEY] : null;
 		const method = options.replace ? 'replaceState' : 'pushState';
-		history[method](historyStateFor(url, backgroundUrl, previousCreationUrl), '', url);
+		const nextState = historyStateFor(url, backgroundUrl, previousCreationUrl);
+		delete nextState[RETURN_OVERLAY_KEY];
+		if (returnOverlayUrl) nextState[RETURN_OVERLAY_KEY] = returnOverlayUrl;
+		history[method](nextState, '', url);
 		return reconcile();
 	}
 
@@ -120,6 +129,12 @@ export function createRouter({ routes, state, layout } = {}) {
 				// Invalid return metadata: use the normal background dismissal.
 			}
 		}
+		const returnUrl = history.state?.[RETURN_OVERLAY_KEY];
+		if (route.params.creationId && typeof returnUrl === 'string') {
+			try {
+				if (routes.match(pathFor(returnUrl)).returnFromCreation) return navigate(returnUrl, { replace: true });
+			} catch { /* Ignore stale return metadata. */ }
+		}
 		const target = currentComposition.backgroundUrl || '/creations';
 		history.replaceState(historyStateFor(target), '', target);
 		return reconcile();
@@ -136,6 +151,10 @@ export function createRouter({ routes, state, layout } = {}) {
 	}
 
 	function onPopState() {
+		if (activeDialog && history.state?.parasceneDialog !== activeDialog) {
+			const key = activeDialog; activeDialog = null;
+			document.dispatchEvent(new CustomEvent('parascene:dialog-dismiss', { detail: { key } }));
+		}
 		void reconcile({ fromHistory: true });
 	}
 
@@ -161,6 +180,22 @@ export function createRouter({ routes, state, layout } = {}) {
 		}
 	}
 
+	function onDialogHistoryRequest(event) {
+		const key = event.detail?.key;
+		if (typeof key !== 'string' || !key) return;
+		const prior = history.state && typeof history.state === 'object' ? history.state : {};
+		if (event.detail.open === true) {
+			activeDialog = key;
+			history.pushState({ ...prior, parasceneDialog: key }, '', currentUrl());
+		} else {
+			if (activeDialog === key) activeDialog = null;
+			if (prior.parasceneDialog !== key) return;
+			const { parasceneDialog: _dialog, ...next } = prior;
+			activeDialog = null;
+			history.replaceState(next, '', currentUrl());
+		}
+	}
+
 	return {
 		async start() {
 			if (started) return;
@@ -169,6 +204,7 @@ export function createRouter({ routes, state, layout } = {}) {
 			document.addEventListener('parascene:navigate', onNavigateRequest);
 			document.addEventListener('parascene:dismiss-overlay', onDismissOverlayRequest);
 			document.addEventListener('parascene:lightbox-history', onLightboxHistoryRequest);
+			document.addEventListener('parascene:dialog-history', onDialogHistoryRequest);
 			window.addEventListener('popstate', onPopState);
 			await reconcile({ fromHistory: true, initial: true });
 		},
@@ -182,6 +218,7 @@ export function createRouter({ routes, state, layout } = {}) {
 			document.removeEventListener('parascene:navigate', onNavigateRequest);
 			document.removeEventListener('parascene:dismiss-overlay', onDismissOverlayRequest);
 			document.removeEventListener('parascene:lightbox-history', onLightboxHistoryRequest);
+			document.removeEventListener('parascene:dialog-history', onDialogHistoryRequest);
 			window.removeEventListener('popstate', onPopState);
 			layout.destroy();
 			currentComposition = null;

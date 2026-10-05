@@ -1,9 +1,33 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import express from 'express';
-import { createCreationsRoutes } from '../routes/creations.js';
+import { createCreationsRoutes, serializeCreation } from '../routes/creations.js';
+import { creationMediaKeys } from '../db/creations.js';
 
-async function withApp(run, { mediaResponse } = {}) {
+test('group detail serializes child thumbnails with parent access for legacy and v2 groups', () => {
+	const legacy = { id: 42, meta: { group: { kind: 'group_creations', source_creations: [
+		{ id: 1, file_path: '/api/images/created/one.png?creation_id=1' },
+		{ id: 2, file_path: '/api/creations/media/two.png?creation_id=2', meta: { media_type: 'video', video: { file_path: '/api/videos/created/video/two.mp4' } } }
+	] } } };
+	const v2 = { id: 42, meta: { group: { kind: 'group_v2', items: [
+		{ pointer: { kind: 'creation', creationId: 1 }, view: { filePath: '/api/images/created/one.png', mediaType: 'image' }, cover: true },
+		{ pointer: { kind: 'creation', creationId: 2 }, view: { filePath: '/api/creations/media/two.png', mediaType: 'video', videoUrl: '/api/videos/created/video/two.mp4' } }
+	] } } };
+	for (const row of [legacy, v2]) {
+		const before = structuredClone(row);
+		const payload = serializeCreation(row);
+		assert.equal(payload.meta.group.kind, 'group_creations');
+		const children = payload.meta.group.source_creations;
+		assert.equal(children.length, 2);
+		assert.equal(children[0].thumbnail_url, '/api/creations/media/one.png?creation_id=42&variant=thumbnail');
+		assert.equal(children[1].thumbnail_url, '/api/creations/media/video/two.mp4?creation_id=42&variant=video_thumbnail');
+		assert.equal(children[1].meta.video.file_path, '/api/creations/media/video/two.mp4?creation_id=42');
+		assert.deepEqual(creationMediaKeys(row).sort(), ['one.png', 'two.png', 'video/two.mp4']);
+		assert.deepEqual(row, before);
+	}
+});
+
+async function withApp(run, { mediaResponse, canAccessMedia = async () => true, fetchMedia } = {}) {
 	const row = {
 		id: 31885,
 		user_id: 42,
@@ -23,9 +47,9 @@ async function withApp(run, { mediaResponse } = {}) {
 		setLiked: async (_userId, _creationId, liked) => ({ like_count: liked ? 2 : 1, viewer_liked: liked, liked_by: liked ? ['@creator', '@friend'] : ['@friend'] }),
 		comments: async () => ({ commentCount: 1, rows: [{ id: 7, user_id: 42, text: 'hello', reactions: {}, viewer_reactions: [] }] }),
 		related: async () => ({ rows: [{ ...row, id: 31921, published: true }], hasMore: false }),
-		canAccessMedia: async () => true,
+		canAccessMedia,
 		safeKey: (key) => key,
-		fetchMedia: async () => mediaResponse || new Response('media'),
+		fetchMedia: fetchMedia || (async () => mediaResponse || new Response('media')),
 	};
 	const users = {
 		byId: async () => ({ id: 42, email: 'creator@example.com', role: 'consumer', meta: {} }),
@@ -112,4 +136,39 @@ test('creation video media preserves partial-content status and range headers', 
 		assert.equal(response.headers.get('accept-ranges'), 'bytes');
 		assert.deepEqual(Buffer.from(await response.arrayBuffer()), bytes);
 	}, { mediaResponse });
+});
+
+test('feed video URLs serve authenticated GET and HEAD through the range-capable media handler', async () => {
+	const key = 'video/19_32279_1791193625600_ya7ofo0.mp4';
+	const calls = [];
+	await withApp(async (origin) => {
+		const url = `${origin}/api/videos/created/${key}?creation_id=32279`;
+		assert.equal((await fetch(url)).status, 401);
+		for (const method of ['GET', 'HEAD']) {
+			const response = await fetch(url, {
+				method,
+				headers: { Authorization: 'Bearer test', Range: 'bytes=0-3' },
+			});
+			assert.equal(response.status, 206);
+			assert.equal(response.headers.get('content-type'), 'video/mp4');
+			assert.equal(response.headers.get('content-range'), 'bytes 0-3/1000');
+			assert.equal(response.headers.get('accept-ranges'), 'bytes');
+			assert.equal(await response.text(), method === 'HEAD' ? '' : 'clip');
+		}
+	}, {
+		canAccessMedia: async (viewerId, creationId, mediaKey) => {
+			assert.equal(viewerId, 42);
+			assert.equal(creationId, '32279');
+			assert.equal(mediaKey, key);
+			return true;
+		},
+		fetchMedia: async (mediaKey, options) => {
+			calls.push({ mediaKey, method: options.method, range: options.range });
+			return new Response(options.method === 'HEAD' ? null : 'clip', {
+				status: 206,
+				headers: { 'Content-Type': 'video/mp4', 'Content-Length': '4', 'Content-Range': 'bytes 0-3/1000', 'Accept-Ranges': 'bytes' },
+			});
+		},
+	});
+	assert.deepEqual(calls, ['GET', 'HEAD'].map(method => ({ mediaKey: key, method, range: 'bytes=0-3' })));
 });

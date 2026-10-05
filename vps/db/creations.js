@@ -533,11 +533,12 @@ export function creationMediaKey(row) {
 		if (cover) return creationMediaKey(cover);
 	}
 	const filePath = String(row?.file_path || "").trim();
-	const marker = "/api/images/created/";
-	const markerIndex = filePath.indexOf(marker);
-	if (markerIndex >= 0) {
-		const encoded = filePath.slice(markerIndex + marker.length).split("?", 1)[0];
-		try { return decodeURIComponent(encoded); } catch { return encoded; }
+	for (const marker of ['/api/images/created/', '/api/videos/created/', '/api/creations/media/']) {
+		const markerIndex = filePath.indexOf(marker);
+		if (markerIndex >= 0) {
+			const encoded = filePath.slice(markerIndex + marker.length).split("?", 1)[0];
+			try { return decodeURIComponent(encoded); } catch { return encoded; }
+		}
 	}
 	if (filePath && !filePath.startsWith("http://") && !filePath.startsWith("https://")) return filePath.replace(/^\/+/, "");
 	return String(row?.filename || "").trim();
@@ -597,7 +598,10 @@ export function creationMediaKeys(row) {
 	const sources = group?.kind === "group_creations"
 		? group.source_creations
 		: group?.kind === "group_v2"
-			? (Array.isArray(group.items) ? group.items.map((item) => item?.view || {}) : [])
+			? (Array.isArray(group.items) ? group.items.map((item) => {
+				const view = item?.view || {};
+				return { ...view, file_path: view.filePath || view.file_path || view.url, video_url: view.videoUrl || view.video_url };
+			}) : [])
 			: [];
 	for (const source of Array.isArray(sources) ? sources : []) {
 		values.push(creationMediaKey(source), creationVideoMediaKey(source));

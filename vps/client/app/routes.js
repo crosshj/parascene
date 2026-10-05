@@ -105,7 +105,7 @@ export function createAppRoutes({ definitions = [] } = {}) {
 			shell: 'app',
 			outlet,
 			overlay: {
-				key: `overlay:${route.path}:${Object.values(route.params).join(':')}`,
+				key: `overlay:${route.path}:${route.retainOverlay ? 'retained' : Object.values(route.params).join(':')}`,
 				view: route.view,
 				props: {
 					url: canonicalUrl,

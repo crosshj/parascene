@@ -531,6 +531,11 @@
 	justify-content: center;
 }
 
+/* The SPA overlay gives buttons their inherited text color; keep the send affordance accented. */
+.beta-app-overlay__content .comment-submit-btn--composer {
+	color: var(--focus);
+}
+
 .comment-submit-btn--composer:hover:not(:disabled) {
 	background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
@@ -1077,6 +1082,12 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+
+.comment-reaction-status:not(:empty) {
+	margin-top: 8px;
+	color: var(--error, #b91c1c);
+	font-size: 0.8125rem;
 }
 
 /* Founder name/handle – same color as flair (use with .comment-author-name, .creation-detail-author-name, .feed-card-metadata, etc.) */
@@ -1995,6 +2006,16 @@
 
 .user-link:hover {
 	text-decoration: underline;
+	text-decoration-color: currentColor;
+}
+
+.user-link:has(.founder-name):hover {
+	text-decoration-color: transparent;
+}
+
+.user-link:has(.founder-name):hover .founder-name {
+	text-decoration: underline;
+	text-decoration-color: currentColor;
 }
 
 .user-link:focus-visible {

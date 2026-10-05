@@ -1,3 +1,5 @@
+import createFeedRoutes from './routes/feed.js';
+import { createFeedQueries } from './db/feed.js';
 import createChallengeCreationRoutes from './routes/challengeCreations.js';
 import createChallengeActionsRoutes from './routes/challengeActions.js';
 import createChallengesRoutes from './routes/challenges.js';
@@ -69,6 +71,7 @@ app.use(createCdnHostBoundary(createCdnRoutes({ profileFiles: db.profileFiles, g
 const challengeDependencies = { ...db.account, queries: { ...db.account.queries, ...createChallengeQueries(db.account.client) } };
 app.use(createChallengeActionsRoutes(challengeDependencies));
 app.use(createChallengesRoutes(challengeDependencies));
+app.use(createFeedRoutes({ queries: { ...db.account.queries, ...createFeedQueries(db.account.client) } }));
 const challengeCreations = createChallengeCreationRoutes(challengeDependencies);
 app.use(challengeCreations);
 app.use(createThreadsRoutes({ threads: db.threads }));

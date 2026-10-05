@@ -317,7 +317,7 @@ export const pinIcon = withAttributes(html`
 	</svg>
 `);
 
-/** Stroke back arrow matching Inter `<-` ligature (shaft + V head). Not chevron-left. */
+/** Stroke back arrow, drawn as SVG so its shape does not depend on the UI font. */
 export const arrowBackIcon = withAttributes(html`
 	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"
 		stroke-linejoin="round" aria-hidden="true">

@@ -200,9 +200,22 @@ height, recalculating on viewport and rail resize and clipping at the panel edge
 Content replacement invalidates the previous feature lease before view teardown,
 so the outgoing controller cannot close the incoming rail or erase its state.
 
-### Feed placeholder exception (2026-10-02)
+### Native Feed and Doom Scroll (2026-10-05)
 
-At the user’s request, the beta Feed placeholder is a minimal progress overview rather than a port of the WWW feed. Its native template and scoped styles belong to `views/Feed`. It presents the main areas already in place and the remaining work; the activity feed will replace it later.
+The active WWW SPA feed replaces the earlier progress overview. `views/Feed`
+owns the mounted card/spotlight DOM, scoped WWW styles, and controller lifetime;
+`providers/feed` owns the feed and doom pagers and native request adapter. Feed
+cards use native navigation with creation seeds, and challenge voting shares the
+Threads history query and durable vote queue. Retained feed media pauses while an
+app overlay is open.
+
+`views/DoomScroll` owns the ported video slides, playback controls and native
+comments dialog. The app router owns `/feed/doom/:creationId` and slide URL
+updates; its retained overlay instance keeps the timeline mounted across those
+updates. Layout retains the underlying feed and its scroll position. Teardown
+aborts pending requests, disconnects observers, removes listeners, and releases
+media. Server selection, ranking, composition and impressions live under
+`services/feed`, with API routes in `routes/feed.js` and queries in `db/feed.js`.
 
 ### Shared Create form contract
 
@@ -275,3 +288,26 @@ and ID before pagination. Other audio pickers retain their existing defaults.
 Explore suppresses publication badges in both grid and large-card modes. The
 shared card publication updater respects that per-card setting while retaining
 published state and the normal badges on other surfaces.
+
+### Profile return from creation detail (2026-10-05)
+
+Profile → creation continues to replace the single app overlay content. The router
+records the opening profile URL (including its tab hash) separately from the page
+background. Creation dismissal returns to that profile; browser history resolves
+the same route. Layout snapshots the departing profile's local browse data through
+`getRestoreState()`, disposes the view, and supplies the snapshot on remount. The
+profile restores loaded tab rows and pagination; layout restores overlay scroll
+after `backgroundReady`. Snapshots are released when leaving the overlay flow.
+No second mounted overlay is retained.
+
+Creation detail applies card-provided hero dimensions before its first paint;
+feed seeds resolve by creation ID, and profile cards pass their loaded record.
+Without known geometry, detail content remains hidden until API dimensions/job
+aspect ratio or intrinsic media dimensions establish it. The hero retains its
+reserved aspect ratio after media loads. Error states release the visibility gate.
+
+Profile reads use the app-scoped `providers/profile` query cache. Cached
+responses render without waiting for background revalidation; refreshed header
+and loaded list pages retain the tab controls and edit forms. Restored lists
+refresh their loaded range. Profile mutations revalidate queries; the app's
+cache clearing and teardown dispose them. Profile data stays in memory only.

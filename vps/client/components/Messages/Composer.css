@@ -12,7 +12,7 @@
 .beta-outlet__composer .chat-page-composer-attachments--has-media .chat-page-composer-attachments-row { padding-top: 8px; padding-bottom: 8px; }
 .beta-outlet__composer .chat-page-composer-attachments-list { display: flex; flex: 1 1 auto; flex-wrap: wrap; align-items: flex-start; min-width: 0; gap: 8px; }
 .beta-outlet__composer .chat-page-composer-attachment { position: relative; flex: 0 0 56px; width: 56px; height: 56px; overflow: hidden; border-radius: 8px; background: color-mix(in srgb, var(--border) 50%, var(--input-bg)); }
-.beta-outlet__composer .chat-page-composer-attachment-preview { display: block; width: 100%; height: 100%; object-fit: cover; }
+.beta-outlet__composer .chat-page-composer-attachment-preview { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center; }
 .beta-outlet__composer .chat-page-composer-attachment-preview-button { display: block; width: 100%; height: 100%; margin: 0; padding: 0; border: 0; background: transparent; cursor: zoom-in; }
 .beta-outlet__composer .chat-page-composer-attachment-preview-button:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .beta-outlet__composer .chat-page-composer-attachment-preview--file { display: flex; align-items: center; justify-content: center; padding: 5px; box-sizing: border-box; color: var(--text-muted); background: color-mix(in srgb, var(--border) 50%, var(--input-bg)); }

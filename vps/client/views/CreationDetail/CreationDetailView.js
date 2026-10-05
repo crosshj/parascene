@@ -1,4 +1,8 @@
 import template from './CreationDetailView.html';
+import { iconMarkup } from '../../components/Icon/Icon.js';
+import { isGroupHeroBlurred, watchGroupNavigation } from './groupNavigation.js';
+import { applyInitialDetailHeroLayout, releaseDetailHeroLayout } from './heroLayout.js';
+import { creationLikeSpinnerHtml, setCreationLikeLoading } from '../../shared/creationLoadingChrome.js';
 import './CreationDetailView.css';
 import * as hostedAudioPlayerMod from '../../shared/hostedAudioPlayer.js';
 import * as creationGpuWaitMod from '../../shared/creationGpuWait.js';
@@ -480,7 +484,10 @@ const CREATION_DETAIL_CONTENT_SKELETON_HTML = `<div class="creation-detail-skele
 				<div class="skeleton skeleton-line skeleton-line--short" style="margin-bottom: 4px;"></div>
 				<div class="skeleton skeleton-line skeleton-line--medium"></div>
 			</div>
-			<span class="skeleton skeleton-pill" style="width: 72px; height: 34px;" aria-hidden="true"></span>
+			<button type="button" class="creation-detail-action-strip-pill is-like-loading" data-like-button aria-label="Loading likes" aria-busy="true" disabled>
+				${creationLikeSpinnerHtml}
+				<span class="skeleton skeleton-line" style="width: 20px; height: 1em;" aria-hidden="true"></span>
+			</button>
 			<span class="skeleton skeleton-pill" style="width: 64px; height: 34px;" aria-hidden="true"></span>
 			<span class="skeleton skeleton-pill" style="width: 88px; height: 34px;" aria-hidden="true"></span>
 			<span class="skeleton skeleton-circle" style="width: 34px; height: 34px;" aria-hidden="true"></span>
@@ -572,6 +579,7 @@ function patchCreationDetailStripChild(sticky, next) {
 		return sticky;
 	}
 	if (key === 'like') {
+		setCreationLikeLoading(sticky, next.classList.contains('is-like-loading'));
 		sticky.classList.toggle('is-liked', next.classList.contains('is-liked'));
 		const pressed = next.getAttribute('aria-pressed');
 		if (pressed != null) sticky.setAttribute('aria-pressed', pressed);
@@ -940,8 +948,7 @@ function heroAspectPayloadFromRecord(record) {
 function applyDetailHeroAspectLayout(record) {
 	const imageWrapper = document.querySelector('[data-image]')?.closest?.('.creation-detail-image-wrapper');
 	if (!(imageWrapper instanceof HTMLElement)) return;
-	if (typeof applyHeroAspectLayoutToElement !== 'function') return;
-	applyHeroAspectLayoutToElement(imageWrapper, heroAspectPayloadFromRecord(record));
+	applyInitialDetailHeroLayout(imageWrapper, record);
 }
 
 /** Lock hero by YouTube link type: Shorts → 9:16, watch → 16:9 (not cover dims). */
@@ -1166,8 +1173,9 @@ const STRIP_SEGMENT_DEFS = [
 		key: 'like',
 		show: (d) => !d.hideActions && d.hasEngagementActions && !d.shareMountedPrivate,
 		render: (d) => html`
-					<button type="button" class="creation-detail-action-strip-pill${d.creationWithLikes?.viewer_liked ? ' is-liked' : ''}"
-						aria-label="Like" aria-pressed="${d.creationWithLikes?.viewer_liked ? 'true' : 'false'}" data-like-button>
+					<button type="button" class="creation-detail-action-strip-pill${d.likeMetadataLoading ? ' is-like-loading' : ''}${d.creationWithLikes?.viewer_liked ? ' is-liked' : ''}"
+						aria-label="Like" aria-busy="${Boolean(d.likeMetadataLoading)}"${d.likeMetadataLoading ? ' disabled' : ''} aria-pressed="${d.creationWithLikes?.viewer_liked ? 'true' : 'false'}" data-like-button>
+						${creationLikeSpinnerHtml}
 						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
 							stroke-linejoin="round" aria-hidden="true">
 							<path
@@ -1175,6 +1183,15 @@ const STRIP_SEGMENT_DEFS = [
 							</path>
 						</svg>
 						<span class="creation-detail-action-strip-pill-count" data-like-count>${d.likeCount}</span>
+					</button>`
+	},
+	{
+		key: 'tip',
+		show: (d) => !d.hideActions && !d.isOwner,
+		render: () => html`
+					<button type="button" class="creation-detail-action-strip-pill" data-tip-creator-button aria-label="Tip">
+						<span class="creation-detail-action-strip-pill-icon">${creditIcon('')}</span>
+						<span>Tip</span>
 					</button>`
 	},
 	{
@@ -1188,15 +1205,6 @@ const STRIP_SEGMENT_DEFS = [
 		key: 'pills',
 		show: (d) => !d.hideActions,
 		render: (d) => renderCreationDetailActionStripPills(d.actionsContext)
-	},
-	{
-		key: 'tip',
-		show: (d) => !d.hideActions && !d.isOwner,
-		render: () => html`
-					<button type="button" class="creation-detail-action-strip-pill" data-tip-creator-button aria-label="Tip">
-						<span class="creation-detail-action-strip-pill-icon">${creditIcon('')}</span>
-						<span>Tip</span>
-					</button>`
 	},
 	{
 		key: 'more',
@@ -3317,7 +3325,7 @@ async function loadCreation() {
 
 	if (!detailContent || !imageEl || !backgroundEl) return;
 
-	showCreationDetailContentSkeleton(detailContent);
+	if (detailContent.dataset.creationSeedPainted !== '1') showCreationDetailContentSkeleton(detailContent);
 	const seedHeroVisible =
 		imageEl instanceof HTMLImageElement && Boolean(String(imageEl.getAttribute('src') || '').trim());
 	if (!seedHeroVisible) {
@@ -3343,9 +3351,13 @@ async function loadCreation() {
 
 	function markHeroReady(meta) {
 		perfRef.current?.markReady('hero', meta);
+		releaseDetailHeroLayout(imageWrapper);
 	}
 
 	function applyLoadedImageState() {
+		if (imageWrapper?.dataset.heroLayoutKnown !== '1' && imageEl.naturalWidth > 0) {
+			applyInitialDetailHeroLayout(imageWrapper, { width: imageEl.naturalWidth, height: imageEl.naturalHeight });
+		}
 		const modIcon = imageWrapper?.querySelector('.creation-detail-error-icon-moderated');
 		if (modIcon) modIcon.remove();
 		if (!heroVideoAwaitingReveal()) {
@@ -3585,7 +3597,7 @@ async function loadCreation() {
 		const raw = String(url || '').trim();
 		const id = Number(delegatedCreationId);
 		if (!raw || !Number.isFinite(id) || id <= 0) return raw;
-		if (!raw.includes('/api/images/created/') && !raw.includes('/api/videos/created/')) return raw;
+		if (!raw.includes('/api/images/created/') && !raw.includes('/api/videos/created/') && !raw.includes('/api/creations/media/')) return raw;
 		try {
 			const parsed = new URL(raw, 'http://localhost');
 			parsed.searchParams.set('creation_id', String(id));
@@ -3972,7 +3984,7 @@ async function loadCreation() {
 	teardownGroupHeroCarousel();
 
 	// Skeleton already shown at top of loadCreation; refresh in case DOM was cleared elsewhere.
-	showCreationDetailContentSkeleton(detailContent);
+	if (detailContent.dataset.creationSeedPainted !== '1') showCreationDetailContentSkeleton(detailContent);
 
 	// Attach image load/error handlers once, so broken-image icons never show
 	if (!imageEl.dataset.fallbackAttached) {
@@ -4167,6 +4179,7 @@ async function loadCreation() {
 					title: 'Creation not found',
 					message: "The creation you're looking for doesn't exist or you don't have access to it.",
 				});
+				releaseDetailHeroLayout(imageWrapper);
 				return;
 			}
 			throw new Error('Failed to load creation');
@@ -4174,6 +4187,7 @@ async function loadCreation() {
 
 		const creation = await perf.timeAsync('creationApi', 'parseJson', () => response.json());
 		if (!isCurrentLoad()) return;
+		applyInitialDetailHeroLayout(imageWrapper, creation);
 		perf.markReady('creationApi', {
 			status: creation.status || 'completed',
 			mediaType: typeof creation.media_type === 'string' ? creation.media_type : (creation.meta?.media_type || 'image')
@@ -4418,12 +4432,15 @@ async function loadCreation() {
 
 		// Load like metadata from backend (no localStorage fallback).
 		// Pinned / results detail hides the action strip — skip the like round-trip.
+		const knownLikeState = typeof activeCreationDetailSeed?.viewer_liked === 'boolean'
+			? activeCreationDetailSeed : null;
 		let likeMeta = {
-			like_count: Number(creation.like_count ?? 0) || 0,
-			viewer_liked: Boolean(creation.viewer_liked),
+			like_count: Number(knownLikeState?.like_count ?? creation.like_count ?? 0) || 0,
+			viewer_liked: Boolean(knownLikeState?.viewer_liked),
 			liked_by: Array.isArray(creation.liked_by) ? creation.liked_by : []
 		};
 		let creationWithLikes = null;
+		let likeMetadataLoading = !knownLikeState && !shareMounted && !isPinnedInteractiveDetail;
 		if (shareMounted || isPinnedInteractiveDetail) {
 			perf.skipPart(
 				'likeMeta',
@@ -4435,16 +4452,18 @@ async function loadCreation() {
 				.then((likeRes) => (likeRes.ok ? likeRes.json() : null))
 				.catch(() => null)
 				.then((meta) => {
-					if (!meta || !isCurrentLoad()) return;
-					likeMeta = {
+					if (!isCurrentLoad()) return;
+					likeMetadataLoading = false;
+					if (meta) likeMeta = {
 						like_count: Number(meta?.like_count ?? likeMeta.like_count),
 						viewer_liked: Boolean(meta?.viewer_liked),
 						liked_by: Array.isArray(meta?.liked_by) ? meta.liked_by : likeMeta.liked_by
 					};
 					if (creationWithLikes) {
 						Object.assign(creationWithLikes, likeMeta);
-						detailContent.querySelectorAll('button[data-like-button]').forEach((button) => {
+							detailContent.querySelectorAll('button[data-like-button]').forEach((button) => {
 							initLikeButton(button, creationWithLikes);
+							setCreationLikeLoading(button, false);
 						});
 					}
 				});
@@ -4959,6 +4978,7 @@ async function loadCreation() {
 					rawTitle: sourceRawTitle,
 					status: typeof sourceObj.status === 'string' ? sourceObj.status.trim().toLowerCase() : '',
 					filePath: sourceFilePath,
+					thumbnailUrl: appendCreationIdToMediaUrl(sourceObj.thumbnail_url || sourceFilePathRaw, creationId),
 					videoUrl: sourceVideoUrl,
 					audioUrl: sourceAudioUrl,
 					mediaType: sourceMediaType,
@@ -5128,7 +5148,7 @@ async function loadCreation() {
 						: source.filePath
 						? html`<button type="button" class="creation-detail-group-item creation-detail-group-thumb${index === 0 ? ' is-active' : ''}"
 									data-group-source-thumb="${source.id}" aria-label="View ${escapeHtml(source.title)}">
-									<img src="${escapeHtml(source.filePath)}" alt="${escapeHtml(source.title)}" loading="eager" />
+									<img src="${escapeHtml(source.thumbnailUrl || source.filePath)}" alt="${escapeHtml(source.title)}" loading="lazy" decoding="async" />
 									${kindMark}
 								</button>`
 						: sourceWaiting
@@ -5493,8 +5513,7 @@ async function loadCreation() {
 		`;
 
 		const authorIdentification = html`
-			<span class="creation-detail-author-name${creatorPlan ? ' founder-name' : ''}">${creatorName}</span>
-			<span class="creation-detail-author-handle${creatorPlan ? ' founder-name' : ''}">${creatorHandle}</span>
+			<span class="creation-detail-author-name${creatorPlan ? ' founder-name' : ''}">${escapeHtml(creatorHandle)}</span>
 		`;
 
 		const hasEngagementActions = !!(isPublished && !isFailed);
@@ -5546,7 +5565,7 @@ async function loadCreation() {
 
 		const stripData = {
 			creatorProfileHref,
-			creatorName,
+			creatorName: creatorHandle,
 			authorAvatar,
 			creatorFollowerCount,
 			creatorId,
@@ -5556,6 +5575,7 @@ async function loadCreation() {
 			hasEngagementActions,
 			shareMountedPrivate,
 			creationWithLikes,
+			likeMetadataLoading,
 			likeCount,
 			actionsContext,
 			isOwner,
@@ -6677,7 +6697,7 @@ async function loadCreation() {
 
 		const likeButtons = detailContent.querySelectorAll('button[data-like-button]');
 		if (!shareMountedPrivate) {
-			likeButtons.forEach((btn) => initLikeButton(btn, creationWithLikes));
+			likeButtons.forEach((btn) => { initLikeButton(btn, creationWithLikes); setCreationLikeLoading(btn, likeMetadataLoading); });
 		} else {
 			likeButtons.forEach((btn) => { btn.style.display = 'none'; });
 		}
@@ -7925,6 +7945,7 @@ async function loadCreation() {
 			}
 
 			function stepGroupSource(direction) {
+				if (isGroupHeroBlurred(imageWrapper)) return;
 				if (orderedSourceIds.length <= 1) return;
 				const currentIndex = sourceIndexById.get(Number(selectedGroupSourceId)) ?? 0;
 				const normalizedDirection = direction >= 0 ? 1 : -1;
@@ -7936,6 +7957,7 @@ async function loadCreation() {
 			for (const btn of groupThumbButtons) {
 				btn.addEventListener('click', (e) => {
 					e.preventDefault();
+					if (isGroupHeroBlurred(imageWrapper)) return;
 					const sourceId = Number(btn.getAttribute('data-group-source-thumb'));
 					if (!Number.isFinite(sourceId)) return;
 					setActiveGroupSource(sourceId);
@@ -8212,6 +8234,7 @@ async function loadCreation() {
 
 	} catch (error) {
 		console.error("Error loading creation detail:", error);
+		releaseDetailHeroLayout(imageWrapper);
 		detailContent.innerHTML = renderEmptyState({
 			title: 'Unable to load creation',
 			message: 'An error occurred while loading the creation.',
@@ -8270,19 +8293,16 @@ function paintCreationDetailFromSeed(seed, detailContent, imageEl, chromeHtmlFro
 		'';
 	const wrap = imageEl instanceof HTMLImageElement ? imageEl.closest?.('.creation-detail-image-wrapper') : null;
 	if (wrap instanceof HTMLElement && typeof applyHeroAspect === 'function') {
-		applyHeroAspect(wrap, {
-			width: seed.width,
-			height: seed.height,
-			meta: seed.meta,
-			media_type: seed.media_type,
-			video_url: seed.video_url,
-		});
+		applyInitialDetailHeroLayout(wrap, seed);
 	}
 	if (imageEl instanceof HTMLImageElement && imgUrl) {
 		imageEl.style.visibility = '';
 		if (!imageEl.getAttribute('src')) imageEl.src = imgUrl;
 		const markHeroSettled = () => {
 			if (!(wrap instanceof HTMLElement)) return;
+			if (wrap.dataset.heroLayoutKnown !== '1' && imageEl.naturalWidth > 0) {
+				applyInitialDetailHeroLayout(wrap, { width: imageEl.naturalWidth, height: imageEl.naturalHeight });
+			}
 			wrap.classList.remove('hero-aspect-pending');
 			if (imageEl.complete && imageEl.naturalWidth > 0) {
 				wrap.classList.remove('image-loading');
@@ -8307,6 +8327,7 @@ function paintCreationDetailFromSeed(seed, detailContent, imageEl, chromeHtmlFro
 		const chrome = typeof chromeHtmlFromSeed === 'function' ? chromeHtmlFromSeed(seed) : '';
 		if (chrome) {
 			detailContent.innerHTML = chrome;
+			detailContent.dataset.creationSeedPainted = '1';
 			const showComments = Boolean(detailContent.querySelector('[data-creation-comments-host]'));
 			detailContent.dataset.creationShowComments = showComments ? '1' : '0';
 			const published = seed.published === true || seed.published === 1 || seed.published === '1';
@@ -8341,7 +8362,10 @@ async function checkAndLoadCreation() {
 		try {
 			const seedMod = creationDetailSeedBundledMod;
 			const aspectMod = aspectRatioBundledMod;
-			const seed = seedMod.readCreationDetailSeed(creationId);
+			const cachedSeed = seedMod.readCreationDetailSeed(creationId);
+			const seed = activeCreationDetailSeed
+				? seedMod.mergeCreationDetailSeeds(activeCreationDetailSeed, cachedSeed)
+				: cachedSeed ? { ...cachedSeed, viewer_liked: undefined } : null;
 			if (seed) {
 				paintedSeed = paintCreationDetailFromSeed(
 					seed,
@@ -8395,25 +8419,34 @@ export function renderCreationDetailView({ outlet, creationId, initialSeed = nul
 	const listenerController = new AbortController();
 	creationDetailViewMounted = true;
 	activeCreationDetailId = id;
-	activeCreationDetailSeed = initialSeed;
+	activeCreationDetailSeed = initialSeed && Number(initialSeed.created_image_id ?? initialSeed.id) === id
+		? { ...initialSeed, ...creationDetailSeedBundledMod.feedItemToCreationDetailSeed(initialSeed), id } : null;
 	activeCreationDetailNavigate = onNavigate || null;
  activeCreateProvider = createProvider || null;
 	window.__VPS_CREATION_DETAIL_SEED__ = initialSeed;
 	document.body.classList.add('creation-detail-page');
 	outlet.innerHTML = template;
+	outlet.querySelector('main')?.classList.add('creation-detail-layout-pending');
+	applyInitialDetailHeroLayout(outlet.querySelector('.creation-detail-image-wrapper'), activeCreationDetailSeed);
+	outlet.querySelector('.creation-detail-image-wrapper')?.insertAdjacentHTML('beforeend',
+		`<span class="creation-detail-nsfw-badge" role="img" aria-label="NSFW">${iconMarkup('eyeHidden')}</span>`);
+	const stopGroupNavigation = watchGroupNavigation(outlet.querySelector('.creation-detail-image-wrapper'));
+	nsfwBundledMod.bindNsfwClicks(outlet, { signal: listenerController.signal });
 	document.title = 'Creation · parascene beta';
 	for (const [type, listener, options] of creationDetailDocumentListeners) {
 		document.addEventListener(type, listener, { ...(typeof options === 'object' ? options : {}), signal: listenerController.signal });
 	}
 	const backgroundReady = bootCreationDetailPage().catch((error) => {
 		if (!creationDetailViewMounted || activeCreationDetailId !== id) return;
+		releaseDetailHeroLayout(outlet.querySelector('.creation-detail-image-wrapper'));
 		console.error('[creation-detail] view boot failed', error);
 	});
 	return {
 		backgroundReady,
 		hasOpenEscapeTarget: creationDetailPageHasOpenEscapeTarget,
 		destroy() {
-		listenerController.abort();
+			listenerController.abort();
+			stopGroupNavigation();
 		stopRelatedSection?.();
 		stopRelatedSection = null;
 		stopCreationDetailInFlightPoll();
@@ -8438,6 +8471,15 @@ addCreationDetailDocumentListener('creation-video-placeholder-updated', (event) 
 	const pageId = Number(getCreationId());
 	if (!Number.isFinite(updatedId) || !Number.isFinite(pageId) || updatedId !== pageId) return;
 	void refreshAfterMutation('status-changed', { creationId: pageId });
+});
+
+addCreationDetailDocumentListener('creation-detail:mutation', (event) => {
+	const detail = event?.detail || {};
+	if (detail.source !== 'publish-modal') return;
+	const updatedId = Number(detail.creationId);
+	const pageId = Number(getCreationId());
+	if (!Number.isFinite(updatedId) || !Number.isFinite(pageId) || updatedId !== pageId) return;
+	void loadCreation();
 });
 
 // Open modal when publish button is clicked

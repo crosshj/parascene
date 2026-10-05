@@ -5,6 +5,7 @@ import { createCreationsProvider } from './creations/index.js';
 import { createFilesProvider } from './files/index.js';
 import { createCreditsProvider } from './credits/index.js';
 import { createAvatarsProvider } from './avatars/index.js';
+import { createProfileProvider } from './profile/index.js';
 
 export function createAppProviders({ bootstrap = {} } = {}) {
 	const viewerId = Number(bootstrap.user?.id) || null;
@@ -17,6 +18,7 @@ export function createAppProviders({ bootstrap = {} } = {}) {
 		files: createFilesProvider({ viewerId, registry, origin: bootstrap.filesOrigin || '' }),
 		credits: createCreditsProvider({ viewerId, registry }),
 		avatars: createAvatarsProvider(),
+		profile: createProfileProvider(),
 	};
 
 	return {

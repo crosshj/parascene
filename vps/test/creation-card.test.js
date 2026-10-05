@@ -2,6 +2,25 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { buildCreationCardShell } from '../client/shared/creationCard.js';
+import { creationDetailChromeHtmlFromSeed, feedItemToCreationDetailSeed } from '../client/shared/creationDetailSeed.js';
+
+test('feed like state paints immediately, while unknown state shows a spinner', () => {
+	for (const liked of [true, false, undefined]) {
+		const seed = feedItemToCreationDetailSeed({ id: 42, created_image_id: 42, viewer_liked: liked, like_count: 3, published: true });
+		assert.equal(seed.viewer_liked, liked);
+		const markup = creationDetailChromeHtmlFromSeed(seed);
+		assert.match(markup, new RegExp(`aria-busy="${liked === undefined}"`));
+		assert.match(markup, new RegExp(`aria-pressed="${liked === true}"`));
+	}
+});
+
+test('early creation detail chrome shows the username rather than the display name', () => {
+	for (const creator of [{ author_user_name: 'artist', author_display_name: 'Display Name' }, { creator: { user_name: 'artist', display_name: 'Display Name' } }]) {
+		const markup = creationDetailChromeHtmlFromSeed({ id: 42, ...creator });
+		assert.match(markup, /creation-detail-action-strip-creator-name">@artist<\/div>/);
+		assert.doesNotMatch(markup, /creator-name">Display Name/);
+	}
+});
 
 test('shared creation card builder emits the media shell used by related creations', () => {
 	const markup = buildCreationCardShell({

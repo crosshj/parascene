@@ -68,6 +68,8 @@ import { healChallengeOrganizerRefsForCreationList } from "../services/create/ch
 
 import { applySourceShareUrlToMutateArgsWhenMatching } from "../services/create/mutateLineageImageUrl.js";
 import { buildMutateLineageMetaFields } from "../services/create/mutateLineageMeta.js";
+import { bumpFeedVersionCounter } from "../services/feed/feedVersion.js";
+import { invalidateFeedBetaCatalogSnapshot } from "../services/feed/ranking/catalogSnapshot.js";
 function buildGenericUrl(key) {
 	const segments = String(key || "")
 		.split("/")
@@ -2192,6 +2194,75 @@ router.post("/api/create/import-audio/finalize", asyncRoute(async (req, res) => 
 				console.error("[create] import-audio finalize failed:", err?.message || err);
 			}
 			return res.status(status).json({ error: message });
+		}
+	}));
+router.post("/api/create/images/:id/publish", asyncRoute(async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+		const id = Number(req.params.id);
+		if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Invalid creation ID" });
+		try {
+			let image = await queries.selectCreatedImageById.get(id, user.id);
+			const isAdmin = user.role === "admin";
+			if (!image && isAdmin) image = await queries.selectCreatedImageByIdAnyUser?.get(id);
+			if (!image) return res.status(404).json({ error: "Image not found" });
+			if (image.status !== "completed") return res.status(400).json({ error: "Only completed creations can be published" });
+			if (image.unavailable_at) return res.status(400).json({ error: "Unavailable creations cannot be published" });
+			if (image.published === true || image.published === 1) return res.status(400).json({ error: "Image is already published" });
+			const title = typeof req.body?.title === "string" ? req.body.title.trim() : "";
+			const description = typeof req.body?.description === "string" ? req.body.description.trim() : "";
+			const publishResult = await queries.publishCreatedImage.run(id, user.id, title || null, description || null, isAdmin);
+			if (!publishResult.changes) return res.status(404).json({ error: "Image not found" });
+			const meta = parseMeta(image.meta);
+			if (typeof req.body?.nsfw === "boolean" || typeof req.body?.doom_scroll_full_height === "boolean") {
+				const nextMeta = { ...meta };
+				if (typeof req.body.nsfw === "boolean") nextMeta.nsfw = req.body.nsfw;
+				if (typeof req.body.doom_scroll_full_height === "boolean") nextMeta.doom_scroll_full_height = req.body.doom_scroll_full_height;
+				await queries.updateCreatedImageMeta.run(id, image.user_id, nextMeta);
+			}
+			const existingFeedItem = await queries.selectFeedItemByCreatedImageId?.get(id);
+			let author = user.email || "User";
+			if (image.user_id && Number(image.user_id) !== Number(user.id)) {
+				try {
+					const creator = await queries.selectUserById.get(image.user_id);
+					if (creator?.email) author = creator.email;
+				} catch { /* Keep the authenticated user's email as a fallback. */ }
+			}
+			if (existingFeedItem) {
+				await queries.updateFeedItem?.run(id, title || "Untitled", description);
+			} else {
+				await queries.insertFeedItem.run(title || "Untitled", description, author, null, id);
+			}
+			await bumpFeedVersionCounter(queries);
+			void invalidateFeedBetaCatalogSnapshot().catch(() => {});
+			return res.json({ success: true, id, published: true });
+		} catch (err) {
+			console.error("[POST /api/create/images/:id/publish]", err);
+			return res.status(Number(err?.status) || 500).json({ error: err?.message || "Failed to publish creation" });
+		}
+	}));
+router.post("/api/create/images/:id/unpublish", asyncRoute(async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+		const id = Number(req.params.id);
+		if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Invalid creation ID" });
+		try {
+			let image = await queries.selectCreatedImageById.get(id, user.id);
+			const isAdmin = user.role === "admin";
+			if (!image && isAdmin) image = await queries.selectCreatedImageByIdAnyUser?.get(id);
+			if (!image) return res.status(404).json({ error: "Image not found" });
+			if (image.published !== true && image.published !== 1) return res.status(400).json({ error: "Image is not published" });
+			const result = await queries.unpublishCreatedImage.run(id, user.id, isAdmin);
+			if (!result.changes) return res.status(404).json({ error: "Image not found" });
+			await queries.deleteFeedItemByCreatedImageId?.run(id);
+			await queries.deleteAllLikesForCreatedImage?.run(id);
+			await queries.deleteAllCommentsForCreatedImage?.run(id);
+			await bumpFeedVersionCounter(queries);
+			void invalidateFeedBetaCatalogSnapshot().catch(() => {});
+			return res.json({ success: true, id, published: false });
+		} catch (err) {
+			console.error("[POST /api/create/images/:id/unpublish]", err);
+			return res.status(Number(err?.status) || 500).json({ error: err?.message || "Failed to unpublish creation" });
 		}
 	}));
 return router;

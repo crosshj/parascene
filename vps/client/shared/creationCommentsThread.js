@@ -301,6 +301,7 @@ export async function mountCreationCommentsThread(container, options) {
 				</div>
 				<div id="comments" data-comments-anchor></div>
 				<div class="comment-list" data-comment-list>${knownZeroComments ? emptyCommentsHtml : ''}</div>
+				<div class="comment-reaction-status" data-comment-reaction-status role="status" aria-live="polite"></div>
 			</div>
 		</div>
 	`;
@@ -337,6 +338,8 @@ export async function mountCreationCommentsThread(container, options) {
 		commentCount: Number.isFinite(initialCommentCount) ? Math.max(0, initialCommentCount) : 0,
 	};
 	let lastRenderedActivitySig = knownZeroComments || keepEmptyList ? 'empty' : '';
+	let commentsLoadGeneration = 0;
+	let commentReactionEpoch = 0;
 	let commentEditingId = null;
 	let commentEditDraft = '';
 	let commentEditBusy = false;
@@ -344,6 +347,7 @@ export async function mountCreationCommentsThread(container, options) {
 
 	const commentCountEl = root.querySelector('[data-comment-count]');
 	const commentListEl = root.querySelector('[data-comment-list]');
+	const commentReactionStatusEl = root.querySelector('[data-comment-reaction-status]');
 	const commentsSortEl = root.querySelector('[data-comments-sort]');
 	const commentsToolbarEl = root.querySelector('.comments-toolbar');
 	const commentComposerRow = root.querySelector('.comment-composer-row');
@@ -628,7 +632,7 @@ export async function mountCreationCommentsThread(container, options) {
 	function commentsActivitySignature(items) {
 		if (!Array.isArray(items) || items.length === 0) return 'empty';
 		return items
-			.map((it) => `${it?.type || ''}:${it?.id ?? ''}:${it?.updated_at || it?.created_at || ''}`)
+			.map((it) => `${it?.type || ''}:${it?.id ?? ''}:${it?.updated_at || it?.created_at || ''}:${JSON.stringify(it?.reactions || {})}:${JSON.stringify(it?.viewer_reactions || [])}`)
 			.join('|');
 	}
 
@@ -728,13 +732,11 @@ export async function mountCreationCommentsThread(container, options) {
 							<div class="comment-top">
 								${profileHref ? `
 									<a class="user-link comment-top-left comment-author-link" href="${profileHref}">
-										<span class="comment-author-name${isFounder ? ' founder-name' : ''}">${escapeHtml(name)}</span>
-										${handle ? `<span class="comment-author-handle${isFounder ? ' founder-name' : ''}">${escapeHtml(handle)}</span>` : ''}
+										<span class="comment-author-name${isFounder ? ' founder-name' : ''}">${escapeHtml(handle || 'User')}</span>
 									</a>
 								` : `
 									<div class="comment-top-left">
-										<span class="comment-author-name${isFounder ? ' founder-name' : ''}">${escapeHtml(name)}</span>
-										${handle ? `<span class="comment-author-handle${isFounder ? ' founder-name' : ''}">${escapeHtml(handle)}</span>` : ''}
+										<span class="comment-author-name${isFounder ? ' founder-name' : ''}">${escapeHtml(handle || 'User')}</span>
 									</div>
 								`}
 							</div>
@@ -866,13 +868,11 @@ export async function mountCreationCommentsThread(container, options) {
 						<div class="comment-top">
 							${profileHref ? `
 								<a class="user-link comment-top-left comment-author-link" href="${profileHref}">
-									<span class="comment-author-name${isFounder ? ' founder-name' : ''}">${escapeHtml(name)}</span>
-									${handle ? `<span class="comment-author-handle${isFounder ? ' founder-name' : ''}">${escapeHtml(handle)}</span>` : ''}
+									<span class="comment-author-name${isFounder ? ' founder-name' : ''}">${escapeHtml(handle || 'User')}</span>
 								</a>
 							` : `
 								<div class="comment-top-left">
-									<span class="comment-author-name${isFounder ? ' founder-name' : ''}">${escapeHtml(name)}</span>
-									${handle ? `<span class="comment-author-handle${isFounder ? ' founder-name' : ''}">${escapeHtml(handle)}</span>` : ''}
+									<span class="comment-author-name${isFounder ? ' founder-name' : ''}">${escapeHtml(handle || 'User')}</span>
 								</div>
 							`}
 						</div>
@@ -899,6 +899,7 @@ export async function mountCreationCommentsThread(container, options) {
 	}
 
 	let activeReactionPicker = null;
+	const pendingCommentReactions = new Set();
 
 	function closeReactionPicker() {
 		if (activeReactionPicker && activeReactionPicker.parentNode) {
@@ -1022,6 +1023,33 @@ export async function mountCreationCommentsThread(container, options) {
 			if (arr.length === 0) delete item.reactions[emojiKey];
 		}
 		patchCommentReactionsDom(commentId);
+	}
+
+	async function saveCommentReaction(commentId, emojiKey, added) {
+		const pendingKey = `${commentId}:${emojiKey}`;
+		if (pendingCommentReactions.has(pendingKey)) return;
+		const item = commentsState.activity.find((it) => it.type === 'comment' && Number(it.id) === commentId);
+		const wasAdded = Array.isArray(item?.viewer_reactions) && item.viewer_reactions.includes(emojiKey);
+		pendingCommentReactions.add(pendingKey);
+		commentReactionEpoch++;
+		commentsLoadGeneration++;
+		if (commentReactionStatusEl) commentReactionStatusEl.textContent = '';
+		applyReactionChange(commentId, emojiKey, added);
+		try {
+			const res = await toggleCommentReaction(commentId, emojiKey, added ? 'add' : 'remove');
+			if (!res?.ok || res.data == null) {
+				applyReactionChange(commentId, emojiKey, wasAdded);
+				if (commentReactionStatusEl) commentReactionStatusEl.textContent = res?.data?.message || res?.data?.error || 'Could not save reaction.';
+			} else if (Boolean(res.data.added) !== added) {
+				applyReactionChange(commentId, emojiKey, Boolean(res.data.added));
+			}
+		} catch (error) {
+			applyReactionChange(commentId, emojiKey, wasAdded);
+			if (commentReactionStatusEl) commentReactionStatusEl.textContent = error?.message || 'Could not save reaction.';
+		} finally {
+			pendingCommentReactions.delete(pendingKey);
+			commentReactionEpoch++;
+		}
 	}
 
 	const onCommentListClick = async (e) => {
@@ -1276,12 +1304,7 @@ export async function mountCreationCommentsThread(container, options) {
 			if (!Number.isFinite(commentId) || !emojiKey) return;
 			const item = commentsState.activity.find((it) => it.type === 'comment' && Number(it.id) === commentId);
 			const currentlyAdded = Array.isArray(item?.viewer_reactions) && item.viewer_reactions.includes(emojiKey);
-			const optimisticAdded = !currentlyAdded;
-			applyReactionChange(commentId, emojiKey, optimisticAdded);
-			const res = await toggleCommentReaction(commentId, emojiKey);
-			if (!res?.ok || res.data == null) {
-				applyReactionChange(commentId, emojiKey, currentlyAdded);
-			}
+			await saveCommentReaction(commentId, emojiKey, !currentlyAdded);
 			return;
 		}
 
@@ -1302,12 +1325,7 @@ export async function mountCreationCommentsThread(container, options) {
 			const unusedKeys = REACTION_ORDER.filter((key) => getCount(reactions[key]) === 0);
 			if (unusedKeys.length === 0) return;
 			showReactionPicker(addBtn, commentId, unusedKeys, (pickedCommentId, pickedEmojiKey) => {
-				applyReactionChange(pickedCommentId, pickedEmojiKey, true);
-				toggleCommentReaction(pickedCommentId, pickedEmojiKey).then((res) => {
-					if (!res?.ok || res.data == null) {
-						applyReactionChange(pickedCommentId, pickedEmojiKey, false);
-					}
-				});
+				void saveCommentReaction(pickedCommentId, pickedEmojiKey, true);
 			});
 		}
 	};
@@ -1416,6 +1434,8 @@ export async function mountCreationCommentsThread(container, options) {
 
 	async function loadComments({ scrollIfHash = false, showSkeleton = true, fresh = false } = {}) {
 		if (!commentListEl) return;
+		const loadGeneration = ++commentsLoadGeneration;
+		const reactionEpoch = commentReactionEpoch;
 
 		const commentsSection = root.querySelector('[data-comments-section]');
 		if (commentsSection instanceof HTMLElement) commentsSection.style.display = '';
@@ -1441,6 +1461,10 @@ export async function mountCreationCommentsThread(container, options) {
 				windowMs: fresh ? 0 : 500,
 			})
 				.catch(() => ({ ok: false, status: 0, data: null }));
+
+			// A comment list request started before or during a reaction write may
+			// carry older reaction state. Let a later deliberate refresh replace it.
+			if (loadGeneration !== commentsLoadGeneration || reactionEpoch !== commentReactionEpoch) return;
 
 			if (!res.ok) {
 				if (commentsToolbarEl instanceof HTMLElement) commentsToolbarEl.style.display = 'none';

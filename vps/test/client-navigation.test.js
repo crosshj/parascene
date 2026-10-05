@@ -9,6 +9,7 @@ const views = {
 };
 
 const definitions = [
+	{ path: '/p/:username', view: {}, presentation: 'overlay', returnFromCreation: true, defaultBackground: '/explore' },
 	{ path: '/', view: views.Feed, title: 'Feed', icon: 'home', composer: 'none' },
 	{ path: '/feed', view: views.Feed, title: 'Feed', icon: 'home', composer: 'none' },
 	{ path: '/feed/doom/:creationId', view: views.DoomScroll, title: 'Doom Scroll', icon: 'chart', presentation: 'overlay', defaultBackground: '/feed', composer: 'none' },
@@ -175,4 +176,20 @@ test('an overlay cannot use another overlay route as its background', () => {
 	} finally {
 		browser.restore();
 	}
+});
+
+
+test('creation dismissal and overlay Back return to the opening profile tab across detail navigation', async t => {
+ const app=harness('/explore');t.after(()=>app.browser.restore());
+ await app.router.start();await app.router.navigate('/p/alice#likes');
+ await app.router.navigate('/creations/42');
+ assert.equal(app.browser.history.state.parasceneReturnOverlayUrl,'/p/alice#likes');
+ await app.router.navigate('/creations/43');await app.router.dismissOverlay();
+ assert.equal(app.applied.at(-1).url,'/p/alice#likes');
+ assert.equal(app.applied.at(-1).backgroundUrl,'/explore');
+ await app.router.navigate('/creations/42');app.router.backOverlay();
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(app.applied.at(-1).url,'/p/alice#likes');
+ await app.router.dismissOverlay();assert.equal(app.applied.at(-1).url,'/explore');
+ app.router.destroy();
 });

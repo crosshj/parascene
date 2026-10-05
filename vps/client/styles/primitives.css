@@ -14,7 +14,9 @@
 
 .btn-primary,
 .btn-secondary,
-.btn-outlined {
+.btn-outlined,
+.route-empty-button {
+	box-sizing: border-box;
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;

@@ -1,14 +1,88 @@
 import './DoomScrollView.css';
+import { mountChatDoomScroll, teardownChatDoomScroll } from './doomScrollMount.js';
+import { openDoomCommentsPopover, destroyDoomCommentsPopover } from './doomCommentsPopover.js';
+import { createFeedRequest } from '../../providers/feed/api.js';
+import { getHiddenFeedItems } from '../../shared/feedHiddenItems.js';
 
 export const DoomScrollView = Object.freeze({
-	mount({ outlet, creationId }) {
-		outlet.innerHTML = `<section class="doom-scroll-view">
-			<div class="doom-scroll-view__art" role="img" aria-label="Coming soon"><svg viewBox="0 0 240 180" aria-hidden="true"><ellipse cx="120" cy="91" rx="93" ry="59"/><rect x="76" y="46" width="90" height="91" rx="20" transform="rotate(-6 76 46)"/><circle cx="120" cy="92" r="15"/><path d="m112 92 6 6 12-14"/></svg></div>
-			<h2>Doom Scroll · ${escapeHtml(creationId)}</h2><nav aria-label="Doom scroll navigation"><a href="/feed" data-spa-link>Back to Feed</a><a href="/create" data-spa-link>Create</a><a href="/creations/${encodeURIComponent(creationId)}" data-spa-link>Open creation</a></nav>
-		</section>`;
-		document.title = 'Doom Scroll - parascene beta';
-		return { backgroundReady: Promise.resolve(), destroy() { outlet.replaceChildren(); } };
-	},
-});
+ mount({ outlet, creationId, services, actions }) {
+  const root = document.createElement('section');
+  root.className = 'doom-scroll-view';
+  root.id = 'chat-doom-scroll-overlay';
+  outlet.replaceChildren(root);
+  document.title = 'Doom Scroll · Parascene beta';
+  let request, destroyed = false, activeId = Number(creationId);
 
-function escapeHtml(value) { return String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]); }
+  function loadTimeline(id) {
+   activeId = Number(id);
+   request?.abort();
+   teardownChatDoomScroll();
+   request = new AbortController();
+   const signal = request.signal;
+   root.innerHTML = '<p class="chat-doom-error" role="status">Loading video…</p>';
+   return mountChatDoomScroll({
+    hostEl: root, startCreationId: Number(id), signal,
+    fetchJsonWithStatusDeduped: createFeedRequest(signal), getHiddenFeedItems,
+    viewerUserId: services.providers.viewerId, viewer: services.session.user,
+    onDismiss: () => actions.dismissOverlay(),
+    onSlideChange(id) {
+     if (destroyed || Number(id) === activeId) return;
+     activeId = Number(id);
+     void actions.navigate(`/feed/doom/${encodeURIComponent(id)}`, { replace: true });
+    },
+   }).catch(error => {
+    if (destroyed || signal.aborted || error.name === 'AbortError') return;
+    if (error.status === 401) return services.session.redirectToLogin();
+    const message = document.createElement('p');
+    message.className = 'chat-doom-error';
+    message.textContent = error.message || 'Unable to load video.';
+    const back = document.createElement('button');
+    back.textContent = 'Back to feed';
+    back.addEventListener('click', () => actions.dismissOverlay());
+    root.replaceChildren(message, back);
+   });
+  }
+
+  const backgroundReady = loadTimeline(creationId);
+  root.addEventListener('click', event => {
+   if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+   const bar = event.target.closest('[data-chat-doom-detail]');
+   if (bar && !event.target.closest('a,button,input,textarea,select')) {
+    event.preventDefault();
+    void actions.navigate(bar.getAttribute('data-chat-doom-detail-href'));
+    return;
+   }
+   const link = event.target.closest('a[href]');
+   if (!link) return;
+   if (link.matches('[data-chat-doom-comments]')) {
+    event.preventDefault();
+    event.stopPropagation();
+    openDoomCommentsPopover({ detailHref: link.getAttribute('href'), viewer: services.session.user });
+    return;
+   }
+   const url = new URL(link.href, location.origin);
+   if (url.origin === location.origin) {
+    event.preventDefault();
+    void actions.navigate(url.pathname + url.search + url.hash);
+   }
+  });
+
+  return {
+   backgroundReady,
+   update({ creationId: next }) {
+    const id = Number(next);
+    if (id === activeId) return;
+    const slide = root.querySelector(`[data-creation-id="${id}"]`);
+    if (slide) { activeId = id; slide.scrollIntoView({ block: 'start' }); }
+    else void loadTimeline(id);
+   },
+   destroy() {
+    destroyed = true;
+    request?.abort();
+    destroyDoomCommentsPopover();
+    teardownChatDoomScroll();
+    root.remove();
+   },
+  };
+ },
+});

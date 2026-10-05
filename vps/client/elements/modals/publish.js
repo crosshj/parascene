@@ -609,19 +609,23 @@ class AppModalPublish extends HTMLElement {
 					title_untitled: !titleRaw,
 					summary: typeof description === 'string' ? description : prev.summary,
 					published: true,
-					published_at: new Date().toISOString()
+					published_at: new Date().toISOString(),
+					nsfw: Boolean(nsfw),
+					meta: { ...(prev.meta && typeof prev.meta === 'object' ? prev.meta : {}), nsfw: Boolean(nsfw), doom_scroll_full_height: Boolean(doomScrollFullHeight) }
 				});
 			}
 		} catch {
 			// ignore
 		}
-		const { refreshAfterMutation, isCreationDetailEmbed, navigate } = creationDetailRuntime;
-		if (isCreationDetailEmbed()) {
-			await refreshAfterMutation('published', { creationId: this._creationId, title });
-			return;
-		}
-
-		navigate(`/creations/${this._creationId}`);
+		const { refreshAfterMutation } = creationDetailRuntime;
+		await refreshAfterMutation('published', {
+			creationId: this._creationId,
+			title: typeof title === 'string' && title.trim() ? title.trim() : 'Untitled',
+			description,
+			nsfw: Boolean(nsfw),
+			doom_scroll_full_height: Boolean(doomScrollFullHeight),
+			source: 'publish-modal'
+		});
 	}
 
 	async handleEditSubmit(title, description, nsfw, doomScrollFullHeight) {

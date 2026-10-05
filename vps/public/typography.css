@@ -1,0 +1,14 @@
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@100..900&display=swap');
+
+:root {
+	--font-family: "Geist", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+	--beta-font-family: var(--font-family);
+}
+
+body,
+button,
+input,
+textarea,
+select {
+	font-family: var(--font-family);
+}

@@ -1207,7 +1207,7 @@ body.beta-layout .chat-page-messages .connect-chat-creation-embed-group-nav {
 		scrollbar-gutter: auto;
 	}
 }
-body.beta-layout .chat-page-messages img:not(.chat-doom-poster):not(.chat-doom-avatar):not(.feed-card-img):not(.feed-card-group-img):not(.connect-chat-creation-embed-img):not(.connect-chat-creation-embed-group-img):not(.comment-avatar-img):not(.feed-card-avatar-img):not([class*="avatar"]):not(.challenge-pane-hero-image):not(.connect-chat-suno-preview-img),
+body.beta-layout .chat-page-messages img:not(.create-composer-attachment-preview):not(.chat-page-composer-attachment-preview):not(.chat-doom-poster):not(.chat-doom-avatar):not(.feed-card-img):not(.feed-card-group-img):not(.connect-chat-creation-embed-img):not(.connect-chat-creation-embed-group-img):not(.comment-avatar-img):not(.feed-card-avatar-img):not([class*="avatar"]):not(.challenge-pane-hero-image):not(.connect-chat-suno-preview-img),
 body.beta-layout .chat-page-messages video:not(.chat-doom-video):not(.feed-card-video) {
 	max-width: 100%;
 	height: auto;
@@ -3915,7 +3915,7 @@ body.beta-layout.modal-open .chat-page-messages {
 	height: 0;
 	display: none;
 }
-body.beta-layout .chat-page-messages img:not(.chat-doom-poster):not(.chat-doom-avatar):not(.feed-card-img):not(.feed-card-group-img):not(.connect-chat-creation-embed-img):not(.connect-chat-creation-embed-group-img):not(.comment-avatar-img):not(.feed-card-avatar-img):not([class*="avatar"]):not(.challenge-pane-hero-image):not(.connect-chat-suno-preview-img),
+body.beta-layout .chat-page-messages img:not(.create-composer-attachment-preview):not(.chat-page-composer-attachment-preview):not(.chat-doom-poster):not(.chat-doom-avatar):not(.feed-card-img):not(.feed-card-group-img):not(.connect-chat-creation-embed-img):not(.connect-chat-creation-embed-group-img):not(.comment-avatar-img):not(.feed-card-avatar-img):not([class*="avatar"]):not(.challenge-pane-hero-image):not(.connect-chat-suno-preview-img),
 body.beta-layout .chat-page-messages video:not(.chat-doom-video):not(.feed-card-video) {
 	max-width: 100%;
 	height: auto;

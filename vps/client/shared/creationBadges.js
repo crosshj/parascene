@@ -4,6 +4,7 @@
  */
 
 import * as SvgIcons from '../icons/svg-strings.js';
+import { iconMarkup } from '../components/Icon/Icon.js';
 
 const html = String.raw;
 
@@ -28,9 +29,7 @@ export function publishedBadgeHtml() {
 
 /** Music / audio creation badge (cover-only cards — never an iframe). */
 export function musicBadgeHtml() {
-	const m = SvgIcons.audioClipMusicIcon;
-	const inner = typeof m === 'function' ? m() : '';
-	return html`<div class="creation-music-badge" title="Music" role="img" aria-label="Music">${inner}</div>`;
+	return html`<div class="creation-music-badge" title="Music" role="img" aria-label="Music">${iconMarkup('music')}</div>`;
 }
 
 /** Imported YouTube / embed video badge (cover-only — never an iframe in feed). */

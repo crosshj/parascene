@@ -6,7 +6,7 @@
 		min-height: 0;
 	}}
 
-img:not(.chat-doom-poster):not(.chat-doom-avatar):not(.feed-card-img):not(.feed-card-group-img):not(.connect-chat-creation-embed-img):not(.connect-chat-creation-embed-group-img):not(.comment-avatar-img):not(.feed-card-avatar-img):not([class*="avatar"]):not(.challenge-pane-hero-image):not(.connect-chat-suno-preview-img) {
+.challenge-pane-root img:not(.create-composer-attachment-preview):not(.chat-page-composer-attachment-preview):not(.chat-doom-poster):not(.chat-doom-avatar):not(.feed-card-img):not(.feed-card-group-img):not(.connect-chat-creation-embed-img):not(.connect-chat-creation-embed-group-img):not(.comment-avatar-img):not(.feed-card-avatar-img):not([class*="avatar"]):not(.challenge-pane-hero-image):not(.connect-chat-suno-preview-img) {
 	max-width: 100%;
 	height: auto;
 }
@@ -1092,6 +1092,66 @@ img:not(.chat-doom-poster):not(.chat-doom-avatar):not(.feed-card-img):not(.feed-
 
 .challenge-pane-rewards-section {
 	margin-top: 2px;
+}
+
+.challenge-rewards-stack {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.challenge-reward-card {
+	display: flex;
+	flex-direction: row;
+	align-items: flex-start;
+	gap: 14px;
+	padding: 14px 14px 14px 12px;
+	border-radius: 12px;
+	background: color-mix(in srgb, var(--text) 6%, transparent);
+	border: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
+	box-sizing: border-box;
+}
+
+.challenge-reward-card-body {
+	min-width: 0;
+	flex: 1;
+}
+
+.challenge-reward-card-title {
+	margin: 0 0 6px;
+	font-size: 0.75rem;
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--text-muted, rgba(255, 255, 255, 0.5));
+}
+
+.challenge-reward-card-text {
+	margin: 0;
+	font-size: 0.9375rem;
+	line-height: 1.5;
+	color: var(--text);
+}
+
+.challenge-reward-card-text p {
+	margin: 0;
+}
+
+/* Reward medals are inline SVGs (see detailsRewardView.js); only size + shadow here */
+.challenge-reward-coin-wrap {
+	flex-shrink: 0;
+	width: 52px;
+	height: 52px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.challenge-reward-coin-svg {
+	display: block;
+	width: 52px;
+	height: auto;
+	filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.16));
 }
 
 .challenge-pane-hero-image-section {
@@ -2830,7 +2890,7 @@ img:not(.chat-doom-poster):not(.chat-doom-avatar):not(.feed-card-img):not(.feed-
 		display: flex !important;
 	}}
 
-img:not(.chat-doom-poster):not(.chat-doom-avatar):not(.feed-card-img):not(.feed-card-group-img):not(.connect-chat-creation-embed-img):not(.connect-chat-creation-embed-group-img):not(.comment-avatar-img):not(.feed-card-avatar-img):not([class*="avatar"]):not(.challenge-pane-hero-image):not(.connect-chat-suno-preview-img) {
+.challenge-pane-root img:not(.create-composer-attachment-preview):not(.chat-page-composer-attachment-preview):not(.chat-doom-poster):not(.chat-doom-avatar):not(.feed-card-img):not(.feed-card-group-img):not(.connect-chat-creation-embed-img):not(.connect-chat-creation-embed-group-img):not(.comment-avatar-img):not(.feed-card-avatar-img):not([class*="avatar"]):not(.challenge-pane-hero-image):not(.connect-chat-suno-preview-img) {
 	max-width: 100%;
 	height: auto;
 }

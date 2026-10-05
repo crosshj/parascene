@@ -578,6 +578,7 @@ body.prsn-creation-composer-drag-active .create-composer:not(.is-drop-target) .c
 	width: 100%;
 	height: 100%;
 	object-fit: cover;
+	object-position: center;
 }
 
 .create-composer-attachment-preview--clickable {

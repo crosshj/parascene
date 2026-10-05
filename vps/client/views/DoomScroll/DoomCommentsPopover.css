@@ -1,0 +1,4 @@
+.doom-comments-dialog {position:fixed;inset:auto 0 0;width:min(100%,720px);max-width:100%;margin:0 auto;max-height:80dvh;padding:16px;border:1px solid var(--border);border-radius:20px 20px 0 0;background:var(--surface);color:var(--text);overflow:auto;}
+.doom-comments-dialog::backdrop {background:rgb(0 0 0 / .45);}
+.doom-comments-dialog .chat-doom-comments-header {display:flex;align-items:center;justify-content:space-between;}
+.doom-comments-dialog .chat-doom-comments-mount {min-height:240px;}

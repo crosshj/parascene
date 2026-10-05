@@ -240,6 +240,17 @@ body.creation-detail-page main>section:first-of-type {
 	z-index: 0;
 }
 
+.creation-detail-layout-pending {
+	visibility: hidden;
+	opacity: 0;
+	pointer-events: none;
+}
+
+/* Keep the reserved geometry after loading; intrinsic media must not collapse it. */
+.creation-detail-image-wrapper[data-hero-layout-known="1"] {
+	aspect-ratio: var(--hero-aspect-ratio, 1 / 1) !important;
+}
+
 .creation-detail-image-wrapper {
 	position: relative;
 	z-index: 1;
@@ -747,19 +758,38 @@ body.creation-detail-page main>section:first-of-type {
 	cursor: pointer;
 }
 
-.creation-detail-image-wrapper.nsfw:not(.nsfw-revealed)::before {
-	z-index: 6;
-	font-size: 1.125rem;
-	font-weight: 600;
-	letter-spacing: 0.06em;
-	padding: 20px;
-	border-radius: 16px;
+.creation-detail-image-wrapper.nsfw::before {
+	content: none;
 }
 
-@supports (width: 1cqi) {
-	.creation-detail-image-wrapper.nsfw::before {
-		padding: min(4cqi, 20px) min(4cqi, 20px);
-	}
+.creation-detail-nsfw-badge {
+	display: none;
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	z-index: 6;
+	width: 52px;
+	height: 52px;
+	align-items: center;
+	justify-content: center;
+	border: 0;
+	border-radius: 15px;
+	corner-shape: squircle;
+	color: rgb(255 255 255 / 70%);
+	background: rgb(18 18 24 / 26%);
+	box-shadow: none;
+	transform: translate(-50%, -50%);
+	pointer-events: none;
+}
+
+body:not(.view-nsfw) .creation-detail-image-wrapper.nsfw:not(.nsfw-revealed) > .creation-detail-nsfw-badge {
+	display: inline-flex;
+}
+
+.creation-detail-nsfw-badge svg {
+	display: block;
+	width: 28px;
+	height: 28px;
 }
 
 body.view-nsfw .creation-detail-image-wrapper.nsfw::after {
@@ -1322,6 +1352,15 @@ body.view-nsfw .creation-detail-image-wrapper.nsfw::after {
 	font-size: 0.8125rem;
 	color: var(--text-muted);
 	line-height: 1.25;
+	min-height: 1.25em;
+	display: flex;
+	align-items: center;
+}
+
+.creation-detail-followers-skeleton {
+	display: block;
+	width: 72px;
+	height: 1em;
 }
 
 .creation-detail-action-strip-follow {
@@ -1375,6 +1414,27 @@ body.view-nsfw .creation-detail-image-wrapper.nsfw::after {
 	width: 18px;
 	height: 18px;
 	flex-shrink: 0;
+}
+
+.creation-detail-action-strip-pill .creation-detail-like-spinner {
+	display: none;
+	animation: creation-detail-like-spin 0.8s linear infinite;
+}
+
+.creation-detail-action-strip-pill[data-like-button]:is(.is-like-loading, [data-like-busy="1"]) {
+	opacity: 1;
+}
+
+.creation-detail-action-strip-pill[data-like-button]:is(.is-like-loading, [data-like-busy="1"]) > svg:not(.creation-detail-like-spinner) {
+	display: none;
+}
+
+.creation-detail-action-strip-pill[data-like-button]:is(.is-like-loading, [data-like-busy="1"]) > .creation-detail-like-spinner {
+	display: block;
+}
+
+@keyframes creation-detail-like-spin {
+	to { transform: rotate(360deg); }
 }
 
 /* Filled heart when creation is liked */
@@ -2346,6 +2406,14 @@ button.creation-detail-group-item {
 	z-index: 2;
 }
 
+body:not(.view-nsfw) .creation-detail-group-thumb-wrap.nsfw:not(.nsfw-revealed) .creation-detail-group-thumb.is-active {
+	border-color: var(--border);
+}
+
+body:not(.view-nsfw) .creation-detail-group-thumb-wrap.nsfw:not(.nsfw-revealed) .creation-detail-group-thumb.is-active::after {
+	content: none;
+}
+
 .creation-detail-group-thumb-audio,
 .creation-detail-group-thumb--audio {
 	background:
@@ -2425,18 +2493,18 @@ button.creation-detail-group-item {
 	height: 32px;
 }
 
-/* Group thumbnails inherit the item's NSFW blur: stay obscured (with a compact label)
+/* Group thumbnails inherit the item's NSFW blur: stay obscured
    until the viewer reveals the item via the hero/carousel or by tapping a thumbnail. */
 .creation-detail-group-thumb-wrap.nsfw:not(.nsfw-revealed) {
 	cursor: pointer;
 }
 
 .creation-detail-group-thumb-wrap.nsfw::before {
-	font-size: 0.5rem;
-	letter-spacing: 0.04em;
-	padding: 2px 6px;
-	border-radius: 6px;
-	white-space: nowrap;
+	content: none;
+}
+
+body:not(.view-nsfw) .creation-detail-image-wrapper.nsfw:not(.nsfw-revealed) .creation-detail-hero-nav {
+	display: none;
 }
 
 .creation-detail-group-actions {

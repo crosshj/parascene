@@ -44,14 +44,11 @@ export function renderFeedCardSkeleton() {
 				${skeletonLine('72%', 'skeleton-line--short')}
 				${skeletonLine('62%', 'skeleton-line--medium')}
 			</div>
-		</div>
-		<div class="skeleton-feed-card-actions">
-			<div style="display: inline-flex; align-items: center; gap: 14px;">
-				${skeletonPill('72px')}
-				${skeletonPill('64px')}
-				${skeletonPill('88px')}
+			<div class="skeleton-feed-card-actions">
+				${skeletonPill('36px', 18)}
+				${skeletonPill('36px', 18)}
+				${skeletonCircle(18)}
 			</div>
-			${skeletonCircle(34)}
 		</div>
 	</div>`;
 }

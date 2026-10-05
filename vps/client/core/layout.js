@@ -104,6 +104,7 @@ export function createLayout({ root, views, services } = {}) {
 		}
 	}
 
+	const overlayRestoreStates = new Map();
 	const mounted = {
 		sidebar: null,
 		mobile: null,
@@ -118,7 +119,7 @@ export function createLayout({ root, views, services } = {}) {
 		menuButton.setAttribute('aria-expanded', 'false');
 	}
 
-	function setPage(chrome = {}) {
+	function setPageTitle(chrome = {}) {
 		pageTitle.replaceChildren();
 		if (chrome.breadcrumb) {
 			const breadcrumb = document.createElement('span');
@@ -140,6 +141,10 @@ export function createLayout({ root, views, services } = {}) {
 		} else {
 			pageTitle.textContent = chrome.title ?? 'Feed';
 		}
+	}
+
+	function setPage(chrome = {}) {
+		setPageTitle(chrome);
 		pageIcon.innerHTML = iconMarkup(chrome.icon || 'home');
 		composer.hidden = chrome.composer !== 'message';
 		creationComposer.hidden = chrome.composer !== 'creation';
@@ -179,10 +184,12 @@ export function createLayout({ root, views, services } = {}) {
 			actions,
 			setHeaderMenu,
 			setHeaderAccessories,
+			setHeaderBreadcrumb(breadcrumb) { setPageTitle({ breadcrumb }); },
+			setHeaderTitle(title) { setPageTitle({ title }); },
 			rightSidebar,
 			setConversationIdentity({ title, avatarHtml, href }) {
 				pageTitle.replaceChildren();
-				pageIcon.innerHTML = avatarHtml;
+				if (typeof avatarHtml === 'string') pageIcon.innerHTML = avatarHtml;
 				if (href) {
 					const titleLink = document.createElement('a');
 					titleLink.className = 'beta-outlet__profile-link';
@@ -211,6 +218,9 @@ export function createLayout({ root, views, services } = {}) {
 	function unmount(name, host) {
 		const record = mounted[name];
 		if (!record) return;
+		if (name === 'overlay' && record.handle?.getRestoreState) {
+			overlayRestoreStates.set(record.key, { state: record.handle.getRestoreState(), scrollTop: host.scrollTop });
+		}
 		record.active = false;
 		destroyHandle(record.handle);
 		record.handle = null;
@@ -231,10 +241,13 @@ export function createLayout({ root, views, services } = {}) {
 		}
 		if (name === 'outlet') rightSidebar.prepare(extra.sidebarRoute);
 		unmount(name, host);
+		if (name === 'overlay') host.scrollTop = 0;
 		const record = { key: descriptor.key, handle: null, active: true };
 		mounted[name] = record;
+		const restored = name === 'overlay' ? overlayRestoreStates.get(descriptor.key) : null;
 		const result = descriptor.view.mount({
 			outlet: host,
+			restoreState: restored?.state,
 			...mountContext(extra),
 			...(descriptor.props || {}),
 		});
@@ -244,6 +257,11 @@ export function createLayout({ root, views, services } = {}) {
 			return true;
 		}
 		record.handle = typeof handle === 'function' ? { destroy: handle } : handle || { destroy() {} };
+		if (restored) {
+			void Promise.resolve(record.handle.backgroundReady).then(() => {
+				if (record.active && mounted[name] === record) host.scrollTop = restored.scrollTop;
+			});
+		}
 		return true;
 	}
 
@@ -273,7 +291,7 @@ export function createLayout({ root, views, services } = {}) {
 			overlayTitle.textContent = descriptor.title || 'Detail';
 			if (mounted.overlay) document.documentElement.classList.remove('beta-overlay-route-pending');
 		}
-		if (!visible || changed) overlayContent.scrollTop = 0;
+		if (!visible) overlayContent.scrollTop = 0;
 	}
 
 	function onDocumentKeydown(event) {
@@ -354,6 +372,7 @@ export function createLayout({ root, views, services } = {}) {
 			await reconcileRegion('overlay', overlayContent, null);
 			showOverlay(null, overlayChanged);
 		}
+		if (!composition.overlay) overlayRestoreStates.clear();
 		appliedComposition = composition;
 	}
 
@@ -379,6 +398,7 @@ export function createLayout({ root, views, services } = {}) {
 		backgroundRevision++;
 		setHeaderAccessories();
 		unmount('overlay', overlayContent);
+		overlayRestoreStates.clear();
 		unmount('outlet', outletRegion);
 		destroyHandle(creationComposerHandle);
 		creationComposerHandle = null;

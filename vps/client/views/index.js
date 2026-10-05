@@ -75,6 +75,10 @@ export const appViews = Object.freeze({
 	NotFound: NotFoundView,
 	CreationDetail: {
 		mount({ outlet, creationId, seed, actions, services }) {
+			const viewer = services.session.user;
+			if (seed && !seed.creator && Number(seed.user_id) === Number(viewer?.id)) {
+				seed = { ...seed, creator: { id: viewer.id, ...viewer.profile } };
+			}
 			return renderCreationDetailView({
 				outlet,
 				creationId,

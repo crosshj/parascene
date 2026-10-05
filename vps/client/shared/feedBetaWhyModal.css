@@ -1,0 +1,7 @@
+.feed-beta-why-modal { max-width: 420px; }
+.feed-beta-why-label { margin: 0 0 8px; font-size: .75rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--accent); }
+.feed-beta-why-summary { margin: 0 0 12px; line-height: 1.45; }
+.feed-beta-why-details { margin: 0 0 12px; padding-left: 1.2rem; line-height: 1.45; }
+.feed-beta-why-details li + li { margin-top: 6px; }
+.feed-beta-why-dev { margin-top: 8px; font-size: .9rem; }
+.feed-beta-why-dev-pre { margin: 8px 0 0; padding: 10px; border-radius: 8px; background: var(--surface-strong); font-size: .75rem; line-height: 1.35; overflow: auto; max-height: 220px; white-space: pre-wrap; word-break: break-word; }

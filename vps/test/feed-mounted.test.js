@@ -1,0 +1,138 @@
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';import vm from 'node:vm';import {JSDOM} from 'jsdom';
+async function harness(url,fetcher){const dom=new JSDOM('<div class="beta-outlet__scroll"><div id="outlet"></div></div>',{url:'http://localhost'+url,pretendToBeVisual:true}),w=dom.window;w.HTMLElement.prototype.scrollTo=function(){};const observers=[];class Observer{constructor(callback){this.callback=callback;this.disconnected=false;observers.push(this)}observe(){}unobserve(){}disconnect(){this.disconnected=true}}w.matchMedia=()=>({matches:false,addEventListener(){},removeEventListener(){}});w.HTMLMediaElement.prototype.play=async function(){};w.HTMLMediaElement.prototype.pause=function(){};w.HTMLMediaElement.prototype.load=function(){};w.HTMLDialogElement.prototype.showModal=function(){this.open=true};w.HTMLDialogElement.prototype.close=function(){this.open=false};const names=['document','Document','HTMLElement','HTMLDivElement','HTMLInputElement','HTMLTextAreaElement','HTMLSelectElement','HTMLButtonElement','HTMLAnchorElement','HTMLImageElement','HTMLTemplateElement','HTMLFormElement','HTMLMediaElement','HTMLAudioElement','HTMLVideoElement','Element','SVGElement','Node','Image','File','FormData','Event','CustomEvent','DOMException','AbortController','AbortSignal','customElements','localStorage','sessionStorage','navigator','location','MutationObserver'];const context=vm.createContext({...Object.fromEntries(names.map(n=>[n,w[n]])),window:w,innerWidth:w.innerWidth,innerHeight:w.innerHeight,matchMedia:w.matchMedia,console,URL,URLSearchParams,CSS:{escape:v=>v},getComputedStyle:w.getComputedStyle.bind(w),IntersectionObserver:Observer,ResizeObserver:Observer,requestAnimationFrame:w.requestAnimationFrame.bind(w),cancelAnimationFrame:w.cancelAnimationFrame.bind(w),setTimeout,clearTimeout,setInterval:w.setInterval.bind(w),clearInterval:w.clearInterval.bind(w),queueMicrotask,fetch:fetcher,alert(){},confirm:()=>true});const modules=new Map();function module(file){file=path.resolve(file);if(modules.has(file))return modules.get(file);let code=fs.readFileSync(file,'utf8');if(file.endsWith('.css'))code='export default {}';if(file.endsWith('.html'))code='export default '+JSON.stringify(code);const mod=new vm.SourceTextModule(code,{identifier:file,context});modules.set(file,mod);return mod}async function load(file){const mod=module(path.resolve('client',file));if(mod.status==='unlinked')await mod.link((name,parent)=>module(path.resolve(path.dirname(parent.identifier),name)));if(mod.status!=='evaluated')await mod.evaluate();return mod.namespace}const navigations=[],actions={navigate:(...args)=>navigations.push(args),dismissOverlay(){}},services={session:{user:{id:1,role:'consumer',meta:{}},redirectToLogin(){throw Error('Unexpected auth redirect')},refresh:async()=>{}},providers:{}};const searchComposer=(await load('components/SearchComposer/SearchComposer.js')).createSearchComposerElement();w.document.body.append(searchComposer);return {w,load,searchComposer,outlet:w.document.getElementById('outlet'),actions,services,navigations,observers,close:()=>dom.window.close()}}
+const tick=()=>new Promise(resolve=>setImmediate(resolve)),response=data=>new Response(JSON.stringify(data),{headers:{"content-type":"application/json"}});
+
+test('Feed marks empty and literal Untitled titles for thin italic styling', {skip:!vm.SourceTextModule}, async()=>{
+ const titles=[null,'','  ','Untitled',' Untitled ','A real title'];
+ const h=await harness('/feed',async url=>response(url.startsWith('/api/feed?')?{items:titles.map((title,index)=>({id:index+1,created_image_id:index+1,title,published:true,image_url:'/one.jpg',user_id:2})),hasMore:false}:{version:1,item:null}));
+ try {
+  const {FeedView}=await h.load('views/Feed/FeedView.js');const mounted=FeedView.mount(h);
+  await tick();await tick();
+  const labels=[...h.outlet.querySelectorAll('.feed-card-title')];assert.equal(labels.length,titles.length);
+  labels.forEach((label,index)=>{assert.equal(label.classList.contains('feed-card-title--untitled'),index<5);assert.equal(label.textContent,index<5?'Untitled':'A real title')});
+  mounted.destroy();
+ } finally {h.close()}
+});
+
+test('creation detail confirms temporary reveal on hero and group thumbnails without changing preferences', {skip:!vm.SourceTextModule}, async()=>{
+ const h=await harness('/creations/42',async()=>response({}));
+ try {
+  const {bindNsfwClicks}=await h.load('shared/nsfwView.js');
+  const lifetime=new h.w.AbortController();
+  h.w.document.body.dataset.enableNsfw='1';
+  h.outlet.innerHTML='<div class="creation-detail-image-wrapper nsfw"><img></div><div class="creation-detail-group-thumb-wrap nsfw"><button>Thumbnail</button></div>';
+  const hero=h.outlet.querySelector('.creation-detail-image-wrapper'),thumb=h.outlet.querySelector('.creation-detail-group-thumb-wrap');
+  let prompts=0,accepted=false,switches=0;
+  h.w.confirm=message=>{assert.match(message,/temporarily reveal/);prompts++;return accepted};
+  thumb.querySelector('button').addEventListener('click',()=>switches++);
+  bindNsfwClicks(h.outlet,{signal:lifetime.signal});
+  hero.querySelector('img').click();assert.equal(prompts,1);assert.equal(hero.classList.contains('nsfw-revealed'),false);
+  accepted=true;thumb.querySelector('button').click();assert.equal(prompts,2);assert.equal(switches,0);
+  assert.ok(hero.classList.contains('nsfw-revealed'));assert.ok(thumb.classList.contains('nsfw-revealed'));
+  assert.equal(h.w.document.body.classList.contains('view-nsfw'),false);assert.equal(h.w.sessionStorage.getItem('viewNsfw'),null);
+  thumb.querySelector('button').click();assert.equal(prompts,2);assert.equal(switches,1);
+  hero.classList.remove('nsfw-revealed');lifetime.abort();hero.querySelector('img').click();assert.equal(prompts,2);
+ } finally {h.close()}
+});
+
+test('blurred NSFW feed groups use one backend preview without loading carousel images', {skip:!vm.SourceTextModule}, async()=>{
+ const h=await harness('/feed',async()=>response({}));
+ try {
+  const {createFeedItemCard,feedItemCardImageUrl}=await h.load('shared/feedCardBuild.js');
+  const item={id:42,created_image_id:42,published:true,nsfw:true,image_url:'/api/images/created/cover.png',meta:{group:{kind:'group_creations',source_creations:[{id:1,file_path:'/api/images/created/one.png'},{id:2,file_path:'/api/images/created/two.png'}]}}};
+  const card=createFeedItemCard(item,0,{nsfwIcon:true});
+  assert.equal(card.querySelector('[data-feed-card-group-carousel]'),null);
+  assert.equal(card.querySelector('.feed-card-group-nav'),null);
+  assert.equal(card.querySelectorAll('.feed-card-image img').length,1);
+  assert.ok(card.querySelector('.feed-card-image--nsfw-group > .creation-group-badge'));
+  const preview=new URL(feedItemCardImageUrl(item),'http://localhost');
+  assert.match(preview.pathname,/^\/api\/creations\/media\//);
+  assert.equal(preview.searchParams.get('variant'),'blur');
+  assert.equal(preview.searchParams.get('creation_id'),'42');
+  card.__disposeFeedCard?.();
+ } finally {h.close()}
+});
+
+test('Feed videos become visible and play muted only in view, pausing for overlays and hidden tabs', {skip:!vm.SourceTextModule}, async()=>{
+ const h=await harness('/feed',async url=>response(url.startsWith('/api/feed?')?{items:[{id:42,created_image_id:42,title:'Video',media_type:'video',video_url:'/api/videos/created/video/clip.mp4?creation_id=42',image_url:'/cover.jpg'}],hasMore:false}:{version:1,item:null}));
+ let stateChanged, plays=0, pauses=0, unsubscribed=false;
+ h.services.state={subscribe(callback){stateChanged=callback;return()=>{unsubscribed=true}}};
+ h.w.HTMLMediaElement.prototype.play=async function(){plays++};
+ h.w.HTMLMediaElement.prototype.pause=function(){pauses++};
+ try {
+  const {FeedView}=await h.load('views/Feed/FeedView.js');const mounted=FeedView.mount(h);
+  await tick();await tick();
+  const video=h.outlet.querySelector('.feed-card-video');assert.ok(video);
+  assert.equal(video.getAttribute('src'),null);assert.equal(video.muted,true);assert.equal(video.loop,true);assert.equal(video.playsInline,true);
+  function intersect(ratio){for(const observer of h.observers)observer.callback([{target:video,isIntersecting:ratio>0,intersectionRatio:ratio}])}
+  intersect(.25);assert.equal(plays,0);assert.equal(video.classList.contains('is-active'),false);
+  intersect(.75);assert.equal(plays,1);assert.ok(video.classList.contains('is-active'));assert.match(video.src,/clip\.mp4/);
+  stateChanged({navigation:{overlay:{}}});assert.equal(video.classList.contains('is-active'),false);assert.ok(pauses>0);
+  intersect(.8);assert.equal(plays,1);
+  video.muted=false;stateChanged({navigation:{overlay:null}});assert.equal(plays,2);assert.equal(video.muted,true);assert.ok(video.classList.contains('is-active'));
+  Object.defineProperty(h.w.document,'hidden',{configurable:true,value:true});h.w.document.dispatchEvent(new h.w.Event('visibilitychange'));
+  assert.equal(video.classList.contains('is-active'),false);
+  Object.defineProperty(h.w.document,'hidden',{configurable:true,value:false});h.w.document.dispatchEvent(new h.w.Event('visibilitychange'));
+  assert.equal(plays,3);assert.ok(video.classList.contains('is-active'));
+  intersect(0);assert.equal(video.classList.contains('is-active'),false);
+  mounted.destroy();intersect(.8);assert.equal(plays,3);assert.ok(unsubscribed);assert.ok(h.observers.every(observer=>observer.disconnected));
+ } finally {h.close()}
+});
+
+test('Feed cursor paging retains existing cards and aborts on unmount', {skip:!vm.SourceTextModule}, async()=>{
+ let page=0;const calls=[];const h=await harness('/feed',async(url,options)=>{calls.push({url,options});return response(url.startsWith('/api/feed?')?{items:[{id:++page,created_image_id:page,title:'Example',image_url:'/one.jpg',media_type:'image',user_id:2}],hasMore:true,feed_cursor:{after_image_created_at:'2026-10-01',after_image_id:5}}:url==='/api/feed/version'?{version:1}:{item:null});});
+ try{const {FeedView}=await h.load('views/Feed/FeedView.js');const mounted=FeedView.mount(h);await tick();await tick();const first=h.outlet.querySelector('.feed-card');assert.ok(first,h.outlet.textContent);h.outlet.querySelector('.feed-view__more').click();await tick();await tick();assert.equal(h.outlet.querySelectorAll('.feed-card').length,2);assert.equal(h.outlet.querySelector('.feed-card'),first);const requests=calls.filter(c=>c.url.startsWith('/api/feed?'));assert.match(requests[1].url,/feed_after_image_id=5/);assert.equal(first.querySelector('[data-details-button]'),null);assert.equal(first.querySelector('[data-creator-button]'),null);assert.ok(first.querySelector('.feed-card-footer-grid > .feed-card-actions'));first.querySelector('.feed-card-image').click();assert.equal(h.navigations[0][0],'/creations/1');assert.equal(h.navigations[0][1].seed.created_image_id,1);mounted.destroy();assert.equal(requests[0].options.signal.aborted,true);assert.ok(h.observers.every(o=>o.disconnected));assert.equal(h.outlet.children.length,0);}finally{h.outlet.querySelector('.feed-view')?.remove();h.close();}
+});
+test('Feed retries the same cursor and ignores a late response after unmount', {skip:!vm.SourceTextModule}, async()=>{
+ let page=0,finish;const calls=[];const h=await harness('/feed',async(url,options)=>{calls.push({url,options});if(!url.startsWith('/api/feed?'))return response({item:null,version:1});page++;if(page===2)return new Response(JSON.stringify({message:'Try again'}),{status:503});if(page===3)return new Promise(resolve=>{finish=()=>resolve(response({items:[{id:2,title:'Late',image_url:'/two.jpg'}],hasMore:false}));});return response({items:[{id:1,title:'First',image_url:'/one.jpg'}],hasMore:true,feed_cursor:{after_image_created_at:'2026-10-01',after_image_id:5}});});
+ try{const {FeedView}=await h.load('views/Feed/FeedView.js');const mounted=FeedView.mount(h);await tick();await tick();h.outlet.querySelector('.feed-view__more').click();await tick();assert.match(h.outlet.querySelector('[role="status"]').textContent,/Try again/);assert.equal(h.outlet.querySelectorAll('.feed-card').length,1);h.outlet.querySelector('.feed-view__more').click();await tick();mounted.destroy();finish();await tick();assert.equal(h.outlet.children.length,0);assert.match(calls.filter(c=>c.url.startsWith('/api/feed?'))[2].url,/feed_after_image_id=5/);}finally{h.outlet.querySelector('.feed-view')?.remove();h.close();}
+});
+
+test('Doom Scroll dismissal during loading aborts the request and cannot install late media', {skip:!vm.SourceTextModule}, async()=>{
+ let finish, options;
+ const h=await harness('/feed/doom/42',async(_url,opts)=>{options=opts;return new Promise(resolve=>{finish=()=>resolve(response({items:[{id:42,created_image_id:42,media_type:'video',video_url:'/clip.mp4'}],hasMore:false}));});});
+ try {
+  const {DoomScrollView}=await h.load('views/DoomScroll/DoomScrollView.js');
+  const mounted=DoomScrollView.mount({...h,creationId:42});
+  assert.match(h.outlet.textContent,/Loading video/);
+  mounted.destroy();assert.equal(options.signal.aborted,true);finish();await mounted.backgroundReady;
+  assert.equal(h.outlet.children.length,0);assert.equal(h.w.document.querySelector('.chat-doom-slide'),null);assert.equal(h.w.document.body.classList.contains('chat-page--doom-scroll'),false);
+ }finally{h.close();}
+});
+
+
+test('Feed renders saved likes and liker tooltips and updates both after unlike', {skip:!vm.SourceTextModule}, async()=>{
+ const h=await harness('/feed',async(url,options)=>{
+  if(url==='/api/created-images/42/like') {
+   assert.equal(options.method,'DELETE');
+   return response({like_count:1,viewer_liked:false,liked_by:['@other']});
+  }
+  return response(url.startsWith('/api/feed?')?{items:[{id:42,created_image_id:42,title:'Liked',image_url:'/one.jpg',media_type:'image',user_id:2,like_count:2,viewer_liked:true,liked_by:['@viewer','@other']}],hasMore:false}:{version:1,item:null});
+ });
+ try {
+  const {FeedView}=await h.load('views/Feed/FeedView.js');const mounted=FeedView.mount(h);
+  await tick();await tick();
+  const button=h.outlet.querySelector('[data-like-id="42"]');
+  assert.ok(button);assert.equal(button.getAttribute('aria-pressed'),'true');
+  assert.equal(button.dataset.tooltip,'@viewer, @other');
+  button.click();await tick();await tick();
+  assert.equal(button.getAttribute('aria-pressed'),'false');
+  assert.equal(button.dataset.tooltip,'@other');
+  assert.equal(h.outlet.querySelector('[data-like-id="42"]'),button);
+  mounted.destroy();
+ }finally{h.close();}
+});
+
+test('Feed why menu opens an explanation dialog and releases it on close and unmount', {skip:!vm.SourceTextModule}, async()=>{
+ const h=await harness('/feed',async url=>response(url.startsWith('/api/feed?')?{items:[{id:42,created_image_id:42,image_url:'/one.jpg',user_id:2,feed_beta_why:{label:'Recommended',summary:'You follow this creator.',details:['A recent creation from someone you follow.'],developer:{rank:3}}}],hasMore:false}:{version:1}));
+ try {
+  const {FeedView}=await h.load('views/Feed/FeedView.js');const mounted=FeedView.mount(h);
+  await tick();await tick();
+  const card=h.outlet.querySelector('.feed-card');
+  function open(){card.querySelector('[data-more-button]').click();card.querySelector('[data-feed-beta-why]').click();return h.w.document.querySelector('dialog.feed-beta-why-modal');}
+  let dialog=open();assert.ok(dialog.open);assert.match(dialog.textContent,/You follow this creator/);assert.match(dialog.textContent,/recent creation/);assert.match(dialog.textContent,/Developer details/);
+  dialog.querySelector('.modal-dismiss').click();assert.equal(dialog.isConnected,false);
+  dialog=open();dialog.close();dialog.dispatchEvent(new h.w.Event('close'));assert.equal(dialog.isConnected,false);
+  dialog=open();mounted.destroy();assert.equal(dialog.isConnected,false);
+ } finally {h.close()}
+});

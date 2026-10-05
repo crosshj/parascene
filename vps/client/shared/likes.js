@@ -154,7 +154,10 @@ function applyLikedByTooltip(buttonEl, likedBy) {
 	}
 }
 
+const likeButtonCreations = new WeakMap();
+
 export function initLikeButton(buttonEl, creation) {
+	if (buttonEl && creation) likeButtonCreations.set(buttonEl, creation);
 	if (!(buttonEl instanceof HTMLElement)) return false;
 
 	const id = getCreationLikeId(creation);
@@ -200,6 +203,15 @@ export function enableLikeButtons(root = document) {
 
 		const prev = button.getAttribute('aria-pressed') === 'true';
 		const next = !prev;
+		const creation = likeButtonCreations.get(button);
+		const updateCreation = (liked, count, likedBy) => {
+			if (!creation) return;
+			creation.viewer_liked = liked;
+			creation.like_count = count;
+			if (likedBy) creation.liked_by = likedBy;
+		};
+		const previousCount = creation?.like_count;
+		updateCreation(next, Math.max(0, (baseCount ?? 0) + (next ? 1 : 0)));
 
 		// Always recompute from base + local liked state (don’t trust rendered text).
 		setDisplayedLikeCount(button, baseCreation, next);
@@ -237,6 +249,7 @@ export function enableLikeButtons(root = document) {
 				const viewerLiked = Boolean(meta?.viewer_liked);
 				const newBase = Math.max(0, likeCount - (viewerLiked ? 1 : 0));
 				const likedBy = Array.isArray(meta?.liked_by) ? meta.liked_by : [];
+				updateCreation(viewerLiked, likeCount, likedBy);
 
 				button.dataset.likeBaseCount = String(newBase);
 				setDisplayedLikeCount(button, { like_count: newBase }, viewerLiked);
@@ -252,6 +265,7 @@ export function enableLikeButtons(root = document) {
 				});
 			})
 			.catch(() => {
+				updateCreation(prev, previousCount);
 				// Revert optimistic state on failure.
 				setDisplayedLikeCount(button, baseCreation, prev);
 				applyLikeButtonState(button, prev, false);

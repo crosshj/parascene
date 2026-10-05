@@ -10,7 +10,7 @@ function isSunoUuid(value) {
 }
 
 function emptySunoTargetIds() {
-	return { songId: "", slug: "", hookId: "", playlistId: "" };
+	return { songId: "", slug: "", hookId: "", playlistId: "", albumId: "" };
 }
 
 /** Pathname only — used for pasted URLs and `/s/…` redirect Location. */
@@ -84,6 +84,24 @@ export function extractSunoTargetFromPathname(pathname) {
 		};
 	}
 
+	const albumMatch = path.match(/^\/album\/([a-f0-9-]{36})\/?$/i);
+	if (albumMatch?.[1] && isSunoUuid(albumMatch[1])) {
+		return {
+			kind: "album",
+			...emptySunoTargetIds(),
+			albumId: albumMatch[1].toLowerCase(),
+		};
+	}
+
+	const handleAlbumMatch = path.match(/^\/@([^/]+)\/album\/([a-f0-9-]{36})\/?$/i);
+	if (handleAlbumMatch?.[2] && isSunoUuid(handleAlbumMatch[2])) {
+		return {
+			kind: "album",
+			...emptySunoTargetIds(),
+			albumId: handleAlbumMatch[2].toLowerCase(),
+		};
+	}
+
 	return null;
 }
 
@@ -101,7 +119,7 @@ export function extractSunoLinkTarget(url) {
 	return extractSunoTargetFromPathname(parsed.pathname || "");
 }
 
-/** `/s/{slug}` may 307 to a song, hook, or playlist. */
+/** `/s/{slug}` may 307 to a song, hook, playlist, or album. */
 export function extractSunoTargetFromLocation(location) {
 	const raw = String(location ?? "").trim();
 	if (!raw) return null;
@@ -201,6 +219,12 @@ export function formatSunoUnfurlTitle(rawTitle, kind) {
 		t = t.trim();
 		return t ? `${t} | Suno playlist` : "";
 	}
+	if (kind === "album") {
+		t = t.replace(/\s+\|\s+Suno(?:\s+Album)?\s*$/i, "");
+		t = t.replace(/\s+by\s+@[A-Za-z0-9._-]+\s*$/i, "");
+		t = t.trim();
+		return t ? `${t} | Suno album` : "";
+	}
 
 	if (kind === "hook") {
 		if (/\|\s*Suno\s+hook\s*$/i.test(t)) return t;
@@ -241,7 +265,7 @@ export function parseSunoPageMeta(html) {
 	return { songId, title: title || "", creator, ogImage: ogImage || "" };
 }
 
-/** Share links 307 to `/song|hook|playlist/{uuid}?sh={slug}` — read Location. */
+/** Share links 307 to `/song|hook|playlist|album/{uuid}?sh={slug}` — read Location. */
 export async function resolveSunoShareTarget(slug) {
 	const shareUrl = `https://suno.com/s/${encodeURIComponent(slug)}`;
 	const upstream = await fetch(shareUrl, {
@@ -291,14 +315,14 @@ async function fetchSunoPageMeta(fetchUrl) {
 }
 
 function emptyResolvedIds() {
-	return { songId: "", hookId: "", playlistId: "" };
+	return { songId: "", hookId: "", playlistId: "", albumId: "" };
 }
 
 /**
  * Resolve a permissive Suno song/share/embed/hook/playlist URL to kind + page meta.
  * @param {string} rawUrl
  * @returns {Promise<{
- *   kind: 'song'|'hook'|'playlist',
+	 *   kind: 'song'|'hook'|'playlist'|'album',
  *   songId: string,
  *   hookId: string,
  *   playlistId: string,
@@ -382,6 +406,22 @@ export async function resolveSunoFromUrl(rawUrl) {
 		};
 	}
 
+	if (resolvedTarget.kind === "album") {
+		const albumId = resolvedTarget.albumId;
+		const canonicalUrl = `https://suno.com/album/${encodeURIComponent(albumId)}`;
+		const meta = await fetchSunoPageMeta(canonicalUrl);
+		return {
+			kind: "album",
+			...emptyResolvedIds(),
+			albumId,
+			title: formatSunoUnfurlTitle(meta?.title || "", "album"),
+			creator: meta?.creator || "",
+			ogImage: meta?.ogImage || "",
+			url: canonicalUrl,
+			embedUrl: "",
+		};
+	}
+
 	const songId = resolvedTarget.songId;
 	if (!songId) {
 		const err = new Error("Could not resolve Suno song");
@@ -452,6 +492,7 @@ export default function createSunoRoutes() {
 				songId: resolved.songId,
 				hookId: resolved.hookId,
 				playlistId: resolved.playlistId,
+				albumId: resolved.albumId,
 				title: resolved.title,
 				creator: resolved.creator,
 				ogImage: resolved.ogImage,

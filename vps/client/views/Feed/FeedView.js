@@ -1,14 +1,14 @@
-import markup from './FeedView.html';
+import './FeedCards.css';
 import './FeedView.css';
-import { createTemplateFactory } from '../../utils/dom.js';
-
-const clone = createTemplateFactory(markup);
+import './feedChallengeCard.css';
+import { createFeedController } from './FeedController.js';
 
 export const FeedView = Object.freeze({
- mount({ outlet }) {
-  const root = clone('feed-overview');
-  outlet.replaceChildren(root);
-  document.title = 'Feed · Parascene beta';
-  return { destroy() { root.remove(); } };
- },
+ mount(context) {
+  const root = document.createElement('section'); root.className = 'feed-view';
+  root.innerHTML = '<div class="feed-view__status" role="status" hidden></div><div data-feed-content></div><button class="feed-view__more btn-outlined" type="button" hidden>Load more</button>';
+  context.outlet.replaceChildren(root); document.title = 'Feed · Parascene beta';
+  const controller = createFeedController({ ...context, root });
+  return { destroy() { controller.destroy(); root.remove(); } };
+ }
 });

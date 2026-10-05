@@ -34,14 +34,35 @@ export function createCommentsStore(client, { creations, queries }) {
    const tail = visible.at(-1);
    return { comments: await enrichCreationComments(client, visible, viewer.id), has_more: rows.length > limit, next_cursor: tail ? { before: tail.created_at, before_id: tail.id } : null };
   },
-  async react(viewer, commentId, key) {
+  async react(viewer, commentId, key, requestedOp = 'toggle') {
    if (!REACTION_ORDER.includes(key)) fail(400, 'Invalid or missing emoji_key');
-   await commentFor(viewer, commentId);
+   const op = ['add', 'remove', 'toggle'].includes(requestedOp) ? requestedOp : 'toggle';
    const scope = { comment_id: commentId, user_id: viewer.id, emoji_key: key };
-   const { data: existing } = await result(client.from('prsn_comment_reactions').select('id').match(scope).maybeSingle());
-   await result(existing ? client.from('prsn_comment_reactions').delete().match(scope) : client.from('prsn_comment_reactions').upsert(scope, { onConflict: 'comment_id,user_id,emoji_key', ignoreDuplicates: true }));
-   const { count } = await result(client.from('prsn_comment_reactions').select('id', { count: 'exact', head: true }).eq('comment_id', commentId).eq('emoji_key', key));
-   return { added: !existing, count: count || 0 };
+   let stage = 'checking comment access';
+   try {
+    await commentFor(viewer, commentId);
+    let shouldExist = op === 'add';
+    if (op === 'toggle') {
+     stage = 'reading existing reaction';
+     const { data: existing } = await result(client.from('prsn_comment_reactions').select('id').match(scope).maybeSingle());
+     shouldExist = !existing;
+    }
+    if (shouldExist) {
+     stage = 'adding reaction';
+     await result(client.from('prsn_comment_reactions').upsert(scope, { onConflict: 'comment_id,user_id,emoji_key', ignoreDuplicates: true }));
+    } else {
+     stage = 'removing reaction';
+     await result(client.from('prsn_comment_reactions').delete().match(scope));
+    }
+    return { added: shouldExist };
+   } catch (cause) {
+    const detail = [cause?.message, cause?.details, cause?.hint, cause?.code && `code ${cause.code}`].filter(Boolean).join(' — ')
+     || (() => { try { return JSON.stringify(cause); } catch { return String(cause); } })();
+    throw Object.assign(new Error(`Reaction save failed while ${stage}${detail ? `: ${detail}` : ''}`, { cause }), {
+     ...(cause?.status ? { status: cause.status } : {}),
+     ...(cause?.code ? { code: cause.code } : {}),
+    });
+   }
   },
   async post(viewer, imageId, text, extras = {}) {
    const image = await imageFor(viewer, imageId); const meta = {};

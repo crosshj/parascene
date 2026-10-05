@@ -7,6 +7,7 @@ import { requireAuth } from "./middleware/auth.js";
 import { creationAudioCdnId, creationMediaKey, creationMediaKeys, creationVideoMediaKey } from "../db/creations.js";
 import { extractVideoThumbnail } from "./utils/media.js";
 import { verifyShareToken } from "./utils/shareLink.js";
+import { costumeGroupV2Meta } from '../services/create/groupV2.js';
 
 function integer(value, fallback, min, max) {
 	const n = Number.parseInt(String(value ?? ""), 10);
@@ -72,6 +73,23 @@ export function serializeCreation(row) {
 	const imageUrl = mediaUrl(row.id, key);
 	const type = mediaType(row);
 	const audioCdnId = creationAudioCdnId(row);
+	const rawMeta = parseMeta(row.meta);
+	const meta = rawMeta.group?.kind === 'group_v2' ? costumeGroupV2Meta(rawMeta, { title: row.title }) : rawMeta;
+	const group = meta.group;
+	const displayMeta = group?.kind === 'group_creations' ? {
+		...meta,
+		group: { ...group, source_creations: (Array.isArray(group.source_creations) ? group.source_creations : []).map(source => {
+			const key = creationMediaKey(source);
+			const videoKey = creationVideoMediaKey(source);
+			const sourceMeta = parseMeta(source.meta);
+			const staticCover = String(source.file_path || '').startsWith('/assets/');
+			return { ...source,
+				file_path: staticCover ? source.file_path : mediaUrl(row.id, key),
+				thumbnail_url: staticCover ? source.file_path : videoKey ? mediaUrl(row.id, videoKey, 'video_thumbnail') : mediaUrl(row.id, key, 'thumbnail'),
+				meta: videoKey ? { ...sourceMeta, video: { ...sourceMeta.video, file_path: mediaUrl(row.id, videoKey) } } : sourceMeta
+			};
+		}) }
+	} : meta;
 	return {
 		id: row.id,
 		user_id: row.user_id,
@@ -90,7 +108,7 @@ export function serializeCreation(row) {
 		published_at: row.published_at,
 		title: row.title,
 		description: row.description,
-		meta: row.meta,
+		meta: displayMeta,
 		nsfw: Boolean(row.meta && typeof row.meta === "object" && row.meta.nsfw),
 		is_moderated_error: isModeratedError(row),
 		media_type: type,
@@ -439,7 +457,9 @@ export function createCreationsRoutes({ creations, users, appendChallengeEligibi
 	// During migration, accept the established media path too. This serves the
 	// media resource from VPS; it does not delegate to WWW.
 	router.get("/api/images/created/*", requireAuth, sendMedia);
+	router.get("/api/videos/created/*", requireAuth, sendMedia);
 	router.head("/api/creations/media/*", requireAuth, sendMedia);
 	router.head("/api/images/created/*", requireAuth, sendMedia);
+	router.head("/api/videos/created/*", requireAuth, sendMedia);
 	return router;
 }

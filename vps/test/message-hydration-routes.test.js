@@ -32,6 +32,11 @@ test('rich message metadata routes match WWW payloads and require authentication
   assert.deepEqual(youtube.body,{title:'Video',creator:'@person',thumbnail_url:'https://i.ytimg.com/vi/abcdefghijk/maxresdefault.jpg'});
   const suno = await request(routes[1][0],routes[1][1],{url:routes[1][2]});
   assert.equal(suno.statusCode,200); assert.equal(suno.body.kind,'song'); assert.equal(suno.body.ogImage,'https://example.com/cover.jpg');
+  const sunoAlbum = await request(routes[1][0],routes[1][1],{url:'https://suno.com/album/5d5f35ce-a6f9-4c3e-bf24-ec42a25afbe6'});
+  assert.equal(sunoAlbum.statusCode,200); assert.equal(sunoAlbum.body.kind,'album');
+  assert.equal(sunoAlbum.body.albumId,'5d5f35ce-a6f9-4c3e-bf24-ec42a25afbe6');
+  assert.equal(sunoAlbum.body.title,'My song | Suno album');
+  assert.equal(sunoAlbum.body.url,'https://suno.com/album/5d5f35ce-a6f9-4c3e-bf24-ec42a25afbe6');
   const x = await request(routes[2][0],routes[2][1],{url:routes[2][2]});
   assert.deepEqual(x.body,{title:'@person',tweetText:'Hello & world'});
  } finally { globalThis.fetch = originalFetch; }

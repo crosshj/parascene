@@ -135,9 +135,10 @@ function renderConsentPage({ appName, actionUrl, hiddenFields }) {
 <head>
 	<meta charset="utf-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<link rel="stylesheet" href="/typography.css" />
 	<title>Authorize app · Parascene</title>
 	<style>
-		body { font-family: system-ui, sans-serif; background: #0a0a0c; color: #eee; margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+		body { font-family: var(--font-family); background: #0a0a0c; color: #eee; margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
 		.card { background: #141418; border-radius: 14px; padding: 28px; max-width: 420px; width: 100%; border: 1px solid #2a2a32; }
 		h1 { font-size: 1.15rem; margin: 0 0 12px; font-weight: 600; }
 		p { color: #a8a8b0; line-height: 1.5; margin: 0 0 20px; font-size: 0.95rem; }

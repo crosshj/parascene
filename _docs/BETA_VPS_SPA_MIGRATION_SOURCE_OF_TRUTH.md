@@ -50,6 +50,25 @@ The feature replaces WWW network/navigation seams with the VPS request/resource 
 
 The Creations browse migration is complete. Its regression checklist covers loading strategy, pagination, media thumbnail selection, badges/privacy, infinite scrolling, grouped items, and header/empty-state behavior.
 
+## Feed and Doom Scroll port
+
+The Feed port uses the active lane construction in `src/chat/chatPage.js`,
+`src/chat/feed/feedChannelView.js`, `feedChannelData.js`, and
+`feedChannelChallenge.js`; card/media behavior comes from the active shared
+`feedCardBuild.js`. Preserve desktop API ordering and the mobile alternating
+spotlight/card layout. The first mobile page requests `mobile_chat_v1`; later
+pages carry the server cursor and ranked-feed acknowledgement.
+
+Doom Scroll uses the active `src/chat/feed/doomScrollMount.js` and
+`doomScrollView.js`, including native/group video playback, YouTube Shorts,
+mute/progress controls, follow, likes, sharing and comments. VPS owns its native
+overlay and comments dialog, with router-owned slide URL changes. The API port
+retains WWW ranking, catalog fallback, composition, editorial pins, challenge
+engagement, seen/impression tracking and timeline selection under `vps/`.
+
+Local fixture browser validation is recorded in the cutover log. Live beta
+acceptance remains in the tracker; the old progress overview is retired.
+
 ## Import adaptation
 
 - Port required modules into their canonical VPS owner; do not create `vps/client/vendor` or a mirrored WWW source tree.
