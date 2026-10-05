@@ -40,7 +40,8 @@ Dated observations and decisions. The current outstanding scope is tracked in th
 ### Comments, Explore, My Files, Library and User Menu (2026-10-04)
 
 The requested five surfaces are implemented in VPS-owned client and server modules.
-Feed remains the existing beta progress placeholder.
+At this point, Feed remained the existing beta progress placeholder; its port is
+recorded in the 2026-10-05 entry below.
 
 - Comments: recent stream, rich text/replies/reactions, creation/profile links,
   composite cursor pagination, refresh, NSFW visibility and authorized mutations.
@@ -128,4 +129,4 @@ Validation: all 18 migration surface tests pass, including a mounted persona reg
 - Ported Doom Scroll together with Feed because they share the selection timeline and card/media helpers. Native and grouped videos retain playback, mute, progress, follow, likes and sharing; YouTube Shorts retain their embed controls. Comments use the existing native creation-comments thread in a dialog. Router-owned dialog history lets Back close comments before dismissing the timeline.
 - Feed owns a mounted controller and uses the VPS request adapter. Challenge voting acquires shared Threads history and writes through its durable vote queue. Doom slide URL replacements retain its mounted timeline; layout retains the underlying feed DOM and scroll position. Media pauses under overlays and teardown aborts requests, releases media, and removes observers/listeners.
 - Validation: VPS build and client boundary check pass; the feed server dependency graph resolves entirely inside VPS. Seventeen focused feed/challenge tests pass, including ranked API output, authentication, NSFW/hidden filtering, cursors, retry, retained cards and late-response teardown. Chrome fixture checks cover desktop/mobile cards, native video playback, comments, slide URL replacement, retained feed DOM and cold deep-link dismissal.
-- The broader VPS suite reports seven failures outside these focused checks (sidebar mock API, client lifecycle/send tests, message source/CSS parity and the resource test module). Live beta data, provider embeds, and external share destinations still need acceptance review; no deployment was performed by this port.
+- The broader VPS suite reports seven failures outside these focused checks (sidebar mock API, client lifecycle/send tests, message source/CSS parity and the resource test module). Live beta review has since been completed. No deployment was performed by this port.

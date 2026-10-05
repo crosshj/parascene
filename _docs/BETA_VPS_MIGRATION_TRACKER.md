@@ -2,25 +2,13 @@
 
 Current outstanding migration scope. Update this checklist as items are verified; dated decisions and observations remain in the [cutover log](BETA_CUTOVER_LOG.md). Governing migration and cutover standards live in the [migration guidance](BETA_VPS_SPA_MIGRATION_SOURCE_OF_TRUTH.md).
 
-## Completed migrations
-
-- Create workflow and creation/conversation composers are ported to VPS-owned views, components, providers, uploads, and routes.
-- My Creations, My Files, Comments, Explore, Library, Profile, Connections, Settings and User Menu are implemented in VPS; Reports retains its local development link.
-- Help is served as a standalone VPS document using VPS-owned Markdown, with the WWW Help layout/search/footer and same-host new-tab entry points.
-- Challenges is ported to VPS: participant/details/organizer UI and active SPA CSS, voting, submission/withdrawal, organizer media/pins, and results/payout routes. Browser review confirmed the port works (2026-10-05).
-- Chat identity links open profiles from avatars and names in DMs, comments and the chat header; username profile lookup supports hyphenated names.
-
-## Main product surfaces remaining
-
-- [ ] Feed live-data acceptance — the active WWW Feed and Doom Scroll are ported, including ranked selection, desktop cards, mobile spotlight strips, challenge engagement/voting, pagination, impressions, playback and comments. Local fixture browser checks pass; review the experience with live beta data.
-
-Feed is ready for live beta review. Smaller follow-ups and migration-wide cutover checks are listed separately below. The dated [2026-10-04 review notes](BETA_CUTOVER_LOG.md#comments-explore-my-files-library-and-user-menu-2026-10-04) record earlier completed port details and validation.
+## Remaining product work
+The remaining product and cutover scope is listed below. Dated implementation details and validation remain in the [cutover log](BETA_CUTOVER_LOG.md).
 
 ## Product follow-ups
 
 - [ ] Serve the pricing view inside the app.
 - [ ] Finish the sidebar plus controls and gear/settings control.
-- [ ] Investigate and fix publishing issues on the VPS beta.
 - [ ] Help page title shows "Help - Help - parascene" with redundant title which is not consistent with app title separators eg. "Creation · parascene beta"; and noting "beta" in title is not needed
 
 ## Public pages and discoverability

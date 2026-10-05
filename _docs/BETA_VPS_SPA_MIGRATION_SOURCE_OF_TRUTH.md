@@ -66,8 +66,9 @@ overlay and comments dialog, with router-owned slide URL changes. The API port
 retains WWW ranking, catalog fallback, composition, editorial pins, challenge
 engagement, seen/impression tracking and timeline selection under `vps/`.
 
-Local fixture browser validation is recorded in the cutover log. Live beta
-acceptance remains in the tracker; the old progress overview is retired.
+The Feed and Doom Scroll ports, including live beta review, are complete. Their
+implementation and validation are recorded in the cutover log; these behaviors
+are regression criteria for future changes.
 
 ## Import adaptation
 
