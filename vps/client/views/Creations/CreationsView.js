@@ -1,5 +1,6 @@
 import { bindRefs, mountTemplate } from '../../utils/dom.js';
 import { createCreationMediaLoader, creationCardMarkup } from '../../shared/creationGrid.js';
+import { createScrollContext } from '../../core/scrollContext.js';
 import template from './CreationsView.html';
 import './CreationsView.css';
 import '../../components/CreationGrid/CreationGrid.css';
@@ -85,9 +86,10 @@ export function renderCreationsView({ outlet, creationsProvider, creationsApi, c
 	let pollTimer = 0;
 	let pollInProgress = false;
 	const scrollRegion = root.closest('.beta-outlet__scroll');
+	const scroll = createScrollContext(root);
 	const mediaLoader = createCreationMediaLoader(refs.grid, {
 		thumbnails: creationsProvider?.thumbnails,
-		preloadRoot: scrollRegion,
+		preloadRoot: scroll.intersectionRoot,
 		preloadMargin: '2000px 0px',
 	});
 	for (let i = 0; i < 25; i += 1) refs.grid.append(makeGridSkeleton());
@@ -369,16 +371,25 @@ export function renderCreationsView({ outlet, creationsProvider, creationsApi, c
 	}
 
 	// Fetch the next page before its cards enter the thumbnail preload range.
-	const sentinelObserver = new IntersectionObserver(([entry]) => { if (entry?.isIntersecting) void loadMore(); }, { root: scrollRegion, rootMargin: '2400px 0px' });
+	let sentinelObserver;
+	function bindScrollOwner() {
+		sentinelObserver?.disconnect();
+		sentinelObserver = new IntersectionObserver(([entry]) => { if (entry?.isIntersecting) void loadMore(); }, { root: scroll.intersectionRoot, rootMargin: '2400px 0px' });
+		sentinelObserver.observe(refs.sentinel);
+		mediaLoader.setRoot(scroll.intersectionRoot);
+		updateScrollTopVisibility();
+	}
 	const updateScrollTopVisibility = () => {
-		const scrollTop = scrollRegion?.scrollTop || 0;
+		const scrollTop = scroll.top;
 		refs.scrollTop.hidden = scrollTop < 720;
 	};
-	const onScrollTopClick = () => scrollRegion?.scrollTo({ top: 0, behavior: 'auto' });
+	const onScrollTopClick = () => scroll.to(0);
 	refs.scrollTop.addEventListener('click', onScrollTopClick);
 	scrollRegion?.addEventListener('scroll', updateScrollTopVisibility, { passive: true });
+	window.addEventListener('scroll', updateScrollTopVisibility, { passive: true });
+	document.addEventListener('beta-mobile-scroll-owner-changed', bindScrollOwner);
 	updateScrollTopVisibility();
-	sentinelObserver.observe(refs.sentinel);
+	bindScrollOwner();
 	unsubscribe = creationsQuery?.subscribe(onQueryState);
 	hydratePromotedPendingRows();
 	if (creationsQuery) {
@@ -387,5 +398,5 @@ export function renderCreationsView({ outlet, creationsProvider, creationsApi, c
 	}
 	else void refresh(true);
 
-	return () => { unsubscribe?.(); mediaLoader?.disconnect(); sentinelObserver.disconnect(); window.clearTimeout(pollTimer); pollTimer = 0; document.removeEventListener('visibilitychange', onVisibilityChange); document.removeEventListener('creation-detail:mutation', onCreationDetailMutation); document.removeEventListener('creations-pending-updated', onPendingCreationsUpdated); refs.grid.removeEventListener('click', onGridClick); refs.scrollTop.removeEventListener('click', onScrollTopClick); scrollRegion?.removeEventListener('scroll', updateScrollTopVisibility); setHeaderMenu?.(); };
+	return () => { unsubscribe?.(); mediaLoader?.disconnect(); sentinelObserver.disconnect(); window.clearTimeout(pollTimer); pollTimer = 0; document.removeEventListener('visibilitychange', onVisibilityChange); document.removeEventListener('creation-detail:mutation', onCreationDetailMutation); document.removeEventListener('creations-pending-updated', onPendingCreationsUpdated); document.removeEventListener('beta-mobile-scroll-owner-changed', bindScrollOwner); refs.grid.removeEventListener('click', onGridClick); refs.scrollTop.removeEventListener('click', onScrollTopClick); scrollRegion?.removeEventListener('scroll', updateScrollTopVisibility); window.removeEventListener('scroll', updateScrollTopVisibility); setHeaderMenu?.(); };
 }

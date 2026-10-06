@@ -1477,4 +1477,22 @@
   padding: max(8px, env(safe-area-inset-top, 0px)) max(8px, env(safe-area-inset-right, 0px)) max(8px, env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px));
  }
  .user-profile-view .route-header p { display: none; }
+	.user-profile-view { box-sizing: border-box; padding-inline: 10px; }
+	:where(.user-profile-view) .user-profile-hero { border-radius: 12px; box-shadow: none; }
+	:where(.user-profile-view) .user-profile-banner { height: 112px; }
+	:where(.user-profile-view) .user-profile-hero-inner {
+		grid-template-columns: 72px minmax(0, 1fr);
+		gap: 10px;
+		padding: 10px;
+	}
+	:where(.user-profile-view) .user-profile-avatar { width: 72px; height: 72px; margin-top: -38px; }
+	:where(.user-profile-view) .user-profile-name { font-size: 1.25rem; }
+	:where(.user-profile-view) .user-profile-stats { gap: 6px; }
+	:where(.user-profile-view) .user-profile-stat { padding: 7px 5px; }
+	:where(.user-profile-view) .user-profile-stat-value { font-size: .9375rem; }
+	:where(.user-profile-view) .user-profile-stat-label { font-size: .7rem; line-height: 1.2; }
+	:where(.user-profile-view) .user-profile-content { margin-top: 12px; }
+	.user-profile-view app-tabs .app-tabs { gap: 18px; }
+	.user-profile-view app-tabs .app-tabs-button { padding: 11px 0 9px; }
+	.user-profile-view app-tabs .app-tabs-panel { margin-top: 16px; }
 }

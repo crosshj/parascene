@@ -165,3 +165,10 @@
 .feed-view__status { color:var(--text-muted); padding:16px; }
 .feed-view__more { display:block; margin:20px auto; }
 .feed-view [hidden] { display:none !important; }
+
+/* WWW mobile Feed is full-bleed; keep its loading cards on the same rhythm. */
+@media (max-width: 768px) {
+	.feed-view .skeleton-feed-card { padding: 6px 0 24px; }
+	.feed-view .skeleton-feed-card + .skeleton-feed-card { padding-top: 16px; }
+	.feed-view .skeleton-feed-card-image { border-radius: 0; }
+}

@@ -1,18 +1,19 @@
 import { createFeedRequest } from '../../providers/feed/api.js';
 import { createChatFeedFetchPage, getChatFeedItemKey } from '../../providers/feed/feed.js';
-import { createChatFeedChannelElementsFromSegments, mountChatFeedLoadMoreSkeleton, removeChatFeedLoadMoreSkeleton } from './feedChannelView.js';
+import { createChatFeedChannelElementsFromSegments, getChatFeedMobileSpotlightHtml, mountChatFeedLoadMoreSkeleton, removeChatFeedLoadMoreSkeleton } from './feedChannelView.js';
 import { loadDeferredChatFeedChallenge, createChatFeedChallengePlaceholderElement, isChatFeedChallengePlaceholder } from './feedChannelChallenge.js';
 import { partitionChatFeedMobileAlternating, isFeedRowVideoCreation } from '../../shared/chatFeedMobilePartition.js';
 import { createFeedItemCard, getFeedGroupVideoPlayer } from '../../shared/feedCardBuild.js';
-import { renderFeedCardsSkeleton } from '../../shared/skeleton.js';
+import { renderFeedCardsSkeleton, renderMobileFeedCardsSkeleton } from '../../shared/skeleton.js';
 import { enableLikeButtons } from '../../shared/likes.js';
 import { safeMediaPlay } from '../../shared/safeMediaPlay.js';
 import { openChallengeVoteModalFromMessages } from '../Challenges/mountPane.js';
 import { setFeedBetaEnabledClient, feedBetaActiveFromProfile } from '../../shared/feedBetaNav.js';
+import { createScrollContext } from '../../core/scrollContext.js';
 
 export function createFeedController({ root, actions, services, setHeaderMenu }) {
  const content = root.querySelector('[data-feed-content]'), status = root.querySelector('[role="status"]'), more = root.querySelector('button');
- const scroll = root.closest('.beta-outlet__scroll');
+ const scroll = createScrollContext(root);
  const lifetime = new AbortController();
  let request, fetchPage, rows = [], hasMore = false, busy = false, destroyed = false, epoch = 0, routeWrap, cards, version, versionBusy = false, challengeLease, voteModal, voteBusy = false, overlayActive = false;
  const mobile = () => matchMedia('(max-width: 768px)').matches;
@@ -32,13 +33,25 @@ export function createFeedController({ root, actions, services, setHeaderMenu })
    if (active) { player?.setMuted(true); player?.play(); } else player?.pause();
   }
  }
- const videoObserver = typeof IntersectionObserver === 'function' ? new IntersectionObserver(entries => {
+ let videoObserver = null;
+ let observer = null;
+ function bindScrollObservers() {
+  videoObserver?.disconnect();
+  observer?.disconnect();
+  if (typeof IntersectionObserver !== 'function') return;
+  videoObserver = new IntersectionObserver(entries => {
   for (const {target, isIntersecting, intersectionRatio} of entries) {
    if (!videoTargets.has(target)) continue;
    if (isIntersecting && intersectionRatio >= .5) visibleVideos.add(target); else visibleVideos.delete(target);
    updateVideo(target);
   }
- }, { root: scroll, threshold: .5 }) : null;
+  }, { root: scroll.intersectionRoot, threshold: .5 });
+  for (const target of videoTargets) videoObserver.observe(target);
+  observer = new IntersectionObserver(entries => { if (entries.some(entry=>entry.isIntersecting) && hasMore && !busy && status.hidden) void load(); }, { root: scroll.intersectionRoot, rootMargin:'800px' });
+  if (more) observer.observe(more);
+ }
+ document.addEventListener('beta-mobile-scroll-owner-changed', bindScrollObservers);
+ bindScrollObservers();
  function setupFeedVideo(target) {
   videoTargets.add(target);
   if (videoObserver) videoObserver.observe(target);
@@ -66,12 +79,22 @@ export function createFeedController({ root, actions, services, setHeaderMenu })
  function skeleton() {
   disposeCards(); videoObserver?.disconnect();
   const route = document.createElement('div'); route.className = 'feed-route chat-feed-channel-route';
+  if (mobile()) {
+   const spotlight = document.createElement('div'); spotlight.innerHTML = getChatFeedMobileSpotlightHtml();
+   if (spotlight.firstElementChild) route.append(spotlight.firstElementChild);
+  }
   const cardList = document.createElement('div'); cardList.className = 'route-cards feed-cards';
-  const generic = document.createElement('div'); generic.innerHTML = renderFeedCardsSkeleton(3);
+  const generic = document.createElement('div'); generic.innerHTML = mobile() ? renderMobileFeedCardsSkeleton(4) : renderFeedCardsSkeleton(3);
   const cards = Array.from(generic.children);
-  if (cards[0]) cardList.append(cards[0]);
-  cardList.append(createChatFeedChallengePlaceholderElement());
-  for (const card of cards.slice(1)) cardList.append(card);
+  if (mobile()) {
+   // WWW keeps the loading state to a simple run of full feed-card skeletons;
+   // challenge engagement is inserted only after the feed response arrives.
+   for (const card of cards) cardList.append(card);
+  } else {
+   if (cards[0]) cardList.append(cards[0]);
+   cardList.append(createChatFeedChallengePlaceholderElement());
+   for (const card of cards.slice(1)) cardList.append(card);
+  }
   route.append(cardList); content.replaceChildren(route);
  }
  async function load(reset = false) {
@@ -86,11 +109,11 @@ export function createFeedController({ root, actions, services, setHeaderMenu })
    const fresh = page.pageItems.filter(item => { const key = getChatFeedItemKey(item); if (seen.has(key)) return false; seen.add(key); return true; });
    rows.push(...fresh); hasMore = page.hasMore;
    if (reset) {
-    disposeCards(); videoObserver?.disconnect(); content.replaceChildren();
+    disposeCards(); content.replaceChildren(); bindScrollObservers();
     const result = createChatFeedChannelElementsFromSegments(mobile() ? partitionChatFeedMobileAlternating(rows, { reserveChallengeSlot: true }).segments : [{ type: 'cards', items: rows }], render, { resolveSpotlightHref: doomHref, performSpotlightNavigation: href => actions.navigate(href) });
     routeWrap = result.routeWrap; cards = result.cards; content.append(routeWrap);
     void loadDeferredChatFeedChallenge({ messagesEl: content, routeWrap, mobileLayout: mobile(), fetchJson: createFeedRequest(request.signal), renderCard: render, isStale: () => destroyed || epoch !== token });
-    scroll?.scrollTo?.({top:0});
+    scroll.to(0);
    } else { removeChatFeedLoadMoreSkeleton(cards); fresh.forEach((item,index) => cards.append(render(item, rows.length-fresh.length+index))); }
    enableLikeButtons(root);
    show(rows.length ? '' : 'Your feed is empty. Explore the community and follow creators to see their creations here.');
@@ -131,12 +154,10 @@ export function createFeedController({ root, actions, services, setHeaderMenu })
  async function onCreationMutation(event) {
   const reason = event.detail?.reason;
   if (!['published', 'unpublished', 'edited'].includes(reason) || destroyed) return;
-  const scrollTop = scroll?.scrollTop ?? 0;
+  const scrollTop = scroll.top;
   await load(true);
-  if (!destroyed && scroll) requestAnimationFrame(() => { if (!destroyed) scroll.scrollTop = scrollTop; });
+  if (!destroyed) requestAnimationFrame(() => scroll.set(scrollTop));
  }
- const observer = typeof IntersectionObserver === 'function' ? new IntersectionObserver(entries => { if (entries.some(entry=>entry.isIntersecting) && hasMore && !busy && status.hidden) void load(); }, {root:scroll,rootMargin:'800px'}) : null;
- observer?.observe(more);
  more.addEventListener('click',()=>void load(!rows.length),{signal:lifetime.signal});
  window.addEventListener('ps:challenge-vote-modal-request',vote,{signal:lifetime.signal});
  document.addEventListener('visibilitychange',()=>{ if (document.hidden) pauseMedia(); else { resumeMedia(); void checkVersion(); } },{signal:lifetime.signal});
@@ -147,5 +168,5 @@ export function createFeedController({ root, actions, services, setHeaderMenu })
  setHeaderMenu?.({label:'Feed',items:[{label:'Refresh',action:'refresh'}],onSelect:()=>void load(true)});
  setFeedBetaEnabledClient(feedBetaActiveFromProfile(services.session.user));
  void load(true); void checkVersion();
- return { destroy() { destroyed=true; ++epoch; lifetime.abort(); unsubscribeState?.(); request?.abort(); clearInterval(timer); observer?.disconnect(); videoObserver?.disconnect(); voteModal?.destroy(); challengeLease?.release(); disposeCards(); } };
+ return { destroy() { destroyed=true; ++epoch; lifetime.abort(); unsubscribeState?.(); request?.abort(); clearInterval(timer); document.removeEventListener('beta-mobile-scroll-owner-changed', bindScrollObservers); observer?.disconnect(); videoObserver?.disconnect(); voteModal?.destroy(); challengeLease?.release(); disposeCards(); } };
 }

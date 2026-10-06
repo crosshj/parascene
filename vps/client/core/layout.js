@@ -1,4 +1,5 @@
 import './layout.css';
+import { mobilePresentation } from './mobilePresentation.js';
 import { createRightSidebar } from './rightSidebar.js';
 import { createPopupMenu } from '../components/PopupMenu/PopupMenu.js';
 import { iconMarkup } from '../components/Icon/Icon.js';
@@ -8,6 +9,7 @@ import { mountCreateComposer } from '../components/CreateComposer/CreateComposer
 import '../components/CreateComposer/CreateComposer.css';
 import { refreshAutoGrowTextareas } from '../shared/autogrow.js';
 import { attachCreateComposerSuggest, isTriggeredSuggestPopupOpen } from '../shared/triggeredSuggest.js';
+import { CHAT_PAGE_BACK_ICON_HTML } from '../shared/chatPageHeader.js';
 
 function getRegion(root, name) {
 	const region = root.querySelector(`[data-layout-region="${name}"]`);
@@ -26,11 +28,15 @@ export function createLayout({ root, views, services } = {}) {
 	const sidebarRegion = getRegion(root, 'sidebar');
 	const pageRegion = getRegion(root, 'page');
 	const mobileRegion = getRegion(root, 'mobile-navigation');
+	const mobileHeaderRegion = document.createElement('div');
+	mobileHeaderRegion.dataset.layoutRegion = 'mobile-header';
+	root.prepend(mobileHeaderRegion);
 	pageRegion.classList.add('beta-outlet');
 	pageRegion.innerHTML = `
 		<div class="beta-outlet__frame">
 			<div class="beta-outlet__thread-body">
 			<header class="beta-outlet__header">
+				<a class="beta-outlet__action beta-outlet__mobile-back" href="/chat#channels" data-spa-link aria-label="Back to Chat">${CHAT_PAGE_BACK_ICON_HTML}</a>
 				<div class="beta-outlet__identity"><span class="beta-outlet__icon"></span><h1 class="beta-outlet__title"></h1></div>
 				<div class="beta-outlet__actions">
 					<button class="beta-outlet__action beta-outlet__more" type="button" aria-label="More options" aria-haspopup="menu" aria-expanded="false">${iconMarkup('more')}</button>
@@ -60,6 +66,102 @@ export function createLayout({ root, views, services } = {}) {
 	const searchComposerResize = new ResizeObserver(() => frame.style.setProperty('--search-composer-height', `${searchComposer.hidden ? 0 : searchComposer.getBoundingClientRect().height}px`));
 	searchComposerResize.observe(searchComposer);
 	const menuButton = pageRegion.querySelector('.beta-outlet__more');
+	const pageActions = pageRegion.querySelector('.beta-outlet__actions');
+	const pageHeader = pageRegion.querySelector('.beta-outlet__header');
+	const mobileMenuButton = document.createElement('button');
+	mobileMenuButton.type = 'button';
+	mobileMenuButton.className = 'beta-outlet__mobile-menu';
+	mobileMenuButton.hidden = true;
+	mobileMenuButton.setAttribute('aria-label', 'Open page menu');
+	mobileMenuButton.setAttribute('aria-haspopup', 'menu');
+	mobileMenuButton.setAttribute('aria-expanded', 'false');
+	mobileMenuButton.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
+	pageHeader.insertBefore(mobileMenuButton, pageActions);
+	const mobileMenuSheet = document.createElement('div');
+	mobileMenuSheet.className = 'beta-outlet__mobile-menu-sheet';
+	mobileMenuSheet.hidden = true;
+	mobileMenuSheet.innerHTML = '<button class="beta-outlet__mobile-menu-scrim" type="button" aria-label="Dismiss page menu"></button><div class="beta-outlet__mobile-menu-panel"><div class="beta-outlet__mobile-menu-items" role="menu"></div></div>';
+	root.append(mobileMenuSheet);
+	const mobileMenuItems = mobileMenuSheet.querySelector('.beta-outlet__mobile-menu-items');
+	let mobileSwitcherConfig = null;
+	let mobileMenuConfig = null;
+	let sidebarMobileMenuButton = null;
+	function closeMobileMenu() {
+		mobileMenuSheet.hidden = true;
+		mobileMenuButton.setAttribute('aria-expanded', 'false');
+		sidebarMobileMenuButton?.setAttribute('aria-expanded', 'false');
+		document.body.classList.remove('beta-mobile-menu-open');
+	}
+	function renderMobileMenu() {
+		mobileMenuItems.replaceChildren();
+		const appendItem = (item, onSelect) => {
+			if (item.section) {
+				const section = document.createElement('div'); section.className = 'beta-outlet__mobile-menu-section'; section.textContent = item.section; mobileMenuItems.append(section); return;
+			}
+			if (item.separator) {
+				const separator = document.createElement('div'); separator.className = 'beta-outlet__mobile-menu-separator'; separator.setAttribute('role', 'separator'); mobileMenuItems.append(separator); return;
+			}
+			const button = item.href ? document.createElement('a') : document.createElement('button');
+			if (!item.href) button.type = 'button';
+			else { button.href = item.href; button.dataset.spaLink = ''; }
+			button.className = `beta-outlet__mobile-menu-item${item.current ? ' is-current' : ''}`;
+			button.setAttribute('role', 'menuitem');
+			button.textContent = item.label;
+			button.addEventListener('click', () => { closeMobileMenu(); if (!item.href) onSelect?.(item); });
+			mobileMenuItems.append(button);
+		};
+		if (mobileSwitcherConfig?.items?.length) {
+			for (const item of mobileSwitcherConfig.items) appendItem(item, (selected) => mobileSwitcherConfig?.onSelect?.(selected.id));
+		}
+		if (mobileMenuConfig?.items?.length) {
+			if (mobileSwitcherConfig?.items?.length) {
+				const separator = document.createElement('div'); separator.className = 'beta-outlet__mobile-menu-separator'; separator.setAttribute('role', 'separator'); mobileMenuItems.append(separator);
+			}
+			for (const item of mobileMenuConfig.items) appendItem(item, (selected) => mobileMenuConfig?.onSelect?.(selected));
+		}
+		const mobileContext = root.dataset.mobileMode !== 'primary' && root.dataset.mobileMode !== 'roster';
+		mobileMenuButton.hidden = !mobileMedia.matches || !mobileContext || !mobileMenuItems.childElementCount;
+		if (sidebarMobileMenuButton) sidebarMobileMenuButton.hidden = mobileMenuButton.hidden;
+		mobileMenuButton.setAttribute('aria-label', mobileSwitcherConfig?.items?.length && mobileMenuConfig?.items?.length ? 'Channel and page menu' : mobileSwitcherConfig?.items?.length ? 'Channel and canvases' : (mobileMenuConfig?.label || 'Page actions'));
+	}
+	function setHeaderSwitcher(config = null) {
+		mobileSwitcherConfig = config;
+		renderMobileMenu();
+	}
+	mobileMenuButton.addEventListener('click', () => {
+		if (!mobileMenuItems.childElementCount) return;
+		if (mobileMenuSheet.hidden) {
+			mobileMenuSheet.hidden = false;
+			mobileMenuButton.setAttribute('aria-expanded', 'true');
+			sidebarMobileMenuButton?.setAttribute('aria-expanded', 'true');
+			document.body.classList.add('beta-mobile-menu-open');
+		} else closeMobileMenu();
+	});
+	mobileMenuSheet.querySelector('.beta-outlet__mobile-menu-scrim').addEventListener('click', closeMobileMenu);
+	document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !mobileMenuSheet.hidden) closeMobileMenu(); });
+	const mobileMedia = window.matchMedia('(max-width: 768px)');
+	function syncMobileActions() {
+		// WWW's app header owns only global actions (notifications, credits, account).
+		// Route actions such as the three-dot menu belong to the page header, which
+		// is hidden while app chrome is active and remains visible in contextual views.
+		if (pageActions.parentElement !== pageHeader) pageHeader.append(pageActions);
+		menuButton.hidden = !menu || mobileMedia.matches;
+	}
+	function syncMobileScrollPolicy(composition = appliedComposition) {
+		const mobile = mobilePresentation(composition || {});
+		const documentScroll = mobileMedia.matches && mobile.backgroundScrollOwner === 'document';
+		scrollRegion.dataset.scrollOwner = documentScroll ? 'document' : 'outlet';
+		document.documentElement.classList.toggle('beta-mobile-document-scroll', documentScroll);
+		document.body.classList.toggle('beta-mobile-document-scroll', documentScroll);
+		root.dataset.mobileScrollOwner = documentScroll ? 'document' : 'outlet';
+	}
+	function onMobileBreakpointChange() {
+		syncMobileActions();
+		renderMobileMenu();
+		syncMobileScrollPolicy();
+		document.dispatchEvent(new CustomEvent('beta-mobile-scroll-owner-changed'));
+	}
+	mobileMedia.addEventListener('change', onMobileBreakpointChange);
 	let menu = null;
 	let actions = {};
 	let appliedComposition = null;
@@ -67,6 +169,8 @@ export function createLayout({ root, views, services } = {}) {
 	let viewportResizeTimer = 0;
 	let sidebarLayoutReady = false;
 	let creationComposerHandle = null;
+	let mobileDocumentScrollLockTop = null;
+	let mobileDocumentScrollLockStyles = null;
 
 	const overlayHost = document.createElement('div');
 	overlayHost.className = 'beta-app-overlay-host';
@@ -91,6 +195,10 @@ export function createLayout({ root, views, services } = {}) {
 	const overlayClose = overlayHost.querySelector('.beta-app-overlay__close');
 
 	const rightSidebar = createRightSidebar({ root });
+	sidebarMobileMenuButton = mobileMenuButton.cloneNode(true);
+	sidebarMobileMenuButton.classList.add('beta-right-sidebar__menu');
+	rightSidebar.header.insertBefore(sidebarMobileMenuButton, rightSidebar.header.querySelector('.beta-right-sidebar__close'));
+	sidebarMobileMenuButton.addEventListener('click', () => mobileMenuButton.click());
 	const headerAccessories = document.createElement('span');
 	headerAccessories.className = 'beta-outlet__accessories';
 	menuButton.before(headerAccessories);
@@ -108,15 +216,18 @@ export function createLayout({ root, views, services } = {}) {
 	const mounted = {
 		sidebar: null,
 		mobile: null,
+		mobileHeader: null,
 		outlet: null,
 		overlay: null,
 	};
 
 	function setHeaderMenu({ label = 'Page actions', items = [], onSelect } = {}) {
+		mobileMenuConfig = items.length ? { label, items, onSelect } : null;
 		menu?.destroy();
 		menu = items.length ? createPopupMenu({ label, items, onSelect, placement: 'below-end' }) : null;
-		menuButton.hidden = !menu;
+		menuButton.hidden = !menu || mobileMedia.matches;
 		menuButton.setAttribute('aria-expanded', 'false');
+		renderMobileMenu();
 	}
 
 	function setPageTitle(chrome = {}) {
@@ -144,7 +255,11 @@ export function createLayout({ root, views, services } = {}) {
 	}
 
 	function setPage(chrome = {}) {
-		setPageTitle(chrome);
+		if (mobileMedia.matches && root.dataset.mobileMode === 'challenge-subpage' && chrome.breadcrumb) {
+			setPageTitle({ title: chrome.breadcrumb.current });
+		} else {
+			setPageTitle(chrome);
+		}
 		pageIcon.innerHTML = iconMarkup(chrome.icon || 'home');
 		composer.hidden = chrome.composer !== 'message';
 		creationComposer.hidden = chrome.composer !== 'creation';
@@ -184,7 +299,14 @@ export function createLayout({ root, views, services } = {}) {
 			actions,
 			setHeaderMenu,
 			setHeaderAccessories,
-			setHeaderBreadcrumb(breadcrumb) { setPageTitle({ breadcrumb }); },
+			setHeaderSwitcher,
+			setHeaderBreadcrumb(breadcrumb) {
+				if (mobileMedia.matches && root.dataset.mobileMode === 'challenge-subpage') {
+					setPageTitle({ title: breadcrumb?.current || 'Challenge details' });
+					return;
+				}
+				setPageTitle({ breadcrumb });
+			},
 			setHeaderTitle(title) { setPageTitle({ title }); },
 			rightSidebar,
 			setConversationIdentity({ title, avatarHtml, href }) {
@@ -266,7 +388,30 @@ export function createLayout({ root, views, services } = {}) {
 	}
 
 	function setBackgroundSuppressed(suppressed) {
+		const lockDocumentScroll = suppressed && document.body.classList.contains('beta-mobile-document-scroll');
+		if (lockDocumentScroll && mobileDocumentScrollLockTop === null) {
+			mobileDocumentScrollLockTop = window.scrollY || document.documentElement.scrollTop || 0;
+			mobileDocumentScrollLockStyles = {
+				position: document.body.style.getPropertyValue('position'),
+				top: document.body.style.getPropertyValue('top'),
+				width: document.body.style.getPropertyValue('width'),
+			};
+			document.body.style.position = 'fixed';
+			document.body.style.setProperty('top', '-' + mobileDocumentScrollLockTop + 'px');
+			document.body.style.width = '100%';
+		}
 		document.body.classList.toggle('beta-creation-overlay-open', suppressed);
+		document.documentElement.classList.toggle('beta-mobile-document-scroll-locked', suppressed && document.body.classList.contains('beta-mobile-document-scroll'));
+		if (!suppressed && mobileDocumentScrollLockTop !== null) {
+			const top = mobileDocumentScrollLockTop;
+			mobileDocumentScrollLockTop = null;
+			for (const [property, value] of Object.entries(mobileDocumentScrollLockStyles || {})) {
+				if (value) document.body.style.setProperty(property, value);
+				else document.body.style.removeProperty(property);
+			}
+			mobileDocumentScrollLockStyles = null;
+			window.scrollTo(0, top);
+		}
 	}
 
 	function setSidebarLayoutReady(ready) {
@@ -313,13 +458,18 @@ export function createLayout({ root, views, services } = {}) {
 		if (revision !== backgroundRevision) return;
 		// Sidebar mount reads the saved width and applies it before returning.
 		setSidebarLayoutReady(true);
-		await reconcileRegion('mobile', mobileRegion, appShell ? { key: 'app:mobile', view: views.MobileNavigation, props: {} } : null);
+		await reconcileRegion('mobileHeader', mobileHeaderRegion, appShell ? { key: 'app:mobile-header', view: views.MobileHeader, props: {} } : null,
+			{ onShellAction: (action) => mounted.sidebar?.handle?.handleShellAction?.(action) });
+		if (revision !== backgroundRevision) return;
+		await reconcileRegion('mobile', mobileRegion, appShell ? { key: 'app:mobile', view: views.MobileNavigation, props: { navigation: composition } } : null);
+		syncMobileActions();
 		if (revision !== backgroundRevision) return;
 
 		const outletChanged = mounted.outlet?.key !== composition.outlet?.key;
 		if (outletChanged) {
 			setHeaderAccessories();
 			setHeaderMenu();
+			setHeaderSwitcher();
 			setPage(composition.outlet?.chrome);
 		}
 		await reconcileCreationComposer(composition.outlet?.chrome, revision);
@@ -327,7 +477,8 @@ export function createLayout({ root, views, services } = {}) {
 		await reconcileRegion('outlet', outletRegion, composition.outlet, { sidebarRoute: composition.backgroundUrl || composition.url });
 		if (revision !== backgroundRevision) return;
 		if (outletChanged) {
-			scrollRegion.scrollTo(0, 0);
+			if (scrollRegion.dataset.scrollOwner === 'document') window.scrollTo({ top: 0, behavior: 'auto' });
+			else scrollRegion.scrollTo(0, 0);
 			outletRegion.scrollTop = 0;
 		}
 	}
@@ -346,6 +497,26 @@ export function createLayout({ root, views, services } = {}) {
 
 	async function apply(composition, nextActions = {}) {
 		actions = nextActions;
+		const mobile = mobilePresentation(composition);
+		const backgroundMobile = mobilePresentation({ url: composition.backgroundUrl || composition.url });
+		root.dataset.mobileMode = mobile.mode;
+		if (mobile.mode === 'primary' || mobile.mode === 'roster') closeMobileMenu();
+		const mobileBack = pageRegion.querySelector('.beta-outlet__mobile-back');
+		if (mobileBack) {
+			const challengeSubpage = mobile.mode === 'challenge-subpage';
+			mobileBack.href = challengeSubpage ? '/challenges' : '/chat#channels';
+			mobileBack.setAttribute('aria-label', challengeSubpage ? 'Back to Challenges' : 'Back to Chat');
+		}
+		root.dataset.mobileBack = String(mobile.backButton);
+		renderMobileMenu();
+		root.dataset.mobileFooter = String(mobile.footer);
+		root.dataset.mobileHeader = String(mobile.appHeader);
+		root.dataset.mobileBackgroundFooter = String(backgroundMobile.footer);
+		root.dataset.mobileBackgroundHeader = String(backgroundMobile.appHeader);
+		syncMobileActions();
+		scrollRegion.dataset.scrollOwner = mobileMedia.matches && mobile.backgroundScrollOwner === 'document' ? 'document' : 'outlet';
+		syncMobileScrollPolicy(composition);
+		mounted.mobile?.handle?.update?.({ navigation: composition, actions });
 		const revision = ++backgroundRevision;
 		const overlayChanged = mounted.overlay?.key !== composition.overlay?.key;
 		if (composition.overlay) {
@@ -392,11 +563,25 @@ export function createLayout({ root, views, services } = {}) {
 	}
 
 	function destroy() {
+		mobileMedia.removeEventListener('change', onMobileBreakpointChange);
+		pageHeader.append(pageActions);
+		delete root.dataset.mobileMode;
+		delete root.dataset.mobileFooter;
+		delete root.dataset.mobileHeader;
+		delete root.dataset.mobileBackgroundFooter;
+		delete root.dataset.mobileBackgroundHeader;
+		document.documentElement.classList.remove('beta-mobile-document-scroll-locked');
+		delete root.dataset.mobileScrollOwner;
+		document.documentElement.classList.remove('beta-mobile-document-scroll');
+		document.body.classList.remove('beta-mobile-document-scroll');
+		unmount('mobileHeader', mobileHeaderRegion);
+		mobileHeaderRegion.remove();
 		composerResize.disconnect();
 		messageComposerResize.disconnect();
 		searchComposerResize.disconnect();
 		backgroundRevision++;
 		setHeaderAccessories();
+		setHeaderSwitcher();
 		unmount('overlay', overlayContent);
 		overlayRestoreStates.clear();
 		unmount('outlet', outletRegion);
@@ -406,6 +591,7 @@ export function createLayout({ root, views, services } = {}) {
 		unmount('mobile', mobileRegion);
 		unmount('sidebar', sidebarRegion);
 		setHeaderMenu();
+		setHeaderSwitcher();
 		setBackgroundSuppressed(false);
 		setSidebarLayoutReady(true);
 		document.removeEventListener('keydown', onDocumentKeydown);

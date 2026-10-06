@@ -8,9 +8,9 @@ import { getAvatarColor } from '../../shared/avatar.js';
 import { renderCommentAvatarHtml } from '../../shared/commentItem.js';
 
 export const ChannelView = Object.freeze({
-	mount({ outlet, services, slug = '', threadId, title = '', composer, setConversationIdentity, setHeaderMenu, setHeaderAccessories, rightSidebar, actions }) {
+	mount({ outlet, services, slug = '', threadId, title = '', composer, setConversationIdentity, setHeaderMenu, setHeaderAccessories, setHeaderSwitcher, rightSidebar, actions }) {
 		let controller;
-		const chrome = createConversationChrome({ services, setHeaderMenu, setHeaderAccessories, rightSidebar, actions });
+		const chrome = createConversationChrome({ services, setHeaderMenu, setHeaderAccessories, setHeaderSwitcher, rightSidebar, actions });
 		const view = mountMessages({
 			outlet, viewerId: services.providers.viewerId,
 			onLoadOlder: () => controller?.loadOlder(),

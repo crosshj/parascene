@@ -481,6 +481,7 @@ export function mountSidebarView({ outlet, services, actions } = {}) {
 	controller = createSidebarController({ view, services, actions });
 	return {
 		root: view.root,
+		handleShellAction: (action) => controller.handleAction(action),
 		update() {},
 		destroy() {
 			controller.destroy();

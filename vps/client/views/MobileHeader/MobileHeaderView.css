@@ -1,0 +1,102 @@
+/* WWW navigation/index.js and global.css header chain, scoped to the mobile shell. */
+.mobile-header-view { --mobile-header-fill: var(--bg); display: none; }
+@media (prefers-color-scheme: dark) { .mobile-header-view { --mobile-header-fill: var(--surface); } }
+@media (max-width: 768px) {
+ .mobile-header-view { box-sizing: border-box; display: block; position: fixed; top: env(safe-area-inset-top); left: env(safe-area-inset-left); right: env(safe-area-inset-right); z-index: 30; height: var(--beta-mobile-header-row-height); padding: 8px 0; font-family: var(--font-family); background: linear-gradient(to bottom, var(--mobile-header-fill) 0%, color-mix(in srgb, var(--mobile-header-fill) 95%, transparent) 20%, color-mix(in srgb, var(--mobile-header-fill) 80%, transparent) 50%, color-mix(in srgb, var(--mobile-header-fill) 40%, transparent) 100%); backdrop-filter: blur(20px) saturate(180%); -webkit-backdrop-filter: blur(20px) saturate(180%); border-bottom: 1px solid color-mix(in srgb, var(--border) 30%, transparent); }
+ .mobile-header-view .header-content { position: relative; display: flex; align-items: center; min-height: 48px; padding: 0 16px; margin: 0 auto; }
+ .mobile-header-view .header-logo { display: flex; align-items: center; height: 36px; }
+ .mobile-header-view .header-logo a { color: inherit; display: block; line-height: 0; }
+ .mobile-header-view .logo { height: 36px; width: auto; fill: currentColor; }
+ .mobile-header-view .header-actions { display: flex; gap: 4px; margin-left: auto; }
+}
+.mobile-header-view[hidden] { display: none; }
+/* Header action items */
+.mobile-header-view .action-item {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	height: 36px;
+	padding: 0 12px;
+	border-radius: 6px;
+	text-decoration: none;
+	color: var(--text);
+	background: transparent;
+	border: 1px solid transparent;
+	font-size: 0.875rem;
+	transition: background-color 0.2s, border-color 0.2s;
+	cursor: pointer;
+	font: inherit;
+	align-self: center;
+	line-height: 1;
+}
+
+/* Square icon buttons for even spacing */
+.mobile-header-view .action-item.notifications-button,
+.mobile-header-view .action-item.profile-button {
+	width: 36px;
+	padding: 0;
+	justify-content: center;
+}
+
+.mobile-header-view .action-item.profile-button.is-avatar-loading {
+	visibility: hidden;
+	pointer-events: none;
+}
+
+.mobile-header-view .profile-button .profile-avatar {
+	width: 28px;
+	height: 28px;
+	aspect-ratio: 1 / 1;
+	border-radius: 50%;
+	object-fit: cover;
+	object-position: center;
+	display: none;
+}
+
+.mobile-header-view .profile-avatar-slot,
+.mobile-header-view .profile-button .avatar-with-founder-flair {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.mobile-header-view .profile-button .avatar-with-founder-flair .profile-avatar {
+	display: block;
+width: 100%;
+height: 100%;
+}
+
+.mobile-header-view .profile-button.has-avatar .profile-avatar {
+	display: block;
+}
+
+.mobile-header-view .profile-button.has-avatar .icon {
+	display: none;
+}
+
+/* Credits button includes a label/count, so keep it wider but same height */
+.mobile-header-view .action-item.credits-button {
+	padding: 0 10px;
+}
+
+.mobile-header-view .action-item:hover:not(.btn-primary) {
+	background: var(--surface-strong);
+	border-color: var(--border);
+}
+
+.mobile-header-view .action-item:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
+}
+
+.mobile-header-view .action-item .icon {
+	width: 16px;
+	height: 16px;
+	flex-shrink: 0;
+	display: block;
+}
+
+.mobile-header-view .credits-button .icon {
+	width: 20px;
+	height: 20px;
+}

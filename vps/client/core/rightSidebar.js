@@ -1,15 +1,19 @@
 import markup from './rightSidebar.html';
 import { createTemplateFactory } from '../utils/dom.js';
+import { CHAT_PAGE_BACK_ICON_HTML } from '../shared/chatPageHeader.js';
 const clone = createTemplateFactory(markup);
 
 // Layout owns the rail. Features supply a mount function and release their lease
 // at teardown; a stale lease can never close another feature's content.
 export function createRightSidebar({ root }) {
- const host = clone('right-sidebar'); root.append(host);
+ const host = clone('right-sidebar');
+ host.querySelector('.beta-right-sidebar__back').innerHTML = CHAT_PAGE_BACK_ICON_HTML;
+ root.append(host);
  const content = host.querySelector('.beta-right-sidebar__content');
  const title = host.querySelector('h2');
  const handle = host.querySelector('[role=separator]');
- const closeButton = host.querySelector('button');
+ const closeButton = host.querySelector('.beta-right-sidebar__close');
+ const backButton = host.querySelector('.beta-right-sidebar__back');
  const listeners = new AbortController();
  let active = null, dragging = false, origin = 0, startWidth = 0, frame = 0, pending = 360;
  const maximum = () => Math.max(220, innerWidth - (matchMedia('(min-width: 1024px)').matches ? Number.parseFloat(getComputedStyle(document.body).getPropertyValue('--beta-sidebar-width')) || 272 : 0) - 180);
@@ -74,6 +78,7 @@ export function createRightSidebar({ root }) {
   if (next !== undefined) { event.preventDefault(); setWidth(next, true); }
  }, { signal: listeners.signal });
  closeButton.addEventListener('click', () => close(), { signal: listeners.signal });
+ backButton.addEventListener('click', () => close(), { signal: listeners.signal });
  document.addEventListener('keydown', event => {
   if (event.key !== 'Escape' || event.defaultPrevented || host.hidden || document.querySelector('dialog[open]')) return;
   // Menus and dialogs receive Escape first.
@@ -97,6 +102,9 @@ export function createRightSidebar({ root }) {
   const nextPath = new URL(path, location.origin).pathname;
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem(routeStorage) || '{}')[nextPath] || null; } catch {}
+  // WWW enters mobile channels on the message view; a remembered canvas is
+  // available from the title switcher but never replaces the conversation.
+  if (matchMedia('(max-width: 768px)').matches && root.dataset.mobileMode === 'conversation') saved = null;
   // Invalidate the old feature lease before its view tears down. When the
   // destination has a sidebar, its loading content replaces the old content
   // without hiding the rail or changing the outlet's reserved space.
@@ -113,5 +121,5 @@ export function createRightSidebar({ root }) {
  }
  prepare(routePath);
  window.addEventListener('resize', () => setWidth(width), { signal: listeners.signal });
- return { open, close, prepare, get restoreDismissed() { return restoreDismissed; }, get restoration() { return restoration; }, get key() { return active?.key; }, destroy() { close({ forget: false }); loadingResize.disconnect(); listeners.abort(); host.remove(); document.body.style.removeProperty('--beta-right-sidebar-width'); } };
+ return { open, close, prepare, header: host.querySelector('.beta-right-sidebar__header'), get restoreDismissed() { return restoreDismissed; }, get restoration() { return restoration; }, get key() { return active?.key; }, destroy() { close({ forget: false }); loadingResize.disconnect(); listeners.abort(); host.remove(); document.body.style.removeProperty('--beta-right-sidebar-width'); } };
 }

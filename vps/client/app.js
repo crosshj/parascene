@@ -29,6 +29,7 @@ const legacyThreadRoutes = [
 ];
 
 const routeDefinitions = [
+	{ path: '/chat', view: views.ChatRoster, title: 'Chat', icon: 'comments', composer: 'none' },
 	{
 		path: '/',
 		view: views.Feed,

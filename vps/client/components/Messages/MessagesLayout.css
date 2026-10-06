@@ -34,6 +34,11 @@
 	padding-bottom: calc(var(--message-composer-height, 0px) + 12px);
 	--link: var(--accent);
 }
+@media (max-width: 768px) {
+	.beta-outlet__scroll.chat-page-thread-body > .beta-outlet__content > .chat-page-messages {
+		padding-top: calc(var(--beta-chrome-row-height) + env(safe-area-inset-top) + 12px);
+	}
+}
 .beta-outlet__content > .chat-page-error { position: absolute; z-index: 4; bottom: calc(var(--message-composer-height, 0px) + 8px); left: 12px; right: 12px; background: var(--surface); padding: 8px 12px; }
 .beta-outlet__content > .chat-page-error[hidden] { display: none; }
 .chat-page-error .chat-page-pane-load-retry { margin-left: 8px; }

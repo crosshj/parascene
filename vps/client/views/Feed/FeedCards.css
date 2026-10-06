@@ -1346,6 +1346,28 @@ body.view-nsfw .feed-view .feed-card-image--nsfw-group > .creation-group-badge,
 	}
 }
 
+.feed-view .skeleton-feed-card--mobile-www .skeleton-feed-card-footer {
+	grid-template-columns: auto 1fr;
+	align-items: start;
+	gap: 12px;
+}
+.feed-view .skeleton-feed-card--mobile-www .skeleton-feed-card-actions {
+	justify-self: auto;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 0 4px 0 12px;
+}
+.feed-view .skeleton-feed-card--mobile-www .skeleton-feed-card-actions-primary {
+	display: inline-flex;
+	align-items: center;
+	gap: 14px;
+}
+@media (max-width: 480px) {
+	.feed-view .skeleton-feed-card--mobile-www .skeleton-feed-card-footer { gap: 8px; }
+	.feed-view .skeleton-feed-card--mobile-www .skeleton-feed-card-actions { gap: 8px; padding-left: 8px; }
+	.feed-view .skeleton-feed-card--mobile-www .skeleton-feed-card-actions-primary { gap: 10px; }
+}
+
 .feed-view .skeleton-feed-card--image-only {
 	gap: 0;
 	padding: 0;

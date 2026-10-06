@@ -323,11 +323,13 @@ export function createCreationMediaLoader(root, { eagerCount = 16, maxConcurrent
 	const queue = [];
 	let active = 0;
 	const loadingMedia = new WeakSet();
+	let activePreloadRoot = preloadRoot;
+	let observer;
 	// Match the working www grid: assign src to every card and let native
 	// loading="lazy" schedule network work. An app-level concurrency cap left
 	// queued cards with no img src while they waited their turn.
 	maxConcurrent = Number.POSITIVE_INFINITY;
-	const observer = new IntersectionObserver((entries) => {
+	function onIntersection(entries) {
 		if (disconnected) return;
 		for (const entry of entries) {
 			if (!entry.isIntersecting) continue;
@@ -343,7 +345,13 @@ export function createCreationMediaLoader(root, { eagerCount = 16, maxConcurrent
 			}
 		}
 		drain();
-	}, { root: preloadRoot, rootMargin: preloadMargin || '0px', threshold: 0.01 });
+	}
+	function bindObserver() {
+		observer?.disconnect();
+		observer = new IntersectionObserver(onIntersection, { root: activePreloadRoot, rootMargin: preloadMargin || '0px', threshold: 0.01 });
+		root.querySelectorAll('.feed-card-image[data-bg-url]:not([data-bg-loaded-url])').forEach((media) => observer.observe(media));
+	}
+	bindObserver();
 
 	function drain() {
 		while (active < maxConcurrent && queue.length) {
@@ -479,5 +487,9 @@ export function createCreationMediaLoader(root, { eagerCount = 16, maxConcurrent
 		);
 		media.replaceChildren(stack, button('prev'), button('next'), ...overlays);
 	}
-	return { observe, disconnect: () => { disconnected = true; observer.disconnect(); } };
+	return {
+		observe,
+		setRoot(nextRoot) { if (nextRoot === activePreloadRoot || disconnected) return; activePreloadRoot = nextRoot; bindObserver(); },
+		disconnect: () => { disconnected = true; observer.disconnect(); },
+	};
 }

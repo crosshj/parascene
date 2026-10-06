@@ -23,8 +23,3 @@ export const sidebarMenus = {
 	notifications: { label: 'Notifications', items: [{ label: 'No new notifications', action: 'notifications-empty' }, { separator: true }, { label: 'View all notifications', href: '/notifications' }] },
 	credits: { label: 'Credits', items: [{ label: 'Credits available', action: 'credits-summary' }, { label: 'Get more credits', href: '/credits', icon: 'credits' }] }
 };
-
-export const mobileNavigationItems = [
-	{ label: 'Feed', path: '/feed' },
-	{ label: 'Files', path: '/files' }
-];

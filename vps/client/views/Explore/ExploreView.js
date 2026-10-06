@@ -6,6 +6,7 @@ import '../../components/CreationGrid/CreationGrid.css';
 import './ExploreView.css';
 import { bindSearchComposer } from '../../components/SearchComposer/SearchComposer.js';
 import { gridSkeletonMarkup } from '../../components/CreationGrid/skeleton.js';
+import { createScrollContext } from '../../core/scrollContext.js';
 
 export const ExploreView = Object.freeze({
  mount({ outlet, actions, services, search = '', searchComposer, setHeaderMenu }) {
@@ -13,7 +14,7 @@ export const ExploreView = Object.freeze({
   root.innerHTML = `<div class="explore-view__status" role="status"></div><div class="route-cards content-cards-image-grid creation-browse-grid" aria-label="Community creations"></div><button class="explore-view__more" type="button" hidden>Load more</button>`;
   outlet.replaceChildren(root); document.title = 'Explore · Parascene beta';
   const grid = root.querySelector('.route-cards'), status = root.querySelector('[role="status"]'), more = root.querySelector('.explore-view__more');
-  const media = createCreationMediaLoader(grid); const scroll = root.closest('.beta-outlet__scroll');
+  const media = createCreationMediaLoader(grid); const scroll = createScrollContext(root);
   let q = new URLSearchParams(search).get('q')?.trim() || '', offset = 0, hasMore = false, busy = false, destroyed = false, epoch = 0, request, rows = [], large = false;
   try { large = localStorage.getItem('parascene:explore-large') === '1'; } catch {}
   function disposeCards() { grid.querySelectorAll('.feed-card').forEach(card => card.__disposeFeedCard?.()); }
@@ -59,15 +60,15 @@ export const ExploreView = Object.freeze({
      const ids = new Set(rows.map(row => String(row.id))); rows.push(...(page.items || []).filter(row => !ids.has(String(row.id))));
      offset += page.items?.length || 0; hasMore = page.hasMore === true; paint(); show(rows.length ? '' : 'Nothing to explore yet. Published creations from the community will appear here.');
     }
-    if (current()) { more.hidden = !hasMore; more.textContent = 'Load more'; if (reset) scroll?.scrollTo?.({ top: 0 }); }
+    if (current()) { more.hidden = !hasMore; more.textContent = 'Load more'; if (reset) scroll.to(0); }
    } catch (error) { if (current() && error.name !== 'AbortError') { if (error.status === 401) return services.session.redirectToLogin(); grid.querySelectorAll('.skeleton-grid-tile').forEach(tile => tile.remove()); show(error.message || 'Unable to load Explore.', true); more.hidden = false; more.textContent = 'Retry'; } }
    finally { if (current()) { busy = false; more.disabled = false; root.removeAttribute('aria-busy'); } }
   }
   async function onCreationMutation(event) {
    if (!['published', 'unpublished', 'edited'].includes(event.detail?.reason) || destroyed) return;
-   const scrollTop = scroll?.scrollTop ?? 0;
+   const scrollTop = scroll.top;
    await load(true);
-   if (!destroyed && scroll) requestAnimationFrame(() => { if (!destroyed) scroll.scrollTop = scrollTop; });
+   if (!destroyed) requestAnimationFrame(() => scroll.set(scrollTop));
   }
   document.addEventListener('creation-detail:mutation', onCreationMutation);
   function submit(value) { const params = new URLSearchParams(); if (value.trim()) params.set('q', value.trim()); void actions.navigate(`/explore${params.size ? `?${params}` : ''}`); }
@@ -75,8 +76,10 @@ export const ExploreView = Object.freeze({
   grid.addEventListener('click', event => { if (large || event.target.closest('a,button')) return; const card = event.target.closest('.creation-grid__card[data-creation-id]'); if (card) void actions.navigate(`/creations/${card.dataset.creationId}`, { seed: card.__creationRecord }); });
   grid.addEventListener('keydown', event => { if (large || !['Enter', ' '].includes(event.key)) return; const card = event.target.closest('.creation-grid__card[data-creation-id]'); if (card && event.target === card) { event.preventDefault(); void actions.navigate(`/creations/${card.dataset.creationId}`, { seed: card.__creationRecord }); } });
   more.addEventListener('click', () => void load(!rows.length));
-  const observer = typeof IntersectionObserver === 'function' ? new IntersectionObserver(entries => { if (entries.some(entry => entry.isIntersecting) && hasMore && !busy && !status.classList.contains('is-error')) void load(); }, { root: scroll, rootMargin: '1000px' }) : null;
-  observer?.observe(more); menu(); void load(true);
-  return { update({ search = '' }) { const next = new URLSearchParams(search).get('q')?.trim() || ''; if (next !== q) { q = next; void load(true); } }, destroy() { document.removeEventListener('creation-detail:mutation', onCreationMutation); searchBinding.destroy(); disposeCards(); destroyed = true; ++epoch; request?.abort(); observer?.disconnect(); media.disconnect(); root.querySelectorAll('audio,video').forEach(player => { player.pause(); player.removeAttribute('src'); player.load(); }); root.remove(); } };
+  let observer;
+  function bindScrollOwner() { observer?.disconnect(); observer = new IntersectionObserver(entries => { if (entries.some(entry => entry.isIntersecting) && hasMore && !busy && !status.classList.contains('is-error')) void load(); }, { root: scroll.intersectionRoot, rootMargin: '1000px' }); observer.observe(more); media.setRoot(scroll.intersectionRoot); }
+  document.addEventListener('beta-mobile-scroll-owner-changed', bindScrollOwner);
+  bindScrollOwner(); menu(); void load(true);
+  return { update({ search = '' }) { const next = new URLSearchParams(search).get('q')?.trim() || ''; if (next !== q) { q = next; void load(true); } }, destroy() { document.removeEventListener('beta-mobile-scroll-owner-changed', bindScrollOwner); document.removeEventListener('creation-detail:mutation', onCreationMutation); searchBinding.destroy(); disposeCards(); destroyed = true; ++epoch; request?.abort(); observer?.disconnect(); media.disconnect(); root.querySelectorAll('audio,video').forEach(player => { player.pause(); player.removeAttribute('src'); player.load(); }); root.remove(); } };
  }
 });

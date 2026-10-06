@@ -9,11 +9,12 @@ import { createChatHistoryCopyModal } from '../../shared/chatHistoryCopyModal.js
 import { formatDateTime } from '../../shared/datetime.js';
 import { renderCommentAvatarHtml } from '../../shared/commentItem.js';
 import { getAvatarColor } from '../../shared/avatar.js';
+import { isSelfDmThread } from '../../shared/chatSidebarRoster.js';
 const clone = createTemplateFactory(markup);
 const storageKey = 'prsn-chat-open-canvas-by-thread-v1';
 const blocked = new Set(['comments', 'feed', 'explore', 'creations', 'challenges']);
 
-export function createConversationChrome({ services, setHeaderMenu, setHeaderAccessories, rightSidebar, actions }) {
+export function createConversationChrome({ services, setHeaderMenu, setHeaderAccessories, setHeaderSwitcher, rightSidebar, actions }) {
  const provider = services.providers.threads;
  const abort = new AbortController();
  let destroyed = false, thread = null, inbox = null, controller = null, canvases = [], pinned = null, rail = null, activeId = null;
@@ -56,6 +57,11 @@ export function createConversationChrome({ services, setHeaderMenu, setHeaderAcc
   const viewing = rail?.isOpen && Number(activeId) === Number(pinned);
   const mobile = matchMedia('(max-width: 1023px)').matches;
   setHeaderAccessories?.(row && (!viewing || mobile) ? [{ label: row.title, ariaLabel: `${viewing ? 'Close' : 'Open'} ${row.title}`, onClick: () => viewing ? rail.close() : openCanvas(row.id) }] : []);
+  const switchItems = [{ id: null, label: isSelfDmThread(thread, services.providers.viewerId) ? 'My Notes' : thread.title || (thread.type === 'dm' ? 'Direct message' : 'Channel'), current: !rail?.isOpen }];
+  if (eligible()) {
+   for (const canvas of canvases) switchItems.push({ id: Number(canvas.id), label: canvas.title || 'Canvas', current: rail?.isOpen && Number(activeId) === Number(canvas.id) });
+  }
+  setHeaderSwitcher?.({ channel: switchItems[0].label, items: switchItems, onSelect(id) { if (id == null) rail?.close(); else openCanvas(id); } });
  }
  async function refresh() {
   if (!eligible() || destroyed) { updateHeader(); return; }
@@ -67,7 +73,12 @@ export function createConversationChrome({ services, setHeaderMenu, setHeaderAcc
    else if (activeId && !editing) openCanvas(activeId, { remember: false });
    if (!restored) {
     restored = true;
-    if (rightSidebar.restoreDismissed) preference(null);
+    if (matchMedia('(max-width: 768px)').matches) {
+     // Mobile always opens the conversation first; users can choose a canvas
+     // from the channel switcher or the pinned-canvas shortcut.
+     if (rightSidebar.restoration) rightSidebar.close({ forget: false });
+    }
+    else if (rightSidebar.restoreDismissed) preference(null);
     else {
      const savedKey = rightSidebar.restoration?.key;
      let id = savedKey?.startsWith(`canvas:${thread.id}:`) ? Number(savedKey.split(':').at(-1)) : null; try { id ||= JSON.parse(localStorage.getItem(storageKey) || '{}')[String(thread.id)]; } catch {}
@@ -89,7 +100,7 @@ export function createConversationChrome({ services, setHeaderMenu, setHeaderAcc
   const row = canvases.find(row => Number(row.id) === Number(id)); if (!row || destroyed) return;
   // Refreshing a read view replaces only rail content, never the conversation.
   activeId = row.id; editing = false;
-  rail = rightSidebar.open({ key: `canvas:${thread.id}:${row.id}`, title: 'Canvas', onClose({ forget = true } = {}) { activeId = null; editing = false; if (forget && !destroyed) preference(null); updateHeader(); }, mount({ outlet, close }) {
+  rail = rightSidebar.open({ key: `canvas:${thread.id}:${row.id}`, title: matchMedia('(max-width: 768px)').matches ? (thread.title || 'Conversation') : 'Canvas', onClose({ forget = true } = {}) { activeId = null; editing = false; if (forget && !destroyed) preference(null); updateHeader(); }, mount({ outlet, close }) {
    const root = clone('canvas'); outlet.append(root);
    const title = root.querySelector('[data-chat-canvas-title-view]');
    const titleInput = root.querySelector('[data-chat-canvas-title-input]');
@@ -188,6 +199,6 @@ export function createConversationChrome({ services, setHeaderMenu, setHeaderAcc
   setThread(value, data) { thread = value; inbox = data; updateHeader(); void refresh(); },
   refresh,
   openCanvas,
-  destroy() { destroyed = true; abort.abort(); revision++; rail?.close({ forget: false }); history?.destroy(); for (const dialog of dialogs) { dialog.close(); dialog.remove(); } dialogs.clear(); window.removeEventListener('resize', onResize); setHeaderAccessories?.(); setHeaderMenu?.(); },
+  destroy() { destroyed = true; abort.abort(); revision++; rail?.close({ forget: false }); history?.destroy(); for (const dialog of dialogs) { dialog.close(); dialog.remove(); } dialogs.clear(); window.removeEventListener('resize', onResize); setHeaderAccessories?.(); setHeaderSwitcher?.(); setHeaderMenu?.(); },
  };
 }

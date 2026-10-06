@@ -8292,6 +8292,10 @@ function paintCreationDetailFromSeed(seed, detailContent, imageEl, chromeHtmlFro
 		(typeof seed.thumbnail_url === 'string' && seed.thumbnail_url.trim()) ||
 		'';
 	const wrap = imageEl instanceof HTMLImageElement ? imageEl.closest?.('.creation-detail-image-wrapper') : null;
+	if (wrap instanceof HTMLElement) {
+		const meta = typeof seed.meta === 'string' ? (() => { try { return JSON.parse(seed.meta); } catch { return null; } })() : seed.meta;
+		wrap.classList.toggle('nsfw', Boolean(seed.nsfw || meta?.nsfw));
+	}
 	if (wrap instanceof HTMLElement && typeof applyHeroAspect === 'function') {
 		applyInitialDetailHeroLayout(wrap, seed);
 	}

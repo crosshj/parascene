@@ -1,35 +1,228 @@
-.mobile-navigation-view { display: none; }
+/* Ported from WWW public/global.css. Layout owns clearance; overlay is above this dock. */
+/* Mobile bottom nav */
+.mobile-bottom-nav-wrap {
+	position: fixed;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	width: 100%;
+	display: none;
+	pointer-events: none;
+	z-index: 20;
+}
 
 @media (max-width: 768px) {
-	.mobile-navigation-view {
-		position: fixed;
-		inset: auto 0 0;
-		display: grid;
-		box-sizing: border-box;
-		grid-template-columns: repeat(var(--mobile-navigation-count), minmax(0, 1fr));
-		min-height: var(--beta-mobile-nav-height);
-		padding: 8px max(8px, env(safe-area-inset-left)) calc(8px + env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-right));
-		border-top: 1px solid color-mix(in srgb, currentColor 12%, transparent);
-		background: color-mix(in srgb, Canvas 96%, currentColor 4%);
-		z-index: 10;
+
+	.mobile-bottom-nav-wrap {
+		display: flex;
 	}
-	.mobile-navigation-view__item {
-		display: grid;
-		place-items: center;
-		box-sizing: border-box;
-		min-height: 44px;
-		border: 0;
-		border-radius: 10px;
-		color: inherit;
-		background: transparent;
-		font: inherit;
-		font-weight: 650;
-		text-decoration: none;
-		opacity: .65;
+
+}
+
+.mobile-bottom-nav-bar {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	height: 55px;
+	background: linear-gradient(to top,
+			rgba(246, 247, 251, 1) 0%,
+			rgba(246, 247, 251, 0.95) 20%,
+			rgba(246, 247, 251, 0.8) 50%,
+			rgba(246, 247, 251, 0.4) 100%);
+	border-top: 1px solid rgba(226, 232, 240, 0.3);
+	backdrop-filter: blur(20px) saturate(180%);
+	-webkit-backdrop-filter: blur(20px) saturate(180%);
+	box-shadow: 0 -10px 24px rgba(15, 23, 42, 0.12);
+}
+
+.mobile-bottom-nav-bar::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	height: 100%;
+	background: linear-gradient(to top,
+			rgba(255, 255, 255, 0.1) 0%,
+			rgba(255, 255, 255, 0.05) 30%,
+			transparent 100%);
+	pointer-events: none;
+}
+
+@media (prefers-color-scheme: dark) {
+	.mobile-bottom-nav-bar {
+		background: linear-gradient(to top,
+				rgba(26, 22, 40, 1) 0%,
+				rgba(26, 22, 40, 0.95) 20%,
+				rgba(26, 22, 40, 0.8) 50%,
+				rgba(26, 22, 40, 0.4) 100%);
+		border-top: 1px solid rgba(61, 53, 82, 0.3);
 	}
-	.mobile-navigation-view__item[aria-current="page"],
-	.mobile-navigation-view__item:hover {
-		background: color-mix(in srgb, currentColor 9%, transparent);
-		opacity: 1;
+
+	.mobile-bottom-nav-bar::before {
+		background: linear-gradient(to top,
+				rgba(255, 255, 255, 0.05) 0%,
+				rgba(255, 255, 255, 0.02) 30%,
+				transparent 100%);
 	}
 }
+
+.mobile-bottom-nav-buttons {
+	position: relative;
+	display: grid;
+	grid-template-columns: repeat(5, minmax(0, 1fr));
+	align-items: end;
+	gap: 0;
+	height: 72px;
+	padding: 0 18px 9px;
+	width: 100%;
+	pointer-events: auto;
+}
+
+.mobile-bottom-nav-slot {
+	height: 1px;
+}
+
+.mobile-bottom-nav-item {
+	background: none;
+	border: none;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 5px;
+	color: var(--text-muted);
+	font: inherit;
+	cursor: pointer;
+	margin-top: auto;
+}
+
+.mobile-bottom-nav-item:disabled {
+	cursor: not-allowed;
+	opacity: 0.6;
+}
+
+.mobile-bottom-nav-item.is-active {
+	color: var(--text);
+}
+
+.mobile-bottom-nav-icon {
+	width: 20px;
+	height: 20px;
+}
+
+.mobile-bottom-nav-icon-home {
+	fill: none;
+}
+
+.mobile-bottom-nav-icon-home .home-house,
+.mobile-bottom-nav-icon-home .home-door-outline,
+.mobile-bottom-nav-icon-home .home-door-fill {
+	fill: none;
+	transition: fill 0.2s, stroke 0.2s, opacity 0.2s;
+}
+
+.mobile-bottom-nav-icon-home .home-door-fill {
+	opacity: 0;
+}
+
+.mobile-bottom-nav-item.is-active .mobile-bottom-nav-icon-home .home-house {
+	fill: currentColor;
+	stroke: transparent;
+}
+
+.mobile-bottom-nav-item.is-active .mobile-bottom-nav-icon-home .home-door-outline {
+	opacity: 0;
+}
+
+.mobile-bottom-nav-item.is-active .mobile-bottom-nav-icon-home .home-door-fill {
+	fill: var(--bg);
+	stroke: none;
+	opacity: 1;
+}
+
+.mobile-bottom-nav-text {
+	font-size: 0.73rem;
+	letter-spacing: 0.02em;
+	line-height: 1;
+}
+
+.mobile-bottom-nav-item--connect,
+.mobile-bottom-nav-item--challenges {
+	position: relative;
+}
+
+.mobile-bottom-nav-unread-badge {
+	position: absolute;
+	top: -2px;
+	right: 5px;
+	min-width: 16px;
+	height: 16px;
+	padding: 0 5px;
+	border-radius: 999px;
+	background: var(--accent);
+	color: var(--accent-text);
+	font-size: 0.58rem;
+	font-weight: 700;
+	display: none;
+	align-items: center;
+	justify-content: center;
+	box-sizing: border-box;
+	line-height: 1;
+}
+
+.mobile-bottom-nav-unread-badge.has-unread {
+	display: inline-flex;
+}
+
+.mobile-bottom-nav-buttons .create-button {
+	background: none;
+	border: none;
+	box-shadow: none;
+	justify-self: center;
+	font-weight: inherit;
+}
+
+.mobile-bottom-nav-buttons .create-button .create-button-icon {
+	width: 40px;
+	height: 40px;
+	border-radius: 50%;
+	background: var(--focus);
+	border: 1px solid var(--focus);
+	color: var(--on-focus, #ffffff);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	box-shadow: var(--shadow);
+}
+
+.mobile-bottom-nav-buttons .create-button.is-active .create-button-icon {
+	background: transparent;
+	border-color: transparent;
+	box-shadow: none;
+	margin-bottom: 0;
+	width: 20px;
+	height: 20px;
+	border-radius: 0;
+	border: none;
+	color: var(--text);
+}
+
+.mobile-bottom-nav-buttons .create-button.is-active:disabled {
+	opacity: 1;
+}
+
+.mobile-bottom-nav-buttons .create-button .create-button-icon svg {
+	width: 20px;
+	height: 20px;
+	stroke: currentColor;
+}
+
+
+.mobile-navigation-view[hidden] { display: none; }
+.mobile-navigation-view { font-family: var(--font-family); }
+.mobile-navigation-view .mobile-bottom-nav-buttons { box-sizing: border-box; height: calc(72px + env(safe-area-inset-bottom)); padding-bottom: calc(9px + env(safe-area-inset-bottom)); }
+.mobile-navigation-view .mobile-bottom-nav-bar { height: calc(55px + env(safe-area-inset-bottom)); }
+.mobile-navigation-view button:focus-visible { outline: 2px solid var(--focus); outline-offset: 4px; }

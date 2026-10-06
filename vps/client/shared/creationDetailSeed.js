@@ -131,6 +131,26 @@ function mergeSeedThumbList(...lists) {
 	return out;
 }
 
+/** Map legacy image endpoints onto the authenticated creation-media route. */
+function normalizeSeedMediaUrl(value, creationId) {
+	const raw = typeof value === 'string' ? value.trim() : '';
+	const id = numId(creationId);
+	if (!raw || !id) return raw;
+	try {
+		const base = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : 'http://localhost';
+		const parsed = new URL(raw, base);
+		const markers = ['/api/images/created/', '/api/videos/created/'];
+		const marker = markers.find((value) => parsed.pathname.includes(value));
+		if (marker) parsed.pathname = parsed.pathname.replace(marker, '/api/creations/media/');
+		else if (!parsed.pathname.startsWith('/api/creations/media/')) return raw;
+		parsed.searchParams.set('creation_id', String(id));
+		const local = parsed.origin === base;
+		return `${local ? '' : parsed.origin}${parsed.pathname}${parsed.search}${parsed.hash}`;
+	} catch {
+		return raw;
+	}
+}
+
 function seedGroupSourceCountFromMeta(meta) {
 	const group = meta?.group && typeof meta.group === 'object' ? meta.group : null;
 	if (group?.kind !== 'group_creations') return 0;
@@ -154,7 +174,7 @@ function seedGroupThumbUrlsFromMeta(meta, creationId) {
 	const out = [];
 	const seen = new Set();
 	for (const row of ordered) {
-		const url = typeof row?.file_path === 'string' ? row.file_path.trim() : '';
+		const url = normalizeSeedMediaUrl(row?.file_path, creationId);
 		if (!url || seen.has(url)) continue;
 		seen.add(url);
 		out.push(url);
@@ -180,7 +200,7 @@ function seedGroupSourceEntries(seed) {
 		for (const row of ordered) {
 			if (!row || typeof row !== 'object') continue;
 			const id = Number(row.id);
-			const url = typeof row.file_path === 'string' ? row.file_path.trim() : '';
+			const url = normalizeSeedMediaUrl(row.thumbnail_url || row.file_path, seed?.id);
 			if (!(Number.isFinite(id) && id > 0) && !url) continue;
 			const sourceMeta = row.meta && typeof row.meta === 'object' ? row.meta : null;
 			fromMeta.push({
@@ -207,7 +227,7 @@ function seedGroupSourceEntries(seed) {
 		const url = rowWaiting
 			? ''
 			: (fromRow && fromRow.url) ||
-				(typeof thumbs[i] === 'string' ? thumbs[i].trim() : '') ||
+				normalizeSeedMediaUrl(thumbs[i], seed?.id) ||
 				(i === 0 && typeof seed?.image_url === 'string' ? seed.image_url.trim() : '') ||
 				(i === 0 && typeof seed?.thumbnail_url === 'string' ? seed.thumbnail_url.trim() : '');
 		out.push({
@@ -225,6 +245,7 @@ function seedGroupSectionHtml(seed) {
 	const esc = escapeSeedHtml;
 	const entries = seedGroupSourceEntries(seed);
 	if (!entries.length) return '';
+	const nsfw = Boolean(seed?.nsfw || seedMetaObject(seed)?.nsfw);
 	const isVideo = String(seed?.media_type || '').trim().toLowerCase() === 'video';
 	const noun = isVideo ? 'video' : 'image';
 	const subtitle = `${entries.length} ${noun}${entries.length === 1 ? '' : 's'}`;
@@ -270,7 +291,7 @@ function seedGroupSectionHtml(seed) {
 				? ` data-group-source-status="${esc(entry.status)}"`
 				: '';
 			return `<div class="creation-detail-group-slot">
-						<div class="creation-detail-group-thumb-wrap">
+						<div class="creation-detail-group-thumb-wrap${nsfw ? ' nsfw' : ''}">
 							<button type="button" class="creation-detail-group-item creation-detail-group-thumb${fallbackClass}${active}"${thumbAttr}${statusAttr}${aria}>
 								${inner}
 							</button>
@@ -408,7 +429,7 @@ function feedLikeItemFromLatestCommentRow(item) {
 		published: item.created_image_published,
 		created_at: item.created_image_created_at || null,
 		meta: item.created_image_meta && typeof item.created_image_meta === 'object' ? item.created_image_meta : null,
-		nsfw: Boolean(item.nsfw),
+		nsfw: Boolean(item.nsfw || meta?.nsfw),
 		status: 'completed',
 	};
 }
@@ -423,13 +444,13 @@ export function feedItemToCreationDetailSeed(item) {
 	const id = numId(item.created_image_id ?? item.id);
 	if (!id) return null;
 	const groupId = numId(item.group_id);
-	const imageUrl =
+	const imageUrl = normalizeSeedMediaUrl(
 		(typeof item.url === 'string' && item.url.trim()) ||
 		(typeof item.image_url === 'string' && item.image_url.trim()) ||
 		(typeof item.thumbnail_url === 'string' && item.thumbnail_url.trim()) ||
-		'';
+		'', id);
 	const thumb =
-		(typeof item.thumbnail_url === 'string' && item.thumbnail_url.trim()) || imageUrl;
+		normalizeSeedMediaUrl((typeof item.thumbnail_url === 'string' && item.thumbnail_url.trim()) || imageUrl, id);
 	const { text: title, untitled: titleUntitled } = seedDisplayTitle({
 		title: typeof item.title === 'string' ? item.title : '',
 		published: item.published,
@@ -643,8 +664,8 @@ export function creationDetailSeedFromClick(ev, creationId) {
 	if (!group_source_thumbs.length && src && group_source_count > 0) group_source_thumbs.push(src);
 	return {
 		id,
-		image_url: src,
-		thumbnail_url: src,
+		image_url: normalizeSeedMediaUrl(src, id),
+		thumbnail_url: normalizeSeedMediaUrl(src, id),
 		width: Number.isFinite(nw) && nw > 0 ? nw : 0,
 		height: Number.isFinite(nh) && nh > 0 ? nh : 0,
 		title,
@@ -658,7 +679,7 @@ export function creationDetailSeedFromClick(ev, creationId) {
 		media_type: mediaType,
 		comment_count,
 		group_source_count,
-		group_source_thumbs,
+		group_source_thumbs: group_source_thumbs.map((url) => normalizeSeedMediaUrl(url, id)),
 		user_id: userId,
 		status,
 		import_provider: importProvider,
@@ -673,9 +694,18 @@ export function writeCreationDetailSeed(seed) {
 	const id = numId(seed.id);
 	if (!id) return;
 	try {
+		const normalized = {
+			...seed,
+			id,
+			image_url: normalizeSeedMediaUrl(seed.image_url || seed.url, id),
+			thumbnail_url: normalizeSeedMediaUrl(seed.thumbnail_url || seed.image_url || seed.url, id),
+			group_source_thumbs: Array.isArray(seed.group_source_thumbs)
+				? seed.group_source_thumbs.map((url) => normalizeSeedMediaUrl(url, id))
+				: [],
+		};
 		sessionStorage.setItem(
 			CREATION_DETAIL_SEED_KEY,
-			JSON.stringify({ ...seed, id, cachedAt: Date.now() })
+			JSON.stringify({ ...normalized, cachedAt: Date.now() })
 		);
 	} catch {
 		// quota / private mode
@@ -696,7 +726,15 @@ export function readCreationDetailSeed(creationId) {
 		if (numId(o?.id) !== id) return null;
 		const age = Date.now() - Number(o.cachedAt || 0);
 		if (Number.isFinite(age) && age > 5 * 60 * 1000) return null;
-		return applyViewerComposerCacheToSeed(applyCreatorStripCacheToSeed(o));
+		const normalized = {
+			...o,
+			image_url: normalizeSeedMediaUrl(o.image_url || o.url, id),
+			thumbnail_url: normalizeSeedMediaUrl(o.thumbnail_url || o.image_url || o.url, id),
+			group_source_thumbs: Array.isArray(o.group_source_thumbs)
+				? o.group_source_thumbs.map((url) => normalizeSeedMediaUrl(url, id))
+				: [],
+		};
+		return applyViewerComposerCacheToSeed(applyCreatorStripCacheToSeed(normalized));
 	} catch {
 		return null;
 	}

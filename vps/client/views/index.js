@@ -2,11 +2,12 @@ import {UserProfileView} from './UserProfile/UserProfileView.js';
 import {ConnectionsView} from './Connections/ConnectionsView.js';
 import { StyleDetailView } from './StyleDetail/StyleDetailView.js';
 import { AudioClipDetailView } from './AudioClipDetail/AudioClipDetailView.js';
-import { mobileNavigationItems } from '../config/sidebar.js';
 import { renderCreationDetailView } from './CreationDetail/CreationDetailView.js';
 import { renderCreationsView } from './Creations/CreationsView.js';
 import { renderFileManagerView } from './FileManager/FileManagerView.js';
 import { mountMobileNavigationView } from './MobileNavigation/MobileNavigationView.js';
+import { mountMobileHeaderView } from './MobileHeader/MobileHeaderView.js';
+import { ChatRosterView } from './ChatRoster/ChatRosterView.js';
 import { mountSidebarView } from './Sidebar/SidebarView.js';
 import { FeedView } from './Feed/FeedView.js';
 import { ExploreView } from './Explore/ExploreView.js';
@@ -33,11 +34,9 @@ export const appViews = Object.freeze({
 	StyleDetail: StyleDetailView,
 	AudioClipDetail: AudioClipDetailView,
 	Sidebar: { mount: mountSidebarView },
-	MobileNavigation: {
-		mount({ outlet }) {
-			return mountMobileNavigationView({ outlet, navigationItems: mobileNavigationItems });
-		},
-	},
+	MobileNavigation: { mount: mountMobileNavigationView },
+	MobileHeader: { mount: mountMobileHeaderView },
+	ChatRoster: ChatRosterView,
 	Creations: {
 		mount({ outlet, services, actions, setHeaderMenu }) {
 			return cleanup(outlet, renderCreationsView({

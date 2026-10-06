@@ -53,6 +53,29 @@ export function renderFeedCardSkeleton() {
 	</div>`;
 }
 
+/** Mobile Feed loading card copied from WWW's global feed skeleton. */
+export function renderMobileFeedCardSkeleton() {
+	return `<div class="skeleton-feed-card skeleton-feed-card--mobile-www" aria-hidden="true">
+		<div class="skeleton-feed-card-image"></div>
+		<div class="skeleton-feed-card-footer">
+			${skeletonCircle(36)}
+			<div class="skeleton-feed-card-content">
+				${skeletonLine('72%', 'skeleton-line--short')}
+				${skeletonLine('62%', 'skeleton-line--medium')}
+			</div>
+		</div>
+		<div class="skeleton-feed-card-actions">
+			<div class="skeleton-feed-card-actions-primary">${skeletonPill('72px')}${skeletonPill('64px')}${skeletonPill('88px')}</div>
+			${skeletonCircle(34)}
+		</div>
+	</div>`;
+}
+
+export function renderMobileFeedCardsSkeleton(count = 4) {
+	const n = Math.max(1, Math.min(10, Number(count) || 4));
+	return Array.from({ length: n }, () => renderMobileFeedCardSkeleton()).join('');
+}
+
 /**
  * Image-only feed tile skeleton (matches `feed-card--image-only` browse lanes).
  * @returns {string}
