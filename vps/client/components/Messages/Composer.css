@@ -26,6 +26,7 @@
 .beta-outlet__composer .chat-page-composer-attachment-error { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 4px; color: var(--error-text); background: color-mix(in srgb, var(--error-bg) 75%, transparent); font-size: .625rem; line-height: 1.2; text-align: center; }
 .beta-outlet__composer .chat-page-composer-upload-error { flex: 0 0 auto; margin: 0; padding: 5px 10px 7px; color: var(--error-text); font-size: .8125rem; line-height: 1.3; }
 .beta-outlet__composer .chat-page-composer-attach-inline { color: var(--text-muted); }
+.beta-outlet__composer .chat-page-composer-attach-inline-icon { display: block; width: 22px; height: 22px; }
 .beta-outlet__composer .chat-page-composer-attach-inline:hover:not(:disabled) { color: var(--text); background: color-mix(in srgb, var(--accent) 10%, transparent); }
 .beta-outlet__composer .chat-page-composer-attach-inline:focus-visible,
 .beta-outlet__composer .chat-page-send-btn:focus-visible { outline: none; box-shadow: 0 0 0 1px color-mix(in srgb, var(--focus) 55%, transparent); }

@@ -53,13 +53,15 @@ export const appViews = Object.freeze({
 		},
 	},
 	FileManager: {
-		mount({ outlet, services, setHeaderMenu }) {
+		mount({ outlet, services, actions, setHeaderMenu, setHeaderAccessories }) {
 			return cleanup(outlet, renderFileManagerView({
 				outlet,
 				filesApi: services.providers.files.api,
 				filesQuery: services.providers.files.query,
 				onUnauthorized: services.session.redirectToLogin,
 				setHeaderMenu,
+				setHeaderAccessories,
+				actions,
 			}));
 		},
 	},

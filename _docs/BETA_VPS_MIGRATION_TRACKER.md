@@ -3,13 +3,18 @@
 Current outstanding migration scope. Update this checklist as items are verified; dated decisions and observations remain in the [cutover log](BETA_CUTOVER_LOG.md). Governing migration and cutover standards live in the [migration guidance](BETA_VPS_SPA_MIGRATION_SOURCE_OF_TRUTH.md).
 
 ## Remaining product work
+
 The remaining product and cutover scope is listed below. Dated implementation details and validation remain in the [cutover log](BETA_CUTOVER_LOG.md).
 
 ## Product follow-ups
 
+- [ ] Bulk operations from creations list
+- [ ] Ability to delete a creation
+- [ ] Command+K to bring up a chooser(?) like we have in www
 - [ ] Serve the pricing view inside the app.
 - [ ] Finish the sidebar plus controls and gear/settings control.
 - [ ] Help page title shows "Help - Help - parascene" with redundant title which is not consistent with app title separators eg. "Creation · parascene beta"; and noting "beta" in title is not needed
+- [ ] generations with the composer don't work right like generations from create form; they mess up on the lifecycle in creations list: queued, generating, done
 
 ## Public pages and discoverability
 

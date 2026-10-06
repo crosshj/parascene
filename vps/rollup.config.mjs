@@ -134,6 +134,7 @@ function emitImportedCss() {
 
 export default {
 	onwarn: sharedOnWarn,
+	watch: { clearScreen: false },
 	input: path.join(vpsDir, "client", "app.js"),
 	output: {
 		dir: buildDir,

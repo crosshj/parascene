@@ -857,6 +857,7 @@ export function openImagePickerModal({ onSelect, modalParent, allowAnyFile = fal
 	const dispose = refs.modalOverlay.__disposeCreate;
 	refs.modalOverlay.__disposeCreate = () => { dispose?.(); parent.remove(); };
 	openModal();
+	return refs.modalOverlay.__disposeCreate;
 }
 
 // --- Handler resolution ---

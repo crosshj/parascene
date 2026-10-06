@@ -25,6 +25,23 @@ test('Basic submits its first image, preserving the retained list and clearing o
  assert.deepEqual(draft.read().inputImages, ['/a.png', '/b.png', '/c.png']);
  assert.equal(draft.read().fieldValues.seed, 17); assert.equal(draft.read().fieldValues.prompt, '');
 });
+test('a file-only Mutate source follows the pasted-image upload path before new-creation submit', async () => {
+ let uploadedFile;
+ const { workflow, draft, sent } = setup({ upload: async file => {
+  uploadedFile = file;
+  return 'https://cdn.parascene.com/s/prepared-input.png';
+ } });
+ workflow.beginCreate();
+ const file = new File(['image bytes'], 'my-file.png', { type: 'image/png' });
+ await workflow.selectImages(file, { first: true });
+ workflow.enterMode({ mode: 'image-edit' });
+ workflow.edit({ fieldValues: { prompt: 'Transform this uploaded file' } });
+ await workflow.submit({ mode: 'image-edit' });
+ assert.equal(uploadedFile, file);
+ assert.equal(draft.read().inputImages[0], 'https://cdn.parascene.com/s/prepared-input.png');
+ assert.equal(sent[0].args.image_url, 'https://cdn.parascene.com/s/prepared-input.png');
+ assert.equal(sent[0].args.prompt, 'Transform this uploaded file');
+});
 test('Advanced submits schema fields, including false/zero and the full ordered image list', async () => {
  const { workflow, sent } = setup(); workflow.edit({ fieldValues: { flag: false, seed: 0 } });
  await workflow.submit({ mode: 'advanced', fields: { prompt: {}, seed: {}, flag: {}, custom: { type: 'image_url_array' } } });

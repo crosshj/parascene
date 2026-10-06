@@ -2,9 +2,10 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const vpsDir = path.dirname(fileURLToPath(import.meta.url));
+const scriptsDir = path.dirname(fileURLToPath(import.meta.url));
+const vpsDir = path.join(scriptsDir, "..");
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
-const nodemonCommand = path.join(vpsDir, "..", "node_modules", ".bin", process.platform === "win32" ? "nodemon.cmd" : "nodemon");
+const nodemonScript = path.join(vpsDir, "node_modules", "nodemon", "bin", "nodemon.js");
 const children = [];
 
 console.log(`[dev] starting beta at http://localhost:${process.env.PORT || 3000}/`);
@@ -12,7 +13,7 @@ console.log("[dev] Rollup and Express output will follow; refresh the browser af
 
 function start(command, args, label) {
 	const child = spawn(command, args, {
-		cwd: path.join(vpsDir, ".."),
+		cwd: vpsDir,
 		env: { ...process.env, NODE_ENV: process.env.NODE_ENV || "development" },
 		stdio: "inherit"
 	});
@@ -27,7 +28,7 @@ function start(command, args, label) {
 }
 
 start(npmCommand, ["run", "build", "--", "--watch"], "Rollup watch");
-start(nodemonCommand, ["--watch", "server.js", "--watch", "routes", "--watch", "db", "--watch", "services", "server.js"], "Express server");
+start(process.execPath, [nodemonScript, "--watch", "server.js", "--watch", "routes", "--watch", "db", "--watch", "services", "server.js"], "Express server");
 
 function stop() {
 	for (const child of children) {

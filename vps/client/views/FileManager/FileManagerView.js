@@ -5,6 +5,7 @@ import './FileManagerView.css';
 import { createMediaLightbox } from '../../components/MediaLightbox/MediaLightbox.js';
 import { creationTypeBadgeMarkup } from '../../shared/creationGrid.js';
 import { gridSkeletonMarkup } from '../../components/CreationGrid/skeleton.js';
+import { openImagePickerModal } from '../../components/ProviderFields/ProviderFields.js';
 import '../../components/CreationGrid/CreationGrid.css';
 
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
@@ -31,12 +32,31 @@ function fileContentUrl(file, filesApi) {
 	return file.public_url || filesApi.url(file.content_path);
 }
 
+function providerImageUrl(publicUrl) {
+	try {
+		const url = new URL(publicUrl, window.location.href);
+		// My Files signed-file links are served by the CDN host. Older file records
+		// can carry the share host, where /s/ is handled by creation-share routes.
+		if (url.hostname.toLowerCase() === 'sh.parascene.com') url.hostname = 'cdn.parascene.com';
+		return url.href;
+	} catch {
+		return '';
+	}
+}
+
+function normalizeFileRecord(file) {
+	if (!file || typeof file !== 'object') return file;
+	const publicUrl = providerImageUrl(file.public_url);
+	return publicUrl && publicUrl !== file.public_url ? { ...file, public_url: publicUrl } : file;
+}
+
 function createFileCard(file, options) {
  const card = document.createElement('button'); card.type = 'button'; card.className = 'file-card creation-grid__card';
  card.addEventListener('click', () => options.onViewFile(card.__fileRecord));
  updateFileCard(card, file, options); return card;
 }
 function updateFileCard(card, file, { filesApi }) {
+ file = normalizeFileRecord(file);
  card.__fileRecord = file; card.setAttribute('aria-label', `View ${file.display_name || file.id}`);
  const key = `${file.content_type}|${fileContentUrl(file, filesApi)}|${artworkUrlFor(file.public_url)}`;
  if (card.dataset.previewKey === key) return; card.dataset.previewKey = key;
@@ -51,38 +71,52 @@ function updateFileCard(card, file, { filesApi }) {
  card.replaceChildren(preview);
 }
 
-export function renderFileManagerView({ outlet, filesApi, filesQuery, onUnauthorized, setHeaderMenu }) {
+export function renderFileManagerView({ outlet, filesApi, filesQuery, onUnauthorized, setHeaderMenu, setHeaderAccessories, actions }) {
 	const controller = new AbortController();
 	const root = mountTemplate(outlet, template);
 	const refs = bindRefs(root);
 	document.title = 'My Files · parascene beta';
- const { dialog, dialogTitle, dismiss, fileInput, grid, loadMore, message, progress, status } = refs;
- const lightbox = createMediaLightbox();
- const cardOptions = { filesApi, onViewFile: viewFile };
+	const { dialog, dialogTitle, dismiss, grid, loadMore, message, progress, status } = refs;
+	const lightbox = createMediaLightbox();
+	const cardOptions = { filesApi, onViewFile: viewFile };
+	setHeaderAccessories?.([
+		{ kind: 'pin', label: 'Upload', onClick: openUploadPicker },
+	]);
 	setHeaderMenu?.({
 		label: 'My Files',
-		items: [
-			{ label: 'Upload file', icon: 'files', action: 'upload' },
-			{ label: 'Refresh', action: 'refresh' }
-		],
-		onSelect: ({ action }) => {
-			if (action === 'upload' && !fileInput.disabled) fileInput.click();
-			if (action === 'refresh' && !fileInput.disabled) void load();
-		}
+		items: [{ label: 'Refresh', action: 'refresh' }],
+		onSelect: ({ action }) => { if (action === 'refresh') void load(); }
 	});
 	let nextOffset = null;
 	let destroyed = false;
 	let dragDepth = 0;
 	let busy = false;
 	let loadingMore = false;
+	let disposeUploadPicker = null;
 	const uploadedNames = new Map();
 
  function viewFile(file) {
-  lightbox.open({ title: file.display_name || file.id, metadata: `${formatFileSize(file.size)} · ${formatDate(file.created_at || file.updated_at)} · ${file.content_type || 'application/octet-stream'}`, kind: mediaKind(file.content_type), url: fileContentUrl(file, filesApi), artwork: artworkUrlFor(file.public_url), actions: [
+  file = normalizeFileRecord(file);
+  const kind = mediaKind(file.content_type);
+  const mutateUrl = kind === 'image' ? providerImageUrl(file.public_url) : '';
+  const actionsList = [
+   ...(mutateUrl ? [{ id: 'mutate', label: 'Mutate', run: async () => {
+    try { sessionStorage.setItem('parascene:file-mutate-image:v1', JSON.stringify({
+     url: mutateUrl,
+     filename: file.display_name || file.id || 'image.png',
+     contentType: file.content_type || 'image/png',
+     savedAt: Date.now(),
+    })); }
+    catch { throw new Error('Unable to prepare this image for editing.'); }
+    try { await actions?.navigate('/create'); }
+    catch (error) { sessionStorage.removeItem('parascene:file-mutate-image:v1'); throw error; }
+    return { close: true };
+   } }] : []),
    { id: 'open', label: 'Open file', href: fileContentUrl(file, filesApi) },
-   { id: 'copy', label: 'Copy link', disabled: !file.public_url, run: async () => { if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(file.public_url); else window.prompt('Copy this public link', file.public_url); return 'Link copied'; } },
+   { id: 'copy', label: 'Copy link', disabled: !file.public_url, run: async () => { if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(providerImageUrl(file.public_url)); else window.prompt('Copy this public link', providerImageUrl(file.public_url)); return 'Link copied'; } },
    { id: 'delete', label: 'Delete', run: async () => { if (await deleteFile(file)) return { close: true }; } },
-  ] });
+  ];
+  lightbox.open({ title: file.display_name || file.id, metadata: `${formatFileSize(file.size)} · ${formatDate(file.created_at || file.updated_at)} · ${file.content_type || 'application/octet-stream'}`, kind, url: fileContentUrl(file, filesApi), artwork: artworkUrlFor(file.public_url), actions: actionsList });
  }
  function showSkeleton() { grid.innerHTML = gridSkeletonMarkup(); grid.hidden = false; grid.setAttribute('aria-busy', 'true'); status.hidden = true; }
 
@@ -92,6 +126,7 @@ export function renderFileManagerView({ outlet, filesApi, filesQuery, onUnauthor
 		status.textContent = 'No files are stored in your personal folder yet.';
 	}
 	function insertFile(file) {
+		file = normalizeFileRecord(file);
 		const displayFile = !file.display_name && uploadedNames.has(file.id) ? { ...file, display_name: uploadedNames.get(file.id) } : file;
 		const current = filesQuery?.data;
 		if (current && Array.isArray(current.files)) {
@@ -108,7 +143,19 @@ export function renderFileManagerView({ outlet, filesApi, filesQuery, onUnauthor
 
 	function setBusy(value) {
 		busy = value;
-		fileInput.disabled = value;
+	}
+	function openUploadPicker() {
+		if (busy || destroyed) return;
+		disposeUploadPicker = openImagePickerModal({
+			modalParent: document.body,
+			allowAnyFile: true,
+			onSelect(value) {
+				disposeUploadPicker = null;
+				if (value instanceof File) return uploadFiles([value]);
+				if (Array.isArray(value)) return uploadFiles(value);
+				showUploadError('My Files stores uploaded files. Choose a file or paste an image from your clipboard.');
+			},
+		});
 	}
 	function showDialog() { if (!dialog.open) dialog.showModal(); }
 	function showUploadError(text) {
@@ -127,7 +174,8 @@ export function renderFileManagerView({ outlet, filesApi, filesQuery, onUnauthor
 		const existing = new Map([...grid.children].map((card) => [card.dataset.fileId, card]));
 		let targetIndex = 0;
 		for (const file of files) {
-			const displayFile = !file.display_name && uploadedNames.has(file.id) ? { ...file, display_name: uploadedNames.get(file.id) } : file;
+			const normalizedFile = normalizeFileRecord(file);
+			const displayFile = !normalizedFile.display_name && uploadedNames.has(normalizedFile.id) ? { ...normalizedFile, display_name: uploadedNames.get(normalizedFile.id) } : normalizedFile;
 			const key = String(displayFile.id);
 			let card = existing.get(key);
 			if (!card) {
@@ -210,7 +258,7 @@ export function renderFileManagerView({ outlet, filesApi, filesQuery, onUnauthor
 		catch (error) { if (error?.name === 'AbortError') return; if (error?.status === 401) return onUnauthorized(); throw error; }
 	}
 	async function uploadFile(file) {
-		if (file.size > MAX_UPLOAD_BYTES) { showUploadError('This file exceeds the 50 MB upload limit.'); fileInput.value = ''; return; }
+		if (file.size > MAX_UPLOAD_BYTES) { showUploadError('This file exceeds the 50 MB upload limit.'); return; }
 		setBusy(true); dialog.classList.remove('is-error'); dialogTitle.textContent = 'Uploading file'; dismiss.hidden = true; progress.hidden = false; progress.value = 0; message.textContent = `Uploading ${file.name}…`; showDialog();
 		try {
 			const result = await filesApi.upload(file, { signal: controller.signal, onProgress(loaded, total) { progress.value = total ? Math.round((loaded / total) * 100) : 0; message.textContent = `Uploading ${file.name} — ${formatFileSize(loaded)} of ${formatFileSize(total)}`; } });
@@ -221,13 +269,12 @@ export function renderFileManagerView({ outlet, filesApi, filesQuery, onUnauthor
 			}
 			progress.value = 100; dialogTitle.textContent = 'Upload complete'; message.textContent = `${file.name} uploaded successfully.`; dismiss.hidden = false;
 		} catch (error) { if (error?.name === 'AbortError') return; if (error?.status === 401) return onUnauthorized(); showUploadError(error?.message || 'Unable to upload the file.'); }
-		finally { setBusy(false); fileInput.value = ''; }
+		finally { setBusy(false); }
 	}
 	loadMore.addEventListener('click', () => load({ append: true }));
 	dismiss.addEventListener('click', () => dialog.close());
 	dialog.addEventListener('cancel', (event) => { if (busy) event.preventDefault(); });
 	async function uploadFiles(files) { if (busy || destroyed) return; for (const file of files) { if (destroyed) break; await uploadFile(file); } }
-	fileInput.addEventListener('change', () => { void uploadFiles([...fileInput.files]); });
 	root.addEventListener('dragenter', event => { if (!event.dataTransfer?.types.includes('Files')) return; event.preventDefault(); dragDepth++; root.classList.add('is-dragging'); });
 	root.addEventListener('dragover', event => { if (event.dataTransfer?.types.includes('Files')) event.preventDefault(); });
 	root.addEventListener('dragleave', () => { if (--dragDepth <= 0) root.classList.remove('is-dragging'); });
@@ -239,6 +286,10 @@ export function renderFileManagerView({ outlet, filesApi, filesQuery, onUnauthor
 	else { showSkeleton(); void filesApi.list({ signal: controller.signal }).then((data) => renderSnapshot(data)).catch((error) => { if (!destroyed && error?.name !== 'AbortError') { grid.querySelectorAll('.skeleton-grid-tile').forEach(tile => tile.remove()); grid.removeAttribute('aria-busy'); status.hidden = false; status.classList.add('is-error'); status.textContent = error?.message || 'Unable to load your files.'; } }); }
 	return () => {
 		destroyed = true;
+		disposeUploadPicker?.();
+		disposeUploadPicker = null;
+		setHeaderAccessories?.([]);
+		setHeaderMenu?.();
 		loadObserver?.disconnect();
 		if (dialog.open) dialog.close();
   lightbox.destroy();

@@ -14,8 +14,24 @@ export function createCreateController({ root, creationId, markup, providers, ac
  let handingOff = false;
  const workflowHref = () => location.pathname + location.search;
  const continuing = workflow.consumeEditorTransition(workflowHref());
+ let fileMutateHandoff = null;
  if (creationId) workflow.beginEditing({ creationId, href: workflowHref() });
- else if (!continuing) workflow.beginCreate();
+ else if (!continuing) {
+  workflow.beginCreate();
+  try {
+   const key = 'parascene:file-mutate-image:v1';
+   const raw = sessionStorage.getItem(key);
+   if (raw) {
+    sessionStorage.removeItem(key);
+    const handoff = JSON.parse(raw);
+    const age = Date.now() - Number(handoff?.savedAt);
+    const url = new URL(handoff?.url, location.origin);
+    if (age >= 0 && age < 60_000 && /^https?:$/.test(url.protocol) && String(handoff?.contentType || '').startsWith('image/')) {
+     fileMutateHandoff = { url: url.href, filename: String(handoff.filename || 'image.png'), contentType: String(handoff.contentType) };
+    }
+   }
+  } catch { try { sessionStorage.removeItem('parascene:file-mutate-image:v1'); } catch {} }
+ }
  const lifetime = createWorkflowLifetime();
  lifetime.listen(document, "credits-updated", event => {
   const query = providers.credits.query;
@@ -27,6 +43,21 @@ export function createCreateController({ root, creationId, markup, providers, ac
  let unmount = () => {};
  let modeLifetime;
  let currentMode;
+ async function prepareFileMutateHandoff() {
+  if (!fileMutateHandoff) return;
+  const handoff = fileMutateHandoff;
+  fileMutateHandoff = null;
+  const response = await fetch(handoff.url, { signal: lifetime.signal, credentials: 'omit' });
+  if (!response.ok) throw new Error(`Could not read the selected file (${response.status}).`);
+  const blob = await response.blob();
+  const contentType = String(blob.type || handoff.contentType).toLowerCase();
+  if (!contentType.startsWith('image/')) throw new Error('The selected file is not a supported image.');
+  const file = new File([blob], handoff.filename, { type: contentType });
+  const saved = await workflow.selectImages(file, { first: true, signal: lifetime.signal });
+  if (!saved || !lifetime.active) return;
+  workflow.enterMode({ mode: 'image-edit' });
+  localStorage.setItem('create_page_tab', 'image-edit');
+ }
  const readMutateSourceKey = () => { const params = new URLSearchParams(location.search); return JSON.stringify([params.get("source_id"), params.get("group_of")]); };
  let mutateSourceKey = readMutateSourceKey();
  let generation = 0;
@@ -97,7 +128,7 @@ export function createCreateController({ root, creationId, markup, providers, ac
   return element.ready || Promise.resolve();
  }
  const readyGeneration = generation + 1;
- const ready = mountMode().catch(error => { if (alive && generation === readyGeneration) renderError(error); });
+ const ready = prepareFileMutateHandoff().then(() => mountMode()).catch(error => { if (alive && generation === readyGeneration) renderError(error); });
  return {
   ready,
   update() {

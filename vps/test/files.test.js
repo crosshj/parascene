@@ -12,6 +12,7 @@ import { createFilesCors } from "../routes/middleware/filesCors.js";
 import { mayDisplayInline, normalizeFileId, serializeFile } from "../routes/utils/files.js";
 import { createSizeLimitedStream, MAX_UPLOAD_BYTES, normalizeOriginalFilename, uploadContentType } from "../routes/utils/uploads.js";
 import { createPublicFileToken } from "../routes/utils/publicFileLinks.js";
+import { filesOriginForRequest } from "../routes/utils/origins.js";
 
 async function withServer(app, run) {
 	const server = http.createServer(app);
@@ -57,6 +58,17 @@ test("normalizes only one safe storage basename", () => {
 	assert.equal(normalizeFileId("misc_123_abc.pdf"), "misc_123_abc.pdf");
 	for (const invalid of ["", ".", "..", "../other", "folder/file", "folder\\file", "x..y", "<file>"]) {
 		assert.equal(normalizeFileId(invalid), null);
+	}
+});
+
+test("signed file links use CDN host when legacy FILES_ORIGIN points at share host", () => {
+	const previous = process.env.FILES_ORIGIN;
+	process.env.FILES_ORIGIN = "https://sh.parascene.com";
+	try {
+		assert.equal(filesOriginForRequest({ hostname: "beta.parascene.com" }), "https://cdn.parascene.com");
+	} finally {
+		if (previous === undefined) delete process.env.FILES_ORIGIN;
+		else process.env.FILES_ORIGIN = previous;
 	}
 });
 

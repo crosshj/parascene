@@ -170,6 +170,7 @@ export function createImagePickerModalDom(linkPanelInputClassName) {
 		modalOverlay,
 		modal,
 		modalHeader,
+		modalTitle,
 		modalClose,
 		modalBody,
 		methodButtons,
