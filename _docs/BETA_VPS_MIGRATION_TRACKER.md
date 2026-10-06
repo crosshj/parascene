@@ -8,6 +8,8 @@ The remaining product and cutover scope is listed below. Dated implementation de
 
 ## Product follow-ups
 
+- [ ] ability to simultaneaously install both beta and prod versions of app
+- [ ] Presence indicators not working in sidebar
 - [ ] Bulk operations from creations list
 - [ ] Ability to delete a creation
 - [ ] command-palette like we have in www, complete with keyboard shortcuts
@@ -15,6 +17,8 @@ The remaining product and cutover scope is listed below. Dated implementation de
 - [ ] Finish the sidebar plus controls and gear/settings control.
 - [ ] Help page title shows "Help - Help - parascene" with redundant title which is not consistent with app title separators eg. "Creation · parascene beta"; and noting "beta" in title is not needed
 - [ ] generations with the composer don't work right like generations from create form; they mess up on the lifecycle in creations list: queued, generating, done
+- [ ] make sure NSFW settings work as they do in WWW, this means refreshing images that are blurred serverside when switching to unblurred
+- [ ] don't show when "Untitled" on mobile vertical video cards
 
 ## Public pages and discoverability
 

@@ -473,42 +473,26 @@ const CREATION_COMMENTS_TOOLBAR_HTML = `<div class="comments-toolbar">
 </div>`;
 
 /** Static skeleton for detail content and SSR first paint. */
-const CREATION_DETAIL_CONTENT_SKELETON_HTML = `<div class="creation-detail-skeleton" aria-label="Loading" aria-busy="true">
+const CREATION_DETAIL_CONTENT_SKELETON_HTML = `<div class="creation-detail-skeleton" role="status" aria-label="Loading creation" aria-busy="true">
 	<div class="creation-detail-title-row">
-		<div class="skeleton skeleton-line" style="width: 72%; max-width: 320px;"></div>
+		<div class="skeleton skeleton-line" style="width:72%;max-width:320px;height:28px;border-radius:6px"></div>
 	</div>
 	<div class="creation-detail-action-strip">
 		<div class="creation-detail-action-strip-scroll">
 			<div class="creation-detail-action-strip-avatar"><span class="skeleton skeleton-circle" style="width: 40px; height: 40px;" aria-hidden="true"></span></div>
 			<div class="creation-detail-action-strip-creator-info">
-				<div class="skeleton skeleton-line skeleton-line--short" style="margin-bottom: 4px;"></div>
-				<div class="skeleton skeleton-line skeleton-line--medium"></div>
+				<div class="skeleton skeleton-line skeleton-line--short" style="width:96px;margin-bottom:6px"></div>
+				<div class="skeleton skeleton-line skeleton-line--medium" style="width:72px"></div>
 			</div>
-			<button type="button" class="creation-detail-action-strip-pill is-like-loading" data-like-button aria-label="Loading likes" aria-busy="true" disabled>
-				${creationLikeSpinnerHtml}
-				<span class="skeleton skeleton-line" style="width: 20px; height: 1em;" aria-hidden="true"></span>
-			</button>
+			<span class="skeleton skeleton-pill" style="width:72px;height:34px" aria-hidden="true"></span>
 			<span class="skeleton skeleton-pill" style="width: 64px; height: 34px;" aria-hidden="true"></span>
 			<span class="skeleton skeleton-pill" style="width: 88px; height: 34px;" aria-hidden="true"></span>
 			<span class="skeleton skeleton-circle" style="width: 34px; height: 34px;" aria-hidden="true"></span>
 		</div>
 	</div>
-	<div class="creation-detail-skeleton-description" style="margin-bottom: 40px;">
+	<div class="creation-detail-skeleton-description" aria-hidden="true">
 		<span class="skeleton skeleton-line" style="display: block; margin-bottom: 8px;"></span>
 		<span class="skeleton skeleton-line" style="display: block; margin-bottom: 12px; width: 95%;"></span>
-		<span class="skeleton skeleton-line skeleton-line--medium" style="display: block; margin-bottom: 12px;"></span>
-	</div>
-	<div data-creation-comments-host>
-	<div class="comment-input" data-comment-input-skeleton>
-		<div class="comment-avatar"><span class="skeleton skeleton-circle" style="width: 32px; height: 32px;" aria-hidden="true"></span></div>
-		<div class="comment-input-body">
-			<span class="skeleton skeleton-line" style="display: block; height: 40px; border-radius: 8px;"></span>
-		</div>
-	</div>
-	<div class="creation-detail-comments-section" data-comments-section>
-	${CREATION_COMMENTS_TOOLBAR_HTML}
-	<div class="comment-list" data-comment-list>${CREATION_COMMENTS_LIST_SKELETON_HTML}</div>
-	</div>
 	</div>
 </div>`;
 
@@ -1544,44 +1528,6 @@ function renderCreationDetailMoreMenu(menuData, escapeFn) {
 
 /** Skeleton placeholder for creation-detail-info while content is loading. Mirrors the loaded layout for a smooth transition. */
 function renderCreationDetailSkeleton() {
-	if (typeof skeletonCircle === 'function') {
-		return html`
-<div class="creation-detail-skeleton" aria-label="Loading" aria-busy="true">
-	<div class="creation-detail-title-row">
-		<div class="skeleton skeleton-line" style="width: 72%; max-width: 320px;"></div>
-	</div>
-	<div class="creation-detail-action-strip">
-		<div class="creation-detail-action-strip-scroll">
-			<div class="creation-detail-action-strip-avatar">${skeletonCircle(40)}</div>
-			<div class="creation-detail-action-strip-creator-info">
-				<div class="skeleton skeleton-line skeleton-line--short" style="margin-bottom: 4px;"></div>
-				<div class="skeleton skeleton-line skeleton-line--medium"></div>
-			</div>
-			${skeletonPill('72px')}
-			${skeletonPill('64px')}
-			${skeletonPill('88px')}
-			<span class="skeleton skeleton-circle" style="width: 34px; height: 34px;"></span>
-		</div>
-	</div>
-	<div class="creation-detail-skeleton-description" style="margin-bottom: 40px;">
-		<span class="skeleton skeleton-line" style="display: block; margin-bottom: 8px;"></span>
-		<span class="skeleton skeleton-line" style="display: block; margin-bottom: 12px; width: 95%;"></span>
-		<span class="skeleton skeleton-line skeleton-line--medium" style="display: block; margin-bottom: 12px;"></span>
-	</div>
-	<div data-creation-comments-host>
-	<div class="comment-input" data-comment-input-skeleton>
-		<div class="comment-avatar">${skeletonCircle(32)}</div>
-		<div class="comment-input-body">
-			<span class="skeleton skeleton-line" style="display: block; height: 40px; border-radius: 8px;"></span>
-		</div>
-	</div>
-	<div class="creation-detail-comments-section" data-comments-section>
-	${CREATION_COMMENTS_TOOLBAR_HTML}
-	<div class="comment-list" data-comment-list>${CREATION_COMMENTS_LIST_SKELETON_HTML}</div>
-	</div>
-	</div>
-</div>`;
-	}
 	return CREATION_DETAIL_CONTENT_SKELETON_HTML;
 }
 

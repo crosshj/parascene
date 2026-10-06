@@ -1044,6 +1044,10 @@ body.view-nsfw .creation-detail-image-wrapper.nsfw::after {
 	margin-bottom: 16px;
 }
 
+.creation-detail-skeleton .creation-detail-action-strip-scroll > .skeleton {
+	flex-shrink: 0;
+}
+
 .creation-detail-skeleton-description {
 	margin-top: 4px;
 	margin-bottom: 20px;
