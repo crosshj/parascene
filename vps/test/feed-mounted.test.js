@@ -2,6 +2,40 @@ import test from 'node:test';import assert from 'node:assert/strict';import fs f
 async function harness(url,fetcher){const dom=new JSDOM('<div class="beta-outlet__scroll"><div id="outlet"></div></div>',{url:'http://localhost'+url,pretendToBeVisual:true}),w=dom.window;w.HTMLElement.prototype.scrollTo=function(){};const observers=[];class Observer{constructor(callback){this.callback=callback;this.disconnected=false;observers.push(this)}observe(){}unobserve(){}disconnect(){this.disconnected=true}}w.matchMedia=()=>({matches:false,addEventListener(){},removeEventListener(){}});w.HTMLMediaElement.prototype.play=async function(){};w.HTMLMediaElement.prototype.pause=function(){};w.HTMLMediaElement.prototype.load=function(){};w.HTMLDialogElement.prototype.showModal=function(){this.open=true};w.HTMLDialogElement.prototype.close=function(){this.open=false};const names=['document','Document','HTMLElement','HTMLDivElement','HTMLInputElement','HTMLTextAreaElement','HTMLSelectElement','HTMLButtonElement','HTMLAnchorElement','HTMLImageElement','HTMLTemplateElement','HTMLFormElement','HTMLMediaElement','HTMLAudioElement','HTMLVideoElement','Element','SVGElement','Node','Image','File','FormData','Event','CustomEvent','DOMException','AbortController','AbortSignal','customElements','localStorage','sessionStorage','navigator','location','MutationObserver'];const context=vm.createContext({...Object.fromEntries(names.map(n=>[n,w[n]])),window:w,innerWidth:w.innerWidth,innerHeight:w.innerHeight,matchMedia:w.matchMedia,console,URL,URLSearchParams,CSS:{escape:v=>v},getComputedStyle:w.getComputedStyle.bind(w),IntersectionObserver:Observer,ResizeObserver:Observer,requestAnimationFrame:w.requestAnimationFrame.bind(w),cancelAnimationFrame:w.cancelAnimationFrame.bind(w),setTimeout,clearTimeout,setInterval:w.setInterval.bind(w),clearInterval:w.clearInterval.bind(w),queueMicrotask,fetch:fetcher,alert(){},confirm:()=>true});const modules=new Map();function module(file){file=path.resolve(file);if(modules.has(file))return modules.get(file);let code=fs.readFileSync(file,'utf8');if(file.endsWith('.css'))code='export default {}';if(file.endsWith('.html'))code='export default '+JSON.stringify(code);const mod=new vm.SourceTextModule(code,{identifier:file,context});modules.set(file,mod);return mod}async function load(file){const mod=module(path.resolve('client',file));if(mod.status==='unlinked')await mod.link((name,parent)=>module(path.resolve(path.dirname(parent.identifier),name)));if(mod.status!=='evaluated')await mod.evaluate();return mod.namespace}const navigations=[],actions={navigate:(...args)=>navigations.push(args),dismissOverlay(){}},services={session:{user:{id:1,role:'consumer',meta:{}},redirectToLogin(){throw Error('Unexpected auth redirect')},refresh:async()=>{}},providers:{}};const searchComposer=(await load('components/SearchComposer/SearchComposer.js')).createSearchComposerElement();w.document.body.append(searchComposer);return {w,load,searchComposer,outlet:w.document.getElementById('outlet'),actions,services,navigations,observers,close:()=>dom.window.close()}}
 const tick=()=>new Promise(resolve=>setImmediate(resolve)),response=data=>new Response(JSON.stringify(data),{headers:{"content-type":"application/json"}});
 
+test('Creations metadata updates retain image visibility and request state', { skip: !vm.SourceTextModule }, async () => {
+ const h = await harness('/creations', async () => response({}));
+ let dispose;
+ try {
+  const { renderCreationsView } = await h.load('views/Creations/CreationsView.js');
+  let publish;
+  const item = { id: 32261, title: 'This Moment', url: '/api/creations/media/one.png', media_type: 'image', user_id: 26, published: false };
+  const query = { subscribe(callback) { publish = callback; return () => {}; }, async loadIfNeeded() {} };
+  dispose = renderCreationsView({ outlet: h.outlet, creationsQuery: query });
+  const update = (row) => publish({ data: { creations: [row], has_more: false } });
+  update(item);
+  const media = h.outlet.querySelector('.feed-card-image');
+  const image = media.querySelector('img');
+  assert.ok(image.getAttribute('src'));
+  assert.ok(media.classList.contains('loading'));
+  update({ ...item, title: 'Updated title' });
+  assert.equal(h.outlet.querySelector('.feed-card-image'), media);
+  assert.ok(media.classList.contains('loading'));
+  image.dispatchEvent(new h.w.Event('load'));
+  const loadedUrl = media.dataset.bgLoadedUrl;
+  assert.ok(loadedUrl);
+  update({ ...item, published: true });
+  assert.equal(h.outlet.querySelector('.feed-card-img'), image);
+  assert.equal(media.dataset.bgLoadedUrl, loadedUrl);
+  assert.ok(media.classList.contains('loaded'), 'publication updates must keep the image visible');
+  assert.ok(media.querySelector('.creation-published-badge'));
+  update({ ...item, url: '/api/creations/media/two.png' });
+  const replacement = h.outlet.querySelector('.feed-card-image');
+  assert.notEqual(replacement, media);
+  assert.ok(replacement.classList.contains('loading'));
+  assert.equal(replacement.classList.contains('loaded'), false);
+ } finally { dispose?.(); h.close(); }
+});
+
 test('Feed marks empty and literal Untitled titles for thin italic styling', {skip:!vm.SourceTextModule}, async()=>{
  const titles=[null,'','  ','Untitled',' Untitled ','A real title'];
  const h=await harness('/feed',async url=>response(url.startsWith('/api/feed?')?{items:titles.map((title,index)=>({id:index+1,created_image_id:index+1,title,published:true,image_url:'/one.jpg',user_id:2})),hasMore:false}:{version:1,item:null}));

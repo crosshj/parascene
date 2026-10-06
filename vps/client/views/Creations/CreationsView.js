@@ -49,7 +49,14 @@ function updateCreationCard(card, item, markup) {
 		else {
 			const nextImage = nextMedia?.querySelector('.feed-card-img');
 			const nextClass = nextMedia?.className || '';
-			if (currentMedia) currentMedia.className = nextClass;
+			if (currentMedia) {
+				// The retained media keeps its request and carousel state. Replacing
+				// all classes hides loaded images without triggering another load.
+				const mediaClasses = ['loading', 'loaded', 'error', 'feed-card-image--group-host', 'feed-card-image--group-carousel']
+					.filter((name) => currentMedia.classList.contains(name));
+				currentMedia.className = nextClass;
+				currentMedia.classList.add(...mediaClasses);
+			}
 			if (currentImage && nextImage) {
 				currentImage.className = nextImage.className;
 				currentImage.alt = nextImage.alt;
