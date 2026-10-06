@@ -814,7 +814,9 @@ export async function computeChallengeEndedByImageId({ sb, images, nowMs }) {
 			const cfgEntry = configByThread.get(tid);
 			const cfg = cfgEntry ? cfgEntry.get(cid)?.payload : null;
 			const phase = deriveChallengePhase(cfg, now);
-			if (!CHALLENGE_ENDED_PHASES.has(phase)) {
+			// List visibility also clears for explicitly removed challenges. Keep
+			// missing configs conservative; they may reflect a failed lookup.
+			if (!CHALLENGE_ENDED_PHASES.has(phase) && phase !== 'deleted' && phase !== 'purged') {
 				allEnded = false;
 				break;
 			}

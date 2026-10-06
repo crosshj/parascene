@@ -84,8 +84,12 @@ export function renderCreationsView({ outlet, creationsProvider, creationsApi, c
 	let unsubscribe;
 	let pollTimer = 0;
 	let pollInProgress = false;
-	const mediaLoader = createCreationMediaLoader(refs.grid);
 	const scrollRegion = root.closest('.beta-outlet__scroll');
+	const mediaLoader = createCreationMediaLoader(refs.grid, {
+		thumbnails: creationsProvider?.thumbnails,
+		preloadRoot: scrollRegion,
+		preloadMargin: '2000px 0px',
+	});
 	for (let i = 0; i < 25; i += 1) refs.grid.append(makeGridSkeleton());
 	const onGridClick = (event) => {
 		const card = event.target.closest?.('[data-creation-id]');
@@ -190,6 +194,9 @@ export function renderCreationsView({ outlet, creationsProvider, creationsApi, c
 		if (refs.sentinel.parentElement !== refs.grid || refs.grid.lastElementChild !== refs.sentinel) {
 			refs.grid.append(refs.sentinel);
 		}
+		// The list is newest first; scrolling older pages must not displace these.
+		creationsProvider?.thumbnails?.retain(desiredCards.slice(0, 30)
+			.map(card => card.querySelector('.feed-card-image')?.dataset.bgUrl || ''));
 		if (cardsToHydrate.length) mediaLoader.observe(cardsToHydrate);
 		syncInFlightPolling();
 	}
@@ -361,7 +368,8 @@ export function renderCreationsView({ outlet, creationsProvider, creationsApi, c
 		} finally { loading = false; }
 	}
 
-	const sentinelObserver = new IntersectionObserver(([entry]) => { if (entry?.isIntersecting) void loadMore(); }, { rootMargin: '1200px 0px' });
+	// Fetch the next page before its cards enter the thumbnail preload range.
+	const sentinelObserver = new IntersectionObserver(([entry]) => { if (entry?.isIntersecting) void loadMore(); }, { root: scrollRegion, rootMargin: '2400px 0px' });
 	const updateScrollTopVisibility = () => {
 		const scrollTop = scrollRegion?.scrollTop || 0;
 		refs.scrollTop.hidden = scrollTop < 720;

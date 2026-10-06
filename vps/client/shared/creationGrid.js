@@ -318,7 +318,8 @@ export function creationCardMarkup(item, { hidePublishedBadge = false } = {}) {
 	</div>`;
 }
 
-export function createCreationMediaLoader(root, { eagerCount = 16, maxConcurrent = 8 } = {}) {
+export function createCreationMediaLoader(root, { eagerCount = 16, maxConcurrent = 8, thumbnails, preloadMargin = null, preloadRoot = null } = {}) {
+	let disconnected = false;
 	const queue = [];
 	let active = 0;
 	const loadingMedia = new WeakSet();
@@ -327,17 +328,22 @@ export function createCreationMediaLoader(root, { eagerCount = 16, maxConcurrent
 	// queued cards with no img src while they waited their turn.
 	maxConcurrent = Number.POSITIVE_INFINITY;
 	const observer = new IntersectionObserver((entries) => {
+		if (disconnected) return;
 		for (const entry of entries) {
 			if (!entry.isIntersecting) continue;
 			const media = entry.target;
 			observer.unobserve(media);
+			// URLs are already assigned. Promote native lazy requests before the
+			// card reaches the viewport, including pending cache resolutions.
+			const image = media.querySelector('.feed-card-img');
+			if (image && !media.dataset.bgLoadedUrl) image.loading = 'eager';
 			if (media.dataset.bgUrl && !media.dataset.bgLoadedUrl && media.dataset.bgQueued !== '1') {
 				media.dataset.bgQueued = '1';
-				queue.push({ media, eager: false });
+				queue.push({ media, eager: true });
 			}
 		}
 		drain();
-	}, { threshold: 0.01 });
+	}, { root: preloadRoot, rootMargin: preloadMargin || '0px', threshold: 0.01 });
 
 	function drain() {
 		while (active < maxConcurrent && queue.length) {
@@ -360,6 +366,11 @@ export function createCreationMediaLoader(root, { eagerCount = 16, maxConcurrent
 			if ('fetchPriority' in image) image.fetchPriority = highPriority ? 'high' : 'auto';
 			image.onload = () => { loadingMedia.delete(media); media.dataset.bgLoadedUrl = media.dataset.bgUrl; media.dataset.bgQueued = '0'; media.style.setProperty('--creation-grid-image', `url("${media.dataset.bgUrl.replaceAll('"', '\\"')}")`); media.classList.remove('loading', 'error'); media.classList.add('loaded'); finish(); };
 			image.onerror = () => {
+				if (image.getAttribute('src')?.startsWith('blob:')) {
+					void thumbnails?.invalidate(media.dataset.bgUrl);
+					image.src = media.dataset.bgUrl;
+					return;
+				}
 				loadingMedia.delete(media);
 				media.dataset.bgQueued = '0';
 				const fallback = media.dataset.bgFallback;
@@ -394,7 +405,12 @@ export function createCreationMediaLoader(root, { eagerCount = 16, maxConcurrent
 				finish();
 			};
 			image.dataset.feedImageUrl = media.dataset.bgUrl;
-			image.src = media.dataset.bgUrl;
+			const url = media.dataset.bgUrl;
+			const source = thumbnails?.resolve(url) ?? url;
+			if (typeof source === 'string') image.src = source;
+			else void Promise.resolve(source).catch(() => url).then(src => {
+				if (!disconnected && media.isConnected && media.dataset.bgUrl === url) image.src = src;
+			});
 		}
 	}
 	function finish() { active -= 1; drain(); }
@@ -419,6 +435,7 @@ export function createCreationMediaLoader(root, { eagerCount = 16, maxConcurrent
 			// the browser gets much more lead time than a custom viewport observer.
 			element.dataset.bgQueued = '1';
 			queue.push({ media: element, eager: index < eagerCount, highPriority: index < 2 });
+			if (preloadMargin && index >= eagerCount) observer.observe(element);
 		});
 		drain();
 	}
@@ -462,5 +479,5 @@ export function createCreationMediaLoader(root, { eagerCount = 16, maxConcurrent
 		);
 		media.replaceChildren(stack, button('prev'), button('next'), ...overlays);
 	}
-	return { observe, disconnect: () => observer.disconnect() };
+	return { observe, disconnect: () => { disconnected = true; observer.disconnect(); } };
 }

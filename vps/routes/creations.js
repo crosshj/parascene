@@ -8,6 +8,8 @@ import { creationAudioCdnId, creationMediaKey, creationMediaKeys, creationVideoM
 import { extractVideoThumbnail } from "./utils/media.js";
 import { verifyShareToken } from "./utils/shareLink.js";
 import { costumeGroupV2Meta } from '../services/create/groupV2.js';
+import { computeChallengeEndedByImageId } from '../services/create/challengeSubmitShared.js';
+import { getSupabaseServiceClient } from '../services/create/supabaseService.js';
 
 function integer(value, fallback, min, max) {
 	const n = Number.parseInt(String(value ?? ""), 10);
@@ -146,7 +148,17 @@ function gridThumbnail(input) {
 		.toBuffer();
 }
 
-export function createCreationsRoutes({ creations, users, appendChallengeEligibility }) {
+export function createCreationsRoutes({ creations, users, appendChallengeEligibility, resolveChallengeEnded = images => computeChallengeEndedByImageId({ sb: getSupabaseServiceClient(), images }) }) {
+	async function serializeList(rows) {
+		const items = rows.map(serializeCreation);
+		try {
+			const ended = await resolveChallengeEnded(items);
+			for (const item of items) {
+				if (ended.has(Number(item.id))) item.challenge_ended = ended.get(Number(item.id));
+			}
+		} catch { /* Unknown challenge state retains the existing blur. */ }
+		return items;
+	}
 	const router = express.Router();
 	const noStore = (_req, res, next) => { res.set("Cache-Control", "private, no-store"); next(); };
 
@@ -266,14 +278,14 @@ export function createCreationsRoutes({ creations, users, appendChallengeEligibi
 				const ids = req.query.ids.split(",").map((value) => integer(value, 0, 0, Number.MAX_SAFE_INTEGER));
 				const rows = await creations.listByIds(req.auth.userId, ids);
 				res.set("Cache-Control", "private, no-store");
-				return res.json({ creations: rows.map(serializeCreation), has_more: false });
+				return res.json({ creations: await serializeList(rows), has_more: false });
 			}
 			const limit = integer(req.query.limit, 50, 1, 100);
 			const offset = integer(req.query.offset, 0, 0, 100000);
 			const challengeOnly = req.query.challenge_only === "1" || req.query.challenge_only === "true";
 			const page = await creations.list(req.auth.userId, { limit, offset, challengeOnly, viewerEnableNsfw });
 			res.set("Cache-Control", "private, no-store");
-			return res.json({ creations: page.rows.map(serializeCreation), has_more: page.hasMore, limit, offset });
+			return res.json({ creations: await serializeList(page.rows), has_more: page.hasMore, limit, offset });
 		} catch (error) { return next(error); }
 	});
 

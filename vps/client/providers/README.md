@@ -14,6 +14,17 @@ Current folders:
 - `threads/` supplies the conversation inbox snapshot—threads, server context, and unread summary—consumed by the Sidebar view. Servers and threads belong under this client capability because server channels participate in the same conversations; the sidebar model remains beside the Sidebar view because it shapes display, not thread data.
 - `creations/`, `files/`, and `credits/` supply their respective APIs and queries.
 
+The Creations provider also owns `thumbnails`: a viewer-scoped IndexedDB blob
+cache for thumbnails belonging to the newest 30 grid cards. The view supplies
+the retained URLs in list order, so browsing older pages does not evict recent
+creations. The media loader resolves those URLs through the provider; other
+images keep native loading. Full URLs, including blur/thumbnail variants, are
+distinct keys. Cache misses deduplicate requests, storage/network failures fall
+back to normal image URLs, and image decode failures invalidate the cached blob.
+Normal teardown preserves disk entries; logout clears them and aborts downloads.
+The cache uses `parascene-creation-thumbnails-v1:<viewerId>` and stores only
+same-origin creation media variants, never original/full-resolution images.
+
 ## Why this is the next step for threads
 
 WWW has two distinct realtime lifetimes that the VPS threads provider will need to represent:

@@ -2,9 +2,11 @@ import { createPendingCreationsStore } from './pending.js';
 import { createQuery } from '../../core/query.js';
 import { createStorageCache } from '../../core/storageCache.js';
 import { createCreationsApi } from './api.js';
+import { createCreationThumbnails } from './thumbnails.js';
 
 export function createCreationsProvider({ viewerId, registry } = {}) {
 	const api = createCreationsApi();
+	const thumbnails = createCreationThumbnails({ viewerId });
  const pending = createPendingCreationsStore(viewerId);
 	const cache = viewerId ? createStorageCache(`prsn-vps-creations-v1:${viewerId}`, {
 		validate: (data) => Array.isArray(data?.creations) && typeof data?.has_more === 'boolean'
@@ -47,6 +49,7 @@ export function createCreationsProvider({ viewerId, registry } = {}) {
 
 	return {
 		api,
+		thumbnails,
   pending,
 		query,
 		mergeRows,
@@ -58,6 +61,7 @@ export function createCreationsProvider({ viewerId, registry } = {}) {
 			if (entry) query.setData(entry.data, { persist: false, updated: entry.updatedAt });
 			else void query.refresh({ force: true }).catch(() => undefined);
 		},
-		clearCache() { cache?.clear(); pending.clear(); },
+		clearCache() { cache?.clear(); pending.clear(); void thumbnails.clearCache(); },
+		destroy() { thumbnails.destroy(); },
 	};
 }
