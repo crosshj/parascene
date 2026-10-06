@@ -23,29 +23,6 @@ export function challengeEngagementItemsEqual(a, b) {
 }
 
 /**
- * Read cached challenge engagement from the app service-worker data cache (if any).
- *
- * @returns {Promise<object|null>}
- */
-export async function readChallengeEngagementFromSwCache() {
-	if (typeof caches === 'undefined' || typeof window === 'undefined') return null;
-	try {
-		const keys = await caches.keys();
-		const cacheName = keys.find((name) => /^parascene-data-v/.test(name));
-		if (!cacheName) return null;
-		const cache = await caches.open(cacheName);
-		const requestUrl = new URL(CHAT_FEED_CHALLENGE_ENGAGEMENT_URL, window.location.origin).href;
-		const cached = await cache.match(requestUrl);
-		if (!cached?.ok) return null;
-		const data = await cached.json();
-		const item = data?.item;
-		return item && typeof item === 'object' ? item : null;
-	} catch {
-		return null;
-	}
-}
-
-/**
  * @param {Function} fetchJson
  * @returns {Promise<object|null>}
  */
@@ -216,14 +193,6 @@ export async function loadDeferredChatFeedChallenge(opts) {
 		ensureChatFeedChallengeDesktopSkeleton(routeWrap);
 	}
 
-	/*
-	 * Do not paint SW-cached engagement before the network response.
-	 * Stale cache is often the old single-challenge card; replacing it seconds later
-	 * with challenge_board (or any different payload) flips the whole card in place.
-	 * Skeleton → one final paint. Cache is only a fallback if the fetch fails.
-	 */
-	const staleItem = await readChallengeEngagementFromSwCache();
-
 	try {
 		const item = await fetchChatFeedChallengeEngagement(fetchJson);
 		if (typeof isStale === 'function' && isStale()) return;
@@ -238,11 +207,6 @@ export async function loadDeferredChatFeedChallenge(opts) {
 	} catch (err) {
 		console.warn('[Chat feed] challenge engagement', err?.message || err);
 		if (typeof isStale === 'function' && isStale()) return;
-		if (staleItem) {
-			mountChatFeedChallengeItem(messagesEl, routeWrap, mobileLayout, staleItem, renderCard);
-			hydrateMountedChatFeedChallengeCard(messagesEl, routeWrap, fetchJson);
-			return;
-		}
 		findChatFeedChallengeSlot(messagesEl, routeWrap)?.remove();
 	}
 }

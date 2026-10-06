@@ -9,6 +9,14 @@ import { createRouter } from './core/router.js';
 import { createSession } from './core/session.js';
 import { appViews as views } from './views/index.js';
 
+// Keep the beta install and offline caches independent from the production WWW app.
+if ('serviceWorker' in navigator) {
+	window.addEventListener('load', () => {
+		const version = document.querySelector('meta[name="asset-version"]')?.content?.trim() || 'beta';
+		navigator.serviceWorker.register(`/sw.js?v=${encodeURIComponent(version)}`, { scope: '/' }).catch(() => {});
+	}, { once: true });
+}
+
 const legacyThreadRoutes = [
 	// TODO: Deprecate these legacy thread URLs in favor of the /ch/ channel route pattern;
 	// migrate private-channel URL generation when replacing these routes.

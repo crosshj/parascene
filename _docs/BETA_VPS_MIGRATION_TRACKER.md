@@ -8,7 +8,6 @@ The remaining product and cutover scope is listed below. Dated implementation de
 
 ## Product follow-ups
 
-- [ ] ability to simultaneaously install both beta and prod versions of app
 - [ ] Presence indicators not working in sidebar
 - [ ] Bulk operations from creations list
 - [ ] Ability to delete a creation
