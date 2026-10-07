@@ -5,6 +5,12 @@ export function createCreationsApi(origin = '') {
 	const url = (path) => `${base}${path}`;
 
 	return {
+  remove(id, { signal } = {}) {
+   return requestJson(url(`/api/create/images/${encodeURIComponent(id)}`), { method: 'DELETE', signal });
+  },
+  group(ids, { signal } = {}) {
+   return requestJson(url('/api/create/images/group'), { method: 'POST', body: { ids }, signal });
+  },
 		async list({ limit = 50, offset = 0, ids, signal } = {}) {
 			const query = Array.isArray(ids) && ids.length
 				? `ids=${encodeURIComponent(ids.join(','))}`

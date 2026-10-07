@@ -1,3 +1,4 @@
+import { registerCreationLibraryRoutes } from './creationLibrary.js';
 import express from "express";
 import path from "path";
 
@@ -2265,5 +2266,6 @@ router.post("/api/create/images/:id/unpublish", asyncRoute(async (req, res) => {
 			return res.status(Number(err?.status) || 500).json({ error: err?.message || "Failed to unpublish creation" });
 		}
 	}));
+registerCreationLibraryRoutes({ router, requireUser, queries, storage });
 return router;
 }

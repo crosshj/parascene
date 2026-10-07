@@ -33,6 +33,50 @@ const supabase = client;
 const serviceClient = client;
 const storageClient = client;
 const queries = {
+markCreatedImageUnavailable: {
+			run: async (id, userId) => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("created_images"))
+					.update({ unavailable_at: new Date().toISOString() })
+					.eq("id", id)
+					.eq("user_id", userId)
+					.select("id");
+				if (error) throw error;
+				return { changes: data?.length ?? 0 };
+			}
+		},
+deleteCreatedImageById: {
+			run: async (id, userId) => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("created_images"))
+					.delete()
+					.eq("id", id)
+					.eq("user_id", userId)
+					.select("id");
+				if (error) throw error;
+				return { changes: data?.length ?? 0 };
+			}
+		},
+updateCreatedImageGroupCover: {
+			run: async (id, userId, { created_at, file_path, width, height, color, meta }) => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("created_images"))
+					.update({
+						created_at,
+						file_path,
+						width,
+						height,
+						color: color ?? null,
+						meta
+					})
+					.eq("id", id)
+					.eq("user_id", userId)
+					.select("id");
+				if (error) throw error;
+				return { changes: data?.length ?? 0 };
+			}
+		},
+
 		selectAudioClipsForOwner: {
 			page: async (_userId, options = {}) => {
 				const lim = Math.min(Math.max(1, Number(options.limit) || 24), 100);

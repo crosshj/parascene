@@ -1,3 +1,5 @@
+import { createBulkActions } from '../../components/BulkActions/BulkActions.js';
+import { creationBulkItem, creationBulkActions } from './bulkActions.js';
 import { bindRefs, mountTemplate } from '../../utils/dom.js';
 import { createCreationMediaLoader, creationCardMarkup } from '../../shared/creationGrid.js';
 import { createScrollContext } from '../../core/scrollContext.js';
@@ -85,6 +87,8 @@ export function renderCreationsView({ outlet, creationsProvider, creationsApi, c
 	let unsubscribe;
 	let pollTimer = 0;
 	let pollInProgress = false;
+ let destroyed = false;
+ const removedIds = new Set();
 	const scrollRegion = root.closest('.beta-outlet__scroll');
 	const scroll = createScrollContext(root);
 	const mediaLoader = createCreationMediaLoader(refs.grid, {
@@ -94,7 +98,7 @@ export function renderCreationsView({ outlet, creationsProvider, creationsApi, c
 	});
 	for (let i = 0; i < 25; i += 1) refs.grid.append(makeGridSkeleton());
 	const onGridClick = (event) => {
-		const card = event.target.closest?.('[data-creation-id]');
+		const card = event.target.closest?.('.creation-grid__card[data-creation-id]');
 		const id = Number(card?.dataset?.creationId);
 		if (card && Number.isFinite(id) && id > 0) onOpenCreation?.(id, card.__creationRecord || null);
 	};
@@ -104,7 +108,7 @@ export function renderCreationsView({ outlet, creationsProvider, creationsApi, c
  document.addEventListener('creations-pending-updated', onPendingCreationsUpdated);
 	refs.grid.addEventListener('keydown', (event) => {
 		if (event.key !== 'Enter' && event.key !== ' ') return;
-		const card = event.target.closest?.('[data-creation-id]');
+		const card = event.target.closest?.('.creation-grid__card[data-creation-id]');
 		if (!card) return;
 		event.preventDefault();
 		const id = Number(card.dataset.creationId);
@@ -114,9 +118,31 @@ export function renderCreationsView({ outlet, creationsProvider, creationsApi, c
 	document.title = 'Creations · parascene beta';
 	setHeaderMenu?.({
 		label: 'Creations',
-		items: [{ label: 'Refresh', action: 'refresh' }],
-		onSelect: ({ action }) => { if (action === 'refresh') void refresh(true); }
+		items: [{ label: 'Bulk actions', action: 'bulk' }, { label: 'Refresh', action: 'refresh' }],
+		onSelect: ({ action }) => { if (action === 'bulk') bulk.enter(); if (action === 'refresh') void refresh(true); }
 	});
+
+ const bulk = createBulkActions({ root, grid: refs.grid, cardSelector: '.creation-grid__card[data-image-id]',
+  getItem: creationBulkItem, actions: creationBulkActions({ api: creationsApi, refresh: () => refresh(true) }),
+  remove: (item, options) => creationsApi.remove(item.id, options),
+  onRemoved: item => {
+   removeCreation(item.id);
+   document.dispatchEvent(new CustomEvent('creation-detail:mutation', { detail: { reason: 'deleted', creationId: item.id } }));
+  },
+  onUnauthorized,
+ });
+ function removeCreation(id) {
+  const key = String(id);
+  removedIds.add(key);
+  const card = [...refs.grid.querySelectorAll('.creation-grid__card')].find(card => card.dataset.creationId === key);
+  if (card) { card.remove(); offset = Math.max(0, offset - 1); }
+  if (creationsQuery?.data) {
+   const current = creationsQuery.data;
+   lastQueryData = { ...current, creations: current.creations.filter(row => creationId(row) !== key) };
+   creationsQuery.setData(lastQueryData);
+  }
+  render({ creations: [], has_more: hasMore }, true);
+ }
 
 	function showState(message, error = false) {
 		refs.status.hidden = false;
@@ -135,7 +161,8 @@ export function renderCreationsView({ outlet, creationsProvider, creationsApi, c
 	}
 
 	function render(data, append = false) {
-		const items = Array.isArray(data?.creations) ? data.creations : [];
+		if (destroyed) return;
+		const items = (Array.isArray(data?.creations) ? data.creations : []).filter(item => !removedIds.has(creationId(item)));
 		const currentCards = [...refs.grid.querySelectorAll('.creation-grid__card')];
 		const currentById = new Map(currentCards.map((card) => [card.dataset.creationId, card]).filter(([id]) => id));
 		const desiredItems = append
@@ -200,6 +227,7 @@ export function renderCreationsView({ outlet, creationsProvider, creationsApi, c
 		creationsProvider?.thumbnails?.retain(desiredCards.slice(0, 30)
 			.map(card => card.querySelector('.feed-card-image')?.dataset.bgUrl || ''));
 		if (cardsToHydrate.length) mediaLoader.observe(cardsToHydrate);
+		bulk.sync();
 		syncInFlightPolling();
 	}
 
@@ -302,6 +330,7 @@ export function renderCreationsView({ outlet, creationsProvider, creationsApi, c
 	async function onCreationDetailMutation(event) {
 		const id = Number(event.detail?.creationId);
 		if (!Number.isInteger(id) || id <= 0 || !root.isConnected) return;
+		if (event.detail?.reason === 'deleted') { removeCreation(id); return; }
 		if (!refs.grid.querySelector(`.creation-grid__card[data-creation-id="${id}"]`)) return;
 		try {
 			const data = await creationsApi.list({ ids: [String(id)] });
@@ -315,7 +344,7 @@ export function renderCreationsView({ outlet, creationsProvider, creationsApi, c
 	}
 
 	function mergeServerRows(rows) {
-		creationsProvider?.mergeRows?.(rows, { beforePublish: next => { lastQueryData = next; } });
+		creationsProvider?.mergeRows?.(rows.filter(row => !removedIds.has(creationId(row))), { beforePublish: next => { lastQueryData = next; } });
 	}
 
 	function onQueryState(snapshot) {
@@ -398,5 +427,5 @@ export function renderCreationsView({ outlet, creationsProvider, creationsApi, c
 	}
 	else void refresh(true);
 
-	return () => { unsubscribe?.(); mediaLoader?.disconnect(); sentinelObserver.disconnect(); window.clearTimeout(pollTimer); pollTimer = 0; document.removeEventListener('visibilitychange', onVisibilityChange); document.removeEventListener('creation-detail:mutation', onCreationDetailMutation); document.removeEventListener('creations-pending-updated', onPendingCreationsUpdated); document.removeEventListener('beta-mobile-scroll-owner-changed', bindScrollOwner); refs.grid.removeEventListener('click', onGridClick); refs.scrollTop.removeEventListener('click', onScrollTopClick); scrollRegion?.removeEventListener('scroll', updateScrollTopVisibility); window.removeEventListener('scroll', updateScrollTopVisibility); setHeaderMenu?.(); };
+	return () => { destroyed = true; bulk.destroy(); unsubscribe?.(); mediaLoader?.disconnect(); sentinelObserver.disconnect(); window.clearTimeout(pollTimer); pollTimer = 0; document.removeEventListener('visibilitychange', onVisibilityChange); document.removeEventListener('creation-detail:mutation', onCreationDetailMutation); document.removeEventListener('creations-pending-updated', onPendingCreationsUpdated); document.removeEventListener('beta-mobile-scroll-owner-changed', bindScrollOwner); refs.grid.removeEventListener('click', onGridClick); refs.scrollTop.removeEventListener('click', onScrollTopClick); scrollRegion?.removeEventListener('scroll', updateScrollTopVisibility); window.removeEventListener('scroll', updateScrollTopVisibility); setHeaderMenu?.(); };
 }

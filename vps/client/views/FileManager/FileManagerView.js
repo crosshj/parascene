@@ -1,3 +1,6 @@
+import { createBulkActions } from '../../components/BulkActions/BulkActions.js';
+import { copyBulkLinks } from '../../components/BulkActions/copyLinks.js';
+import { addToMutateQueue } from '../../shared/mutateQueue.js';
 import { bindRefs, mountTemplate } from '../../utils/dom.js';
 import { formatDate, formatFileSize } from '../../utils/format.js';
 import template from './FileManagerView.html';
@@ -51,8 +54,9 @@ function normalizeFileRecord(file) {
 }
 
 function createFileCard(file, options) {
- const card = document.createElement('button'); card.type = 'button'; card.className = 'file-card creation-grid__card';
+ const card = document.createElement('div'); card.setAttribute('role', 'button'); card.tabIndex = 0; card.className = 'file-card creation-grid__card';
  card.addEventListener('click', () => options.onViewFile(card.__fileRecord));
+ card.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); options.onViewFile(card.__fileRecord); } });
  updateFileCard(card, file, options); return card;
 }
 function updateFileCard(card, file, { filesApi }) {
@@ -84,8 +88,8 @@ export function renderFileManagerView({ outlet, filesApi, filesQuery, onUnauthor
 	]);
 	setHeaderMenu?.({
 		label: 'My Files',
-		items: [{ label: 'Refresh', action: 'refresh' }],
-		onSelect: ({ action }) => { if (action === 'refresh') void load(); }
+		items: [{ label: 'Bulk actions', action: 'bulk' }, { label: 'Refresh', action: 'refresh' }],
+		onSelect: ({ action }) => { if (action === 'bulk') bulk.enter(); if (action === 'refresh') void load(); }
 	});
 	let nextOffset = null;
 	let destroyed = false;
@@ -94,6 +98,32 @@ export function renderFileManagerView({ outlet, filesApi, filesQuery, onUnauthor
 	let loadingMore = false;
 	let disposeUploadPicker = null;
 	const uploadedNames = new Map();
+ const removedIds = new Set();
+ const bulk = createBulkActions({ root, grid, cardSelector: '.file-card[data-file-id]', noun: 'files', permanent: true,
+  getItem: card => { const file = card.__fileRecord; return file ? { id: file.id, label: file.display_name || file.id, file } : null; },
+  actions: [
+   { id: 'copy-links', label: 'Copy links', enabled: items => items.some(item => item.file.public_url), run: items => copyBulkLinks(items.map(item => providerImageUrl(item.file.public_url))) },
+   { id: 'queue', label: 'Queue', enabled: items => items.some(item => mediaKind(item.file.content_type) === 'image' && item.file.public_url), run(items) {
+    for (const { file } of items) if (mediaKind(file.content_type) === 'image' && file.public_url) addToMutateQueue({ imageUrl: providerImageUrl(file.public_url), published: false });
+    return { exit: true };
+   } },
+  ],
+  remove: (item, options) => filesApi.remove(item.id, options),
+  onRemoved: item => removeFileRow(item.id), onUnauthorized,
+ });
+ function removeFileRow(id) {
+  removedIds.add(String(id));
+  const current = filesQuery?.data;
+  if (current) {
+   const count = current.files.some(row => String(row.id) === String(id)) ? 1 : 0;
+   filesQuery.setData({ ...current, files: current.files.filter(row => String(row.id) !== String(id)), pagination: { ...current.pagination, next_offset: Number.isInteger(current.pagination?.next_offset) ? Math.max(0, current.pagination.next_offset - count) : null } });
+  } else {
+   [...grid.children].find(card => card.dataset.fileId === String(id))?.remove();
+   if (nextOffset !== null) nextOffset = Math.max(0, nextOffset - 1);
+  }
+  bulk.sync();
+  if (!grid.querySelector('[data-file-id]')) showEmptyState();
+ }
 
  function viewFile(file) {
   file = normalizeFileRecord(file);
@@ -136,6 +166,7 @@ export function renderFileManagerView({ outlet, filesApi, filesQuery, onUnauthor
 			const card = createFileCard(displayFile, cardOptions);
 			card.dataset.fileId = String(file.id);
 			grid.prepend(card);
+   bulk.sync();
 		}
 		status.hidden = true;
 		grid.hidden = false;
@@ -170,7 +201,7 @@ export function renderFileManagerView({ outlet, filesApi, filesQuery, onUnauthor
 		if (destroyed) return;
 		grid.removeAttribute('aria-busy');
   grid.querySelectorAll('.skeleton-grid-tile').forEach(tile => tile.remove());
-		const files = Array.isArray(data?.files) ? data.files : [];
+		const files = (Array.isArray(data?.files) ? data.files : []).filter(file => !removedIds.has(String(file.id)));
 		const existing = new Map([...grid.children].map((card) => [card.dataset.fileId, card]));
 		let targetIndex = 0;
 		for (const file of files) {
@@ -197,6 +228,7 @@ export function renderFileManagerView({ outlet, filesApi, filesQuery, onUnauthor
 			status.classList.remove('is-error', 'is-stale');
 			status.textContent = 'No files are stored in your personal folder yet.';
 		} else status.hidden = true;
+  bulk.sync();
 	}
 	function onQueryState(snapshot) {
 		if (destroyed) return;
@@ -247,12 +279,8 @@ export function renderFileManagerView({ outlet, filesApi, filesQuery, onUnauthor
 		if (!confirm(`Permanently delete “${file.display_name || file.id}”?`)) return;
 		try {
 			await filesApi.remove(file.id, { signal: controller.signal });
-			const current = filesQuery?.data;
 			if (destroyed) return;
-			if (current) filesQuery.setData({ ...current, files: current.files.filter((row) => String(row.id) !== String(file.id)), pagination: { ...current.pagination, next_offset: Number.isInteger(current.pagination?.next_offset) ? Math.max(0, current.pagination.next_offset - 1) : null } });
-			else grid.querySelector(`[data-file-id="${CSS.escape(String(file.id))}"]`)?.remove();
-
-			if (!grid.children.length) showEmptyState();
+   removeFileRow(file.id);
    return true;
 		}
 		catch (error) { if (error?.name === 'AbortError') return; if (error?.status === 401) return onUnauthorized(); throw error; }
@@ -286,6 +314,7 @@ export function renderFileManagerView({ outlet, filesApi, filesQuery, onUnauthor
 	else { showSkeleton(); void filesApi.list({ signal: controller.signal }).then((data) => renderSnapshot(data)).catch((error) => { if (!destroyed && error?.name !== 'AbortError') { grid.querySelectorAll('.skeleton-grid-tile').forEach(tile => tile.remove()); grid.removeAttribute('aria-busy'); status.hidden = false; status.classList.add('is-error'); status.textContent = error?.message || 'Unable to load your files.'; } }); }
 	return () => {
 		destroyed = true;
+  bulk.destroy();
 		disposeUploadPicker?.();
 		disposeUploadPicker = null;
 		setHeaderAccessories?.([]);

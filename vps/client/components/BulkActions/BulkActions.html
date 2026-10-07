@@ -1,0 +1,19 @@
+<div class="creations-bulk-bar" data-creations-bulk-bar aria-hidden="true">
+ <div class="creations-bulk-bar-inner">
+  <span class="creations-bulk-bar-label">Bulk</span>
+  <div class="creations-bulk-actions" data-bulk-actions></div>
+  <button type="button" class="modal-close creations-bulk-bar-close" data-creations-bulk-close aria-label="Close bulk actions"><svg class="modal-close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+ </div>
+ <p data-bulk-error role="alert" hidden></p>
+</div>
+<dialog class="creations-bulk-delete-modal" aria-labelledby="bulk-delete-title">
+ <h3 id="bulk-delete-title">Delete selected creations?</h3>
+ <p data-creations-bulk-delete-message></p>
+ <p class="creations-bulk-delete-modal-error" data-creations-bulk-delete-error role="alert"></p>
+ <div class="creations-bulk-delete-modal-footer">
+  <button type="button" class="btn-secondary" data-creations-bulk-delete-cancel>Cancel</button>
+  <button type="button" class="btn-danger creations-bulk-delete-confirm-btn" data-creations-bulk-delete-confirm>
+   <span class="creations-bulk-delete-confirm-label">Delete</span><span class="creations-bulk-delete-confirm-spinner" aria-hidden="true"></span>
+  </button>
+ </div>
+</dialog>
