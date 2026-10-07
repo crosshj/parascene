@@ -2024,6 +2024,14 @@
 	border-radius: 6px;
 }
 
+.creation-link {
+	color: var(--accent);
+}
+
+.creation-link:hover {
+	color: var(--accent);
+}
+
 .mention-link {
 	color: color-mix(in srgb, var(--accent) 55%, var(--text-muted));
 	font-weight: 500;

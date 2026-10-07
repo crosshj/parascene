@@ -8,7 +8,6 @@ The remaining product and cutover scope is listed below.
 
 ## Product follow-ups
 
-- [ ] links in chat are not formatted as links as is done in www
 - [ ] command-palette like we have in www, complete with keyboard shortcuts
 - [ ] Serve the pricing view inside the app.
 - [ ] Finish the sidebar plus controls and gear/settings control.

@@ -10,6 +10,7 @@ import '../components/CreateComposer/CreateComposer.css';
 import { refreshAutoGrowTextareas } from '../shared/autogrow.js';
 import { attachCreateComposerSuggest, isTriggeredSuggestPopupOpen } from '../shared/triggeredSuggest.js';
 import { CHAT_PAGE_BACK_ICON_HTML } from '../shared/chatPageHeader.js';
+import { bindConversationVisualViewport } from './conversationViewport.js';
 
 function getRegion(root, name) {
 	const region = root.querySelector(`[data-layout-region="${name}"]`);
@@ -53,6 +54,7 @@ export function createLayout({ root, views, services } = {}) {
 	const pageIcon = pageRegion.querySelector('.beta-outlet__icon');
 	const composer = createMessageComposerElement();
 	const frame = pageRegion.querySelector('.beta-outlet__frame');
+	const conversationViewport = bindConversationVisualViewport({ frame, root });
 	const searchComposer = createSearchComposerElement();
 	frame.append(composer, searchComposer);
 	const creationComposer = pageRegion.querySelector('[data-layout-creation-composer]');
@@ -500,6 +502,7 @@ export function createLayout({ root, views, services } = {}) {
 		const mobile = mobilePresentation(composition);
 		const backgroundMobile = mobilePresentation({ url: composition.backgroundUrl || composition.url });
 		root.dataset.mobileMode = mobile.mode;
+		conversationViewport.sync();
 		if (mobile.mode === 'primary' || mobile.mode === 'roster') closeMobileMenu();
 		const mobileBack = pageRegion.querySelector('.beta-outlet__mobile-back');
 		if (mobileBack) {
@@ -563,6 +566,7 @@ export function createLayout({ root, views, services } = {}) {
 	}
 
 	function destroy() {
+		conversationViewport.destroy();
 		mobileMedia.removeEventListener('change', onMobileBreakpointChange);
 		pageHeader.append(pageActions);
 		delete root.dataset.mobileMode;

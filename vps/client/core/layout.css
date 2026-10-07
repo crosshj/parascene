@@ -103,6 +103,14 @@ body.beta-layout main#app-outlet {
 	body.beta-layout #app-shell { height: 100dvh; min-height: 100dvh; }
 	body.beta-layout main#app-outlet { height: 100dvh; min-height: 100dvh; margin: 0; border-radius: 0; }
 	.beta-outlet__frame { height: 100%; min-height: 0; }
+	/* Keyboard: pin the conversation frame to the visual viewport (WWW chat shell). */
+	#app-shell[data-mobile-mode="conversation"] .beta-outlet__frame.is-visual-viewport {
+		position: fixed;
+		z-index: 1;
+		margin: 0;
+		border-radius: 0;
+		max-width: none;
+	}
 	.beta-outlet__header { top: env(safe-area-inset-top); }
 	.beta-outlet__composer {
 		padding: 5px 5px calc(3px + env(safe-area-inset-bottom));
