@@ -36,6 +36,12 @@ export function createThreadsApi() {
 		openChannel(tag, options = {}) {
 			return requestJson('/api/chat/channels', { ...options, method: 'POST', body: { tag } });
 		},
+		openDm(otherUserId, options = {}) {
+			return requestJson('/api/chat/dm', { ...options, method: 'POST', body: { other_user_id: otherUserId } });
+		},
+		listChannelSlugs(options = {}) {
+			return requestJson('/api/chat/channel-slugs', options);
+		},
 		async loadMessages(threadId, { limit = 40, before, signal } = {}) {
 			const query = new URLSearchParams({ limit: String(limit) });
 			if (before) query.set('before', String(before));
@@ -68,7 +74,7 @@ export function createThreadsApi() {
 			return requestJson(`/api/chat/messages/${encodeURIComponent(messageId)}/reactions`, { ...options, method: 'POST', body: { emoji_key: emoji } });
 		},
 		markThreadHidden(threadId, options = {}) {
-			return requestJson(`/api/chat/threads/${encodeURIComponent(threadId)}/hide`, { ...options, method: 'POST', body: {} });
+			return requestJson(`/api/chat/threads/${encodeURIComponent(threadId)}/hide`, { ...options, method: 'POST', body: { hidden: true } });
 		},
 		leaveThread(threadId, options = {}) {
 			return requestJson(`/api/chat/threads/${encodeURIComponent(threadId)}/leave`, { ...options, method: 'POST', body: {} });

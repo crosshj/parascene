@@ -18,8 +18,13 @@ export function createPopupMenu({ label = '', items = [], onSelect, placement = 
 	menu.setAttribute('role', 'menu');
 	menu.setAttribute('aria-label', label || 'Menu');
 	menu.hidden = true;
-	if (label) menu.append(htmlFragment(`<p class="ps-popup-menu__label">${escapeHtml(label)}</p>`));
-	menu.append(htmlFragment(items.map(itemMarkup).join('')));
+	let menuItems = items;
+	function renderItems() {
+		menu.replaceChildren();
+		if (label) menu.append(htmlFragment(`<p class="ps-popup-menu__label">${escapeHtml(label)}</p>`));
+		menu.append(htmlFragment(menuItems.map(itemMarkup).join('') || ''));
+	}
+	renderItems();
 	document.body.append(menu);
 	let anchor = null;
 
@@ -65,7 +70,7 @@ export function createPopupMenu({ label = '', items = [], onSelect, placement = 
 	function onMenuClick(event) {
 		const target = event.target.closest('[data-popup-menu-index]');
 		if (!target) return;
-		const item = items[Number(target.dataset.popupMenuIndex)];
+		const item = menuItems[Number(target.dataset.popupMenuIndex)];
 		close();
 		if (!item?.href) onSelect?.(item);
 	}
@@ -97,6 +102,10 @@ export function createPopupMenu({ label = '', items = [], onSelect, placement = 
 		open,
 		toggle,
 		close,
+		setItems(nextItems) {
+			menuItems = Array.isArray(nextItems) ? nextItems : [];
+			renderItems();
+		},
 		destroy() {
 			menu.removeEventListener('click', onMenuClick);
 			document.removeEventListener('pointerdown', onDocumentPointerDown, true);

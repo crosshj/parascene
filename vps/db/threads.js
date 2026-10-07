@@ -99,6 +99,66 @@ export function createThreadsStore(client, users, { broadcast = broadcastThreadH
 		await result(client.from('prsn_chat_members').upsert({ thread_id: thread.id, user_id: userId }, { onConflict: 'thread_id,user_id', ignoreDuplicates: true }));
 		return { thread: { id: thread.id, type: 'channel', channel_slug: slug, visibility: 'public' } };
 	}
+	function dmPairKey(a, b) {
+		const x = Number(a);
+		const y = Number(b);
+		if (!Number.isFinite(x) || !Number.isFinite(y) || x <= 0 || y <= 0) return null;
+		return `${Math.min(x, y)}:${Math.max(x, y)}`;
+	}
+	async function openDm(userId, { otherUserId, otherUserName } = {}) {
+		let otherId = Number(otherUserId);
+		if (!Number.isFinite(otherId) || otherId <= 0) {
+			const name = typeof otherUserName === 'string' ? otherUserName.trim().replace(/^@/, '') : '';
+			if (!name) fail(400, 'other_user_id or other_user_name required');
+			const other = await users.byUsername(name);
+			otherId = Number(other?.id);
+		} else {
+			const other = await users.byId(otherId);
+			if (!other) otherId = 0;
+		}
+		if (!Number.isFinite(otherId) || otherId <= 0) fail(404, 'User not found');
+		const key = dmPairKey(userId, otherId);
+		if (!key) fail(400, 'Invalid user ids');
+		let thread = await result(client.from('prsn_chat_threads').select('id').eq('type', 'dm').eq('dm_pair_key', key).maybeSingle());
+		if (!thread) {
+			const inserted = await client.from('prsn_chat_threads').insert({ type: 'dm', dm_pair_key: key, channel_slug: null }).select('id').single();
+			if (inserted.error) {
+				thread = await result(client.from('prsn_chat_threads').select('id').eq('type', 'dm').eq('dm_pair_key', key).maybeSingle());
+				if (!thread) throw inserted.error;
+			} else thread = inserted.data;
+		}
+		const members = otherId === Number(userId)
+			? [{ thread_id: thread.id, user_id: Number(userId) }]
+			: [{ thread_id: thread.id, user_id: Number(userId) }, { thread_id: thread.id, user_id: otherId }];
+		await result(client.from('prsn_chat_members').upsert(members, { onConflict: 'thread_id,user_id', ignoreDuplicates: true }));
+		await result(client.from('prsn_chat_members').update({ hidden_at: null }).eq('thread_id', thread.id).eq('user_id', userId));
+		return { thread: { id: thread.id, type: 'dm', dm_pair_key: key, channel_slug: null } };
+	}
+	async function listPublicChannelSlugs() {
+		const rows = await result(client.from('prsn_chat_threads').select('channel_slug, meta').eq('type', 'channel')) || [];
+		const slugs = [...new Set(rows.filter((row) => row?.meta?.visibility !== 'private' && String(row?.channel_slug || '').trim()).map((row) => String(row.channel_slug).trim()))];
+		slugs.sort((a, b) => a.localeCompare(b));
+		return { slugs };
+	}
+	async function hideThread(userId, threadId, hidden = true) {
+		const thread = await result(client.from('prsn_chat_threads').select('id, type').eq('id', threadId).maybeSingle());
+		if (!thread) fail(404, 'Thread not found');
+		if (thread.type !== 'dm') fail(400, 'Only direct messages can be hidden');
+		const member = await result(client.from('prsn_chat_members').select('user_id').eq('thread_id', threadId).eq('user_id', userId).maybeSingle());
+		if (!member) fail(403, 'Not a member of this thread');
+		const shouldHide = hidden !== false;
+		await result(client.from('prsn_chat_members').update({ hidden_at: shouldHide ? new Date().toISOString() : null }).eq('thread_id', threadId).eq('user_id', userId));
+		return { ok: true, hidden: shouldHide };
+	}
+	async function leaveThread(userId, threadId) {
+		const thread = await result(client.from('prsn_chat_threads').select('id, type').eq('id', threadId).maybeSingle());
+		if (!thread) fail(404, 'Thread not found');
+		if (thread.type !== 'channel') fail(400, 'Only channels can be left');
+		const member = await result(client.from('prsn_chat_members').select('user_id').eq('thread_id', threadId).eq('user_id', userId).maybeSingle());
+		if (!member) return { ok: true, left: false };
+		await result(client.from('prsn_chat_members').delete().eq('thread_id', threadId).eq('user_id', userId));
+		return { ok: true, left: true };
+	}
 	async function messages(userId, threadId, { limit = 40, before } = {}) {
 		const thread = await threadForMember(userId, threadId);
 		let cursor = null;
@@ -282,7 +342,7 @@ export function createThreadsStore(client, users, { broadcast = broadcastThreadH
 		return { ok: true, deleted_id: messageId, thread_id: thread.id };
 	}
 	const canvases = createThreadCanvases({ client, users, threadForMember, privateSecret, decrypt, broadcast });
-	return { canvases, inbox, openPublicChannel, messages, unread, threadForMember, markRead, send, edit, react, remove,
+	return { canvases, inbox, openPublicChannel, openDm, listPublicChannelSlugs, hideThread, leaveThread, messages, unread, threadForMember, markRead, send, edit, react, remove,
 		async getPrivateKey(userId, threadId) { const thread = await threadForMember(userId, threadId); if (thread.visibility !== 'private') fail(400, 'Not a private channel'); const k = await privateSecret(userId, threadId); if (!k) fail(403, 'Private channel key missing'); return { k }; },
 	};
 }

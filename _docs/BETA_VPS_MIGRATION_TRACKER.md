@@ -6,7 +6,6 @@ Current outstanding migration scope. Update this checklist as items are verified
 
 The remaining product and cutover scope is listed below.
 
-- [ ] Finish the sidebar plus controls and gear/settings control.
 - [ ] daily credits claim. Sidebar credits indicator should have badge to indicate credits can be claimed
 - [ ] beta PWA has issues with updating credits in the mobile header
 

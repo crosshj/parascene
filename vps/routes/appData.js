@@ -33,6 +33,11 @@ function publicNotification(row) {
 	};
 }
 
+function serverError(res, next, error) {
+	if (error.status) return res.status(error.status).json({ error: error.message });
+	return next(error);
+}
+
 function publicUserMeta(meta) {
 	if (!meta || typeof meta !== 'object') return {};
 	const { apiKeyHash, vynlyBearerToken, presence_last_seen_at, appear_offline, chat_private_keys, forceLegacyFeed, ...safe } = meta;
@@ -119,6 +124,30 @@ export function createAppDataRoutes({ users, credits, notifications, servers }) 
 	});
 	router.get('/api/servers', noStore, requireAuth, async (req, res, next) => {
 		try { res.json(await servers.list(req.auth.userId)); } catch (error) { next(error); }
+	});
+	router.get('/api/servers/:id', noStore, requireAuth, async (req, res, next) => {
+		try { res.json(await servers.getById(req.auth.userId, req.params.id)); }
+		catch (error) { return serverError(res, next, error); }
+	});
+	router.put('/api/servers/:id', noStore, requireAuth, async (req, res, next) => {
+		try { res.json(await servers.update(req.auth.userId, req.params.id, req.body || {})); }
+		catch (error) { return serverError(res, next, error); }
+	});
+	router.post('/api/servers/:id/join', noStore, requireAuth, async (req, res, next) => {
+		try { res.json(await servers.join(req.auth.userId, req.params.id)); }
+		catch (error) { return serverError(res, next, error); }
+	});
+	router.post('/api/servers/:id/leave', noStore, requireAuth, async (req, res, next) => {
+		try { res.json(await servers.leave(req.auth.userId, req.params.id)); }
+		catch (error) { return serverError(res, next, error); }
+	});
+	router.post('/api/servers/:id/test', noStore, requireAuth, async (req, res, next) => {
+		try { res.json(await servers.test(req.auth.userId, req.params.id)); }
+		catch (error) { return serverError(res, next, error); }
+	});
+	router.post('/api/servers/:id/refresh', noStore, requireAuth, async (req, res, next) => {
+		try { res.json(await servers.refresh(req.auth.userId, req.params.id, req.body || {})); }
+		catch (error) { return serverError(res, next, error); }
 	});
 
 	router.get('/api/credits', noStore, requireAuth, async (req, res, next) => {

@@ -259,7 +259,8 @@
 .sidebar-view__unread[hidden] { display: none; }
 .sidebar-view__menu-item:hover .sidebar-view__unread { visibility: hidden; }
 .sidebar-view__row-controls { position: absolute; top: 50%; right: var(--beta-sidebar-control-inset); width: 56px; height: 28px; transform: translateY(-50%); }
-.sidebar-view__badge-slot { position: absolute; top: 50%; right: 0; display: inline-flex; width: 28px; height: 28px; align-items: center; justify-content: center; transform: translateY(-50%); }
+/* The unread badge shares the gear's box. It must not take the click, including when the slot is empty. */
+.sidebar-view__badge-slot { position: absolute; top: 50%; right: 0; display: inline-flex; width: 28px; height: 28px; align-items: center; justify-content: center; transform: translateY(-50%); pointer-events: none; }
 .sidebar-view__row-menu {
 	display: inline-flex;
 	align-items: center;

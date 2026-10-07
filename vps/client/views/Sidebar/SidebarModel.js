@@ -1,5 +1,7 @@
-import { navigationItems, sidebarMenus } from '../../config/sidebar.js';
+import { navigationItems } from '../../config/sidebar.js';
 import { formatCredits } from '../../utils/format.js';
+import { buildProfilePath } from '../../shared/profileLinks.js';
+import { isDmPinKeyActive } from '../../shared/chatDmPins.js';
 import { SIDEBAR_TOP_STRIP_CHANNEL_SLUGS, mergeThreadRowsWithJoinedServers, isSelfDmThread, getDmOtherUserId,
  buildChatThreadUrl, buildChatThreadRowAvatarHtml, sortChannelRowsByLastActivity,
  prioritizeUnreadRowsInVisibleWindow, sortDmsWithPinnedOrder, dmStablePinStorageKey, CHAT_SIDEBAR_COLLAPSE_LIST_CAP } from '../../shared/chatSidebarRoster.js';
@@ -20,11 +22,8 @@ function rosterModel(roster = {}, presence) {
 	const navigation = structuredClone(navigationItems);
 	const challenges = navigation.find((item) => item.id === 'challenges');
 	if (challenges) challenges.unread = Number(roster.unreadSummary?.challenges_unread) || 0;
-	const hiddenIds = new Set(Array.isArray(roster.hiddenIds) ? roster.hiddenIds.map(String) : []);
-	const dms = threads.filter((row) => row?.type === 'dm' && !isSelfDmThread(row, roster.viewerId) && !hiddenIds.has(`dm-${row.id}`));
-	// Preserve WWW's ordering pipeline; adapt the VPS inbox's pin identifiers.
-	const pinKeys = (roster.pinnedIds || []).map(id => dmStablePinStorageKey(dms.find(row => `dm-${row.id}` === id))).filter(Boolean);
-	const pinned = sortDmsWithPinnedOrder(dms, roster.viewerId, pinKeys.length ? pinKeys : undefined);
+	const dms = threads.filter((row) => row?.type === 'dm' && !isSelfDmThread(row, roster.viewerId));
+	const pinned = sortDmsWithPinnedOrder(dms, roster.viewerId);
 	const isOnline = row => presence?.isOnline(getDmOtherUserId(row)) || false;
 	const lastInteracted = row => {
 		const ms = Date.parse(String(row?.last_message?.created_at || ''));
@@ -41,11 +40,15 @@ function rosterModel(roster = {}, presence) {
 	const directMessages = orderedDms.map((row) => {
 		const other = row.other_user || {};
 		const username = String(other.user_name || row.other_user_id || 'user');
+		const pinKey = dmStablePinStorageKey(row);
 		return {
-			id: `dm-${row.id}`, label: `@${username}`,
+			id: `dm-${row.id}`, section: 'dm', label: `@${username}`,
 			path: buildChatThreadUrl(row), avatarHtml: avatar(row), online: isOnline(row),
 			unread: Number(row.unread_count) || 0,
-			route: { kind: 'dm', userName: username, threadId: Number(row.id) }
+			lastMessageId: Number(row.last_message?.id) || 0,
+			pinKey, pinned: Boolean(pinKey && isDmPinKeyActive(pinKey)),
+			profilePath: buildProfilePath({ userName: other.user_name, userId: row.other_user_id }),
+			route: { kind: 'dm', userName: username.toLowerCase(), threadId: Number(row.id) }
 		};
 	});
 	const visibleChannels = threads.filter(row => row?.type === 'channel' && !SIDEBAR_TOP_STRIP_CHANNEL_SLUGS.has(String(row.channel_slug || '').trim().toLowerCase()));
@@ -53,15 +56,17 @@ function rosterModel(roster = {}, presence) {
 	function channelItem(row, kind = 'channel', server = null) {
 		const slug = String(row.channel_slug || row.title || 'channel').replace(/^#/, '');
 		return {
-			id: `${kind}-${row.id || slug}`, label: row.title || `#${slug}`,
+			id: `${kind}-${row.id || slug}`, section: kind, label: row.title || `#${slug}`,
 			path: buildChatThreadUrl(row),
 			avatarHtml: avatar(server?.avatar_url?.trim() ? { ...row, server_avatar_url: server.avatar_url.trim() } : row), unread: Number(row.unread_count) || 0,
-			route: { kind: 'channel', slug, threadId: Number(row.id) }
+			lastMessageId: Number(row.last_message?.id) || 0,
+			server: server ? { id: Number(server.id), name: server.name || row.title || slug, description: typeof server.description === 'string' ? server.description : '', canManage: server.can_manage === true } : null,
+			route: { kind: 'channel', slug, threadId: Number(row.id) || 0, serverId: server ? Number(server.id) : 0 }
 		};
 	}
 	const isServer = row => joinedBySlug.has(String(row.channel_slug || '').trim().toLowerCase());
-	const channelRows = ordered(visibleChannels.filter(row => !isServer(row))).map(row => channelItem(row)).filter(row => !hiddenIds.has(row.id));
-	const servers = ordered(visibleChannels.filter(isServer)).map(row => channelItem(row, 'server', joinedBySlug.get(String(row.channel_slug).trim().toLowerCase()))).filter(row => !hiddenIds.has(row.id));
+	const channelRows = ordered(visibleChannels.filter(row => !isServer(row))).map(row => channelItem(row));
+	const servers = ordered(visibleChannels.filter(isServer)).map(row => channelItem(row, 'server', joinedBySlug.get(String(row.channel_slug).trim().toLowerCase())));
 	return {
 		navigation, directMessages, servers,
 		channels: channelRows,
@@ -72,7 +77,6 @@ function rosterModel(roster = {}, presence) {
 export function createSidebarModel(preference = {}, roster = null, presence) {
 	const model = {
 		...rosterModel(roster || {}, presence),
-		menus: structuredClone(sidebarMenus),
 		footer: { credits: roster?.credits == null ? '' : formatCredits(roster.credits) }
 	};
 	if (preference.mode !== 'minimal') return model;

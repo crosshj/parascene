@@ -4,6 +4,7 @@ import { iconMarkup } from '../../components/Icon/Icon.js';
 import { createPopupMenu } from '../../components/PopupMenu/PopupMenu.js';
 import { bindRefs, escapeHtml, htmlFragment, mountTemplate } from '../../utils/dom.js';
 import { formatCredits } from '../../utils/format.js';
+import { sidebarRowMenuItems } from '../../config/sidebar.js';
 import { isSidebarRouteActive } from '../../utils/sidebarRoutes.js';
 import { createSidebarController } from './SidebarController.js';
 import template from './SidebarView.html';
@@ -20,7 +21,6 @@ function navigationMarkup(items) {
 }
 
 function rosterRowMarkup(item, kind) {
-	const menuKey = kind === 'dm' ? 'dmRow' : kind === 'server' ? 'serverRow' : 'channelRow';
 	const presenceClass = kind === 'dm' ? (item.online ? ' is-online' : ' is-offline') : '';
 	const unread = Number(item.unread) || 0;
 	const unreadClass = unread > 0 ? ' has-unread' : '';
@@ -32,7 +32,7 @@ function rosterRowMarkup(item, kind) {
 			</span></span>
 		</a>
 		<span class="sidebar-view__row-controls">
-			<button class="sidebar-view__row-menu" type="button" data-menu-key="${menuKey}" data-row-id="${escapeHtml(item.id)}" aria-label="${escapeHtml(item.label)} options" aria-haspopup="menu" aria-expanded="false">${iconMarkup('gear', 'sidebar-view__row-menu-icon')}</button>
+			<button class="sidebar-view__row-menu" type="button" data-row-menu data-row-id="${escapeHtml(item.id)}" aria-label="${escapeHtml(item.label)} options" aria-haspopup="menu" aria-expanded="false">${iconMarkup('gear', 'sidebar-view__row-menu-icon')}</button>
 			<span class="sidebar-view__badge-slot">${unread > 0 ? `<span class="sidebar-view__unread" aria-label="${unread} unread">${unread > 99 ? '99+' : unread}</span>` : ''}</span>
 		</span>
 	</div>`;
@@ -92,7 +92,6 @@ function patchRosterRow(current, next) {
 	}
 	const liveButton = current.querySelector('.sidebar-view__row-menu');
 	const nextButton = next.querySelector('.sidebar-view__row-menu');
-	if (liveButton.dataset.menuKey !== nextButton.dataset.menuKey) liveButton.dataset.menuKey = nextButton.dataset.menuKey;
 	if (liveButton.dataset.rowId !== nextButton.dataset.rowId) liveButton.dataset.rowId = nextButton.dataset.rowId;
 	if (liveButton.getAttribute('aria-label') !== nextButton.getAttribute('aria-label')) liveButton.setAttribute('aria-label', nextButton.getAttribute('aria-label') || 'Options');
 	return current;
@@ -119,8 +118,13 @@ function mountSidebarPresentation({ outlet, model = {}, onAction }) {
 	let currentModel = model;
 	let currentPath = location.pathname;
 	let routeItems = new Map();
-	let popupMenus = new Map();
 	let activeMenuRow = null;
+	const rowMenu = createPopupMenu({
+		placement: 'below-end',
+		onSelect(item) {
+			onAction?.({ action: item?.action, row: activeMenuRow });
+		}
+	});
 	let footerResizeObserver = null;
 
 	try { sidebarWidth = clampWidth(localStorage.getItem('prsn-chat-sidebar-width-px')); } catch { /* Storage may be unavailable. */ }
@@ -189,7 +193,7 @@ function mountSidebarPresentation({ outlet, model = {}, onAction }) {
 
 	function syncRoute(pathname = location.pathname, { closeMenus = true } = {}) {
 		currentPath = pathname;
-		if (closeMenus) for (const popup of popupMenus.values()) popup.close();
+		if (closeMenus) rowMenu.close();
 		for (const [element, item] of routeItems) {
 			const active = isSidebarRouteActive(item, currentPath);
 			element.classList.toggle('is-active', active);
@@ -213,25 +217,6 @@ function mountSidebarPresentation({ outlet, model = {}, onAction }) {
 		syncScrollEdges();
 	}
 
-	function destroyPopupMenus() {
-		for (const popup of popupMenus.values()) popup.destroy();
-		popupMenus = new Map();
-	}
-
-	function setupPopupMenus() {
-		destroyPopupMenus();
-		for (const [key, definition] of Object.entries(currentModel.menus || {})) {
-			if (['account', 'notifications', 'credits'].includes(key)) continue;
-			popupMenus.set(key, createPopupMenu({
-				...definition,
-				onSelect(item) {
-					if (item?.action === 'logout') refs.logout.click();
-					else onAction?.({ action: item?.action, menu: key, row: activeMenuRow });
-				}
-			}));
-		}
-	}
-
 	function reconcileRows(host, items, kind, existingRows) {
 		const desired = [];
 		for (const item of items) {
@@ -249,9 +234,7 @@ function mountSidebarPresentation({ outlet, model = {}, onAction }) {
 
 	function closeMenuForRemovedRow(existingRows) {
 		if (!activeMenuRow || !existingRows.has(activeMenuRow)) return;
-		const oldRow = existingRows.get(activeMenuRow);
-		const menuKey = oldRow.querySelector('[data-menu-key]')?.dataset.menuKey;
-		popupMenus.get(menuKey)?.close();
+		rowMenu.close();
 		activeMenuRow = null;
 	}
 
@@ -328,8 +311,7 @@ function mountSidebarPresentation({ outlet, model = {}, onAction }) {
 			const nextHost = nextMenuRow?.parentElement;
 			const nextIndex = nextHost ? [...nextHost.children].indexOf(nextMenuRow) : -1;
 			if (!nextMenuRow || priorMenuHost !== nextHost || priorMenuIndex !== nextIndex) {
-				const menuKey = priorMenuRow?.querySelector('[data-menu-key]')?.dataset.menuKey;
-				popupMenus.get(menuKey)?.close();
+				rowMenu.close();
 				activeMenuRow = null;
 			}
 		}
@@ -384,27 +366,40 @@ function mountSidebarPresentation({ outlet, model = {}, onAction }) {
 			if (!shouldExpand) collapsible?.scrollIntoView({ block: 'nearest' });
 			return;
 		}
+		const addButton = event.target.closest('[data-sidebar-add]');
+		if (addButton) {
+			event.preventDefault();
+			event.stopPropagation();
+			rowMenu.close();
+			onAction?.({ action: 'open-section', section: addButton.dataset.sidebarAdd });
+			return;
+		}
+		const rowMenuButton = event.target.closest('[data-row-menu]');
+		if (rowMenuButton) {
+			event.preventDefault();
+			event.stopPropagation();
+			const row = rowMenuButton.closest('[data-sidebar-item]');
+			const item = row ? routeItems.get(row) : null;
+			if (!item) return;
+			activeMenuRow = item.id;
+			rowMenu.setItems(sidebarRowMenuItems(item));
+			rowMenu.toggle(rowMenuButton);
+			return;
+		}
 		const menuButton = event.target.closest('[data-menu-key]');
 		if (menuButton) {
 			event.preventDefault();
 			event.stopPropagation();
+			rowMenu.close();
 			if (['account', 'notifications', 'credits'].includes(menuButton.dataset.menuKey)) {
 				onAction?.({ action: 'open-overlay', overlay: menuButton.dataset.menuKey, anchor: menuButton });
-				return;
 			}
-			activeMenuRow = menuButton.dataset.rowId || null;
-			for (const [key, popup] of popupMenus) {
-				if (key !== menuButton.dataset.menuKey) popup.close();
-			}
-			popupMenus.get(menuButton.dataset.menuKey)?.toggle(menuButton);
-			return;
 		}
 		const link = event.target.closest('a[data-spa-link]');
 		if (link) syncRoute(new URL(link.href, location.href).pathname);
 	}
 
 	setSidebarWidth(sidebarWidth, { persist: false });
-	setupPopupMenus();
 	renderModel(currentModel);
 	refs.resizeHandle.addEventListener('pointerdown', onPointerDown);
 	refs.resizeHandle.addEventListener('pointermove', onPointerMove);
@@ -460,7 +455,7 @@ function mountSidebarPresentation({ outlet, model = {}, onAction }) {
 		destroy() {
 			if (resizeFrame) cancelAnimationFrame(resizeFrame);
 			footerResizeObserver?.disconnect();
-			destroyPopupMenus();
+			rowMenu.destroy();
 			document.body.classList.remove('is-resizing-sidebar');
 			refs.resizeHandle.removeEventListener('pointerdown', onPointerDown);
 			refs.resizeHandle.removeEventListener('pointermove', onPointerMove);

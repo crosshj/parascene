@@ -20,6 +20,10 @@ export function createThreadsRoutes({ threads }) {
 		if (req.body?.visibility === 'private') throw Object.assign(new Error('Private channel creation is not available here yet'), { status: 400 });
 		return threads.openPublicChannel(req.auth.userId, req.body?.tag ?? req.body?.channel);
 	}));
+	router.post('/api/chat/dm', handle((req) => threads.openDm(req.auth.userId, { otherUserId: req.body?.other_user_id, otherUserName: req.body?.other_user_name })));
+	router.get('/api/chat/channel-slugs', handle(() => threads.listPublicChannelSlugs()));
+	router.post('/api/chat/threads/:threadId/hide', handle((req) => threads.hideThread(req.auth.userId, id(req), req.body?.hidden !== false)));
+	router.post('/api/chat/threads/:threadId/leave', handle((req) => threads.leaveThread(req.auth.userId, id(req))));
 	router.get('/api/chat/unread-summary', handle((req) => threads.unread(req.auth.userId)));
 	router.get('/api/chat/threads/:threadId', handle(async (req) => ({ thread: await threads.threadForMember(req.auth.userId, id(req)) })));
 	router.get('/api/chat/threads/:threadId/canvases', handle(req => threads.canvases.list(req.auth.userId, id(req))));

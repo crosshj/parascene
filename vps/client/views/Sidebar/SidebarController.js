@@ -1,6 +1,9 @@
 import { createSidebarModel } from './SidebarModel.js';
 import { formatCredits } from '../../utils/format.js';
+import { pinDmKey, unpinDmKey } from '../../shared/chatDmPins.js';
+import { isSidebarRouteActive } from '../../utils/sidebarRoutes.js';
 import { mountSidebarOverlays } from '../SidebarOverlays/SidebarOverlaysView.js';
+import { mountSidebarSectionModals } from './SidebarSectionModals.js';
 
 function routePath(navigation) {
 	const raw = navigation?.backgroundUrl || navigation?.url || location.pathname;
@@ -9,7 +12,7 @@ function routePath(navigation) {
 
 export function createSidebarController({ view, services, actions } = {}) {
 	const { providers, state, session } = services;
-const settings=document.createElement('app-modal-profile'),about=document.createElement('app-modal-about');document.body.append(settings,about);const accountMenu=document.createElement('app-account-menu');accountMenu.onSettings=()=>settings.open();accountMenu.onAbout=()=>about.open();accountMenu.onNavigate=actions?.navigate;accountMenu.onLogout=session.logout;document.body.appendChild(accountMenu);
+const settings=document.createElement('app-modal-profile'),about=document.createElement('app-modal-about'),serverModal=document.createElement('app-modal-server');document.body.append(settings,about,serverModal);const accountMenu=document.createElement('app-account-menu');accountMenu.onSettings=()=>settings.open();accountMenu.onAbout=()=>about.open();accountMenu.onNavigate=actions?.navigate;accountMenu.onLogout=session.logout;document.body.appendChild(accountMenu);function refreshServers(){void threadsQuery?.refresh({force:true});}document.addEventListener('servers-updated',refreshServers);document.addEventListener('server-updated',refreshServers);
 	const threadsQuery = providers.threads.query;
 	const creditsQuery = providers.credits.query;
 
@@ -27,37 +30,68 @@ const settings=document.createElement('app-modal-profile'),about=document.create
 		view.updateAccount(session.user);
 	}
 
-	function updateRoster(action) {
-		if (action?.action === 'refresh-sidebar') {
-			void providers.presence?.refresh();
-			void threadsQuery?.refresh({ force: true }).catch(() => undefined);
+	function findItem(id) {
+		const current = model();
+		return [...current.directMessages, ...current.servers, ...current.channels].find((entry) => entry.id === id) || null;
+	}
+
+	const sectionModals = mountSidebarSectionModals({
+		api: providers.threads.api,
+		getThreads: () => threadsQuery?.data?.threads || [],
+		getViewerId: () => providers.viewerId,
+		navigate: (href) => actions?.navigate(href),
+		refresh: () => threadsQuery?.refresh({ force: true }),
+	});
+
+	async function handleRosterAction(action) {
+		const item = findItem(action?.row);
+		if (!item) return;
+		const threadId = Number(item.route?.threadId);
+		if (action.action === 'profile' && item.profilePath) {
+			void actions?.navigate(item.profilePath);
 			return;
 		}
-		if (!action?.row || !threadsQuery?.data) return;
-		const data = threadsQuery.data;
-		const next = {
-			...data,
-			threads: data.threads.map((row) => ({ ...row })),
-			servers: data.servers.map((row) => ({ ...row })),
-			pinnedIds: [...(data.pinnedIds || [])],
-			hiddenIds: [...(data.hiddenIds || [])],
-			readMarkers: { ...(data.readMarkers || {}) },
-		};
-		const itemId = String(action.row);
-		if (action.action === 'hide' || action.action === 'leave') next.hiddenIds = [...new Set([...next.hiddenIds, itemId])];
-		if (action.action === 'pin') next.pinnedIds = next.pinnedIds.includes(itemId)
-			? next.pinnedIds.filter((id) => id !== itemId)
-			: [...next.pinnedIds, itemId];
-		if (action.action === 'mark-read') {
-			const item = [...model().directMessages, ...model().servers, ...model().channels].find((entry) => entry.id === itemId);
-			const threadId = Number(item?.route?.threadId || itemId.replace(/^(dm|channel|server)-/, ''));
-			const thread = next.threads.find((row) => Number(row.id) === threadId);
-			next.readMarkers[String(threadId)] = Number(thread?.last_message?.id) || Number(thread?.last_read_message_id) || 0;
-			next.threads = next.threads.map((row) => Number(row.id) === threadId
-				? { ...row, unread_count: 0, last_read_message_id: next.readMarkers[String(threadId)] || row.last_read_message_id }
-				: row);
+		if (action.action === 'server-details' && item.server?.id) {
+			void serverModal.open({ mode: item.server.canManage ? 'edit' : 'view', serverId: item.server.id });
+			return;
 		}
-		threadsQuery.setData(next);
+		if ((action.action === 'pin' || action.action === 'unpin') && item.pinKey) {
+			if (action.action === 'pin') pinDmKey(item.pinKey);
+			else unpinDmKey(item.pinKey);
+			renderState();
+			return;
+		}
+		if (action.action === 'mark-read') {
+			if (!(threadId > 0)) return;
+			if (!(item.lastMessageId > 0)) {
+				threadsQuery?.update((current) => current ? {
+					...current,
+					threads: current.threads.map((row) => Number(row.id) === threadId ? { ...row, unread_count: 0 } : row),
+				} : current);
+				return;
+			}
+			await providers.threads.markRead(threadId, item.lastMessageId);
+			return;
+		}
+		if (action.action === 'hide' || action.action === 'leave') {
+			if (!(threadId > 0)) return;
+			const closing = action.action === 'hide';
+			const confirmed = await sectionModals.confirm({
+				title: closing ? 'Close DM' : 'Leave channel',
+				message: closing
+					? `Close your DM with ${item.label}? It will reappear in your sidebar if they message you again.`
+					: `Leave ${item.label}?`,
+				confirmLabel: closing ? 'Close DM' : 'Leave channel',
+				run: async () => {
+					if (closing) {
+						await providers.threads.api.markThreadHidden(threadId);
+						if (item.pinKey) unpinDmKey(item.pinKey);
+					} else await providers.threads.api.leaveThread(threadId);
+					await threadsQuery?.refresh({ force: true });
+				},
+			});
+			if (confirmed && isSidebarRouteActive(item, routePath(state.get().navigation))) void actions?.navigate('/feed');
+		}
 	}
 
 	const overlays = mountSidebarOverlays({
@@ -84,7 +118,16 @@ const settings=document.createElement('app-modal-profile'),about=document.create
 			void session.logout();
 			return;
 		}
-		updateRoster(action);
+		if (action?.action === 'refresh-sidebar') {
+			void providers.presence?.refresh();
+			void threadsQuery?.refresh({ force: true }).catch(() => undefined);
+			return;
+		}
+		if (action?.action === 'open-section') {
+			sectionModals.open(action.section);
+			return;
+		}
+		void handleRosterAction(action).catch(() => undefined);
 	}
 
 	const unsubscribeState = state.subscribe(renderState);
@@ -116,7 +159,9 @@ const settings=document.createElement('app-modal-profile'),about=document.create
 			unsubscribePresence?.();
 			unsubscribeRoster?.();
 			unsubscribeCredits?.();
-			overlays.destroy();accountMenu.remove();settings.close();settings.remove();about.close();about.remove();
+			document.removeEventListener('servers-updated', refreshServers);
+			document.removeEventListener('server-updated', refreshServers);
+			overlays.destroy();sectionModals.destroy();accountMenu.remove();settings.close();settings.remove();about.close();about.remove();serverModal.close();serverModal.remove();
 		},
 	};
 }
