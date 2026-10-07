@@ -257,7 +257,6 @@
 }
 .sidebar-view__unread { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; box-sizing: border-box; min-width: 16px; height: 16px; padding: 0 5px; border-radius: 999px; color: var(--beta-accent-text); background: var(--beta-accent); font-size: .6rem; font-weight: 700; line-height: normal; }
 .sidebar-view__unread[hidden] { display: none; }
-.sidebar-view__menu-item:hover .sidebar-view__unread { visibility: hidden; }
 .sidebar-view__row-controls { position: absolute; top: 50%; right: var(--beta-sidebar-control-inset); width: 56px; height: 28px; transform: translateY(-50%); }
 /* The unread badge shares the gear's box. It must not take the click, including when the slot is empty. */
 .sidebar-view__badge-slot { position: absolute; top: 50%; right: 0; display: inline-flex; width: 28px; height: 28px; align-items: center; justify-content: center; transform: translateY(-50%); pointer-events: none; }
@@ -383,6 +382,41 @@
 .sidebar-view__footer-action:focus-visible { outline: 2px solid #7c3aed; outline-offset: 2px; }
 .sidebar-view__footer-action .sidebar-view__control-icon { width: 18px; height: 18px; }
 .sidebar-view__credits { font-size: .8125rem; font-weight: 600; }
+.sidebar-view__credits-badge {
+	display: none;
+	position: absolute;
+	top: -2px;
+	right: -2px;
+	width: 16px;
+	height: 16px;
+	box-sizing: border-box;
+	border: 2px solid var(--surface);
+	border-radius: 999px;
+	background: var(--accent);
+	pointer-events: none;
+}
+.sidebar-view__credits.attention .sidebar-view__credits-badge { display: block; }
+.sidebar-view__notifications-badge {
+	display: none;
+	position: absolute;
+	top: 0;
+	right: 0;
+	min-width: 16px;
+	height: 16px;
+	padding: 0 4px;
+	box-sizing: border-box;
+	border: 2px solid var(--surface);
+	border-radius: 999px;
+	background: var(--beta-accent);
+	color: var(--beta-accent-text);
+	font-size: .6rem;
+	font-weight: 700;
+	line-height: 1;
+	align-items: center;
+	justify-content: center;
+	pointer-events: none;
+}
+.sidebar-view__notifications-badge:not(:empty) { display: inline-flex; }
 .sidebar-view__resize-handle {
 	position: fixed;
 	top: var(--beta-shell-inset);

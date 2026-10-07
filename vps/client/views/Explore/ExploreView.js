@@ -13,7 +13,7 @@ export const ExploreView = Object.freeze({
  mount({ outlet, actions, services, search = '', searchComposer, setHeaderMenu }) {
   const root = document.createElement('section'); root.className = 'explore-view creation-browse chat-feed-channel-route--browse-view';
   root.innerHTML = `<div class="explore-view__status" role="status"></div><div class="route-cards content-cards-image-grid creation-browse-grid" aria-label="Community creations"></div><button class="explore-view__more" type="button" hidden>Load more</button>`;
-  outlet.replaceChildren(root); document.title = 'Explore · Parascene beta';
+  outlet.replaceChildren(root); services.providers.document.setTitle('Explore · Parascene beta');
   const grid = root.querySelector('.route-cards'), status = root.querySelector('[role="status"]'), more = root.querySelector('.explore-view__more');
   const media = createCreationMediaLoader(grid); const scroll = createScrollContext(root);
   let q = new URLSearchParams(search).get('q')?.trim() || '', offset = 0, hasMore = false, busy = false, destroyed = false, epoch = 0, request, rows = [], large = false;

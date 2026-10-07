@@ -1,4 +1,5 @@
 import { mountChallengesPane } from './mountPane.js';
+import { outstandingChallengeVotes } from '../../shared/challenges/model/outstandingVotes.js';
 import { mountOrganizeSnapshot } from './organizePageMain.js';
 import { isChallengeChannelAdmin, resolveChallengeOrganizerAllowlistFromMessages } from '../../shared/challenges/challengeAdmin.js';
 import { challengesMessagesFingerprint } from '../../shared/challenges/challengesChannelCache.js';
@@ -21,7 +22,7 @@ export const ChallengesView = Object.freeze({
   const root = document.createElement('div'); root.className = organizing ? 'challenges-organize-root challenges-organize-root--spa' : 'challenge-pane-root';
   wrapper.append(status, retry, root); outlet.replaceChildren(wrapper);
   root.innerHTML = organizing ? renderChallengesOrganizeBoardSkeleton() : renderChallengePaneSkeleton();
-  document.title = `${title} · Parascene beta`;
+  services.providers.document.setTitle(`${title} · Parascene beta`);
   let destroyed = false, mounted = null, lease = null, unsubscribeMessages = null, threadId = null, fingerprint = '', latest = null, readId = 0, participantPainted = false;
   function delivery() {
    if (destroyed) return;
@@ -58,6 +59,10 @@ export const ChallengesView = Object.freeze({
     return;
    }
    const messages = threads.votes.project(snapshot.data.messages);
+   const outstanding = outstandingChallengeVotes(messages, viewer.id);
+   threads.setChallengeAttention?.(outstanding);
+   const last = Number(messages.at(-1)?.id) || 0;
+   if (outstanding === 0 && last > readId) { readId = last; void threads.markRead(threadId, last).catch(() => { readId = 0; }); }
    if (mounted?.isVoteOpen?.()) { mounted.updateVotes(messages); return; }
    if (mounted?.isModalOpen?.()) return;
    const next = `${challengesMessagesFingerprint(messages)}:${Math.floor(Date.now() / 60000)}`;
@@ -76,12 +81,10 @@ export const ChallengesView = Object.freeze({
      } else {
       setHeaderTitle?.(title);
      }
-     document.title = info?.title ? `${headerTitle} · Challenges · Parascene beta` : `${title} · Parascene beta`;
+     services.providers.document.setTitle(info?.title ? `${headerTitle} · Challenges · Parascene beta` : `${title} · Parascene beta`);
     },
    });
    participantPainted = true; fingerprint = next; header(eligible);
-   const last = Number(messages.at(-1)?.id) || 0;
-   if (last > readId) { readId = last; void threads.markRead(threadId, last).catch(() => { readId = 0; }); }
   }
   function connect(inboxSnapshot) {
    if (destroyed || lease) return;

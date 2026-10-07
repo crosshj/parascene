@@ -29,7 +29,7 @@ export function mountMobileNavigationView({ outlet, services, actions, navigatio
 	}
 	function badges({ data } = {}) {
 		const summary = data?.unreadSummary || {};
-		const challenges = Math.max(0, Number(summary.challenges_unread) || 0);
+		const challenges = services.providers.threads.challengeUnread?.(summary) ?? Math.max(0, Number(summary.challenges_unread) || 0);
 		const chat = Math.max(0, Number(summary.chat_unread ?? (Number(summary.total_unread || 0) - challenges)) || 0);
 		for (const [route, count, label] of [['connect', chat, 'Chat'], ['challenges', challenges, 'Challenges']]) {
 			const button = root.querySelector(`[data-route="${route}"]`);
@@ -41,7 +41,8 @@ export function mountMobileNavigationView({ outlet, services, actions, navigatio
 	}
 	root.addEventListener('click', click);
 	const unsubscribe = services.providers.threads.query.subscribe(badges);
+	const unsubscribeAttention = services.providers.threads.subscribeChallengeAttention?.(() => badges({ data: services.providers.threads.query.data }));
 	badges({ data: services.providers.threads.query.data });
 	update({ navigation });
-	return { root, update, destroy() { unsubscribe(); root.removeEventListener('click', click); root.remove(); } };
+	return { root, update, destroy() { unsubscribe(); unsubscribeAttention?.(); root.removeEventListener('click', click); root.remove(); } };
 }

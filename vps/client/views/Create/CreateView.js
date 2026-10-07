@@ -12,7 +12,7 @@ export const CreateView = Object.freeze({
  mount({ outlet, services, actions, creationId }) {
   outlet.append(createFragment('create-workflow'));
   const root = outlet.querySelector('.create-workflow-root');
-  document.title = `${creationId ? 'Mutate' : 'Create'} - parascene beta`;
+  services.providers.document.setTitle(`${creationId ? 'Mutate' : 'Create'} - parascene beta`);
   const controller = createCreateController({
    root, creationId, markup: basicCreateMarkup(), providers: services.providers, actions,
    renderError(error) { const message = document.createElement('p'); message.setAttribute('role', 'alert'); message.textContent = error.message || 'Could not load Create.'; root.replaceChildren(message); },

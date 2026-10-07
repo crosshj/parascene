@@ -261,6 +261,19 @@ const commandPalette = initCommandPalette({
 });
 const stopCommandPaletteRoster = providers.threads.query?.subscribe(() => commandPalette.refresh());
 providers.threads.preload();
+providers.document.start();
+window.state = {
+	title: {
+		explain() {
+			const report = providers.document.explain();
+			console.log(report.text);
+			if (report.messages.length) console.table(report.messages);
+			if (report.notifications.length) console.table(report.notifications);
+			if (report.skipped.length) console.table(report.skipped);
+			return report;
+		},
+	},
+};
 const lifecycle = connectLifecycle({ state, session, providers, router });
 
 await lifecycle.start();

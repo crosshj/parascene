@@ -20,6 +20,17 @@ function escapeHtml(str) {
 		.replace(/'/g, '&#039;');
 }
 
+function atUsername(userName) {
+	const handle = typeof userName === 'string' ? userName.trim().replace(/^@+/, '') : '';
+	return handle ? `@${handle}` : 'User';
+}
+
+function profileIdentityHtml({ href, label, founder }) {
+	const inner = `<span class="comment-author-name${founder ? ' founder-name' : ''}">${escapeHtml(label)}</span>`;
+	if (!href) return `<span>${inner}</span>`;
+	return `<a class="user-link connect-comment-profile-link" href="${escapeHtml(href)}" data-profile-link aria-label="View ${escapeHtml(label)} profile">${inner}</a>`;
+}
+
 /**
  * @param {object} comment — row from GET /api/comments/latest (plus reactions from API)
  * @param {{ extraRootClass?: string }} [opts]
@@ -34,15 +45,10 @@ export function createConnectCommentRowElement(comment, opts = {}) {
 	const imageUrl = typeof comment?.created_image_url === 'string' ? comment.created_image_url.trim() : '';
 	const resolvedThumb = thumbUrl || imageUrl || '';
 
-	const displayName = (typeof comment?.display_name === 'string' && comment.display_name.trim())
-		? comment.display_name.trim()
-		: '';
 	const userName = (typeof comment?.user_name === 'string' && comment.user_name.trim())
 		? comment.user_name.trim()
 		: '';
-	const fallbackName = userName ? userName : 'User';
-	const commenterName = displayName || fallbackName;
-	const commenterHandle = userName ? `@${userName}` : '';
+	const commenterLabel = atUsername(userName);
 
 	const createdImageTitle = (typeof comment?.created_image_title === 'string' && comment.created_image_title.trim())
 		? comment.created_image_title.trim()
@@ -56,9 +62,6 @@ export function createConnectCommentRowElement(comment, opts = {}) {
 		(Array.isArray(comment?.created_image_meta?.challenge_organizer_refs) &&
 			comment.created_image_meta.challenge_organizer_refs.length > 0);
 
-	const creatorDisplayName = (typeof comment?.created_image_display_name === 'string' && comment.created_image_display_name.trim())
-		? comment.created_image_display_name.trim()
-		: '';
 	const creatorUserName = (typeof comment?.created_image_user_name === 'string' && comment.created_image_user_name.trim())
 		? comment.created_image_user_name.trim()
 		: '';
@@ -135,15 +138,14 @@ export function createConnectCommentRowElement(comment, opts = {}) {
 
 		const creatorId = Number(comment?.created_image_user_id ?? 0);
 		const creatorProfileHref = buildProfilePath({ userName: creatorUserName, userId: creatorId });
-		const creatorName = creatorDisplayName || (creatorUserName ? creatorUserName : 'User');
-		const creatorHandle = creatorUserName ? `@${creatorUserName}` : '';
-		const creatorSeed = creatorUserName || String(creatorId || '') || creatorName;
+		const creatorLabel = atUsername(creatorUserName);
+		const creatorSeed = creatorUserName || String(creatorId || '') || creatorLabel;
 		const creatorColor = getAvatarColor(creatorSeed);
 		const creatorAvatarUrl = typeof comment?.created_image_avatar_url === 'string' ? comment.created_image_avatar_url.trim() : '';
 		const creatorPlan = comment?.created_image_owner_plan === 'founder';
 		const creatorAvatarHtml = renderCommentAvatarHtml({
 			avatarUrl: creatorAvatarUrl,
-			displayName: creatorName,
+			displayName: creatorUserName || 'User',
 			color: creatorColor,
 			href: creatorProfileHref,
 			isFounder: creatorPlan,
@@ -154,20 +156,20 @@ export function createConnectCommentRowElement(comment, opts = {}) {
 		<div class="connect-comment-creator-left">
 			${creatorAvatarHtml}
 			<div class="connect-comment-creator-who">
-				${creatorProfileHref ? `<a class="user-link connect-comment-profile-link" href="${escapeHtml(creatorProfileHref)}" data-profile-link aria-label="View ${escapeHtml(creatorName)} profile"><span class="comment-author-name${creatorPlan ? ' founder-name' : ''}">${escapeHtml(creatorName)}</span>${creatorHandle ? ` <span class="comment-author-handle${creatorPlan ? ' founder-name' : ''}">${escapeHtml(creatorHandle)}</span>` : ''}</a>` : `<span><span class="comment-author-name${creatorPlan ? ' founder-name' : ''}">${escapeHtml(creatorName)}</span>${creatorHandle ? ` <span class="comment-author-handle${creatorPlan ? ' founder-name' : ''}">${escapeHtml(creatorHandle)}</span>` : ''}</span>`}
+				${profileIdentityHtml({ href: creatorProfileHref, label: creatorLabel, founder: creatorPlan })}
 			</div>
 		</div>
 	`;
 	}
 	const commenterId = Number(comment?.user_id ?? 0);
 	const profileHref = buildProfilePath({ userName, userId: commenterId });
-	const seed = userName || String(comment?.user_id ?? '') || commenterName;
+	const seed = userName || String(comment?.user_id ?? '') || commenterLabel;
 	const color = getAvatarColor(seed);
 	const avatarUrl = typeof comment?.avatar_url === 'string' ? comment.avatar_url.trim() : '';
 	const commenterPlan = comment?.plan === 'founder';
 	const avatarHtml = renderCommentAvatarHtml({
 		avatarUrl,
-		displayName: commenterName,
+		displayName: userName || 'User',
 		color,
 		href: profileHref,
 		isFounder: commenterPlan,
@@ -246,7 +248,7 @@ export function createConnectCommentRowElement(comment, opts = {}) {
 			${avatarHtml}
 			<div class="connect-comment-footer-who">
 				<span class="connect-comment-footer-name-handle-time">
-					${profileHref ? `<a class="user-link connect-comment-profile-link" href="${escapeHtml(profileHref)}" data-profile-link aria-label="View ${escapeHtml(commenterName)} profile"><span class="comment-author-name${commenterPlan ? ' founder-name' : ''}">${escapeHtml(commenterName)}</span>${commenterHandle ? ` <span class="comment-author-handle${commenterPlan ? ' founder-name' : ''}">${escapeHtml(commenterHandle)}</span>` : ''}</a>` : `<span><span class="comment-author-name${commenterPlan ? ' founder-name' : ''}">${escapeHtml(commenterName)}</span>${commenterHandle ? ` <span class="comment-author-handle${commenterPlan ? ' founder-name' : ''}">${escapeHtml(commenterHandle)}</span>` : ''}</span>`}
+					${profileIdentityHtml({ href: profileHref, label: commenterLabel, founder: commenterPlan })}
 					${timeAgo ? `<span class="comment-time">&nbsp;·&nbsp;${escapeHtml(timeAgo)}</span>` : ''}
 				</span>
 			</div>

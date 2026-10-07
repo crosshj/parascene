@@ -3826,8 +3826,8 @@ body.view-nsfw .creation-detail-image-wrapper.nsfw::after {
 	font-size: 0.875rem;
 	border: none;
 	cursor: pointer;
-	background: var(--text);
-	color: var(--bg);
+	background: color-mix(in srgb, var(--text) 16%, var(--surface));
+	color: var(--text);
 }
 
 .creation-detail-action-strip-pill {
@@ -3845,7 +3845,7 @@ body.view-nsfw .creation-detail-image-wrapper.nsfw::after {
 	color: var(--text);
 }
 
-/* Publish pill: same style as Follow button (filled, high contrast) */
+/* Publish stays the filled high-contrast action in this row. */
 .creation-detail-action-strip-pill[data-publish-btn] {
 	background: var(--text);
 	color: var(--bg);

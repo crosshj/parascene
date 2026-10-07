@@ -26,6 +26,7 @@ import * as emptyStateMod from './emptyState.js';
 import * as commentItemMod from './commentItem.js';
 import * as createSubmitMod from '../providers/create/transport.js';
 import * as tooltipTapMod from './reactionTooltipTap.js';
+import { openImagePickerModal } from '../components/ProviderFields/ProviderFields.js';
 
 const commentsThreadDeps = Object.freeze({
 	formatDateTime: datetimeMod.formatDateTime,
@@ -1691,6 +1692,7 @@ export async function mountCreationCommentsThread(container, options) {
 
 	/* Comment media/sticker attachments:
 	 * - primary "+" opens a choice popup (upload, stickers, generate sticker)
+	 * - "Upload an Image" opens the shared image picker (file, paste, or URL)
 	 * - sticker picker loads/saves URLs in users.meta.comment_stickers
 	 * - generate sticker uses the same create job as chat /gen, then posts as a sticker
 	 * - `/gen <prompt>` opens that modal with the prompt filled and generation already started
@@ -1754,6 +1756,7 @@ export async function mountCreationCommentsThread(container, options) {
 	let commentGenBusy = false;
 	let commentAttachChoiceOutsideClick = null;
 	let commentAttachChoiceEscape = null;
+	let commentImagePickerDispose = null;
 	const COMMENT_STICKER_SLOT_LIMIT = 12;
 	let commentStickerUploadSlotIndex = null;
 	let commentStickerLoadingSlotIndex = null;
@@ -1855,12 +1858,9 @@ export async function mountCreationCommentsThread(container, options) {
 			</button>
 		`;
 		pop.querySelector('[data-comment-attach-choice-upload]')?.addEventListener('click', () => {
+			const context = commentAttachContext;
 			closeCommentAttachChoiceModal();
-			const input = resolveAttachInput(commentAttachContext);
-			if (input instanceof HTMLInputElement) {
-				input.value = '';
-				input.click();
-			}
+			openCommentImageChooser(context);
 		});
 		pop.querySelector('[data-comment-attach-choice-sticker]')?.addEventListener('click', () => {
 			closeCommentAttachChoiceModal();
@@ -2435,9 +2435,27 @@ export async function mountCreationCommentsThread(container, options) {
 		await handleCommentAttachInputChange(imageFiles[0], context, attachBtn, attachInput);
 	}
 
-	async function handleCommentAttachInputChange(file, context, attachBtn, attachInput) {
-		if (!file) return;
-		if (typeof uploadImageFile !== 'function') {
+	function openCommentImageChooser(context) {
+		if (typeof commentImagePickerDispose === 'function') {
+			commentImagePickerDispose();
+			commentImagePickerDispose = null;
+		}
+		const attachBtn = resolveAttachButton(context);
+		const attachInput = resolveAttachInput(context);
+		commentImagePickerDispose = openImagePickerModal({
+			modalParent: document.body,
+			onSelect(value) {
+				commentImagePickerDispose = null;
+				void handleCommentAttachInputChange(value, context, attachBtn, attachInput);
+			},
+		});
+	}
+
+	async function handleCommentAttachInputChange(fileOrUrl, context, attachBtn, attachInput) {
+		const file = fileOrUrl instanceof File ? fileOrUrl : null;
+		const directUrl = typeof fileOrUrl === 'string' ? fileOrUrl.trim() : '';
+		if (!file && !directUrl) return;
+		if (file && typeof uploadImageFile !== 'function') {
 			setCommentAttachStatus('Upload unavailable. Refresh and try again.', {
 				tone: 'error',
 				context,
@@ -2452,7 +2470,9 @@ export async function mountCreationCommentsThread(container, options) {
 			attachBtn.classList.add('is-loading');
 		}
 		try {
-			const url = await uploadImageFile(file, { uploadKind: 'generic' });
+			const url = file
+				? await uploadImageFile(file, { uploadKind: 'generic' })
+				: directUrl;
 			if (typeof url !== 'string' || !url) throw new Error('Upload returned no URL');
 			if (context?.kind === 'inline') {
 				await submitCommentText(url, { referencedCommentId: Number(context.referencedCommentId) });
@@ -2529,6 +2549,10 @@ export async function mountCreationCommentsThread(container, options) {
 		setCommentsLoading(false);
 		try { closeReactionPicker(); } catch { /* ignore */ }
 		try { closeCommentAttachChoiceModal(); } catch { /* ignore */ }
+		if (typeof commentImagePickerDispose === 'function') {
+			try { commentImagePickerDispose(); } catch { /* ignore */ }
+			commentImagePickerDispose = null;
+		}
 		try { closeCommentGenModal(); } catch { /* ignore */ }
 		if (commentGenModal instanceof HTMLElement) {
 			try { commentGenModal.remove(); } catch { /* ignore */ }

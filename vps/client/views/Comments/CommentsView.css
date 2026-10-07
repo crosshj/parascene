@@ -326,12 +326,6 @@
 	:where(.comments-view) .connect-comment .comment-text {
 		margin-top: 10px;
 	}
-
-	/* Optional: reduce visual noise on small screens */
-	:where(.comments-view) .connect-comment-creator-who .comment-author-handle,
-	:where(.comments-view) .connect-comment-footer-who .comment-author-handle {
-		display: none;
-	}
 }
 
 

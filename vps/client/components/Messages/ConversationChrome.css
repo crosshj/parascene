@@ -1094,47 +1094,6 @@ dialog.chat-canvas-create-dialog, dialog.chat-private-members-dialog { color: va
 .chat-private-members-head { display: flex; align-items: center; justify-content: space-between; }
 
 
-.chat-page-topbar-pinned-canvas-btn {
-	display: inline-flex;
-	align-items: center;
-	justify-content: flex-start;
-	box-sizing: border-box;
-	max-width: min(240px, 30vw);
-	min-width: 0;
-	min-height: 40px;
-	margin: 0;
-	padding: 0 8px;
-	border: none;
-	border-radius: 6px;
-	background: transparent;
-	color: var(--text-muted);
-	font: inherit;
-	font-size: 0.9375rem;
-	font-weight: 400;
-	line-height: 1.2;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-	cursor: pointer;
-	flex-shrink: 1;
-	-webkit-tap-highlight-color: transparent;
-	touch-action: manipulation;
-	transition:
-		background-color 0.12s ease,
-		color 0.12s ease;
-}
-
-.chat-page-topbar-pinned-canvas-btn:hover {
-	color: var(--text);
-	background: color-mix(in srgb, var(--text) 6%, transparent);
-}
-
-.chat-page-topbar-pinned-canvas-btn:focus-visible {
-	outline: 2px solid var(--focus);
-	outline-offset: 2px;
-}
-
-
 @keyframes chat-history-copy-progress-cycle {
 	from {
 		margin-left: 0;

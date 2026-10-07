@@ -1,9 +1,9 @@
 import { createSidebarModel } from './SidebarModel.js';
-import { formatCredits } from '../../utils/format.js';
 import { pinDmKey, unpinDmKey } from '../../shared/chatDmPins.js';
 import { isSidebarRouteActive } from '../../utils/sidebarRoutes.js';
 import { mountSidebarOverlays } from '../SidebarOverlays/SidebarOverlaysView.js';
 import { mountSidebarSectionModals } from './SidebarSectionModals.js';
+import { claimedOnUtcDay, settleCredits } from '../../providers/credits/dailyClaim.js';
 
 function routePath(navigation) {
 	const raw = navigation?.backgroundUrl || navigation?.url || location.pathname;
@@ -20,7 +20,10 @@ const settings=document.createElement('app-modal-profile'),about=document.create
 		const preference = state.selectors.sidebarPreference();
 		const roster = threadsQuery?.data || { viewerId: providers.viewerId, threads: [], servers: [] };
 		const next = createSidebarModel(preference, roster, providers.presence);
-		if (creditsQuery?.data) next.footer.credits = formatCredits(creditsQuery.data.balance);
+		next.footer.creditsView = providers.credits.viewState();
+		next.footer.notificationsView = providers.document.attention().bell;
+		const challenges = next.navigation.find((item) => item.id === 'challenges');
+		if (challenges && providers.threads.challengeUnread) challenges.unread = providers.threads.challengeUnread(roster.unreadSummary);
 		return next;
 	}
 
@@ -96,11 +99,19 @@ const settings=document.createElement('app-modal-profile'),about=document.create
 
 	const overlays = mountSidebarOverlays({
 		onAction: handleAction,
-		creditsQuery,
+		credits: providers.credits,
+		notifications: providers.notifications,
 		onClaimCredits: async () => {
-			const result = await providers.credits.api.claimDaily();
-			creditsQuery?.update((current) => ({ ...current, ...result, canClaim: false, viewerId: providers.viewerId }));
-			return result;
+			try {
+				const result = await providers.credits.api.claimDaily();
+				creditsQuery?.update((current) => settleCredits({ ...current, ...result, canClaim: false, viewerId: providers.viewerId }, current));
+				return result;
+			} catch (error) {
+				if (error?.data?.success === false && claimedOnUtcDay(error.data.lastClaimDate)) {
+					creditsQuery?.update((current) => settleCredits({ ...current, ...error.data, canClaim: false, viewerId: providers.viewerId }, current));
+				}
+				throw error;
+			}
 		},
 		onRefreshCredits: () => creditsQuery?.refresh({ force: true }),
 	});
@@ -148,6 +159,12 @@ const settings=document.createElement('app-modal-profile'),about=document.create
 		if (snapshot.error?.status === 401) return session.redirectToLogin();
 		if (snapshot.data) renderState();
 	});
+	const unsubscribeChallengeAttention = providers.threads.subscribeChallengeAttention?.(() => renderState());
+	const unsubscribeDocumentAttention = providers.document.subscribe?.(() => renderState());
+	const unsubscribeNotifications = providers.notifications.query?.subscribe((snapshot) => {
+		if (snapshot.error?.status === 401) return session.redirectToLogin();
+		if (snapshot.data) renderState();
+	});
 
 	renderState();
 	if (threadsQuery) void threadsQuery.loadIfNeeded().catch(() => undefined);
@@ -159,6 +176,9 @@ const settings=document.createElement('app-modal-profile'),about=document.create
 			unsubscribePresence?.();
 			unsubscribeRoster?.();
 			unsubscribeCredits?.();
+			unsubscribeNotifications?.();
+			unsubscribeChallengeAttention?.();
+			unsubscribeDocumentAttention?.();
 			document.removeEventListener('servers-updated', refreshServers);
 			document.removeEventListener('server-updated', refreshServers);
 			overlays.destroy();sectionModals.destroy();accountMenu.remove();settings.close();settings.remove();about.close();about.remove();serverModal.close();serverModal.remove();

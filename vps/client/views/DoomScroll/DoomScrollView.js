@@ -20,7 +20,7 @@ export const DoomScrollView = Object.freeze({
   root.className = 'doom-scroll-view';
   root.id = 'chat-doom-scroll-overlay';
   outlet.replaceChildren(root);
-  document.title = 'Doom Scroll · Parascene beta';
+  services.providers.document.setTitle('Doom Scroll · Parascene beta');
   let request, destroyed = false, activeId = Number(creationId);
 
   function loadTimeline(id) {

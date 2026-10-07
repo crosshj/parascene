@@ -57,7 +57,7 @@ body.view-nsfw .creation-browse-grid .feed-card-image.nsfw::after { display: non
 .creation-grid__group-nav--next { right: 8px; }
 .creation-grid__group-nav:hover { background: rgb(9 9 11 / 88%); }
 .creation-published-badge, .creation-challenge-locked-badge, .creation-group-badge, .creation-music-badge, .creation-video-badge { position: absolute; top: 8px; z-index: 3; display: flex; width: 32px; height: 32px; align-items: center; justify-content: center; border: 0; border-radius: 11px; color: rgb(255 255 255 / 70%); background: rgb(18 18 24 / 26%); -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: 0 2px 8px rgb(0 0 0 / 11%); pointer-events: none; }
-.creation-published-badge svg, .creation-challenge-locked-badge svg, .creation-group-badge svg, .creation-music-badge svg, .creation-video-badge svg { display: block; width: 16px; height: 16px; }
+.creation-published-badge svg, .creation-challenge-locked-badge svg, .creation-group-badge svg, .creation-music-badge svg, .creation-video-badge svg { display: block; width: 16px; height: 16px; color: rgb(255 255 255 / 70%); }
 .creation-published-badge { right: 8px; }
 .creation-challenge-locked-badge { left: 8px; z-index: 5; }
 .creation-group-badge { top: auto; bottom: 8px; left: 8px; }

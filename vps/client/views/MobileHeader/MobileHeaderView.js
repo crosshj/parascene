@@ -1,7 +1,6 @@
 import { mountTemplate, htmlFragment } from '../../utils/dom.js';
 import { notifyIcon, creditIcon } from '../../icons/svg-strings.js';
 import { normalizeAvatarUrl } from '../../shared/avatar.js';
-import { formatCredits } from '../../utils/format.js';
 import template from './MobileHeaderView.html';
 import './MobileHeaderView.css';
 
@@ -31,14 +30,30 @@ export function mountMobileHeaderView({ outlet, services, onShellAction }) {
 			avatarSlot.append(avatar);
 		}
 	}
-	function credits({ data } = {}) { root.querySelector('.credits-count').textContent = formatCredits(data?.balance || 0); }
+	const creditsProvider = services.providers.credits;
+	function credits(snapshot) {
+		const view = creditsProvider.viewState(snapshot);
+		const label = root.querySelector('.credits-count');
+		if (view.known && label.textContent !== view.balanceText) label.textContent = view.balanceText;
+		const button = root.querySelector('.credits-button');
+		button.classList.toggle('attention', view.claimAvailable);
+		if (button.getAttribute('aria-label') !== view.label) button.setAttribute('aria-label', view.label);
+	}
 	function click(event) {
 		const button = event.target.closest('[data-shell-action]');
 		if (button) onShellAction({ action: 'open-overlay', overlay: button.dataset.shellAction, anchor: button });
 	}
 	root.addEventListener('click', click);
 	const unsubscribeState = services.state.subscribe(account);
-	const unsubscribeCredits = services.providers.credits.query.subscribe(credits);
-	account(); credits({ data: services.providers.credits.query.data });
-	return { root, destroy() { unsubscribeState(); unsubscribeCredits(); root.removeEventListener('click', click); root.remove(); } };
+	function notifications() {
+		const view = services.providers.document.attention().bell;
+		const badge = root.querySelector('.notifications-badge');
+		const button = root.querySelector('.notifications-button');
+		if (badge.textContent !== view.text) badge.textContent = view.text;
+		if (view.known && button.getAttribute('aria-label') !== view.label) button.setAttribute('aria-label', view.label);
+	}
+	const unsubscribeCredits = creditsProvider.query?.subscribe(credits);
+	const unsubscribeNotifications = services.providers.document.subscribe(notifications);
+	account(); credits();
+	return { root, destroy() { unsubscribeState(); unsubscribeCredits(); unsubscribeNotifications?.(); root.removeEventListener('click', click); root.remove(); } };
 }

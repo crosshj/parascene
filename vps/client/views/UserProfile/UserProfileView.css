@@ -574,7 +574,7 @@
 .user-profile-view .modal-body {
 	min-height: 0;
 	overflow-y: auto;
-	padding-bottom: 36px;
+	padding: 20px 20px 36px;
 }
 
 /* Professional file upload UI */
@@ -1157,19 +1157,36 @@
  .user-profile-view { width: calc(100% - 48px); }
 }
 /* These selectors also isolate the profile from browse-grid rules imported by
-   other routes. WWW profile uses the shared five/four/two-column image grid. */
+   other routes. WWW profile uses the shared five/four/two-column image grid.
+   height:auto keeps a tile from adopting the overlay height (and then the
+   full width via aspect-ratio) after a creation overlay has been open. */
 .user-profile-view .content-cards-image-grid {
- display: grid;
- grid-template-columns: repeat(5, minmax(0, 1fr));
- gap: 6px;
- width: 100%;
- min-width: 0;
+	display: grid;
+	grid-template-columns: repeat(5, minmax(0, 1fr));
+	grid-auto-rows: auto;
+	align-items: start;
+	gap: 6px;
+	width: 100%;
+	min-width: 0;
 }
+
+.user-profile-view .content-cards-image-grid > .route-card-image {
+	width: auto;
+	max-width: 100%;
+	min-width: 0;
+	height: auto;
+	min-height: 0;
+	aspect-ratio: 1 / 1;
+	align-self: start;
+	justify-self: stretch;
+}
+
 @media (max-width: 1024px) {
- .user-profile-view .content-cards-image-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+	.user-profile-view .content-cards-image-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
+
 @media (max-width: 860px) {
- .user-profile-view .content-cards-image-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+	.user-profile-view .content-cards-image-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 .user-profile-view .route-header {
@@ -1389,7 +1406,7 @@
  cursor: pointer; font-size: 1.2rem; line-height: 1;
 }
 .user-profile-view .modal-close:hover { background: var(--surface-strong); }
-.user-profile-view .modal-body { padding-bottom: 36px; }
+.user-profile-view .modal-body { padding: 20px 20px 36px; }
 .user-profile-view .btn-primary {
  padding: 10px 16px; min-height: 0; border-radius: 6px;
  background: var(--accent); color: var(--accent-text); border: 1px solid var(--accent);

@@ -1,6 +1,7 @@
 import express from 'express';
 import { requireAuth } from './middleware/auth.js';
 import { mockThreads } from '../server/mocks/sidebar.js';
+import { isDmChatMentionNotification } from '../db/notifications.js';
 
 function utcDayStart(value = new Date()) {
 	return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
@@ -167,13 +168,22 @@ export function createAppDataRoutes({ users, credits, notifications, servers }) 
 		} catch (error) { return next(error); }
 	});
 
+	router.get('/api/notifications/unread-count', noStore, requireAuth, async (req, res, next) => {
+		try {
+			const user = await users.byId(req.auth.userId);
+			if (!user) return res.status(404).json({ error: 'User not found' });
+			const summary = notifications ? await notifications.unreadCount(user.id, user.role) : { count: 0, attention: 0, items: [], skipped: [] };
+			return res.json({ count: summary.count, attention: summary.attention, items: summary.items, skipped: summary.skipped, viewer_id: Number(req.auth.userId) });
+		} catch (error) { return next(error); }
+	});
 	router.get('/api/notifications', noStore, requireAuth, async (req, res, next) => {
 		try {
 			const user = await users.byId(req.auth.userId);
 			if (!user) return res.status(404).json({ error: 'User not found' });
 			const limit = integer(req.query.limit, 25, 1, 200);
 			const rows = notifications ? await notifications.list(user.id, user.role, { limit }) : [];
-			return res.json({ notifications: rows.map(publicNotification) });
+			const visible = rows.filter((row) => !isDmChatMentionNotification(row));
+			return res.json({ notifications: visible.map(publicNotification), viewer_id: Number(req.auth.userId) });
 		} catch (error) { return next(error); }
 	});
 	router.post('/api/notifications/acknowledge', noStore, requireAuth, async (req, res, next) => {

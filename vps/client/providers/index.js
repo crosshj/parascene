@@ -7,6 +7,8 @@ import { createCreditsProvider } from './credits/index.js';
 import { createAvatarsProvider } from './avatars/index.js';
 import { createProfileProvider } from './profile/index.js';
 import { createPresenceProvider } from './presence/index.js';
+import { createNotificationsProvider } from './notifications/index.js';
+import { createDocumentProvider } from './document/index.js';
 
 export function createAppProviders({ bootstrap = {} } = {}) {
 	const viewerId = Number(bootstrap.user?.id) || null;
@@ -21,7 +23,13 @@ export function createAppProviders({ bootstrap = {} } = {}) {
 		credits: createCreditsProvider({ viewerId, registry }),
 		avatars: createAvatarsProvider(),
 		profile: createProfileProvider(),
+		notifications: createNotificationsProvider({ viewerId, registry }),
 	};
+	providers.document = createDocumentProvider({
+		threads: providers.threads,
+		notifications: providers.notifications,
+		credits: providers.credits,
+	});
 
 	return {
 		viewerId,

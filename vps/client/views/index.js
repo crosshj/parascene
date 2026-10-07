@@ -49,6 +49,7 @@ export const appViews = Object.freeze({
 				onUnauthorized: services.session.redirectToLogin,
 				setHeaderMenu,
 				onOpenCreation: (id, seed) => actions.navigate(`/creations/${id}`, { seed }),
+				setTitle: (title) => services.providers.document.setTitle(title),
 			}));
 		},
 	},
@@ -62,6 +63,7 @@ export const appViews = Object.freeze({
 				setHeaderMenu,
 				setHeaderAccessories,
 				actions,
+				setTitle: (title) => services.providers.document.setTitle(title),
 			}));
 		},
 	},
@@ -94,7 +96,8 @@ export const appViews = Object.freeze({
 				outlet,
 				creationId,
 				initialSeed: seed,
-    createProvider: services.providers.create,
+				createProvider: services.providers.create,
+				setTitle: (title) => services.providers.document.setTitle(title),
 				onNavigate: actions.navigate,
 				onDismiss: actions.dismissOverlay,
 			});

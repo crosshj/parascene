@@ -298,8 +298,15 @@ function mountSidebarPresentation({ outlet, model = {}, onAction }) {
 		renderRosterSection(refs.directMessages, currentModel.directMessages || [], 'dm', 'directMessages');
 		renderRosterSection(refs.servers, currentModel.servers || [], 'server', 'servers');
 		renderRosterSection(refs.channels, currentModel.channels || [], 'channel', 'channels');
-		const creditsText = String(currentModel.footer?.credits ?? '…');
-		if (refs.credits.textContent !== creditsText) refs.credits.textContent = creditsText;
+		const creditsView = currentModel.footer?.creditsView;
+		const creditsButton = refs.credits.closest('button');
+		if (creditsView?.known && refs.credits.textContent !== creditsView.balanceText) refs.credits.textContent = creditsView.balanceText;
+		creditsButton.classList.toggle('attention', creditsView?.claimAvailable === true);
+		if (creditsView?.label && creditsButton.getAttribute('aria-label') !== creditsView.label) creditsButton.setAttribute('aria-label', creditsView.label);
+		const notificationsView = currentModel.footer?.notificationsView;
+		const notificationsButton = refs.notificationsBadge.closest('button');
+		if (refs.notificationsBadge.textContent !== (notificationsView?.text || '')) refs.notificationsBadge.textContent = notificationsView?.text || '';
+		if (notificationsView?.label && notificationsButton.getAttribute('aria-label') !== notificationsView.label) notificationsButton.setAttribute('aria-label', notificationsView.label);
 		routeItems = new Map();
 		const allItems = [...(currentModel.navigation || []), ...(currentModel.directMessages || []), ...(currentModel.servers || []), ...(currentModel.channels || [])];
 		for (const item of allItems) {

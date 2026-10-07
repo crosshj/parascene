@@ -3,6 +3,7 @@ import { formatRelativeTime } from '../../shared/datetime.js';
 import { helpIcon, creditIcon } from '../../icons/svg-strings.js';
 import { MODAL_DISMISS_ICON_SVG as modalDismissIconSvg } from '../../shared/modalDismiss.js';
 import { getHelpHref } from '../../shared/helpUrl.js';
+import { claimedOnUtcDay } from '../../providers/credits/dailyClaim.js';
 
 const html = String.raw;
 
@@ -212,22 +213,23 @@ class AppModalCredits extends HTMLElement {
 				}
 			});
 
+			const data = await response.json().catch(() => null);
 			if (!response.ok) {
-				const error = await response.json();
-				// console.error('Failed to claim credits:', error);
+				if (data?.success === false && claimedOnUtcDay(data.lastClaimDate)) this.recordClaim(data);
 				return;
 			}
 
-			const data = await response.json();
-			if (data.success) {
+			if (data?.success) {
+				const claimedAt = data.lastClaimDate || new Date().toISOString();
 				this.creditsCount = this.normalizeCredits(data.balance);
 				this.writeStoredCredits(this.creditsCount);
-				// Immediately mark as claimed today so header/UI updates even if refresh fails.
-				this.lastClaimDate = new Date().toISOString();
-				this.writeStoredClaimDate(this.getTodayKey());
-				this.canClaim = false;
+				this.recordClaim({ ...data, lastClaimDate: claimedAt });
 				// Refresh (forced) to get updated lastClaimDate/balance from server.
 				await this.refreshCredits({ force: true });
+				if (claimedOnUtcDay(claimedAt)) {
+					this.canClaim = false;
+					if (!claimedOnUtcDay(this.lastClaimDate)) this.lastClaimDate = claimedAt;
+				}
 				this.updateCreditsUI();
 				this.updateClaimUI();
 				document.dispatchEvent(new CustomEvent('credits-updated', {
@@ -243,6 +245,18 @@ class AppModalCredits extends HTMLElement {
 			this._claimInFlight = false;
 			this.updateClaimUI();
 		}
+	}
+
+	recordClaim(data) {
+		const claimedAt = data?.lastClaimDate || new Date().toISOString();
+		this.lastClaimDate = claimedAt;
+		this.canClaim = false;
+		this.writeStoredClaimDate(String(claimedAt).slice(0, 10));
+		if (Number.isFinite(Number(data?.balance))) this.creditsCount = this.normalizeCredits(data.balance);
+		this.updateCreditsUI();
+		document.dispatchEvent(new CustomEvent('credits-claimed', {
+			detail: { balance: this.creditsCount, lastClaimDate: claimedAt, canClaim: false }
+		}));
 	}
 
 	updateCreditsUI() {

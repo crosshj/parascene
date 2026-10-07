@@ -8419,7 +8419,7 @@ let creationDetailViewMounted = false;
  * The full legacy fragment is mounted first; the existing page runtime then boots
  * against the document as it did when this was a standalone page.
  */
-export function renderCreationDetailView({ outlet, creationId, initialSeed = null, onNavigate, createProvider } = {}) {
+export function renderCreationDetailView({ outlet, creationId, initialSeed = null, onNavigate, createProvider, setTitle = () => {} } = {}) {
 	if (!(outlet instanceof HTMLElement)) return { destroy() {} };
 	const id = Number(creationId);
 	if (!Number.isFinite(id) || id <= 0) return { destroy() {} };
@@ -8448,7 +8448,7 @@ export function renderCreationDetailView({ outlet, creationId, initialSeed = nul
 		`<span class="creation-detail-nsfw-badge" role="img" aria-label="NSFW">${iconMarkup('eyeHidden')}</span>`);
 	const stopGroupNavigation = watchGroupNavigation(outlet.querySelector('.creation-detail-image-wrapper'));
 	nsfwBundledMod.bindNsfwClicks(outlet, { signal: listenerController.signal });
-	document.title = 'Creation · parascene beta';
+	setTitle('Creation · parascene beta');
 	for (const [type, listener, options] of creationDetailDocumentListeners) {
 		document.addEventListener(type, listener, { ...(typeof options === 'object' ? options : {}), signal: listenerController.signal });
 	}

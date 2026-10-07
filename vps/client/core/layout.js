@@ -208,7 +208,7 @@ export function createLayout({ root, views, services } = {}) {
 		headerAccessories.replaceChildren();
 		for (const item of items) {
 			const button = document.createElement('button');
-			button.type = 'button'; button.className = item.kind === 'action' ? 'beta-outlet__header-button' : 'beta-outlet__pin chat-page-topbar-pinned-canvas-btn';
+			button.type = 'button'; button.className = 'beta-outlet__pin';
 			button.textContent = item.label; button.setAttribute('aria-label', item.ariaLabel || item.label);
 			button.addEventListener('click', item.onClick); headerAccessories.append(button);
 		}
@@ -330,7 +330,7 @@ export function createLayout({ root, views, services } = {}) {
 				} else {
 					pageTitle.textContent = title;
 				}
-				document.title = `${title} - parascene beta`;
+				services.providers.document.setTitle(`${title} - parascene beta`);
 			},
 			composer,
 			searchComposer,

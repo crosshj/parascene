@@ -6,7 +6,7 @@ function navigationMarkup(groups) {
  return '<a class="help-nav-item" href="/help">Help home</a>' + groups.map(group => `<div class="help-nav-section"><h3 class="help-nav-section-title">${escapeHtml(group.section.replace(/-/g, ' '))}</h3>${group.items.map(item => `<a class="help-nav-item${item.active ? ' active' : ''}" href="/help/${escapeHtml(item.slug)}">${escapeHtml(item.title)}</a>`).join('')}</div>`).join('');
 }
 export const HelpView = Object.freeze({
- mount({ outlet, actions, url = '/help' }) {
+ mount({ outlet, actions, services, url = '/help' }) {
   const root = document.createElement('section'); root.className = 'help-view'; outlet.replaceChildren(root);
   let controller, searchController, epoch = 0, searchEpoch = 0, closed = false;
   async function load(url) {
@@ -17,7 +17,7 @@ export const HelpView = Object.freeze({
     const route = new URL(url, location.origin), slug = route.pathname.replace(/^\/help\/?/, '');
     const page = await requestJson('/api/help?' + new URLSearchParams({ slug }), { signal: controller.signal });
     if (closed || token !== epoch) return;
-    document.title = `${page.article.title} · parascene`;
+    services.providers.document.setTitle(`${page.article.title} · parascene`);
     root.innerHTML = `<div class="help-container"><aside class="help-sidebar"><nav class="help-nav" aria-label="Help articles">${navigationMarkup(page.navigation)}</nav></aside><div class="help-article-wrapper"><form class="help-search-bar" role="search"><a class="help-mobile-home btn-secondary" href="/help">Overview</a><input type="search" name="q" aria-label="Search help" placeholder="Search help…"><button type="submit">Search</button></form><article class="help-article"><div class="help-content"><h1>${escapeHtml(page.article.title)}</h1><div class="help-body">${page.article.html}</div></div></article></div></div>`;
     root.querySelector('form').onsubmit = async event => {
      event.preventDefault(); searchController?.abort(); searchController = new AbortController(); const searchToken = ++searchEpoch;

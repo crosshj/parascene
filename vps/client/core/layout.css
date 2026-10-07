@@ -245,6 +245,41 @@ body.is-resizing-viewport .creation-detail-suno-play {
 }
 
 .beta-outlet__accessories { display: flex; gap: 6px; min-width: 0; }
+.beta-outlet__pin {
+	display: inline-flex;
+	align-items: center;
+	justify-content: flex-start;
+	box-sizing: border-box;
+	max-width: min(240px, 30vw);
+	min-width: 0;
+	min-height: 40px;
+	margin: 0;
+	padding: 0 8px;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--text-muted);
+	font: inherit;
+	font-size: 0.9375rem;
+	font-weight: 400;
+	line-height: 1.2;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	cursor: pointer;
+	flex-shrink: 1;
+	-webkit-tap-highlight-color: transparent;
+	touch-action: manipulation;
+	transition: background-color 0.12s ease, color 0.12s ease;
+}
+.beta-outlet__pin:hover {
+	color: var(--text);
+	background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+.beta-outlet__pin:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
+}
 .beta-right-sidebar { position: fixed; z-index: 10; top: var(--beta-shell-inset); right: var(--beta-shell-inset-inline); bottom: var(--beta-shell-inset); width: var(--beta-right-sidebar-width, 360px); }
 .beta-right-sidebar[hidden] { display: none; }
 .beta-right-sidebar__panel { height: 100%; overflow: hidden; border-radius: var(--beta-panel-radius); corner-shape: squircle; background: var(--beta-panel-background); display: flex; flex-direction: column; }
@@ -300,9 +335,6 @@ html.beta-right-sidebar-restoring body.beta-layout main#app-outlet, body.beta-ri
 .beta-outlet__mobile-menu-section { padding: 12px 16px 6px; color: var(--text-muted); font-size: .75rem; font-weight: 600; }
 .beta-outlet__mobile-menu-separator { height: 1px; margin: 6px 0; background: var(--border); }
 body.beta-mobile-menu-open { overflow: hidden; }
-
-.beta-outlet__header-button { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; min-height: 32px; padding: 4px 10px; border: 1px solid var(--border); border-radius: 8px; color: inherit; background: var(--input-bg); font: inherit; font-size: .8125rem; white-space: nowrap; cursor: pointer; }
-.beta-outlet__header-button:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); }
 
 /* WWW mobile shell composition. Desktop scroll ownership remains unchanged. */
 [data-layout-region="mobile-header"] { display: none; }

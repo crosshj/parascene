@@ -20,7 +20,7 @@ export const LibraryView = Object.freeze({
   const lifetime = new AbortController(), ingest = createAudioClipIngestModal(), edit = createAudioClipEditModal();
   const states = Object.fromEntries(['personas', 'styles', 'audio-clips'].map(id => [id, { rows: [], shown: PAGE_SIZE, ready: false, busy: false, hasMore: false, error: '', epoch: 0, request: null }]));
   let active = 'personas', destroyed = false, canAdd = false, catalogPromise = null, currentHash = hash;
-  document.title = 'Library · Parascene beta';
+  services.providers.document.setTitle('Library · Parascene beta');
   const directStyle = /^\/styles\/([^/]+)$/.exec(new URL(url, location.origin).pathname);
   const directAddStyle = directStyle?.[1] === 'new';
   const directAudioClip = /^\/audio-clips\/(\d+)$/.exec(new URL(url, location.origin).pathname);
@@ -29,8 +29,8 @@ export const LibraryView = Object.freeze({
   function grid(id) { return root.querySelector(`[data-grid="${id}"]`); }
   function syncHeader() {
    const buttons = [];
-   if (active === 'styles' && canAdd) buttons.push({ kind: 'action', label: 'Add style', onClick: () => styleModal.open() });
-   if (active === 'audio-clips') buttons.push({ kind: 'action', label: 'Record clip', onClick: () => ingest.openAudioClipIngestModal({ mode: 'record', onSaved: () => { if (!destroyed) void load('audio-clips', true); } }) });
+   if (active === 'styles' && canAdd) buttons.push({ label: 'Add style', onClick: () => styleModal.open() });
+   if (active === 'audio-clips') buttons.push({ label: 'Record clip', onClick: () => ingest.openAudioClipIngestModal({ mode: 'record', onSaved: () => { if (!destroyed) void load('audio-clips', true); } }) });
    setHeaderAccessories?.(buttons);
    setHeaderMenu?.({ label: 'Library', items: [{ label: 'Refresh', action: 'refresh' }], onSelect() {
     if (active !== 'audio-clips') { catalogPromise = null; states.styles.ready = false; states.personas.ready = false; }

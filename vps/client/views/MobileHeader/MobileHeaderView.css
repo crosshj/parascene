@@ -38,6 +38,31 @@
 	justify-content: center;
 }
 
+.mobile-header-view .action-item.notifications-button { position: relative; }
+
+.mobile-header-view .notifications-badge {
+	display: none;
+	position: absolute;
+	top: -2px;
+	right: -2px;
+	min-width: 16px;
+	height: 16px;
+	padding: 0 4px;
+	box-sizing: border-box;
+	border: 2px solid var(--surface);
+	border-radius: 999px;
+	background: var(--beta-accent);
+	color: var(--beta-accent-text);
+	font-size: .6rem;
+	font-weight: 700;
+	line-height: 1;
+	align-items: center;
+	justify-content: center;
+	pointer-events: none;
+}
+
+.mobile-header-view .notifications-badge:not(:empty) { display: inline-flex; }
+
 .mobile-header-view .action-item.profile-button.is-avatar-loading {
 	visibility: hidden;
 	pointer-events: none;
@@ -76,8 +101,25 @@ height: 100%;
 
 /* Credits button includes a label/count, so keep it wider but same height */
 .mobile-header-view .action-item.credits-button {
+	position: relative;
 	padding: 0 10px;
 }
+
+.mobile-header-view .credits-badge {
+	display: none;
+	position: absolute;
+	top: -2px;
+	right: -2px;
+	width: 16px;
+	height: 16px;
+	box-sizing: border-box;
+	border: 2px solid var(--surface);
+	border-radius: 999px;
+	background: var(--accent);
+	pointer-events: none;
+}
+
+.mobile-header-view .credits-button.attention .credits-badge { display: block; }
 
 .mobile-header-view .action-item:hover:not(.btn-primary) {
 	background: var(--surface-strong);

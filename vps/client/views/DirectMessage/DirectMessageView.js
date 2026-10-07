@@ -40,12 +40,11 @@ export const DirectMessageView = Object.freeze({
 				avatarHtml: isNotes ? iconMarkup('notes') : buildChatThreadRowAvatarHtml(thread, { getAvatarColor, renderCommentAvatarHtml }),
 				href: profileHref,
 			});
-			document.title = `${displayName} - parascene beta`;
 		};
 		controller = createDirectMessageController({ view, services, slug: slug || "self" });
 		chrome.connect(controller);
 		view.refreshChrome = () => chrome.refresh();
-		document.title = `${title} - parascene beta`;
+		services.providers.document.setTitle(`${title} - parascene beta`);
 		return { destroy() { chrome.destroy(); controller.destroy(); binding.destroy(); view.destroy(); } };
 	},
 });

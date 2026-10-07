@@ -75,16 +75,16 @@ function updateFileCard(card, file, { filesApi }) {
  card.replaceChildren(preview);
 }
 
-export function renderFileManagerView({ outlet, filesApi, filesQuery, onUnauthorized, setHeaderMenu, setHeaderAccessories, actions }) {
+export function renderFileManagerView({ outlet, filesApi, filesQuery, onUnauthorized, setHeaderMenu, setHeaderAccessories, actions, setTitle = () => {} }) {
 	const controller = new AbortController();
 	const root = mountTemplate(outlet, template);
 	const refs = bindRefs(root);
-	document.title = 'My Files · parascene beta';
+	setTitle('My Files · parascene beta');
 	const { dialog, dialogTitle, dismiss, grid, loadMore, message, progress, status } = refs;
 	const lightbox = createMediaLightbox();
 	const cardOptions = { filesApi, onViewFile: viewFile };
 	setHeaderAccessories?.([
-		{ kind: 'pin', label: 'Upload', onClick: openUploadPicker },
+		{ label: 'Upload', onClick: openUploadPicker },
 	]);
 	setHeaderMenu?.({
 		label: 'My Files',

@@ -90,7 +90,7 @@ function updateCreationCard(card, item, markup) {
 	return false;
 }
 
-export function renderCreationsView({ outlet, creationsProvider, creationsApi, creationsQuery, pendingCreations, onUnauthorized, setHeaderMenu, onOpenCreation }) {
+export function renderCreationsView({ outlet, creationsProvider, creationsApi, creationsQuery, pendingCreations, onUnauthorized, setHeaderMenu, onOpenCreation, setTitle = () => {} }) {
 	const root = mountTemplate(outlet, template);
 	const refs = bindRefs(root);
 	let offset = 0;
@@ -128,7 +128,7 @@ export function renderCreationsView({ outlet, creationsProvider, creationsApi, c
 		if (Number.isFinite(id) && id > 0) onOpenCreation?.(id, card.__creationRecord || null);
 	});
 
-	document.title = 'Creations · parascene beta';
+	setTitle('Creations · parascene beta');
 	setHeaderMenu?.({
 		label: 'Creations',
 		items: [{ label: 'Bulk actions', action: 'bulk' }, { label: 'Refresh', action: 'refresh' }],

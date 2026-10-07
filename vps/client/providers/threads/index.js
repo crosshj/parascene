@@ -1,3 +1,4 @@
+import { outstandingChallengeVotes } from '../../shared/challenges/model/outstandingVotes.js';
 import { mergeThreadsInbox } from './model.js';
 import { createChallengeVotes } from '../challenges/votes.js';
 import { createThreadsApi } from './api.js';
@@ -28,6 +29,21 @@ export function createThreadsProvider({ viewerId, registry, realtimeFactory = cr
   },
   onSaved(threadId) { rooms.get(Number(threadId))?.refresh.request(); inboxRefresh?.request(); },
  });
+	let challengeAttention = null;
+	const attentionListeners = new Set();
+	let stopChallengeAttentionInbox = null;
+	let stopChallengeAttentionMessages = null;
+	let challengeAttentionLease = null;
+	function setChallengeAttention(count) {
+		const next = count == null || !Number.isFinite(Number(count)) ? null : Math.max(0, Math.floor(Number(count)));
+		if (Object.is(challengeAttention, next)) return;
+		challengeAttention = next;
+		for (const listener of attentionListeners) listener(next);
+	}
+	function challengeUnread(summary) {
+		const server = Math.max(0, Number(summary?.challenges_unread) || 0);
+		return typeof challengeAttention === 'number' && challengeAttention > 0 ? challengeAttention : server;
+	}
 	let stopUser = null;
 	const stopInbox = query?.subscribe((snapshot) => {
 		if (snapshot.data && !stopUser && !destroyed) stopUser = realtime.subscribe(`user:${viewerId}`, () => inboxRefresh.request(), { debounceMs: 280 });
@@ -40,9 +56,27 @@ export function createThreadsProvider({ viewerId, registry, realtimeFactory = cr
 	}
 	if (typeof document !== 'undefined') document.addEventListener('visibilitychange', resume);
 	if (typeof window !== 'undefined') window.addEventListener('online', resume);
+	function publishChallengeAttention(snapshot) {
+		if (destroyed || !snapshot?.data?.complete) return;
+		setChallengeAttention(outstandingChallengeVotes(votes.project(snapshot.data.messages), viewerId));
+	}
+	function watchChallengeAttention() {
+		if (stopChallengeAttentionInbox || !query) return;
+		stopChallengeAttentionInbox = query.subscribe((snapshot) => {
+			if (destroyed || challengeAttentionLease) return;
+			const thread = snapshot?.data?.threads?.find((row) => row.channel_slug === 'challenges');
+			if (!thread) return;
+			challengeAttentionLease = provider.acquireMessages(Number(thread.id), { persist: true, complete: true });
+			stopChallengeAttentionMessages = challengeAttentionLease.query.subscribe(publishChallengeAttention);
+			void challengeAttentionLease.query.loadIfNeeded().catch(() => undefined);
+		});
+	}
 	function destroy() {
 		if (destroyed) return;
 		destroyed = true;
+		stopChallengeAttentionMessages?.();
+		challengeAttentionLease?.release();
+		stopChallengeAttentionInbox?.();
 		votes.destroy(); stopInbox?.(); stopUser?.(); inboxRefresh?.destroy(); realtime?.destroy();
 		for (const room of rooms.values()) { room.refresh.destroy(); room.unsubscribe(); }
 		rooms.clear();
@@ -52,11 +86,21 @@ export function createThreadsProvider({ viewerId, registry, realtimeFactory = cr
 		if (typeof window !== 'undefined') window.removeEventListener('online', resume);
 	}
 
-	return {
+	const provider = {
 		api,
 		votes,
 		query,
-		preload() { if (query) void query.loadIfNeeded().catch(() => undefined); },
+		preload() {
+			watchChallengeAttention();
+			if (query) void query.loadIfNeeded().catch(() => undefined);
+		},
+		get challengeAttention() { return challengeAttention; },
+		setChallengeAttention,
+		challengeUnread,
+		subscribeChallengeAttention(listener) {
+			attentionListeners.add(listener);
+			return () => attentionListeners.delete(listener);
+		},
 		acquireMessages(threadId, { persist = false, complete = false } = {}) {
 			if (destroyed) throw new Error('Threads provider has been destroyed');
 			const key = Number(threadId);
@@ -147,4 +191,5 @@ export function createThreadsProvider({ viewerId, registry, realtimeFactory = cr
 		clearCache() { votes.clear(); inbox?.clearCache(); clearThreadMessagesCache(viewerId); destroy(); },
 		destroy,
 	};
+	return provider;
 }

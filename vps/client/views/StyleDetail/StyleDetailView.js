@@ -376,7 +376,7 @@ function renderStyle(root, loading, errRoot, style, adminCanDelete, canSetStyleT
 			? ` data-style-thumb-creation-prefill="${escapeHtml(savedCreationLinkPath)}"`
 			: "";
 
-	document.title = `${displayTitle} — parascene`;
+	services.providers.document.setTitle(`${displayTitle} — parascene`);
 
 	const thumbBlock = thumbUrl
 		? `<img class="style-detail-thumb" src="${escapeHtml(thumbUrl)}" alt="" width="140" height="160" loading="eager" decoding="async" />`
@@ -549,7 +549,7 @@ function renderNewStyleForbidden(root, loading, errRoot) {
 	if (root) root.hidden = true;
 	if (!errRoot) return;
 	errRoot.hidden = false;
-	document.title = "New style — parascene";
+	services.providers.document.setTitle('New style — parascene');
 	errRoot.innerHTML = `
 		<div class="route-empty-state">
 			<h2 class="route-empty-title">Not allowed</h2>
@@ -563,7 +563,7 @@ function renderNewStyleForm(root, loading, errRoot) {
 	if (errRoot) errRoot.hidden = true;
 	if (!root) return;
 	root.hidden = false;
-	document.title = "New style — parascene";
+	services.providers.document.setTitle('New style — parascene');
 
 	root.innerHTML = `
 		<h1 class="style-detail-title style-detail-title--form">New style</h1>

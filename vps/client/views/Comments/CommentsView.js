@@ -11,7 +11,7 @@ export const CommentsView = Object.freeze({
   const root = document.createElement('section'); root.className = 'comments-view';
 
   root.innerHTML = '<div class="comments-view__status" role="status" hidden></div><div class="connect-comment-list" aria-label="Recent comments"></div><button class="comments-view__more" type="button" hidden>Load more</button>';
-  outlet.replaceChildren(root); document.title = 'Comments · Parascene beta';
+  outlet.replaceChildren(root); services.providers.document.setTitle('Comments · Parascene beta');
   const status = root.querySelector('[role="status"]'), list = root.querySelector('.connect-comment-list'), more = root.querySelector('button');
   let cursor = null, hasMore = false, busy = false, destroyed = false, epoch = 0, request;
   const seen = new Set(); const scroll = root.closest('.beta-outlet__scroll');

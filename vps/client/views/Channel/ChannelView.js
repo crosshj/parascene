@@ -35,7 +35,7 @@ export const ChannelView = Object.freeze({
 		controller = createChannelController({ view, services, slug: slug || "feedback", threadId });
 		chrome.connect(controller);
 		view.refreshChrome = () => chrome.refresh();
-		document.title = title ? `${title} - parascene beta` : 'parascene beta';
+		services.providers.document.setTitle(title ? `${title} - parascene beta` : 'parascene beta');
 		return { destroy() { chrome.destroy(); controller.destroy(); binding.destroy(); view.destroy(); } };
 	},
 });

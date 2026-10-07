@@ -6,8 +6,8 @@ Current outstanding migration scope. Update this checklist as items are verified
 
 The remaining product and cutover scope is listed below.
 
-- [ ] daily credits claim. Sidebar credits indicator should have badge to indicate credits can be claimed
-- [ ] beta PWA has issues with updating credits in the mobile header
+- [ ] likes and has user liked, comments, etc should be populated in doom scroll
+- [ ] the comments popover for doomscroll should be formated and EXACTLY like the www and any functionality WWW provides should be mirrored in doomscroll on vps (we don't want to re-invent the wheel or ignore hard-fought, past wisdom)
 
 Later: hook up Stripe before the pricing overlay can complete a purchase. Founder checkout, credit-pack checkout, the return from Checkout, and switching back to Free still need the www billing endpoints (`/api/subscription/checkout`, `/api/credits/checkout`, `/api/subscription/checkout-return`, and `/api/profile/plan`), including plan and subscription updates on the user record.
 
