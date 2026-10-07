@@ -17,7 +17,7 @@ export const HelpView = Object.freeze({
     const route = new URL(url, location.origin), slug = route.pathname.replace(/^\/help\/?/, '');
     const page = await requestJson('/api/help?' + new URLSearchParams({ slug }), { signal: controller.signal });
     if (closed || token !== epoch) return;
-    document.title = `${page.article.title} · Parascene help`;
+    document.title = `${page.article.title} · parascene`;
     root.innerHTML = `<div class="help-container"><aside class="help-sidebar"><nav class="help-nav" aria-label="Help articles">${navigationMarkup(page.navigation)}</nav></aside><div class="help-article-wrapper"><form class="help-search-bar" role="search"><a class="help-mobile-home btn-secondary" href="/help">Overview</a><input type="search" name="q" aria-label="Search help" placeholder="Search help…"><button type="submit">Search</button></form><article class="help-article"><div class="help-content"><h1>${escapeHtml(page.article.title)}</h1><div class="help-body">${page.article.html}</div></div></article></div></div>`;
     root.querySelector('form').onsubmit = async event => {
      event.preventDefault(); searchController?.abort(); searchController = new AbortController(); const searchToken = ++searchEpoch;

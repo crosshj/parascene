@@ -9,7 +9,6 @@ The remaining product and cutover scope is listed below.
 ## Product follow-ups
 
 - [ ] Finish the sidebar plus controls and gear/settings control.
-- [ ] Help page title shows "Help - Help - parascene" with redundant title which is not consistent with app title separators eg. "Creation · parascene beta"; and noting "beta" in title is not needed
 - [ ] generations with the composer don't work right like generations from create form; they mess up on the lifecycle in creations list: queued, generating, done
 - [ ] make sure NSFW settings work as they do in WWW, this means refreshing images that are blurred serverside when switching to unblurred - what I'm seeing is very, very inconsistent with www as related to settings and everywhere in the app
 - [ ] don't show when "Untitled" on mobile vertical video cards
