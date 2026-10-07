@@ -179,7 +179,14 @@ function syncSliderUi() {
 	];
 	for (const [key, input, label] of map) {
 		const v = values[key];
-		if (input instanceof HTMLInputElement) input.value = String(v);
+		if (input instanceof HTMLInputElement) {
+			input.value = String(v);
+			const min = Number(input.min);
+			const max = Number(input.max);
+			const span = max - min;
+			const pct = span > 0 ? ((v - min) / span) * 100 : 0;
+			input.style.setProperty('--adjust-fill', `${pct}%`);
+		}
 		if (label instanceof HTMLElement) label.textContent = String(v);
 	}
 	applyPreviewFilter();
@@ -251,7 +258,7 @@ function ensureModalDom() {
 				<h2 id="adjust-image-title" class="creation-detail-adjust-image-title">Adjust Image</h2>
 				<button type="button" class="creation-detail-adjust-image-close" data-adjust-image-close aria-label="Close">×</button>
 			</div>
-			<div class="creation-detail-adjust-image-preview-wrap">
+			<div class="creation-detail-adjust-image-preview-wrap" data-adjust-image-preview-wrap aria-busy="false">
 				<img class="creation-detail-adjust-image-preview" data-adjust-image-preview alt="Adjustment preview" />
 			</div>
 			<div class="creation-detail-adjust-image-sliders">
@@ -369,8 +376,9 @@ export function openAdjustImageModal(deps) {
 	resetValues();
 	setSaveEnabled(false);
 	setModalBusy(false);
-	setModalStatus('Loading image…');
+	setModalStatus('');
 	modalRoot?.classList.add('is-preview-loading', 'open');
+	modalRoot?.querySelector('[data-adjust-image-preview-wrap]')?.setAttribute('aria-busy', 'true');
 	modalRoot?.setAttribute('aria-hidden', 'false');
 	document.body.style.overflow = 'hidden';
 
@@ -394,6 +402,7 @@ export function openAdjustImageModal(deps) {
 			}
 			previewReady = true;
 			modalRoot?.classList.remove('is-preview-loading');
+			modalRoot?.querySelector('[data-adjust-image-preview-wrap]')?.setAttribute('aria-busy', 'false');
 			setModalStatus('');
 			for (const input of [brightness, contrast, saturation]) {
 				if (input instanceof HTMLInputElement) input.disabled = false;
@@ -403,6 +412,7 @@ export function openAdjustImageModal(deps) {
 			if (activeDeps !== deps) return;
 			setModalStatus(err?.message || 'Could not load image', true);
 			modalRoot?.classList.remove('is-preview-loading');
+			modalRoot?.querySelector('[data-adjust-image-preview-wrap]')?.setAttribute('aria-busy', 'false');
 		}
 	})();
 }

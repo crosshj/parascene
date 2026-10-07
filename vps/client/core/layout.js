@@ -284,7 +284,6 @@ export function createLayout({ root, views, services } = {}) {
 			refreshAutoGrowTextareas,
 			attachPromptSuggest: attachCreateComposerSuggest,
 			isTriggeredSuggestPopupOpen,
-			navigate: 'creations',
 			createProvider: services.providers.create,
 		});
 		creationComposerHandle = result && typeof result.then === 'function' ? await result : result;

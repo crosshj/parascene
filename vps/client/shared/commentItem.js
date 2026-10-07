@@ -1,7 +1,7 @@
 /**
  * Shared comment avatar HTML. Used by creation-detail (comments + tips) and servers (Connect).
  */
-import { normalizeAvatarUrl } from './avatar.js';
+import { avatarPendingFaceHtml, normalizeAvatarUrl } from './avatar.js';
 
 function escapeHtml(str) {
 	return String(str ?? '')
@@ -37,10 +37,8 @@ export function renderCommentAvatarHtml(options) {
 
 	const initial = (displayName || '?').charAt(0).toUpperCase();
 	const safeName = escapeHtml(displayName || 'User');
-	const innerContent = safeAvatarUrl
-		? `<img class="comment-avatar-img" data-avatar-src="${escapeHtml(safeAvatarUrl)}" alt="">`
-		: escapeHtml(initial);
-	const innerStyle = `background: ${safeAvatarUrl ? 'var(--surface-strong)' : color};`;
+	const innerContent = avatarPendingFaceHtml(safeAvatarUrl, initial, { imgClass: 'comment-avatar-img' });
+	const innerStyle = `background: ${color};`;
 	const flairInner = isFounder
 		? `<div class="avatar-with-founder-flair avatar-with-founder-flair--${flairSize}"><div class="founder-flair-avatar-ring"><div class="founder-flair-avatar-inner" style="${innerStyle}" aria-hidden="true">${innerContent}</div></div></div>`
 		: innerContent;

@@ -1,12 +1,37 @@
 /* Ported from WWW's Creations bulk rules in public/global.css. */
 .creations-bulk-bar {
- display:none;position:sticky;top:0;z-index:100;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 16px;margin-bottom:12px;box-shadow:var(--shadow);
+	display: none;
+	position: sticky;
+	top: 0;
+	z-index: 100;
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	padding: 8px 10px;
+	margin-bottom: 12px;
+	box-shadow: var(--shadow);
 }
 @media(max-width:768px){[data-scroll-owner="document"] .creations-bulk-bar{top:calc(var(--beta-mobile-header-row-height,65px) + env(safe-area-inset-top,0px));}}
 .bulk-actions-host.is-bulk-mode .creations-bulk-bar{display:block;}
-.creations-bulk-bar-inner{display:flex;align-items:center;gap:16px;}
-.creations-bulk-bar-label{margin:0;color:var(--text);font-size:.9375rem;font-weight:600;}
-.creations-bulk-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.creations-bulk-bar-inner {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.creations-bulk-actions {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex-wrap: wrap;
+}
+
+.creations-bulk-actions .btn-secondary {
+	min-height: 36px;
+	padding: 6px 12px;
+	border-radius: 6px;
+	font-size: 0.8125rem;
+}
 
 /* WWW global.css supplies shared modal-close rules; scope the same treatment here. */
 .bulk-actions-host .creations-bulk-bar-close{display:flex;align-items:center;justify-content:center;flex:0 0 32px;width:32px;height:32px;min-width:32px;min-height:32px;margin-left:auto;padding:4px;border:0;border-radius:6px;color:var(--text);background:transparent;font:inherit;font-size:1.2rem;line-height:1;cursor:pointer;transition:background-color .2s;}

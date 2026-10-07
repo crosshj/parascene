@@ -25,6 +25,13 @@ function creationId(item) {
 	return Number.isFinite(id) && id > 0 ? String(id) : '';
 }
 
+function creationToken(item) {
+	if (typeof item?.creation_token === 'string' && item.creation_token.trim()) return item.creation_token.trim();
+	let meta = item?.meta;
+	if (typeof meta === 'string') { try { meta = JSON.parse(meta); } catch { meta = null; } }
+	return typeof meta?.creation_token === 'string' ? meta.creation_token.trim() : '';
+}
+
 function makeCreationCard(item, markup = creationCardMarkup(item)) {
 	const fragment = document.createRange().createContextualFragment(markup);
 	const card = fragment.firstElementChild;
@@ -64,7 +71,13 @@ function updateCreationCard(card, item, markup) {
 				currentImage.className = nextImage.className;
 				currentImage.alt = nextImage.alt;
 			}
-			for (const selector of ['.creation-grid__status', '.creation-grid__nsfw-badge', '.route-media-challenge-blur-overlay', '.creation-challenge-entered-badge', '.creation-published-badge', '.creation-challenge-locked-badge', '.creation-group-badge', '.creation-music-badge', '.creation-video-badge']) {
+			const currentStatus = currentMedia?.querySelector('.creation-grid__status');
+			const nextStatus = nextMedia?.querySelector('.creation-grid__status');
+			if ((currentStatus?.outerHTML || '') !== (nextStatus?.outerHTML || '')) {
+				currentStatus?.remove();
+				if (nextStatus && currentMedia) currentMedia.append(nextStatus.cloneNode(true));
+			}
+			for (const selector of ['.creation-grid__nsfw-badge', '.route-media-challenge-blur-overlay', '.creation-challenge-entered-badge', '.creation-published-badge', '.creation-challenge-locked-badge', '.creation-group-badge', '.creation-music-badge', '.creation-video-badge']) {
 				currentMedia?.querySelectorAll(selector).forEach((node) => node.remove());
 				nextMedia?.querySelectorAll(selector).forEach((node) => currentMedia?.append(node.cloneNode(true)));
 			}
@@ -105,7 +118,6 @@ export function renderCreationsView({ outlet, creationsProvider, creationsApi, c
 	refs.grid.addEventListener('click', onGridClick);
 	document.addEventListener('visibilitychange', onVisibilityChange);
 	document.addEventListener('creation-detail:mutation', onCreationDetailMutation);
-	document.addEventListener('creations-pending-updated', onPendingCreationsUpdated);
 	document.addEventListener('nsfw-preference-changed', onNsfwPreference);
 	refs.grid.addEventListener('keydown', (event) => {
 		if (event.key !== 'Enter' && event.key !== ' ') return;
@@ -165,6 +177,11 @@ export function renderCreationsView({ outlet, creationsProvider, creationsApi, c
 		const items = (Array.isArray(data?.creations) ? data.creations : []).filter(item => !removedIds.has(creationId(item)));
 		const currentCards = [...refs.grid.querySelectorAll('.creation-grid__card')];
 		const currentById = new Map(currentCards.map((card) => [card.dataset.creationId, card]).filter(([id]) => id));
+		const currentByToken = new Map();
+		for (const card of currentCards) {
+			const token = creationToken(card.__creationRecord);
+			if (token && !currentByToken.has(token)) currentByToken.set(token, card);
+		}
 		const desiredItems = append
 			? currentCards.map((card) => card.__creationRecord).filter(item => item && !item.__optimistic)
 			: [];
@@ -184,10 +201,15 @@ export function renderCreationsView({ outlet, creationsProvider, creationsApi, c
 		const desiredCards = [];
 		const cardsToHydrate = [];
 		const retainedCards = new Set();
+		const usedCards = new Set();
 		for (const item of desiredItems) {
 			const id = creationId(item);
+			const placeholderId = item?.placeholder_id ? String(item.placeholder_id) : '';
+			const token = creationToken(item);
 			const markup = creationCardMarkup(item);
-			const card = id ? currentById.get(id) : null;
+			const card = [id && currentById.get(id), placeholderId && currentById.get(placeholderId), token && currentByToken.get(token)]
+				.find((candidate) => candidate && !usedCards.has(candidate)) || null;
+			if (card) usedCards.add(card);
 			if (card) {
 				if (updateCreationCard(card, item, markup)) cardsToHydrate.push(card);
 				retainedCards.add(card);
@@ -307,26 +329,6 @@ export function renderCreationsView({ outlet, creationsProvider, creationsApi, c
 		} else syncInFlightPolling();
 	}
 
-	function hydratePromotedPendingRows() {
-		if (!root.isConnected) return;
-		if (typeof creationsProvider?.syncPendingRows !== 'function') return;
-		// A composer submit can navigate here before the first-page creations cache
-		// expires. Resolve promoted placeholders by ID so a stale cached page cannot
-		// hide the newly accepted row until a manual refresh.
-		void creationsProvider.syncPendingRows({ beforePublish: next => { lastQueryData = next; } }).then(rows => {
-			if (!root.isConnected || !rows?.length) return;
-			render({ creations: rows, has_more: false }, true);
-		}).catch(error => {
-			if (error?.status === 401) onUnauthorized?.();
-		});
-	}
-
- function onPendingCreationsUpdated() {
-  if (!root.isConnected) return;
-  render({ creations: [], has_more: hasMore }, true);
-		hydratePromotedPendingRows();
- }
-
 	async function onCreationDetailMutation(event) {
 		const id = Number(event.detail?.creationId);
 		if (!Number.isInteger(id) || id <= 0 || !root.isConnected) return;
@@ -375,17 +377,18 @@ export function renderCreationsView({ outlet, creationsProvider, creationsApi, c
 		void refresh(true);
 	}
 
-	async function refresh(force = false) {
+	async function refresh() {
 		if (loading || destroyed) return;
 		loading = true;
 		try {
-			const result = await creationsApi.list({ limit: PAGE_SIZE, offset: 0 });
-   if (destroyed) return;
-   const data = { ...result, creations: result.creations.filter(row => !removedIds.has(creationId(row))) };
-			if (creationsQuery) {
-				lastQueryData = data;
-				creationsQuery.setData(data);
-			}
+			const data = creationsQuery
+				? await creationsQuery.refresh({ force: true })
+				: await creationsApi.list({ limit: PAGE_SIZE, offset: 0 }).then(result => ({
+					...result,
+					creations: result.creations.filter(row => !removedIds.has(creationId(row)))
+				}));
+			if (destroyed || !data) return;
+			lastQueryData = data;
 			offset = Array.isArray(data.creations) ? data.creations.length : 0;
 			render(data);
 		} catch (error) {
@@ -433,12 +436,11 @@ export function renderCreationsView({ outlet, creationsProvider, creationsApi, c
 	updateScrollTopVisibility();
 	bindScrollOwner();
 	unsubscribe = creationsQuery?.subscribe(onQueryState);
-	hydratePromotedPendingRows();
 	if (creationsQuery) {
 		const cachedInFlight = creationsQuery.data?.creations?.some(item => IN_FLIGHT_STATUSES.has(String(item.status || '').toLowerCase()));
 		void (cachedInFlight ? creationsQuery.refresh() : creationsQuery.loadIfNeeded()).catch(() => undefined);
 	}
 	else void refresh(true);
 
-	return () => { destroyed = true; bulk.destroy(); unsubscribe?.(); mediaLoader?.disconnect(); sentinelObserver.disconnect(); window.clearTimeout(pollTimer); pollTimer = 0; document.removeEventListener('visibilitychange', onVisibilityChange); document.removeEventListener('creation-detail:mutation', onCreationDetailMutation); document.removeEventListener('creations-pending-updated', onPendingCreationsUpdated); document.removeEventListener('nsfw-preference-changed', onNsfwPreference); document.removeEventListener('beta-mobile-scroll-owner-changed', bindScrollOwner); refs.grid.removeEventListener('click', onGridClick); refs.scrollTop.removeEventListener('click', onScrollTopClick); scrollRegion?.removeEventListener('scroll', updateScrollTopVisibility); window.removeEventListener('scroll', updateScrollTopVisibility); setHeaderMenu?.(); };
+	return () => { destroyed = true; bulk.destroy(); unsubscribe?.(); mediaLoader?.disconnect(); sentinelObserver.disconnect(); window.clearTimeout(pollTimer); pollTimer = 0; document.removeEventListener('visibilitychange', onVisibilityChange); document.removeEventListener('creation-detail:mutation', onCreationDetailMutation); document.removeEventListener('nsfw-preference-changed', onNsfwPreference); document.removeEventListener('beta-mobile-scroll-owner-changed', bindScrollOwner); refs.grid.removeEventListener('click', onGridClick); refs.scrollTop.removeEventListener('click', onScrollTopClick); scrollRegion?.removeEventListener('scroll', updateScrollTopVisibility); window.removeEventListener('scroll', updateScrollTopVisibility); setHeaderMenu?.(); };
 }

@@ -265,12 +265,12 @@ export async function mountCreationCommentsThread(container, options) {
 					${viewerPlan
 						? `<div class="avatar-with-founder-flair avatar-with-founder-flair--sm">
 							<div class="founder-flair-avatar-ring">
-								<div class="founder-flair-avatar-inner" data-founder-flair-avatar-bg aria-hidden="true">
-									${viewerAvatarUrl ? `<img class="comment-avatar-img" data-avatar-src="${escapeHtml(viewerAvatarUrl)}" alt="">` : escapeHtml(viewerInitial)}
+								<div class="founder-flair-avatar-inner" data-founder-flair-avatar-bg style="--avatar-bg: ${escapeHtml(viewerColor)};" aria-hidden="true">
+									${avatarMod.avatarPendingFaceHtml(viewerAvatarUrl, viewerInitial, { imgClass: 'comment-avatar-img' })}
 								</div>
 							</div>
 						</div>`
-						: (viewerAvatarUrl ? `<img class="comment-avatar-img" data-avatar-src="${escapeHtml(viewerAvatarUrl)}" alt="">` : escapeHtml(viewerInitial))}
+						: avatarMod.avatarPendingFaceHtml(viewerAvatarUrl, viewerInitial, { imgClass: 'comment-avatar-img' })}
 				</div>
 				<div class="comment-input-body">
 					<div class="comment-composer-row">
@@ -676,14 +676,12 @@ export async function mountCreationCommentsThread(container, options) {
 					viewerPlan
 						? `<div class="avatar-with-founder-flair avatar-with-founder-flair--sm">
 							<div class="founder-flair-avatar-ring">
-								<div class="founder-flair-avatar-inner" data-founder-flair-avatar-bg aria-hidden="true">
-									${viewerAvatarUrl ? `<img class="comment-avatar-img" data-avatar-src="${escapeHtml(viewerAvatarUrl)}" alt="">` : `${escapeHtml(viewerInitial)}`}
+								<div class="founder-flair-avatar-inner" data-founder-flair-avatar-bg style="--avatar-bg: ${escapeHtml(viewerColor)};" aria-hidden="true">
+									${avatarMod.avatarPendingFaceHtml(viewerAvatarUrl, viewerInitial, { imgClass: 'comment-avatar-img' })}
 								</div>
 							</div>
 						</div>`
-						: viewerAvatarUrl
-							? `<img class="comment-avatar-img" data-avatar-src="${escapeHtml(viewerAvatarUrl)}" alt="">`
-							: `${escapeHtml(viewerInitial)}`
+						: avatarMod.avatarPendingFaceHtml(viewerAvatarUrl, viewerInitial, { imgClass: 'comment-avatar-img' })
 				}</div>`
 			: '';
 

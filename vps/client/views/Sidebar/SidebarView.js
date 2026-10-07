@@ -440,9 +440,11 @@ function mountSidebarPresentation({ outlet, model = {}, onAction }) {
 			refs.account.textContent = label;
 			refs.avatar.setAttribute('aria-label', label);
 			refs.avatar.classList.toggle('is-founder', user?.plan === 'founder' || user?.meta?.plan === 'founder');
-			refs.avatar.style.setProperty('--avatar-bg', profile.avatar_color || '#7c3aed');
+			const avatarColor = profile.avatar_color || '#7c3aed';
+			refs.avatar.style.setProperty('--avatar-bg', avatarColor);
+			refs.avatar.style.setProperty('--avatar-color', avatarColor);
 			refs.avatarInitial.textContent = (label.trim().slice(0, 1) || '?').toUpperCase();
-			refs.avatarInitial.hidden = Boolean(avatarUrl);
+			refs.avatarInitial.hidden = false;
 			refs.avatarImage.hidden = !avatarUrl;
 			// Session/profile refreshes can arrive while the sidebar is mounted. Avoid
 			// reassigning an unchanged src: browsers may restart/repaint the image even

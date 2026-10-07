@@ -235,7 +235,7 @@
 	overflow: hidden;
 	border-radius: 50%;
 	color: #fff;
-	background: var(--avatar-color, #7c3aed);
+	background: var(--avatar-color, var(--surface-strong));
 	font-size: .7rem;
 	font-weight: 700;
 	line-height: 1;

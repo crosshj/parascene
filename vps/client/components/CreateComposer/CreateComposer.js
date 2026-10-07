@@ -22,7 +22,7 @@ import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
 import { loadMutateServerOptions } from '../../shared/mutateOptions.js';
 import { openImagePickerModal } from '../../components/ProviderFields/ProviderFields.js';
 import { openChatInlineImageLightbox } from '../../shared/chatInlineImageLightbox.js';
-import { setCreateEditorMode } from '../../shared/createPageRuntime.js';
+import { refreshAfterSubmit, setCreateEditorMode } from '../../shared/createPageRuntime.js';
 import '../../components/ProviderFields/ProviderModals.css';
 import '../../components/ProviderFields/ProviderFields.css';
 import { showOccupancyConfirm } from '../../shared/gpuOccupancy.js';
@@ -951,7 +951,6 @@ function buildSubmitArgs(baseArgs, aspectRatio, formContext) {
  * @param {HTMLElement} host
  * @param {{
  *   refreshAutoGrowTextareas?: (root?: Document|HTMLElement) => void,
- *   navigate?: 'none' | 'creations' | 'full',
  *   attachPromptSuggest?: (textarea: HTMLTextAreaElement) => void,
  *   isTriggeredSuggestPopupOpen?: (field: EventTarget | null) => boolean,
  * }} [opts]
@@ -962,7 +961,6 @@ export function mountCreateComposer(host, opts = {}) {
 		return { destroy() {}, async refreshModelOptions() {} };
 	}
 
-	const navigate = opts.navigate === 'none' || opts.navigate === 'creations' ? opts.navigate : 'full';
 	const refreshAutoGrow = opts.refreshAutoGrowTextareas || (() => {});
 	const checkSuggestPopupOpen =
 		typeof opts.isTriggeredSuggestPopupOpen === 'function'
@@ -2459,17 +2457,18 @@ export function mountCreateComposer(host, opts = {}) {
 			if (submittedImages.length) draftChange.imageChange = { type: 'replace', images: submittedImages };
 			editProviderDraft(draftChange);
 			const mode = outputMode === 'video' ? 'image-to-video' : outputMode === 'image' && hasAttachment() ? 'image-to-image' : 'basic';
-			await createProvider.workflow.submit({
+			const result = await createProvider.workflow.submit({
 				...payload,
 				mode,
 				args: payload.args,
 				validateMentions: false,
-				navigate: navigate === 'creations' ? 'creations' : navigate === 'none' ? 'none' : 'spa',
+				navigate: 'none',
 			}, {
 				confirm: question => question.kind === 'occupancy'
 					? showOccupancyConfirm(question.occupancy, question.options)
 					: window.confirm(question.message || 'Continue?'),
 			});
+			refreshAfterSubmit({ creationId: result?.id });
 			clearComposerState();
 		} catch (err) {
 			if (err?.code !== 'occupancy_cancelled' && err?.name !== 'AbortError' && err?.message) alert(err.message);
@@ -2802,8 +2801,9 @@ export function mountCreateComposer(host, opts = {}) {
 					const result = await createProvider.workflow.importMedia({
 						provider,
 						url: importUrl,
-						navigate: navigate === 'creations' ? 'creations' : navigate === 'none' ? 'none' : 'spa',
+						navigate: 'none',
 					});
+					refreshAfterSubmit({ creationId: result?.id });
 					clearComposerState();
 					if (
 						alreadyNoted ||

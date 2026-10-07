@@ -5484,7 +5484,7 @@ async function loadCreation() {
 		const viewerColor = getAvatarColor(viewerUserName || viewerEmailPrefix || String(currentUserId || '') || viewerName);
 		const viewerPlan = currentUser?.plan === 'founder';
 
-		const creatorAvatarContent = creatorAvatarUrl ? html`<img class="creation-detail-author-avatar" data-avatar-src="${creatorAvatarUrl}" alt="">` : creatorInitial;
+		const creatorAvatarContent = avatarMod.avatarPendingFaceHtml(creatorAvatarUrl, creatorInitial, { imgClass: 'creation-detail-author-avatar' });
 		const authorAvatar = creatorPlan ? html`
 			<div class="avatar-with-founder-flair avatar-with-founder-flair--sm">
 				<div class="founder-flair-avatar-ring">
@@ -5949,9 +5949,8 @@ async function loadCreation() {
 		// Group members still generating render a wait overlay; keep it live.
 		if (isGroupCreation) scheduleCreationDetailGroupMemberPoll(creationId);
 
-		/* When showing initial only (no avatar image), set --avatar-bg so the class uses it; with image, CSS uses var(--surface-strong) */
 		const founderFlairEl = detailContent.querySelector('[data-founder-flair-avatar-bg]');
-		if (founderFlairEl && !viewerAvatarUrl) founderFlairEl.style.setProperty('--avatar-bg', viewerColor);
+		if (founderFlairEl) founderFlairEl.style.setProperty('--avatar-bg', viewerColor);
 
 		// Landscape (hidden trigger): published owner, square cover (groups use cover dimensions).
 		lastDetailLandscapeOwner = Boolean(isOwner);
@@ -6283,9 +6282,7 @@ async function loadCreation() {
 			const creatorColor = getAvatarColor(creatorUserName || creatorEmailPrefix || String(creatorId || '') || creatorName);
 			const creatorProfileHref = buildProfilePath({ userName: creatorUserName, userId: creatorId });
 			const creatorPlan = cr?.plan === 'founder';
-			const avatarInner = creatorAvatarUrl
-				? `<img class="creation-detail-author-avatar" data-avatar-src="${escapeHtml(creatorAvatarUrl)}" alt="">`
-				: escapeHtml(creatorInitial);
+			const avatarInner = avatarMod.avatarPendingFaceHtml(creatorAvatarUrl, creatorInitial, { imgClass: 'creation-detail-author-avatar' });
 			const avatarSlot = creatorPlan
 				? `<div class="avatar-with-founder-flair avatar-with-founder-flair--sm"><div class="founder-flair-avatar-ring"><div class="founder-flair-avatar-inner" style="background: ${escapeHtml(creatorColor)};" aria-hidden="true">${avatarInner}</div></div></div>`
 				: `<span class="creation-detail-author-icon" style="background: ${escapeHtml(creatorColor)};">${avatarInner}</span>`;
@@ -8429,8 +8426,17 @@ export function renderCreationDetailView({ outlet, creationId, initialSeed = nul
 	const listenerController = new AbortController();
 	creationDetailViewMounted = true;
 	activeCreationDetailId = id;
-	activeCreationDetailSeed = initialSeed && Number(initialSeed.created_image_id ?? initialSeed.id) === id
-		? { ...initialSeed, ...creationDetailSeedBundledMod.feedItemToCreationDetailSeed(initialSeed), id } : null;
+	const mappedSeed = initialSeed && Number(initialSeed.created_image_id ?? initialSeed.id) === id
+		? creationDetailSeedBundledMod.feedItemToCreationDetailSeed(initialSeed)
+		: null;
+	activeCreationDetailSeed = mappedSeed
+		? creationDetailSeedBundledMod.applyCreatorStripCacheToSeed({
+			...initialSeed,
+			...mappedSeed,
+			id,
+			viewer_user_id: initialSeed.viewer_user_id ?? mappedSeed.viewer_user_id,
+			viewer_role: typeof initialSeed.viewer_role === 'string' ? initialSeed.viewer_role : mappedSeed.viewer_role,
+		}) : null;
 	activeCreationDetailNavigate = onNavigate || null;
  activeCreateProvider = createProvider || null;
 	window.__VPS_CREATION_DETAIL_SEED__ = initialSeed;

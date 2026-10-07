@@ -7,12 +7,118 @@ import { renderFeedCardSkeleton, renderMobileFeedCardSkeleton } from '../client/
 
 test('feed like state paints immediately, while unknown state shows a spinner', () => {
 	for (const liked of [true, false, undefined]) {
-		const seed = feedItemToCreationDetailSeed({ id: 42, created_image_id: 42, viewer_liked: liked, like_count: 3, published: true });
+		const seed = {
+			...feedItemToCreationDetailSeed({
+				id: 42,
+				created_image_id: 42,
+				user_id: 7,
+				status: 'completed',
+				viewer_liked: liked,
+				like_count: 3,
+				published: true,
+			}),
+			viewer_user_id: 7,
+			viewer_role: '',
+		};
 		assert.equal(seed.viewer_liked, liked);
 		const markup = creationDetailChromeHtmlFromSeed(seed);
 		assert.match(markup, new RegExp(`aria-busy="${liked === undefined}"`));
 		assert.match(markup, new RegExp(`aria-pressed="${liked === true}"`));
 	}
+});
+
+test('creation list overlay paints the owner action set from the parent row', () => {
+	const seed = {
+		...feedItemToCreationDetailSeed({
+			id: 9,
+			user_id: 7,
+			status: 'completed',
+			published: false,
+			media_type: 'image',
+			url: '/api/creations/media/a.png?creation_id=9',
+			author_user_name: 'me',
+		}),
+		viewer_user_id: 7,
+		viewer_role: '',
+	};
+	const markup = creationDetailChromeHtmlFromSeed(seed);
+	assert.match(markup, /data-publish-btn/);
+	assert.match(markup, /data-mutate-btn/);
+	assert.match(markup, /data-share-btn/);
+	assert.match(markup, /data-edit-btn/);
+	assert.match(markup, /data-creation-more-btn/);
+	assert.doesNotMatch(markup, /data-tip-creator-button/);
+	assert.doesNotMatch(markup, /data-like-button/);
+	assert.doesNotMatch(markup, /is-actions-pending/);
+});
+
+test('published creations with no challenge data omit the challenge slot', () => {
+	const markup = creationDetailChromeHtmlFromSeed({
+		...feedItemToCreationDetailSeed({
+			id: 9,
+			user_id: 7,
+			status: 'completed',
+			published: true,
+			media_type: 'image',
+			url: '/api/creations/media/a.png?creation_id=9',
+		}),
+		viewer_user_id: 7,
+		viewer_role: '',
+	});
+	assert.doesNotMatch(markup, /creation-detail-challenge-slot/);
+	assert.doesNotMatch(markup, /data-challenge-submit-detail-btn/);
+});
+
+test('challenge chrome stays a skeleton until submit eligibility and banners are final', () => {
+	const unpublished = creationDetailChromeHtmlFromSeed({
+		...feedItemToCreationDetailSeed({
+			id: 9,
+			user_id: 7,
+			status: 'completed',
+			published: false,
+			media_type: 'image',
+			url: '/api/creations/media/a.png?creation_id=9',
+		}),
+		viewer_user_id: 7,
+		viewer_role: '',
+	});
+	assert.match(unpublished, /is-challenge-pending/);
+	assert.doesNotMatch(unpublished, /data-challenge-submit-detail-btn/);
+	assert.doesNotMatch(unpublished, /data-organizer-assign-detail-btn/);
+
+	const entered = creationDetailChromeHtmlFromSeed({
+		...feedItemToCreationDetailSeed({
+			id: 11,
+			user_id: 7,
+			status: 'completed',
+			published: true,
+			media_type: 'image',
+			url: '/api/creations/media/a.png?creation_id=11',
+			meta: { challenge_submissions: [{ challenge_id: 'spring' }] },
+			challenge_ended: true,
+		}),
+		viewer_user_id: 7,
+		viewer_role: '',
+	});
+	assert.match(entered, /is-challenge-pending/);
+	assert.doesNotMatch(entered, /Challenge ended/);
+	assert.doesNotMatch(entered, /Challenge entry/);
+});
+
+test('overlay action buttons stay skeletons until the parent row can decide them', () => {
+	const markup = creationDetailChromeHtmlFromSeed(feedItemToCreationDetailSeed({
+		id: 9,
+		user_id: 3,
+		status: 'completed',
+		published: true,
+		media_type: 'image',
+		url: '/api/creations/media/a.png?creation_id=9',
+	}));
+	assert.match(markup, /is-actions-pending/);
+	assert.match(markup, /skeleton-pill/);
+	assert.doesNotMatch(markup, /data-mutate-btn/);
+	assert.doesNotMatch(markup, /data-like-button/);
+	assert.doesNotMatch(markup, /data-publish-btn/);
 });
 
 test('early creation detail chrome shows the username rather than the display name', () => {

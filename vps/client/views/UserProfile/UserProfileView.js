@@ -550,15 +550,17 @@ function renderProfilePage(
 	const creationsPublished = Number(stats?.creations_published ?? 0);
 	const likesReceived = Number(stats?.likes_received ?? 0);
 
-	const avatarContent = avatarUrl
-		? html`<img class="user-profile-avatar-img" data-avatar-src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(displayName)}">`
-: html`<div class="user-profile-avatar-fallback" style="--user-profile-avatar-bg: ${avatarColor};" aria-hidden="true">${escapeHtml(avatarInitial)}</div>`;
+	const avatarContent = avatarMod.avatarPendingFaceHtml(avatarUrl, avatarInitial, {
+		imgClass: 'user-profile-avatar-img',
+		fallbackClass: 'user-profile-avatar-fallback avatar-fallback-label',
+		fallbackStyle: `--user-profile-avatar-bg: ${avatarColor}`,
+	});
 
 	const avatarBlockHtml = isFounder
 		? html`
 					<div class="avatar-with-founder-flair avatar-with-founder-flair--xl">
 						<div class="founder-flair-avatar-ring">
-							<div class="founder-flair-avatar-inner">
+							<div class="founder-flair-avatar-inner" style="background: ${avatarColor};">
 								${avatarContent}
 							</div>
 						</div>
@@ -1082,9 +1084,11 @@ function appendCommentsListItems(container, comments) {
 		const color = getAvatarColor(u?.user_name || u?.user_id || name);
 		const initial = name.charAt(0).toUpperCase() || '?';
 		const href = buildProfilePath({ userName: u?.user_name, userId: id }) || '#';
-		const avatarContent = avatarUrl
-			? html`<img class="user-profile-comment-avatar-img" data-avatar-src="${escapeHtml(avatarUrl)}" alt="">`
-			: html`<span class="user-profile-comment-avatar-fallback" style="--user-profile-avatar-bg: ${color};" aria-hidden="true">${escapeHtml(initial)}</span>`;
+		const avatarContent = avatarMod.avatarPendingFaceHtml(avatarUrl, initial, {
+			imgClass: 'user-profile-comment-avatar-img',
+			fallbackClass: 'user-profile-comment-avatar-fallback avatar-fallback-label',
+			fallbackStyle: `--user-profile-avatar-bg: ${color}`,
+		});
 		return html`<a href="${escapeHtml(href)}" class="user-profile-comment-user"><span
 		class="user-profile-comment-avatar">${avatarContent}</span><span class="user-profile-comment-user-info"><span
 			class="user-profile-comment-user-name">${escapeHtml(name)}</span>${handle ? html`<span
@@ -1196,9 +1200,11 @@ function renderCommentsList(container, comments, emptyMessage) {
 		const color = getAvatarColor(u?.user_name || u?.user_id || name);
 		const initial = name.charAt(0).toUpperCase() || '?';
 		const href = buildProfilePath({ userName: u?.user_name, userId: id }) || '#';
-		const avatarContent = avatarUrl
-			? html`<img class="user-profile-comment-avatar-img" data-avatar-src="${escapeHtml(avatarUrl)}" alt="">`
-			: html`<span class="user-profile-comment-avatar-fallback" style="--user-profile-avatar-bg: ${color};" aria-hidden="true">${escapeHtml(initial)}</span>`;
+		const avatarContent = avatarMod.avatarPendingFaceHtml(avatarUrl, initial, {
+			imgClass: 'user-profile-comment-avatar-img',
+			fallbackClass: 'user-profile-comment-avatar-fallback avatar-fallback-label',
+			fallbackStyle: `--user-profile-avatar-bg: ${color}`,
+		});
 		return html`
 			<a href="${escapeHtml(href)}" class="user-profile-comment-user">
 				<span class="user-profile-comment-avatar">${avatarContent}</span>
@@ -1492,9 +1498,11 @@ function renderPersonalityDiscoveryPage(
 		const avatarUrl = avatarMod.normalizeAvatarUrl(personaCatalog?.avatar_url);
 		const avatarInitial = displayTitle.trim().charAt(0).toUpperCase() || '?';
 		const avatarColor = getAvatarColor(safePersonality);
-		const avatarBlockHtml = avatarUrl
-			? html`<img class="user-profile-avatar-img" data-avatar-src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(displayTitle)}">`
-			: html`<div class="user-profile-avatar-fallback" style="--user-profile-avatar-bg: ${avatarColor};" aria-hidden="true">${escapeHtml(avatarInitial)}</div>`;
+		const avatarBlockHtml = avatarMod.avatarPendingFaceHtml(avatarUrl, avatarInitial, {
+			imgClass: 'user-profile-avatar-img',
+			fallbackClass: 'user-profile-avatar-fallback avatar-fallback-label',
+			fallbackStyle: `--user-profile-avatar-bg: ${avatarColor}`,
+		});
 
 		const aboutInner =
 			desc
@@ -2088,13 +2096,13 @@ function applyPersonaHeroAvatarFromResponse(container, tag, persona) {
 	const avSlot = container.querySelector('.user-profile-hero .user-profile-avatar');
 	if (!avSlot) return;
 	const disp = (nameEl?.textContent || container.dataset.personaLibraryTitle || '').trim() || '?';
-	if (au) {
-		avSlot.innerHTML = `<img class="user-profile-avatar-img" data-avatar-src="${escapeHtml(au)}" alt="${escapeHtml(disp)}">`;
-	} else {
-		const initial = disp.charAt(0).toUpperCase() || '?';
-		const avatarColor = getAvatarColor(tag);
-		avSlot.innerHTML = `<div class="user-profile-avatar-fallback" style="--user-profile-avatar-bg: ${avatarColor};" aria-hidden="true">${escapeHtml(initial)}</div>`;
-	}
+	const initial = disp.charAt(0).toUpperCase() || '?';
+	const avatarColor = getAvatarColor(tag);
+	avSlot.innerHTML = avatarMod.avatarPendingFaceHtml(au, initial, {
+		imgClass: 'user-profile-avatar-img',
+		fallbackClass: 'user-profile-avatar-fallback avatar-fallback-label',
+		fallbackStyle: `--user-profile-avatar-bg: ${avatarColor}`,
+	});
 }
 
 async function runPersonaSetAvatarFromCreation(container, tag, creationId, btn) {

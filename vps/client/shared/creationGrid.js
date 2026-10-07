@@ -224,12 +224,14 @@ function waveform() {
 	return `<svg class="creation-grid__waveform" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" aria-hidden="true">${bars.map((height, index) => `<rect x="${12 + index * 4.8}" y="${50 - height / 2}" width="3.5" height="${height}" rx="1.25"></rect>`).join('')}</svg>`;
 }
 
-function statusMarkup(status, queuePosition = null) {
+function statusMarkup(status, queuePosition = null, { optimistic = false } = {}) {
 	const value = String(status || '').toLowerCase();
 	if (value === 'failed') {
 		return `<span class="creation-grid__status is-failed"><svg class="creation-grid__status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="m9 9 6 6M15 9l-6 6"></path></svg><span>FAILED</span></span>`;
 	}
-	if (['processing', 'running'].includes(value)) {
+	// Queued is the local wait before a server read. `creating` is that read
+	// telling us the job exists and is underway, same as processing/running.
+	if (!optimistic && ['creating', 'processing', 'running'].includes(value)) {
 		return `<span class="creation-grid__status is-generating"><span class="creation-grid__status-gears" aria-hidden="true"><svg class="creation-grid__status-gear creation-grid__status-gear--large" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09A1.65 1.65 0 0 0 19.4 15Z"></path></svg><svg class="creation-grid__status-gear creation-grid__status-gear--small" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82-.33l-.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09A1.65 1.65 0 0 0 19.4 15Z"></path></svg></span><span>GENERATING…</span></span>`;
 	}
 	const place = Number(queuePosition);
@@ -282,10 +284,11 @@ export function creationCardMarkup(item, { hidePublishedBadge = false } = {}) {
 	const queuePosition = Number(meta?.line_place ?? meta?.provider_last_payload?.place);
 	const title = String(item?.title || '').trim() || (item?.published ? 'Untitled' : '');
 	const mediaClass = `feed-card-image${pending || failed ? ' creation-grid__status-card' : nsfw ? (nsfwBlur ? ' nsfw' : ' nsfw nsfw-revealed') : ''}${failed ? ' creation-grid__failed-card' : ''}${!failed && challengeBlur ? ' feed-card-image--challenge-pending' : ''}`;
+	const optimistic = Boolean(item?.__optimistic) || String(rawId).startsWith('pending-');
 	const state = failed
 		? statusMarkup(status)
 		: pending
-			? statusMarkup(status, queuePosition)
+			? statusMarkup(status, queuePosition, { optimistic })
 			: creationNeedsAudioWaveformCover(item) ? waveform() : '';
 	const thumbnail = pending || failed ? '' : creationThumbnailUrl(item, { video: type === 'video' });
 	const original = pending || failed ? '' : (nsfwBlur ? thumbnail : creationOriginalUrl(item));

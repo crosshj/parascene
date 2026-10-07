@@ -19,6 +19,16 @@ const SHELL_OUT_MESSAGE = 'prsn-creation-detail-overlay-shell-out';
 const DISMISS_MESSAGE = 'prsn-workflow-overlay-dismiss';
 const CREATE_EDITOR_COOKIE = 'create_editor';
 
+/** Shell handoff so create-form and composer submits share one trip onto My Creations. */
+let afterSubmitHandoff = null;
+
+/**
+ * @param {{ sync?: (payload: object) => void, navigate?: (href: string, options?: object) => void } | null} next
+ */
+export function setAfterCreateSubmitHandoff(next) {
+	afterSubmitHandoff = next && typeof next === 'object' ? next : null;
+}
+
 function postToParentOverlay(payload) {
 	const host = getCreateWorkflowHost();
 	if (!host) return false;
@@ -150,24 +160,37 @@ export function openFullPageRoute(href) {
 }
 
 /**
+ * After a creation is accepted: refresh My Creations, then open that list.
+ * Create form, mutate, import, and the composer all call this. The list owns
+ * the card from here — queued, then generating, then the finished media.
  * @param {{ creationId?: number|string }} [options]
  */
 export function refreshAfterSubmit(options = {}) {
-	if (!isCreateWorkflowNativeHost()) return;
-
 	const creationId = Number(options.creationId);
-	const reason = 'create-submitted';
-	const scopes = defaultScopesForCreationShellSyncReason(reason);
+	if (!(Number.isFinite(creationId) && creationId > 0)) return;
 
-	if (Number.isFinite(creationId) && creationId > 0) {
+	const reason = 'create-submitted';
+	const payload = {
+		creationId,
+		reason,
+		scopes: normalizeCreationDetailShellSyncScopes(defaultScopesForCreationShellSyncReason(reason)),
+	};
+
+	if (typeof afterSubmitHandoff?.sync === 'function') afterSubmitHandoff.sync(payload);
+	else {
 		postToParentOverlay({
 			type: CREATION_DETAIL_SHELL_SYNC_MESSAGE,
-			creationId,
-			reason,
-			scopes: normalizeCreationDetailShellSyncScopes(scopes),
+			creationId: payload.creationId,
+			reason: payload.reason,
+			scopes: payload.scopes,
 		});
 	}
 
+	if (typeof afterSubmitHandoff?.navigate === 'function') {
+		afterSubmitHandoff.navigate('/creations', { replace: true });
+		return;
+	}
+	if (!isCreateWorkflowNativeHost() && typeof afterSubmitHandoff?.sync !== 'function') return;
 	navigate('/creations', { replace: true });
 }
 

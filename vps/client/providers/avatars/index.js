@@ -155,19 +155,26 @@ export function createAvatarsProvider({ fetchImpl = (...args) => fetch(...args) 
 		if (!url) {
 			image.removeAttribute('src');
 			image.hidden = true;
+			image.classList.add('is-avatar-unresolved');
 			delete image.dataset.avatarResolved;
 			delete image.dataset.avatarBlobSource;
 			return;
 		}
 		image.hidden = false;
-		if (image.dataset.avatarResolved === url) return;
+		if (image.dataset.avatarResolved === url && image.getAttribute('src')) return;
+		image.classList.remove('is-avatar-unresolved');
 		image.dataset.avatarResolved = url;
 		image.onerror = () => {
-			if (image.dataset.avatarBlobSource !== url || !image.src.startsWith('blob:')) return;
-			image.dataset.avatarBlobSource = '';
-			uncachedUrls.add(url);
-			void deleteBlob(url);
-			image.src = url;
+			if (image.dataset.avatarResolved !== url) return;
+			const retryingBlob = image.dataset.avatarBlobSource === url && image.src.startsWith('blob:');
+			if (retryingBlob) {
+				image.dataset.avatarBlobSource = '';
+				uncachedUrls.add(url);
+				void deleteBlob(url);
+				image.src = url;
+				return;
+			}
+			image.classList.add('is-avatar-unresolved');
 		};
 		if (!canCacheAvatar(url)) {
 			image.src = url;

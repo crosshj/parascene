@@ -23,6 +23,32 @@ export function normalizeAvatarUrl(value) {
 	return url;
 }
 
+function escapeAvatarHtml(value) {
+	return String(value ?? '')
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;');
+}
+
+/**
+ * Face markup for an avatar shell. A URL keeps the initial in the DOM but CSS
+ * hides it until the image fails. No URL renders the initial immediately.
+ * @param {string} url
+ * @param {string} initial
+ * @param {{ imgClass?: string, fallbackClass?: string, fallbackStyle?: string }} [options]
+ */
+export function avatarPendingFaceHtml(url, initial, options = {}) {
+	const letter = escapeAvatarHtml(String(initial || '?').trim().charAt(0).toUpperCase() || '?');
+	const fallbackClass = options.fallbackClass || 'avatar-fallback-label';
+	const style = options.fallbackStyle ? ` style="${escapeAvatarHtml(options.fallbackStyle)}"` : '';
+	const label = `<span class="${escapeAvatarHtml(fallbackClass)}"${style} aria-hidden="true">${letter}</span>`;
+	const safeUrl = normalizeAvatarUrl(url);
+	if (!safeUrl) return label;
+	const imgClass = options.imgClass ? ` class="${escapeAvatarHtml(options.imgClass)}"` : '';
+	return `${label}<img${imgClass} data-avatar-src="${escapeAvatarHtml(safeUrl)}" alt="">`;
+}
+
 function hashString(input) {
 	const str = String(input ?? '');
 	let hash = 5381;

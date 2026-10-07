@@ -1424,20 +1424,20 @@ function buildFeedBlogPostCard(item) {
 	const relativeTime = formatRelativeTime(item.created_at) || "recently";
 	const profileHref = buildProfilePath({ userName: authorUserName, userId: authorUserId });
 	const isFounder = item.author_plan === "founder";
-	const avatarContent = avatarUrl ? html`<img data-avatar-src="${avatarUrl}" alt="">` : avatarInitial;
+	const avatarFace = avatarMod.avatarPendingFaceHtml(avatarUrl, avatarInitial, { imgClass: 'feed-card-avatar-img' });
 	const avatarBlock = isFounder
 		? html`
           <div class="avatar-with-founder-flair avatar-with-founder-flair--sm">
             <div class="founder-flair-avatar-ring">
-              <div class="founder-flair-avatar-inner" style="background: ${avatarUrl ? 'var(--surface-strong)' : avatarColor};" aria-hidden="true">
-                ${avatarContent}
+              <div class="founder-flair-avatar-inner" style="background: ${avatarColor};" aria-hidden="true">
+                ${avatarFace}
               </div>
             </div>
           </div>
         `
 		: html`
           <div class="feed-card-avatar feed-card-blog-avatar-chip" style="--feed-card-avatar-bg: ${avatarColor};" aria-hidden="true">
-	            ${avatarUrl ? html`<img class="feed-card-avatar-img" data-avatar-src="${avatarUrl}" alt="">` : avatarInitial}
+	            ${avatarFace}
           </div>
         `;
 	const safeHandleForHtml = handleForLabel
@@ -1724,20 +1724,20 @@ function buildFeedCreationCard(
 	const titleUntitled = missingTitle || title.trim().toLowerCase() === 'untitled';
 	const profileHref = buildProfilePath({ userName: authorUserName, userId: authorUserId });
 	const isFounder = item.author_plan === "founder";
-	const avatarContent = avatarUrl ? html`<img data-avatar-src="${avatarUrl}" alt="">` : avatarInitial;
+	const avatarFace = avatarMod.avatarPendingFaceHtml(avatarUrl, avatarInitial, { imgClass: 'feed-card-avatar-img' });
 	const avatarBlock = isFounder
 		? html`
           <div class="avatar-with-founder-flair avatar-with-founder-flair--md">
             <div class="founder-flair-avatar-ring">
-              <div class="founder-flair-avatar-inner" style="background: ${avatarUrl ? 'var(--surface-strong)' : avatarColor};" aria-hidden="true">
-                ${avatarContent}
+              <div class="founder-flair-avatar-inner" style="background: ${avatarColor};" aria-hidden="true">
+                ${avatarFace}
               </div>
             </div>
           </div>
         `
 		: html`
           <div class="feed-card-avatar" style="--feed-card-avatar-bg: ${avatarColor};" aria-hidden="true">
-	            ${avatarUrl ? html`<img class="feed-card-avatar-img" data-avatar-src="${avatarUrl}" alt="">` : avatarInitial}
+	            ${avatarFace}
           </div>
         `;
 

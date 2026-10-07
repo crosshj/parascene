@@ -2,7 +2,7 @@
  * Shared user list row HTML. Used by user-profile (follows/following lists).
  */
 
-import {getAvatarColor, normalizeAvatarUrl} from './avatar.js';
+import {avatarPendingFaceHtml, getAvatarColor, normalizeAvatarUrl} from './avatar.js';
 import {buildProfilePath} from './profileLinks.js';
 
 const html = String.raw;
@@ -39,9 +39,11 @@ export function buildUserListRowHtml(user, options = {}) {
 	const initial = name.charAt(0).toUpperCase() || '?';
 	const href = buildProfilePath({ userName: user?.user_name, userId: id }) || '#';
 
-	const avatarContent = avatarUrl
-		? html`<img class="user-profile-list-avatar-img" data-avatar-src="${escapeHtml(avatarUrl)}" alt="">`
-		: html`<div class="user-profile-list-avatar-fallback" style="--user-profile-avatar-bg: ${color};" aria-hidden="true">${escapeHtml(initial)}</div>`;
+	const avatarContent = avatarPendingFaceHtml(avatarUrl, initial, {
+		imgClass: 'user-profile-list-avatar-img',
+		fallbackClass: 'user-profile-list-avatar-fallback avatar-fallback-label',
+		fallbackStyle: `--user-profile-avatar-bg: ${color}`,
+	});
 
 	const viewerFollows = (uid) => viewerFollowsByUserId instanceof Set
 		? viewerFollowsByUserId.has(uid)

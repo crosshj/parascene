@@ -6,16 +6,37 @@ export function createPendingCreationsStore(viewerId) {
   catch { return []; }
  }
  function write(items) { try { sessionStorage.setItem(key, JSON.stringify(items)); } catch {} }
+ function rowToken(row) {
+  if (typeof row?.creation_token === 'string' && row.creation_token.trim()) return row.creation_token.trim();
+  let meta = row?.meta;
+  if (typeof meta === 'string') { try { meta = JSON.parse(meta); } catch { meta = null; } }
+  return typeof meta?.creation_token === 'string' ? meta.creation_token.trim() : '';
+ }
  function reconcile(rows) {
-  const ids = new Set(rows.map(row => String(row.id ?? row.created_image_id)));
-  const tokens = new Set(rows.map(row => {
-   let meta = row.meta;
-   if (typeof meta === 'string') { try { meta = JSON.parse(meta); } catch { meta = null; } }
-   return meta?.creation_token;
-  }).filter(Boolean));
-  const items = read().filter(item => !ids.has(String(item.id)) && !tokens.has(item.creation_token) && Date.now() - Date.parse(item.created_at) < 60 * 60 * 1000);
-  write(items);
-  return items.map(item => ({ ...item, __optimistic: true }));
+  const visibleIds = new Set();
+  const visibleTokens = new Set();
+  const terminalIds = new Set();
+  const terminalTokens = new Set();
+  for (const row of rows) {
+   const id = String(row?.id ?? row?.created_image_id ?? '');
+   const token = rowToken(row);
+   const status = String(row?.status || 'completed').toLowerCase();
+   const terminal = status === 'completed' || status === 'failed' || status === 'cancelled';
+   if (id) visibleIds.add(id);
+   if (token) visibleTokens.add(token);
+   if (!terminal) continue;
+   if (id) terminalIds.add(id);
+   if (token) terminalTokens.add(token);
+  }
+  const fresh = read().filter(item => Date.now() - Date.parse(item.created_at) < 60 * 60 * 1000);
+  // Drop a placeholder only once its creation is finished. An in-flight list
+  // snapshot can omit the new row; keeping the placeholder lets that render
+  // show the same card instead of removing it and painting it again.
+  const kept = fresh.filter(item => !terminalIds.has(String(item.id)) && !terminalTokens.has(item.creation_token));
+  write(kept);
+  return kept
+   .filter(item => !visibleIds.has(String(item.id)) && !visibleTokens.has(item.creation_token))
+   .map(item => ({ ...item, __optimistic: true }));
  }
  return { key, read, reconcile, clear() { try { sessionStorage.removeItem(key); } catch {} } };
 }

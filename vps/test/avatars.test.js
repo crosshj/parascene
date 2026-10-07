@@ -6,6 +6,13 @@ import { JSDOM } from 'jsdom';
 import { createAvatarsProvider } from '../client/providers/avatars/index.js';
 const avatar = '/api/images/generic/profile/7/avatar_123_test.webp';
 const tick = () => new Promise(resolve => setTimeout(resolve, 20));
+async function waitFor(fn) {
+	for (let i = 0; i < 25; i += 1) {
+		if (fn()) return;
+		await tick();
+	}
+	assert.fail('timed out');
+}
 function databaseFixture(rows) {
  const db = { close() {}, transaction() {
   const tx = { objectStore: () => ({ get: key => request(() => rows.get(key)), put: row => request(() => { rows.set(row.url, row); return row.url; }), delete: key => request(() => rows.delete(key)), openCursor: () => request(() => null) }) };
@@ -26,16 +33,20 @@ test('persisted blobs avoid HTTP, misses deduplicate, and failures fall back onc
  try {
   provider = createAvatarsProvider({ fetchImpl }); provider.start();
   const one = mount(), two = mount(); assert.equal(one.hasAttribute('src'), false);
-  await tick(); await tick(); assert.equal(calls, 1); assert.match(one.src, /^blob:/); assert.equal(one.src, two.src);
+  await waitFor(() => one.src.startsWith('blob:') && two.src === one.src);
+  assert.equal(calls, 1); assert.match(one.src, /^blob:/); assert.equal(one.src, two.src);
   provider.destroy(); document.querySelector('main').replaceChildren();
   provider = createAvatarsProvider({ fetchImpl }); provider.start();
-  const cached = mount(); await tick(); await tick(); assert.equal(calls, 1); assert.match(cached.src, /^blob:/);
+  const cached = mount(); await waitFor(() => cached.src.startsWith('blob:')); assert.equal(calls, 1); assert.match(cached.src, /^blob:/);
   const invalid = mount('null'); await tick(); assert.equal(invalid.hasAttribute('src'), false);
   provider.destroy(); document.querySelector('main').replaceChildren();
   let failures = 0;
   provider = createAvatarsProvider({ fetchImpl: async () => { failures++; throw new Error('CORS'); } }); provider.start();
   const failedUrl = avatar.replace('123', '456'); const fallback = mount(failedUrl);
-  await tick(); await tick(); assert.equal(fallback.getAttribute('src'), `http://localhost:3000${failedUrl}`);
+  await waitFor(() => fallback.getAttribute('src') === `http://localhost:3000${failedUrl}`);
+  assert.equal(fallback.getAttribute('src'), `http://localhost:3000${failedUrl}`);
+  fallback.dispatchEvent(new dom.window.Event('error'));
+  assert.equal(fallback.classList.contains('is-avatar-unresolved'), true);
   mount(failedUrl); await tick(); assert.equal(failures, 1);
  } finally { provider?.destroy(); dom.window.close(); for (const [key, value] of previous) { if (value === undefined) delete globalThis[key]; else globalThis[key] = value; } }
 });

@@ -79,8 +79,16 @@ export const appViews = Object.freeze({
 	CreationDetail: {
 		mount({ outlet, creationId, seed, actions, services }) {
 			const viewer = services.session.user;
-			if (seed && !seed.creator && Number(seed.user_id) === Number(viewer?.id)) {
-				seed = { ...seed, creator: { id: viewer.id, ...viewer.profile } };
+			if (seed && viewer) {
+				const profile = viewer.profile && typeof viewer.profile === 'object' ? viewer.profile : {};
+				seed = {
+					...seed,
+					viewer_user_id: seed.viewer_user_id ?? viewer.id,
+					viewer_role: typeof seed.viewer_role === 'string' ? seed.viewer_role : (typeof viewer.role === 'string' ? viewer.role : ''),
+				};
+				if (!seed.creator && Number(seed.user_id) === Number(viewer.id)) {
+					seed = { ...seed, creator: { id: viewer.id, ...profile } };
+				}
 			}
 			return renderCreationDetailView({
 				outlet,

@@ -45,7 +45,7 @@
 	justify-content: center;
 	position: relative;
 	z-index: 0;
-	/* --avatar-bg set in JS when showing initial only (no image); otherwise surface-strong for image container */
+	/* --avatar-bg is the colored initial. A pending image covers it with the muted avatar rule. */
 	background: var(--avatar-bg, var(--surface-strong));
 	color: #fff;
 	font-weight: 600;

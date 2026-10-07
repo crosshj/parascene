@@ -3,15 +3,17 @@
  * without waiting on GET /api/create/images/:id.
  */
 
-import { groupActionSupportedWhenKnown } from './creationGroupMedia.js';
+import { groupActionSupported, groupActionSupportedWhenKnown, groupSupportedKnown } from './creationGroupMedia.js';
 import { creationLikeSpinnerHtml } from './creationLoadingChrome.js';
-import { normalizeAvatarUrl } from './avatar.js';
+import { avatarPendingFaceHtml, getAvatarColor, normalizeAvatarUrl } from './avatar.js';
 import {
 	audioCoverWaveformHtml,
 	creationNeedsAudioWaveformCover,
 } from './audioCoverWaveform.js';
 import {
+	creationCanRecheckAfterTimeout,
 	creationGpuWaitMarkup,
+	isCreationFinishTimedOut,
 	isCreationGpuInFlight,
 } from './creationGpuWait.js';
 
@@ -456,16 +458,10 @@ export function feedItemToCreationDetailSeed(item) {
 		published: item.published,
 	});
 	const summary = typeof item.summary === 'string' ? item.summary.trim() : '';
-	const authorUserName =
-		typeof item.author_user_name === 'string' ? item.author_user_name.trim() : typeof item.creator?.user_name === 'string' ? item.creator.user_name.trim() : '';
-	const authorDisplay =
-		typeof item.author_display_name === 'string'
-			? item.author_display_name.trim()
-			: typeof item.author === 'string'
-				? item.author.trim()
-				: '';
-	const authorAvatar =
-		typeof item.author_avatar_url === 'string' ? item.author_avatar_url.trim() : '';
+	const creator = item.creator && typeof item.creator === 'object' ? item.creator : null;
+	const authorUserName = pickSeedString(item.author_user_name, creator?.user_name);
+	const authorDisplay = pickSeedString(item.author_display_name, item.author, creator?.display_name);
+	const authorAvatar = pickSeedString(item.author_avatar_url, creator?.avatar_url, item.avatar_url);
 	const userId = numId(item.user_id);
 	let meta = item.meta && typeof item.meta === 'object' ? item.meta : null;
 	if (typeof item.meta === 'string' && item.meta) {
@@ -503,14 +499,14 @@ export function feedItemToCreationDetailSeed(item) {
 		creator_follower_count: seedFollowerCount(item),
 		created_at: item.created_at || null,
 		published_at: item.published_at || item.created_at || null,
-		published: seedPublishedFlag(item.published) !== false,
+		published: seedPublishedFlag(item.published),
 		status: typeof item.status === 'string' ? item.status.trim() : '',
 		editorial_pin: item.editorial_pin === true,
 		editorial_pin_show_metadata: item.editorial_pin_show_metadata !== false,
 		import_provider:
 			meta?.import && typeof meta.import.provider === 'string' ? meta.import.provider.trim() : '',
 		meta,
-		challenge_ended: item.challenge_ended === true,
+		challenge_ended: item.challenge_ended === true ? true : item.challenge_ended === false ? false : null,
 	};
 }
 
@@ -1080,6 +1076,104 @@ function seedIsOwner(seed) {
 	return viewer === owner;
 }
 
+function seedExplicitStatus(seed) {
+	return typeof seed?.status === 'string' ? seed.status.trim().toLowerCase() : '';
+}
+
+function seedGroupHasSourceMedia(group) {
+	const sources = Array.isArray(group?.source_creations) ? group.source_creations : [];
+	return sources.some((source) => {
+		if (!source || typeof source !== 'object') return false;
+		const filePath = typeof source.file_path === 'string' ? source.file_path.trim() : '';
+		const videoPath = typeof source.meta?.video?.file_path === 'string' ? source.meta.video.file_path.trim() : '';
+		return Boolean(filePath || videoPath);
+	});
+}
+
+/**
+ * Strip buttons are ready only when the parent row plus viewer identity decide
+ * the same set the loaded detail will show. Otherwise the chrome stays a skeleton.
+ */
+function seedStripPlan(seed) {
+	const viewer = numId(seed?.viewer_user_id);
+	const owner = numId(seed?.user_id);
+	const status = seedExplicitStatus(seed);
+	const meta = seedMetaObject(seed);
+	const publishedFlag = seedPublishedFlag(seed?.published);
+	const roleKnown = typeof seed?.viewer_role === 'string';
+	const isOwner = Boolean(viewer && owner && viewer === owner);
+	const isAdmin = roleKnown && seed.viewer_role === 'admin';
+	const followKnown = isOwner || isAdmin || typeof seed?.viewer_follows === 'boolean';
+	const challengeKnown = !seedHasChallengeSubmissions(meta) || seed?.challenge_ended === true || seed?.challenge_ended === false;
+	if (!viewer || !owner || !status || publishedFlag == null || !roleKnown || !followKnown || !challengeKnown || !groupSupportedKnown(meta?.group)) {
+		return { ready: false };
+	}
+	const isPublished = publishedFlag === true;
+	const canEdit = isOwner || isAdmin;
+	const userDeleted = seed?.user_deleted === true;
+	const adminViewingUserDeleted = isAdmin && userDeleted;
+	const isFailed = status === 'failed' || isCreationFinishTimedOut(status, meta);
+	const completed = status === 'completed' && !isFailed;
+	const isImportEmbed = seedIsImportEmbed(seed);
+	const group = meta?.group && typeof meta.group === 'object' ? meta.group : null;
+	const isGroup = group?.kind === 'group_creations';
+	const hasUrl = Boolean(pickSeedString(seed?.image_url, seed?.url));
+	const hasChallengeSubmission = seedHasChallengeSubmissions(meta);
+	const challengeAllEnded = hasChallengeSubmission && seed.challenge_ended === true;
+	const challengeMediaLocked = seedHasActiveFeedPin(meta) || seedHasOrganizerRef(meta);
+	let showPublish =
+		canEdit &&
+		!isPublished &&
+		completed &&
+		!adminViewingUserDeleted &&
+		(!hasChallengeSubmission || challengeAllEnded) &&
+		!challengeMediaLocked;
+	let showEdit = canEdit && completed && !adminViewingUserDeleted;
+	let showMutate = !isAdmin && !isImportEmbed && completed && hasUrl;
+	let showShare = !isImportEmbed && completed;
+	let showRetry = canEdit && isFailed && !adminViewingUserDeleted && !isImportEmbed;
+	let showCheckAgain =
+		isOwner &&
+		!adminViewingUserDeleted &&
+		!isImportEmbed &&
+		(creationCanRecheckAfterTimeout(status, meta) ||
+			(isCreationGpuInFlight(status) && Boolean(meta?.revived_from_timeout_at)));
+	const showMoreInfo =
+		isFailed &&
+		(Object.keys(meta?.args || {}).length > 0 ||
+			(meta?.provider_error != null && typeof meta.provider_error === 'object'));
+	if (isGroup && seedGroupHasSourceMedia(group) && completed && !isAdmin) showMutate = true;
+	if (isGroup) {
+		showRetry = false;
+		showCheckAgain = false;
+		if (!groupActionSupported(group, 'publish')) showPublish = false;
+		if (!groupActionSupported(group, 'edit')) showEdit = false;
+		if (!groupActionSupported(group, 'share')) showShare = false;
+		if (!groupActionSupported(group, 'remix')) showMutate = false;
+	}
+	const showDelete = canEdit && !isAdmin;
+	return {
+		ready: true,
+		showLike: isPublished && !isFailed,
+		showTip: !isOwner,
+		showFollow: !isAdmin && !isOwner && seed.viewer_follows === false,
+		showPublish,
+		showMutate,
+		showShare,
+		showEdit,
+		showRetry,
+		showCheckAgain,
+		showMoreInfo,
+		showMore: !isFailed || showDelete,
+		imageExportEligible: !isImportEmbed && completed && (isOwner || isPublished || isAdmin),
+	};
+}
+
+const SEED_ACTION_SKELETONS = `<span class="skeleton skeleton-pill" style="width: 72px; height: 34px;" aria-hidden="true"></span>
+					<span class="skeleton skeleton-pill" style="width: 64px; height: 34px;" aria-hidden="true"></span>
+					<span class="skeleton skeleton-pill" style="width: 88px; height: 34px;" aria-hidden="true"></span>
+					<span class="skeleton skeleton-circle" style="width: 34px; height: 34px;" aria-hidden="true"></span>`;
+
 function seedShowComments(seed) {
 	if (seedStatus(seed) === 'failed') return false;
 	return seedIsPublished(seed) || seedHideIdentifyChrome(seed);
@@ -1106,23 +1200,22 @@ function seedCommentComposerHtml(seed) {
 	const avatarUrl = normalizeAvatarUrl(seed.viewer_avatar_url);
 	const display = pickSeedString(seed.viewer_display_name, seed.viewer_user_name);
 	const initial = (display || '?').charAt(0).toUpperCase();
+	const viewerColor = getAvatarColor(display || 'viewer');
 	const founder = seed.viewer_plan === 'founder';
 	const plusSvg = '<svg class="comment-input-attach-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>';
 	const sendSvg = '<svg class="comment-send-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3.4 20.6 21 12 3.4 3.4 3 10l11 2L3 14l.4 6.6Z"></path></svg>';
-	const avatarInner = avatarUrl
-		? `<img class="comment-avatar-img" data-avatar-src="${esc(avatarUrl)}" alt="">`
-		: esc(initial);
+	const avatarInner = avatarPendingFaceHtml(avatarUrl, initial, { imgClass: 'comment-avatar-img' });
 	const avatarHtml = founder
 		? `<div class="avatar-with-founder-flair avatar-with-founder-flair--sm">
 							<div class="founder-flair-avatar-ring">
-								<div class="founder-flair-avatar-inner" data-founder-flair-avatar-bg aria-hidden="true">
+								<div class="founder-flair-avatar-inner" data-founder-flair-avatar-bg style="background: ${esc(viewerColor)};" aria-hidden="true">
 									${avatarInner}
 								</div>
 							</div>
 						</div>`
 		: avatarInner;
 	return `<div class="comment-input" data-comment-input data-comment-input-adorned>
-				<div class="comment-avatar"${founder ? '' : ' style="background: var(--surface);"'}>${avatarHtml}</div>
+				<div class="comment-avatar"${founder ? '' : ` style="background: ${esc(viewerColor)};"`}>${avatarHtml}</div>
 				<div class="comment-input-body">
 					<div class="comment-composer-row">
 						<button type="button" class="comment-input-attach" data-comment-attach aria-label="Attach image">${plusSvg}</button>
@@ -1190,77 +1283,62 @@ const SEED_EDIT_SVG = `<svg width="16" height="16" viewBox="0 0 16 16" fill="non
 const SEED_CHALLENGE_TROPHY_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 21h8"></path><path d="M12 17v4"></path><path d="M7 4h10v5a5 5 0 0 1-10 0V4z"></path><path d="M7 8H5a2 2 0 0 1-2-2V5h4"></path><path d="M17 8h2a2 2 0 0 0 2-2V5h-4"></path></svg>`;
 const SEED_CHALLENGE_COG_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0 1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0 1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06-.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>`;
 
-function seedChallengeSlotHtml(seed) {
+const SEED_CHALLENGE_SKELETON = `<div class="creation-detail-challenge-slot is-challenge-pending" data-creation-detail-challenge-slot aria-busy="true">
+		<div class="creation-detail-challenge-skeleton" aria-hidden="true">
+			<span class="skeleton skeleton-circle" style="width: 22px; height: 22px;"></span>
+			<span class="creation-detail-challenge-skeleton-copy">
+				<span class="skeleton skeleton-line" style="width: 38%; height: 14px;"></span>
+				<span class="skeleton skeleton-line" style="width: 86%; height: 12px;"></span>
+			</span>
+		</div>
+	</div>`;
+
+/**
+ * Challenge banners and submit/assign buttons stay a skeleton until the parent
+ * row can decide the same slot the loaded detail will show.
+ * @returns {'empty' | 'skeleton' | 'actions'}
+ */
+function seedChallengeSlotMode(seed) {
 	const meta = seedMetaObject(seed);
-	const isOwner = seedIsOwner(seed);
-	const isPublished = seedIsPublished(seed);
-	const completed = seedStatus(seed) === 'completed';
 	const hasPin = seedHasActiveFeedPin(meta);
 	const hasOrganizerRef = seedHasOrganizerRef(meta);
 	const hasSubmissions = seedHasChallengeSubmissions(meta);
-	const allEnded = seed?.challenge_ended === true;
+	if (hasPin || hasOrganizerRef || hasSubmissions) return 'skeleton';
+	const publishedFlag = seedPublishedFlag(seed?.published);
+	if (publishedFlag === true) return 'empty';
+	const viewer = numId(seed?.viewer_user_id);
+	const owner = numId(seed?.user_id);
+	const status = seedExplicitStatus(seed);
+	if (!viewer || !owner || !status || publishedFlag == null || !groupSupportedKnown(meta?.group)) return 'skeleton';
+	const isOwner = viewer === owner;
+	const completed = status === 'completed';
+	const isGroup = seedIsGroupCreation(meta);
+	const group = meta?.group;
+	const submitBlocked =
+		!isOwner ||
+		!completed ||
+		isGroup ||
+		!groupActionSupported(group, 'challenge_submit');
+	if (!submitBlocked && typeof seed?.challenge_submit?.eligible !== 'boolean') return 'skeleton';
+	return 'actions';
+}
+
+function seedChallengeActionsHtml(seed) {
+	const meta = seedMetaObject(seed);
+	const isOwner = seedIsOwner(seed);
+	const completed = seedExplicitStatus(seed) === 'completed';
+	const isGroup = seedIsGroupCreation(meta);
+	const group = meta?.group;
 	const showSubmit =
 		isOwner &&
 		completed &&
-		!isPublished &&
-		!seedIsGroupCreation(meta) &&
-		!hasPin &&
-		!hasOrganizerRef &&
-		groupActionSupportedWhenKnown(meta?.group, 'challenge_submit');
-	const showAssign =
-		isOwner &&
-		!isPublished &&
-		!hasPin &&
-		groupActionSupportedWhenKnown(meta?.group, 'challenge_assign');
-	const challengesHref = '/challenges';
-	let banners = '';
-	if (hasOrganizerRef && !hasPin) {
-		const detail = isOwner
-			? 'This creation is attached to a challenge as challenge media. It can’t be published, deleted, or submitted as an entry while that use remains.'
-			: 'This creation is used as challenge media.';
-		banners += `<div class="creation-detail-challenge-banner" role="status">
-				<div class="creation-detail-challenge-banner-main">
-					<div class="creation-detail-challenge-banner-icon">${SEED_CHALLENGE_TROPHY_SVG}</div>
-					<div class="creation-detail-challenge-banner-body">
-						<p class="creation-detail-challenge-banner-title">Challenge media</p>
-						<p class="creation-detail-challenge-banner-detail">${detail}</p>
-					</div>
-				</div>
-				<div class="creation-detail-challenge-banner-actions">
-					<a class="creation-detail-challenge-banner-link btn-outlined" href="${challengesHref}">Open Challenges</a>
-				</div>
-			</div>`;
-	}
-	if (hasSubmissions) {
-		const title = allEnded ? 'Challenge ended' : 'Challenge entry';
-		const detail = allEnded
-			? isOwner && !isPublished
-				? 'This challenge has ended — you can now publish this creation.'
-				: 'This creation was entered in a community challenge that has now ended.'
-			: isOwner && !isPublished
-				? 'This creation is entered in a challenge. Remove it from the challenge before deleting. You can publish it once the challenge ends.'
-				: 'This creation was submitted to a community challenge.';
-		const withdraw =
-			isOwner && hasSubmissions && !allEnded
-				? `<button type="button" class="creation-detail-challenge-banner-withdraw" data-challenge-withdraw-btn>Remove from challenge</button>`
-				: '';
-		banners += `<div class="creation-detail-challenge-banner${allEnded ? ' creation-detail-challenge-banner-ended' : ''}" role="status">
-				<div class="creation-detail-challenge-banner-main">
-					<div class="creation-detail-challenge-banner-icon">${SEED_CHALLENGE_TROPHY_SVG}</div>
-					<div class="creation-detail-challenge-banner-body">
-						<p class="creation-detail-challenge-banner-title">${title}</p>
-						<p class="creation-detail-challenge-banner-detail">${detail}</p>
-					</div>
-				</div>
-				<div class="creation-detail-challenge-banner-actions">
-					<a class="creation-detail-challenge-banner-link btn-outlined" href="${challengesHref}">Open Challenges</a>
-					${withdraw}
-				</div>
-			</div>`;
-	}
-	const actions =
-		showSubmit || showAssign
-			? `<div class="creation-detail-challenge-actions">
+		!isGroup &&
+		groupActionSupported(group, 'challenge_submit') &&
+		seed?.challenge_submit?.eligible === true;
+	const showAssign = isOwner && groupActionSupported(group, 'challenge_assign');
+	if (!showSubmit && !showAssign) return '';
+	return `<div class="creation-detail-challenge-slot" data-creation-detail-challenge-slot>
+			<div class="creation-detail-challenge-actions">
 				<div class="creation-detail-challenge-actions-btns">
 					${showSubmit
 						? `<button type="button" class="creation-detail-challenge-submit-btn" data-challenge-submit-detail-btn>
@@ -1281,9 +1359,15 @@ function seedChallengeSlotHtml(seed) {
 				${showAssign && !showSubmit
 					? `<p class="creation-detail-challenge-submit-hint">Organizers can attach this creation as challenge media.</p>`
 					: ''}
-			</div>`
-			: '';
-	return `<div class="creation-detail-challenge-slot" data-creation-detail-challenge-slot>${banners}${actions}</div>`;
+			</div>
+		</div>`;
+}
+
+function seedChallengeSlotHtml(seed) {
+	const mode = seedChallengeSlotMode(seed);
+	if (mode === 'empty') return '';
+	if (mode === 'skeleton') return SEED_CHALLENGE_SKELETON;
+	return seedChallengeActionsHtml(seed);
 }
 
 /**
@@ -1300,7 +1384,7 @@ export function creationDetailChromeHtmlFromSeed(seed) {
 	const display =
 		(typeof seed.author_display_name === 'string' && seed.author_display_name.trim()) ||
 		handle;
-	const avatarUrl = normalizeAvatarUrl(seed.author_avatar_url);
+	const avatarUrl = normalizeAvatarUrl(seed.author_avatar_url) || normalizeAvatarUrl(seed.creator?.avatar_url);
 	const userId = numId(seed.user_id);
 	const likes = Number(seed.like_count) || 0;
 	const liked = Boolean(seed.viewer_liked);
@@ -1309,12 +1393,13 @@ export function creationDetailChromeHtmlFromSeed(seed) {
 	const founder = seed.author_plan === 'founder';
 	const profileHref = handle ? `/p/${encodeURIComponent(handle)}` : userId ? `/user/${userId}` : '';
 	const initial = (display || handle || '?').charAt(0).toUpperCase();
+	const avatarColor = getAvatarColor(handle || display || String(userId || ''));
 	const avatarInner = avatarUrl
-		? `<img class="creation-detail-author-avatar" data-avatar-src="${esc(avatarUrl)}" alt="">`
-		: esc(initial);
+		? avatarPendingFaceHtml(avatarUrl, initial, { imgClass: 'creation-detail-author-avatar' })
+		: '';
 	const avatarHtml = founder
-		? `<div class="avatar-with-founder-flair avatar-with-founder-flair--sm"><div class="founder-flair-avatar-ring"><div class="founder-flair-avatar-inner" style="background: ${avatarUrl ? 'var(--surface-strong)' : 'var(--surface)'};">${avatarInner}</div></div></div>`
-		: `<span class="creation-detail-author-icon">${avatarInner}</span>`;
+		? `<div class="avatar-with-founder-flair avatar-with-founder-flair--sm"><div class="founder-flair-avatar-ring"><div class="founder-flair-avatar-inner${avatarUrl ? '' : ' is-avatar-pending'}" style="${avatarUrl ? `background: ${esc(avatarColor)};` : ''}">${avatarInner}</div></div></div>`
+		: `<span class="creation-detail-author-icon${avatarUrl ? '' : ' is-avatar-pending'}"${avatarUrl ? ` style="background: ${esc(avatarColor)};"` : ''}>${avatarInner}</span>`;
 	const avatarWrap = profileHref
 		? `<a class="creation-detail-action-strip-avatar" href="${esc(profileHref)}" aria-label="View ${esc(handle ? `@${handle}` : 'user')} profile">${avatarHtml}</a>`
 		: `<div class="creation-detail-action-strip-avatar" aria-hidden="true">${avatarHtml}</div>`;
@@ -1350,10 +1435,6 @@ export function creationDetailChromeHtmlFromSeed(seed) {
 	const durationStr = seedDurationStr(meta);
 	const isPublished = seedIsPublished(seed);
 	const hideIdentify = seedHideIdentifyChrome(seed);
-	const isOwner = seedIsOwner(seed);
-	const status = seedStatus(seed);
-	const isImportEmbed = seedIsImportEmbed(seed);
-	const completed = status === 'completed';
 	const publishedDateRaw = seed.published_at || seed.created_at || null;
 	const publishedTimeAgo = publishedDateRaw ? seedRelativeTime(publishedDateRaw) : '';
 	const metaBits = [];
@@ -1438,46 +1519,48 @@ export function creationDetailChromeHtmlFromSeed(seed) {
 					${metaLine}
 				</div>`;
 
-	const showMutate = !isImportEmbed && completed && groupActionSupportedWhenKnown(meta?.group, 'remix');
-	const showShare = !isImportEmbed && completed && groupActionSupportedWhenKnown(meta?.group, 'share');
-	const showLike = isPublished && completed;
-	const showTip = isPublished && !isOwner;
-	const showPublish = isOwner && !isPublished && completed && groupActionSupportedWhenKnown(meta?.group, 'publish');
-	const showEdit = isOwner && completed && groupActionSupportedWhenKnown(meta?.group, 'edit');
-	const actionStrip = hideIdentify
-		? ''
-		: `<div class="creation-detail-action-strip has-overflow-right">
-				<div class="creation-detail-action-strip-scroll">
-					${avatarWrap}
-					${creatorInfo}
-					${showLike ? `<button type="button" class="creation-detail-action-strip-pill${likesLoading ? ' is-like-loading' : ''}${liked ? ' is-liked' : ''}" aria-label="Like" aria-busy="${likesLoading}"${likesLoading ? ' disabled' : ''} aria-pressed="${liked ? 'true' : 'false'}" data-like-button>
+	const actions = seedStripPlan(seed);
+	const actionButtons = actions.ready
+		? `${actions.showLike ? `<button type="button" class="creation-detail-action-strip-pill${likesLoading ? ' is-like-loading' : ''}${liked ? ' is-liked' : ''}" aria-label="Like" aria-busy="${likesLoading}"${likesLoading ? ' disabled' : ''} aria-pressed="${liked ? 'true' : 'false'}" data-like-button>
 						${creationLikeSpinnerHtml}
 						${SEED_HEART_SVG}
 						<span class="creation-detail-action-strip-pill-count" data-like-count>${likes}</span>
 					</button>` : ''}
-					${showTip ? `<button type="button" class="creation-detail-action-strip-pill" data-tip-creator-button aria-label="Tip">
+					${actions.showTip ? `<button type="button" class="creation-detail-action-strip-pill" data-tip-creator-button aria-label="Tip">
 						<span class="creation-detail-action-strip-pill-icon">${SEED_CREDIT_SVG}</span>
 						<span>Tip</span>
 					</button>` : ''}
-					${showPublish ? `<button type="button" class="creation-detail-action-strip-pill" data-publish-btn>
+					${actions.showFollow ? `<button type="button" class="creation-detail-action-strip-follow" data-follow-button data-follow-user-id="${esc(String(userId || ''))}">Follow</button>` : ''}
+					${actions.showPublish ? `<button type="button" class="creation-detail-action-strip-pill" data-publish-btn>
 						<span class="creation-detail-action-strip-pill-icon">${SEED_PUBLISH_SVG}</span>
 						Publish
 					</button>` : ''}
-					${showMutate ? `<button type="button" class="creation-detail-action-strip-pill" data-mutate-btn>
+					${actions.showMutate ? `<button type="button" class="creation-detail-action-strip-pill" data-mutate-btn>
 						<span class="creation-detail-action-strip-pill-icon">${SEED_SPARKLE_SVG}</span>
 						Mutate
 					</button>` : ''}
-					${showShare ? `<button type="button" class="creation-detail-action-strip-pill" data-share-btn>
+					${actions.showShare ? `<button type="button" class="creation-detail-action-strip-pill" data-share-btn${actions.imageExportEligible ? ' data-image-export-eligible="1"' : ''}>
 						<span class="creation-detail-action-strip-pill-icon">${SEED_SHARE_SVG}</span>
 						Share
 					</button>` : ''}
-					${showEdit ? `<button type="button" class="creation-detail-action-strip-pill" data-edit-btn>
+					${actions.showEdit ? `<button type="button" class="creation-detail-action-strip-pill" data-edit-btn>
 						<span class="creation-detail-action-strip-pill-icon">${SEED_EDIT_SVG}</span>
 						Edit
 					</button>` : ''}
-					<button type="button" class="creation-detail-more-btn" aria-label="More options" data-creation-more-btn>
+					${actions.showRetry ? `<button type="button" class="creation-detail-action-strip-pill" data-retry-btn>Retry</button>` : ''}
+					${actions.showCheckAgain ? `<button type="button" class="creation-detail-action-strip-pill" data-check-again-btn>Check again</button>` : ''}
+					${actions.showMoreInfo ? `<button type="button" class="creation-detail-action-strip-pill" data-more-info-btn>More Info</button>` : ''}
+					${actions.showMore ? `<button type="button" class="creation-detail-more-btn" aria-label="More options" data-creation-more-btn>
 						<span class="creation-detail-more-dots" aria-hidden="true"></span>
-					</button>
+					</button>` : ''}`
+		: SEED_ACTION_SKELETONS;
+	const actionStrip = hideIdentify
+		? ''
+		: `<div class="creation-detail-action-strip has-overflow-right${actions.ready ? '' : ' is-actions-pending'}"${actions.ready ? '' : ' aria-busy="true"'}>
+				<div class="creation-detail-action-strip-scroll">
+					${avatarWrap}
+					${creatorInfo}
+					${actionButtons}
 					<span class="creation-detail-action-strip-scroll-spacer" aria-hidden="true"></span>
 				</div>
 			</div>`;

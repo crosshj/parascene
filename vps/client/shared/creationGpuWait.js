@@ -1,4 +1,4 @@
-/** Creation GPU wait: in line (queued/pending) vs generating (processing/running). */
+/** Creation GPU wait: optimistic or in line (queued/pending) vs the server working (creating/processing/running). */
 
 const IN_FLIGHT = new Set(["creating", "queued", "pending", "processing", "running"]);
 
@@ -20,12 +20,12 @@ export function isCreationGpuInFlight(status) {
 
 export function isCreationInLine(status) {
 	const s = String(status ?? "").trim().toLowerCase();
-	return s === "creating" || s === "queued" || s === "pending";
+	return s === "queued" || s === "pending";
 }
 
 export function isCreationGenerating(status) {
 	const s = String(status ?? "").trim().toLowerCase();
-	return s === "processing" || s === "running";
+	return s === "creating" || s === "processing" || s === "running";
 }
 
 export function creationGpuWaitLabel(status, place, opts = {}) {

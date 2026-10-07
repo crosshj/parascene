@@ -10,6 +10,7 @@ import { createSession } from './core/session.js';
 import { appViews as views } from './views/index.js';
 import { initCommandPalette } from './shared/commandPalette/commandPalette.js';
 import { initNsfwViewPreference, setNsfwContentEnabled } from './shared/nsfwView.js';
+import { setAfterCreateSubmitHandoff } from './shared/createPageRuntime.js';
 
 function hydrateNsfwFromBootstrap(user) {
 	const meta = user?.meta && typeof user.meta === 'object' ? user.meta : null;
@@ -241,6 +242,15 @@ const layout = createLayout({
 	services,
 });
 const router = createRouter({ routes, state, layout });
+setAfterCreateSubmitHandoff({
+	sync() {
+		document.dispatchEvent(new CustomEvent('credits-updated'));
+		return providers.creations.query?.refresh({ force: true });
+	},
+	navigate(href, options) {
+		return router.navigate(href, options);
+	},
+});
 const commandPalette = initCommandPalette({
 	getThreads: () => providers.threads.query?.data?.threads || [],
 	getJoinedServers: () => providers.threads.query?.data?.servers || [],
