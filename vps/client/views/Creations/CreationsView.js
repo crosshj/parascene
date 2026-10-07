@@ -126,7 +126,6 @@ export function renderCreationsView({ outlet, creationsProvider, creationsApi, c
   getItem: creationBulkItem, actions: creationBulkActions({ api: creationsApi, refresh: () => refresh(true) }),
   remove: (item, options) => creationsApi.remove(item.id, options),
   onRemoved: item => {
-   removeCreation(item.id);
    document.dispatchEvent(new CustomEvent('creation-detail:mutation', { detail: { reason: 'deleted', creationId: item.id } }));
   },
   onUnauthorized,
@@ -331,6 +330,7 @@ export function renderCreationsView({ outlet, creationsProvider, creationsApi, c
 		const id = Number(event.detail?.creationId);
 		if (!Number.isInteger(id) || id <= 0 || !root.isConnected) return;
 		if (event.detail?.reason === 'deleted') { removeCreation(id); return; }
+  if (event.detail?.reason === 'ungrouped') { removedIds.add(String(id)); removeCreation(id); return; }
 		if (!refs.grid.querySelector(`.creation-grid__card[data-creation-id="${id}"]`)) return;
 		try {
 			const data = await creationsApi.list({ ids: [String(id)] });
@@ -365,10 +365,12 @@ export function renderCreationsView({ outlet, creationsProvider, creationsApi, c
 	}
 
 	async function refresh(force = false) {
-		if (loading) return;
+		if (loading || destroyed) return;
 		loading = true;
 		try {
-			const data = await creationsApi.list({ limit: PAGE_SIZE, offset: 0 });
+			const result = await creationsApi.list({ limit: PAGE_SIZE, offset: 0 });
+   if (destroyed) return;
+   const data = { ...result, creations: result.creations.filter(row => !removedIds.has(creationId(row))) };
 			if (creationsQuery) {
 				lastQueryData = data;
 				creationsQuery.setData(data);

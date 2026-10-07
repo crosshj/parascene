@@ -6,6 +6,7 @@ function normalizeApiOrigin(origin) {
 
 export function createFilesApi(origin) {
 	const base = normalizeApiOrigin(origin);
+ const removedIds = new Set();
 	const url = (path) => `${base}${path}`;
 
 	return {
@@ -15,7 +16,7 @@ export function createFilesApi(origin) {
 			if (!Array.isArray(data?.files) || !data.pagination || !Number.isInteger(data.pagination.offset)) {
 				throw new ApiError('The files response was incomplete. Try refreshing.');
 			}
-			return data;
+			return { ...data, files: data.files.filter(file => !removedIds.has(String(file.id))) };
 		},
 
 		upload(file, { onProgress, signal } = {}) {
@@ -51,8 +52,10 @@ export function createFilesApi(origin) {
 			});
 		},
 
-		remove(fileId, { signal } = {}) {
-			return requestJson(url(`/api/files/${encodeURIComponent(fileId)}`), { method: 'DELETE', signal });
+		async remove(fileId, { signal } = {}) {
+			const result = await requestJson(url(`/api/files/${encodeURIComponent(fileId)}`), { method: 'DELETE', signal });
+   removedIds.add(String(fileId));
+   return result;
 		}
 	};
 }

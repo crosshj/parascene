@@ -36,6 +36,7 @@ export function creationBulkActions({ api, refresh }) {
    const message = items.some(item => item.group) ? `Add ${count} ${noun}${count === 1 ? '' : 's'} to the selected group?` : `Group ${items.length} creations into a single creation?`;
    if (!window.confirm(message)) return;
    await api.group(items.map(item => item.id), options);
+   if (options.signal?.aborted) return;
    await refresh();
    showToast('Creations grouped');
    return { exit: true };

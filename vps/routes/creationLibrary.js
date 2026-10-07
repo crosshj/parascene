@@ -613,4 +613,253 @@ router.delete("/api/create/images/:id", async (req, res) => {
 		}
 	});
 
+function normalizeGroupSourcesCoverFirst(sourceList, coverSourceId) {
+		const list = Array.isArray(sourceList)
+			? sourceList.filter((item) => item && typeof item === "object")
+			: [];
+		const coverId = Number(coverSourceId);
+		if (!Number.isFinite(coverId) || coverId <= 0) return list;
+		const coverIndex = list.findIndex((item) => Number(item.id) === coverId);
+		if (coverIndex <= 0) return list;
+		const normalized = [...list];
+		const [coverSource] = normalized.splice(coverIndex, 1);
+		normalized.unshift(coverSource);
+		return normalized;
+	}
+
+function buildGroupReorderLeftState({
+		groupMeta,
+		groupPayload,
+		sourceCreations,
+		sourceId,
+		storage,
+		fallbackGroupRow
+	}) {
+		const coverSourceId = Number(groupPayload?.cover_source_id);
+		const sourceList = normalizeGroupSourcesCoverFirst(sourceCreations, coverSourceId);
+		const index = sourceList.findIndex((item) => Number(item.id) === Number(sourceId));
+		if (index <= 0) return null;
+
+		const reordered = [...sourceList];
+		[reordered[index - 1], reordered[index]] = [reordered[index], reordered[index - 1]];
+		const reorderedSources = reordered.map((item, orderIndex) => ({ ...item, order: orderIndex }));
+		const oldFirstId = Number(sourceList[0]?.id);
+		const newCoverId = Number(reorderedSources[0]?.id);
+
+		if (Number.isFinite(newCoverId) && newCoverId > 0 && newCoverId !== oldFirstId) {
+			return buildGroupCoverUpdateState({
+				groupMeta,
+				groupPayload,
+				sourceCreations: reorderedSources,
+				coverSourceId: newCoverId,
+				storage,
+				fallbackGroupRow
+			});
+		}
+
+		const nextMeta = {
+			...(groupMeta && typeof groupMeta === "object" ? groupMeta : {}),
+			group: {
+				...(groupPayload && typeof groupPayload === "object" ? groupPayload : {}),
+				updated_at: nowIso(),
+				cover_source_id: Number.isFinite(newCoverId) && newCoverId > 0 ? newCoverId : coverSourceId,
+				source_creation_ids: reorderedSources
+					.map((item) => Number(item.id))
+					.filter((n, idx, arr) => Number.isFinite(n) && n > 0 && arr.indexOf(n) === idx),
+				source_creations: reorderedSources
+			}
+		};
+
+		return {
+			reorderedSources,
+			meta: nextMeta,
+			updatePayload: null
+		};
+	}
+
+router.post("/api/create/images/:id/group-cover", async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+
+		try {
+			const groupId = Number(req.params.id);
+			const sourceId = Number(req.body?.source_id);
+			if (!Number.isFinite(groupId) || groupId <= 0 || !Number.isFinite(sourceId) || sourceId <= 0) {
+				return res.status(400).json({ error: "Invalid ids" });
+			}
+			const groupRow = await queries.selectCreatedImageById.get(groupId, user.id);
+			if (!groupRow) {
+				return res.status(404).json({ error: "Creation not found" });
+			}
+			const groupMeta = parseMeta(groupRow.meta) || {};
+			const groupPayload = groupMeta?.group && typeof groupMeta.group === "object" ? groupMeta.group : null;
+			if (!groupPayload || groupPayload.kind !== "group_creations") {
+				return res.status(400).json({ error: "Creation is not a group creation" });
+			}
+			const sourceCreationsRaw = Array.isArray(groupPayload.source_creations) ? groupPayload.source_creations : [];
+			const sourceCreations = sourceCreationsRaw.filter((item) => item && typeof item === "object");
+			const coverState = buildGroupCoverUpdateState({
+				groupMeta,
+				groupPayload,
+				sourceCreations,
+				coverSourceId: sourceId,
+				storage,
+				fallbackGroupRow: groupRow
+			});
+			if (!coverState) {
+				return res.status(400).json({ error: "Selected source is not part of this group" });
+			}
+
+			const updateResult = await queries.updateCreatedImageGroupCover?.run(
+				groupId,
+				user.id,
+				coverState.updatePayload
+			);
+			if (!updateResult || updateResult.changes === 0) {
+				return res.status(500).json({ error: "Failed to set group cover" });
+			}
+			const updatedGroup = await queries.selectCreatedImageById.get(groupId, user.id);
+			return res.json({
+				ok: true,
+				grouped_creation: {
+					id: updatedGroup?.id ?? groupId,
+					created_at: updatedGroup?.created_at ?? coverState.updatePayload.created_at,
+					meta: parseMeta(updatedGroup?.meta) || coverState.meta
+				}
+			});
+		} catch (error) {
+			return res.status(500).json({ error: "Failed to set group cover" });
+		}
+	});
+
+router.post("/api/create/images/:id/group-reorder", async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+
+		try {
+			const groupId = Number(req.params.id);
+			const sourceId = Number(req.body?.source_id);
+			if (!Number.isFinite(groupId) || groupId <= 0 || !Number.isFinite(sourceId) || sourceId <= 0) {
+				return res.status(400).json({ error: "Invalid ids" });
+			}
+			const groupRow = await queries.selectCreatedImageById.get(groupId, user.id);
+			if (!groupRow) {
+				return res.status(404).json({ error: "Creation not found" });
+			}
+			const isPublished = groupRow.published === 1 || groupRow.published === true;
+			if (isPublished) {
+				return res.status(400).json({ error: "Published group creations cannot be reordered" });
+			}
+			const groupMeta = parseMeta(groupRow.meta) || {};
+			const groupPayload = groupMeta?.group && typeof groupMeta.group === "object" ? groupMeta.group : null;
+			if (!groupPayload || groupPayload.kind !== "group_creations") {
+				return res.status(400).json({ error: "Creation is not a group creation" });
+			}
+			const sourceCreationsRaw = Array.isArray(groupPayload.source_creations) ? groupPayload.source_creations : [];
+			const sourceCreations = sourceCreationsRaw.filter((item) => item && typeof item === "object");
+			const reorderState = buildGroupReorderLeftState({
+				groupMeta,
+				groupPayload,
+				sourceCreations,
+				sourceId,
+				storage,
+				fallbackGroupRow: groupRow
+			});
+			if (!reorderState) {
+				return res.status(400).json({ error: "Selected source cannot be moved left" });
+			}
+
+			if (reorderState.updatePayload) {
+				const updateResult = await queries.updateCreatedImageGroupCover?.run(
+					groupId,
+					user.id,
+					reorderState.updatePayload
+				);
+				if (!updateResult || updateResult.changes === 0) {
+					return res.status(500).json({ error: "Failed to reorder group sources" });
+				}
+			} else {
+				const metaResult = await queries.updateCreatedImageMeta.run(groupId, user.id, reorderState.meta);
+				if (!metaResult || metaResult.changes === 0) {
+					return res.status(500).json({ error: "Failed to reorder group sources" });
+				}
+			}
+
+			const updatedGroup = await queries.selectCreatedImageById.get(groupId, user.id);
+			return res.json({
+				ok: true,
+				grouped_creation: {
+					id: updatedGroup?.id ?? groupId,
+					created_at: updatedGroup?.created_at ?? groupRow.created_at,
+					meta: parseMeta(updatedGroup?.meta) || reorderState.meta
+				}
+			});
+		} catch (error) {
+			return res.status(500).json({ error: "Failed to reorder group sources" });
+		}
+	});
+
+router.post("/api/create/images/:id/ungroup", async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+
+		try {
+			const groupId = Number(req.params.id);
+			if (!Number.isFinite(groupId) || groupId <= 0) {
+				return res.status(400).json({ error: "Invalid creation id" });
+			}
+			const groupRow = await queries.selectCreatedImageById.get(groupId, user.id);
+			if (!groupRow) {
+				return res.status(404).json({ error: "Creation not found" });
+			}
+			const isPublished = groupRow.published === 1 || groupRow.published === true;
+			if (isPublished) {
+				return res.status(400).json({ error: "Published group creations cannot be ungrouped" });
+			}
+			const groupMeta = parseMeta(groupRow.meta) || {};
+			if (isGroupV2Meta(groupMeta)) {
+				return res.status(400).json({ error: groupV2RejectMessage("ungroup") });
+			}
+			const groupPayload = groupMeta?.group && typeof groupMeta.group === "object" ? groupMeta.group : null;
+			if (!groupPayload || groupPayload.kind !== "group_creations") {
+				return res.status(400).json({ error: "Creation is not a group creation" });
+			}
+			const sourceIdsRaw = Array.isArray(groupPayload.source_creation_ids) ? groupPayload.source_creation_ids : [];
+			const sourceIds = sourceIdsRaw
+				.map((v) => Number(v))
+				.filter((n, index, arr) => Number.isFinite(n) && n > 0 && arr.indexOf(n) === index);
+			if (sourceIds.length === 0) {
+				return res.status(400).json({ error: "Group creation has no source creations to restore" });
+			}
+
+			for (const sourceId of sourceIds) {
+				const sourceRow = await queries.selectCreatedImageByIdAnyUser?.get(sourceId);
+				if (!sourceRow || Number(sourceRow.user_id) !== Number(user.id)) {
+					return res.status(400).json({ error: "Unable to restore source creations for this group" });
+				}
+				const sourcePublished = sourceRow.published === 1 || sourceRow.published === true;
+				if (sourcePublished) {
+					return res.status(400).json({ error: "Cannot ungroup because one source creation is published" });
+				}
+			}
+
+			for (const sourceId of sourceIds) {
+				const restoreResult = await queries.unmarkCreatedImageUnavailable?.run(sourceId, user.id);
+				if (!restoreResult || restoreResult.changes === 0) {
+					return res.status(500).json({ error: "Failed to restore source creations" });
+				}
+			}
+
+			const markGroupUnavailable = await queries.markCreatedImageUnavailable?.run(groupId, user.id);
+			if (!markGroupUnavailable || markGroupUnavailable.changes === 0) {
+				return res.status(500).json({ error: "Failed to archive grouped creation" });
+			}
+
+			return res.json({ ok: true, restored_creation_ids: sourceIds });
+		} catch (error) {
+			return res.status(500).json({ error: "Failed to ungroup creation" });
+		}
+	});
+
+
 }

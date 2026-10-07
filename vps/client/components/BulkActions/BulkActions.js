@@ -97,6 +97,11 @@ export function createBulkActions({ root, grid, cardSelector, getItem, actions =
   const card = event.target.closest?.(cardSelector);
   if (!card) return;
   if (Date.now() < suppressUntil) { event.preventDefault(); event.stopImmediatePropagation(); return; }
+  if (!active && event.shiftKey) {
+   event.preventDefault(); event.stopImmediatePropagation(); enter();
+   const item = getItem(card); if (item) selected.add(String(item.id));
+   sync(); return;
+  }
   if (!active) return;
   event.stopImmediatePropagation();
   if (event.target.matches('[data-creations-bulk-checkbox]')) {

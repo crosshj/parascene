@@ -33,7 +33,19 @@ const supabase = client;
 const serviceClient = client;
 const storageClient = client;
 const queries = {
-markCreatedImageUnavailable: {
+unmarkCreatedImageUnavailable: {
+			run: async (id, userId) => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("created_images"))
+					.update({ unavailable_at: null })
+					.eq("id", id)
+					.eq("user_id", userId)
+					.select("id");
+				if (error) throw error;
+				return { changes: data?.length ?? 0 };
+			}
+		},
+		markCreatedImageUnavailable: {
 			run: async (id, userId) => {
 				const { data, error } = await serviceClient
 					.from(prefixedTable("created_images"))

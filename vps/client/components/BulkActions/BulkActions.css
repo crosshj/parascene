@@ -1,235 +1,46 @@
+/* Ported from WWW's Creations bulk rules in public/global.css. */
 .creations-bulk-bar {
-	display: none;
-	position: sticky;
-	top: 0;
-	z-index: 100;
-	background: var(--surface);
-	border: 1px solid var(--border);
-	border-radius: 8px;
-	padding: 12px 16px;
-	margin-bottom: 12px;
-	box-shadow: var(--shadow);
+ display:none;position:sticky;top:0;z-index:100;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 16px;margin-bottom:12px;box-shadow:var(--shadow);
 }
+@media(max-width:768px){[data-scroll-owner="document"] .creations-bulk-bar{top:calc(var(--beta-mobile-header-row-height,65px) + env(safe-area-inset-top,0px));}}
+.bulk-actions-host.is-bulk-mode .creations-bulk-bar{display:block;}
+.creations-bulk-bar-inner{display:flex;align-items:center;gap:16px;}
+.creations-bulk-bar-label{margin:0;color:var(--text);font-size:.9375rem;font-weight:600;}
+.creations-bulk-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
 
-@media (max-width: 768px) {
-	[data-mobile-scroll-owner="document"] .creations-bulk-bar {
-		top: 58px;
-	}
+/* WWW global.css supplies shared modal-close rules; scope the same treatment here. */
+.bulk-actions-host .creations-bulk-bar-close{display:flex;align-items:center;justify-content:center;flex:0 0 32px;width:32px;height:32px;min-width:32px;min-height:32px;margin-left:auto;padding:4px;border:0;border-radius:6px;color:var(--text);background:transparent;font:inherit;font-size:1.2rem;line-height:1;cursor:pointer;transition:background-color .2s;}
+.bulk-actions-host .creations-bulk-bar-close:hover{background:var(--surface-strong);}
+.bulk-actions-host .creations-bulk-bar-close:focus-visible{outline:2px solid var(--focus);outline-offset:2px;}
+.bulk-actions-host .creations-bulk-bar-close .modal-close-icon{display:block;flex:0 0 24px;width:24px;height:24px;}
 
-	[data-mobile-scroll-owner="document"] .creations-bulk-bar {
-		top: 56px;
-	}
-}
+.creations-card-bulk-overlay{position:absolute;inset:0;z-index:10;display:none;align-items:flex-start;justify-content:flex-start;padding:10px;border-radius:inherit;background:color-mix(in srgb,var(--bg) 40%,transparent);pointer-events:none;}
+.bulk-actions-host.is-bulk-mode .creations-card-bulk-overlay{display:flex;pointer-events:auto;}
+.bulk-actions-host .creations-card-bulk-overlay[hidden]{display:none;}
+.creations-card-bulk-checkbox{width:22px;height:22px;flex-shrink:0;border:2px solid var(--border);border-radius:6px;background:var(--surface);accent-color:var(--accent);cursor:pointer;pointer-events:auto;}
+.creations-card-bulk-checkbox:checked{border-color:var(--accent);background:var(--accent);}
+.bulk-actions-host .route-card:has(.creations-card-bulk-checkbox:checked),.bulk-actions-host .creation-grid__card:has(.creations-card-bulk-checkbox:checked){outline:2px solid var(--accent);outline-offset:2px;border-radius:10px;}
+@media(max-width:768px){.bulk-actions-host .creation-grid__card{-webkit-touch-callout:none;user-select:none;}.bulk-actions-host.is-bulk-mode .creation-grid__card{touch-action:manipulation;}}
 
-.bulk-actions-host.is-bulk-mode .creations-bulk-bar {
-	display: block;
-}
+/* WWW's bulk delete confirmation, adapted to a native dialog top layer. */
+.creations-bulk-delete-modal{box-sizing:border-box;width:90%;max-width:380px;max-height:min(90vh,90dvh);padding:20px;overflow:auto;border:1px solid var(--border);border-radius:14px;color:var(--text);background:var(--surface);box-shadow:var(--shadow);transform:scale(.95);transition:transform .2s;}
+.creations-bulk-delete-modal[open]{transform:scale(1);}
+.creations-bulk-delete-modal::backdrop{background:rgba(0,0,0,.5);}
+.creations-bulk-delete-modal h3{margin:0 0 12px;color:var(--text);font-size:1.125rem;font-weight:600;}
+.creations-bulk-delete-modal p{margin:0 0 16px;color:var(--text-muted);font-size:.9375rem;line-height:1.45;}
+.creations-bulk-delete-modal-error{display:none;margin:0 0 12px;padding:10px 12px;border:1px solid var(--error-border);border-radius:6px;color:var(--error-text);background:var(--error-bg);font-size:.875rem;}
+.creations-bulk-delete-modal-error.visible{display:block;}
+.creations-bulk-delete-modal-footer{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:16px;}
+.creations-bulk-delete-modal-footer .btn-secondary{min-width:80px;}
+.creations-bulk-delete-modal-footer .creations-bulk-delete-confirm-btn{position:relative;min-width:100px;}
 
-.creations-bulk-bar-inner {
-	display: flex;
-	align-items: center;
-	gap: 16px;
-}
-
-.creations-bulk-bar-label {
-	font-weight: 600;
-	font-size: 0.9375rem;
-	color: var(--text);
-	margin: 0;
-}
-
-.creations-bulk-actions {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	flex-wrap: wrap;
-}
-
-.creations-bulk-bar .creations-bulk-delete-btn {
-	/* Secondary by default */
-}
-
-.creations-bulk-bar.has-selection .creations-bulk-delete-btn {
-	/* Primary + error/danger when selection exists */
-	background: var(--error);
-	color: var(--accent-text);
-	border-color: var(--error);
-	font-weight: 600;
-}
-
-.creations-bulk-bar.has-selection .creations-bulk-delete-btn:hover:not(:disabled) {
-	background: color-mix(in srgb, var(--error) 90%, black);
-	border-color: color-mix(in srgb, var(--error) 90%, black);
-}
-
-.creations-bulk-bar-close {
-	margin-left: auto;
-	flex-shrink: 0;
-}
-
-/* Card overlay when bulk mode is active */
-.creations-card-bulk-overlay {
-	position: absolute;
-	inset: 0;
-	z-index: 2;
-	display: none;
-	align-items: flex-start;
-	justify-content: flex-start;
-	padding: 10px;
-	background: color-mix(in srgb, var(--bg) 40%, transparent);
-	pointer-events: none;
-	border-radius: inherit;
-}
-
-.bulk-actions-host.is-bulk-mode .creations-card-bulk-overlay {
-	display: flex;
-	pointer-events: auto;
-}
-
-.creations-card-bulk-checkbox {
-	width: 22px;
-	height: 22px;
-	border-radius: 6px;
-	border: 2px solid var(--border);
-	background: var(--surface);
-	cursor: pointer;
-	accent-color: var(--accent);
-	flex-shrink: 0;
-	pointer-events: auto;
-}
-
-.creations-card-bulk-checkbox:checked {
-	background: var(--accent);
-	border-color: var(--accent);
-}
-
-.creations-card-check-again {
-	margin-top: 8px;
-	padding: 6px 10px;
-	font-size: 0.8rem;
-	width: fit-content;
-}
-
-.bulk-actions-host .route-card:has(.creations-card-bulk-checkbox:checked) {
-	outline: 2px solid var(--accent);
-	outline-offset: 2px;
-	border-radius: 6px;
-}
-
-.bulk-actions-host .creation-grid__card:has(.creations-card-bulk-checkbox:checked) {
-	outline: 2px solid var(--accent);
-	outline-offset: 2px;
-	border-radius: 10px;
-}
-
-@media (max-width: 768px) {
-	.bulk-actions-host .creation-grid__card,
-	.bulk-actions-host .creation-grid__card {
-		-webkit-touch-callout: none;
-		user-select: none;
-	}
-
-	.bulk-actions-host.is-bulk-mode .creation-grid__card,
-	.bulk-actions-host.is-bulk-mode .creation-grid__card {
-		touch-action: manipulation;
-	}
-}
-
-.creations-bulk-delete-modal {
-	background: var(--surface);
-	border: 1px solid var(--border);
-	border-radius: 14px;
-	box-shadow: var(--shadow);
-	max-width: 380px;
-	width: 90%;
-	padding: 20px;
-	transform: none;
-	transition: transform 0.2s;
-}
-
-.creations-bulk-delete-modal[open] {
-	transform: scale(1);
-}
-
-.creations-bulk-delete-modal h3 {
-	margin: 0 0 12px;
-	font-size: 1.125rem;
-	font-weight: 600;
-	color: var(--text);
-}
-
-.creations-bulk-delete-modal p {
-	margin: 0 0 16px;
-	color: var(--text-muted);
-	font-size: 0.9375rem;
-	line-height: 1.45;
-}
-
-.creations-bulk-delete-modal-error {
-	margin: 0 0 12px;
-	padding: 10px 12px;
-	background: var(--error-bg);
-	border: 1px solid var(--error-border);
-	border-radius: 6px;
-	color: var(--error-text);
-	font-size: 0.875rem;
-	display: none;
-}
-
-.creations-bulk-delete-modal-error.visible {
-	display: block;
-}
-
-.creations-bulk-delete-modal-footer {
-	display: flex;
-	align-items: center;
-	justify-content: flex-end;
-	gap: 8px;
-	margin-top: 16px;
-}
-
-.creations-bulk-delete-modal-footer .btn-secondary {
-	min-width: 80px;
-}
-
-.creations-bulk-delete-modal-footer .creations-bulk-delete-confirm-btn {
-	min-width: 100px;
-	position: relative;
-}
-
-.creations-bulk-delete-confirm-btn .creations-bulk-delete-confirm-spinner {
-	display: none;
-	width: 1em;
-	height: 1em;
-	border: 2px solid color-mix(in srgb, currentColor 40%, transparent);
-	border-top-color: currentColor;
-	border-radius: 50%;
-	animation: spin 0.8s linear infinite;
-}
-
-.creations-bulk-delete-confirm-btn.is-loading .creations-bulk-delete-confirm-label {
-	visibility: hidden;
-}
-
-/* Use margin-based centering (not transform) so spin animation isn't overridden */
-.creations-bulk-delete-confirm-btn.is-loading .creations-bulk-delete-confirm-spinner {
-	display: block;
-	position: absolute;
-	left: 50%;
-	top: 50%;
-	margin-left: -0.5em;
-	margin-top: -0.5em;
-}
-
-/* Keep danger styling during loading (don't switch to disabled gray) */
-.creations-bulk-delete-confirm-btn.is-loading:disabled {
-	background: var(--error-text);
-	color: var(--accent-text);
-	border-color: var(--error-text);
-}
-
-
-.creations-bulk-delete-modal::backdrop { background: rgba(0,0,0,.5); }
-.creations-bulk-delete-modal .btn-danger { background: var(--error); color: var(--accent-text); border: 1px solid var(--error); border-radius: 8px; padding: 10px 16px; cursor: pointer; }
-.bulk-actions-host .creations-card-bulk-overlay[hidden] { display: none; }
-.bulk-actions-host .creations-card-bulk-overlay { z-index: 10; }
+/* WWW global.css danger-button treatment is absent from VPS shared primitives. */
+.creations-bulk-delete-modal button.btn-danger{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:9px 16px;border:1px solid var(--error-text);border-radius:6px;color:var(--accent-text);background:var(--error-text);font:inherit;font-weight:600;line-height:1.1;cursor:pointer;transition:background .2s ease,transform .1s ease;}
+.creations-bulk-delete-modal button.btn-danger:hover:not(:disabled){border-color:color-mix(in srgb,var(--error-text) 90%,black);background:color-mix(in srgb,var(--error-text) 90%,black);transform:translateY(-1px);}
+.creations-bulk-delete-modal button.btn-danger:active:not(:disabled){transform:translateY(0);}
+.creations-bulk-delete-modal button.btn-danger:disabled{border-color:var(--border);color:var(--text);background:var(--surface-strong);cursor:not-allowed;opacity:.7;}
+.creations-bulk-delete-confirm-btn .creations-bulk-delete-confirm-spinner{display:none;width:1em;height:1em;border:2px solid color-mix(in srgb,currentColor 40%,transparent);border-top-color:currentColor;border-radius:50%;animation:spin .8s linear infinite;}
+.creations-bulk-delete-confirm-btn.is-loading .creations-bulk-delete-confirm-label{visibility:hidden;}
+.creations-bulk-delete-confirm-btn.is-loading .creations-bulk-delete-confirm-spinner{display:block;position:absolute;left:50%;top:50%;margin:-.5em 0 0 -.5em;}
+.creations-bulk-delete-confirm-btn.is-loading:disabled{border-color:var(--error-text);color:var(--accent-text);background:var(--error-text);}
+.creations-bulk-bar [data-bulk-error]{margin:12px 0 0;color:var(--error-text);}

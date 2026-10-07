@@ -8086,6 +8086,11 @@ async function loadCreation() {
 						ungroupBtn.disabled = false;
 						return;
 					}
+					await refreshAfterMutation('ungrouped', {
+						creationId,
+						restoredCreationIds: Array.isArray(data?.restored_creation_ids) ? data.restored_creation_ids : [],
+						skipContentRefresh: true
+					});
 					shellOut('/creations');
 				} catch (err) {
 					alert(err?.message || 'Failed to ungroup creation');

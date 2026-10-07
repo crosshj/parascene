@@ -47,6 +47,7 @@ export function bindMobileCreationsBulkLongPress({
 							)
 					);
 
+	const ghostCleanups = new Set();
 	const moveThresholdSq = DEFAULT_MOVE_THRESHOLD_PX * DEFAULT_MOVE_THRESHOLD_PX;
 	let timer = null;
 	/** @type {number | null} */
@@ -110,8 +111,10 @@ export function bindMobileCreationsBulkLongPress({
 				ev.stopPropagation();
 			}
 		};
+		const cleanup = () => { clearTimeout(timeout); document.removeEventListener('click', onClick, true); ghostCleanups.delete(cleanup); };
+		const timeout = setTimeout(cleanup, GHOST_CLICK_MS + 40);
+		ghostCleanups.add(cleanup);
 		document.addEventListener('click', onClick, true);
-		setTimeout(() => document.removeEventListener('click', onClick, true), GHOST_CLICK_MS + 40);
 	};
 
 	const armLongPress = () => {
@@ -158,7 +161,7 @@ export function bindMobileCreationsBulkLongPress({
 			clearState();
 			return { cancel: clearState };
 		}
-		signal.addEventListener('abort', clearState, { once: true });
+		signal.addEventListener('abort', () => { clearState(); for (const cleanup of ghostCleanups) cleanup(); }, { once: true });
 	}
 
 	const opts = signal ? { signal } : undefined;
