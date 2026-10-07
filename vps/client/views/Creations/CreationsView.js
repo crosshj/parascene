@@ -105,7 +105,8 @@ export function renderCreationsView({ outlet, creationsProvider, creationsApi, c
 	refs.grid.addEventListener('click', onGridClick);
 	document.addEventListener('visibilitychange', onVisibilityChange);
 	document.addEventListener('creation-detail:mutation', onCreationDetailMutation);
- document.addEventListener('creations-pending-updated', onPendingCreationsUpdated);
+	document.addEventListener('creations-pending-updated', onPendingCreationsUpdated);
+	document.addEventListener('nsfw-preference-changed', onNsfwPreference);
 	refs.grid.addEventListener('keydown', (event) => {
 		if (event.key !== 'Enter' && event.key !== ' ') return;
 		const card = event.target.closest?.('.creation-grid__card[data-creation-id]');
@@ -364,6 +365,16 @@ export function renderCreationsView({ outlet, creationsProvider, creationsApi, c
 		}
 	}
 
+	function onNsfwPreference(event) {
+		if (destroyed) return;
+		if (event.detail?.membershipChanged === false) {
+			const items = [...refs.grid.querySelectorAll('.creation-grid__card')].map((card) => card.__creationRecord).filter(Boolean);
+			if (items.length) render({ creations: items, has_more: hasMore });
+			return;
+		}
+		void refresh(true);
+	}
+
 	async function refresh(force = false) {
 		if (loading || destroyed) return;
 		loading = true;
@@ -429,5 +440,5 @@ export function renderCreationsView({ outlet, creationsProvider, creationsApi, c
 	}
 	else void refresh(true);
 
-	return () => { destroyed = true; bulk.destroy(); unsubscribe?.(); mediaLoader?.disconnect(); sentinelObserver.disconnect(); window.clearTimeout(pollTimer); pollTimer = 0; document.removeEventListener('visibilitychange', onVisibilityChange); document.removeEventListener('creation-detail:mutation', onCreationDetailMutation); document.removeEventListener('creations-pending-updated', onPendingCreationsUpdated); document.removeEventListener('beta-mobile-scroll-owner-changed', bindScrollOwner); refs.grid.removeEventListener('click', onGridClick); refs.scrollTop.removeEventListener('click', onScrollTopClick); scrollRegion?.removeEventListener('scroll', updateScrollTopVisibility); window.removeEventListener('scroll', updateScrollTopVisibility); setHeaderMenu?.(); };
+	return () => { destroyed = true; bulk.destroy(); unsubscribe?.(); mediaLoader?.disconnect(); sentinelObserver.disconnect(); window.clearTimeout(pollTimer); pollTimer = 0; document.removeEventListener('visibilitychange', onVisibilityChange); document.removeEventListener('creation-detail:mutation', onCreationDetailMutation); document.removeEventListener('creations-pending-updated', onPendingCreationsUpdated); document.removeEventListener('nsfw-preference-changed', onNsfwPreference); document.removeEventListener('beta-mobile-scroll-owner-changed', bindScrollOwner); refs.grid.removeEventListener('click', onGridClick); refs.scrollTop.removeEventListener('click', onScrollTopClick); scrollRegion?.removeEventListener('scroll', updateScrollTopVisibility); window.removeEventListener('scroll', updateScrollTopVisibility); setHeaderMenu?.(); };
 }

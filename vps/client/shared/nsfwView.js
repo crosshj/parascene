@@ -25,6 +25,7 @@ export function setNsfwContentEnabled(value) {
 	try {
 		if (value) localStorage.setItem(NSFW_CONTENT_ENABLED_KEY, '1');
 		else localStorage.removeItem(NSFW_CONTENT_ENABLED_KEY);
+		if (document.body) document.body.dataset.enableNsfw = value ? '1' : '0';
 	} catch (_) {}
 }
 
@@ -63,6 +64,7 @@ export function initNsfwViewPreference() {
 	try {
 		const enabled = getNsfwContentEnabled();
 		const obscure = getNsfwObscure();
+		if (document.body) document.body.dataset.enableNsfw = enabled ? '1' : '0';
 		if (enabled && !obscure) {
 			document.body.classList.add(NSFW_VIEW_BODY_CLASS);
 			sessionStorage.setItem(NSFW_VIEW_STORAGE_KEY, '1');
@@ -137,19 +139,12 @@ export function handleNsfwClick(e) {
 	);
 	if (chatEmbedNsfw) {
 		if (document.body.classList.contains(NSFW_VIEW_BODY_CLASS)) return false;
-		if (!getNsfwContentEnabled()) return false;
-		if (!window.confirm(NSFW_CONFIRM_MESSAGE_THIS_IMAGE)) return true;
-		revealNsfwElementOnly(chatEmbedNsfw);
 		return true;
 	}
 
 	const doomSlideNsfw = e.target?.closest?.('.chat-doom-slide-media-frame.nsfw:not(.nsfw-revealed)');
 	if (doomSlideNsfw) {
 		if (document.body.classList.contains(NSFW_VIEW_BODY_CLASS)) return false;
-		if (!getNsfwContentEnabled()) return false;
-		if (!window.confirm(NSFW_CONFIRM_MESSAGE_THIS_IMAGE)) return true;
-		revealNsfwElementOnly(doomSlideNsfw);
-		doomSlideNsfw.dispatchEvent(new CustomEvent('prsn-doom-nsfw-revealed', { bubbles: true }));
 		return true;
 	}
 
@@ -169,20 +164,12 @@ export function handleNsfwClick(e) {
 		if (!nsfwEl) return false;
 		if (document.body.dataset.enableNsfw !== '1') return true;
 		if (!window.confirm(NSFW_CONFIRM_MESSAGE_THIS_IMAGE)) return true;
-		/* Reveal hero + every grouped thumbnail together so the whole item unblurs at once. */
 		revealCreationDetailNsfw();
+		document.dispatchEvent(new CustomEvent('nsfw-detail-reveal'));
 		return true;
 	}
 
-	const creationId = getCreationIdFromNsfwElement(e.target);
-	if (!creationId) return false;
-
-	if (e.target?.closest?.('.connect-chat-creation-embed')) return false;
-	if (document.body.classList.contains(NSFW_VIEW_BODY_CLASS)) return false;
-	if (!window.confirm(NSFW_CONFIRM_MESSAGE_SESSION)) return true;
-	enableNsfwView();
-	window.location.href = `/creations/${creationId}`;
-	return true;
+	return false;
 }
 
 export function bindNsfwClicks(root, { signal } = {}) {

@@ -1,6 +1,7 @@
 import { fetchExplorePage } from '../../providers/explore/api.js';
 import { mergeExploreSearchKeywordSemantic } from '../../providers/explore/model.js';
 import { creationCardMarkup, createCreationMediaLoader } from '../../shared/creationGrid.js';
+import { includeInCollection } from '../../shared/nsfwPolicy.js';
 import { createFeedItemCard } from '../../shared/feedCardBuild.js';
 import '../../components/CreationGrid/CreationGrid.css';
 import './ExploreView.css';
@@ -22,7 +23,7 @@ export const ExploreView = Object.freeze({
    disposeCards();
    media.disconnect();grid.querySelectorAll('video,audio').forEach(player=>{player.pause();player.removeAttribute('src');player.load()}); grid.replaceChildren();
    grid.classList.toggle('content-cards-image-grid', !large); root.classList.toggle('explore-view--large', large);
-   for (const [index, item] of rows.entries()) {
+   for (const [index, item] of rows.filter(includeInCollection).entries()) {
     const card = large ? createFeedItemCard(item, index, { preferThumbnail: true, hideFeedCardMetadata: false, hidePublishedBadge: true, performCreationNavigation: href => actions.navigate(href, { seed: item }), performShellNavigation: href => actions.navigate(href) }) : document.createRange().createContextualFragment(creationCardMarkup(item, { hidePublishedBadge: true })).firstElementChild;
     if (!card) continue; card.__creationRecord = item; grid.append(card);
    }
@@ -71,6 +72,12 @@ export const ExploreView = Object.freeze({
    if (!destroyed) requestAnimationFrame(() => scroll.set(scrollTop));
   }
   document.addEventListener('creation-detail:mutation', onCreationMutation);
+  function onNsfwPreference(event) {
+   if (destroyed) return;
+   if (event.detail?.membershipChanged === false) paint();
+   else void load(true);
+  }
+  document.addEventListener('nsfw-preference-changed', onNsfwPreference);
   function submit(value) { const params = new URLSearchParams(); if (value.trim()) params.set('q', value.trim()); void actions.navigate(`/explore${params.size ? `?${params}` : ''}`); }
   const searchBinding = bindSearchComposer({ form: searchComposer, onSearch: submit });
   grid.addEventListener('click', event => { if (large || event.target.closest('a,button')) return; const card = event.target.closest('.creation-grid__card[data-creation-id]'); if (card) void actions.navigate(`/creations/${card.dataset.creationId}`, { seed: card.__creationRecord }); });
@@ -80,6 +87,6 @@ export const ExploreView = Object.freeze({
   function bindScrollOwner() { observer?.disconnect(); observer = new IntersectionObserver(entries => { if (entries.some(entry => entry.isIntersecting) && hasMore && !busy && !status.classList.contains('is-error')) void load(); }, { root: scroll.intersectionRoot, rootMargin: '1000px' }); observer.observe(more); media.setRoot(scroll.intersectionRoot); }
   document.addEventListener('beta-mobile-scroll-owner-changed', bindScrollOwner);
   bindScrollOwner(); menu(); void load(true);
-  return { update({ search = '' }) { const next = new URLSearchParams(search).get('q')?.trim() || ''; if (next !== q) { q = next; void load(true); } }, destroy() { document.removeEventListener('beta-mobile-scroll-owner-changed', bindScrollOwner); document.removeEventListener('creation-detail:mutation', onCreationMutation); searchBinding.destroy(); disposeCards(); destroyed = true; ++epoch; request?.abort(); observer?.disconnect(); media.disconnect(); root.querySelectorAll('audio,video').forEach(player => { player.pause(); player.removeAttribute('src'); player.load(); }); root.remove(); } };
+  return { update({ search = '' }) { const next = new URLSearchParams(search).get('q')?.trim() || ''; if (next !== q) { q = next; void load(true); } }, destroy() { document.removeEventListener('beta-mobile-scroll-owner-changed', bindScrollOwner); document.removeEventListener('creation-detail:mutation', onCreationMutation); document.removeEventListener('nsfw-preference-changed', onNsfwPreference); searchBinding.destroy(); disposeCards(); destroyed = true; ++epoch; request?.abort(); observer?.disconnect(); media.disconnect(); root.querySelectorAll('audio,video').forEach(player => { player.pause(); player.removeAttribute('src'); player.load(); }); root.remove(); } };
  }
 });

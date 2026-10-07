@@ -13,6 +13,7 @@ import {
 	feedItemPlayableVideoUrl
 } from "../../shared/videoFirstFramePoster.js";
 import { claimWarmedDoomVideo } from "../../shared/doomFeedVideoCache.js";
+import { nsfwShouldBlur } from "../../shared/nsfwPolicy.js";
 import { getAvatarColor } from "../../shared/avatar.js";
 import { renderCommentAvatarHtml } from "../../shared/commentItem.js";
 import { primeMediaElementForAudioLeveling } from "../../shared/mediaAudioLeveling.js";
@@ -714,7 +715,11 @@ export function createDoomSlideElement(item, viewerUserId, slideOpts = {}) {
 		video.preload = warmed ? 'auto' : (bgLoad ? 'none' : 'metadata');
 		primeMediaElementForAudioLeveling(video);
 		if (needsFramePoster) video.preload = bgLoad ? 'metadata' : 'auto';
-		if (videoUrl && video.getAttribute('src') !== videoUrl && !video.src.endsWith(videoUrl)) video.src = videoUrl;
+		if (videoUrl && !nsfwShouldBlur(item) && video.getAttribute('src') !== videoUrl && !String(video.src || '').endsWith(videoUrl)) video.src = videoUrl;
+		if (videoUrl && nsfwShouldBlur(item)) {
+			video.removeAttribute('src');
+			try { video.load(); } catch { /* ignore */ }
+		}
 		if (needsFramePoster && posterImg) {
 			applyVideoFirstFramePoster(posterImg, { videoUrl, existingVideo: video });
 		}

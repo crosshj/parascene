@@ -24,6 +24,7 @@ import {
 	feedItemPlayableVideoUrl
 } from './videoFirstFramePoster.js';
 import { rememberFeedDoomVideo } from './doomFeedVideoCache.js';
+import { itemIsNsfw, nsfwMediaUrl, nsfwShouldBlur } from './nsfwPolicy.js';
 import { primeMediaElementForAudioLeveling } from './mediaAudioLeveling.js';
 import {
 	hydrateChallengeHistoryThumbnails,
@@ -82,6 +83,11 @@ const { creationMetaHasChallengeSubmission, creationMetaHasChallengeAnnotation }
 const { challengeEnteredBadgeHtml, challengeLockedBadgeHtml, publishedBadgeHtml, musicBadgeHtml, videoImportBadgeHtml } = creationBadgesMod;
 
 const html = String.raw;
+
+function feedCardNsfwClass(item) {
+	if (!itemIsNsfw(item)) return '';
+	return nsfwShouldBlur(item) ? ' nsfw' : ' nsfw nsfw-revealed';
+}
 
 /** @type {WeakMap<HTMLElement, ReturnType<typeof mountSequentialVideoPlayer>>} */
 const feedGroupVideoPlayers = new WeakMap();
@@ -215,7 +221,7 @@ export function feedItemCardImageUrl(item, preferThumbnail = false) {
 	const useThumbnail = preferThumbnail && !isFeedRowVideoCreation(item);
 	const groupCover = resolveGroupCoverDisplayUrl(item, useThumbnail);
 	const meta = parseFeedItemMeta(item) || {};
-	const blur = Boolean(item?.nsfw || meta.nsfw) || creationMetaHasChallengeSubmission(meta) && !(item.published === true || item.published === 1) && item.challenge_ended !== true && String(item.media_type || meta.media_type || '').toLowerCase() !== 'audio';
+	const blur = nsfwShouldBlur(item) || creationMetaHasChallengeSubmission(meta) && !(item.published === true || item.published === 1) && item.challenge_ended !== true && String(item.media_type || meta.media_type || '').toLowerCase() !== 'audio';
 	if (groupCover) return blur ? appendMediaVariant(groupCover, 'blur') : groupCover;
 	if (useThumbnail) {
 		return appendMediaVariant(appendCreationIdToMediaUrl(item.thumbnail_url || item.image_url || '', creationId), blur ? 'blur' : '');
@@ -256,7 +262,7 @@ export function feedItemCardImageUrlCandidates(item, preferThumbnail = false) {
 	const thumb = appendCreationIdToMediaUrl(thumbRaw, creationId);
 	const useThumbnail = preferThumbnail && !isFeedRowVideoCreation(item);
 	const meta = parseFeedItemMeta(item) || {};
-	const blur = Boolean(item?.nsfw || meta.nsfw) || creationMetaHasChallengeSubmission(meta) && !(item.published === true || item.published === 1) && item.challenge_ended !== true && String(item.media_type || meta.media_type || '').toLowerCase() !== 'audio';
+	const blur = nsfwShouldBlur(item) || creationMetaHasChallengeSubmission(meta) && !(item.published === true || item.published === 1) && item.challenge_ended !== true && String(item.media_type || meta.media_type || '').toLowerCase() !== 'audio';
 	const ordered = useThumbnail ? [thumb, full] : [full, thumb];
 	const urls = blur ? ordered.map((url) => appendMediaVariant(url, 'blur')) : ordered;
 	const out = [];
@@ -422,8 +428,8 @@ export function getFeedItemGroupCarouselSources(item, preferThumbnail = false) {
 		seen.add(url);
 		const sourceTitle = typeof source?.title === 'string' ? source.title.trim() : '';
 		out.push({
-			url,
-			displayUrl: preferThumbnail ? appendThumbnailVariant(url) : url,
+			url: nsfwMediaUrl(url, item),
+			displayUrl: nsfwMediaUrl(preferThumbnail ? appendThumbnailVariant(url) : url, item),
 			title: sourceTitle || item?.title || 'Grouped creation image'
 		});
 	}
@@ -1662,7 +1668,7 @@ function buildFeedCreationCard(
 			</div>`
 				: '';
 		card.innerHTML = html`
-      <div class="feed-card-image${item.nsfw ? ' nsfw' : ''}${isVideo ? ' feed-card-image-video' : ''}${challengeBlurClass}">
+      <div class="feed-card-image${feedCardNsfwClass(item)}${isVideo ? ' feed-card-image-video' : ''}${challengeBlurClass}">
         <img class="feed-card-img" alt="${item.title || 'Creation'}" loading="lazy" decoding="async">
         ${publishedOverlay}
         ${groupOverlay}
@@ -1736,7 +1742,7 @@ function buildFeedCreationCard(
         `;
 
 	card.innerHTML = html`
-      <div class="feed-card-image${item.nsfw ? ' nsfw' : ''}${isVideo ? ' feed-card-image-video' : ''}${challengeBlurClass}">
+      <div class="feed-card-image${feedCardNsfwClass(item)}${isVideo ? ' feed-card-image-video' : ''}${challengeBlurClass}">
         <img class="feed-card-img" alt="${item.title || 'Feed image'}" loading="lazy" decoding="async">
         ${isVideo ? html`<video class="feed-card-video" playsinline muted></video>` : ''}
         ${feedCardAudioBadgeHtml(mediaType, item)}
@@ -2093,7 +2099,7 @@ function finishFeedCreationCardMediaAndClick(
 	// Auto-play looping preview for video feed items when in view.
 	if (isVideo && !processing) {
 		const groupVideoSlides = getFeedItemGroupVideoSlides(item);
-		if (groupVideoSlides.length > 1 && imageContainer) {
+		if (groupVideoSlides.length > 1 && imageContainer && !nsfwShouldBlur(item)) {
 			const player = setupFeedCardGroupVideoPlaylist(imageContainer, item);
 			if (player && typeof setupFeedVideo === 'function') {
 				setupFeedVideo(imageContainer);
@@ -2101,7 +2107,6 @@ function finishFeedCreationCardMediaAndClick(
 		} else {
 			const videoEl = card.querySelector('.feed-card-video');
 			if (videoEl) {
-				rememberFeedDoomVideo(item);
 				primeMediaElementForAudioLeveling(videoEl);
 				videoEl.removeAttribute('poster');
 				videoEl.muted = true;
@@ -2110,8 +2115,14 @@ function finishFeedCreationCardMediaAndClick(
 				videoEl.setAttribute('playsinline', '');
 				videoEl.setAttribute('muted', '');
 				videoEl.setAttribute('loop', '');
-				videoEl.dataset.feedVideoSrc = item.video_url;
-				if (typeof setupFeedVideo === 'function') setupFeedVideo(videoEl);
+				if (nsfwShouldBlur(item)) {
+					videoEl.removeAttribute('src');
+					delete videoEl.dataset.feedVideoSrc;
+				} else {
+					rememberFeedDoomVideo(item);
+					videoEl.dataset.feedVideoSrc = item.video_url;
+					if (typeof setupFeedVideo === 'function') setupFeedVideo(videoEl);
+				}
 			}
 		}
 	} else if (isVideo && processing) {
@@ -2239,12 +2250,14 @@ export function createFeedItemCard(item, itemIndex, options = {}) {
 	if (options.nsfwIcon === true) {
 		const media = card.querySelector('.feed-card-image.nsfw');
 		if (media) {
-			const badge = document.createElement('span');
-			badge.className = 'feed-card-nsfw-badge';
-			badge.setAttribute('role', 'img');
-			badge.setAttribute('aria-label', 'NSFW');
-			badge.innerHTML = iconMarkup('eyeHidden');
-			media.append(badge);
+			if (nsfwShouldBlur(item) && !media.classList.contains('nsfw-revealed')) {
+				const badge = document.createElement('span');
+				badge.className = 'feed-card-nsfw-badge';
+				badge.setAttribute('role', 'img');
+				badge.setAttribute('aria-label', 'NSFW');
+				badge.innerHTML = iconMarkup('eyeHidden');
+				media.append(badge);
+			}
 			if (parseFeedItemMeta(item)?.group?.kind === 'group_creations') {
 				media.classList.add('feed-card-image--nsfw-group');
 				if (!media.querySelector('.creation-group-badge')) {
@@ -2334,7 +2347,7 @@ export function createFeedSpotlightVideoTile(item, itemIndex, options = {}) {
 	}
 
 	const imageContainer = document.createElement("div");
-	imageContainer.className = `feed-card-image chat-feed-mobile-spotlight-cell-media${item.nsfw ? " nsfw" : ""}`;
+	imageContainer.className = `feed-card-image chat-feed-mobile-spotlight-cell-media${feedCardNsfwClass(item)}`;
 
 	const img = document.createElement("img");
 	img.className = "feed-card-img";
@@ -2342,7 +2355,7 @@ export function createFeedSpotlightVideoTile(item, itemIndex, options = {}) {
 	img.decoding = "async";
 
 	imageContainer.appendChild(img);
-	if (item.nsfw) {
+	if (itemIsNsfw(item) && nsfwShouldBlur(item)) {
 		const badge = document.createElement('span');
 		badge.className = 'feed-card-nsfw-badge';
 		badge.setAttribute('role', 'img');

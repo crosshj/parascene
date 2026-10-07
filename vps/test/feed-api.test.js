@@ -15,17 +15,18 @@ async function call(router, path, { auth = { userId: 1 }, query = {}, body } = {
  return { status, data };
 }
 function queries(extra = {}) {
- return { selectUserById: { get: async () => ({id:1,meta:{forceLegacyFeed:true}}) }, selectPolicyByKey:{get:async()=>null}, selectFeedItems:{getPage:async()=>({rows:[],hasMore:false})}, ...extra };
+ return { selectUserById: { get: async () => ({id:1,meta:{}}) }, selectPolicyByKey:{get:async()=>null}, selectFeedItems:{getPage:async()=>({rows:[],hasMore:false})}, ...extra };
 }
 test('every feed surface requires authentication, including impression writes', async()=>{
  const router = createFeedRoutes({queries:queries()});
  for (const path of ['/api/feed','/api/feed/doom','/api/feed/version','/api/feed/challenge-engagement','/api/feed/impressions','/api/feed/impression']) assert.equal((await call(router,path,{auth:null})).status,401,path);
 });
-test('feed preserves creation media, NSFW filtering, pagination',async()=>{
- invalidateChallengeFeedSnapshotMemCache();let options;
- const router=createFeedRoutes({queries:queries({selectFeedItems:{getPage:async(_viewer,opts)=>{options=opts;return {rows:[{id:7,created_image_id:70,url:'/safe.jpg',created_at:'2026-10-01',user_id:2},{id:8,created_image_id:80,url:'/hidden.jpg',nsfw:true,created_at:'2026-09-30',user_id:2}],hasMore:true};}}})});
- const out=await call(router,'/api/feed',{query:{limit:2,offset:2,feed_surface:'chat'}});
- assert.equal(out.status,200);assert.equal(options.offset,2);assert.equal(options.includeOwnPosts,false);assert.deepEqual(out.data.items.map(row=>row.created_image_id),[70]);assert.equal(out.data.hasMore,true);assert.equal(out.data.feed_cursor,undefined);
+test('ranked feed drops NSFW rows even when a stored legacy-feed flag is present',async()=>{
+ invalidateChallengeFeedSnapshotMemCache();
+ const catalog=[{id:7,created_image_id:70,url:'/safe.jpg',created_at:'2026-10-01',user_id:2,meta:{}},{id:8,created_image_id:80,url:'/hidden.jpg',nsfw:true,created_at:'2026-09-30',user_id:2,meta:{}}];
+ const router=createFeedRoutes({queries:queries({selectUserById:{get:async()=>({id:1,meta:{forceLegacyFeed:true}})},selectFeedBetaSitewideCatalog:{getRecent:async()=>catalog,getPublishedCount:async()=>catalog.length},selectUserFollowing:{all:async()=>[]}})});
+ const out=await call(router,'/api/feed',{query:{limit:12,feed_surface:'chat'}});
+ assert.equal(out.status,200);assert.deepEqual(out.data.items.map(row=>row.created_image_id),[70]);assert.equal(out.data.feed_beta.completed_page,1);
 });
 test('doom deep links fall back to the site video timeline with an explicit anchor and cursor',async()=>{
  let options;const router=createFeedRoutes({queries:queries({selectFeedItems:{getPage:async()=>({rows:[],hasMore:false}),getSitePublishedVideoFeedPage:async(_viewer,opts)=>{options=opts;return {rows:[{created_image_id:42,url:'/cover.jpg',meta:{media_type:'video',video:{file_path:'/clip.mp4'}}}],hasMore:true,cursor:{after_created_image_id:'42'}};}}})});

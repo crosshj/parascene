@@ -1,5 +1,6 @@
 import { escapeHtml } from '../utils/dom.js';
 import { iconMarkup } from '../components/Icon/Icon.js';
+import { nsfwShouldBlur } from './nsfwPolicy.js';
 
 const html = String.raw;
 
@@ -179,9 +180,8 @@ function mediaPath(url, item, variant = '') {
 }
 
 export function creationThumbnailUrl(item, { video = false } = {}) {
-	const nsfw = Boolean(item?.nsfw || parseCreationMeta(item)?.nsfw);
 	const meta = parseCreationMeta(item) || {};
-	const blurVariant = nsfw || shouldBlurChallengeMedia(item) ? 'blur' : '';
+	const blurVariant = nsfwShouldBlur(item) || shouldBlurChallengeMedia(item) ? 'blur' : '';
 	if (video && creationNeedsVideoFramePoster(item) && item?.video_thumbnail_url) {
 		return mediaPath(item.video_thumbnail_url, item, blurVariant || 'video_thumbnail');
 	}
@@ -277,17 +277,18 @@ export function creationCardMarkup(item, { hidePublishedBadge = false } = {}) {
  const creationId = String(rawId).startsWith("pending-") ? String(rawId) : Number(rawId);
 	const hasCreationId = Number.isFinite(creationId) && creationId > 0;
 	const nsfw = Boolean(item?.nsfw || meta?.nsfw);
+	const nsfwBlur = nsfw && nsfwShouldBlur(item);
 	const challengeBlur = shouldBlurChallengeMedia(item);
 	const queuePosition = Number(meta?.line_place ?? meta?.provider_last_payload?.place);
 	const title = String(item?.title || '').trim() || (item?.published ? 'Untitled' : '');
-	const mediaClass = `feed-card-image${pending || failed ? ' creation-grid__status-card' : nsfw ? ' nsfw' : ''}${failed ? ' creation-grid__failed-card' : ''}${!failed && challengeBlur ? ' feed-card-image--challenge-pending' : ''}`;
+	const mediaClass = `feed-card-image${pending || failed ? ' creation-grid__status-card' : nsfw ? (nsfwBlur ? ' nsfw' : ' nsfw nsfw-revealed') : ''}${failed ? ' creation-grid__failed-card' : ''}${!failed && challengeBlur ? ' feed-card-image--challenge-pending' : ''}`;
 	const state = failed
 		? statusMarkup(status)
 		: pending
 			? statusMarkup(status, queuePosition)
 			: creationNeedsAudioWaveformCover(item) ? waveform() : '';
 	const thumbnail = pending || failed ? '' : creationThumbnailUrl(item, { video: type === 'video' });
-	const original = pending || failed ? '' : creationOriginalUrl(item);
+	const original = pending || failed ? '' : (nsfwBlur ? thumbnail : creationOriginalUrl(item));
 	const slides = pending || failed ? [] : groupSlides(item);
 	const challengeOverlay = !pending && !failed && challengeBlur
 		? `<span class="route-media-challenge-blur-overlay" aria-hidden="true"></span><span class="creation-challenge-entered-badge" role="img" aria-label="Entered in challenge" title="Entered in challenge">${iconMarkup('trophy')}</span>`
@@ -314,7 +315,7 @@ export function creationCardMarkup(item, { hidePublishedBadge = false } = {}) {
 		processingStatus ? `data-creation-status="${escapeHtml(processingStatus)}"` : ''
 	].filter(Boolean).join(' ');
 	return html`<div class="feed-card feed-card--image-only creation-grid__card" ${attributes} role="link" tabindex="0" aria-label="Open ${escapeHtml(title || `Creation ${creationId || ''}`)}">
-		<div class="${mediaClass}" aria-hidden="true" data-creation-id="${escapeHtml(creationId)}" data-media-type="${escapeHtml(type)}" data-bg-blur="${nsfw || challengeBlur ? '1' : '0'}" data-bg-url="${escapeHtml(thumbnail)}" data-bg-fallback="${escapeHtml(original)}" data-group-slides="${escapeHtml(JSON.stringify(slides))}"><img class="feed-card-img" alt="${escapeHtml(title || 'Creation')}" loading="lazy" decoding="async">${state}${nsfw && !pending && !failed ? `<span class="creation-grid__nsfw-badge" role="img" aria-label="NSFW">${iconMarkup('eyeHidden')}</span>` : ''}${challengeOverlay}${!failed && !pending ? badges(item, { hideChallengeCorner: challengeBlur, hidePublished: hidePublishedBadge }) : ''}</div>
+		<div class="${mediaClass}" aria-hidden="true" data-creation-id="${escapeHtml(creationId)}" data-media-type="${escapeHtml(type)}" data-bg-blur="${nsfwBlur || challengeBlur ? '1' : '0'}" data-bg-url="${escapeHtml(thumbnail)}" data-bg-fallback="${escapeHtml(original)}" data-group-slides="${escapeHtml(JSON.stringify(slides))}"><img class="feed-card-img" alt="${escapeHtml(title || 'Creation')}" loading="lazy" decoding="async">${state}${nsfwBlur && !pending && !failed ? `<span class="creation-grid__nsfw-badge" role="img" aria-label="NSFW">${iconMarkup('eyeHidden')}</span>` : ''}${challengeOverlay}${!failed && !pending ? badges(item, { hideChallengeCorner: challengeBlur, hidePublished: hidePublishedBadge }) : ''}</div>
 	</div>`;
 }
 

@@ -140,6 +140,15 @@ function blurredThumbnail(input) {
 	return image.resize(480, 480, { fit: "cover", position: "centre" }).blur(60).jpeg({ quality: 82, mozjpeg: true }).toBuffer();
 }
 
+function blurredOriginal(input) {
+	return sharp(input, { failOn: "none" })
+		.rotate()
+		.resize(1600, 1600, { fit: "inside", withoutEnlargement: true })
+		.blur(60)
+		.jpeg({ quality: 82, mozjpeg: true })
+		.toBuffer();
+}
+
 function gridThumbnail(input) {
 	return sharp(input, { failOn: "none" })
 		.rotate()
@@ -219,12 +228,15 @@ export function createCreationsRoutes({ creations, users, appendChallengeEligibi
 				return req.method === "HEAD" ? res.end() : res.send(output);
 			}
 			if (variant === "blur") {
-				const sourceVariant = req.query.source_variant === "fit" ? "fit" : "thumbnail";
+				const requestedSource = String(req.query.source_variant || "").trim().toLowerCase();
+				const sourceVariant = requestedSource === "fit" ? "fit" : requestedSource === "original" ? "" : "thumbnail";
 				const response = await creations.fetchMedia(key, { variant: sourceVariant, method: "GET" });
 				if (!response.ok || !response.body) return res.status(404).json({ error: "Media not found" });
 				const chunks = [];
 				for await (const chunk of Readable.fromWeb(response.body)) chunks.push(chunk);
-				const output = await blurredThumbnail(Buffer.concat(chunks));
+				const output = sourceVariant
+					? await blurredThumbnail(Buffer.concat(chunks))
+					: await blurredOriginal(Buffer.concat(chunks));
 				res.status(200);
 				res.type("jpg");
 				res.set("Content-Length", String(output.length));

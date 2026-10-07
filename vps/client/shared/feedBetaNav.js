@@ -11,12 +11,6 @@ export function readFeedBetaEnabledSync() {
 	return true;
 }
 
-/** Effective ranked-feed path: everyone gets it unless they force the legacy feed. */
-export function feedBetaActiveFromProfile(user) {
-	if (!user || typeof user !== 'object') return true;
-	return user.forceLegacyFeed !== true && user.meta?.forceLegacyFeed !== true;
-}
-
 /** @param {boolean} enabled */
 export function setFeedBetaEnabledClient(enabled) {
 	if (typeof window === 'undefined') return;

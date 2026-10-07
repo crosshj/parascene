@@ -8,13 +8,12 @@ import {
 	applyNsfwPreference,
 	NSFW_VIEW_BODY_CLASS,
 } from '../../shared/nsfwView.js';
+import { publishNsfwPreference, readNsfwPolicy } from '../../shared/nsfwPolicy.js';
 import {
 	hydrateChatAudibleNotificationsFromServer,
 	setChatAudibleNotificationsEnabled,
 	clearChatAudibleNotificationsStorage,
 } from '../../shared/chatAudibleNotificationsPref.js';
-import { setFeedBetaEnabledClient, feedBetaActiveFromProfile } from '../../shared/feedBetaNav.js';
-
 const html = String.raw;
 
 function invalidateOwnPublicProfileCache(profileData) {
@@ -84,7 +83,6 @@ class AppModalProfile extends HTMLElement {
 
 		this.setupNsfwToggles();
 		this.setupShowOwnPostsToggle();
-		this.setupForceLegacyFeedToggle();
 		this.setupAppearOfflineToggle();
 		this.setupAudibleNotificationsToggle();
 	}
@@ -125,9 +123,9 @@ class AppModalProfile extends HTMLElement {
 				}, { windowMs: 0 });
 				if (res?.ok) {
 					if (this.profileData) this.profileData.enableNsfw = enabled;
+					const previous = readNsfwPolicy();
 					setNsfwContentEnabled(enabled);
-					applyNsfwPreference();
-					document.dispatchEvent(new CustomEvent('nsfw-preference-changed'));
+					publishNsfwPreference(previous);
 					invalidateOwnPublicProfileCache(this.profileData);
 				} else {
 					enableCheckbox.checked = !enabled;
@@ -140,8 +138,9 @@ class AppModalProfile extends HTMLElement {
 		});
 
 		obscureCheckbox.addEventListener('change', () => {
+			const previous = readNsfwPolicy();
 			setNsfwObscure(!obscureCheckbox.checked);
-			applyNsfwPreference();
+			publishNsfwPreference(previous);
 		});
 	}
 
@@ -249,51 +248,6 @@ class AppModalProfile extends HTMLElement {
 		});
 	}
 
-	syncForceLegacyFeedVisibility() {
-		const wrap = this.shadowRoot.querySelector('[data-force-legacy-wrap]');
-		if (!wrap) return;
-		wrap.removeAttribute('hidden');
-	}
-
-	setupForceLegacyFeedToggle() {
-		const checkbox = this.shadowRoot.querySelector('[data-force-legacy-feed]');
-		if (!checkbox) return;
-
-		const syncFromProfile = () => {
-			this.syncForceLegacyFeedVisibility();
-			checkbox.checked = this.profileData?.forceLegacyFeed === true;
-		};
-		syncFromProfile();
-
-		checkbox.addEventListener('change', async () => {
-			const forceLegacyFeed = checkbox.checked === true;
-			try {
-				const res = await fetchJsonWithStatusDeduped(
-					'/api/profile',
-					{
-						method: 'PATCH',
-						credentials: 'include',signal:this._controller?.signal,
-						headers: { 'Content-Type': 'application/json' },
-						body: JSON.stringify({ forceLegacyFeed })
-					},
-					{ windowMs: 0 }
-				);
-				if (res?.ok) {
-					if (this.profileData) this.profileData.forceLegacyFeed = forceLegacyFeed;
-					if (typeof setFeedBetaEnabledClient === 'function' && typeof feedBetaActiveFromProfile === 'function') {
-						setFeedBetaEnabledClient(feedBetaActiveFromProfile(this.profileData));
-					}
-					document.dispatchEvent(new CustomEvent('feed-preference-changed'));
-					invalidateOwnPublicProfileCache(this.profileData);
-				} else {
-					checkbox.checked = !forceLegacyFeed;
-				}
-			} catch {
-				checkbox.checked = !forceLegacyFeed;
-			}
-		});
-	}
-
 	/** Sync NSFW checkbox state from profile (API) and localStorage when modal opens or profile loads. */
 	syncNsfwTogglesFromStorage() {
 		const enableCheckbox = this.shadowRoot.querySelector('[data-nsfw-enable]');
@@ -320,11 +274,6 @@ class AppModalProfile extends HTMLElement {
 		if (showOwnPostsBox) {
 			showOwnPostsBox.checked = this.profileData?.showOwnPostsInFeed === true;
 		}
-		const forceLegacyBox = this.shadowRoot.querySelector('[data-force-legacy-feed]');
-		if (forceLegacyBox) {
-			forceLegacyBox.checked = this.profileData?.forceLegacyFeed === true;
-		}
-		this.syncForceLegacyFeedVisibility();
 	}
 
 	handleOpenSettingsEvent() {
@@ -400,10 +349,10 @@ class AppModalProfile extends HTMLElement {
 			if(!this.isConnected)return;
 			const user = result.data;
 			const nextKey = user
-				? `${user.id}|${user.hasApiKey ? '1' : '0'}|${user.apiKeyPrefix || ''}|${user.hasVynlyToken ? '1' : '0'}|${user.vynlyTokenPrefix || ''}|${user.enableNsfw ? '1' : '0'}|${user.showOwnPostsInFeed ? '1' : '0'}|${user.audibleNotifications !== false ? '1' : '0'}|${user.appear_offline ? '1' : '0'}|${user.forceLegacyFeed ? '1' : '0'}`
+				? `${user.id}|${user.hasApiKey ? '1' : '0'}|${user.apiKeyPrefix || ''}|${user.hasVynlyToken ? '1' : '0'}|${user.vynlyTokenPrefix || ''}|${user.enableNsfw ? '1' : '0'}|${user.showOwnPostsInFeed ? '1' : '0'}|${user.audibleNotifications !== false ? '1' : '0'}|${user.appear_offline ? '1' : '0'}`
 				: '';
 			const currentKey = this.profileData
-				? `${this.profileData.id}|${this.profileData.hasApiKey ? '1' : '0'}|${this.profileData.apiKeyPrefix || ''}|${this.profileData.hasVynlyToken ? '1' : '0'}|${this.profileData.vynlyTokenPrefix || ''}|${this.profileData.enableNsfw ? '1' : '0'}|${this.profileData.showOwnPostsInFeed ? '1' : '0'}|${this.profileData.audibleNotifications !== false ? '1' : '0'}|${this.profileData.appear_offline ? '1' : '0'}|${this.profileData.forceLegacyFeed ? '1' : '0'}`
+				? `${this.profileData.id}|${this.profileData.hasApiKey ? '1' : '0'}|${this.profileData.apiKeyPrefix || ''}|${this.profileData.hasVynlyToken ? '1' : '0'}|${this.profileData.vynlyTokenPrefix || ''}|${this.profileData.enableNsfw ? '1' : '0'}|${this.profileData.showOwnPostsInFeed ? '1' : '0'}|${this.profileData.audibleNotifications !== false ? '1' : '0'}|${this.profileData.appear_offline ? '1' : '0'}`
 				: '';
 
 			if (nextKey !== currentKey) {
@@ -411,7 +360,16 @@ class AppModalProfile extends HTMLElement {
 			}
 			this.profileLoadedAt = Date.now();
 			// Keep localStorage in sync with server so publish modal and others get correct default
-			if (user) setNsfwContentEnabled(user.enableNsfw === true);
+			if (user) {
+				const previous = readNsfwPolicy();
+				setNsfwContentEnabled(user.enableNsfw === true);
+				const next = readNsfwPolicy();
+				if (previous.showInCollections !== next.showInCollections || previous.presentation !== next.presentation) {
+					publishNsfwPreference(previous);
+				} else {
+					applyNsfwPreference();
+				}
+			}
 			if (user && typeof hydrateChatAudibleNotificationsFromServer === 'function') {
 				hydrateChatAudibleNotificationsFromServer(user.audibleNotifications);
 			}
@@ -735,8 +693,7 @@ class AppModalProfile extends HTMLElement {
           cursor: pointer;
           accent-color: var(--accent);
         }
-        [data-nsfw-obscure-wrap][hidden],
-        [data-force-legacy-wrap][hidden] {
+        [data-nsfw-obscure-wrap][hidden] {
           display: none !important;
         }
       </style>
@@ -783,10 +740,6 @@ class AppModalProfile extends HTMLElement {
                     <div class="profile-nsfw-row">
                       <label for="profile-show-own-posts">Show my posts in feed</label>
                       <input type="checkbox" id="profile-show-own-posts" data-show-own-posts />
-                    </div>
-                    <div class="profile-nsfw-row" data-force-legacy-wrap hidden>
-                      <label for="profile-force-legacy-feed">Force legacy feed</label>
-                      <input type="checkbox" id="profile-force-legacy-feed" data-force-legacy-feed />
                     </div>
                   </div>
                 </div>

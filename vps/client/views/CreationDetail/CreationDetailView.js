@@ -11,6 +11,7 @@ import * as datetimeBundledMod from '../../shared/datetime.js';
 import * as apiBundledMod from '../../shared/api.js';
 import * as iconsBundledMod from '../../icons/svg-strings.js';
 import * as nsfwBundledMod from '../../shared/nsfwView.js';
+import { itemIsNsfw, nsfwMediaUrl, nsfwShouldBlur } from '../../shared/nsfwPolicy.js';
 import { creationCardMarkup, createCreationMediaLoader } from '../../shared/creationGrid.js';
 import * as triggeredSuggestBundledMod from '../../shared/triggeredSuggest.js';
 import * as likesBundledMod from '../../shared/likes.js';
@@ -153,6 +154,16 @@ const creationDetailDocumentListeners = [];
 function addCreationDetailDocumentListener(type, listener, options) {
 	creationDetailDocumentListeners.push([type, listener, options]);
 }
+
+addCreationDetailDocumentListener('nsfw-preference-changed', () => {
+	detailNsfwRevealed = false;
+	applyCreationDetailNsfwMedia?.();
+});
+addCreationDetailDocumentListener('nsfw-detail-reveal', () => {
+	detailNsfwRevealed = true;
+	revealCreationDetailGroupThumbs();
+	applyCreationDetailNsfwMedia?.();
+});
 
 async function refreshAfterMutation(_reason, options = {}) {
 	apiBundledMod.invalidateAppCaches({
@@ -604,6 +615,21 @@ function patchCreationDetailStripChild(sticky, next) {
 	return sticky;
 }
 
+function revealCreationDetailGroupThumbs() {
+	if (!detailNsfwAllowsClear()) return;
+	for (const wrap of document.querySelectorAll('.creation-detail-group-thumb-wrap.nsfw')) {
+		if (!(wrap instanceof HTMLElement)) continue;
+		wrap.classList.add('nsfw-revealed');
+		const img = wrap.querySelector('img');
+		if (!(img instanceof HTMLImageElement)) continue;
+		const clear = nsfwMediaUrl(img.getAttribute('src') || '', lastCreationMeta || { nsfw: true }, {
+			revealed: true,
+			sourceVariant: 'original',
+		});
+		if (clear && img.getAttribute('src') !== clear) img.src = clear;
+	}
+}
+
 function patchCreationDetailActionStrip(stickyStrip, nextStrip) {
 	if (!(stickyStrip instanceof HTMLElement) || !(nextStrip instanceof HTMLElement)) return;
 	stickyStrip.className = nextStrip.className;
@@ -636,6 +662,9 @@ function patchCreationDetailGroupSlot(stickySlot, nextSlot) {
 	const nextWrap = nextSlot.querySelector('.creation-detail-group-thumb-wrap');
 	if (stickyWrap instanceof HTMLElement && nextWrap instanceof HTMLElement) {
 		if (stickyWrap.className !== nextWrap.className) stickyWrap.className = nextWrap.className;
+		if (detailNsfwRevealed || nextWrap.classList.contains('nsfw-revealed')) {
+			stickyWrap.classList.add('nsfw-revealed');
+		}
 	}
 	const stickyBtn = stickySlot.querySelector('.creation-detail-group-item');
 	const nextBtn = nextSlot.querySelector('.creation-detail-group-item');
@@ -656,6 +685,11 @@ function patchCreationDetailGroupSlot(stickySlot, nextSlot) {
 	if (nextImg instanceof HTMLImageElement && stickyImg instanceof HTMLImageElement) {
 		const nextAlt = nextImg.getAttribute('alt') || '';
 		if (nextAlt && stickyImg.getAttribute('alt') !== nextAlt) stickyImg.setAttribute('alt', nextAlt);
+		const nextSrc = nextImg.getAttribute('src') || '';
+		const src = detailNsfwRevealed
+			? nsfwMediaUrl(nextSrc || stickyImg.getAttribute('src'), lastCreationMeta || { nsfw: true }, { revealed: true, sourceVariant: 'original' })
+			: nextSrc;
+		if (src && stickyImg.getAttribute('src') !== src) stickyImg.src = src;
 	} else if (nextImg instanceof HTMLImageElement && !stickyImg) {
 		stickyBtn.replaceChildren(nextImg);
 	} else if (nextStatus && stickyImg) {
@@ -1593,7 +1627,7 @@ function renderLineageOffspringThumbLinks(items, ctx) {
 	return items.map((child) => {
 		const cid = child.id;
 		const childNsfw = !!child.nsfw;
-		const thumbUrl = (child.thumbnail_url || child.url || '').trim();
+		const thumbUrl = nsfwMediaUrl((child.thumbnail_url || child.url || '').trim(), child, { sourceVariant: 'original' });
 		const unpublished = child.unpublished === true;
 		const labelSuffix = unpublished ? ' (unpublished)' : '';
 		if (!enableNsfw && childNsfw) {
@@ -1664,7 +1698,7 @@ function buildLineageSectionHtmlFromPrefetch(lineagePrefetch, ctx) {
 			const dataCreationId = enableNsfw && nsfw ? ` data-creation-id="${id}"` : '';
 
 			if (slot.mode === 'lineage-open') {
-				const t = (slot.thumb || '').trim();
+				const t = nsfwMediaUrl((slot.thumb || '').trim(), { nsfw }, { sourceVariant: 'original' });
 				const inner = t
 					? `<span class="creation-detail-history-fallback" data-history-fallback style="display: none;">#${id}</span><img class="creation-detail-history-thumb" src="${escapeHtml(t)}" alt="" loading="lazy" />`
 					: `<span class="creation-detail-history-fallback" data-history-fallback>#${id}</span><img class="creation-detail-history-thumb" data-history-img alt="" loading="lazy" style="display: none;" />`;
@@ -3224,11 +3258,12 @@ async function pollCreationDetailGroupMembersOnce(creationId) {
 		// Terminal. Swap in the thumb when we have one; otherwise leave the
 		// slot to the next full render (the group meta gets re-stamped when
 		// the finished member is filed).
-		const thumb =
+		const thumbRaw =
 			(typeof row.thumbnail_url === 'string' && row.thumbnail_url.trim()) ||
 			(typeof row.url === 'string' && row.url.trim()) ||
 			(typeof row.file_path === 'string' && row.file_path.trim()) ||
 			'';
+		const thumb = nsfwMediaUrl(thumbRaw, lastCreationMeta, { revealed: detailNsfwAllowsClear(), sourceVariant: 'original' });
 		creationDetailGroupMemberLiveState.delete(sourceId);
 		btn.removeAttribute('data-group-source-status');
 		if (status === 'completed' && thumb) {
@@ -3253,6 +3288,7 @@ async function pollCreationDetailGroupMembersOnce(creationId) {
 }
 
 async function loadCreation() {
+	applyCreationDetailNsfwMedia = () => { void loadCreation(); };
 	stopCreationDetailHeroPlayback();
 	stopCreationDetailInFlightPoll();
 	stopCreationDetailGroupMemberPoll();
@@ -3614,7 +3650,7 @@ async function loadCreation() {
 
 	function showHeroImage(nextUrl, options = {}) {
 		const deferBackground = options.deferBackground === true;
-		const url = String(nextUrl || '').trim();
+		const url = nsfwMediaUrl(String(nextUrl || '').trim(), lastCreationMeta, { revealed: detailNsfwAllowsClear(), sourceVariant: 'original' });
 		if (!url) return;
 		const currentUrl = String(heroImageDisplayedUrl() || '').trim();
 		if (urlsMatch(currentUrl, url)) {
@@ -3810,6 +3846,7 @@ async function loadCreation() {
 	}
 
 	async function mountHeroVideoPlaybackEarly(sources, startSourceId, hooks = {}) {
+		if (nsfwShouldBlur(lastCreationMeta, { revealed: detailNsfwAllowsClear() })) return false;
 		const playable = (Array.isArray(sources) ? sources : [])
 			.map((source) => ({
 				id: Number(source?.id),
@@ -4431,7 +4468,11 @@ async function loadCreation() {
 
 		// Set image and blurred background depending on status
 		imageWrapper?.classList.remove('image-error');
-		imageWrapper?.classList.toggle('nsfw', !!(creation.nsfw ?? creation.meta?.nsfw));
+		const heroNsfw = !!(creation.nsfw ?? creation.meta?.nsfw);
+		const heroClear = heroNsfw && detailNsfwAllowsClear();
+		imageWrapper?.classList.toggle('nsfw', heroNsfw);
+		imageWrapper?.classList.toggle('nsfw-revealed', heroClear);
+		imageWrapper?.classList.toggle('nsfw-server-blur', heroNsfw && !heroClear);
 		// Corner trophy on the hero (no full-hero blur — keep the image visible; banner/chip carry the copy).
 		const creationIsPublished = creation.published === true || creation.published === 1;
 		const showChallengeHeroLock =
@@ -4503,9 +4544,10 @@ async function loadCreation() {
 			imageWrapper?.classList.add('image-loading', 'hero-video-pending');
 
 			const bgUrl = creation.url || creation.thumbnail_url || null;
-			if (bgUrl) {
-				showHeroImage(bgUrl);
-				setHeroBackgroundUrl(bgUrl);
+			const heroStillUrl = nsfwMediaUrl(bgUrl, creation, { revealed: detailNsfwAllowsClear(), sourceVariant: 'original' });
+			if (heroStillUrl) {
+				showHeroImage(heroStillUrl);
+				setHeroBackgroundUrl(heroStillUrl);
 			}
 
 			if (!isGroupedVideoCreation) {
@@ -4519,7 +4561,7 @@ async function loadCreation() {
 					}],
 					Number(creation.id),
 					{
-						posterUrl: typeof bgUrl === 'string' ? bgUrl.trim() : '',
+						posterUrl: heroStillUrl,
 						onFirstReveal: () => markHeroReady({ state: 'video' }),
 					}
 				);
@@ -4846,7 +4888,7 @@ async function loadCreation() {
 				const sourceId = Number(sourceObj.id);
 				if (!Number.isFinite(sourceId) || sourceId <= 0) return null;
 				const sourceFilePathRaw = typeof sourceObj.file_path === 'string' ? sourceObj.file_path.trim() : '';
-				const sourceFilePath = appendCreationIdToMediaUrl(sourceFilePathRaw, creationId);
+				const sourceFilePath = nsfwMediaUrl(appendCreationIdToMediaUrl(sourceFilePathRaw, creationId), lastCreationMeta, { revealed: detailNsfwAllowsClear(), sourceVariant: 'original' });
 				const sourceRawTitle = typeof sourceObj.title === 'string' ? sourceObj.title.trim() : '';
 				const sourceDescription = typeof sourceObj.description === 'string' ? sourceObj.description.trim() : '';
 				const sourceCreatedAt = typeof sourceObj.created_at === 'string' ? sourceObj.created_at : '';
@@ -4907,7 +4949,7 @@ async function loadCreation() {
 							? sourceMeta.media_type.trim()
 							: 'image';
 				const sourceVideoUrlRaw = sourceMeta?.video?.file_path;
-				const sourceVideoUrl = sourceMediaType === 'video' && typeof sourceVideoUrlRaw === 'string' && sourceVideoUrlRaw.trim()
+				const sourceVideoUrl = sourceMediaType === 'video' && typeof sourceVideoUrlRaw === 'string' && sourceVideoUrlRaw.trim() && !nsfwShouldBlur(lastCreationMeta, { revealed: detailNsfwAllowsClear() })
 					? appendCreationIdToMediaUrl(sourceVideoUrlRaw.trim(), creationId)
 					: '';
 				const sourceAudioCdn =
@@ -4924,7 +4966,7 @@ async function loadCreation() {
 					rawTitle: sourceRawTitle,
 					status: typeof sourceObj.status === 'string' ? sourceObj.status.trim().toLowerCase() : '',
 					filePath: sourceFilePath,
-					thumbnailUrl: appendCreationIdToMediaUrl(sourceObj.thumbnail_url || sourceFilePathRaw, creationId),
+					thumbnailUrl: nsfwMediaUrl(appendCreationIdToMediaUrl(sourceObj.thumbnail_url || sourceFilePathRaw, creationId), lastCreationMeta, { revealed: detailNsfwAllowsClear(), sourceVariant: 'original' }),
 					videoUrl: sourceVideoUrl,
 					audioUrl: sourceAudioUrl,
 					mediaType: sourceMediaType,
@@ -5048,11 +5090,11 @@ async function loadCreation() {
 		const groupMediaKinds = new Set(groupSources.map((source) => source.mediaType).filter(Boolean));
 		const groupMediaCountLabel =
 			groupMediaKinds.size > 1 ? 'item' : isGroupVideo ? 'video' : 'image';
-		// When the group creation is NSFW (hero blurred), blur its thumbnails too. Mirror the
-		// hero's reveal model: pre-reveal when the viewer shows unobscured, else one-off reveal.
+		// When the group creation is NSFW, its thumbnails follow the hero:
+		// clear when the setting is unobscured, or after this page's confirm.
 		const groupIsNsfw = Boolean(creation.nsfw ?? creation.meta?.nsfw);
 		const groupThumbNsfwClass = groupIsNsfw
-			? (showUnobscured ? ' nsfw nsfw-revealed' : ' nsfw')
+			? (detailNsfwAllowsClear() ? ' nsfw nsfw-revealed' : ' nsfw')
 			: '';
 		const groupSectionHtml = isGroupCreation && groupSources.length > 0
 			? html`
@@ -5900,6 +5942,7 @@ async function loadCreation() {
 				</div>
 			</div>
 		`);
+		revealCreationDetailGroupThumbs();
 
 		perf.recordStep('contentAboveComments', 'renderDom', performance.now() - detailRenderStart);
 
@@ -8196,6 +8239,14 @@ async function loadCreation() {
 let currentCreationId = null;
 let stopRelatedSection = null;
 let lastCreationMeta = null;
+let detailNsfwRevealed = false;
+
+function detailNsfwAllowsClear() {
+	return detailNsfwRevealed
+		|| !nsfwBundledMod.getNsfwObscure()
+		|| document.body.classList.contains(nsfwBundledMod.NSFW_VIEW_BODY_CLASS);
+}
+let applyCreationDetailNsfwMedia = null;
 let loadCreationSequence = 0;
 let lastDetailLandscapeOwner = false;
 let lastDetailLandscapeEligibility = { eligible: true };
@@ -8243,16 +8294,20 @@ function paintCreationDetailFromSeed(seed, detailContent, imageEl, chromeHtmlFro
 		(typeof seed.thumbnail_url === 'string' && seed.thumbnail_url.trim()) ||
 		'';
 	const wrap = imageEl instanceof HTMLImageElement ? imageEl.closest?.('.creation-detail-image-wrapper') : null;
+	const seedNsfw = itemIsNsfw(seed);
+	const seedClear = seedNsfw && detailNsfwAllowsClear();
+	const src = nsfwMediaUrl(imgUrl, seed, { revealed: seedClear || detailNsfwAllowsClear(), sourceVariant: 'original' });
 	if (wrap instanceof HTMLElement) {
-		const meta = typeof seed.meta === 'string' ? (() => { try { return JSON.parse(seed.meta); } catch { return null; } })() : seed.meta;
-		wrap.classList.toggle('nsfw', Boolean(seed.nsfw || meta?.nsfw));
+		wrap.classList.toggle('nsfw', seedNsfw);
+		wrap.classList.toggle('nsfw-revealed', seedClear);
+		wrap.classList.toggle('nsfw-server-blur', seedNsfw && !seedClear);
 	}
 	if (wrap instanceof HTMLElement && typeof applyHeroAspect === 'function') {
 		applyInitialDetailHeroLayout(wrap, seed);
 	}
 	if (imageEl instanceof HTMLImageElement && imgUrl) {
 		imageEl.style.visibility = '';
-		if (!imageEl.getAttribute('src')) imageEl.src = imgUrl;
+		if (!imageEl.getAttribute('src')) imageEl.src = src;
 		const markHeroSettled = () => {
 			if (!(wrap instanceof HTMLElement)) return;
 			if (wrap.dataset.heroLayoutKnown !== '1' && imageEl.naturalWidth > 0) {
@@ -8412,6 +8467,8 @@ export function renderCreationDetailView({ outlet, creationId, initialSeed = nul
 		activeCreationDetailId = null;
 		activeCreationDetailSeed = null;
 		activeCreationDetailNavigate = null;
+		detailNsfwRevealed = false;
+		applyCreationDetailNsfwMedia = null;
 		currentCreationId = null;
 		if (window.__VPS_CREATION_DETAIL_SEED__) delete window.__VPS_CREATION_DETAIL_SEED__;
 		document.body.classList.remove('creation-detail-page');

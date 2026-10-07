@@ -2547,6 +2547,30 @@ if(!lifetime.active)return;
 		} catch { /* Keep the already-rendered profile if the refresh fails. */ }
 	};
 	lifetime.listen(document, 'creation-detail:mutation', onCreationMutation);
+	lifetime.listen(document, 'nsfw-preference-changed', (event) => {
+		const imageTabs = ['creations', 'mentions', 'likes'].filter((id) => loadedTabs.has(id));
+		if (event.detail?.membershipChanged === false) {
+			for (const id of imageTabs) renderTabContent(id);
+			return;
+		}
+		void (async () => {
+			if (loadedTabs.has('creations')) {
+				try {
+					const result = await loadUserImages(target, {
+						includeAll: includeAllForAdmin,
+						limit: Math.max(PROFILE_PAGE_SIZE.creations, tabData.creations.items.length || 0),
+						offset: 0,
+					});
+					if (!lifetime.active) return;
+					tabData.creations = { items: result.images || [], hasMore: Boolean(result.has_more) };
+					renderTabContent('creations');
+				} catch { /* keep the grid already on screen */ }
+			}
+			for (const id of ['mentions', 'likes']) {
+				if (loadedTabs.has(id)) void loadTabContent(id, true);
+			}
+		})();
+	});
 	if (profileProvider && restoreState?.tabData) {
 		for (const id of loadedTabs) {
 			const endpoints = { creations: ['created-images', 'images'], likes: ['liked-creations', 'images'], follows: ['following', 'following'], following: ['followers', 'followers'], comments: ['comments', 'comments'] };

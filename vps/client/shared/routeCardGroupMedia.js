@@ -3,7 +3,7 @@
  *
  * Dependencies are ordinary static imports owned by the VPS client bundle.
  */
-import { setRouteMediaBackgroundImage } from './routeMedia.js';
+import { nsfwMediaUrl, nsfwShouldBlur } from './nsfwPolicy.js';
 import {
 	creationMediaType,
 	creationNeedsAudioWaveformCover,
@@ -30,17 +30,17 @@ import {
 function resolveRouteCardThumbUrl(item, preferThumbnail, isVideo) {
 	const feedItem = normalizeRouteCardFeedItem(item);
 	const groupCover = resolveGroupCoverDisplayUrl(feedItem, preferThumbnail && !isVideo);
-	if (groupCover) return groupCover;
+	if (groupCover) return nsfwMediaUrl(groupCover, feedItem);
 	if (isVideo) {
 		const poster = feedItem.thumbnail_url || feedItem.image_url || feedItem.url || "";
-		return typeof poster === "string" ? poster.trim() : "";
+		return nsfwMediaUrl(typeof poster === "string" ? poster.trim() : "", feedItem);
 	}
 	const fromFeed = feedItemCardImageUrl(feedItem, preferThumbnail);
 	if (fromFeed) return fromFeed;
 	const raw = preferThumbnail
 		? (feedItem.thumbnail_url || feedItem.image_url || feedItem.url || "")
 		: (feedItem.image_url || feedItem.url || feedItem.thumbnail_url || "");
-	return typeof raw === "string" ? raw.trim() : "";
+	return nsfwMediaUrl(typeof raw === "string" ? raw.trim() : "", feedItem);
 }
 
 function markRouteMediaGroupHost(mediaEl) {
@@ -80,7 +80,7 @@ export function hydrateRouteCardMedia(mediaEl, item, options = {}) {
 	}
 
 	const groupVideoSlides = getFeedItemGroupVideoSlides(feedItem);
-	if (isVideo && groupVideoSlides.length > 1) {
+	if (isVideo && groupVideoSlides.length > 1 && !nsfwShouldBlur(feedItem)) {
 		markRouteMediaGroupHost(mediaEl);
 		const posterUrl =
 			typeof options.posterUrl === "string" && options.posterUrl.trim()

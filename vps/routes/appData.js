@@ -35,7 +35,7 @@ function publicNotification(row) {
 
 function publicUserMeta(meta) {
 	if (!meta || typeof meta !== 'object') return {};
-	const { apiKeyHash, vynlyBearerToken, presence_last_seen_at, appear_offline, chat_private_keys, ...safe } = meta;
+	const { apiKeyHash, vynlyBearerToken, presence_last_seen_at, appear_offline, chat_private_keys, forceLegacyFeed, ...safe } = meta;
 	return safe;
 }
 
@@ -62,7 +62,6 @@ export function createAppDataRoutes({ users, credits, notifications, servers }) 
 				enableNsfw: meta.enableNsfw === true,
 				showOwnPostsInFeed: meta.showOwnPostsInFeed === true,
 				audibleNotifications: meta.audibleNotifications !== false,
-				forceLegacyFeed: meta.forceLegacyFeed === true,
 				hasApiKey: Boolean(privateMeta.apiKeyHash),
 				apiKeyPrefix: typeof privateMeta.apiKeyPrefix === 'string' ? privateMeta.apiKeyPrefix : null,
 				hasVynlyToken: Boolean(typeof privateMeta.vynlyBearerToken === 'string' && privateMeta.vynlyBearerToken.trim()),

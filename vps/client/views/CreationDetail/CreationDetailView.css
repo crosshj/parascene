@@ -751,11 +751,20 @@ body.creation-detail-page main>section:first-of-type {
 	z-index: 6;
 }
 
-/* Stack NSFW blur/label above hero video stack (z-index 2) and play overlay (z-index 4). */
+/* Stack the eye above the hero. The blur itself is the server bitmap, not a CSS frost of the clear file. */
 .creation-detail-image-wrapper.nsfw:not(.nsfw-revealed)::after {
 	z-index: 5;
 	pointer-events: auto;
 	cursor: pointer;
+	backdrop-filter: none;
+	-webkit-backdrop-filter: none;
+	background: none;
+}
+
+.creation-detail-image-wrapper.nsfw-server-blur::after {
+	backdrop-filter: none;
+	-webkit-backdrop-filter: none;
+	background: none;
 }
 
 .creation-detail-image-wrapper.nsfw::before {

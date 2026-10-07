@@ -34,9 +34,12 @@ import {
 } from './doomCommentsPopover.js';
 import { warmDoomSlideVideo } from './doomScrollWarm.js';
 import {
+	feedItemCardImageUrl,
 	feedItemCardImageUrlCandidates,
 	getFeedItemGroupVideoSlides
 } from '../../shared/feedCardBuild.js';
+import { feedItemPlayableVideoUrl } from '../../shared/videoFirstFramePoster.js';
+import { itemIsNsfw, nsfwShouldBlur, readNsfwPolicy } from '../../shared/nsfwPolicy.js';
 import { mountSequentialVideoPlayer } from '../../shared/sequentialVideoPlayer.js';
 
 /** @type {null | (() => void)} */
@@ -156,6 +159,7 @@ function resolveDoomSlideVideo(slide) {
  * @param {{ onFirstReveal?: () => void, onPlaybackStateChange?: () => void, onIndexChange?: () => void }} [hooks]
  */
 function mountDoomGroupVideoPlaylist(slide, item, hooks = {}) {
+	if (nsfwShouldBlur(item)) return null;
 	const groupSlides = getFeedItemGroupVideoSlides(item);
 	if (groupSlides.length <= 1) return null;
 	const mediaFrame = slide.querySelector('.chat-doom-slide-media-frame');
@@ -988,18 +992,46 @@ export async function mountChatDoomScroll(opts) {
 		syncPlayOverlayForSlide(slides()[activeIdx]);
 	});
 
-	const onNsfwPreferenceChangedForDoom = () => {
+	const onNsfwPreferenceChangedForDoom = (event) => {
 		queueMicrotask(() => {
-			try {
-				if (!document.body.classList.contains('view-nsfw')) {
-					for (const s of slides()) {
-						const fr = s.querySelector('.chat-doom-slide-media-frame.nsfw');
-						if (fr instanceof HTMLElement) fr.classList.remove('nsfw-revealed');
+			const membershipOff = event.detail?.membershipChanged === true && !readNsfwPolicy().showInCollections;
+			for (const slide of slides()) {
+				if (!(slide instanceof HTMLElement)) continue;
+				const cid = Number(slide.dataset.creationId);
+				let item = null;
+				for (const candidate of videoByKey.values()) {
+					if (Number(candidate?.created_image_id ?? candidate?.id) === cid) {
+						item = candidate;
+						break;
 					}
 				}
-			} catch {
-				// ignore
+				if (!item) continue;
+				if (membershipOff && itemIsNsfw(item) && cid !== startCreationId) {
+					slide.remove();
+					continue;
+				}
+				const blur = nsfwShouldBlur(item);
+				const frame = slide.querySelector('.chat-doom-slide-media-frame');
+				if (frame instanceof HTMLElement) {
+					frame.classList.toggle('nsfw', itemIsNsfw(item));
+					frame.classList.toggle('nsfw-revealed', itemIsNsfw(item) && !blur);
+				}
+				const video = slide.querySelector('video.chat-doom-video');
+				if (video instanceof HTMLVideoElement) {
+					const poster = feedItemCardImageUrl(item);
+					if (poster) video.poster = poster;
+					if (blur) {
+						video.pause();
+						video.removeAttribute('src');
+						try { video.load(); } catch { /* ignore */ }
+					} else {
+						const file = feedItemPlayableVideoUrl(item);
+						if (file) video.src = file;
+					}
+				}
 			}
+			const list = slides();
+			if (activeIdx >= list.length) activeIdx = Math.max(0, list.length - 1);
 			playActive();
 			const cur = slides()[activeIdx];
 			if (cur instanceof HTMLElement) syncPlayOverlayForSlide(cur);

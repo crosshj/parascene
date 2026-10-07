@@ -9,6 +9,18 @@ import { createRouter } from './core/router.js';
 import { createSession } from './core/session.js';
 import { appViews as views } from './views/index.js';
 import { initCommandPalette } from './shared/commandPalette/commandPalette.js';
+import { initNsfwViewPreference, setNsfwContentEnabled } from './shared/nsfwView.js';
+
+function hydrateNsfwFromBootstrap(user) {
+	const meta = user?.meta && typeof user.meta === 'object' ? user.meta : null;
+	const enabled = typeof user?.enableNsfw === 'boolean'
+		? user.enableNsfw
+		: meta && typeof meta.enableNsfw === 'boolean'
+			? meta.enableNsfw
+			: null;
+	if (enabled !== null) setNsfwContentEnabled(enabled);
+	initNsfwViewPreference();
+}
 
 // Keep the beta install and offline caches independent from the production WWW app.
 if ('serviceWorker' in navigator) {
@@ -211,6 +223,7 @@ const routeDefinitions = [
 ];
 
 const bootstrap = window.__PARASCENE_BOOTSTRAP__ || {};
+hydrateNsfwFromBootstrap(bootstrap.user);
 const state = createApplicationState({ bootstrap });
 const providers = createAppProviders({ bootstrap });
 // Avatar-bearing dialogs and overlays can be mounted beside the app shell.

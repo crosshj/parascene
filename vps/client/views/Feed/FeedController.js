@@ -9,7 +9,7 @@ import { renderFeedCardsSkeleton, renderMobileFeedCardsSkeleton } from '../../sh
 import { enableLikeButtons } from '../../shared/likes.js';
 import { safeMediaPlay } from '../../shared/safeMediaPlay.js';
 import { openChallengeVoteModalFromMessages } from '../Challenges/mountPane.js';
-import { setFeedBetaEnabledClient, feedBetaActiveFromProfile } from '../../shared/feedBetaNav.js';
+import { setFeedBetaEnabledClient } from '../../shared/feedBetaNav.js';
 import { createScrollContext } from '../../core/scrollContext.js';
 
 export function createFeedController({ root, actions, services, setHeaderMenu }) {
@@ -166,11 +166,29 @@ export function createFeedController({ root, actions, services, setHeaderMenu })
  window.addEventListener('ps:challenge-vote-modal-request',vote,{signal:lifetime.signal});
  document.addEventListener('visibilitychange',()=>{ if (document.hidden) pauseMedia(); else { resumeMedia(); void checkVersion(); } },{signal:lifetime.signal});
  window.addEventListener('focus',checkVersion,{signal:lifetime.signal});
- document.addEventListener('nsfw-preference-changed',()=>void load(true),{signal:lifetime.signal});
+ document.addEventListener('nsfw-preference-changed', (event) => {
+  if (event.detail?.membershipChanged === false) {
+   for (const card of [...content.querySelectorAll('.feed-card[data-creation-id]')]) {
+    const id = card.getAttribute('data-creation-id');
+    const index = rows.findIndex((item) => String(item?.created_image_id ?? item?.id ?? '') === id);
+    if (index < 0) continue;
+    for (const target of [...videoTargets]) {
+     if (card.contains(target)) {
+      videoTargets.delete(target);
+      visibleVideos.delete(target);
+     }
+    }
+    card.__disposeFeedCard?.();
+    card.replaceWith(render(rows[index], index));
+   }
+   return;
+  }
+  void load(true);
+ }, {signal:lifetime.signal});
  document.addEventListener('creation-detail:mutation',onCreationMutation,{signal:lifetime.signal});
  const timer = setInterval(checkVersion,60000);
  setHeaderMenu?.({label:'Feed',items:[{label:'Refresh',action:'refresh'}],onSelect:()=>void load(true)});
- setFeedBetaEnabledClient(feedBetaActiveFromProfile(services.session.user));
+ setFeedBetaEnabledClient(true);
  void load(true); void checkVersion();
  return { destroy() { destroyed=true; ++epoch; lifetime.abort(); unsubscribeState?.(); request?.abort(); clearInterval(timer); document.removeEventListener('beta-mobile-scroll-owner-changed', bindScrollObservers); observer?.disconnect(); videoObserver?.disconnect(); voteModal?.destroy(); challengeLease?.release(); disposeCards(); } };
 }
