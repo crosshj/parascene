@@ -8,6 +8,7 @@ import { createLayout } from './core/layout.js';
 import { createRouter } from './core/router.js';
 import { createSession } from './core/session.js';
 import { appViews as views } from './views/index.js';
+import { initCommandPalette } from './shared/commandPalette/commandPalette.js';
 
 // Keep the beta install and offline caches independent from the production WWW app.
 if ('serviceWorker' in navigator) {
@@ -226,7 +227,21 @@ const layout = createLayout({
 	services,
 });
 const router = createRouter({ routes, state, layout });
+const commandPalette = initCommandPalette({
+	getThreads: () => providers.threads.query?.data?.threads || [],
+	getJoinedServers: () => providers.threads.query?.data?.servers || [],
+	getViewerId: () => state.selectors.session().userId,
+	navigateToPath: (href) => {
+		void router.navigate(href);
+	},
+});
+const stopCommandPaletteRoster = providers.threads.query?.subscribe(() => commandPalette.refresh());
+providers.threads.preload();
 const lifecycle = connectLifecycle({ state, session, providers, router });
 
 await lifecycle.start();
-window.addEventListener('pagehide', lifecycle.destroy, { once: true });
+window.addEventListener('pagehide', () => {
+	stopCommandPaletteRoster?.();
+	commandPalette.destroy();
+	lifecycle.destroy();
+}, { once: true });

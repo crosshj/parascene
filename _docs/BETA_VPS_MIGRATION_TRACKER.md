@@ -8,7 +8,6 @@ The remaining product and cutover scope is listed below.
 
 ## Product follow-ups
 
-- [ ] command-palette like we have in www, complete with keyboard shortcuts
 - [ ] Serve the pricing view inside the app.
 - [ ] Finish the sidebar plus controls and gear/settings control.
 - [ ] Help page title shows "Help - Help - parascene" with redundant title which is not consistent with app title separators eg. "Creation · parascene beta"; and noting "beta" in title is not needed

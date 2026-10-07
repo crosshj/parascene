@@ -5,3 +5,4 @@ import '../components/CreationCard/CreationCard.css';
 import '../components/Comments/Comments.css';
 import '../components/TriggeredSuggest/TriggeredSuggest.css';
 import '../components/WhoTooltip/WhoTooltip.css';
+import '../shared/commandPalette/commandPalette.css';
