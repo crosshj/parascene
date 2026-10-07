@@ -134,6 +134,7 @@ const routeDefinitions = [
 {path:'/p/:username',view:views.UserProfile,returnFromCreation:true,presentation:'overlay',defaultBackground:'/feed',title:'Profile',composer:'none'},
 {path:'/t/:tag',view:views.UserProfile,returnFromCreation:true,presentation:'overlay',defaultBackground:'/feed',title:'Tag',composer:'none'},
 {path:'/integrations',view:views.Connections,presentation:'overlay',defaultBackground:'/creations',title:'Connections',composer:'none'},
+	{ path: '/pricing', view: views.Pricing, presentation: 'overlay', defaultBackground: '/feed', title: 'Pricing', icon: 'credits', composer: 'none' },
 { path: '/prompt-library', view: views.Library, title: 'Prompt Library', icon: 'book', composer: 'none' },
 	{ path: '/styles/new', view: views.Library, title: 'Library', icon: 'book', composer: 'none' },
 	{ path: '/styles/:slug', view: views.Library, title: 'Library', icon: 'book', composer: 'none' },

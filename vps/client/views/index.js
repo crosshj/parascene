@@ -18,6 +18,7 @@ import { DirectMessageView } from './DirectMessage/DirectMessageView.js';
 import { LibraryView } from './Library/LibraryView.js';
 import { NotFoundView } from './NotFound/NotFoundView.js';
 import { CreateView } from './Create/CreateView.js';
+import { PricingView } from './Pricing/PricingView.js';
 import { DoomScrollView } from './DoomScroll/DoomScrollView.js';
 
 function cleanup(outlet, dispose) {
@@ -72,6 +73,7 @@ export const appViews = Object.freeze({
 	DirectMessage: DirectMessageView,
 	Library: LibraryView,
 	Create: CreateView,
+	Pricing: PricingView,
 	DoomScroll: DoomScrollView,
 	NotFound: NotFoundView,
 	CreationDetail: {

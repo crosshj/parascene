@@ -55,7 +55,7 @@ export function mountSidebarOverlays({ onAction, creditsQuery, onClaimCredits, o
 				<div class="ps-credits-content" data-credits-content>
 					<p class="ps-credits-balance">You have <strong data-credits-balance>—</strong> credits available.</p>
 					<section><h3>Claim daily free credits</h3><p>Claim 10 credits once per day.</p><div class="ps-credits-actions"><button class="ps-outline-button" data-overlay-action="claim-credits" disabled>Claim 10 credits</button><span data-credits-claim-status aria-live="polite">Checking daily credit availability…</span><button class="ps-credits-retry" data-overlay-action="retry-credits" hidden>Retry</button></div></section>
-					<section><h3>Get more credits</h3><p>Buy a credit pack or subscribe on the pricing page.</p><a class="ps-outline-button is-green" href="/credits" data-spa-link>${iconMarkup('credits')}View pricing</a></section>
+					<section><h3>Get more credits</h3><p>Buy a credit pack or subscribe on the pricing page.</p><a class="ps-outline-button is-green" href="/pricing" data-spa-link>${iconMarkup('credits')}View pricing</a></section>
 					<section><h3>Run a server</h3><p>Run a server and earn credits for supporting the community.</p><a class="ps-outline-button" href="/servers/new" data-spa-link>${iconMarkup('help')}Learn More</a></section>
 				</div>
 			</section>
@@ -166,6 +166,7 @@ export function mountSidebarOverlays({ onAction, creditsQuery, onClaimCredits, o
 		if (close || event.target.matches('.ps-modal-scrim')) { closeModal(); return; }
 		const modal = event.target.closest('[data-modal]');
 		if (modal && activeModal) {
+			if (event.target.closest('a[data-spa-link]')) { closeModal(); return; }
 			const action = event.target.closest('[data-overlay-action]')?.dataset.overlayAction;
 			if (action === 'notifications') openModal('notifications');
 			else if (action === 'claim-credits') void claimDailyCredits();

@@ -8,7 +8,6 @@ The remaining product and cutover scope is listed below.
 
 ## Product follow-ups
 
-- [ ] Serve the pricing view inside the app.
 - [ ] Finish the sidebar plus controls and gear/settings control.
 - [ ] Help page title shows "Help - Help - parascene" with redundant title which is not consistent with app title separators eg. "Creation · parascene beta"; and noting "beta" in title is not needed
 - [ ] generations with the composer don't work right like generations from create form; they mess up on the lifecycle in creations list: queued, generating, done
@@ -16,6 +15,8 @@ The remaining product and cutover scope is listed below.
 - [ ] don't show when "Untitled" on mobile vertical video cards
 - [ ] daily credits claim. Sidebar credits indicator should have badge to indicate credits can be claimed
 - [ ] beta PWA has issues with updating credits in the mobile header
+
+Later: hook up Stripe before the pricing overlay can complete a purchase. Founder checkout, credit-pack checkout, the return from Checkout, and switching back to Free still need the www billing endpoints (`/api/subscription/checkout`, `/api/credits/checkout`, `/api/subscription/checkout-return`, and `/api/profile/plan`), including plan and subscription updates on the user record.
 
 ## Public pages and discoverability
 
