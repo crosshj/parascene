@@ -110,6 +110,19 @@ test('Feed marks empty and literal Untitled titles for thin italic styling', {sk
  } finally {h.close()}
 });
 
+test('mobile vertical video cards omit an Untitled title overlay', {skip:!vm.SourceTextModule}, async()=>{
+ const h=await harness('/feed', async()=>response({}));
+ try {
+  const {createFeedSpotlightVideoTile}=await h.load('shared/feedCardBuild.js');
+  const video={media_type:'video',video_url:'/v.mp4',image_url:'/one.jpg'};
+  const untitled=createFeedSpotlightVideoTile({...video,id:1,created_image_id:1,title:'Untitled'},0);
+  assert.equal(untitled.querySelector('.chat-feed-mobile-spotlight-overlay'),null);
+  assert.equal(untitled.querySelector('a').getAttribute('aria-label'),'Open creation');
+  const titled=createFeedSpotlightVideoTile({...video,id:2,created_image_id:2,title:'Night drive'},1);
+  assert.equal(titled.querySelector('.chat-feed-mobile-spotlight-overlay-title').textContent,'Night drive');
+ } finally {h.close()}
+});
+
 test('mobile Feed starts with four full creation-card skeletons and no inserted challenge placeholder', {skip:!vm.SourceTextModule}, async()=>{
  let release;
  const pending = new Promise(resolve => { release = resolve; });

@@ -6,12 +6,9 @@ Current outstanding migration scope. Update this checklist as items are verified
 
 The remaining product and cutover scope is listed below.
 
-## Product follow-ups
-
 - [ ] Finish the sidebar plus controls and gear/settings control.
 - [ ] generations with the composer don't work right like generations from create form; they mess up on the lifecycle in creations list: queued, generating, done
 - [ ] make sure NSFW settings work as they do in WWW, this means refreshing images that are blurred serverside when switching to unblurred - what I'm seeing is very, very inconsistent with www as related to settings and everywhere in the app
-- [ ] don't show when "Untitled" on mobile vertical video cards
 - [ ] daily credits claim. Sidebar credits indicator should have badge to indicate credits can be claimed
 - [ ] beta PWA has issues with updating credits in the mobile header
 

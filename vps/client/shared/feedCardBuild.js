@@ -2308,6 +2308,7 @@ export function createFeedSpotlightVideoTile(item, itemIndex, options = {}) {
 	}
 	const titleRaw = typeof item.title === "string" ? item.title.trim() : "";
 	const titleDisplay = softenShoutingFeedTitleForSpotlight(titleRaw);
+	const showTitle = Boolean(titleDisplay) && titleDisplay.toLowerCase() !== "untitled";
 
 	const mediaType = typeof item.media_type === "string" ? item.media_type : "image";
 	const videoUrl = typeof item.video_url === "string" ? item.video_url.trim() : "";
@@ -2319,7 +2320,7 @@ export function createFeedSpotlightVideoTile(item, itemIndex, options = {}) {
 	const hit = document.createElement("a");
 	hit.className = "chat-feed-mobile-spotlight-cell-hit";
 	hit.href = href;
-	hit.setAttribute("aria-label", titleDisplay ? `Open creation: ${titleDisplay}` : "Open creation");
+	hit.setAttribute("aria-label", showTitle ? `Open creation: ${titleDisplay}` : "Open creation");
 	if (typeof options.performSpotlightNavigation === "function") {
 		hit.addEventListener("click", (ev) => {
 			ev.preventDefault();
@@ -2346,7 +2347,7 @@ export function createFeedSpotlightVideoTile(item, itemIndex, options = {}) {
 		badge.innerHTML = iconMarkup('eyeHidden');
 		imageContainer.append(badge);
 	}
-	if (titleRaw) {
+	if (showTitle) {
 		const overlay = document.createElement("div");
 		overlay.className = "chat-feed-mobile-spotlight-overlay";
 		overlay.setAttribute("aria-hidden", "true");
