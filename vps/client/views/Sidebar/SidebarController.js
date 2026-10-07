@@ -16,7 +16,7 @@ const settings=document.createElement('app-modal-profile'),about=document.create
 	function model() {
 		const preference = state.selectors.sidebarPreference();
 		const roster = threadsQuery?.data || { viewerId: providers.viewerId, threads: [], servers: [] };
-		const next = createSidebarModel(preference, roster);
+		const next = createSidebarModel(preference, roster, providers.presence);
 		if (creditsQuery?.data) next.footer.credits = formatCredits(creditsQuery.data.balance);
 		return next;
 	}
@@ -29,6 +29,7 @@ const settings=document.createElement('app-modal-profile'),about=document.create
 
 	function updateRoster(action) {
 		if (action?.action === 'refresh-sidebar') {
+			void providers.presence?.refresh();
 			void threadsQuery?.refresh({ force: true }).catch(() => undefined);
 			return;
 		}
@@ -87,10 +88,18 @@ const settings=document.createElement('app-modal-profile'),about=document.create
 	}
 
 	const unsubscribeState = state.subscribe(renderState);
+	const unsubscribePresence = providers.presence?.query.subscribe((snapshot) => {
+		// WWW paints its cached snapshot before fetching, then paints the result.
+		// Both renders participate in the offline-grace calculation.
+		if (snapshot.data) view.update(model());
+	});
 	const unsubscribeRoster = threadsQuery?.subscribe((snapshot) => {
 		if (snapshot.error?.status === 401) return session.redirectToLogin();
 		view.setRosterStatus(snapshot);
-		if (snapshot.data) renderState();
+		if (snapshot.data) {
+			providers.presence?.setThreads(snapshot.data.threads);
+			renderState();
+		}
 	});
 	const unsubscribeCredits = creditsQuery?.subscribe((snapshot) => {
 		if (snapshot.error?.status === 401) return session.redirectToLogin();
@@ -104,6 +113,7 @@ const settings=document.createElement('app-modal-profile'),about=document.create
 		handleAction,
 		destroy() {
 			unsubscribeState();
+			unsubscribePresence?.();
 			unsubscribeRoster?.();
 			unsubscribeCredits?.();
 			overlays.destroy();accountMenu.remove();settings.close();settings.remove();about.close();about.remove();

@@ -1,23 +1,24 @@
 # VPS migration tracker
 
-Current outstanding migration scope. Update this checklist as items are verified; dated decisions and observations remain in the [cutover log](BETA_CUTOVER_LOG.md). Governing migration and cutover standards live in the [migration guidance](BETA_VPS_SPA_MIGRATION_SOURCE_OF_TRUTH.md).
+Current outstanding migration scope. Update this checklist as items are verified. Governing migration and cutover standards live in the [migration guidance](BETA_VPS_SPA_MIGRATION_SOURCE_OF_TRUTH.md).
 
 ## Remaining product work
 
-The remaining product and cutover scope is listed below. Dated implementation details and validation remain in the [cutover log](BETA_CUTOVER_LOG.md).
+The remaining product and cutover scope is listed below.
 
 ## Product follow-ups
 
-- [ ] Presence indicators not working in sidebar
-- [ ] Bulk operations from creations list
-- [ ] Ability to delete a creation
+- [ ] Bulk operations from creations list (should also be applied consistently on My Files page)
+- [ ] Ability to delete a creation (soft delete)
 - [ ] command-palette like we have in www, complete with keyboard shortcuts
 - [ ] Serve the pricing view inside the app.
 - [ ] Finish the sidebar plus controls and gear/settings control.
 - [ ] Help page title shows "Help - Help - parascene" with redundant title which is not consistent with app title separators eg. "Creation · parascene beta"; and noting "beta" in title is not needed
 - [ ] generations with the composer don't work right like generations from create form; they mess up on the lifecycle in creations list: queued, generating, done
-- [ ] make sure NSFW settings work as they do in WWW, this means refreshing images that are blurred serverside when switching to unblurred
+- [ ] make sure NSFW settings work as they do in WWW, this means refreshing images that are blurred serverside when switching to unblurred - what I'm seeing is very, very inconsistent with www as related to settings and everywhere in the app
 - [ ] don't show when "Untitled" on mobile vertical video cards
+- [ ] daily credits claim. Sidebar credits indicator should have badge to indicate credits can be claimed
+- [ ] beta PWA has issues with updating credits in the mobile header
 
 ## Public pages and discoverability
 

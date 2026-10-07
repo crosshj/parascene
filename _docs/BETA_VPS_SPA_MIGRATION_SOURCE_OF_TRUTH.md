@@ -66,9 +66,8 @@ overlay and comments dialog, with router-owned slide URL changes. The API port
 retains WWW ranking, catalog fallback, composition, editorial pins, challenge
 engagement, seen/impression tracking and timeline selection under `vps/`.
 
-The Feed and Doom Scroll ports, including live beta review, are complete. Their
-implementation and validation are recorded in the cutover log; these behaviors
-are regression criteria for future changes.
+The Feed and Doom Scroll ports, including live beta review, are complete. These
+behaviors are regression criteria for future changes.
 
 ## Import adaptation
 
@@ -97,6 +96,5 @@ The creation-detail overlay requirements above describe the completed VPS owners
 - Preserve the requested feature scope. No silent deletion or replacement of behavior during cleanup.
 - A shell, static imports or successful initial load do not establish a completed feature port.
 - Resolve document-wide selectors, delayed listeners and navigation globals into mounted feature lifetimes; verify action-specific API contracts and teardown.
-- Dated Creation Detail API observations remain in the [cutover log](BETA_CUTOVER_LOG.md#creation-detail-api-observations-2026-10-01).
 - Review deep links, seed handoff, Back/Forward, dismiss/reopen, dismissal during loading, scroll retention and session expiry. Retained controllers must survive overlays without duplicate subscriptions; unmount must dispose owned work.
 - Building alone does not verify browser behavior. Resolve unclear WWW behavior or ownership before continuing the affected migration step.

@@ -6,12 +6,14 @@ import { createFilesProvider } from './files/index.js';
 import { createCreditsProvider } from './credits/index.js';
 import { createAvatarsProvider } from './avatars/index.js';
 import { createProfileProvider } from './profile/index.js';
+import { createPresenceProvider } from './presence/index.js';
 
 export function createAppProviders({ bootstrap = {} } = {}) {
 	const viewerId = Number(bootstrap.user?.id) || null;
 	const registry = createQueryRegistry();
 	const creations = createCreationsProvider({ viewerId, registry });
 	const providers = {
+		presence: createPresenceProvider({ viewerId }),
 		create: createCreateProvider({ viewerId, pendingCreations: creations.pending }),
 		threads: createThreadsProvider({ viewerId, registry }),
 		creations,

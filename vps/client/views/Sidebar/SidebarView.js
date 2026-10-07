@@ -21,7 +21,7 @@ function navigationMarkup(items) {
 
 function rosterRowMarkup(item, kind) {
 	const menuKey = kind === 'dm' ? 'dmRow' : kind === 'server' ? 'serverRow' : 'channelRow';
-	const presenceClass = kind === 'dm' && !item.online ? ' is-offline' : '';
+	const presenceClass = kind === 'dm' ? (item.online ? ' is-online' : ' is-offline') : '';
 	const unread = Number(item.unread) || 0;
 	const unreadClass = unread > 0 ? ' has-unread' : '';
 	return `<div class="sidebar-view__row${presenceClass}${unreadClass}" data-sidebar-item="${escapeHtml(item.id)}">

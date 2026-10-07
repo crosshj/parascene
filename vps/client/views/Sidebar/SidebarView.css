@@ -222,6 +222,7 @@
 .sidebar-view__row-body { display: flex; flex: 1 1 auto; flex-direction: column; align-items: flex-start; justify-content: center; min-width: 0; }
 .sidebar-view__row-title-line { display: flex; flex-direction: row; align-items: center; gap: 5px; width: 100%; min-width: 0; }
 .sidebar-view__row.is-offline { opacity: .62; }
+.sidebar-view__row.is-online .sidebar-view__row-label { font-weight: 600; }
 .sidebar-view__row.is-offline .sidebar-view__row-label { color: color-mix(in srgb, currentColor 72%, #525a6b); }
 .ps-avatar,
 .sidebar-view__avatar {

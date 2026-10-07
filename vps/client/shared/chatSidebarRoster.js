@@ -1,3 +1,5 @@
+import { getDmOtherUserId } from './dmIdentity.js';
+export { getDmOtherUserId } from './dmIdentity.js';
 /**
  * Shared roster logic for Connect chat list and full-page chat sidebar (channels + DMs).
  */
@@ -1106,20 +1108,6 @@ export function buildChatThreadRowAvatarHtml(t, deps) {
 }
 
 /** @param {object} t */
-export function getDmOtherUserId(t) {
-	if (!t || t.type !== 'dm') return null;
-	const ou = t.other_user;
-	if (ou && ou.id != null) {
-		const n = Number(ou.id);
-		if (Number.isFinite(n) && n > 0) return n;
-	}
-	const raw = t.other_user_id;
-	if (raw != null) {
-		const n = Number(raw);
-		if (Number.isFinite(n) && n > 0) return n;
-	}
-	return null;
-}
 
 /**
  * DM thread whose counterparty is the viewer (notes-to-self / same user id in pair key).
