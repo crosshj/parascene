@@ -3,9 +3,19 @@ import { mountChatDoomScroll, teardownChatDoomScroll } from './doomScrollMount.j
 import { openDoomCommentsPopover, destroyDoomCommentsPopover } from './doomCommentsPopover.js';
 import { createFeedRequest } from '../../providers/feed/api.js';
 import { getHiddenFeedItems } from '../../shared/feedHiddenItems.js';
+import { doomSeedItem } from '../../shared/doomFeedVideoCache.js';
+
+function showPendingIndicator(root) {
+	const pending = document.createElement('div');
+	pending.className = 'chat-doom-pending';
+	pending.setAttribute('role', 'status');
+	pending.setAttribute('aria-label', 'Loading');
+	pending.innerHTML = '<span class="chat-doom-pending-spinner" aria-hidden="true"></span>';
+	root.replaceChildren(pending);
+}
 
 export const DoomScrollView = Object.freeze({
- mount({ outlet, creationId, services, actions }) {
+ mount({ outlet, creationId, services, actions, seed }) {
   const root = document.createElement('section');
   root.className = 'doom-scroll-view';
   root.id = 'chat-doom-scroll-overlay';
@@ -19,9 +29,11 @@ export const DoomScrollView = Object.freeze({
    teardownChatDoomScroll();
    request = new AbortController();
    const signal = request.signal;
-   root.innerHTML = '<p class="chat-doom-error" role="status">Loading video…</p>';
+   root.innerHTML = '';
+   showPendingIndicator(root);
    return mountChatDoomScroll({
     hostEl: root, startCreationId: Number(id), signal,
+    seedItem: doomSeedItem(seed, id),
     fetchJsonWithStatusDeduped: createFeedRequest(signal), getHiddenFeedItems,
     viewerUserId: services.providers.viewerId, viewer: services.session.user,
     onDismiss: () => actions.dismissOverlay(),

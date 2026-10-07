@@ -269,7 +269,25 @@ export async function mountChatDoomScroll(opts) {
 		pageSize: DOOM_FEED_PAGE_SIZE
 	});
 
-	const mountPage = await doomPager.fetchMountPage(startCreationId);
+	const seedItem =
+		opts.seedItem &&
+		Number(opts.seedItem.created_image_id ?? opts.seedItem.id) === startCreationId
+			? opts.seedItem
+			: null;
+	const mountPromise = doomPager.fetchMountPage(startCreationId);
+	/** Settled copy so a seed-first paint does not leave the timeline request unhandled. */
+	const seedTimeline = seedItem
+		? mountPromise.then(
+			(page) => ({ ok: true, page }),
+			() => ({ ok: false })
+		)
+		: null;
+	let mountPage;
+	if (seedItem) {
+		mountPage = { pageItems: [seedItem], hasMore: true };
+	} else {
+		mountPage = await mountPromise;
+	}
 	if (opts.signal?.aborted) return;
 	const orderedVideos = normalizeDoomAnchorMountItems(
 		mountPage.pageItems,
@@ -413,6 +431,25 @@ export async function mountChatDoomScroll(opts) {
 		sync();
 	}
 
+	function armDelayedPlaybackIndicator(slide, video) {
+		if (!(video instanceof HTMLVideoElement) || video.readyState >= 2) return;
+		const hold = document.createElement('div');
+		hold.className = 'chat-doom-pending chat-doom-pending--over-media';
+		hold.setAttribute('aria-hidden', 'true');
+		hold.innerHTML = '<span class="chat-doom-pending-spinner" aria-hidden="true"></span>';
+		const media = slide.querySelector('.chat-doom-slide-media') || slide;
+		media.appendChild(hold);
+		const clear = () => {
+			hold.remove();
+			video.removeEventListener('loadeddata', clear);
+			video.removeEventListener('playing', clear);
+			video.removeEventListener('error', clear);
+		};
+		video.addEventListener('loadeddata', clear);
+		video.addEventListener('playing', clear);
+		video.addEventListener('error', clear);
+	}
+
 	function appendDoomSlideForItem(item, eagerVideoLoad = false) {
 		const slide = createDoomSlideElement(item, viewerUserId ?? -1, { signal: opts.signal });
 		const groupPlayer = mountDoomGroupVideoPlaylist(slide, item, doomGroupPlaylistHooks(slide));
@@ -421,6 +458,7 @@ export async function mountChatDoomScroll(opts) {
 			if (v0 instanceof HTMLVideoElement) {
 				v0.preload = 'auto';
 				v0.setAttribute('data-chat-doom-warm', 'auto');
+				armDelayedPlaybackIndicator(slide, v0);
 			}
 		}
 		scroller.appendChild(slide);
@@ -519,7 +557,8 @@ export async function mountChatDoomScroll(opts) {
 	/** Ignore scroll-idle resolve until first anchor play starts (avoids refresh double-play). */
 	let doomScrollPlaybackReady = false;
 	/** In-memory mount tail (slides for first `/api/feed/doom` page) finished — blocks idle API prefetch. */
-	let mountInMemoryTailComplete = anchorIndex + 1 >= orderedVideos.length;
+	let doomTimelineReady = !seedItem;
+	let mountInMemoryTailComplete = doomTimelineReady && anchorIndex + 1 >= orderedVideos.length;
 
 	/** Skip pause-on-scroll while we re-snap after appending older slides (same gesture system as swipe intent). */
 	let suppressSwipePauseOnAppend = false;
@@ -1232,7 +1271,7 @@ export async function mountChatDoomScroll(opts) {
 	 */
 	async function maybeAppendMore(requireNearEnd = true) {
 		if (!doomHasMore || doomPagingBusy) return;
-		if (!mountInMemoryTailComplete || !doomScrollPlaybackReady) return;
+		if (!doomTimelineReady || !mountInMemoryTailComplete || !doomScrollPlaybackReady) return;
 		const list = slides();
 		if (list.length === 0) return;
 		if (requireNearEnd && !isNearEndOfSlideList()) return;
@@ -1250,9 +1289,14 @@ export async function mountChatDoomScroll(opts) {
 	/** Small batches + idle yield: a dozen videos × metadata + eager posters in one frame was janking the anchor decode. */
 	const DOOM_TAIL_CHUNK = 4;
 	let tailSlideIdx = anchorIndex + 1;
+	let tailKickStarted = false;
 
+	let tailChunkQueued = false;
 	function scheduleNextTailChunk() {
+		if (tailChunkQueued || tailSlideIdx >= orderedVideos.length) return;
+		tailChunkQueued = true;
 		const run = () => {
+			tailChunkQueued = false;
 			if (!doomMountAlive) return;
 			requestAnimationFrame(appendTailSlidesChunk);
 		};
@@ -1295,6 +1339,35 @@ export async function mountChatDoomScroll(opts) {
 		} else {
 			scheduleNextTailChunk();
 		}
+	}
+
+	if (seedTimeline) {
+		void seedTimeline.then((result) => {
+			if (!doomMountAlive || opts.signal?.aborted) return;
+			doomTimelineReady = true;
+			if (!result.ok) {
+				doomHasMore = false;
+				mountInMemoryTailComplete = tailSlideIdx >= orderedVideos.length;
+				return;
+			}
+			const full = normalizeDoomAnchorMountItems(result.page.pageItems, startCreationId);
+			const have = new Set(orderedVideos.map((it) => String(it?.created_image_id ?? it?.id ?? '')));
+			for (const it of full) {
+				const id = String(it?.created_image_id ?? it?.id ?? '');
+				if (!id || have.has(id)) continue;
+				orderedVideos.push(it);
+				have.add(id);
+				const key = getChatFeedItemKey(it);
+				if (!videoByKey.has(key)) videoByKey.set(key, it);
+			}
+			doomHasMore = Boolean(result.page.hasMore);
+			if (tailSlideIdx < orderedVideos.length) {
+				mountInMemoryTailComplete = false;
+				if (tailKickStarted) scheduleNextTailChunk();
+			} else {
+				mountInMemoryTailComplete = true;
+			}
+		});
 	}
 
 	/**
@@ -1345,6 +1418,7 @@ export async function mountChatDoomScroll(opts) {
 		}, 250);
 		scheduleLightWarmAdjacentSlides();
 		refreshWarmupObservers();
+		tailKickStarted = true;
 		if (anchorIndex + 1 < orderedVideos.length) {
 			scheduleNextTailChunk();
 		}

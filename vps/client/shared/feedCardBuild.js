@@ -23,6 +23,7 @@ import {
 	feedItemNeedsVideoFramePoster,
 	feedItemPlayableVideoUrl
 } from './videoFirstFramePoster.js';
+import { rememberFeedDoomVideo } from './doomFeedVideoCache.js';
 import { primeMediaElementForAudioLeveling } from './mediaAudioLeveling.js';
 import {
 	hydrateChallengeHistoryThumbnails,
@@ -2100,6 +2101,7 @@ function finishFeedCreationCardMediaAndClick(
 		} else {
 			const videoEl = card.querySelector('.feed-card-video');
 			if (videoEl) {
+				rememberFeedDoomVideo(item);
 				primeMediaElementForAudioLeveling(videoEl);
 				videoEl.removeAttribute('poster');
 				videoEl.muted = true;
@@ -2326,7 +2328,8 @@ export function createFeedSpotlightVideoTile(item, itemIndex, options = {}) {
 			ev.preventDefault();
 			const h = hit.getAttribute("href");
 			if (!h || h === "#") return;
-			options.performSpotlightNavigation(h, ev);
+			rememberFeedDoomVideo(item);
+			options.performSpotlightNavigation(h, ev, item);
 		});
 	}
 
@@ -2381,6 +2384,7 @@ export function createFeedSpotlightVideoTile(item, itemIndex, options = {}) {
 	const processing = isFeedCreationImageProcessing(item);
 	const moderated = item?.is_moderated_error === true;
 
+	if (isFeedRowVideoCreation(item)) rememberFeedDoomVideo(item);
 	if (!isFeedRowVideoCreation(item)) {
 		markFeedCardImageUnavailable(imageContainer, img, {
 			state: moderated ? "moderated" : "missing",

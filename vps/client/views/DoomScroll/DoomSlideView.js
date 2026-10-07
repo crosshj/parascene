@@ -9,8 +9,10 @@ import {
 } from "../../shared/feedCardBuild.js";
 import {
 	applyVideoFirstFramePoster,
-	feedItemNeedsVideoFramePoster
+	feedItemNeedsVideoFramePoster,
+	feedItemPlayableVideoUrl
 } from "../../shared/videoFirstFramePoster.js";
+import { claimWarmedDoomVideo } from "../../shared/doomFeedVideoCache.js";
 import { getAvatarColor } from "../../shared/avatar.js";
 import { renderCommentAvatarHtml } from "../../shared/commentItem.js";
 import { primeMediaElementForAudioLeveling } from "../../shared/mediaAudioLeveling.js";
@@ -576,7 +578,7 @@ export function createDoomSlideElement(item, viewerUserId, slideOpts = {}) {
 	const bgLoad = Boolean(slideOpts.backgroundLoad);
 	const cid = Number(item.created_image_id || item.id);
 	const uid = Number(item.user_id);
-	const videoUrl = typeof item.video_url === 'string' ? item.video_url.trim() : '';
+	const videoUrl = feedItemPlayableVideoUrl(item);
 	const youtube = !videoUrl ? youtubeEmbedFromCreationMeta(item.meta) : null;
 	/** Full `image_url` for poster fidelity; thumb only as fallback if full fails to load. */
 	const posterCandidates = feedItemCardImageUrlCandidates(item, false);
@@ -702,16 +704,17 @@ export function createDoomSlideElement(item, viewerUserId, slideOpts = {}) {
 		bindDoomYoutubeCaptionSuppress(iframe);
 		mediaFrame.appendChild(iframe);
 	} else {
-		const video = document.createElement('video');
+		const warmed = !bgLoad && videoUrl ? claimWarmedDoomVideo(videoUrl) : null;
+		const video = warmed instanceof HTMLVideoElement ? warmed : document.createElement('video');
 		video.className = 'chat-doom-video';
 		video.setAttribute('playsinline', '');
 		video.playsInline = true;
 		video.loop = true;
 		video.muted = true;
-		video.preload = bgLoad ? 'none' : 'metadata';
+		video.preload = warmed ? 'auto' : (bgLoad ? 'none' : 'metadata');
 		primeMediaElementForAudioLeveling(video);
 		if (needsFramePoster) video.preload = bgLoad ? 'metadata' : 'auto';
-		if (videoUrl) video.src = videoUrl;
+		if (videoUrl && video.getAttribute('src') !== videoUrl && !video.src.endsWith(videoUrl)) video.src = videoUrl;
 		if (needsFramePoster && posterImg) {
 			applyVideoFirstFramePoster(posterImg, { videoUrl, existingVideo: video });
 		}

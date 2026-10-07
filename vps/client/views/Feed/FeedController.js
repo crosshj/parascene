@@ -3,6 +3,7 @@ import { createChatFeedFetchPage, getChatFeedItemKey } from '../../providers/fee
 import { createChatFeedChannelElementsFromSegments, getChatFeedMobileSpotlightHtml, mountChatFeedLoadMoreSkeleton, removeChatFeedLoadMoreSkeleton } from './feedChannelView.js';
 import { loadDeferredChatFeedChallenge, createChatFeedChallengePlaceholderElement, isChatFeedChallengePlaceholder } from './feedChannelChallenge.js';
 import { partitionChatFeedMobileAlternating, isFeedRowVideoCreation } from '../../shared/chatFeedMobilePartition.js';
+import { rememberFeedDoomVideo } from '../../shared/doomFeedVideoCache.js';
 import { createFeedItemCard, getFeedGroupVideoPlayer } from '../../shared/feedCardBuild.js';
 import { renderFeedCardsSkeleton, renderMobileFeedCardsSkeleton } from '../../shared/skeleton.js';
 import { enableLikeButtons } from '../../shared/likes.js';
@@ -58,7 +59,10 @@ export function createFeedController({ root, actions, services, setHeaderMenu })
   else { visibleVideos.add(target); updateVideo(target); }
  }
  function pauseMedia() { root.querySelectorAll('video,audio').forEach(player => player.pause()); for (const target of videoTargets) { target.classList.remove('is-active'); getFeedGroupVideoPlayer(target)?.pause(); } }
- function resumeMedia() { for (const target of videoTargets) updateVideo(target); }
+ function resumeMedia() {
+  for (const item of rows) rememberFeedDoomVideo(item);
+  for (const target of videoTargets) updateVideo(target);
+ }
  const unsubscribeState = services.state?.subscribe(state => {
   const next = Boolean(state.navigation?.overlay);
   if (next === overlayActive) return; overlayActive = next;
@@ -110,7 +114,7 @@ export function createFeedController({ root, actions, services, setHeaderMenu })
    rows.push(...fresh); hasMore = page.hasMore;
    if (reset) {
     disposeCards(); content.replaceChildren(); bindScrollObservers();
-    const result = createChatFeedChannelElementsFromSegments(mobile() ? partitionChatFeedMobileAlternating(rows, { reserveChallengeSlot: true }).segments : [{ type: 'cards', items: rows }], render, { resolveSpotlightHref: doomHref, performSpotlightNavigation: href => actions.navigate(href) });
+    const result = createChatFeedChannelElementsFromSegments(mobile() ? partitionChatFeedMobileAlternating(rows, { reserveChallengeSlot: true }).segments : [{ type: 'cards', items: rows }], render, { resolveSpotlightHref: doomHref, performSpotlightNavigation: (href, _event, item) => actions.navigate(href, { seed: item }) });
     routeWrap = result.routeWrap; cards = result.cards; content.append(routeWrap);
     void loadDeferredChatFeedChallenge({ messagesEl: content, routeWrap, mobileLayout: mobile(), fetchJson: createFeedRequest(request.signal), renderCard: render, isStale: () => destroyed || epoch !== token });
     scroll.to(0);

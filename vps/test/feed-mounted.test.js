@@ -213,13 +213,34 @@ test('Feed retries the same cursor and ignores a late response after unmount', {
  try{const {FeedView}=await h.load('views/Feed/FeedView.js');const mounted=FeedView.mount(h);await tick();await tick();h.outlet.querySelector('.feed-view__more').click();await tick();assert.match(h.outlet.querySelector('[role="status"]').textContent,/Try again/);assert.equal(h.outlet.querySelectorAll('.feed-card').length,1);h.outlet.querySelector('.feed-view__more').click();await tick();mounted.destroy();finish();await tick();assert.equal(h.outlet.children.length,0);assert.match(calls.filter(c=>c.url.startsWith('/api/feed?'))[2].url,/feed_after_image_id=5/);}finally{h.outlet.querySelector('.feed-view')?.remove();h.close();}
 });
 
+test('Doom Scroll opens a feed-cached video before the timeline request finishes', {skip:!vm.SourceTextModule}, async()=>{
+ let finish;
+ const item={id:42,created_image_id:42,media_type:'video',video_url:'/clip.mp4',image_url:'/one.jpg',title:'Clip'};
+ const h=await harness('/feed/doom/42',()=>new Promise(resolve=>{finish=()=>resolve(response({items:[item],hasMore:false}));}));
+ try {
+  const {rememberFeedDoomVideo}=await h.load('shared/doomFeedVideoCache.js');
+  rememberFeedDoomVideo(item);
+  const {DoomScrollView}=await h.load('views/DoomScroll/DoomScrollView.js');
+  const mounted=DoomScrollView.mount({...h,creationId:42,seed:item});
+  const video=h.outlet.querySelector('video.chat-doom-video');
+  assert.ok(video);
+  assert.match(video.getAttribute('src')||video.src,/clip\.mp4/);
+  assert.doesNotMatch(h.outlet.textContent,/Loading video/);
+  mounted.destroy();
+  finish();
+  await mounted.backgroundReady;
+  assert.equal(h.outlet.children.length,0);
+ } finally {h.close()}
+});
+
 test('Doom Scroll dismissal during loading aborts the request and cannot install late media', {skip:!vm.SourceTextModule}, async()=>{
  let finish, options;
  const h=await harness('/feed/doom/42',async(_url,opts)=>{options=opts;return new Promise(resolve=>{finish=()=>resolve(response({items:[{id:42,created_image_id:42,media_type:'video',video_url:'/clip.mp4'}],hasMore:false}));});});
  try {
   const {DoomScrollView}=await h.load('views/DoomScroll/DoomScrollView.js');
   const mounted=DoomScrollView.mount({...h,creationId:42});
-  assert.match(h.outlet.textContent,/Loading video/);
+  assert.ok(h.outlet.querySelector('.chat-doom-pending-spinner'));
+  assert.doesNotMatch(h.outlet.textContent, /Loading video/);
   mounted.destroy();assert.equal(options.signal.aborted,true);finish();await mounted.backgroundReady;
   assert.equal(h.outlet.children.length,0);assert.equal(h.w.document.querySelector('.chat-doom-slide'),null);assert.equal(h.w.document.body.classList.contains('chat-page--doom-scroll'),false);
  }finally{h.close();}
