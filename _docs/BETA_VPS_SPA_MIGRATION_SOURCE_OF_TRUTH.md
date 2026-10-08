@@ -33,6 +33,8 @@ When shared behavior is needed:
 - keep the port’s boundary and ownership clear;
 - verify the module graph from the Docker image’s `/app` root before deploying.
 
+**The server must not import `vps/client/`, including `vps/client/shared`.** That tree is client-only. Code shared by client and server lives in `vps/shared`. If the server needs a helper that currently sits under `vps/client/shared`, move the helper into `vps/shared` and have the client import it. A server import of a client module loads that module in Node, and a CSS import there exits the process on startup.
+
 ## Creations example
 
 The Creations browse feature is a completed port of the active WWW SPA chat/pseudo-channel surface. It is not a port of the deprecated standalone `app-route-creations` page or the abandoned `prsn_creations` table. The VPS `/api/creations` endpoint is canonical for `prsn_created_images`; the view owns list loading, offset pagination, optimistic pending cards, status polling, bounded lazy media loading, media selection, grouped covers/carousels/playlists, badges/privacy/status presentation, refresh/filter state, and grid markup/styles. Create workflow/composers and Creation Detail have separate owners and are not missing pieces of the browse view.

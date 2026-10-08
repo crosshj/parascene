@@ -1,0 +1,10 @@
+---
+description: Keep VPS runtime imports inside vps and off Node's module loader for CSS
+alwaysApply: true
+---
+
+# VPS import boundary
+
+VPS server and client modules must not import runtime code from outside `vps/`. That includes `public/`, `src/`, `api_routes/`, and any other legacy tree. Those files are references only. Copy the needed implementation into `vps/` and import that copy. An import that works only because the monorepo parent is present fails in the Docker image, whose root is `vps/`.
+
+**EXTREME: the server must not import `vps/client/`, including `vps/client/shared`.** That folder is client-only. Code used by both sides already lives in `vps/shared`. If a route, service, or db module needs a helper that is currently under `vps/client/shared`, move that helper into `vps/shared` and let the client import or re-export it. Do not point the server at the client module. A server import of client code pulls that module into Node at startup, so a CSS import beside it kills the process (`ERR_UNKNOWN_FILE_EXTENSION`).

@@ -38,7 +38,7 @@ import { normalizeEditedUploadBuffer } from "../services/create/editedImageUploa
 import { ACTIVE_SHARE_VERSION, mintShareToken } from "./utils/shareLink.js";
 import { getStyleInfo } from "../services/create/createStyles.js";
 import { PARASCENE_BLUE_SERVER_ID } from "../client/shared/generationDefaults.js";
-import { resolveProductNamedPrice } from "../client/shared/gpuOccupancy.js";
+import { resolveProductNamedPrice } from "../shared/gpuOccupancy.js";
 import { importSunoCreation, previewSunoImport } from "../services/create/importSunoCreation.js";
 import { importYoutubeCreation, previewYoutubeImport, refreshYoutubeImportCover } from "../services/create/importYoutubeCreation.js";
 import { finalizeAudioFileImport, startAudioFileImport } from "../services/create/importAudioFileCreation.js";
