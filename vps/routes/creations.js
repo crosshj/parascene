@@ -125,6 +125,10 @@ export function serializeCreation(row) {
 	};
 }
 
+function isStreamedVideoKey(key) {
+	return /\.(mp4|m4v|webm|mov|ogv)$/i.test(String(key || ""));
+}
+
 function setMediaHeaders(res, upstream, key) {
 	for (const name of ["content-length", "content-range", "accept-ranges", "etag", "last-modified"]) {
 		const value = upstream.headers.get(name);
@@ -210,8 +214,17 @@ export function createCreationsRoutes({ creations, users, appendChallengeEligibi
     const entry = await challengeCreationForViewer({ creations, viewer, creationId: req.query.creation_id, query: req.query });
     allowed = Boolean(entry && creationMediaKeys(entry).some(value => creations.safeKey(value) === key));
    }
-   if (!allowed) return res.status(404).json({ error: "Media not found" });
+			if (!allowed) return res.status(404).json({ error: "Media not found" });
 			const variant = String(req.query.variant || "").trim().toLowerCase();
+			// Video bytes stay on storage. This response is only the access check plus a
+			// short-lived URL, so a follow-up range does not download the file through the app.
+			if (!variant && isStreamedVideoKey(key) && typeof creations.signedPlaybackUrl === "function") {
+				const target = await creations.signedPlaybackUrl(key);
+				if (target) {
+					res.set("Cache-Control", "private, no-store");
+					return res.redirect(302, target);
+				}
+			}
 			if (variant === "grid_thumbnail") {
 				const response = await creations.fetchMedia(key, { method: "GET" });
 				if (!response.ok || !response.body) return res.status(404).json({ error: "Media not found" });

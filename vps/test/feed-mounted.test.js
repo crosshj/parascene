@@ -291,10 +291,9 @@ test('Doom Scroll buffers the next clips instead of leaving them on preload none
   const mounted=DoomScrollView.mount({...h,creationId:1});
   await mounted.backgroundReady;
   const videos=[...h.outlet.querySelectorAll('video.chat-doom-video')];
-  assert.equal(videos.length,3);
+  assert.equal(videos.length,2);
   assert.equal(videos[1].preload,'auto');
   assert.equal(videos[1].getAttribute('data-chat-doom-fetch'),'1');
-  assert.equal(videos[2].preload,'auto');
   mounted.destroy();
  } finally {h.close()}
 });

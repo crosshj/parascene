@@ -6,10 +6,9 @@ Current outstanding migration scope. Update this checklist as items are verified
 
 The remaining product and cutover scope is listed below.
 
-- [ ] likes and has user liked, comments, etc should be populated in doom scroll
 - [ ] the comments popover for doomscroll should be formated and EXACTLY like the www and any functionality WWW provides should be mirrored in doomscroll on vps (we don't want to re-invent the wheel or ignore hard-fought, past wisdom)
 
-Later: hook up Stripe before the pricing overlay can complete a purchase. Founder checkout, credit-pack checkout, the return from Checkout, and switching back to Free still need the www billing endpoints (`/api/subscription/checkout`, `/api/credits/checkout`, `/api/subscription/checkout-return`, and `/api/profile/plan`), including plan and subscription updates on the user record.
+- [ ] Hook up Stripe before the pricing overlay can complete a purchase. Founder checkout, credit-pack checkout, the return from Checkout, and switching back to Free still need the www billing endpoints (`/api/subscription/checkout`, `/api/credits/checkout`, `/api/subscription/checkout-return`, and `/api/profile/plan`), including plan and subscription updates on the user record.
 
 ## Public pages and discoverability
 
@@ -42,6 +41,7 @@ Likely future direction for rich links: have the client ask the server for a pre
 - [ ] Validate generic and edited image uploads, chat attachments, creation/comment inputs, previews and playback, owner listing/deletion, signed cross-origin media links, audio artwork/downloads, video range playback, near-limit files, and owner isolation
 - [ ] Confirm large upload bodies and media reads bypass Vercel; align Cloudflare, Nginx, VPS, and storage limits; verify CI-managed Nginx streaming configuration
 - [ ] Complete the reversible CDN rollout, retain the WWW transport as rollback until stable, then remove the temporary legacy transport switch
+- [ ] Creation videos follow the files video path. Local dev serves them on the local host. Beta and prod send playback only through `cdn.parascene.com`, with a signed link a video element can load without the session cookie. Do not leave playback on the app host or on a raw Supabase signed URL.
 - [ ] Deployment readiness: secrets/configuration, process and schedule ownership, logs/alerts, backups/restore, rate limits, rollback, and removal of old-runtime dependencies
 
 Resumable uploads, a durable upload ledger, per-file sharing/privacy controls,

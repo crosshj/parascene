@@ -464,6 +464,21 @@ if ((!owner && !discussable && !isAdmin) || (unavailable && !isAdmin)) return nu
 			return Boolean(row && creationMediaKeys(row).some((value) => safe === safeKey(value)));
 		},
 
+		async signedPlaybackUrl(filename, expiresIn = 6 * 60 * 60) {
+			const key = safeKey(filename);
+			if (!key || typeof client?.storage?.from !== "function") return null;
+			try {
+				const { data, error } = await client.storage.from(IMAGE_BUCKET).createSignedUrl(key, expiresIn);
+				const url = typeof data?.signedUrl === "string" ? data.signedUrl : "";
+				if (error || !url) return null;
+				const target = new URL(url);
+				const origin = new URL(supabaseUrl);
+				if (target.protocol !== origin.protocol || target.host !== origin.host) return null;
+				return target.toString();
+			} catch {
+				return null;
+			}
+		},
 		async fetchMedia(filename, { variant = "", method = "GET", range, signal } = {}) {
 			const key = safeKey(filename);
 			if (!key) return new Response(null, { status: 404 });

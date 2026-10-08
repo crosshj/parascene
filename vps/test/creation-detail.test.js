@@ -27,7 +27,7 @@ test('group detail serializes child thumbnails with parent access for legacy and
 	}
 });
 
-async function withApp(run, { mediaResponse, canAccessMedia = async () => true, fetchMedia } = {}) {
+async function withApp(run, { mediaResponse, canAccessMedia = async () => true, fetchMedia, signedPlaybackUrl } = {}) {
 	const row = {
 		id: 31885,
 		user_id: 42,
@@ -50,6 +50,7 @@ async function withApp(run, { mediaResponse, canAccessMedia = async () => true, 
 		canAccessMedia,
 		safeKey: (key) => key,
 		fetchMedia: fetchMedia || (async () => mediaResponse || new Response('media')),
+		signedPlaybackUrl,
 	};
 	const users = {
 		byId: async () => ({ id: 42, email: 'creator@example.com', role: 'consumer', meta: {} }),
@@ -136,6 +137,36 @@ test('creation video media preserves partial-content status and range headers', 
 		assert.equal(response.headers.get('accept-ranges'), 'bytes');
 		assert.deepEqual(Buffer.from(await response.arrayBuffer()), bytes);
 	}, { mediaResponse });
+});
+
+test('creation video playback redirects to storage after the access check', async () => {
+	let fetched = false;
+	await withApp(async (origin) => {
+		const headers = { Authorization: 'Bearer test' };
+		const target = 'https://example.supabase.co/storage/v1/object/sign/clip.mp4?token=abc';
+		for (const method of ['GET', 'HEAD']) {
+			const response = await fetch(`${origin}/api/videos/created/video/clip.mp4?creation_id=31885`, {
+				method,
+				headers,
+				redirect: 'manual',
+			});
+			assert.equal(response.status, 302);
+			assert.equal(response.headers.get('location'), target);
+			assert.match(response.headers.get('cache-control'), /no-store/);
+		}
+		const image = await fetch(`${origin}/api/images/created/creation.png?creation_id=31885`, { headers });
+		assert.equal(image.status, 200);
+		assert.equal(await image.text(), 'still-proxied');
+	}, {
+		signedPlaybackUrl: async (key) => key === 'video/clip.mp4'
+			? 'https://example.supabase.co/storage/v1/object/sign/clip.mp4?token=abc'
+			: null,
+		fetchMedia: async () => {
+			fetched = true;
+			return new Response('still-proxied', { status: 200, headers: { 'Content-Type': 'image/png' } });
+		},
+	});
+	assert.equal(fetched, true);
 });
 
 test('feed video URLs serve authenticated GET and HEAD through the range-capable media handler', async () => {

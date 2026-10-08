@@ -491,10 +491,10 @@ export async function mountChatDoomScroll(opts) {
 	for (let si = 0; si <= anchorIndex && si < orderedVideos.length; si += 1) {
 		appendDoomSlideForItem(orderedVideos[si], si === anchorIndex);
 	}
-	/** Next clips exist before the anchor finishes playing, so a swipe has a slide to land on. */
+	/** The next clip is in the DOM so it can buffer. One ahead keeps the active download first. */
 	let prebufferedAhead = 0;
 	const aheadRoom = orderedVideos.length - (anchorIndex + 1);
-	prebufferedAhead = Math.min(2, Math.max(0, aheadRoom));
+	prebufferedAhead = Math.min(1, Math.max(0, aheadRoom));
 	for (let ahead = 1; ahead <= prebufferedAhead; ahead += 1) {
 		appendDoomSlideForItem(orderedVideos[anchorIndex + ahead], false);
 	}
@@ -1190,17 +1190,15 @@ export async function mountChatDoomScroll(opts) {
 	}
 	window.addEventListener('keydown', onDoomKeydown);
 
-	/** Buffer the previous clip lightly and the next two fully, as soon as they exist. */
+	/** Buffer only the following clip. A second full download competes with the one on screen. */
 	function primePlaybackWindow() {
 		if (!doomMountAlive) return;
 		const list = slides();
 		const aheadLevel = shouldSkipAggressiveVideoWarm() ? 'metadata' : 'auto';
 		const prev = list[activeIdx - 1];
 		if (prev instanceof HTMLElement) warmDoomSlideVideo(prev, 'metadata');
-		for (let step = 1; step <= 2; step += 1) {
-			const next = list[activeIdx + step];
-			if (next instanceof HTMLElement) warmDoomSlideVideo(next, aheadLevel);
-		}
+		const next = list[activeIdx + 1];
+		if (next instanceof HTMLElement) warmDoomSlideVideo(next, aheadLevel);
 	}
 
 	/** Full buffer warm — deferred so swipe/scroll handlers stay light. */
