@@ -8,8 +8,10 @@
 .beta-app-overlay__content *::before,
 .beta-app-overlay__content *::after { box-sizing: border-box; }
 
-.beta-app-overlay__content a:not(.btn-primary):not(.btn-secondary):not(.btn-outlined):not(.route-empty-button) { color: var(--accent); }
-.beta-app-overlay__content button:not(.btn-primary):not(.btn-secondary):not(.btn-outlined):not(.route-empty-button) { color: inherit; }
+.beta-app-overlay__content a { color: var(--accent); }
+.beta-app-overlay__content button { color: inherit; }
+.beta-app-overlay__content :is(.btn-primary, a.btn-primary) { color: var(--accent-text); }
+.beta-app-overlay__content :is(.btn-secondary, .btn-outlined, .route-empty-button, a.btn-secondary, a.btn-outlined) { color: var(--text); }
 .beta-app-overlay__content [hidden] { display: none !important; }
 
 .btn-primary,
