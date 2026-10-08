@@ -44,8 +44,13 @@ export function escapeHtmlAttr(s) {
  * @param {object} item — feed / summary creation row
  * @returns {string}
  */
+function doomTitleText(item) {
+	const raw = typeof item?.title === 'string' ? item.title : '';
+	return raw.replace(/[\u200B-\u200D\uFEFF]/g, '').replace(/\s+/g, ' ').trim();
+}
+
 export function formatDoomCaption(item) {
-	const titleRaw = typeof item.title === 'string' ? item.title.trim() : '';
+	const titleRaw = doomTitleText(item);
 	if (!titleRaw || titleRaw.toLowerCase() === 'untitled') return '';
 	return softenShoutingFeedTitleForSpotlight(titleRaw);
 }
@@ -70,6 +75,19 @@ export function syncDoomSlideEngagement(slide, item) {
 		const handle = typeof item.author_user_name === 'string' ? item.author_user_name.trim() : '';
 		if (handle) name.textContent = `@${handle}`;
 		name.classList.toggle('founder-name', item.author_plan === 'founder');
+	}
+	const caption = formatDoomCaption(item);
+	const bottom = slide.querySelector('.chat-doom-bottom');
+	const existingCaption = slide.querySelector('.chat-doom-caption');
+	if (!caption) {
+		existingCaption?.remove();
+	} else if (existingCaption instanceof HTMLElement) {
+		existingCaption.textContent = caption;
+	} else if (bottom instanceof HTMLElement) {
+		const captionEl = document.createElement('p');
+		captionEl.className = 'chat-doom-caption';
+		captionEl.textContent = caption;
+		bottom.appendChild(captionEl);
 	}
 }
 
@@ -463,7 +481,14 @@ export function bindDoomVideoRevealWhenFrameReady(video, slide, opts = {}) {
 	/** @type {(() => void) | null} */
 	let onTimeUpdate = null;
 
+	/** @type {(() => void) | null} */
+	let onPlaying = null;
+
 	const cleanup = () => {
+		if (onPlaying) {
+			video.removeEventListener('playing', onPlaying);
+			onPlaying = null;
+		}
 		if (onTimeUpdate) {
 			video.removeEventListener('timeupdate', onTimeUpdate);
 			onTimeUpdate = null;
@@ -487,20 +512,41 @@ export function bindDoomVideoRevealWhenFrameReady(video, slide, opts = {}) {
 		revealDoomSlideVideoPlayback(slide);
 	};
 
-	if (!video.paused && video.readyState >= 2 && video.currentTime > 0) {
-		reveal();
-		return cleanup;
-	}
-
-	onTimeUpdate = () => {
-		if (video.currentTime > 0) reveal();
-	};
-	video.addEventListener('timeupdate', onTimeUpdate);
-
-	if (typeof video.requestVideoFrameCallback === 'function') {
+	const waitForPresentedFrame = () => {
+		if (done) return;
+		if (typeof video.requestVideoFrameCallback !== 'function') return;
 		rvfcId = video.requestVideoFrameCallback(() => {
+			rvfcId = undefined;
+			if (done) return;
+			if (!shouldReveal()) {
+				waitForPresentedFrame();
+				return;
+			}
 			reveal();
 		});
+	};
+
+	const arm = () => {
+		if (done) return;
+		if (typeof video.requestVideoFrameCallback === 'function') {
+			waitForPresentedFrame();
+			return;
+		}
+		if (!video.paused && video.readyState >= 2 && video.videoWidth > 0 && video.currentTime > 0) {
+			reveal();
+			return;
+		}
+		onTimeUpdate = () => {
+			if (video.readyState >= 2 && video.videoWidth > 0 && video.currentTime > 0) reveal();
+		};
+		video.addEventListener('timeupdate', onTimeUpdate);
+	};
+
+	if (video.paused) {
+		onPlaying = () => arm();
+		video.addEventListener('playing', onPlaying, { once: true });
+	} else {
+		arm();
 	}
 
 	doomVideoRevealCleanupByVideo.set(video, cleanup);
@@ -508,7 +554,8 @@ export function bindDoomVideoRevealWhenFrameReady(video, slide, opts = {}) {
 }
 
 /**
- * Hide poster and show the playing video (first frame / resume visible).
+ * Fade the video in over the still, then drop the still once the video is opaque.
+ * Hiding the poster at the start of the fade shows the black video background.
  * @param {HTMLElement | null | undefined} slide
  */
 export function revealDoomSlideVideoPlayback(slide) {
@@ -516,9 +563,29 @@ export function revealDoomSlideVideoPlayback(slide) {
 	const video = slide.querySelector('video.chat-doom-video');
 	const posterImg = slide.querySelector('img.chat-doom-poster');
 	const iframe = resolveDoomYoutubeIframe(slide);
-	if (video instanceof HTMLVideoElement) video.style.opacity = '1';
+	const hidePoster = () => {
+		if (posterImg instanceof HTMLImageElement) posterImg.hidden = true;
+	};
+	if (video instanceof HTMLVideoElement) {
+		if (video.style.opacity === '1') {
+			hidePoster();
+		} else {
+			const onEnd = (event) => {
+				if (event.target !== video || event.propertyName !== 'opacity') return;
+				video.removeEventListener('transitionend', onEnd);
+				hidePoster();
+			};
+			video.addEventListener('transitionend', onEnd);
+			video.style.opacity = '1';
+			window.setTimeout(() => {
+				video.removeEventListener('transitionend', onEnd);
+				hidePoster();
+			}, 240);
+		}
+	} else {
+		hidePoster();
+	}
 	if (iframe instanceof HTMLIFrameElement) iframe.style.opacity = '1';
-	if (posterImg instanceof HTMLImageElement) posterImg.hidden = true;
 }
 
 /**

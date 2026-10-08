@@ -446,18 +446,31 @@ export function mountSequentialVideoPlayer(container, slides, options = {}) {
 		syncVideoSlotAspect(video, slide);
 		video.classList.add('sequential-video-player-video--pending');
 		let revealed = false;
+		let frameWait = 0;
 		const revealOnce = () => {
 			if (revealed) return;
 			revealed = true;
+			if (frameWait) window.clearTimeout(frameWait);
 			revealVideo(video);
 			syncPlayPauseOverlay();
 		};
-		video.addEventListener('playing', revealOnce, { once: true });
-		video.addEventListener('loadeddata', revealOnce, { once: true });
+		const revealWhenFrameReady = () => {
+			if (revealed) return;
+			if (typeof video.requestVideoFrameCallback === 'function' && video.readyState >= 2 && !video.error) {
+				video.requestVideoFrameCallback(() => revealOnce());
+				frameWait = window.setTimeout(revealOnce, 400);
+				return;
+			}
+			revealOnce();
+		};
+		video.addEventListener('playing', () => {
+			revealWhenFrameReady();
+			if (!frameWait) frameWait = window.setTimeout(revealOnce, 400);
+		}, { once: true });
 		video.addEventListener('error', revealOnce, { once: true });
 		await tryPlayVideo(video);
-		if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-			revealOnce();
+		if (!video.paused && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+			revealWhenFrameReady();
 		}
 		syncPlayPauseOverlay();
 		attachEarlyPreload(video);

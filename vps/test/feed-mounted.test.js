@@ -336,6 +336,8 @@ test('Feed renders saved likes and liker tooltips and updates both after unlike'
 
 test('Doom comments sheet keeps the mobile keyboard layout and www open/close behavior', {skip:!vm.SourceTextModule}, async()=>{
  const css = fs.readFileSync(path.resolve('client/views/DoomScroll/DoomCommentsPopover.css'), 'utf8');
+ assert.match(css, /\.chat-doom-comments-overlay \*[\s\S]*?box-sizing:\s*border-box/);
+ assert.match(css, /\.chat-doom-comments-overlay \[hidden\] \{\s*display:\s*none !important/);
  assert.match(css, /--chat-doom-sheet-keyboard-cover:\s*45dvh/);
  assert.match(css, /--chat-doom-sheet-content:\s*30dvh/);
  assert.match(css, /height:\s*calc\(var\(--chat-doom-sheet-keyboard-cover\) \+ var\(--chat-doom-sheet-content\)\)/);
