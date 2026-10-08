@@ -1,6 +1,8 @@
 /**
  * Two-stage off-screen doom video warm-up (metadata → auto on swipe / visibility).
- * Only bumps `preload` — no `video.load()` (reload flashes black on iOS).
+ * A later `preload` change is ignored once the element chose `none`, so a stalled
+ * element (no frames, nothing in flight) is kicked with `load()`. Elements that
+ * already have a frame are left alone — reloading those flashes black.
  */
 
 /** @typedef {'metadata' | 'auto'} DoomVideoWarmLevel */
@@ -35,23 +37,61 @@ export function doomVideoWarmLevel(video) {
  * @param {DoomVideoWarmLevel} level
  * @returns {boolean} whether level was applied
  */
+/**
+ * True when the element has a source but has not received data and is not fetching.
+ * @param {HTMLVideoElement} video
+ */
+export function doomVideoFetchStalled(video) {
+	if (!(video instanceof HTMLVideoElement)) return false;
+	if (video.readyState > 0) return false;
+	if (video.networkState === 2) return false;
+	return Boolean(video.getAttribute('src') || video.currentSrc || video.src);
+}
+
+/**
+ * Start the resource selection that `preload="none"` skipped.
+ * One kick per source so a later warm pass does not abort an in-flight fetch.
+ * @param {HTMLVideoElement} video
+ * @returns {boolean}
+ */
+export function kickDoomVideoFetch(video) {
+	if (!doomVideoFetchStalled(video)) return false;
+	const src = video.currentSrc || video.getAttribute('src') || video.src || '';
+	if (video.getAttribute('data-chat-doom-fetch-src') !== src) {
+		video.removeAttribute('data-chat-doom-fetch');
+		if (src) video.setAttribute('data-chat-doom-fetch-src', src);
+	}
+	if (video.getAttribute('data-chat-doom-fetch') === '1') return false;
+	video.setAttribute('data-chat-doom-fetch', '1');
+	try {
+		video.load();
+	} catch {
+		video.removeAttribute('data-chat-doom-fetch');
+		return false;
+	}
+	return true;
+}
+
 export function warmDoomVideoElement(video, level) {
 	if (!(video instanceof HTMLVideoElement)) return false;
 	if (!video.src && !video.currentSrc) return false;
 
+	const requested = level === 'auto' && shouldSkipAggressiveVideoWarm() ? 'metadata' : level;
 	const cur = doomVideoWarmLevel(video);
-	if (level === 'metadata') {
-		if (cur === 'metadata' || cur === 'auto') return false;
-		video.preload = 'metadata';
-		video.setAttribute('data-chat-doom-warm', 'metadata');
-		return true;
+	if (requested === 'metadata') {
+		if (cur !== 'metadata' && cur !== 'auto') {
+			video.preload = 'metadata';
+			video.setAttribute('data-chat-doom-warm', 'metadata');
+		}
+		return kickDoomVideoFetch(video) || (cur !== 'metadata' && cur !== 'auto');
 	}
 
-	if (level === 'auto') {
-		if (shouldSkipAggressiveVideoWarm()) return false;
-		if (cur === 'auto') return false;
-		video.preload = 'auto';
-		video.setAttribute('data-chat-doom-warm', 'auto');
+	if (requested === 'auto') {
+		if (cur !== 'auto') {
+			video.preload = 'auto';
+			video.setAttribute('data-chat-doom-warm', 'auto');
+		}
+		kickDoomVideoFetch(video);
 		return true;
 	}
 

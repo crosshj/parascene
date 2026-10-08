@@ -616,6 +616,60 @@
 	height: 26px;
 }
 
+.doom-scroll-view .chat-doom-rail button.feed-card-action[data-like-button] svg path {
+	fill: none;
+	stroke: currentcolor;
+	transition: fill 0.15s ease;
+}
+
+.doom-scroll-view .chat-doom-rail button.feed-card-action[data-like-button][aria-pressed="true"] svg path {
+	fill: currentcolor;
+	stroke: currentcolor;
+}
+
+.doom-scroll-view .chat-doom-rail button.feed-card-action[data-like-button].is-like-animating svg {
+	animation: like-beat 1.35s cubic-bezier(0.2, 0.9, 0.2, 1);
+	transform-origin: center;
+}
+
+.doom-scroll-view .chat-doom-rail button.feed-card-action[data-like-button].is-like-animating svg path {
+	fill: currentcolor;
+}
+
+@keyframes like-beat {
+	0% {
+		transform: scale(1);
+	}
+
+	12% {
+		transform: scale(1.25);
+	}
+
+	22% {
+		transform: scale(1);
+	}
+
+	42% {
+		transform: scale(1.18);
+	}
+
+	52% {
+		transform: scale(1);
+	}
+
+	72% {
+		transform: scale(1.12);
+	}
+
+	82% {
+		transform: scale(1);
+	}
+
+	100% {
+		transform: scale(1.02);
+	}
+}
+
 .chat-doom-rail .feed-card-action-count {
 	color: inherit;
 	font-size: 12px;
@@ -707,6 +761,16 @@
 	text-decoration: none;
 	color: inherit;
 	text-shadow: 0 1px 4px rgba(0, 0, 0, 0.65);
+}
+
+.doom-scroll-view a.chat-doom-creator-text,
+.doom-scroll-view a.chat-doom-creator-text:hover {
+	color: inherit;
+}
+
+.doom-scroll-view .chat-doom-creator-text .founder-name,
+.doom-scroll-view a.chat-doom-creator-text:hover .founder-name {
+	color: var(--founder-flair-name);
 }
 
 .chat-doom-handle {

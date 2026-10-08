@@ -46,7 +46,31 @@ export function escapeHtmlAttr(s) {
  */
 export function formatDoomCaption(item) {
 	const titleRaw = typeof item.title === 'string' ? item.title.trim() : '';
-	return titleRaw ? softenShoutingFeedTitleForSpotlight(titleRaw) : '';
+	if (!titleRaw || titleRaw.toLowerCase() === 'untitled') return '';
+	return softenShoutingFeedTitleForSpotlight(titleRaw);
+}
+
+/**
+ * Refresh like, comment, and founder-name chrome after a richer timeline row arrives.
+ * @param {HTMLElement} slide
+ * @param {object} item
+ */
+export function syncDoomSlideEngagement(slide, item) {
+	if (!(slide instanceof HTMLElement) || !item) return;
+	const comments = slide.querySelector('a[data-chat-doom-comments]');
+	if (comments instanceof HTMLElement) {
+		const countEl = comments.querySelector('.chat-doom-rail-count');
+		if (countEl) countEl.textContent = String(Math.max(0, Number(item.comment_count ?? 0) || 0));
+		applyWhoTooltipAttr(comments, item.commented_by);
+		if (comments.hasAttribute('data-tooltip')) comments.setAttribute('data-who-longpress', '1');
+		else comments.removeAttribute('data-who-longpress');
+	}
+	const name = slide.querySelector('.chat-doom-handle');
+	if (name instanceof HTMLElement) {
+		const handle = typeof item.author_user_name === 'string' ? item.author_user_name.trim() : '';
+		if (handle) name.textContent = `@${handle}`;
+		name.classList.toggle('founder-name', item.author_plan === 'founder');
+	}
 }
 
 /**
@@ -756,6 +780,8 @@ export function createDoomSlideElement(item, viewerUserId, slideOpts = {}) {
 		</div>
 		<div class="chat-doom-rail-item">
 			<button type="button" class="feed-card-action chat-doom-rail-btn" data-like-button aria-label="Like"
+				aria-pressed="${item.viewer_liked ? 'true' : 'false'}"
+				data-like-id="${Number.isFinite(cid) && cid > 0 ? String(cid) : ''}"
 				data-like-base-count="${String(Math.max(0, likeCount - (item.viewer_liked ? 1 : 0)))}">
 				<span class="chat-doom-rail-icon" aria-hidden="true">
 					<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
@@ -814,9 +840,10 @@ export function createDoomSlideElement(item, viewerUserId, slideOpts = {}) {
 	})}</div>`;
 
 	/** Username only in the rail — omit display name / email prefix when we have a handle. */
+	const founderClass = item.author_plan === 'founder' ? ' founder-name' : '';
 	const creatorNameHtml = handle
-		? `<span class="chat-doom-handle">@${escapeHtmlAttr(handle)}</span>`
-		: escapeHtmlAttr(displayName);
+		? `<span class="chat-doom-handle${founderClass}">@${escapeHtmlAttr(handle)}</span>`
+		: `<span class="chat-doom-handle${founderClass}">${escapeHtmlAttr(displayName)}</span>`;
 	const profileAria =
 		handle && profileHref ? ` aria-label="${escapeHtmlAttr(`@${handle}`)}"` : '';
 	const profileLink = profileHref
@@ -839,7 +866,7 @@ export function createDoomSlideElement(item, viewerUserId, slideOpts = {}) {
 				${followSlot}
 			</div>
 		</div>
-		<p class="chat-doom-caption">${escapeHtmlAttr(caption)}</p>
+		${caption ? `<p class="chat-doom-caption">${escapeHtmlAttr(caption)}</p>` : ''}
 	`;
 
 	overlay.appendChild(rail);

@@ -233,6 +233,72 @@ test('Doom Scroll opens a feed-cached video before the timeline request finishes
  } finally {h.close()}
 });
 
+test('Doom Scroll fills likes and comments from the timeline and hides an Untitled caption', {skip:!vm.SourceTextModule}, async()=>{
+ let finish;
+ const seed={id:42,created_image_id:42,media_type:'video',video_url:'/clip.mp4',title:'Untitled',author_user_name:'ada',user_id:7,like_count:0,comment_count:0,viewer_liked:false};
+ const api={...seed,title:'Untitled',like_count:4,viewer_liked:true,liked_by:['@ada'],comment_count:2,commented_by:['@bob'],author_plan:'founder'};
+ const h=await harness('/feed/doom/42',async(url)=>String(url).includes('/api/feed/doom')?new Promise(resolve=>{finish=()=>resolve(response({items:[api],hasMore:false}));}):response({}));
+ try {
+  const {formatDoomCaption}=await h.load('views/DoomScroll/DoomSlideView.js');
+  assert.equal(formatDoomCaption({title:'Untitled'}),'');
+  assert.equal(formatDoomCaption({title:'  untitled  '}),'');
+  assert.equal(formatDoomCaption({title:''}),'');
+  assert.equal(formatDoomCaption({title:'Night drive'}),'Night drive');
+  const {DoomScrollView}=await h.load('views/DoomScroll/DoomScrollView.js');
+  const mounted=DoomScrollView.mount({...h,creationId:42,seed});
+  await mounted.backgroundReady;
+  assert.equal(h.outlet.querySelector('.chat-doom-caption'),null);
+  finish();
+  await tick(); await tick();
+  const like=h.outlet.querySelector('button[data-like-button]');
+  assert.equal(like.getAttribute('aria-pressed'),'true');
+  assert.equal(like.querySelector('[data-like-count]').textContent,'4');
+  assert.equal(like.getAttribute('data-tooltip'),'@ada');
+  const comments=h.outlet.querySelector('a[data-chat-doom-comments]');
+  assert.equal(comments.querySelector('.chat-doom-rail-count').textContent,'2');
+  assert.equal(comments.getAttribute('data-tooltip'),'@bob');
+  assert.ok(h.outlet.querySelector('.chat-doom-handle').classList.contains('founder-name'));
+  assert.equal(h.outlet.querySelector('.chat-doom-caption'),null);
+  const titled=formatDoomCaption({title:'Night drive'});
+  assert.equal(titled,'Night drive');
+  mounted.destroy();
+ } finally {h.close()}
+});
+
+test('Doom Scroll buffers the next clips instead of leaving them on preload none', {skip:!vm.SourceTextModule}, async()=>{
+ const items=[1,2,3].map(id=>({id,created_image_id:id,media_type:'video',video_url:`/clip-${id}.mp4`,title:`Clip ${id}`}));
+ const h=await harness('/feed/doom/1',async(url)=>String(url).includes('/api/feed/doom')?response({items,hasMore:false}):response({}));
+ try {
+  const {warmDoomVideoElement}=await h.load('views/DoomScroll/doomScrollWarm.js');
+  const stalled=h.w.document.createElement('video');
+  let loads=0;
+  stalled.load=()=>{loads+=1};
+  stalled.preload='none';
+  stalled.src='/clip.mp4';
+  assert.equal(warmDoomVideoElement(stalled,'auto'),true);
+  assert.equal(stalled.preload,'auto');
+  assert.equal(loads,1);
+  assert.equal(warmDoomVideoElement(stalled,'auto'),true);
+  assert.equal(loads,1,'a second warm must not restart the fetch');
+  const ready=h.w.document.createElement('video');
+  let readyLoads=0;
+  ready.load=()=>{readyLoads+=1};
+  ready.src='/ready.mp4';
+  Object.defineProperty(ready,'readyState',{value:2});
+  warmDoomVideoElement(ready,'auto');
+  assert.equal(readyLoads,0);
+  const {DoomScrollView}=await h.load('views/DoomScroll/DoomScrollView.js');
+  const mounted=DoomScrollView.mount({...h,creationId:1});
+  await mounted.backgroundReady;
+  const videos=[...h.outlet.querySelectorAll('video.chat-doom-video')];
+  assert.equal(videos.length,3);
+  assert.equal(videos[1].preload,'auto');
+  assert.equal(videos[1].getAttribute('data-chat-doom-fetch'),'1');
+  assert.equal(videos[2].preload,'auto');
+  mounted.destroy();
+ } finally {h.close()}
+});
+
 test('Doom Scroll dismissal during loading aborts the request and cannot install late media', {skip:!vm.SourceTextModule}, async()=>{
  let finish, options;
  const h=await harness('/feed/doom/42',async(_url,opts)=>{options=opts;return new Promise(resolve=>{finish=()=>resolve(response({items:[{id:42,created_image_id:42,media_type:'video',video_url:'/clip.mp4'}],hasMore:false}));});});

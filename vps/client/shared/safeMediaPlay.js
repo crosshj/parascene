@@ -54,7 +54,6 @@ export function safeMediaPlayWithHandlers(media, opts = {}) {
 				opts.onPlayed?.();
 			})
 			.catch((err) => {
-				if (isMediaPlayAbortError(err)) return;
 				opts.onRejected?.(err);
 			});
 	} catch {
