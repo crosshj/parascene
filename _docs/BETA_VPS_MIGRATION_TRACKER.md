@@ -2,7 +2,7 @@
 
 ## Remaining product work
 
-- [ ] 
+- [ ] ...
 
 ## Public pages and discoverability
 
