@@ -537,14 +537,15 @@ export function createLayout({ root, views, services } = {}) {
 			}
 		}
 
+		if (!composition.overlay && mounted.overlay) {
+			// Destroy the detail as soon as the route closes. Waiting for the
+			// background left its videos mounted and still playing.
+			await reconcileRegion('overlay', overlayContent, null);
+		}
+
 		await prepareBackground(composition, revision);
 
-		if (!composition.overlay) {
-			// Keep an existing overlay covering the page until its destination is
-			// ready, then remove the overlay mount and restore background interaction.
-			await reconcileRegion('overlay', overlayContent, null);
-			showOverlay(null, overlayChanged);
-		}
+		if (!composition.overlay) showOverlay(null, overlayChanged);
 		if (!composition.overlay) overlayRestoreStates.clear();
 		appliedComposition = composition;
 	}

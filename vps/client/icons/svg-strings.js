@@ -722,10 +722,10 @@ const COG_INNER = html`
 export function generatingGearsIcon(className = '') {
 	const extra = className ? ` ${className}` : '';
 	return html`<span class="creation-wait-gears${extra}" data-from="svg-strings" aria-hidden="true">
-		<svg class="creation-wait-gear creation-wait-gear--lg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-			stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">${COG_INNER}</svg>
-		<svg class="creation-wait-gear creation-wait-gear--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-			stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">${COG_INNER}</svg>
+		<span class="creation-wait-gear creation-wait-gear--lg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+			stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">${COG_INNER}</svg></span>
+		<span class="creation-wait-gear creation-wait-gear--sm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+			stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">${COG_INNER}</svg></span>
 	</span>`;
 }
 

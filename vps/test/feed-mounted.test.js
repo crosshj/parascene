@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';import vm from 'node:vm';import {JSDOM} from 'jsdom';
-async function harness(url,fetcher,{mobile=false}={}){const dom=new JSDOM('<div class="beta-outlet__scroll"><div id="outlet"></div></div>',{url:'http://localhost'+url,pretendToBeVisual:true}),w=dom.window;w.HTMLElement.prototype.scrollTo=function(){};const observers=[];class Observer{constructor(callback,options){this.callback=callback;this.options=options;this.targets=new Set();this.disconnected=false;observers.push(this)}observe(target){this.targets.add(target)}unobserve(target){this.targets.delete(target)}disconnect(){this.disconnected=true}}w.matchMedia=()=>({matches:mobile,addEventListener(){},removeEventListener(){}});w.HTMLMediaElement.prototype.play=async function(){};w.HTMLMediaElement.prototype.pause=function(){};w.HTMLMediaElement.prototype.load=function(){};w.HTMLDialogElement.prototype.showModal=function(){this.open=true};w.HTMLDialogElement.prototype.close=function(){this.open=false};const names=['document','Document','HTMLElement','HTMLDivElement','HTMLInputElement','HTMLTextAreaElement','HTMLSelectElement','HTMLButtonElement','HTMLAnchorElement','HTMLImageElement','HTMLTemplateElement','HTMLFormElement','HTMLMediaElement','HTMLAudioElement','HTMLVideoElement','Element','SVGElement','Node','Image','File','FormData','Event','CustomEvent','DOMException','AbortController','AbortSignal','customElements','localStorage','sessionStorage','navigator','location','MutationObserver'];const context=vm.createContext({...Object.fromEntries(names.map(n=>[n,w[n]])),window:w,innerWidth:w.innerWidth,innerHeight:w.innerHeight,matchMedia:w.matchMedia,console,URL,URLSearchParams,CSS:{escape:v=>v},getComputedStyle:w.getComputedStyle.bind(w),IntersectionObserver:Observer,ResizeObserver:Observer,requestAnimationFrame:w.requestAnimationFrame.bind(w),cancelAnimationFrame:w.cancelAnimationFrame.bind(w),setTimeout,clearTimeout,setInterval:w.setInterval.bind(w),clearInterval:w.clearInterval.bind(w),queueMicrotask,fetch:fetcher,alert(){},confirm:()=>true});const modules=new Map();function module(file){file=path.resolve(file);if(modules.has(file))return modules.get(file);let code=fs.readFileSync(file,'utf8');if(file.endsWith('.css'))code='export default {}';if(file.endsWith('.html'))code='export default '+JSON.stringify(code);const mod=new vm.SourceTextModule(code,{identifier:file,context});modules.set(file,mod);return mod}async function load(file){const mod=module(path.resolve('client',file));if(mod.status==='unlinked')await mod.link((name,parent)=>module(path.resolve(path.dirname(parent.identifier),name)));if(mod.status!=='evaluated')await mod.evaluate();return mod.namespace}const navigations=[],actions={navigate:(...args)=>navigations.push(args),dismissOverlay(){}},services={session:{user:{id:1,role:'consumer',meta:{}},redirectToLogin(){throw Error('Unexpected auth redirect')},refresh:async()=>{}},providers:{document:{setTitle(){},get baseTitle(){return 'parascene'}}}};const searchComposer=(await load('components/SearchComposer/SearchComposer.js')).createSearchComposerElement();w.document.body.append(searchComposer);return {w,load,searchComposer,outlet:w.document.getElementById('outlet'),actions,services,navigations,observers,close:()=>dom.window.close()}}
+async function harness(url,fetcher,{mobile=false}={}){const dom=new JSDOM('<div class="beta-outlet__scroll"><div id="outlet"></div></div>',{url:'http://localhost'+url,pretendToBeVisual:true}),w=dom.window;w.HTMLElement.prototype.scrollTo=function(){};const observers=[];class Observer{constructor(callback,options){this.callback=callback;this.options=options;this.targets=new Set();this.disconnected=false;observers.push(this)}observe(target){this.targets.add(target)}unobserve(target){this.targets.delete(target)}disconnect(){this.disconnected=true}}w.matchMedia=()=>({matches:mobile,addEventListener(){},removeEventListener(){}});w.HTMLMediaElement.prototype.play=async function(){};w.HTMLMediaElement.prototype.pause=function(){};w.HTMLMediaElement.prototype.load=function(){};w.HTMLDialogElement.prototype.showModal=function(){this.open=true};w.HTMLDialogElement.prototype.close=function(){this.open=false};const names=['document','Document','HTMLElement','HTMLMetaElement','HTMLDivElement','HTMLInputElement','HTMLTextAreaElement','HTMLSelectElement','HTMLButtonElement','HTMLAnchorElement','HTMLImageElement','HTMLTemplateElement','HTMLFormElement','HTMLMediaElement','HTMLAudioElement','HTMLVideoElement','Element','SVGElement','Node','Image','File','FormData','Event','CustomEvent','KeyboardEvent','DOMException','AbortController','AbortSignal','customElements','localStorage','sessionStorage','navigator','location','MutationObserver'];const context=vm.createContext({...Object.fromEntries(names.map(n=>[n,w[n]])),window:w,innerWidth:w.innerWidth,innerHeight:w.innerHeight,matchMedia:w.matchMedia,console,URL,URLSearchParams,CSS:{escape:v=>v},getComputedStyle:w.getComputedStyle.bind(w),IntersectionObserver:Observer,ResizeObserver:Observer,requestAnimationFrame:w.requestAnimationFrame.bind(w),cancelAnimationFrame:w.cancelAnimationFrame.bind(w),setTimeout,clearTimeout,setInterval:w.setInterval.bind(w),clearInterval:w.clearInterval.bind(w),queueMicrotask,fetch:fetcher,alert(){},confirm:()=>true});const modules=new Map();function module(file){file=path.resolve(file);if(modules.has(file))return modules.get(file);let code=fs.readFileSync(file,'utf8');if(file.endsWith('.css'))code='export default {}';if(file.endsWith('.html'))code='export default '+JSON.stringify(code);const mod=new vm.SourceTextModule(code,{identifier:file,context});modules.set(file,mod);return mod}async function load(file){const mod=module(path.resolve('client',file));if(mod.status==='unlinked')await mod.link((name,parent)=>module(path.resolve(path.dirname(parent.identifier),name)));if(mod.status!=='evaluated')await mod.evaluate();return mod.namespace}const navigations=[],actions={navigate:(...args)=>navigations.push(args),dismissOverlay(){}},services={session:{user:{id:1,role:'consumer',meta:{}},redirectToLogin(){throw Error('Unexpected auth redirect')},refresh:async()=>{}},providers:{document:{setTitle(){},get baseTitle(){return 'parascene'}}}};const searchComposer=(await load('components/SearchComposer/SearchComposer.js')).createSearchComposerElement();w.document.body.append(searchComposer);return {w,load,searchComposer,outlet:w.document.getElementById('outlet'),actions,services,navigations,observers,close:()=>dom.window.close()}}
 const tick=()=>new Promise(resolve=>setImmediate(resolve)),response=data=>new Response(JSON.stringify(data),{headers:{"content-type":"application/json"}});
 
 test('Creations metadata updates retain image visibility and request state', { skip: !vm.SourceTextModule }, async () => {
@@ -332,6 +332,73 @@ test('Feed renders saved likes and liker tooltips and updates both after unlike'
   assert.equal(h.outlet.querySelector('[data-like-id="42"]'),button);
   mounted.destroy();
  }finally{h.close();}
+});
+
+test('Doom comments sheet keeps the mobile keyboard layout and www open/close behavior', {skip:!vm.SourceTextModule}, async()=>{
+ const css = fs.readFileSync(path.resolve('client/views/DoomScroll/DoomCommentsPopover.css'), 'utf8');
+ assert.match(css, /--chat-doom-sheet-keyboard-cover:\s*45dvh/);
+ assert.match(css, /--chat-doom-sheet-content:\s*30dvh/);
+ assert.match(css, /height:\s*calc\(var\(--chat-doom-sheet-keyboard-cover\) \+ var\(--chat-doom-sheet-content\)\)/);
+ assert.match(css, /scroll-margin-bottom:\s*var\(--chat-doom-sheet-keyboard-cover\)/);
+ assert.match(css, /padding-bottom:\s*calc\(var\(--chat-doom-sheet-keyboard-cover\)/);
+ assert.match(css, /data-chat-doom-comments-body-scroll-lock/);
+ let releaseActivity;
+ const h = await harness('/feed/doom/42', async (url) => {
+  if (String(url).includes('/activity')) {
+   await new Promise((resolve) => { releaseActivity = resolve; });
+   return response({ items: [], comment_count: 5 });
+  }
+  return response({});
+ });
+ try {
+  h.w.document.body.classList.add('chat-page--doom-scroll');
+  const meta = h.w.document.createElement('meta');
+  meta.setAttribute('name', 'viewport');
+  meta.setAttribute('content', 'width=device-width, initial-scale=1');
+  h.w.document.head.append(meta);
+  const { openDoomCommentsPopover, destroyDoomCommentsPopover } = await h.load('views/DoomScroll/doomCommentsPopover.js');
+  const viewer = { id: 1, role: 'consumer', plan: 'free', profile: { user_name: 'ada', display_name: 'Ada', avatar_url: '' } };
+  openDoomCommentsPopover({ commentCountLabel: '2', detailHref: '/creations/42#comments', viewer, isAdmin: false });
+  const sheet = h.w.document.querySelector('.chat-doom-comments-sheet');
+  const body = h.w.document.querySelector('[data-chat-doom-comments-body]');
+  assert.ok(sheet);
+  assert.equal(sheet.getAttribute('role'), 'dialog');
+  assert.equal(h.w.document.querySelector('dialog'), null);
+  assert.ok(body);
+  assert.equal(body.querySelector('[data-chat-doom-comments-mount]'), h.w.document.querySelector('[data-chat-doom-comments-mount]'));
+  assert.ok(h.w.document.querySelector('.chat-doom-comments-handle'));
+  assert.equal(h.w.document.querySelector('[data-chat-doom-comments-count]').textContent, '2');
+  assert.equal(h.w.location.hash, '#comments');
+  assert.match(meta.getAttribute('content'), /interactive-widget=overlays-content/);
+  assert.equal(h.w.document.documentElement.dataset.chatDoomCommentsOpen, '1');
+  assert.equal(h.w.document.body.style.overflow, '');
+  await tick();
+  assert.equal(body.dataset.chatDoomCommentsBodyScrollLock, '1');
+  const field = body.querySelector('.comment-textarea');
+  assert.ok(field);
+  assert.equal(field.closest('[data-chat-doom-comments-body]'), body);
+  assert.equal(body.querySelector('.comment-avatar')?.textContent.trim(), 'A');
+  assert.ok(body.querySelector('.comments-toolbar'));
+  releaseActivity();
+  await tick(); await tick();
+  assert.equal(body.dataset.chatDoomCommentsBodyScrollLock, undefined);
+  assert.equal(h.w.document.querySelector('[data-chat-doom-comments-count]').textContent, '5');
+  h.w.dispatchEvent(new h.w.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+  assert.equal(h.w.document.querySelector('.chat-doom-comments-overlay').hidden, true);
+  assert.equal(h.w.location.hash, '');
+  assert.equal(meta.getAttribute('content'), 'width=device-width, initial-scale=1');
+  assert.equal(h.w.document.documentElement.dataset.chatDoomCommentsOpen, undefined);
+  openDoomCommentsPopover({ commentCountLabel: '5', detailHref: '/creations/42#comments', viewer, isAdmin: false });
+  assert.equal(h.w.location.hash, '#comments');
+  await new Promise((resolve) => {
+   h.w.addEventListener('popstate', () => resolve(), { once: true });
+   h.w.history.back();
+  });
+  assert.equal(h.w.location.hash, '');
+  assert.equal(h.w.document.querySelector('.chat-doom-comments-overlay').hidden, true);
+  destroyDoomCommentsPopover();
+  assert.equal(h.w.document.querySelector('.chat-doom-comments-overlay'), null);
+ } finally { releaseActivity?.(); h.close(); }
 });
 
 test('Feed why menu opens an explanation dialog and releases it on close and unmount', {skip:!vm.SourceTextModule}, async()=>{

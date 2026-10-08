@@ -1,4 +1,275 @@
-.doom-comments-dialog {position:fixed;inset:auto 0 0;width:min(100%,720px);max-width:100%;margin:0 auto;max-height:80dvh;padding:16px;border:1px solid var(--border);border-radius:20px 20px 0 0;background:var(--surface);color:var(--text);overflow:auto;}
-.doom-comments-dialog::backdrop {background:rgb(0 0 0 / .45);}
-.doom-comments-dialog .chat-doom-comments-header {display:flex;align-items:center;justify-content:space-between;}
-.doom-comments-dialog .chat-doom-comments-mount {min-height:240px;}
+/* Doom scroll comments bottom sheet. */
+
+.chat-doom-comments-overlay {
+	position: fixed;
+	inset: 0;
+	z-index: 12000;
+	/* Mobile: block layout + absolutely positioned sheet (top inset → bottom). Desktop overrides below. */
+	display: block;
+	box-sizing: border-box;
+	padding: 0;
+	margin: 0;
+}
+
+.chat-doom-comments-overlay[hidden] {
+	display: none !important;
+}
+
+.chat-doom-comments-backdrop {
+	position: absolute;
+	inset: 0;
+	background: rgb(0 0 0 / 60%);
+}
+
+.chat-doom-comments-sheet {
+	/*
+	 * Bottom-anchored Shorts-style sheet. `interactive-widget=overlays-content` (set on the
+	 * viewport meta while the sheet is open) keeps the layout viewport stable when the soft
+	 * keyboard opens, so the keyboard draws over the lower portion of the sheet.
+	 *
+	 * Sheet height is expressed as `<keyboard budget> + <content budget>`:
+	 *   - `--chat-doom-sheet-keyboard-cover` ≈ typical mobile soft-keyboard height
+	 *     (Gboard portrait + suggestion strip / iOS predictive bar lands ~38–48dvh).
+	 *   - `--chat-doom-sheet-content` is the comfortable area visible ABOVE the keyboard
+	 *     (header + composer + a few scroll rows).
+	 *
+	 * Tweak either var to change how much of the page the sheet covers; the math is
+	 * intentional so the relationship to the keyboard stays readable.
+	 */
+	--chat-doom-sheet-keyboard-cover: 45dvh;
+	--chat-doom-sheet-content: 30dvh;
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	top: auto;
+	z-index: 1;
+	margin: 0 auto;
+	max-width: 720px;
+	width: 100%;
+	box-sizing: border-box;
+	height: calc(var(--chat-doom-sheet-keyboard-cover) + var(--chat-doom-sheet-content));
+	/* Never overlap the status-bar / notch even if the budgets sum to > 100dvh. */
+	max-height: calc(100dvh - env(safe-area-inset-top, 0px));
+	min-height: 0;
+	background-color: var(--surface);
+	background-image: none;
+	color: var(--text);
+	border-radius: 16px 16px 0 0;
+	box-shadow: var(--shadow);
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	isolation: isolate;
+}
+
+.chat-doom-comments-handle {
+	flex-shrink: 0;
+	width: 40px;
+	height: 5px;
+	margin: 10px auto 6px;
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--text) 22%, transparent);
+}
+
+.chat-doom-comments-head {
+	flex-shrink: 0;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 4px 16px 12px;
+	border-bottom: 1px solid var(--border);
+}
+
+.chat-doom-comments-head-title-block {
+	display: flex;
+	flex-direction: row;
+	flex-wrap: nowrap;
+	align-items: baseline;
+	gap: 8px;
+	min-width: 0;
+	flex: 1;
+}
+
+.chat-doom-comments-title {
+	margin: 0;
+	font-size: 1.125rem;
+	font-weight: 700;
+	line-height: 1.25;
+	letter-spacing: -0.02em;
+	color: var(--text);
+}
+
+.chat-doom-comments-count-wrap {
+	flex-shrink: 0;
+}
+
+.chat-doom-comments-count {
+	font-size: 0.8125rem;
+	font-weight: 400;
+	line-height: 1.25;
+	color: var(--text-muted);
+}
+
+.chat-doom-comments-count--skeleton {
+	display: inline-block;
+	min-width: 32px;
+	height: 13px;
+	border-radius: 4px;
+	background: var(--skeleton);
+	vertical-align: middle;
+	animation: chat-doom-comments-count-pulse 1.2s ease-in-out infinite;
+}
+
+.chat-doom-comments-close {
+	flex-shrink: 0;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 36px;
+	height: 36px;
+	margin: 0;
+	padding: 0;
+	border: none;
+	border-radius: 50%;
+	background: transparent;
+	color: var(--text);
+	cursor: pointer;
+	-webkit-tap-highlight-color: transparent;
+}
+
+.chat-doom-comments-close-icon {
+	display: block;
+	pointer-events: none;
+}
+
+.chat-doom-comments-close:hover {
+	background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+.chat-doom-comments-close:active {
+	background: color-mix(in srgb, var(--text) 12%, transparent);
+}
+
+.chat-doom-comments-close:focus,
+.chat-doom-comments-close:focus-visible {
+	outline: none;
+	box-shadow: none;
+}
+
+/* Drag handle is hidden for now but kept in layout so the sheet's top padding/spacing stays the same. */
+.chat-doom-comments-handle {
+	visibility: hidden;
+}
+
+.chat-doom-comments-body {
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+	-webkit-overflow-scrolling: touch;
+	padding: 12px 16px calc(24px + env(safe-area-inset-bottom));
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	box-sizing: border-box;
+}
+
+.chat-doom-comments-body .creation-comments-thread {
+	display: flex;
+	flex-direction: column;
+}
+
+/* Lock sheet body scroll while the shared thread shows its loading skeleton. */
+.chat-doom-comments-body[data-chat-doom-comments-body-scroll-lock='1'] {
+	overflow: hidden;
+	overscroll-behavior: contain;
+}
+
+.chat-doom-comments-body .comment-list {
+	margin-top: 12px;
+}
+
+/* Sheet header already shows the comment count, and sort is unnecessary chrome here. */
+.chat-doom-comments-body .comments-toolbar {
+	display: none;
+}
+
+/* Main composer keeps its own margins. Inline replies still shift left to meet the reply column. */
+.chat-doom-comments-body [data-comment-input].comment-input {
+	margin-top: 16px;
+	margin-bottom: 12px;
+	margin-left: 0;
+	padding-top: 0;
+	padding-bottom: 0;
+	border-bottom: 0;
+}
+
+/* Mobile: trailing scroll room + scroll-margin so reply/edit fields can clear the soft keyboard. */
+@media (max-width: 768px) {
+	.chat-doom-comments-body {
+		padding-bottom: calc(var(--chat-doom-sheet-keyboard-cover) + 24px + env(safe-area-inset-bottom, 0px));
+	}
+
+	.chat-doom-comments-body .comment-textarea,
+	.chat-doom-comments-body .comment-edit-input,
+	.chat-doom-comments-body .comment-inline-reply-field {
+		scroll-margin-top: 12px;
+		scroll-margin-bottom: var(--chat-doom-sheet-keyboard-cover);
+	}
+}
+
+.chat-doom-comments-error {
+	margin: 12px 0;
+	color: var(--text-muted);
+	text-align: center;
+	font-size: 0.9rem;
+}
+
+/*
+ * Reaction picker, attach popover, and sticker modal are appended to <body>.
+ * Lift them above this sheet (z-index 12000) while it is open.
+ */
+html[data-chat-doom-comments-open='1'] .comment-reaction-picker {
+	z-index: 12100;
+}
+
+html[data-chat-doom-comments-open='1'] .comment-sticker-modal-overlay {
+	z-index: 12200;
+}
+
+html[data-chat-doom-comments-open='1'] .comment-attach-popover {
+	z-index: 12300;
+}
+
+@keyframes chat-doom-comments-count-pulse {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.5;
+	}
+}
+
+@media (min-width: 769px) {
+	.chat-doom-comments-overlay {
+		display: flex;
+		align-items: flex-end;
+		justify-content: center;
+	}
+
+	.chat-doom-comments-sheet {
+		position: relative;
+		left: auto;
+		right: auto;
+		bottom: auto;
+		top: auto;
+		height: auto;
+		max-height: min(70dvh, 680px);
+		min-height: min(600px, 70dvh);
+		border-radius: 16px;
+		margin-bottom: 16px;
+	}
+}

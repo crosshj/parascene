@@ -121,8 +121,18 @@ export function createCreationsProvider({ viewerId, registry } = {}) {
 
  function onMutation(event) {
   const reason = event.detail?.reason;
+  const id = String(event.detail?.creationId ?? '');
+  if (reason === 'status-changed' && event.detail?.status) {
+   const status = String(event.detail.status);
+   queueMicrotask(() => {
+    if (destroyed || !query?.data?.creations) return;
+    const current = query.data.creations.find(row => String(row.id) === id);
+    if (!current || String(current.status) === status) return;
+    mergeRows([{ ...current, status }]);
+   });
+   return;
+  }
   if (reason !== 'deleted' && reason !== 'ungrouped') return;
-  const id = String(event.detail.creationId);
   removedIds.add(id);
   // Let a mounted grid reconcile its paginated rows before publishing the cached first page.
   queueMicrotask(() => {

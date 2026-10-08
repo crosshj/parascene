@@ -40,7 +40,7 @@ import { getStyleInfo } from "../services/create/createStyles.js";
 import { PARASCENE_BLUE_SERVER_ID } from "../client/shared/generationDefaults.js";
 import { resolveProductNamedPrice } from "../client/shared/gpuOccupancy.js";
 import { importSunoCreation, previewSunoImport } from "../services/create/importSunoCreation.js";
-import { importYoutubeCreation, previewYoutubeImport } from "../services/create/importYoutubeCreation.js";
+import { importYoutubeCreation, previewYoutubeImport, refreshYoutubeImportCover } from "../services/create/importYoutubeCreation.js";
 import { finalizeAudioFileImport, startAudioFileImport } from "../services/create/importAudioFileCreation.js";
 import {
 	finalizeEphemeralStill,
@@ -2195,6 +2195,79 @@ router.post("/api/create/import-audio/finalize", asyncRoute(async (req, res) => 
 				console.error("[create] import-audio finalize failed:", err?.message || err);
 			}
 			return res.status(status).json({ error: message });
+		}
+	}));
+router.put("/api/create/images/:id", asyncRoute(async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+		const id = Number(req.params.id);
+		if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Invalid creation ID" });
+		try {
+			let image = await queries.selectCreatedImageById.get(id, user.id);
+			const isAdmin = user.role === "admin";
+			if (!image && isAdmin) image = await queries.selectCreatedImageByIdAnyUser?.get(id);
+			if (!image) {
+				const existing = await queries.selectCreatedImageByIdAnyUser?.get(id);
+				if (!existing) return res.status(404).json({ error: "Image not found" });
+				return res.status(403).json({ error: "Forbidden: You can only edit your own creations" });
+			}
+			const title = typeof req.body?.title === "string"
+				? (req.body.title.trim() || null)
+				: (typeof image.title === "string" && image.title.trim() ? image.title.trim() : null);
+			const description = typeof req.body?.description === "string"
+				? (req.body.description.trim() || null)
+				: (typeof image.description === "string" && image.description.trim() ? image.description.trim() : null);
+			const updateResult = await queries.updateCreatedImage.run(id, user.id, title, description, isAdmin);
+			if (!updateResult?.changes) return res.status(500).json({ error: "Failed to update image" });
+			const nextMeta = { ...(parseMeta(image.meta) || {}) };
+			let metaDirty = false;
+			if (typeof req.body?.nsfw === "boolean") {
+				nextMeta.nsfw = req.body.nsfw;
+				metaDirty = true;
+			}
+			if (typeof req.body?.doom_scroll_full_height === "boolean") {
+				nextMeta.doom_scroll_full_height = req.body.doom_scroll_full_height;
+				metaDirty = true;
+			}
+			const importProvider = typeof nextMeta.import?.provider === "string"
+				? nextMeta.import.provider.trim().toLowerCase()
+				: "";
+			if (importProvider === "youtube") {
+				try {
+					const refreshed = await refreshYoutubeImportCover({
+						imageId: id,
+						userId: image.user_id,
+						meta: nextMeta,
+						color: image.color,
+						queries,
+						storage,
+					});
+					if (refreshed) metaDirty = false;
+				} catch {
+					// Title and description still save when the cover refresh fails.
+				}
+			}
+			if (metaDirty) await queries.updateCreatedImageMeta.run(id, image.user_id, nextMeta);
+			const feedItem = await queries.selectFeedItemByCreatedImageId?.get(id);
+			if (feedItem) {
+				await queries.updateFeedItem?.run(id, title || "Untitled", description || "");
+				await bumpFeedVersionCounter(queries);
+				void invalidateFeedBetaCatalogSnapshot().catch(() => {});
+			}
+			const updated = image.user_id === user.id
+				? await queries.selectCreatedImageById.get(id, user.id)
+				: await queries.selectCreatedImageByIdAnyUser?.get(id);
+			const updatedMeta = parseMeta(updated?.meta) || nextMeta;
+			return res.json({
+				id: updated?.id ?? id,
+				title: updated?.title ?? title,
+				description: updated?.description ?? description,
+				meta: updatedMeta,
+				nsfw: updatedMeta.nsfw === true,
+			});
+		} catch (err) {
+			console.error("[PUT /api/create/images/:id]", err);
+			return res.status(500).json({ error: "Failed to update image" });
 		}
 	}));
 router.post("/api/create/images/:id/publish", asyncRoute(async (req, res) => {

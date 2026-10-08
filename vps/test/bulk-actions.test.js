@@ -139,3 +139,15 @@ test('deletion while Creations is unmounted updates persisted provider data and 
   assert.deepEqual(saved.data.creations.map(row => row.id), [2]);
  } finally { provider?.destroy(); h.close(); }
 });
+
+test('a retry status change updates the cached creation while Creations is unmounted', { skip: !vm.SourceTextModule }, async () => {
+ const h = await harness('/feed', async () => response({ creations: [], has_more: false })); let provider;
+ try {
+  const { createCreationsProvider } = await h.load('providers/creations/index.js');
+  provider = createCreationsProvider({ viewerId: 7, registry: { acquire(_key, factory) { return { query: factory() }; } } });
+  provider.query.setData({ creations: [{ id: 4, status: 'failed', created_at: '2020-01-01T00:00:00.000Z' }], has_more: false });
+  h.w.document.dispatchEvent(new h.w.CustomEvent('creation-detail:mutation', { detail: { reason: 'status-changed', creationId: 4, status: 'creating' } }));
+  await tick();
+  assert.equal(provider.query.data.creations.find(row => row.id === 4).status, 'creating');
+ } finally { provider?.destroy(); h.close(); }
+});

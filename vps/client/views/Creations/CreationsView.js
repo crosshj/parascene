@@ -334,7 +334,16 @@ export function renderCreationsView({ outlet, creationsProvider, creationsApi, c
 		if (!Number.isInteger(id) || id <= 0 || !root.isConnected) return;
 		if (event.detail?.reason === 'deleted') { removeCreation(id); return; }
   if (event.detail?.reason === 'ungrouped') { removedIds.add(String(id)); removeCreation(id); return; }
-		if (!refs.grid.querySelector(`.creation-grid__card[data-creation-id="${id}"]`)) return;
+		const card = refs.grid.querySelector(`.creation-grid__card[data-creation-id="${id}"]`);
+		if (!card) return;
+		const queuedLocally = event.detail?.reason === 'status-changed'
+			&& ['pending', 'queued'].includes(String(event.detail?.status || '').toLowerCase());
+		if (event.detail?.reason === 'status-changed' && event.detail?.status && card.__creationRecord) {
+			const next = { ...card.__creationRecord, status: event.detail.status };
+			mergeServerRows([next]);
+			render({ creations: [next], has_more: false }, true);
+		}
+		if (queuedLocally) return;
 		try {
 			const data = await creationsApi.list({ ids: [String(id)] });
 			if (root.isConnected && data.creations?.length) {

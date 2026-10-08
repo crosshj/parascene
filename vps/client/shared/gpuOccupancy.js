@@ -1,3 +1,4 @@
+import './gpuOccupancy.css';
 import { requestCreate } from '../providers/create/api.js';
 import { PARASCENE_BLUE_SERVER_ID } from './generationDefaults.js';
 

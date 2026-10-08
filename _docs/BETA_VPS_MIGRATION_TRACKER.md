@@ -1,14 +1,8 @@
 # VPS migration tracker
 
-Current outstanding migration scope. Update this checklist as items are verified. Governing migration and cutover standards live in the [migration guidance](BETA_VPS_SPA_MIGRATION_SOURCE_OF_TRUTH.md).
-
 ## Remaining product work
 
-The remaining product and cutover scope is listed below.
-
-- [ ] the comments popover for doomscroll should be formated and EXACTLY like the www and any functionality WWW provides should be mirrored in doomscroll on vps (we don't want to re-invent the wheel or ignore hard-fought, past wisdom)
-
-- [ ] Hook up Stripe before the pricing overlay can complete a purchase. Founder checkout, credit-pack checkout, the return from Checkout, and switching back to Free still need the www billing endpoints (`/api/subscription/checkout`, `/api/credits/checkout`, `/api/subscription/checkout-return`, and `/api/profile/plan`), including plan and subscription updates on the user record.
+- [ ] 
 
 ## Public pages and discoverability
 
@@ -20,6 +14,7 @@ The remaining product and cutover scope is listed below.
 
 ## APIs, services, and administration
 
+- [ ] Hook up Stripe before the pricing overlay can complete a purchase. Founder checkout, credit-pack checkout, the return from Checkout, and switching back to Free still need the www billing endpoints (`/api/subscription/checkout`, `/api/credits/checkout`, `/api/subscription/checkout-return`, and `/api/profile/plan`), including plan and subscription updates on the user record.
 - [ ] Inventory WWW API contracts and verify each required endpoint, authorization rule, and data behavior on VPS
 - [ ] Inventory and port required background services: scheduled work, queues, retries/recovery, media processing, catalog/feed rebuilds, notifications, and realtime
 - [ ] Inventory external integrations and callbacks: storage/CDN, generation providers, billing, email, OAuth, and webhooks

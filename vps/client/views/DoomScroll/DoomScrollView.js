@@ -69,7 +69,14 @@ export const DoomScrollView = Object.freeze({
    if (link.matches('[data-chat-doom-comments]')) {
     event.preventDefault();
     event.stopPropagation();
-    openDoomCommentsPopover({ detailHref: link.getAttribute('href'), viewer: services.session.user });
+    const countEl = link.querySelector('.chat-doom-rail-count');
+    const commentCountLabel = countEl && typeof countEl.textContent === 'string' ? countEl.textContent.trim() : '';
+    openDoomCommentsPopover({
+     commentCountLabel,
+     detailHref: link.getAttribute('href'),
+     viewer: services.session.user,
+     isAdmin: services.session.user?.role === 'admin',
+    });
     return;
    }
    const url = new URL(link.href, location.origin);

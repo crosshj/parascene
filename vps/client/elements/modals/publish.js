@@ -658,7 +658,9 @@ class AppModalPublish extends HTMLElement {
 					...prev,
 					title: titleRaw || 'Untitled',
 					title_untitled: !titleRaw,
-					summary: typeof description === 'string' ? description : prev.summary
+					summary: typeof description === 'string' ? description : prev.summary,
+					nsfw: Boolean(nsfw),
+					meta: { ...(prev.meta && typeof prev.meta === 'object' ? prev.meta : {}), nsfw: Boolean(nsfw), doom_scroll_full_height: Boolean(doomScrollFullHeight) }
 				});
 			}
 		} catch {

@@ -796,6 +796,13 @@ body.view-nsfw .feed-card-image--group-carousel.nsfw::after {
 .creation-wait-gear {
 	position: absolute;
 	overflow: visible;
+	transform-origin: center;
+}
+
+.creation-wait-gear svg {
+	display: block;
+	width: 100%;
+	height: 100%;
 }
 
 .creation-wait-gear--lg {

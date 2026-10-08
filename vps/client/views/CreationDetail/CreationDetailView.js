@@ -6,7 +6,8 @@ import { creationLikeSpinnerHtml, setCreationLikeLoading } from '../../shared/cr
 import './CreationDetailView.css';
 import * as hostedAudioPlayerMod from '../../shared/hostedAudioPlayer.js';
 import * as creationGpuWaitMod from '../../shared/creationGpuWait.js';
-import { confirmGpuOccupancyIfNeeded } from '../../shared/gpuOccupancy.js';
+import { applyGpuBid, confirmGpuOccupancyIfNeeded } from '../../shared/gpuOccupancy.js';
+import { registerCreationDetailRefreshHandler } from '../../shared/creationDetailRuntime.js';
 import * as datetimeBundledMod from '../../shared/datetime.js';
 import * as apiBundledMod from '../../shared/api.js';
 import * as iconsBundledMod from '../../icons/svg-strings.js';
@@ -782,9 +783,9 @@ function commitCreationDetailContentHtml(detailContent, nextHtml) {
 		const nextRow = tmp.querySelector('.creation-detail-title-row');
 		if (nextRow instanceof HTMLElement) {
 			const nextNsfw = nextRow.querySelector('.creation-detail-nsfw-tag');
-			if (nextNsfw && !stickyRow.querySelector('.creation-detail-nsfw-tag')) {
-				stickyRow.prepend(nextNsfw);
-			}
+			const stickyNsfw = stickyRow.querySelector('.creation-detail-nsfw-tag');
+			if (nextNsfw && !stickyNsfw) stickyRow.prepend(nextNsfw);
+			else if (!nextNsfw && stickyNsfw) stickyNsfw.remove();
 			const nextTitle = nextRow.querySelector('.creation-detail-title');
 			if (stickyTitle instanceof HTMLElement && nextTitle instanceof HTMLElement) {
 				const nextText = nextTitle.textContent?.trim() || '';
@@ -8438,6 +8439,7 @@ export function renderCreationDetailView({ outlet, creationId, initialSeed = nul
 			viewer_role: typeof initialSeed.viewer_role === 'string' ? initialSeed.viewer_role : mappedSeed.viewer_role,
 		}) : null;
 	activeCreationDetailNavigate = onNavigate || null;
+	registerCreationDetailRefreshHandler(() => loadCreation());
  activeCreateProvider = createProvider || null;
 	window.__VPS_CREATION_DETAIL_SEED__ = initialSeed;
 	document.body.classList.add('creation-detail-page');
@@ -8461,6 +8463,8 @@ export function renderCreationDetailView({ outlet, creationId, initialSeed = nul
 		backgroundReady,
 		hasOpenEscapeTarget: creationDetailPageHasOpenEscapeTarget,
 		destroy() {
+			loadCreationSequence += 1;
+			stopCreationDetailHeroPlayback();
 			listenerController.abort();
 			stopGroupNavigation();
 		stopRelatedSection?.();
@@ -8468,11 +8472,17 @@ export function renderCreationDetailView({ outlet, creationId, initialSeed = nul
 		stopCreationDetailInFlightPoll();
 		stopCreationDetailGroupMemberPoll();
 		clearCreationDetailSunoPlayer(outlet.querySelector('.creation-detail-image-wrapper'));
+		outlet.querySelectorAll('video, audio').forEach((media) => {
+			try { media.pause(); } catch { /* already stopped */ }
+			media.removeAttribute('src');
+			try { media.load(); } catch { /* ignore */ }
+		});
 		creationDetailViewMounted = false;
   activeCreateProvider = null;
 		activeCreationDetailId = null;
 		activeCreationDetailSeed = null;
 		activeCreationDetailNavigate = null;
+		registerCreationDetailRefreshHandler(null);
 		detailNsfwRevealed = false;
 		applyCreationDetailNsfwMedia = null;
 		currentCreationId = null;
@@ -9449,12 +9459,10 @@ async function handleRetry() {
 			if (retryBtn) retryBtn.disabled = false;
 			return;
 		}
-		retryArgs = occMod.applyGpuBid(args || {}, occupancy.bid, 'product');
+		retryArgs = applyGpuBid(args || {}, occupancy.bid, 'product');
 	} catch (err) {
-		if (err?.code === 'occupancy_cancelled') {
-			if (retryBtn) retryBtn.disabled = false;
-			return;
-		}
+		if (retryBtn) retryBtn.disabled = false;
+		if (err?.code === 'occupancy_cancelled') return;
 		throw err;
 	}
 
@@ -9495,23 +9503,14 @@ async function handleRetry() {
 			}));
 		}
 
-		// Same creation row is now "creating"; refresh lanes and leave detail
-		if (isCreationDetailEmbed()) {
-			await refreshAfterMutation('status-changed', { creationId, skipContentRefresh: true });
-			shellOut('/creations');
-			return;
-		}
-
-		const creationsRoute = document.querySelector("app-route-creations");
-		if (creationsRoute && typeof creationsRoute.loadCreations === "function") {
-			await creationsRoute.loadCreations({ force: true, background: false });
-		}
-		const header = document.querySelector('app-navigation');
-		if (header && typeof header.navigateToRoute === 'function') {
-			header.navigateToRoute('creations');
-		} else {
-			shellOut('/creations');
-		}
+		// Same row, known id. Show it queued on the grid the way a new create does,
+		// then leave detail. The grid poll replaces that with the server status.
+		await refreshAfterMutation('status-changed', {
+			creationId,
+			status: 'pending',
+			skipContentRefresh: true,
+		});
+		shellOut('/creations');
 	} catch (error) {
 		alert(error.message || 'Failed to retry creation. Please try again.');
 	} finally {

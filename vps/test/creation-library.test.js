@@ -22,6 +22,9 @@ async function fixture(run) {
   insertCreatedImage: { run: async (owner, filename, file_path, width, height, color, status, meta) => { const id = 10; rows.set(id, { id, user_id: owner, filename, file_path, width, height, color, status, meta }); return { insertId: id }; } },
   updateCreatedImageGroupCover: { run: async (id, owner, payload) => { assert.equal(rows.get(id).user_id, owner); Object.assign(rows.get(id), payload); return { changes: 1 }; } },
   updateCreatedImageMeta: { run: async (id, owner, meta) => { assert.equal(rows.get(id).user_id, owner); rows.get(id).meta = meta; return { changes: 1 }; } },
+  updateCreatedImage: { run: async (id, owner, title, description, isAdmin = false) => { const row = rows.get(Number(id)); if (!row || (!isAdmin && row.user_id !== owner)) return { changes: 0 }; row.title = title; row.description = description; calls.push(['update', Number(id), title, description]); return { changes: 1 }; } },
+  selectFeedItemByCreatedImageId: { get: async id => rows.get(Number(id))?.published ? { id, created_image_id: Number(id) } : undefined },
+  updateFeedItem: { run: async (id, title, summary) => { calls.push(['feed-title', id, title, summary]); return { changes: 1 }; } },
  };
  const storage = { getImageUrl: name => `/api/images/created/${name}`, deleteImage: async name => { calls.push(['storage', name]); } };
  const app = express(); app.use(express.json());
@@ -131,5 +134,29 @@ test('group detail mutation routes validate ownership, membership, publication a
   assert.equal((await request('POST', '/10/ungroup')).status, 400);
   assert.equal(rows.get(1).unavailable_at != null, true);
   assert.equal(rows.get(2).unavailable_at != null, true);
+ });
+});
+
+test('edit save updates the owner creation and a published feed title', async () => {
+ await fixture(async ({ request, rows, calls }) => {
+  assert.equal((await request('PUT', '/1', { title: 'Night' }, 0)).status, 401);
+  assert.equal((await request('PUT', '/1', { title: 'Night' }, 8)).status, 403);
+  assert.equal((await request('PUT', '/999', { title: 'Night' })).status, 404);
+  rows.get(1).published = true;
+  const saved = await request('PUT', '/1', { title: '  Night drive  ', description: 'After dark', nsfw: true, doom_scroll_full_height: true });
+  assert.equal(saved.status, 200);
+  assert.equal(saved.data.title, 'Night drive');
+  assert.equal(saved.data.description, 'After dark');
+  assert.equal(saved.data.nsfw, true);
+  assert.equal(saved.data.meta.doom_scroll_full_height, true);
+  assert.equal(rows.get(1).title, 'Night drive');
+  assert.deepEqual(calls.filter(call => call[0] === 'update'), [['update', 1, 'Night drive', 'After dark']]);
+  assert.deepEqual(calls.filter(call => call[0] === 'feed-title'), [['feed-title', 1, 'Night drive', 'After dark']]);
+  const cleared = await request('PUT', '/2', { title: '   ', description: '' });
+  assert.equal(cleared.status, 200);
+  assert.equal(rows.get(2).title, null);
+  assert.equal(rows.get(2).description, null);
+  assert.equal((await request('PUT', '/1', { title: 'Admin edit' }, 99)).status, 200);
+  assert.equal(rows.get(1).title, 'Admin edit');
  });
 });
