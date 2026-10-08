@@ -1,5 +1,6 @@
 import './tokens.css';
 import './primitives.css';
+import '../icons/gears.css';
 import '../app.css';
 import '../components/CreationCard/CreationCard.css';
 import '../components/Comments/Comments.css';

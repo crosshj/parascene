@@ -22,13 +22,6 @@
 .creation-grid__status-watch-wrap { position: relative; display: block; width: 48px; height: 48px; flex: 0 0 auto; container-type: size; }
 .creation-grid__status-watch-wrap .creation-grid__status-icon { width: 100%; height: 100%; }
 .creation-grid__status-place { position: absolute; right: -6%; bottom: 2%; z-index: 1; display: flex; width: 44%; height: 44%; box-sizing: border-box; align-items: center; justify-content: center; border: 1.5px solid currentColor; border-radius: 50%; color: inherit; background: var(--creations-card-placeholder, #e2e3e6); font-size: .62rem; font-size: 22cqmin; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: 0; line-height: 1; }
-.creation-grid__status-gears { position: relative; display: block; width: 48px; height: 48px; flex: 0 0 auto; opacity: .75; }
-.creation-grid__status-gear { position: absolute; overflow: visible; transform-origin: center; }
-.creation-grid__status-gear svg { display: block; width: 100%; height: 100%; }
-.creation-grid__status-gear--large { top: 6%; left: 0; width: 72%; height: 72%; animation: creation-grid-status-spin 4.5s linear infinite; }
-.creation-grid__status-gear--small { right: 2%; bottom: 4%; width: 46%; height: 46%; animation: creation-grid-status-spin 3.15s linear infinite reverse; }
-@keyframes creation-grid-status-spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .creation-grid__status-gear { animation: none; } }
 .feed-card-image.nsfw .feed-card-img { filter: none; transform: none; }
 .creation-browse-grid .feed-card-image.nsfw { position: relative; overflow: hidden; }
 /* CreationCard.css adds a generic NSFW text pill; this view renders the eye-hidden icon instead. */

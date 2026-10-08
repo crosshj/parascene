@@ -104,7 +104,7 @@ const routeDefinitions = [
 		title: 'Challenge details',
 		viewName: 'Challenges · Details',
 		icon: 'trophy',
-		composer: 'none',
+		composer: 'challenge',
 	},
 	{
 		path: '/comments',

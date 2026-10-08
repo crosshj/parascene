@@ -2395,7 +2395,7 @@
 	gap: 10px;
 }
 
-:where(.create-workflow-root) .creation-detail-image-wrapper [data-creation-gpu-wait] .creation-wait-gears,
+:where(.create-workflow-root) .creation-detail-image-wrapper [data-creation-gpu-wait] .icon-gears,
 :where(.create-workflow-root) .creation-detail-image-wrapper [data-creation-gpu-wait] .creation-wait-icon,
 :where(.create-workflow-root) .creation-detail-image-wrapper [data-creation-gpu-wait] .creation-wait-timeout {
 	width: 4.5rem;
@@ -2530,6 +2530,7 @@
 	width: 100%;
 	--hero-max-height: min(80vh, calc(100svh - 10.5rem));
 }
+
 
 :where(.create-workflow-root) .creation-detail-background {
 	position: absolute;
@@ -4762,7 +4763,7 @@
 }
 
 :where(.create-workflow-root) .creation-detail-group-thumb--waiting .creation-wait-icon,
-:where(.create-workflow-root) .creation-detail-group-thumb--waiting .creation-wait-gears,
+:where(.create-workflow-root) .creation-detail-group-thumb--waiting .icon-gears,
 :where(.create-workflow-root) .creation-detail-group-thumb--waiting .creation-wait-timeout {
 	width: 32px;
 	height: 32px;

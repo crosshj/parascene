@@ -721,10 +721,10 @@ const COG_INNER = html`
 /** Two meshing cogs — GPU generating overlay. */
 export function generatingGearsIcon(className = '') {
 	const extra = className ? ` ${className}` : '';
-	return html`<span class="creation-wait-gears${extra}" data-from="svg-strings" aria-hidden="true">
-		<span class="creation-wait-gear creation-wait-gear--lg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+	return html`<span class="icon-gears${extra}" data-from="svg-strings" aria-hidden="true">
+		<span class="icon-gears__cog icon-gears__cog--lg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
 			stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">${COG_INNER}</svg></span>
-		<span class="creation-wait-gear creation-wait-gear--sm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+		<span class="icon-gears__cog icon-gears__cog--sm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
 			stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">${COG_INNER}</svg></span>
 	</span>`;
 }

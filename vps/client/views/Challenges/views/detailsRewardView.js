@@ -7,6 +7,7 @@ import {
 } from '../../../shared/challenges/model/prizes.js';
 import { pickChallengeTrack } from '../../../shared/challenges/model/tracks.js';
 import { esc } from '../../../shared/challenges/constants.js';
+import { createModalDismissButton } from '../../../shared/modalDismiss.js';
 
 /**
  * Hero image above description (`hero_image_url` on challenge_config).
@@ -279,6 +280,61 @@ export function renderDetailsAndReward(cfg) {
 	html += renderRewardsSection(cfg);
 	html += renderHowToEnterSection(cfg);
 	return html;
+}
+
+/**
+ * About this challenge in the standard app dialog.
+ * @param {object} cfg
+ * @returns {HTMLDialogElement | null}
+ */
+export function openChallengeAboutModal(cfg) {
+	if (typeof document === 'undefined') return null;
+	const body = renderDetailsAndReward(cfg);
+	if (!String(body || '').trim()) return null;
+	document.querySelector('[data-challenge-about-modal]')?._dispose?.();
+	const dialog = document.createElement('dialog');
+	dialog.className = 'app-dialog';
+	dialog.setAttribute('data-challenge-about-modal', '');
+	dialog.setAttribute('aria-labelledby', 'challenge-about-modal-title');
+	dialog.innerHTML = `<header class="app-dialog__header">
+			<h2 id="challenge-about-modal-title" class="app-dialog__title">About this challenge</h2>
+		</header>
+		<div class="app-dialog__body">${body}</div>`;
+	const closeBtn = createModalDismissButton();
+	dialog.querySelector('header').append(closeBtn);
+	let disposed = false;
+	const dispose = () => {
+		if (disposed) return;
+		disposed = true;
+		if (dialog.open) dialog.close();
+		dialog.remove();
+	};
+	dialog._dispose = dispose;
+	closeBtn.addEventListener('click', dispose);
+	dialog.addEventListener('click', (event) => {
+		if (event.target === dialog) dispose();
+	});
+	dialog.addEventListener('close', dispose, { once: true });
+	document.body.append(dialog);
+	dialog.showModal();
+	return dialog;
+}
+
+/**
+ * Brief, rewards, and how to enter. Open when the challenge has no entries.
+ * @param {object} cfg
+ * @param {{ open?: boolean, challengeId?: string }} [opts]
+ */
+export function renderChallengeAboutSection(cfg, opts = {}) {
+	const body = renderDetailsAndReward(cfg);
+	if (!String(body || '').trim()) return '';
+	const challengeId = String(opts.challengeId || '').trim();
+	const idAttr = challengeId ? ` data-challenge-id="${esc(challengeId)}"` : '';
+	const open = opts.open === true ? ' open' : '';
+	return `<details class="challenge-pane-about" data-challenge-about${idAttr}${open}>
+			<summary class="challenge-pane-about-summary">About this challenge</summary>
+			<div class="challenge-pane-about-body">${body}</div>
+		</details>`;
 }
 
 /**

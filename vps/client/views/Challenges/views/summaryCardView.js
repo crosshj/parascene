@@ -23,7 +23,7 @@ export function renderChallengeSummaryCard(item) {
 	const cfg = item.latestConfig || {};
 	const phase = String(item.phase || '');
 	const ranked = Array.isArray(item.rankedSubmissions) ? item.rankedSubmissions : [];
-	const heroVm = participantHeroViewModel(cfg, ranked);
+	const heroVm = participantHeroViewModel(cfg, ranked, phase);
 	const track = pickChallengeTrack(cfg);
 	const trackLabel = CHALLENGE_TRACK_LABELS[track] || 'Challenge';
 	const phaseLabel = challengePhaseDisplayLabel(phase);

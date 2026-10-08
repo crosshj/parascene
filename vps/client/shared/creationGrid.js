@@ -1,5 +1,6 @@
 import { escapeHtml } from '../utils/dom.js';
 import { iconMarkup } from '../components/Icon/Icon.js';
+import { generatingGearsIcon } from '../icons/svg-strings.js';
 import { nsfwShouldBlur } from './nsfwPolicy.js';
 
 const html = String.raw;
@@ -88,7 +89,9 @@ function isChallengeLocked(item) {
 
 function shouldBlurChallengeMedia(item) {
 	const meta = parseCreationMeta(item);
-	const ended = item?.challenge_ended === true || meta?.challenge_ended === true;
+	const entry = item?.challenge_entry;
+	const entryEnded = entry && typeof entry === 'object' && entry.all_ended === true;
+	const ended = item?.challenge_ended === true || meta?.challenge_ended === true || entryEnded;
 	return !item?.published && !item?.nsfw && !meta?.nsfw && !ended &&
 		hasItems(meta?.challenge_submissions) && creationMediaType(item) !== 'audio';
 }
@@ -179,9 +182,9 @@ function mediaPath(url, item, variant = '') {
 	return raw;
 }
 
-export function creationThumbnailUrl(item, { video = false } = {}) {
+export function creationThumbnailUrl(item, { video = false, revealChallengeMedia = false } = {}) {
 	const meta = parseCreationMeta(item) || {};
-	const blurVariant = nsfwShouldBlur(item) || shouldBlurChallengeMedia(item) ? 'blur' : '';
+	const blurVariant = nsfwShouldBlur(item) || (!revealChallengeMedia && shouldBlurChallengeMedia(item)) ? 'blur' : '';
 	if (video && creationNeedsVideoFramePoster(item) && item?.video_thumbnail_url) {
 		return mediaPath(item.video_thumbnail_url, item, blurVariant || 'video_thumbnail');
 	}
@@ -232,7 +235,7 @@ function statusMarkup(status, queuePosition = null, { optimistic = false } = {})
 	// Queued is the local wait before a server read. `creating` is that read
 	// telling us the job exists and is underway, same as processing/running.
 	if (!optimistic && ['creating', 'processing', 'running'].includes(value)) {
-		return `<span class="creation-grid__status is-generating"><span class="creation-grid__status-gears" aria-hidden="true"><span class="creation-grid__status-gear creation-grid__status-gear--large"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09A1.65 1.65 0 0 0 19.4 15Z"></path></svg></span><span class="creation-grid__status-gear creation-grid__status-gear--small"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82-.33l-.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09A1.65 1.65 0 0 0 19.4 15Z"></path></svg></span></span><span>GENERATING…</span></span>`;
+		return `<span class="creation-grid__status is-generating">${generatingGearsIcon()}<span>GENERATING…</span></span>`;
 	}
 	const place = Number(queuePosition);
 	const positionBadge = Number.isFinite(place) && place > 0
@@ -269,7 +272,7 @@ function badges(item, { hideChallengeCorner = false, hidePublished = false } = {
 	return `${published}${challenge}${groupBadge}${music}${video}`;
 }
 
-export function creationCardMarkup(item, { hidePublishedBadge = false } = {}) {
+export function creationCardMarkup(item, { hidePublishedBadge = false, revealChallengeMedia = false, hideChallengeBadge = false } = {}) {
 	const status = String(item?.status || 'completed').toLowerCase();
 	const failed = status === 'failed';
 	const pending = status !== 'completed' && status !== 'failed';
@@ -280,7 +283,7 @@ export function creationCardMarkup(item, { hidePublishedBadge = false } = {}) {
 	const hasCreationId = Number.isFinite(creationId) && creationId > 0;
 	const nsfw = Boolean(item?.nsfw || meta?.nsfw);
 	const nsfwBlur = nsfw && nsfwShouldBlur(item);
-	const challengeBlur = shouldBlurChallengeMedia(item);
+	const challengeBlur = !revealChallengeMedia && shouldBlurChallengeMedia(item);
 	const queuePosition = Number(meta?.line_place ?? meta?.provider_last_payload?.place);
 	const title = String(item?.title || '').trim() || (item?.published ? 'Untitled' : '');
 	const mediaClass = `feed-card-image${pending || failed ? ' creation-grid__status-card' : nsfw ? (nsfwBlur ? ' nsfw' : ' nsfw nsfw-revealed') : ''}${failed ? ' creation-grid__failed-card' : ''}${!failed && challengeBlur ? ' feed-card-image--challenge-pending' : ''}`;
@@ -290,11 +293,14 @@ export function creationCardMarkup(item, { hidePublishedBadge = false } = {}) {
 		: pending
 			? statusMarkup(status, queuePosition, { optimistic })
 			: creationNeedsAudioWaveformCover(item) ? waveform() : '';
-	const thumbnail = pending || failed ? '' : creationThumbnailUrl(item, { video: type === 'video' });
+	const thumbnail = pending || failed ? '' : creationThumbnailUrl(item, { video: type === 'video', revealChallengeMedia });
 	const original = pending || failed ? '' : (nsfwBlur ? thumbnail : creationOriginalUrl(item));
 	const slides = pending || failed ? [] : groupSlides(item);
+	const challengeTrophy = hideChallengeBadge
+		? ''
+		: `<span class="creation-challenge-entered-badge" role="img" aria-label="Entered in challenge" title="Entered in challenge">${iconMarkup('trophy')}</span>`;
 	const challengeOverlay = !pending && !failed && challengeBlur
-		? `<span class="route-media-challenge-blur-overlay" aria-hidden="true"></span><span class="creation-challenge-entered-badge" role="img" aria-label="Entered in challenge" title="Entered in challenge">${iconMarkup('trophy')}</span>`
+		? `<span class="route-media-challenge-blur-overlay" aria-hidden="true"></span>${challengeTrophy}`
 		: '';
 	const group = meta?.group;
 	const isGroup = group?.kind === 'group_creations' || group?.kind === 'group_v2';
@@ -318,7 +324,7 @@ export function creationCardMarkup(item, { hidePublishedBadge = false } = {}) {
 		processingStatus ? `data-creation-status="${escapeHtml(processingStatus)}"` : ''
 	].filter(Boolean).join(' ');
 	return html`<div class="feed-card feed-card--image-only creation-grid__card" ${attributes} role="link" tabindex="0" aria-label="Open ${escapeHtml(title || `Creation ${creationId || ''}`)}">
-		<div class="${mediaClass}" aria-hidden="true" data-creation-id="${escapeHtml(creationId)}" data-media-type="${escapeHtml(type)}" data-bg-blur="${nsfwBlur || challengeBlur ? '1' : '0'}" data-bg-url="${escapeHtml(thumbnail)}" data-bg-fallback="${escapeHtml(original)}" data-group-slides="${escapeHtml(JSON.stringify(slides))}"><img class="feed-card-img" alt="${escapeHtml(title || 'Creation')}" loading="lazy" decoding="async">${state}${nsfwBlur && !pending && !failed ? `<span class="creation-grid__nsfw-badge" role="img" aria-label="NSFW">${iconMarkup('eyeHidden')}</span>` : ''}${challengeOverlay}${!failed && !pending ? badges(item, { hideChallengeCorner: challengeBlur, hidePublished: hidePublishedBadge }) : ''}</div>
+		<div class="${mediaClass}" aria-hidden="true" data-creation-id="${escapeHtml(creationId)}" data-media-type="${escapeHtml(type)}" data-bg-blur="${nsfwBlur || challengeBlur ? '1' : '0'}" data-bg-url="${escapeHtml(thumbnail)}" data-bg-fallback="${escapeHtml(original)}" data-group-slides="${escapeHtml(JSON.stringify(slides))}"><img class="feed-card-img" alt="${escapeHtml(title || 'Creation')}" loading="lazy" decoding="async">${state}${nsfwBlur && !pending && !failed ? `<span class="creation-grid__nsfw-badge" role="img" aria-label="NSFW">${iconMarkup('eyeHidden')}</span>` : ''}${challengeOverlay}${!failed && !pending ? badges(item, { hideChallengeCorner: hideChallengeBadge || challengeBlur, hidePublished: hidePublishedBadge }) : ''}</div>
 	</div>`;
 }
 

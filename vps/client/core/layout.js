@@ -56,7 +56,11 @@ export function createLayout({ root, views, services } = {}) {
 	const frame = pageRegion.querySelector('.beta-outlet__frame');
 	const conversationViewport = bindConversationVisualViewport({ frame, root });
 	const searchComposer = createSearchComposerElement();
-	frame.append(composer, searchComposer);
+	const challengeNav = document.createElement('div');
+	challengeNav.className = 'beta-outlet__composer beta-outlet__challenge-nav';
+	challengeNav.hidden = true;
+	challengeNav.setAttribute('data-challenge-detail-nav', '');
+	frame.append(composer, searchComposer, challengeNav);
 	const creationComposer = pageRegion.querySelector('[data-layout-creation-composer]');
 	const creationComposerHost = creationComposer.querySelector('[data-create-composer-host]');
 	const measureComposer = () => frame.style.setProperty('--creation-composer-height', `${creationComposer.hidden ? 0 : creationComposer.getBoundingClientRect().height}px`);
@@ -67,6 +71,9 @@ export function createLayout({ root, views, services } = {}) {
 	messageComposerResize.observe(composer);
 	const searchComposerResize = new ResizeObserver(() => frame.style.setProperty('--search-composer-height', `${searchComposer.hidden ? 0 : searchComposer.getBoundingClientRect().height}px`));
 	searchComposerResize.observe(searchComposer);
+	const measureChallengeNav = () => frame.style.setProperty('--challenge-nav-height', `${challengeNav.hidden ? 0 : challengeNav.getBoundingClientRect().height}px`);
+	const challengeNavResize = new ResizeObserver(measureChallengeNav);
+	challengeNavResize.observe(challengeNav);
 	const menuButton = pageRegion.querySelector('.beta-outlet__more');
 	const pageActions = pageRegion.querySelector('.beta-outlet__actions');
 	const pageHeader = pageRegion.querySelector('.beta-outlet__header');
@@ -266,9 +273,11 @@ export function createLayout({ root, views, services } = {}) {
 		composer.hidden = chrome.composer !== 'message';
 		creationComposer.hidden = chrome.composer !== 'creation';
 		searchComposer.hidden = chrome.composer !== 'search';
+		challengeNav.hidden = chrome.composer !== 'challenge';
 		frame.dataset.composer = chrome.composer || 'none';
 		measureComposer();
 		measureMessageComposer();
+		measureChallengeNav();
 	}
 
 	async function reconcileCreationComposer(chrome, revision) {
@@ -334,6 +343,7 @@ export function createLayout({ root, views, services } = {}) {
 			},
 			composer,
 			searchComposer,
+			challengeNav,
 			...extra,
 		};
 	}
@@ -583,6 +593,7 @@ export function createLayout({ root, views, services } = {}) {
 		composerResize.disconnect();
 		messageComposerResize.disconnect();
 		searchComposerResize.disconnect();
+		challengeNavResize.disconnect();
 		backgroundRevision++;
 		setHeaderAccessories();
 		setHeaderSwitcher();

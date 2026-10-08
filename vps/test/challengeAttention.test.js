@@ -43,11 +43,13 @@ test('outstanding challenge votes reach the sidebar before Challenges is opened'
 			return { messages, hasMore: false, nextBefore: null };
 		},
 	};
+	let channel = null;
 	const provider = createThreadsProvider({
 		viewerId: 1,
 		registry: createQueryRegistry(),
 		apiFactory: () => api,
 		realtimeFactory: () => ({ subscribe() { return () => {}; }, destroy() {}, retry() {} }),
+		onChallengeChannel(detail) { channel = detail; },
 	});
 	try {
 		assert.equal(provider.challengeAttention, null);
@@ -57,6 +59,8 @@ test('outstanding challenge votes reach the sidebar before Challenges is opened'
 		assert.equal(messageLoads, 1);
 		assert.equal(provider.challengeAttention, 1);
 		assert.equal(provider.challengeUnread({ challenges_unread: 0 }), 1);
+		assert.equal(channel.threadId, 9);
+		assert.equal(channel.messages.some((row) => row.id === 2), true);
 	} finally {
 		provider.destroy();
 	}

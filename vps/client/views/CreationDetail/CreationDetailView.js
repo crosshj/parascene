@@ -3689,9 +3689,7 @@ async function loadCreation() {
 			if (imageEl.complete && imageEl.naturalWidth > 0) {
 				applyLoadedImageState();
 			} else {
-				if (!deferBackground) {
-					setHeroBackgroundUrl(url);
-				}
+				if (!deferBackground) setHeroBackgroundUrl(url);
 				ensureHeroImageVisible();
 			}
 			return;
@@ -3715,9 +3713,7 @@ async function loadCreation() {
 			if (imageEl.complete && imageEl.naturalWidth > 0) {
 				applyLoadedImageState();
 			} else {
-				if (!deferBackground) {
-					setHeroBackgroundUrl(url);
-				}
+				if (!deferBackground) setHeroBackgroundUrl(url);
 				ensureHeroImageVisible();
 			}
 		});
@@ -3763,9 +3759,7 @@ async function loadCreation() {
 			img.classList.toggle('is-active', isActive);
 		}
 		const activeUrl = String(activeImg.getAttribute('src') || '').trim();
-		if (activeUrl) {
-			setHeroBackgroundUrl(activeUrl);
-		}
+		if (activeUrl) setHeroBackgroundUrl(activeUrl);
 		imageWrapper?.classList.remove('image-loading', 'image-error', 'image-error-moderated', 'hero-aspect-pending');
 		return true;
 	}
@@ -4467,7 +4461,7 @@ async function loadCreation() {
 		}
 		const likeCount = getCreationLikeCount(creationWithLikes);
 
-		// Set image and blurred background depending on status
+		// Set the hero image depending on status
 		imageWrapper?.classList.remove('image-error');
 		const heroNsfw = !!(creation.nsfw ?? creation.meta?.nsfw);
 		const heroClear = heroNsfw && detailNsfwAllowsClear();

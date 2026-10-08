@@ -1363,7 +1363,7 @@ export function renderChallengeOrganizerModalInnerHtml(
 	return renderChallengeOrganizerCreateFormHtml('Save challenge', createOpts || {});
 }
 
-function renderChallengeOrganizerModalHtml() {
+export function renderChallengeOrganizerModalHtml() {
 	return `<dialog class="modal-overlay chat-page-chat-modal" data-challenges-organizer-modal aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="challenges-organizer-modal-title">
 		<div class="modal modal-medium chat-page-chat-modal-panel chat-page-challenges-organizer-modal-panel">
 			<div class="modal-header">

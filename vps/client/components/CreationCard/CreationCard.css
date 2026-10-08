@@ -777,48 +777,11 @@ body.view-nsfw .feed-card-image--group-carousel.nsfw::after {
 	}
 
 	.creation-wait-icon,
-	.creation-wait-gears,
+	.icon-gears,
 	.creation-wait-timeout {
 		width: 36px;
 		height: 36px;
 	}
-}
-
-.creation-wait-gears {
-	position: relative;
-	display: block;
-	width: 48px;
-	height: 48px;
-	flex-shrink: 0;
-	opacity: 0.75;
-}
-
-.creation-wait-gear {
-	position: absolute;
-	overflow: visible;
-	transform-origin: center;
-}
-
-.creation-wait-gear svg {
-	display: block;
-	width: 100%;
-	height: 100%;
-}
-
-.creation-wait-gear--lg {
-	width: 72%;
-	height: 72%;
-	left: 0;
-	top: 6%;
-	animation: creation-wait-spin 4.5s linear infinite;
-}
-
-.creation-wait-gear--sm {
-	width: 46%;
-	height: 46%;
-	right: 2%;
-	bottom: 4%;
-	animation: creation-wait-spin 3.15s linear infinite reverse;
 }
 
 .creation-wait-icon {
@@ -874,19 +837,6 @@ body.view-nsfw .feed-card-image--group-carousel.nsfw::after {
 	font-variant-numeric: tabular-nums;
 	letter-spacing: 0;
 	line-height: 1;
-}
-
-@keyframes creation-wait-spin {
-	to {
-		transform: rotate(360deg);
-	}
-}
-
-@media (prefers-reduced-motion: reduce) {
-	.creation-wait-gear--lg,
-	.creation-wait-gear--sm {
-		animation: none;
-	}
 }
 
 .route-details {

@@ -1,0 +1,55 @@
+/* Meshing cogs. Size the box from the parent; the spin lives here only. */
+.icon-gears {
+	position: relative;
+	display: block;
+	width: 48px;
+	height: 48px;
+	flex-shrink: 0;
+	opacity: 0.75;
+}
+
+.icon-gears__cog {
+	position: absolute;
+	overflow: visible;
+	transform-origin: center;
+}
+
+.icon-gears__cog svg {
+	display: block;
+	width: 100%;
+	height: 100%;
+}
+
+.icon-gears__cog--lg {
+	top: 6%;
+	left: 0;
+	width: 72%;
+	height: 72%;
+	animation: icon-gears-spin 4.5s linear infinite;
+}
+
+.icon-gears__cog--sm {
+	right: 2%;
+	bottom: 4%;
+	width: 46%;
+	height: 46%;
+	animation: icon-gears-spin 3.15s linear infinite reverse;
+}
+
+/* `rotate` stays on its own layer. A `transform` spin is dropped on Android
+   Chrome when an ancestor clips with overflow or paint containment. */
+@keyframes icon-gears-spin {
+	from {
+		rotate: 0deg;
+	}
+
+	to {
+		rotate: 360deg;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.icon-gears__cog {
+		animation: none;
+	}
+}

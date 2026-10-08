@@ -203,12 +203,12 @@ export function isImpliedChallengeOrganizer(viewerUserName) {
 }
 
 /**
- * Payout / finalize actions — oceanman and the platform admin account only (for now).
+ * Payout / finalize actions — oceanman, admin, and paperman.
  * @param {string | null | undefined} viewerUserName
  */
 export function viewerCanManageChallengePayouts(viewerUserName) {
 	const u = typeof viewerUserName === 'string' ? viewerUserName.trim().toLowerCase() : '';
-	return u === IMPLIED_CHALLENGE_ORGANIZER || u === 'admin';
+	return u === IMPLIED_CHALLENGE_ORGANIZER || u === 'admin' || u === 'paperman';
 }
 
 /**

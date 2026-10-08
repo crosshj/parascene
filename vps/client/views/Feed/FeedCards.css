@@ -1116,12 +1116,6 @@ body.view-nsfw .feed-view .feed-card-image--nsfw-group > .creation-group-badge,
 	}
 }
 
-@keyframes creation-wait-spin {
-	to {
-		transform: rotate(360deg);
-	}
-}
-
 @keyframes spinner-reveal {
 	to {
 		opacity: 1;

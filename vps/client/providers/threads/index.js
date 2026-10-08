@@ -7,7 +7,22 @@ import { encryptThreadText } from './private.js';
 import { createThreadsRealtime } from './realtime.js';
 import { createQueryRefresh } from './refresh.js';
 
-export function createThreadsProvider({ viewerId, registry, realtimeFactory = createThreadsRealtime, apiFactory = createThreadsApi } = {}) {
+function channelStamp(messages) {
+	const list = Array.isArray(messages) ? messages : [];
+	let hash = list.length;
+	for (const message of list) {
+		hash = Math.imul(hash, 33) + (Number(message?.id) || 0);
+		const body = typeof message?.body === 'string' ? message.body : '';
+		hash = Math.imul(hash, 33) + body.length;
+		const reactions = message?.reactions;
+		if (reactions) hash = Math.imul(hash, 33) + JSON.stringify(reactions).length;
+		const viewerReactions = message?.viewer_reactions;
+		if (viewerReactions) hash = Math.imul(hash, 33) + JSON.stringify(viewerReactions).length;
+	}
+	return String(hash);
+}
+
+export function createThreadsProvider({ viewerId, registry, realtimeFactory = createThreadsRealtime, apiFactory = createThreadsApi, onChallengeChannel, onChallengePing } = {}) {
 	const api = apiFactory();
 	const inbox = viewerId ? createThreadsInboxQuery({ viewerId, api }) : null;
 	const lease = inbox ? registry.acquire(['threads-inbox', viewerId], () => inbox.query) : null;
@@ -34,6 +49,9 @@ export function createThreadsProvider({ viewerId, registry, realtimeFactory = cr
 	let stopChallengeAttentionInbox = null;
 	let stopChallengeAttentionMessages = null;
 	let challengeAttentionLease = null;
+	let attentionThreadId = null;
+	let seenAttentionStamp = '';
+	let seenChallengeUnread = null;
 	function setChallengeAttention(count) {
 		const next = count == null || !Number.isFinite(Number(count)) ? null : Math.max(0, Math.floor(Number(count)));
 		if (Object.is(challengeAttention, next)) return;
@@ -58,15 +76,34 @@ export function createThreadsProvider({ viewerId, registry, realtimeFactory = cr
 	if (typeof window !== 'undefined') window.addEventListener('online', resume);
 	function publishChallengeAttention(snapshot) {
 		if (destroyed || !snapshot?.data?.complete) return;
-		setChallengeAttention(outstandingChallengeVotes(votes.project(snapshot.data.messages), viewerId));
+		const messages = votes.project(snapshot.data.messages);
+		setChallengeAttention(outstandingChallengeVotes(messages, viewerId));
+		const stamp = channelStamp(messages);
+		if (stamp === seenAttentionStamp) return;
+		seenAttentionStamp = stamp;
+		if (attentionThreadId) onChallengeChannel?.({ threadId: attentionThreadId, messages });
+	}
+	function noteChallengeUnread(snapshot) {
+		const unread = Math.max(0, Number(snapshot?.data?.unreadSummary?.challenges_unread) || 0);
+		if (seenChallengeUnread == null) {
+			seenChallengeUnread = unread;
+			return;
+		}
+		const increased = unread > seenChallengeUnread;
+		seenChallengeUnread = unread;
+		if (!increased) return;
+		const thread = snapshot.data?.threads?.find((row) => row.channel_slug === 'challenges');
+		if (thread) onChallengePing?.(Number(thread.id));
 	}
 	function watchChallengeAttention() {
 		if (stopChallengeAttentionInbox || !query) return;
 		stopChallengeAttentionInbox = query.subscribe((snapshot) => {
+			noteChallengeUnread(snapshot);
 			if (destroyed || challengeAttentionLease) return;
 			const thread = snapshot?.data?.threads?.find((row) => row.channel_slug === 'challenges');
 			if (!thread) return;
-			challengeAttentionLease = provider.acquireMessages(Number(thread.id), { persist: true, complete: true });
+			attentionThreadId = Number(thread.id);
+			challengeAttentionLease = provider.acquireMessages(attentionThreadId, { persist: true, complete: true });
 			stopChallengeAttentionMessages = challengeAttentionLease.query.subscribe(publishChallengeAttention);
 			void challengeAttentionLease.query.loadIfNeeded().catch(() => undefined);
 		});

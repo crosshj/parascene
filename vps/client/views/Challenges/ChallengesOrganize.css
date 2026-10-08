@@ -1146,19 +1146,15 @@
 }
 
 .challenge-pane-active-card {
-	border-bottom: 1px solid var(--border, #333);
-	padding-bottom: 24px;
+	padding-bottom: 8px;
 }
 
 .challenge-pane-active-card:last-child {
-	border-bottom: none;
 	padding-bottom: 0;
 }
 
-/* Same divider + gap as between stacked cards when Next / Previous follow the list. */
 .challenge-pane-active-list:has(+ .challenge-pane-section) > .challenge-pane-active-card:last-child {
-	border-bottom: 1px solid var(--border, #333);
-	padding-bottom: 24px;
+	padding-bottom: 8px;
 }
 
 .challenge-pane-active-list + .challenge-pane-section {

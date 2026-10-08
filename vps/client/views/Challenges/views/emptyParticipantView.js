@@ -8,20 +8,8 @@ import {
 } from '../../../shared/challenges/challengeAdmin.js';
 import { deriveChallengePhase } from '../../../shared/challenges/model/phases.js';
 import { ACTIVE_PARTICIPANT_PHASES } from '../../../shared/challenges/model/participantSlice.js';
-import { parseHeroCreationOrShareRef } from '../../../shared/userText.js';
 import { renderChallengeHistoryThumbWrapHtml } from '../../../shared/challengeHistoryThumb.js';
-
-/**
- * @param {string} raw results_creation_url value
- * @returns {string | null} in-app navigation href
- */
-function resolveChallengeResultsNavigationHref(raw) {
-	const cref = parseHeroCreationOrShareRef(raw);
-	if (cref?.kind === 'creation') {
-		return `/creations/${encodeURIComponent(String(cref.creationId))}`;
-	}
-	return null;
-}
+import { challengesDetailsHref } from '../../../shared/challenges/model/detailsRoute.js';
 
 /**
  * @param {{ msg: object, payload: object }[]} configEntries
@@ -31,53 +19,6 @@ function resolveChallengeResultsNavigationHref(raw) {
 function effectiveChallengePayload(configEntries, summaryPayload, challengeId) {
 	const merged = mergeFullChallengeConfigForChallenge(configEntries, challengeId);
 	return { ...summaryPayload, ...merged };
-}
-
-/**
- * @param {object} payload merged challenge_config
- * @param {number} nowMs
- * @returns {{ stateLabel: string, stateClass: string, resultsHref: string | null }}
- */
-function challengeHistoryCardMeta(payload, nowMs) {
-	const phase = deriveChallengePhase(payload, nowMs);
-	const resultsHref = resolveChallengeResultsNavigationHref(
-		typeof payload.results_creation_url === 'string' ? payload.results_creation_url : ''
-	);
-	if (phase === 'results' && resultsHref) {
-		return { stateLabel: 'View results', stateClass: 'results', resultsHref };
-	}
-	if (phase === 'results') {
-		return { stateLabel: 'Winners announced', stateClass: 'results', resultsHref: null };
-	}
-	if (phase === 'finalizing') {
-		return { stateLabel: 'Finalizing', stateClass: 'finalizing', resultsHref: null };
-	}
-	if (phase === 'submit_and_vote' || phase === 'submitting') {
-		return { stateLabel: 'Open', stateClass: 'active', resultsHref: null };
-	}
-	if (phase === 'voting') {
-		return { stateLabel: 'Voting', stateClass: 'active', resultsHref: null };
-	}
-	if (phase === 'between') {
-		return { stateLabel: 'Between rounds', stateClass: 'between', resultsHref: null };
-	}
-	return { stateLabel: 'Ended', stateClass: 'ended', resultsHref: null };
-}
-
-function renderChallengeHistoryCardInner({
-	title,
-	activeRange,
-	heroRef,
-	challengeId,
-	stateLabel,
-	stateClass
-}) {
-	return `${renderChallengeHistoryThumbWrapHtml(heroRef, challengeId, esc)}
-				<div class="challenge-pane-history-card-content">
-					<h3 class="challenge-pane-history-card-title">${esc(title)}</h3>
-					<p class="challenge-pane-history-card-range">${esc(activeRange)}</p>
-				</div>
-				<div class="challenge-pane-history-card-state challenge-pane-history-card-state--${esc(stateClass)}" aria-label="Challenge state">${esc(stateLabel)}</div>`;
 }
 
 function formatShortDateTime(isoLike) {
@@ -116,6 +57,14 @@ function challengeStartsAtMs(payload) {
 	return Number.isFinite(ms) ? ms : null;
 }
 
+function challengeEndsAtMs(payload) {
+	const end =
+		pickChallengeConfigTimestamp(payload, 'voting_end_at') ||
+		pickChallengeConfigTimestamp(payload, 'submission_end_at');
+	const ms = Date.parse(String(end || '').trim());
+	return Number.isFinite(ms) ? ms : null;
+}
+
 function pickNextChallengeSummary(configs = [], opts = {}) {
 	const excludeIds = new Set();
 	if (typeof opts.excludeChallengeId === 'string' && opts.excludeChallengeId.trim()) {
@@ -144,6 +93,61 @@ function pickNextChallengeSummary(configs = [], opts = {}) {
 		return aStart - bStart;
 	});
 	return upcoming[0] || null;
+}
+
+/**
+ * Older is the challenge that finishes sooner. Newer is the one that finishes later.
+ * Overlapping ranges stay in that line, so walking newer from the oldest reaches every stop.
+ * Deleted, purged, and unlisted drafts are not stops on this path.
+ * @param {{ msg: object, payload: object }[]} configs
+ * @param {string} challengeId
+ * @param {number} [nowMs]
+ * @returns {{ previous: { challengeId: string, title: string } | null, next: { challengeId: string, title: string } | null }}
+ */
+export function challengeDetailNeighbors(configs, challengeId, nowMs = Date.now()) {
+	const current = String(challengeId || '').trim();
+	const rows = summarizeLatestChallengeConfigs(configs).map((summary) => {
+		const id = String(summary.challenge_id || '').trim();
+		const payload = effectiveChallengePayload(configs, summary.payload, id);
+		return {
+			challengeId: id,
+			title: summary.title && summary.title.trim() ? summary.title.trim() : `Challenge ${id}`,
+			phase: deriveChallengePhase(payload, nowMs),
+			payload,
+			startMs: challengeStartsAtMs(payload),
+			endMs: challengeEndsAtMs(payload),
+			sortKey: summary.sortKey
+		};
+	}).filter((row) => row.challengeId);
+	const available = (row) => {
+		if (row.phase === 'deleted' || row.phase === 'purged') return false;
+		// Unlisted only hides a draft that has not started. Once a challenge is on the
+		// main page — active, or already in the previous list — it stays a stop.
+		if (row.phase === 'pre_submit' && !isChallengeListedForUpcoming(row.payload)) return false;
+		return true;
+	};
+	const timeOrLast = (ms) => (ms == null ? Number.POSITIVE_INFINITY : ms);
+	const byTime = (a, b) => {
+		const endDelta = timeOrLast(a.endMs) - timeOrLast(b.endMs);
+		if (endDelta !== 0) return endDelta;
+		const startDelta = timeOrLast(a.startMs) - timeOrLast(b.startMs);
+		if (startDelta !== 0) return startDelta;
+		return a.sortKey - b.sortKey;
+	};
+	const visible = rows.filter(available).sort(byTime);
+	let index = visible.findIndex((row) => row.challengeId === current);
+	let sequence = visible;
+	if (index < 0) {
+		const self = rows.find((row) => row.challengeId === current);
+		if (!self) return { previous: null, next: null };
+		sequence = [...visible, self].sort(byTime);
+		index = sequence.findIndex((row) => row.challengeId === current);
+	}
+	const stop = (row) => row ? { challengeId: row.challengeId, title: row.title } : null;
+	return {
+		previous: stop(sequence[index - 1]),
+		next: stop(sequence[index + 1])
+	};
 }
 
 /**
@@ -184,7 +188,9 @@ function renderChallengeHistoryCards(configs = [], opts = {}) {
 		return bEnd - aEnd;
 	});
 	if (!summaries.length) {
-		return `<p class="challenge-pane-muted">No challenges have been posted yet.</p>`;
+		return `<div class="route-empty challenge-entries-empty" data-challenge-past-empty>
+			<div class="route-empty-title">No previous challenges</div>
+		</div>`;
 	}
 	const cards = summaries
 		.map((summary) => {
@@ -194,29 +200,17 @@ function renderChallengeHistoryCards(configs = [], opts = {}) {
 			const challengeId =
 				typeof summary.challenge_id === 'string' ? summary.challenge_id.trim() : '';
 			const effectivePayload = effectiveChallengePayload(configs, summary.payload, challengeId);
-			const activeRange = challengeActiveRangeLabel(effectivePayload);
 			const heroRef = challengeHistoryThumbnailRef(effectivePayload);
-			const { stateLabel, stateClass, resultsHref } = challengeHistoryCardMeta(
-				effectivePayload,
-				Date.now()
-			);
-			const inner = renderChallengeHistoryCardInner({
-				title,
-				activeRange,
-				heroRef,
-				challengeId,
-				stateLabel,
-				stateClass
-			});
-			if (resultsHref) {
-				return `<li class="challenge-pane-card challenge-pane-history-card challenge-pane-history-card--has-link">
-				<a class="challenge-pane-history-card-link" href="${esc(resultsHref)}">${inner}</a>
-			</li>`;
-			}
-			return `<li class="challenge-pane-card challenge-pane-history-card">${inner}</li>`;
+			if (!challengeId) return '';
+			return `<a class="challenge-entry-card-link" href="${esc(challengesDetailsHref(challengeId))}" data-spa-link data-challenge-past-card data-challenge-id="${esc(challengeId)}">
+				<div class="feed-card feed-card--image-only creation-grid__card" aria-hidden="true">
+					<div class="feed-card-image">${renderChallengeHistoryThumbWrapHtml(heroRef, challengeId, esc)}</div>
+				</div>
+				<span class="challenge-card-kind-bar"><span class="challenge-card-kind-label"><span class="challenge-card-kind-rank">${esc(title)}</span></span></span>
+			</a>`;
 		})
 		.join('');
-	return `<ul class="challenge-pane-history-list">${cards}</ul>`;
+	return `<div class="route-cards content-cards-image-grid creation-browse-grid challenge-entry-grid challenge-past-grid">${cards}</div>`;
 }
 
 /**
@@ -254,10 +248,12 @@ export function renderNextChallengeSection(configs = [], opts = {}) {
  * @param {{ excludeChallengeId?: string, excludeChallengeIds?: string[] }} [opts]
  */
 export function renderPastChallengesSection(configs = [], opts = {}) {
-	const listHtml = renderChallengeHistoryCards(configs, opts);
-	return `<section class="challenge-pane-section challenge-pane-history-section">
-			<h3 class="challenge-pane-section-label">Previous challenges</h3>
-			${listHtml}
+	const gridHtml = renderChallengeHistoryCards(configs, opts);
+	return `<section class="creation-browse challenge-past-lane" data-challenge-past>
+			<div class="challenge-pane-entries-head">
+				<h3 class="challenge-pane-section-label">Previous challenges</h3>
+			</div>
+			${gridHtml}
 		</section>`;
 }
 
@@ -268,9 +264,8 @@ export function renderEmptyParticipantPane(configs = []) {
 	return `<div class="challenge-pane-empty route-empty-image-grid">
 			<section class="challenge-pane-section challenge-pane-inactive-note" aria-label="No active challenge">
 				<h2 class="challenge-pane-inactive-note-title">No active challenge right now</h2>
-				<p class="challenge-pane-inactive-note-text">There is currently no active challenge. Review previous challenges below — published results open your highlights creation when configured.</p>
+				<p class="challenge-pane-inactive-note-text">There is currently no active challenge. Open a previous challenge to see its entries and posts.</p>
 			</section>
 			${renderNextChallengeSection(configs)}
-			${renderPastChallengesSection(configs)}
 		</div>`;
 }

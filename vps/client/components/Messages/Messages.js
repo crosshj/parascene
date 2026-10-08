@@ -70,6 +70,7 @@ export function mountMessages({ outlet, viewerId, onLoadOlder, onRetry, onRetryS
 	}
 	const scroll = createMessagesScroll({ viewport, content: root, onLatestVisible: acknowledgeVisibleLatest });
 	let records = new Map();
+	const deleting = new Set();
 	let initial = true;
 	let editing = null;
 	let destroyed = false;
@@ -107,11 +108,20 @@ export function mountMessages({ outlet, viewerId, onLoadOlder, onRetry, onRetryS
 			record.node.replaceWith(node); record.node = node;
 			reactions.update(node, record.message, record.canReply);
 			node.classList.toggle('connect-chat-msg--reply-target', String(record.message.id) === replyTargetId);
+			applyDeleting(node, record.message.id);
 			const messages = [...records.values()].map((item) => item.message);
 			applyUnreadState(node, messages.indexOf(record.message), messages);
 			hydrateMessages(node);
 			scroll.observeRows();
 		}
+	}
+	function applyDeleting(node, key) {
+		const pending = deleting.has(String(key));
+		node.classList.toggle('is-deleting', pending);
+		if (pending) {
+			node.setAttribute('aria-busy', 'true');
+			node.classList.remove('connect-chat-msg--toolbar-open');
+		} else node.removeAttribute('aria-busy');
 	}
 	function beginEdit(key) {
 		if (editing?.saving) return;
@@ -139,6 +149,7 @@ export function mountMessages({ outlet, viewerId, onLoadOlder, onRetry, onRetryS
 	}
 	function retryLoad() { onRetry?.(); }
 	function rowAction(event) {
+		if (event.target.closest('.connect-chat-msg.is-deleting')) return;
 		const fileLink = event.target.closest('a.user-text-inline-file-link[href]');
 		if (fileLink && fileLink.closest('.connect-chat-msg-bubble') && !(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)) {
 			const kind = chatAttachmentPreviewKindFromHref(fileLink.getAttribute('href') || fileLink.href);
@@ -154,7 +165,13 @@ export function mountMessages({ outlet, viewerId, onLoadOlder, onRetry, onRetryS
 		const copy = event.target.closest('[data-chat-hover-copy]');
 		if (copy) navigator.clipboard.writeText(records.get(copy.dataset.chatMessageId)?.message.body || '').catch((reason) => { if (!destroyed) { status.textContent = reason.message || 'Could not copy message.'; errorLine.hidden = false; } });
 		const remove = event.target.closest('[data-chat-hover-delete]');
-		if (remove && confirm('Delete this message?')) Promise.resolve(onDelete?.(remove.dataset.chatMessageId)).catch((reason) => { if (!destroyed) { status.textContent = reason.message || 'Could not delete message.'; errorLine.hidden = false; } });
+		if (remove && !deleting.has(remove.dataset.chatMessageId) && confirm('Delete this message?')) {
+			const key = remove.dataset.chatMessageId;
+			deleting.add(key);
+			const record = records.get(key);
+			if (record) applyDeleting(record.node, key);
+			Promise.resolve(onDelete?.(key)).catch((reason) => { if (!destroyed) { status.textContent = reason.message || 'Could not delete message.'; errorLine.hidden = false; } }).finally(() => { deleting.delete(key); if (!destroyed) { const current = records.get(key); if (current) applyDeleting(current.node, key); } });
+		}
 		if (matchMedia('(hover: none), (pointer: coarse)').matches && !event.target.closest('button, a, textarea, input, video, audio, iframe')) {
 			const row = event.target.closest('.connect-chat-msg');
 			const open = row && !row.classList.contains('connect-chat-msg--toolbar-open');
@@ -253,6 +270,7 @@ export function mountMessages({ outlet, viewerId, onLoadOlder, onRetry, onRetryS
 				record.message = message; record.previous = messages[index - 1]; record.canEdit = canEdit;
 				record.canReply = data.editable !== false;
 				record.node.classList.toggle('connect-chat-msg--reply-target', key === replyTargetId);
+				applyDeleting(record.node, key);
 				applyUnreadState(record.node, index, messages);
 				if (record.reactionSignature !== reactionSignature) {
 					reactions.update(record.node, message, record.canReply);

@@ -41,6 +41,8 @@ import {
 	pendingPayoutRows,
 	mergeResultsPreservingPaid
 } from "../services/challenges/challengePayouts.js";
+import { listChallengeEntryCreations } from "../services/challenges/creationAccess.js";
+import { serializeCreation } from "./creations.js";
 
 export default function createChallengesRoutes({ queries }) {
 	const router = express.Router();
@@ -519,6 +521,31 @@ export default function createChallengesRoutes({ queries }) {
 			}
 		}
 	);
+
+	router.post("/api/chat/challenges/:threadId/entry-creations", async (req, res, next) => {
+		try {
+			const userId = requireUser(req, res);
+			if (!userId) return;
+			const sb = getSb(res);
+			if (!sb) return;
+			const viewers = typeof queries?.selectUsersByIds === "function"
+				? await queries.selectUsersByIds([userId])
+				: new Map();
+			const viewer = viewers.get(Number(userId));
+			if (!viewer) return res.status(404).json({ error: "User not found" });
+			const items = await listChallengeEntryCreations({
+				sb,
+				viewer,
+				threadId: Number(req.params.threadId),
+				items: req.body?.items,
+				serialize: serializeCreation
+			});
+			return res.json({ items });
+		} catch (err) {
+			console.error("[POST .../entry-creations]", err);
+			return next(err);
+		}
+	});
 
 	return router;
 }

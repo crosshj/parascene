@@ -1,0 +1,35 @@
+.segmented-control {
+	display: inline-flex;
+	align-items: stretch;
+	flex-shrink: 0;
+	padding: 2px;
+	border-radius: 999px;
+	border: 1px solid var(--border, #444);
+	background: color-mix(in srgb, var(--text) 6%, transparent);
+	gap: 2px;
+}
+
+.segmented-control-option {
+	margin: 0;
+	padding: 4px 10px;
+	border: 0;
+	border-radius: 999px;
+	background: transparent;
+	font-size: 0.75rem;
+	font-weight: 600;
+	line-height: 1.2;
+	color: var(--text-muted);
+	cursor: pointer;
+	user-select: none;
+}
+
+.segmented-control-option.is-active {
+	color: var(--text);
+	background: var(--surface-strong, var(--surface));
+	box-shadow: 0 1px 2px color-mix(in srgb, #000 22%, transparent);
+}
+
+.segmented-control-option:focus-visible {
+	outline: 2px solid var(--accent, #5eead4);
+	outline-offset: 2px;
+}

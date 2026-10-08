@@ -93,7 +93,8 @@
 	.creation-detail-author-icon,
 	.user-profile-avatar,
 	.user-profile-list-avatar,
-	.user-profile-comment-avatar
+	.user-profile-comment-avatar,
+	.challenge-entry-lightbox-avatar
 ) {
 	position: relative;
 }
@@ -107,7 +108,8 @@
 	.creation-detail-author-icon,
 	.user-profile-avatar,
 	.user-profile-list-avatar,
-	.user-profile-comment-avatar
+	.user-profile-comment-avatar,
+	.challenge-entry-lightbox-avatar
 ) img[data-avatar-src] {
 	position: absolute;
 	inset: 0;
@@ -127,7 +129,8 @@
 	.creation-detail-author-icon,
 	.user-profile-avatar:not(:has(.avatar-with-founder-flair)),
 	.user-profile-list-avatar,
-	.user-profile-comment-avatar
+	.user-profile-comment-avatar,
+	.challenge-entry-lightbox-avatar
 ):has(img[data-avatar-src]:not(.is-avatar-unresolved)) {
 	background: var(--surface-strong) !important;
 	color: transparent !important;
@@ -142,7 +145,8 @@
 	.creation-detail-author-icon,
 	.user-profile-avatar,
 	.user-profile-list-avatar,
-	.user-profile-comment-avatar
+	.user-profile-comment-avatar,
+	.challenge-entry-lightbox-avatar
 ):has(img[data-avatar-src]:not(.is-avatar-unresolved)) :is(
 	.avatar-fallback-label,
 	.user-profile-avatar-fallback,

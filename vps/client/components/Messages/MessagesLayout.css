@@ -48,3 +48,20 @@
 .beta-outlet__composer .chat-page-composer-reply[hidden] { display: none; }
 .chat-page-composer-reply-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .8125rem; }
 .beta-outlet__composer .chat-page-composer-reply button { width: 26px; height: 26px; border-radius: 50%; background: transparent; color: inherit; }
+
+/* Dim a row while its delete request is in flight, until the row leaves. */
+.chat-page-messages .connect-chat-msg {
+	transition: background-color 0.12s ease, opacity 0.16s ease;
+}
+
+.chat-page-messages .connect-chat-msg.is-deleting {
+	opacity: 0.4;
+}
+
+.chat-page-messages .connect-chat-msg.is-deleting .connect-chat-msg-hover-bar,
+.chat-page-messages .connect-chat-msg.is-deleting:hover .connect-chat-msg-hover-bar,
+.chat-page-messages .connect-chat-msg.is-deleting:focus-within .connect-chat-msg-hover-bar,
+.chat-page-messages .connect-chat-msg.is-deleting.connect-chat-msg--toolbar-open .connect-chat-msg-hover-bar {
+	opacity: 0;
+	pointer-events: none;
+}

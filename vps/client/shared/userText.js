@@ -1975,11 +1975,18 @@ export async function fetchCreationEmbedPayload(id, shareOpts, challengeOpts) {
 		challengeOpts && challengeOpts.challengeId != null
 			? String(challengeOpts.challengeId).trim()
 			: '';
+	const challengeMessageId = Number(
+		challengeOpts?.challengeMessageId ?? challengeOpts?.challenge_message_id
+	);
+	const messageKey =
+		Number.isSafeInteger(challengeMessageId) && challengeMessageId > 0
+			? String(challengeMessageId)
+			: '';
 	const cacheKey =
 		shareVersion && shareToken
-			? `${id}\0${shareVersion}\0${shareToken}\0${challengeId}`
-			: challengeId
-				? `${id}\0challenge:${challengeId}`
+			? `${id}\0${shareVersion}\0${shareToken}\0${challengeId}\0${messageKey}`
+			: challengeId || messageKey
+				? `${id}\0challenge:${challengeId}\0${messageKey}`
 				: id;
 	if (creationEmbedDataCache.has(cacheKey)) {
 		return creationEmbedDataCache.get(cacheKey);
@@ -1992,9 +1999,11 @@ export async function fetchCreationEmbedPayload(id, shareOpts, challengeOpts) {
 				headers['X-Share-Version'] = shareVersion;
 				headers['X-Share-Token'] = shareToken;
 			}
-			const qs = challengeId
-				? `?challenge_id=${encodeURIComponent(challengeId)}`
-				: '';
+			const params = new URLSearchParams();
+			if (challengeId) params.set('challenge_id', challengeId);
+			if (messageKey) params.set('challenge_message_id', messageKey);
+			const query = params.toString();
+			const qs = query ? `?${query}` : '';
 			const res = await fetch(`/api/create/images/${encodeURIComponent(id)}${qs}`, {
 				method: 'GET',
 				credentials: 'include',

@@ -1,5 +1,6 @@
 import { esc } from '../../../shared/challenges/constants.js';
 import { deriveChallengePhase } from '../../../shared/challenges/model/phases.js';
+import { ACTIVE_PARTICIPANT_PHASES } from '../../../shared/challenges/model/participantSlice.js';
 import {
 	addDaysYmd,
 	compareYmd,
@@ -72,6 +73,20 @@ function organizeActionsForPhase(phase, opts = {}) {
 		showRestore: false,
 		showPurge: false
 	};
+}
+
+/**
+ * Header actions for one challenge detail. Active challenges can be managed.
+ * Past challenges open the read-only view. Both include results.
+ * @param {string} phase
+ * @returns {{ id: 'manage' | 'view' | 'results', label: string, ariaLabel: string }[]}
+ */
+export function detailOrganizerHeaderActions(phase) {
+	if (!phase || phase === 'deleted' || phase === 'purged' || phase === 'empty') return [];
+	const primary = ACTIVE_PARTICIPANT_PHASES.has(phase)
+		? { id: 'manage', label: 'Manage', ariaLabel: 'Manage challenge' }
+		: { id: 'view', label: 'View', ariaLabel: 'View challenge' };
+	return [primary, { id: 'results', label: 'Results', ariaLabel: 'Challenge results' }];
 }
 
 /**

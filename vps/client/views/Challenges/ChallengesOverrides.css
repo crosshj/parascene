@@ -1,43 +1,4 @@
 /* Active WWW SPA challenge cascade overrides. */
-.challenge-pane-organize-entry {
-	margin-top: 0;
-	margin-bottom: 14px;
-}
-
-.challenge-pane-organize-entry-btn {
-	box-sizing: border-box;
-	width: 100%;
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	gap: 10px;
-	padding: 14px 22px;
-	font-size: 1.0625rem;
-	font-weight: 600;
-	line-height: 1.2;
-	text-decoration: none;
-	color: var(--text-muted);
-	border: 1px solid color-mix(in srgb, var(--border) 85%, var(--text) 15%);
-	border-radius: 12px;
-	cursor: pointer;
-	appearance: none;
-	-webkit-appearance: none;
-	background: transparent;
-	box-shadow: none;
-	transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
-}
-
-.challenge-pane-organize-entry-btn:hover {
-	color: var(--text);
-	background: color-mix(in srgb, var(--text) 4%, transparent);
-	border-color: color-mix(in srgb, var(--border) 55%, var(--text) 45%);
-}
-
-.challenge-pane-organize-entry-btn:focus-visible {
-	outline: 2px solid color-mix(in srgb, var(--accent, #5eead4) 55%, transparent);
-	outline-offset: 3px;
-}
-
 .challenge-pane-hero-stat {
 	border: none;
 	background: var(--color-purple-bg-subtle, color-mix(in srgb, var(--color-purple, #a78bfa) 14%, transparent));

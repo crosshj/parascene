@@ -16,6 +16,7 @@ import {
 } from '../../shared/challenges/challengeAdmin.js';
 import { challengeConfigBodyFingerprint } from '../../shared/challenges/challengesChannelCache.js';
 import {
+	renderChallengeOrganizerModalHtml,
 	renderChallengeOrganizerPageMarkup,
 	renderChallengeOrganizerModalInnerHtml,
 	renderChallengeOrganizerStatsModalInnerHtml,
@@ -1888,7 +1889,7 @@ export function mountChallengesOrganizerTools(host, opts) {
 		syncOrganizeCardHeroSquares();
 	};
 
-	const paint = () => {
+	const indexOrganizerRows = () => {
 		const model = buildChallengesChannelModel(opts.messages, {
 			viewerId: opts.viewerId,
 			nowMs: Date.now()
@@ -1902,6 +1903,52 @@ export function mountChallengesOrganizerTools(host, opts) {
 		const summaries = summarizeLatestChallengeConfigs(model.raw.configs);
 		challengeConfigEntries = model.raw.configs;
 		rowByChallengeId = new Map(summaries.map((s) => [s.challenge_id, s]));
+		return summaries;
+	};
+
+	const challengeEditPayload = (challengeId) => {
+		const cid = String(challengeId || '').trim();
+		const row = rowByChallengeId.get(cid);
+		const merged = mergeFullChallengeConfigForChallenge(challengeConfigEntries, cid);
+		const title =
+			(row?.payload && typeof row.payload.title === 'string' && row.payload.title.trim()) ||
+			(typeof row?.title === 'string' && row.title.trim()) ||
+			(typeof merged?.title === 'string' && merged.title.trim()) ||
+			cid;
+		return {
+			cid,
+			row,
+			merged,
+			title,
+			payload: { ...(row?.payload || {}), ...merged, challenge_id: cid }
+		};
+	};
+
+	const openManage = (challengeId) => {
+		const { cid, row, payload } = challengeEditPayload(challengeId);
+		if (!cid) return;
+		openModal('edit', payload, row?.configMessageId, { section: 'all', activeTab: 'details' });
+	};
+
+	const openView = (challengeId) => {
+		const { cid, row, merged, payload } = challengeEditPayload(challengeId);
+		if (!cid) return;
+		const resultsUrl = pickChallengeResultsCreationUrl(merged);
+		openModal('view', payload, row?.configMessageId, { activeTab: resultsUrl ? 'details' : 'pins' });
+	};
+
+	const openResults = (challengeId) => {
+		const { cid, title } = challengeEditPayload(challengeId);
+		if (!cid) return;
+		void openStatsModal(cid, title);
+	};
+
+	const paint = () => {
+		const summaries = indexOrganizerRows();
+		if (opts.actionsOnly) {
+			host.innerHTML = renderChallengeOrganizerModalHtml();
+			return;
+		}
 
 		const statsSvg = statsIcon('challenge-pane-organizer-stats-trigger-svg');
 		const contentSvg = slidersIcon('challenges-organize-section-svg');
@@ -2042,12 +2089,16 @@ export function mountChallengesOrganizerTools(host, opts) {
 			host.removeEventListener('click', onHostClick);
 			host.removeEventListener('keydown', onHostKeydown);
 			host.removeEventListener('submit', onAdminConfigSubmit);
-			host.innerHTML = '';
+			host.remove();
 		},
 		openGlobalSettings: () => {
 			if (!isImpliedChallengeOrganizer(opts.viewerUserName)) return;
 			openModal('global');
 		},
+		openManage,
+		openView,
+		openResults,
+		isModalOpen: () => !!host.querySelector('[data-challenges-organizer-modal][open]'),
 		isOceanman: () => isImpliedChallengeOrganizer(opts.viewerUserName)
 	};
 }

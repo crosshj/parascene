@@ -1,11 +1,14 @@
 import { totalVoteCountFromChallengeReactions } from '../../../shared/challenges/constants.js';
 
+const ENDED_PHASES = new Set(['finalizing', 'results', 'deleted', 'purged']);
+
 /**
  * Thin presenter: latest config payload → hero title string (escaped once in hero view).
  * @param {object | null} latestConfig
  * @param {object[]} [rankedSubmissions]
+ * @param {string} [phase]
  */
-export function participantHeroViewModel(latestConfig, rankedSubmissions = []) {
+export function participantHeroViewModel(latestConfig, rankedSubmissions = [], phase = '') {
 	const title =
 		latestConfig &&
 		typeof latestConfig.title === 'string' &&
@@ -41,12 +44,13 @@ export function participantHeroViewModel(latestConfig, rankedSubmissions = []) {
 		totalVotes += totalVoteCountFromChallengeReactions(row?.reactions);
 	}
 
+	const ended = ENDED_PHASES.has(String(phase || ''));
 	return {
 		title,
 		stats: [
-			{ key: 'entries', label: 'Entries so far', value: String(entries) },
-			{ key: 'creators', label: 'Creators entered', value: String(creators) },
-			{ key: 'votes', label: 'Total votes', value: String(totalVotes) }
+			{ key: 'entries', label: ended ? 'Entries' : 'Entries so far', value: String(entries) },
+			{ key: 'creators', label: ended ? 'Creators' : 'Creators entered', value: String(creators) },
+			{ key: 'votes', label: ended ? 'Votes' : 'Total votes', value: String(totalVotes) }
 		]
 	};
 }

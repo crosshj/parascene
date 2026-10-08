@@ -63,9 +63,13 @@ try {
  const bubble=stream.querySelector('.connect-chat-msg-bubble');const row=stream.firstChild;
  row.querySelector('[data-chat-hover-copy]').click();
  row.querySelector('[data-chat-hover-delete]').click();
+ assert.ok(row.classList.contains('is-deleting'));
+ assert.equal(row.getAttribute('aria-busy'), 'true');
  row.querySelector('.connect-chat-msg-hover-react').click();
  await new Promise(resolve => setTimeout(resolve, 0));
  assert.deepEqual(actions, [['copy', 'Hello'], ['delete', '10'], ['react', '10', 'heart']]);
+ assert.ok(!row.classList.contains('is-deleting'));
+ assert.equal(row.getAttribute('aria-busy'), null);
  context.matchMedia = () => ({ matches: true });
  bubble.click(); assert.ok(row.classList.contains('connect-chat-msg--toolbar-open'));
  bubble.click(); assert.ok(!row.classList.contains('connect-chat-msg--toolbar-open'));

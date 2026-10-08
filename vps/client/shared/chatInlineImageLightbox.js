@@ -174,7 +174,7 @@ function attachChatInlineImageLightboxBackdropClose(overlay) {
 	overlay.addEventListener('click', (e) => {
 		const t = e.target;
 		if (!(t instanceof Element)) return;
-		if (t.closest('.chat-inline-image-lightbox-footer, .chat-inline-image-lightbox-title')) return;
+		if (t.closest('.chat-inline-image-lightbox-footer, .chat-inline-image-lightbox-title, .challenge-entry-lightbox-user')) return;
 		if (t.closest('.chat-inline-image-lightbox-close')) return;
 		if (
 			t.closest('.chat-inline-image-lightbox-file-card') ||
@@ -490,10 +490,37 @@ export function openChatInlineImageLightbox(src, creationMeta, hooks) {
 		detachMountedLightboxVisual();
 		const img = document.createElement('img');
 		img.className = 'chat-inline-image-lightbox-img';
-		img.src = String(srcUrl || '').trim();
 		img.alt = '';
-		mountedLightboxVisual = img;
-		mountIntoFrame(img);
+		const src = String(srcUrl || '').trim();
+		const frameWidth = Number(hooks?.width);
+		const frameHeight = Number(hooks?.height);
+		if (!(frameWidth > 0 && frameHeight > 0)) {
+			img.src = src;
+			mountedLightboxVisual = img;
+			mountIntoFrame(img);
+			return;
+		}
+		const slot = document.createElement('div');
+		slot.className = 'chat-inline-image-lightbox-image-slot';
+		slot.style.setProperty('--chat-lightbox-image-w', String(frameWidth));
+		slot.style.setProperty('--chat-lightbox-image-h', String(frameHeight));
+		const placeholder = document.createElement('div');
+		placeholder.className = 'chat-inline-image-lightbox-image-placeholder skeleton';
+		placeholder.setAttribute('role', 'status');
+		placeholder.setAttribute('aria-label', 'Loading image');
+		img.classList.add('chat-inline-image-lightbox-img--pending');
+		const reveal = () => {
+			img.classList.remove('chat-inline-image-lightbox-img--pending');
+			placeholder.remove();
+		};
+		img.addEventListener('load', reveal, { once: true });
+		img.addEventListener('error', reveal, { once: true });
+		img.src = src;
+		slot.append(img);
+		if (!(img.complete && img.naturalWidth > 0)) slot.append(placeholder);
+		else reveal();
+		mountedLightboxVisual = slot;
+		mountIntoFrame(slot);
 	};
 
 	const mountGallerySlide = (idx) => {
@@ -1760,9 +1787,12 @@ export function openChatAttachmentPreviewLightbox(src, kind, hooks) {
 			sourceVideo &&
 			sourceVideo.parentNode &&
 			!chatInlineVideoLightboxRestore;
+		const hinted = { width: Number(hooks?.width), height: Number(hooks?.height) };
 		const { width: intrinsicW, height: intrinsicH } = canReuseInline
 			? inlineVideoIntrinsicSize(sourceVideo)
-			: { width: 0, height: 0 };
+			: hinted.width > 0 && hinted.height > 0
+				? hinted
+				: { width: 0, height: 0 };
 
 		const slot = document.createElement('div');
 		slot.className = 'chat-inline-image-lightbox-video-slot';
@@ -1836,6 +1866,33 @@ export function openChatAttachmentPreviewLightbox(src, kind, hooks) {
 		slot.appendChild(video);
 		if (!hasInlineFrame) slot.appendChild(placeholder);
 		frame.appendChild(slot);
+	} else if (kind === 'suno') {
+		const stage = document.createElement('div');
+		stage.className = 'chat-inline-image-lightbox-suno-stage';
+		const frameWidth = Number(hooks?.width);
+		const frameHeight = Number(hooks?.height);
+		stage.style.setProperty('--chat-lightbox-image-w', frameWidth > 0 ? String(frameWidth) : '1');
+		stage.style.setProperty('--chat-lightbox-image-h', frameHeight > 0 ? String(frameHeight) : '1');
+		if (hooks?.artwork) {
+			const art = document.createElement('img');
+			art.className = 'chat-inline-image-lightbox-suno-art';
+			art.src = hooks.artwork;
+			art.alt = '';
+			art.draggable = false;
+			stage.append(art);
+		}
+		const dock = document.createElement('div');
+		dock.className = 'chat-inline-image-lightbox-suno-dock';
+		const iframe = document.createElement('iframe');
+		iframe.className = 'chat-inline-image-lightbox-suno-iframe';
+		iframe.src = url;
+		iframe.title = hooks?.title || 'Suno song';
+		iframe.setAttribute('allow', 'autoplay; encrypted-media; fullscreen');
+		iframe.setAttribute('allowfullscreen', '');
+		iframe.setAttribute('referrerpolicy', 'no-referrer-when-downgrade');
+		dock.append(iframe);
+		stage.append(dock);
+		frame.append(stage);
 	} else if (kind === 'audio') {
 		const slot = document.createElement('div');
 		slot.className =
@@ -2273,10 +2330,10 @@ export function createChatMediaLightbox() {
  const close = () => { if (owned && chatInlineImageLightboxEl === owned) closeChatInlineImageLightbox(); owned = null; };
  return {
   get element() { return owned; }, close,
-  open({ title, metadata = '', explainer = metadata, kind = 'image', url = '', artwork = '', actions = [] }) {
+  open({ title, metadata = '', explainer = metadata, kind = 'image', url = '', artwork = '', actions = [], width = 0, height = 0 }) {
    if (destroyed) return;
    const opener = document.activeElement;
-   const hooks = { title, explainer, artwork, actions, onDismiss: () => { if (opener?.isConnected) opener.focus({ preventScroll: true }); } };
+   const hooks = { title, explainer, artwork, actions, width, height, onDismiss: () => { if (opener?.isConnected) opener.focus({ preventScroll: true }); } };
    if (kind === 'image') openChatInlineImageLightbox(url, null, hooks);
    else openChatAttachmentPreviewLightbox(url || '#', kind, hooks);
    owned = chatInlineImageLightboxEl;

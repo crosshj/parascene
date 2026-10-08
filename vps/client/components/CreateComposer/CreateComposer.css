@@ -2546,7 +2546,7 @@ body.create-page:not(.creation-edit-page) .create-btn-generate:focus-visible,
 	gap: 10px;
 }
 
-.creation-detail-image-wrapper [data-creation-gpu-wait] .creation-wait-gears,
+.creation-detail-image-wrapper [data-creation-gpu-wait] .icon-gears,
 .creation-detail-image-wrapper [data-creation-gpu-wait] .creation-wait-icon,
 .creation-detail-image-wrapper [data-creation-gpu-wait] .creation-wait-timeout {
 	width: 4.5rem;
@@ -2681,6 +2681,7 @@ body.creation-detail-page main>section:first-of-type {
 	width: 100%;
 	--hero-max-height: min(80vh, calc(100svh - 10.5rem));
 }
+
 
 .creation-detail-background {
 	position: absolute;
@@ -4913,7 +4914,7 @@ button.creation-detail-group-item {
 }
 
 .creation-detail-group-thumb--waiting .creation-wait-icon,
-.creation-detail-group-thumb--waiting .creation-wait-gears,
+.creation-detail-group-thumb--waiting .icon-gears,
 .creation-detail-group-thumb--waiting .creation-wait-timeout {
 	width: 32px;
 	height: 32px;

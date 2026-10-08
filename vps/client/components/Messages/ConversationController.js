@@ -100,7 +100,7 @@ export function createConversationController({ view, provider, route, viewerId, 
 		const viewer = getViewer() || {};
 		const profile = viewer.profile || viewer;
 		const clientKey = `pending-${crypto.randomUUID()}`;
-		const record = { id: clientKey, clientKey, sender_id: viewerId, sender_user_name: profile.user_name, sender_avatar_url: profile.avatar_url, sender_plan: viewer.meta?.plan || 'free', body, created_at: new Date().toISOString(), meta: reply ? { reply: { ...reply } } : {}, reply_parent_exists: !!reply, delivery: { status: 'queued' } };
+		const record = { id: clientKey, clientKey, sender_id: viewerId, sender_user_name: profile.user_name, sender_avatar_url: profile.avatar_url, sender_plan: viewer.plan === 'founder' || viewer.meta?.plan === 'founder' ? 'founder' : 'free', body, created_at: new Date().toISOString(), meta: reply ? { reply: { ...reply } } : {}, reply_parent_exists: !!reply, delivery: { status: 'queued' } };
 		outgoing.set(record.id, record); void deliver(record); return true;
 	}
 	async function loadOlder() {

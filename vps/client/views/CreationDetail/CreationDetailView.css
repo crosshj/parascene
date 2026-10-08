@@ -93,7 +93,7 @@
 	gap: 10px;
 }
 
-.creation-detail-image-wrapper [data-creation-gpu-wait] .creation-wait-gears,
+.creation-detail-image-wrapper [data-creation-gpu-wait] .icon-gears,
 .creation-detail-image-wrapper [data-creation-gpu-wait] .creation-wait-icon,
 .creation-detail-image-wrapper [data-creation-gpu-wait] .creation-wait-timeout {
 	width: 4.5rem;
@@ -2524,7 +2524,7 @@ body:not(.view-nsfw) .creation-detail-group-thumb-wrap.nsfw:not(.nsfw-revealed) 
 }
 
 .creation-detail-group-thumb--waiting .creation-wait-icon,
-.creation-detail-group-thumb--waiting .creation-wait-gears,
+.creation-detail-group-thumb--waiting .icon-gears,
 .creation-detail-group-thumb--waiting .creation-wait-timeout {
 	width: 32px;
 	height: 32px;

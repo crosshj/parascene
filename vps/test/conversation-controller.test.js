@@ -4,16 +4,17 @@ import { createConversationController } from '../client/components/Messages/Conv
 import { createQuery } from '../client/core/query.js';
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
-function fixture(send) {
+function fixture(send, getViewer) {
 	const snapshots = [];
 	let released = false;
 	const query = createQuery({ load: async () => ({ messages: [], hasMore: false, nextBefore: null }) });
+	const inbox = { threads: [{ id: 7, type: 'channel', channel_slug: 'general' }] };
 	const provider = {
-		query: { refresh: async () => ({ threads: [{ id: 7, type: 'channel', channel_slug: 'general' }] }) },
+		query: createQuery({ initialData: inbox, load: async () => inbox }),
 		acquireMessages: () => ({ query, release() { released = true; query.destroy(); } }),
 		send,
 	};
-	const controller = createConversationController({ view: { render: (data) => snapshots.push(structuredClone(data)), setStatus() {}, setReady() {} }, provider, route: { kind: 'channel', slug: 'general' }, viewerId: 1 });
+	const controller = createConversationController({ view: { render: (data) => snapshots.push(structuredClone(data)), setStatus() {}, setReady() {} }, provider, route: { kind: 'channel', slug: 'general' }, viewerId: 1, getViewer });
 	return { controller, query, snapshots, get released() { return released; } };
 }
 
@@ -32,6 +33,20 @@ test('failed sends retain their body and retry replaces the temporary row with o
 	state.controller.retrySend(failed.id);
 	await settle();
 	assert.deepEqual(state.snapshots.at(-1).messages.map((row) => row.id), [9]);
+	state.controller.destroy();
+});
+
+test('an optimistic row uses the viewer founder plan before the server confirms', async () => {
+	let complete;
+	const state = fixture(() => new Promise((resolve) => { complete = resolve; }), () => ({ plan: 'founder', profile: { user_name: 'ada' } }));
+	await settle();
+	state.controller.send('Hello');
+	const pending = state.snapshots.at(-1).messages[0];
+	assert.equal(pending.sender_plan, 'founder');
+	assert.equal(pending.sender_user_name, 'ada');
+	assert.equal(pending.delivery.status, 'pending');
+	complete({ id: 9, body: 'Hello', sender_id: 1, sender_plan: 'founder', created_at: pending.created_at });
+	await settle();
 	state.controller.destroy();
 });
 
