@@ -2,7 +2,11 @@
 
 ## Remaining product work
 
-- [ ] ...
+- [ ] on mobile, doomscroll comments, click plus button, upload image selection - the add Image modal doesn't center vertical in the space left over from keypad taking up space.  This makes the modal sit under the keypad, not good.  Elsewhere in the app we don't have this problem.
+- [ ] queue for later seems not to work
+- [ ] queue from frame: Failed to execute 'toBlob' - tainted canvas
+- [ ] Use first frame as poster works where normal video gen seems to struggle with proper poster frame
+- [ ] create detail three dots menu should lock scroll behind it while visible (or move with scroll via anchor)
 
 ## Public pages and discoverability
 

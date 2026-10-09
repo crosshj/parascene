@@ -3,8 +3,9 @@ import { createChatFeedFetchPage, getChatFeedItemKey } from '../../providers/fee
 import { createChatFeedChannelElementsFromSegments, getChatFeedMobileSpotlightHtml, mountChatFeedLoadMoreSkeleton, removeChatFeedLoadMoreSkeleton } from './feedChannelView.js';
 import { loadDeferredChatFeedChallenge, createChatFeedChallengePlaceholderElement, isChatFeedChallengePlaceholder } from './feedChannelChallenge.js';
 import { partitionChatFeedMobileAlternating, isFeedRowVideoCreation } from '../../shared/chatFeedMobilePartition.js';
-import { rememberFeedDoomVideo } from '../../shared/doomFeedVideoCache.js';
-import { createFeedItemCard, getFeedGroupVideoPlayer } from '../../shared/feedCardBuild.js';
+import { primeDoomAudiblePlayback, rememberFeedDoomVideo } from '../../shared/doomFeedVideoCache.js';
+import { resumeMediaAudioLevelingFromGesture } from '../../shared/mediaAudioLeveling.js';
+import { createFeedItemCard, getFeedGroupVideoPlayer, getFeedItemGroupVideoSlides } from '../../shared/feedCardBuild.js';
 import { renderFeedCardsSkeleton, renderMobileFeedCardsSkeleton } from '../../shared/skeleton.js';
 import { enableLikeButtons } from '../../shared/likes.js';
 import { safeMediaPlay } from '../../shared/safeMediaPlay.js';
@@ -69,12 +70,24 @@ export function createFeedController({ root, actions, services, setHeaderMenu })
   if (next) pauseMedia(); else resumeMedia();
  });
  function doomHref(item) { return mobile() && isFeedRowVideoCreation(item) ? `/feed/doom/${encodeURIComponent(item.created_image_id ?? item.id)}` : undefined; }
+ function beginDoomFromFeedTap(href, item) {
+  if (typeof href !== 'string' || !href.startsWith('/feed/doom/')) return;
+  try {
+   if (getFeedItemGroupVideoSlides(item).length > 1) {
+    resumeMediaAudioLevelingFromGesture();
+    return;
+   }
+   primeDoomAudiblePlayback(item);
+  } catch {
+   // Playback unlock must not block opening the scroll.
+  }
+ }
  function render(item, index) {
   if (isChatFeedChallengePlaceholder(item)) return createChatFeedChallengePlaceholderElement();
   return createFeedItemCard(item, index, {
    setupFeedVideo, enableComposerDragSource: true, inlineActions: true, nsfwIcon: true,
    resolveCreationCardHref: doomHref,
-   performCreationNavigation: href => actions.navigate(href, { seed: item }),
+   performCreationNavigation: href => { beginDoomFromFeedTap(href, item); actions.navigate(href, { seed: item }); },
    performShellNavigation: href => actions.navigate(href),
   });
  }
@@ -114,7 +127,7 @@ export function createFeedController({ root, actions, services, setHeaderMenu })
    rows.push(...fresh); hasMore = page.hasMore;
    if (reset) {
     disposeCards(); content.replaceChildren(); bindScrollObservers();
-    const result = createChatFeedChannelElementsFromSegments(mobile() ? partitionChatFeedMobileAlternating(rows, { reserveChallengeSlot: true }).segments : [{ type: 'cards', items: rows }], render, { resolveSpotlightHref: doomHref, performSpotlightNavigation: (href, _event, item) => actions.navigate(href, { seed: item }) });
+    const result = createChatFeedChannelElementsFromSegments(mobile() ? partitionChatFeedMobileAlternating(rows, { reserveChallengeSlot: true }).segments : [{ type: 'cards', items: rows }], render, { resolveSpotlightHref: doomHref, performSpotlightNavigation: (href, _event, item) => { beginDoomFromFeedTap(href, item); actions.navigate(href, { seed: item }); } });
     routeWrap = result.routeWrap; cards = result.cards; content.append(routeWrap);
     void loadDeferredChatFeedChallenge({ messagesEl: content, routeWrap, mobileLayout: mobile(), fetchJson: createFeedRequest(request.signal), renderCard: render, isStale: () => destroyed || epoch !== token });
     scroll.to(0);

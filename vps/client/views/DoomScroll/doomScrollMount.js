@@ -772,6 +772,23 @@ export async function mountChatDoomScroll(opts) {
 		}
 		const v = resolveDoomSlideVideo(slide);
 		if (!(v instanceof HTMLVideoElement)) return;
+		/* Tap already started this element with sound. Don't play() again — that
+		   wires Web Audio and drops the gesture, which leaves only the opener silent. */
+		if (
+			!preferMuted &&
+			!slideNsfwBlocked(slide) &&
+			v.dataset.doomAudibleGesture === '1' &&
+			!v.paused
+		) {
+			applyMutedStateToVideo(v, false);
+			bindDoomVideoRevealWhenFrameReady(v, slide, {
+				shouldReveal: () => slides()[activeIdx] === slide
+			});
+			syncMuteUi();
+			syncPlayOverlayForSlide(slide);
+			attachActiveProgressListener();
+			return;
+		}
 		warmDoomSlideVideo(slide, 'auto');
 		if (v.readyState < 2 && !slide.querySelector('.chat-doom-pending--over-media')) {
 			armDelayedPlaybackIndicator(slide, v);
@@ -794,7 +811,8 @@ export async function mountChatDoomScroll(opts) {
 
 		const applyMuteForSlide = (forceMutedForAutoplay) => {
 			/* Obscured NSFW still autoplays (muted); browser policy allows muted autoplay. */
-			v.muted = slideNsfwBlocked(slide) || forceMutedForAutoplay ? true : preferMuted;
+			const muted = Boolean(slideNsfwBlocked(slide) || forceMutedForAutoplay || preferMuted);
+			applyMutedStateToVideo(v, muted);
 		};
 
 		const tryPlay = (forceMutedForAutoplay, attempt = 0) => {
@@ -802,7 +820,19 @@ export async function mountChatDoomScroll(opts) {
 			safeMediaPlayWithHandlers(v, {
 				onPlayed: () => {
 					if (slides()[activeIdx] !== slide) return;
+					/* Unmuted play() on the opener is often rejected (mount is after the tap).
+					   Muted autoplay then sticks. If the document was already activated, drop mute. */
+					if (
+						forceMutedForAutoplay &&
+						!preferMuted &&
+						!slideNsfwBlocked(slide) &&
+						(navigator.userActivation?.hasBeenActive === true ||
+							v.dataset.doomAudibleGesture === '1')
+					) {
+						applyMutedStateToVideo(v, false);
+					}
 					syncPlayOverlayForSlide(slide);
+					syncMuteUi();
 				},
 				onRejected: (err) => {
 					if (isMediaPlayAbortError(err)) {
@@ -1659,9 +1689,13 @@ export async function mountChatDoomScroll(opts) {
 
 	function applyMutedStateToVideo(v, muted) {
 		if (!(v instanceof HTMLVideoElement)) return;
-		v.muted = muted;
-		if (muted) v.setAttribute('muted', '');
+		const next = Boolean(muted);
+		/* `defaultMuted` reflects the muted attribute. Leaving it set keeps the
+		   warmed opener silent after the property is cleared. */
+		v.defaultMuted = next;
+		if (next) v.setAttribute('muted', '');
 		else v.removeAttribute('muted');
+		v.muted = next;
 	}
 
 	if (muteBtn instanceof HTMLElement) {

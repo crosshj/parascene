@@ -171,7 +171,8 @@ export function mountSequentialVideoPlayer(container, slides, options = {}) {
 		video.playsInline = true;
 		video.preload = 'auto';
 		video.muted = startMuted;
-		video.defaultMuted = startMuted;
+		video.defaultMuted = false;
+		if (!startMuted) video.removeAttribute('muted');
 		video.loop = loopSingleClip;
 		if (loopSingleClip) video.setAttribute('loop', '');
 		primeMediaElementForAudioLeveling(video);
@@ -390,13 +391,26 @@ export function mountSequentialVideoPlayer(container, slides, options = {}) {
 	};
 
 	const tryPlayVideo = async (video) => {
+		const wantSound = video.muted !== true;
 		try {
+			attachMediaAudioLeveling(video);
 			await video.play();
 			return true;
-		} catch {
+		} catch (err) {
+			if (err && err.name === 'AbortError') return !video.paused;
+			if (!wantSound || !(err && err.name === 'NotAllowedError')) return false;
+			video.defaultMuted = false;
 			video.muted = true;
 			try {
 				await video.play();
+				if (
+					wantSound &&
+					typeof navigator !== 'undefined' &&
+					navigator.userActivation?.hasBeenActive === true
+				) {
+					video.removeAttribute('muted');
+					video.muted = false;
+				}
 				return true;
 			} catch {
 				return false;
@@ -746,9 +760,10 @@ export function mountSequentialVideoPlayer(container, slides, options = {}) {
 			const nextMuted = muted === true;
 			for (const video of videos) {
 				if (!(video instanceof HTMLVideoElement)) continue;
-				video.muted = nextMuted;
+				video.defaultMuted = nextMuted;
 				if (nextMuted) video.setAttribute('muted', '');
 				else video.removeAttribute('muted');
+				video.muted = nextMuted;
 			}
 		},
 		isMuted() {

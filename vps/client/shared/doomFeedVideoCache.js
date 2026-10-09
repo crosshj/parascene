@@ -3,6 +3,8 @@
  * element instead of starting a second download when a card is opened.
  */
 import { isFeedRowVideoCreation } from './chatFeedMobilePartition.js';
+import { resumeMediaAudioLevelingFromGesture, primeMediaElementForAudioLeveling } from './mediaAudioLeveling.js';
+import { nsfwShouldBlur } from './nsfwPolicy.js';
 import { feedItemPlayableVideoUrl } from './videoFirstFramePoster.js';
 
 const MAX_WARMED = 8;
@@ -34,13 +36,84 @@ export function rememberFeedDoomVideo(item) {
 	}
 	if (warmByUrl.has(url) || warmByUrl.size >= MAX_WARMED) return;
 	const video = document.createElement('video');
+	/* Property only. `defaultMuted` writes the muted attribute, and the claimed
+	   opener then stays silent after `.muted = false`. */
 	video.muted = true;
-	video.defaultMuted = true;
+	video.defaultMuted = false;
 	video.playsInline = true;
 	video.preload = 'auto';
 	video.src = url;
 	video.load();
 	warmByUrl.set(url, video);
+}
+
+function doomPreferMuted() {
+	try {
+		return sessionStorage.getItem('chatDoomPreferMuted') === '1';
+	} catch {
+		return false;
+	}
+}
+
+function parkGestureVideo(video) {
+	if (typeof document === 'undefined' || video.isConnected) return;
+	video.style.position = 'fixed';
+	video.style.width = '1px';
+	video.style.height = '1px';
+	video.style.opacity = '0';
+	video.style.pointerEvents = 'none';
+	video.style.left = '0';
+	video.style.top = '0';
+	document.body.appendChild(video);
+}
+
+/**
+ * Call from the feed tap that opens doom, before any await.
+ * The opener is the only clip started outside that gesture, so browsers
+ * leave it muted unless this element begins playback here.
+ * @param {object | null | undefined} item
+ */
+export function primeDoomAudiblePlayback(item) {
+	resumeMediaAudioLevelingFromGesture();
+	if (!isFeedRowVideoCreation(item) || nsfwShouldBlur(item) || doomPreferMuted()) return;
+	const url = feedItemPlayableVideoUrl(item);
+	if (!url || typeof document === 'undefined') return;
+
+	let video = warmByUrl.get(url);
+	if (!(video instanceof HTMLVideoElement)) {
+		if (warmByUrl.size >= MAX_WARMED) {
+			const oldest = warmByUrl.keys().next().value;
+			const evicted = oldest ? warmByUrl.get(oldest) : null;
+			if (oldest) warmByUrl.delete(oldest);
+			if (evicted instanceof HTMLVideoElement) {
+				evicted.pause();
+				evicted.remove();
+			}
+		}
+		video = document.createElement('video');
+		video.playsInline = true;
+		video.setAttribute('playsinline', '');
+		video.preload = 'auto';
+		video.loop = true;
+		primeMediaElementForAudioLeveling(video);
+		video.src = url;
+		warmByUrl.set(url, video);
+	} else {
+		primeMediaElementForAudioLeveling(video);
+	}
+
+	video.defaultMuted = false;
+	video.removeAttribute('muted');
+	video.muted = false;
+	video.volume = 1;
+	video.dataset.doomAudibleGesture = '1';
+	parkGestureVideo(video);
+	try {
+		const pending = video.play();
+		if (pending && typeof pending.catch === 'function') pending.catch(() => {});
+	} catch {
+		// ignore
+	}
 }
 
 /**
@@ -75,5 +148,14 @@ export function claimWarmedDoomVideo(url) {
 	if (!key || !warmByUrl.has(key)) return null;
 	const video = warmByUrl.get(key) || null;
 	warmByUrl.delete(key);
+	if (video instanceof HTMLVideoElement) {
+		video.style.removeProperty('position');
+		video.style.removeProperty('width');
+		video.style.removeProperty('height');
+		video.style.removeProperty('opacity');
+		video.style.removeProperty('pointer-events');
+		video.style.removeProperty('left');
+		video.style.removeProperty('top');
+	}
 	return video instanceof HTMLVideoElement ? video : null;
 }

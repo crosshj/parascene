@@ -239,6 +239,17 @@ export function playDoomYoutubeSlide(slide, opts = {}) {
 	const hasSrc = Boolean(iframe.getAttribute('src'));
 	if (seekToStart || !hasSrc) {
 		iframe.src = nextSrc;
+		if (!muted) {
+			const unmute = () => {
+				youtubePlayerCommand(iframe, 'unMute');
+				youtubePlayerCommand(iframe, 'playVideo');
+			};
+			iframe.addEventListener('load', () => {
+				unmute();
+				window.setTimeout(unmute, 200);
+				window.setTimeout(unmute, 800);
+			}, { once: true });
+		}
 	} else {
 		youtubePlayerCommand(iframe, muted ? 'mute' : 'unMute');
 		youtubePlayerCommand(iframe, 'playVideo');
@@ -798,11 +809,19 @@ export function createDoomSlideElement(item, viewerUserId, slideOpts = {}) {
 	} else {
 		const warmed = !bgLoad && videoUrl ? claimWarmedDoomVideo(videoUrl) : null;
 		const video = warmed instanceof HTMLVideoElement ? warmed : document.createElement('video');
+		const gestureAudible = video.dataset.doomAudibleGesture === '1';
 		video.className = 'chat-doom-video';
 		video.setAttribute('playsinline', '');
 		video.playsInline = true;
 		video.loop = true;
-		video.muted = true;
+		/* Keep a tap-started opener audible. Forcing muted here drops that gesture. */
+		video.defaultMuted = false;
+		if (gestureAudible) {
+			video.removeAttribute('muted');
+			video.muted = false;
+		} else {
+			video.muted = true;
+		}
 		video.preload = warmed ? 'auto' : (bgLoad ? 'none' : 'metadata');
 		primeMediaElementForAudioLeveling(video);
 		if (needsFramePoster) video.preload = bgLoad ? 'metadata' : 'auto';

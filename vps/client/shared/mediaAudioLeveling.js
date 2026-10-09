@@ -113,6 +113,16 @@ export function attachMediaAudioLeveling(media) {
 
 	const ctx = getSharedAudioContext();
 	if (!ctx) return false;
+	/* A suspended graph swallows element audio and makes play() throw NotAllowedError.
+	   Leave the element on its own output until a gesture has started the context. */
+	if (ctx.state !== 'running') {
+		try {
+			void ctx.resume();
+		} catch {
+			// ignore
+		}
+		if (ctx.state !== 'running') return false;
+	}
 
 	try {
 		const source = ctx.createMediaElementSource(media);
@@ -131,6 +141,21 @@ export function attachMediaAudioLeveling(media) {
 export function resumeMediaAudioLevelingContext() {
 	try {
 		const p = sharedContext?.resume?.();
+		if (p && typeof p.catch === 'function') p.catch(() => {});
+	} catch {
+		// ignore
+	}
+}
+
+/**
+ * Create/resume the shared graph while a click is still on the stack.
+ * A context created later, during doom mount, starts suspended and stays silent.
+ */
+export function resumeMediaAudioLevelingFromGesture() {
+	const ctx = getSharedAudioContext();
+	if (!ctx) return;
+	try {
+		const p = ctx.resume();
 		if (p && typeof p.catch === 'function') p.catch(() => {});
 	} catch {
 		// ignore

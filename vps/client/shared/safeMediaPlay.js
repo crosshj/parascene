@@ -5,6 +5,11 @@
 
 import { attachMediaAudioLeveling } from './mediaAudioLeveling.js';
 
+/** Opener playback is started inside the feed tap. Routing it through Web Audio drops that gesture. */
+function keepGestureAudibleOutput(media) {
+	return media instanceof HTMLMediaElement && media.dataset.doomAudibleGesture === '1';
+}
+
 /** @param {unknown} err */
 export function isMediaPlayAbortError(err) {
 	return err != null && typeof err === 'object' && /** @type {{ name?: string }} */ (err).name === 'AbortError';
@@ -21,7 +26,7 @@ export function isMediaAutoplayBlockedError(err) {
  */
 export function safeMediaPlay(media) {
 	if (!(media instanceof HTMLMediaElement)) return undefined;
-	attachMediaAudioLeveling(media);
+	if (!keepGestureAudibleOutput(media)) attachMediaAudioLeveling(media);
 	try {
 		const p = media.play();
 		if (p != null && typeof p.catch === 'function') {
@@ -45,7 +50,7 @@ export function safeMediaPlay(media) {
  */
 export function safeMediaPlayWithHandlers(media, opts = {}) {
 	if (!(media instanceof HTMLMediaElement)) return;
-	attachMediaAudioLeveling(media);
+	if (!keepGestureAudibleOutput(media)) attachMediaAudioLeveling(media);
 	try {
 		const p = media.play();
 		if (p == null || typeof p.then !== 'function') return;
