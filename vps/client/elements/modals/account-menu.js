@@ -50,6 +50,11 @@ function fallbackAnchorRect() {
 	return { left: right, top, width: 0, height: 0, right, bottom: top };
 }
 
+function isLocalDevHost() {
+	const host = String(window.location?.hostname || '').toLowerCase();
+	return host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]' || host.endsWith('.localhost');
+}
+
 const html = String.raw;
 
 class AppAccountMenu extends HTMLElement {
@@ -73,6 +78,12 @@ connectedCallback() {
 	renderShell() {
 		if (this.shadowRoot.querySelector('.account-menu-panel')) return;
 		const helpHref = typeof getHelpHref === 'function' ? getHelpHref('/help') : 'https://www.parascene.com/help';
+		const reportsItem = isLocalDevHost()
+			? html`<button type="button" class="account-menu-item" data-action="reports" role="menuitem" data-reports-item hidden>
+					${statsBarsIcon('account-menu-svg')}
+					<span class="account-menu-label">Reports</span>
+				</button>`
+			: '';
 		this.shadowRoot.innerHTML = html`
 			<style>
 				:host {
@@ -124,6 +135,10 @@ connectedCallback() {
 					transition: background 0.12s ease, color 0.12s ease;
 					text-decoration: none;
 					font: inherit;
+				}
+				.account-menu-item[hidden],
+				.account-menu-link[hidden] {
+					display: none !important;
 				}
 				.account-menu-item:hover,
 				.account-menu-link:hover {
@@ -184,10 +199,7 @@ connectedCallback() {
 					${infoIcon('account-menu-svg')}
 					<span class="account-menu-label">About</span>
 				</button>
-				<button type="button" class="account-menu-item" data-action="reports" role="menuitem" data-reports-item hidden>
-					${statsBarsIcon('account-menu-svg')}
-					<span class="account-menu-label">Reports</span>
-				</button>
+				${reportsItem}
 				<button type="button" class="account-menu-item" data-action="clear-cache" role="menuitem">
 					${gearIcon('account-menu-svg')}
 					<span class="account-menu-label">Clear cache</span>
@@ -279,19 +291,17 @@ connectedCallback() {
 		}
 	}
 
-	/** Reports item is localhost-only and shown only when opened from the chat sidebar. */
+	/** Reports item exists only on a local dev host, and only when opened from the sidebar. */
 	_syncReportsItem(el) {
 		const item = this.shadowRoot.querySelector('[data-reports-item]');
 		if (!item) return;
-		const host = window.location?.hostname || '';
-		const isLocal = host === 'localhost' || host === '127.0.0.1' || host === '[::1]';
-		const fromChatSidebar = !!(
+		const fromSidebar = !!(
 			el && (
 				el.matches?.('[data-chat-sidebar-open-profile], [data-menu-key="account"]') ||
 				el.closest?.('[data-chat-sidebar-open-profile], [data-menu-key="account"]')
 			)
 		);
-		item.hidden = !(isLocal && fromChatSidebar);
+		item.hidden = !(isLocalDevHost() && fromSidebar);
 	}
 
 	async open(anchor) {

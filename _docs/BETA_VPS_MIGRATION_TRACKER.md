@@ -2,15 +2,16 @@
 
 ## Remaining product work
 
+- [ ] the outline which exists on grouped items on the creation detail page has a z-index that is higher than the creation detail header bar, so it overlaps the bar when we scroll it near the top
 - [ ] on mobile, doomscroll comments, click plus button, upload image selection - the add Image modal doesn't center vertical in the space left over from keypad taking up space.  This makes the modal sit under the keypad, not good.  Elsewhere in the app we don't have this problem.
-- [ ] queue for later seems not to work
-- [ ] queue from frame: Failed to execute 'toBlob' - tainted canvas
-- [ ] Use first frame as poster works where normal video gen seems to struggle with proper poster frame
 - [ ] create detail three dots menu should lock scroll behind it while visible (or move with scroll via anchor)
 - [ ] challenge detail mobile, header doesn't have room for title and buttons; for mobile-only put the title of challenge in the page with the card for challenge, but don't put it in the title bar
-- [ ] the outline which exists on grouped items on the creation detail page has a z-index that is higher than the creation detail header bar, so it overlaps the bar when we scroll it near the top
-- [ ] I should be able to paste an audio creation that is not published into comments of another creation and have it play; for now it only shows up if I publish it - not ideal
+- [ ] queue from frame: Failed to execute 'toBlob' - tainted canvas
+- [ ] Use first frame as poster works where normal video gen seems to struggle with proper poster frame
 - [ ] does tipping work in vps?  it should
+- [ ] queue for later seems not to work
+- [ ] I should be able to paste an audio creation that is not published into comments of another creation and have it play; for now it only shows up if I publish it - not ideal
+- [ ] "Generating" graphic on creations still doesn't animate on mobile.  Consider different approaches.
 - [ ] ...
 
 ## Public pages and discoverability
