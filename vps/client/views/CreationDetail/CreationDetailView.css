@@ -2440,7 +2440,7 @@ button.creation-detail-group-item {
 	border: 3px solid var(--accent);
 	border-radius: inherit;
 	pointer-events: none;
-	z-index: 2;
+	z-index: 1;
 }
 
 body:not(.view-nsfw) .creation-detail-group-thumb-wrap.nsfw:not(.nsfw-revealed) .creation-detail-group-thumb.is-active {

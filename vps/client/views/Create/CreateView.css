@@ -4687,7 +4687,7 @@
 	border: 3px solid var(--accent);
 	border-radius: inherit;
 	pointer-events: none;
-	z-index: 2;
+	z-index: 1;
 }
 
 :where(.create-workflow-root) .creation-detail-group-thumb-audio,

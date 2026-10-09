@@ -2,7 +2,6 @@
 
 ## Remaining product work
 
-- [ ] the outline which exists on grouped items on the creation detail page has a z-index that is higher than the creation detail header bar, so it overlaps the bar when we scroll it near the top
 - [ ] on mobile, doomscroll comments, click plus button, upload image selection - the add Image modal doesn't center vertical in the space left over from keypad taking up space.  This makes the modal sit under the keypad, not good.  Elsewhere in the app we don't have this problem.
 - [ ] create detail three dots menu should lock scroll behind it while visible (or move with scroll via anchor)
 - [ ] challenge detail mobile, header doesn't have room for title and buttons; for mobile-only put the title of challenge in the page with the card for challenge, but don't put it in the title bar
