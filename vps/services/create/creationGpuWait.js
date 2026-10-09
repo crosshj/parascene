@@ -80,6 +80,38 @@ export function isCreationFinishTimedOut(status, meta, now = Date.now()) {
 	return Number.isFinite(timeoutAt) && now > timeoutAt;
 }
 
+function creationTimeoutAtMs(meta) {
+	const raw = meta && typeof meta === "object" ? meta.timeout_at : null;
+	if (raw == null || raw === "") return NaN;
+	const parsed = typeof raw === "number" ? raw : Date.parse(String(raw));
+	return Number.isFinite(parsed) ? parsed : NaN;
+}
+
+function creationTimeoutMessage(meta) {
+	if (!meta || typeof meta !== "object") return "";
+	const parts = [meta.error, meta.error_message];
+	const provider = meta.provider_error;
+	if (provider && typeof provider === "object") {
+		parts.push(provider.message, provider.error);
+	} else if (typeof provider === "string") {
+		parts.push(provider);
+	}
+	return parts.filter((part) => typeof part === "string").join(" ");
+}
+
+export function isCreationTimedOutDisplay(status, meta, now = Date.now()) {
+	const s = String(status ?? "").trim().toLowerCase();
+	if (s === "completed") return false;
+	if (s === "timed_out" || s === "timeout") return true;
+	if (String(meta?.error_code ?? "").trim().toLowerCase() === "timeout") return true;
+	if (/\btimed?\s*out\b/i.test(creationTimeoutMessage(meta))) return true;
+	if (s === "failed") {
+		const timeoutAt = creationTimeoutAtMs(meta);
+		if (Number.isFinite(timeoutAt) && now > timeoutAt) return true;
+	}
+	return isCreationFinishTimedOut(status, meta, now);
+}
+
 /** QStash may keep polling for hours; UI finish clock (`timeout_at`) is separate. */
 export const PROVIDER_POLL_HARD_CAP_MS = 4 * 60 * 60 * 1000;
 export const PROVIDER_POLL_MAX_DELAY_SECONDS = 5 * 60;

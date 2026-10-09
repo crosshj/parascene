@@ -22,6 +22,11 @@ function rosterModel(roster = {}, presence) {
 	const navigation = structuredClone(navigationItems);
 	const challenges = navigation.find((item) => item.id === 'challenges');
 	if (challenges) challenges.unread = Number(roster.unreadSummary?.challenges_unread) || 0;
+	const feedback = navigation.find((item) => item.id === 'feedback');
+	if (feedback) {
+		const row = threads.find((entry) => entry?.type === 'channel' && String(entry.channel_slug || '').trim().toLowerCase() === 'feedback');
+		feedback.unread = Number(row?.unread_count) || 0;
+	}
 	const dms = threads.filter((row) => row?.type === 'dm' && !isSelfDmThread(row, roster.viewerId));
 	const pinned = sortDmsWithPinnedOrder(dms, roster.viewerId);
 	const isOnline = row => presence?.isOnline(getDmOtherUserId(row)) || false;

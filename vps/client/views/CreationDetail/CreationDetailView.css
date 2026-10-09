@@ -104,6 +104,32 @@
 	font-size: 1rem;
 }
 
+.creation-detail-timeout-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	justify-content: center;
+	pointer-events: auto;
+}
+
+.creation-detail-timeout-retry {
+	padding: 8px 14px;
+	border: 0;
+	border-radius: 999px;
+	background: var(--text);
+	color: var(--bg);
+	font: inherit;
+	font-size: 0.875rem;
+	font-weight: 650;
+	line-height: 1;
+	cursor: pointer;
+}
+
+.creation-detail-timeout-retry:disabled {
+	opacity: 0.6;
+	cursor: default;
+}
+
 .creation-detail-image-wrapper [data-creation-gpu-wait] .creation-wait-place {
 	font-size: 0.85rem;
 	border-width: 2px;
@@ -1402,6 +1428,10 @@ body.view-nsfw .creation-detail-image-wrapper.nsfw::after {
 	line-height: 1;
 	background: color-mix(in srgb, var(--text) 16%, var(--surface));
 	color: var(--text);
+}
+
+.creation-detail-action-strip-pill[hidden] {
+	display: none;
 }
 
 /* Publish stays the filled high-contrast action in this row. */

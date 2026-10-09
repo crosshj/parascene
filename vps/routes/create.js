@@ -11,6 +11,7 @@ import { runCreationJob, runProviderPollJob, healProviderPollOnRead, PROVIDER_TI
 import {
 	isCreationFinishTimedOut,
 	isCreationGpuInFlight,
+	isCreationTimedOutDisplay,
 } from "../services/create/creationGpuWait.js";
 import { runLandscapeJob } from "../services/create/landscapeJob.js";
 import { scheduleCreationJob, scheduleAudioCoverJob } from "../services/create/scheduleCreationJob.js";
@@ -1589,19 +1590,19 @@ router.post("/api/create", asyncRoute(async (req, res) => {
 					return res.status(404).json({ error: "Image not found" });
 				}
 				const status = image.status || "completed";
+				const existingMeta = parseMeta(image.meta) || {};
 				if (status === "completed") {
 					return res.status(400).json({
 						error: "Cannot retry",
 						message: "Only failed or timed-out creations can be retried"
 					});
 				}
-				if (isCreationGpuInFlight(status) && !isCreationFinishTimedOut(status, parseMeta(image.meta) || {})) {
+				if (isCreationGpuInFlight(status) && !isCreationTimedOutDisplay(status, existingMeta) && !isCreationFinishTimedOut(status, existingMeta)) {
 					return res.status(400).json({
 						error: "Cannot retry",
 						message: "Creation is still in progress"
 					});
 				}
-				const existingMeta = parseMeta(image.meta) || {};
 				// Preserve existing history on retries (including mutated creations).
 				if (Array.isArray(existingMeta.history)) {
 					meta.history = existingMeta.history;

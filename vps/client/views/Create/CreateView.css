@@ -3695,6 +3695,10 @@
 	color: var(--text);
 }
 
+:where(.create-workflow-root) .creation-detail-action-strip-pill[hidden] {
+	display: none;
+}
+
 /* Publish stays the filled high-contrast action in this row. */
 :where(.create-workflow-root) .creation-detail-action-strip-pill[data-publish-btn] {
 	background: var(--text);

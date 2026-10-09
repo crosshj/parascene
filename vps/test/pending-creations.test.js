@@ -41,3 +41,40 @@ test('queued is the optimistic wait and generating starts once the server row is
 	assert.equal(creationGpuWaitLabel('creating'), 'Generating…');
 	assert.equal(creationGpuWaitLabel('pending'), 'QUEUED');
 });
+
+test('a timed-out creation shows the timeout state on the grid', () => {
+	const failed = creationCardMarkup({
+		id: 9,
+		status: 'failed',
+		meta: { error_code: 'timeout' },
+	});
+	const stillRunning = creationCardMarkup({
+		id: 10,
+		status: 'processing',
+		meta: { timeout_at: '2020-01-01T00:00:00.000Z' },
+	});
+	const messageOnly = creationCardMarkup({
+		id: 11,
+		status: 'failed',
+		meta: { error: 'Timed out waiting for generation to finish.' },
+	});
+	const clockThenFailed = creationCardMarkup({
+		id: 12,
+		status: 'failed',
+		meta: { timeout_at: '2020-01-01T00:00:00.000Z', error_code: 'provider_error' },
+	});
+	const plainFailed = creationCardMarkup({
+		id: 13,
+		status: 'failed',
+		meta: { error_code: 'provider_error', error: 'Server is not active' },
+	});
+	for (const markup of [failed, stillRunning, messageOnly, clockThenFailed]) {
+		assert.match(markup, /creation-grid__status is-timeout/);
+		assert.match(markup, /TIMED OUT/);
+		assert.doesNotMatch(markup, />FAILED</);
+		assert.doesNotMatch(markup, /route-media-wait/);
+	}
+	assert.match(plainFailed, />FAILED</);
+	assert.doesNotMatch(plainFailed, /TIMED OUT/);
+	assert.doesNotMatch(stillRunning, /GENERATING/);
+});

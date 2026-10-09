@@ -3251,7 +3251,13 @@ async function pollCreationDetailGroupMembersOnce(creationId) {
 			payload?.creation || payload?.image || payload?.data || payload || {};
 		const status = String(row.status || '').trim().toLowerCase();
 		const rowMeta = row.meta && typeof row.meta === 'object' ? row.meta : {};
-		if (isCreationGpuInFlight(status)) {
+		const timedOut = isCreationTimedOutDisplay(status, rowMeta);
+		if (isCreationGpuInFlight(status) || timedOut) {
+			const stored = lastGroupSourcesById.get(sourceId);
+			if (stored) {
+				stored.status = status;
+				stored.meta = rowMeta;
+			}
 			creationDetailGroupMemberLiveState.set(sourceId, { status, meta: rowMeta });
 			btn.setAttribute('data-group-source-status', status);
 			const nextWaitHtml = creationGpuWaitMarkup(status, creationLinePlace(rowMeta), {
@@ -3265,6 +3271,12 @@ async function pollCreationDetailGroupMembersOnce(creationId) {
 					.querySelector('.creation-detail-image-wrapper')
 					?.querySelector('[data-creation-gpu-wait]');
 				if (heroWait instanceof HTMLElement) heroWait.outerHTML = nextWaitHtml;
+				const retryBtn = document.querySelector('[data-detail-content] [data-retry-btn]');
+				if (timedOut && !retryBtn && !creationDetailGroupMemberReloadedIds.has(sourceId)) {
+					creationDetailGroupMemberReloadedIds.add(sourceId);
+					void loadCreation();
+					return;
+				}
 			}
 			continue;
 		}
@@ -3298,6 +3310,23 @@ async function pollCreationDetailGroupMembersOnce(creationId) {
 		}
 	}
 	scheduleCreationDetailGroupMemberPoll(creationId);
+}
+
+function attachHeroTimeoutActions(wrapper, { checkAgain = false } = {}) {
+	if (!(wrapper instanceof HTMLElement)) return;
+	const wait = wrapper.querySelector('[data-creation-gpu-wait].is-timeout');
+	wait?.querySelector('[data-hero-timeout-actions]')?.remove();
+	if (!(wait instanceof HTMLElement) || !checkAgain) return;
+	const row = document.createElement('span');
+	row.className = 'creation-detail-timeout-actions';
+	row.setAttribute('data-hero-timeout-actions', '');
+	const check = document.createElement('button');
+	check.type = 'button';
+	check.className = 'creation-detail-timeout-retry';
+	check.setAttribute('data-check-again-btn', '');
+	check.textContent = 'Check again';
+	row.append(check);
+	wait.append(row);
 }
 
 async function loadCreation() {
@@ -3662,6 +3691,7 @@ async function loadCreation() {
 	}
 
 	function showHeroImage(nextUrl, options = {}) {
+		imageWrapper?.removeAttribute('data-hero-timeout');
 		const deferBackground = options.deferBackground === true;
 		const url = nsfwMediaUrl(String(nextUrl || '').trim(), lastCreationMeta, { revealed: detailNsfwAllowsClear(), sourceVariant: 'original' });
 		if (!url) return;
@@ -3983,6 +4013,12 @@ async function loadCreation() {
 		imageEl.addEventListener('load', applyLoadedImageState);
 
 		imageEl.addEventListener('error', (event) => {
+			// Clearing the hero src while mounting the timeout overlay fires this.
+			// Leave the timed-out clock in place instead of the unavailable-image mark.
+			if (imageWrapper?.dataset.heroTimeout === '1') {
+				imageEl.style.visibility = 'hidden';
+				return;
+			}
 			// In overlay/embed mode the server-rendered hero <img> may carry a src the viewer
 			// can't load directly (non-owner / lineage / challenge URLs need query params the API
 			// adds). While loadCreation() is still resolving + preloading the correct URL, keep the
@@ -4213,7 +4249,7 @@ async function loadCreation() {
 
 		const lineageOfQuerySuffix = `?lineage_of=${encodeURIComponent(String(creationId))}`;
 
-		const status = creation.status || 'completed';
+		const status = String(creation.status || 'completed').trim().toLowerCase();
 		const meta = metaEarly;
 
 		const creatorIdEarly = Number(creation?.creator?.id ?? creation?.user_id ?? 0);
@@ -4417,7 +4453,8 @@ async function loadCreation() {
 			? creation.media_type
 			: (meta && typeof meta.media_type === 'string' ? meta.media_type : 'image');
 		const isTimedOut = isCreationFinishTimedOut(status, meta);
-		const isFailed = status === 'failed' || isTimedOut;
+		const timedOutDisplay = creation.is_moderated_error !== true && status !== 'completed' && isCreationTimedOutDisplay(status, meta);
+		const isFailed = status === 'failed' || isTimedOut || timedOutDisplay;
 		const shareMounted = isShareMountedView();
 
 		// Load like metadata from backend (no localStorage fallback).
@@ -4475,6 +4512,7 @@ async function loadCreation() {
 
 		// Set the hero image depending on status
 		imageWrapper?.classList.remove('image-error');
+		imageWrapper?.removeAttribute('data-hero-timeout');
 		const heroNsfw = !!(creation.nsfw ?? creation.meta?.nsfw);
 		const heroClear = heroNsfw && detailNsfwAllowsClear();
 		imageWrapper?.classList.toggle('nsfw', heroNsfw);
@@ -4618,19 +4656,21 @@ async function loadCreation() {
 			showHeroImage(creation.url);
 			mountCreationDetailYoutubePlayer(imageWrapper, meta);
 			markHeroReady({ state: 'youtube' });
-		} else if (isCreationGpuInFlight(status) && !isTimedOut) {
+		} else if (isCreationGpuInFlight(status) && !timedOutDisplay) {
 			const modIcon = imageWrapper?.querySelector('.creation-detail-error-icon-moderated');
 			if (modIcon) modIcon.remove();
 			showHeroLoadingPlaceholder();
 			mountHeroGpuWait(status, meta);
 			markHeroReady({ state: isCreationGpuInFlight(status) ? status : 'creating' });
 			scheduleCreationDetailInFlightPoll(creationId);
-		} else if (isCreationTimedOutDisplay(status, meta) && creation.is_moderated_error !== true) {
+		} else if (timedOutDisplay) {
 			const modIcon = imageWrapper?.querySelector('.creation-detail-error-icon-moderated');
 			if (modIcon) modIcon.remove();
-			imageWrapper?.classList.remove('image-error-moderated');
+			if (imageWrapper) imageWrapper.dataset.heroTimeout = '1';
+			imageWrapper?.classList.remove('image-error', 'image-error-moderated');
 			showHeroLoadingPlaceholder();
 			mountHeroGpuWait(status, meta, { timedOut: true });
+			imageWrapper?.classList.remove('image-error');
 			markHeroReady({ state: 'timed_out' });
 		} else if (isFailed) {
 			resetHeroVideo();
@@ -4775,6 +4815,8 @@ async function loadCreation() {
 			mediaType === 'image' &&
 			Boolean(creation.url);
 		const isImportEmbedCreation = isExternalImportCreation(mediaType, meta);
+		const retryBlockedImport = ['youtube', 'suno'].includes(getCreationImportProvider(meta));
+		const canRetryCreation = canEdit && !adminViewingUserDeleted && !retryBlockedImport;
 		const showAdminVideoTools =
 			isAdmin &&
 			!adminViewingUserDeleted &&
@@ -4827,7 +4869,7 @@ async function loadCreation() {
 				status === 'completed' &&
 				!isFailed &&
 				(isOwner || isPublished || isAdmin),
-			showRetry: canEdit && isFailed && !adminViewingUserDeleted && !isImportEmbedCreation,
+			showRetry: canRetryCreation && isFailed,
 			showCheckAgain:
 				isOwner &&
 				!adminViewingUserDeleted &&
@@ -4869,7 +4911,6 @@ async function loadCreation() {
 		const isGroupCreation = groupMeta?.kind === 'group_creations';
 		const groupCan = (key) => groupActionSupported(groupMeta, key);
 		if (isGroupCreation) {
-			actionsContext.showRetry = false;
 			actionsContext.showCheckAgain = false;
 			actionsContext.showQueueFromFrame = false;
 			actionsContext.showSetVideoPoster = false;
@@ -5017,11 +5058,28 @@ async function loadCreation() {
 				actionsContext.showQueueForLater = true;
 			}
 			actionsContext.showDelete = canEdit && !isAdmin;
+			const memberNeedsRetry = (source) => {
+				const memberStatus = String(source?.status || '').trim().toLowerCase();
+				if (memberStatus === 'failed' || memberStatus === 'timed_out' || memberStatus === 'timeout') return true;
+				return isCreationTimedOutDisplay(memberStatus, source?.meta);
+			};
+			if (canRetryCreation && (isFailed || timedOutDisplay || groupSources.some(memberNeedsRetry))) {
+				actionsContext.showRetry = true;
+			}
+			if (timedOutDisplay && creationCanRecheckAfterTimeout(status, meta)) {
+				actionsContext.showCheckAgain = isOwner && !adminViewingUserDeleted && !isImportEmbedCreation;
+			}
 		} else {
 			lastDetailIsGroupCreation = false;
 			lastGroupSourcesById = new Map();
 			lastGroupSelectedSourceId = null;
 		}
+		if (timedOutDisplay && canRetryCreation) {
+			actionsContext.showRetry = true;
+		}
+		attachHeroTimeoutActions(imageWrapper, {
+			checkAgain: Boolean(actionsContext.showCheckAgain),
+		});
 
 		actionsContext.showDownloadVideo =
 			isOwner &&
@@ -5134,7 +5192,8 @@ async function loadCreation() {
 								: '';
 					// Member still generating (project videos land in the group
 					// before the media exists): same overlay as My Creations tiles.
-					const sourceWaiting = !source.filePath && isCreationGpuInFlight(source.status);
+					const sourceTimedOut = isCreationTimedOutDisplay(source.status, source.meta);
+					const sourceWaiting = !source.filePath && (isCreationGpuInFlight(source.status) || sourceTimedOut);
 					const thumbHtml = waveThumb
 						? html`<button type="button" class="creation-detail-group-item creation-detail-group-thumb creation-detail-group-thumb--audio creation-audio-cover${index === 0 ? ' is-active' : ''}"
 									data-group-source-thumb="${source.id}" aria-label="View ${escapeHtml(source.title)}">
@@ -7870,8 +7929,13 @@ async function loadCreation() {
 						}
 					};
 					clearHeroGpuWait();
+					const sourceTimedOut = isCreationTimedOutDisplay(source.status, source.meta);
 					const sourceWaiting =
-						!source.filePath && !source.videoUrl && isCreationGpuInFlight(source.status);
+						!source.filePath && !source.videoUrl && (isCreationGpuInFlight(source.status) || sourceTimedOut);
+					if (imageWrapper) {
+						if (sourceTimedOut) imageWrapper.dataset.heroTimeout = '1';
+						else imageWrapper.removeAttribute('data-hero-timeout');
+					}
 					if (sourceWaiting) {
 						// Member still generating: gray hero + the same queued /
 						// generating icons as My Creations. Deactivate the carousel
@@ -7887,9 +7951,11 @@ async function loadCreation() {
 						for (const img of groupHeroImageBySourceId.values()) {
 							img.classList.remove('is-active');
 						}
+						if (sourceTimedOut && imageWrapper) imageWrapper.dataset.heroTimeout = '1';
 						showHeroLoadingPlaceholder();
 						const live = creationDetailGroupMemberLiveState.get(Number(source.id));
-						mountHeroGpuWait(live?.status || source.status, live?.meta || source.meta);
+						mountHeroGpuWait(live?.status || source.status, live?.meta || source.meta, { timedOut: sourceTimedOut });
+						imageWrapper?.classList.remove('image-error');
 						markHeroReady({ state: live?.status || source.status || 'creating' });
 					} else if (isGroupVideo && groupVideoPlaylistEnabled && source.videoUrl) {
 						clearGroupMemberAudio();
@@ -9522,14 +9588,28 @@ async function handleCheckAgain() {
 	}
 }
 
+function retrySubject() {
+	if (lastDetailIsGroupCreation && lastGroupSelectedSourceId != null) {
+		const source = lastGroupSourcesById.get(Number(lastGroupSelectedSourceId));
+		if (source && isCreationTimedOutDisplay(source.status, source.meta)) {
+			return { id: source.id, meta: source.meta || null };
+		}
+	}
+	return {
+		id: getCreationId(),
+		meta: lastCreationMeta && lastCreationMeta.meta ? lastCreationMeta.meta : null,
+	};
+}
+
 async function handleRetry() {
-	const creationId = getCreationId();
+	const subject = retrySubject();
+	const creationId = subject.id;
 	if (!creationId) {
 		alert('Invalid creation ID');
 		return;
 	}
 
-	const meta = lastCreationMeta && lastCreationMeta.meta ? lastCreationMeta.meta : null;
+	const meta = subject.meta;
 	const serverId = meta && meta.server_id;
 	const method = meta && meta.method;
 	const args = (meta && meta.args) ? meta.args : {};
@@ -9539,10 +9619,8 @@ async function handleRetry() {
 		return;
 	}
 
-	const retryBtn = document.querySelector('[data-retry-btn]');
-	if (retryBtn) {
-		retryBtn.disabled = true;
-	}
+	const retryButtons = [...document.querySelectorAll('[data-retry-btn]')];
+	for (const retryBtn of retryButtons) retryBtn.disabled = true;
 
 	let retryArgs = args || {};
 	try {
@@ -9553,12 +9631,12 @@ async function handleRetry() {
 			lane: 'product',
 		});
 		if (!occupancy.ok) {
-			if (retryBtn) retryBtn.disabled = false;
+			for (const retryBtn of retryButtons) retryBtn.disabled = false;
 			return;
 		}
 		retryArgs = applyGpuBid(args || {}, occupancy.bid, 'product');
 	} catch (err) {
-		if (retryBtn) retryBtn.disabled = false;
+		for (const retryBtn of retryButtons) retryBtn.disabled = false;
 		if (err?.code === 'occupancy_cancelled') return;
 		throw err;
 	}
@@ -9611,9 +9689,7 @@ async function handleRetry() {
 	} catch (error) {
 		alert(error.message || 'Failed to retry creation. Please try again.');
 	} finally {
-		if (retryBtn) {
-			retryBtn.disabled = false;
-		}
+		for (const retryBtn of retryButtons) retryBtn.disabled = false;
 	}
 }
 

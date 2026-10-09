@@ -41,20 +41,44 @@ export function creationGpuWaitDetail(status, place, opts = {}) {
 	return Number.isFinite(n) && n > 0 ? `${n} in line` : "";
 }
 
+function creationTimeoutAtMs(meta) {
+	const raw = meta && typeof meta === "object" ? meta.timeout_at : null;
+	if (raw == null || raw === "") return NaN;
+	const parsed = typeof raw === "number" ? raw : Date.parse(String(raw));
+	return Number.isFinite(parsed) ? parsed : NaN;
+}
+
+function creationTimeoutMessage(meta) {
+	if (!meta || typeof meta !== "object") return "";
+	const parts = [meta.error, meta.error_message];
+	const provider = meta.provider_error;
+	if (provider && typeof provider === "object") {
+		parts.push(provider.message, provider.error);
+	} else if (typeof provider === "string") {
+		parts.push(provider);
+	}
+	return parts.filter((part) => typeof part === "string").join(" ");
+}
+
 export function isCreationFinishTimedOut(status, meta, now = Date.now()) {
 	const s = String(status ?? "").trim().toLowerCase();
 	if (s === "creating" || s === "queued" || s === "pending") return false;
 	if (s !== "processing" && s !== "running") return false;
-	const raw = meta && typeof meta === "object" ? meta.timeout_at : null;
-	const timeoutAt = typeof raw === "string" ? new Date(raw).getTime() : NaN;
+	const timeoutAt = creationTimeoutAtMs(meta);
 	return Number.isFinite(timeoutAt) && now > timeoutAt;
 }
 
-export function isCreationTimedOutDisplay(status, meta) {
+export function isCreationTimedOutDisplay(status, meta, now = Date.now()) {
 	const s = String(status ?? "").trim().toLowerCase();
+	if (s === "completed") return false;
 	if (s === "timed_out" || s === "timeout") return true;
 	if (String(meta?.error_code ?? "").trim().toLowerCase() === "timeout") return true;
-	return isCreationFinishTimedOut(status, meta);
+	if (/\btimed?\s*out\b/i.test(creationTimeoutMessage(meta))) return true;
+	if (s === "failed") {
+		const timeoutAt = creationTimeoutAtMs(meta);
+		if (Number.isFinite(timeoutAt) && now > timeoutAt) return true;
+	}
+	return isCreationFinishTimedOut(status, meta, now);
 }
 
 export function creationLinePlace(meta) {
@@ -89,8 +113,8 @@ export function creationGpuWaitMarkup(status, place, { escapeHtml = escapeHtmlDe
 }
 
 export function creationCanRecheckAfterTimeout(status, meta) {
-	if (String(status ?? "").trim().toLowerCase() !== "failed") return false;
-	if (String(meta?.error_code ?? "").trim().toLowerCase() !== "timeout") return false;
+	if (String(status ?? "").trim().toLowerCase() === "completed") return false;
+	if (!isCreationTimedOutDisplay(status, meta)) return false;
 	const jobId =
 		(typeof meta?.provider_job_id === "string" && meta.provider_job_id.trim()) ||
 		(typeof meta?.provider_last_payload?.job_id === "string" &&

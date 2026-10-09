@@ -15,6 +15,7 @@ import {
 	creationGpuWaitMarkup,
 	isCreationFinishTimedOut,
 	isCreationGpuInFlight,
+	isCreationTimedOutDisplay,
 } from './creationGpuWait.js';
 
 export const CREATION_DETAIL_SEED_KEY = 'prsn-creation-detail-seed';
@@ -225,7 +226,7 @@ function seedGroupSourceEntries(seed) {
 		const fromRow = fromMeta[i];
 		// A member still generating has no media of its own — never borrow a
 		// thumb/cover fallback for it, or the slot shows another member's image.
-		const rowWaiting = Boolean(fromRow) && !fromRow.url && isCreationGpuInFlight(fromRow.status);
+		const rowWaiting = Boolean(fromRow) && !fromRow.url && (isCreationGpuInFlight(fromRow.status) || isCreationTimedOutDisplay(fromRow.status, fromRow.meta));
 		const url = rowWaiting
 			? ''
 			: (fromRow && fromRow.url) ||
@@ -274,13 +275,13 @@ function seedGroupSectionHtml(seed) {
 			// In-flight member (still generating on the GPU): show the same
 			// queued / generating overlay as My Creations tiles, not a bare
 			// skeleton. The detail page polls these and swaps in the thumb.
-			const waiting = !needsWave && !entry.url && isCreationGpuInFlight(entry.status);
+			const waiting = !needsWave && !entry.url && (isCreationGpuInFlight(entry.status) || isCreationTimedOutDisplay(entry.status, entry.meta));
 			const inner = needsWave
 				? audioCoverWaveformHtml('creation-audio-wave creation-detail-group-wave')
 				: entry.url
 					? `<img src="${esc(entry.url)}" alt="" loading="eager" decoding="async">`
 					: waiting
-						? creationGpuWaitMarkup(entry.status, null, { escapeHtml: esc })
+						? creationGpuWaitMarkup(entry.status, null, { escapeHtml: esc, meta: entry.meta })
 						: `<span class="skeleton" style="display: block; width: 100%; height: 100%;" aria-hidden="true"></span>`;
 			const fallbackClass = needsWave
 				? ' creation-detail-group-thumb--audio creation-audio-cover'
@@ -1112,9 +1113,12 @@ function seedStripPlan(seed) {
 	const canEdit = isOwner || isAdmin;
 	const userDeleted = seed?.user_deleted === true;
 	const adminViewingUserDeleted = isAdmin && userDeleted;
-	const isFailed = status === 'failed' || isCreationFinishTimedOut(status, meta);
+	const isFailed = status === 'failed' || isCreationFinishTimedOut(status, meta) || (status !== 'completed' && isCreationTimedOutDisplay(status, meta));
 	const completed = status === 'completed' && !isFailed;
 	const isImportEmbed = seedIsImportEmbed(seed);
+	const retryBlockedImport = ['youtube', 'suno'].includes(
+		pickSeedString(seed?.import_provider, meta?.import?.provider).toLowerCase()
+	);
 	const group = meta?.group && typeof meta.group === 'object' ? meta.group : null;
 	const isGroup = group?.kind === 'group_creations';
 	const hasUrl = Boolean(pickSeedString(seed?.image_url, seed?.url));
@@ -1131,7 +1135,7 @@ function seedStripPlan(seed) {
 	let showEdit = canEdit && completed && !adminViewingUserDeleted;
 	let showMutate = !isAdmin && !isImportEmbed && completed && hasUrl;
 	let showShare = !isImportEmbed && completed;
-	let showRetry = canEdit && isFailed && !adminViewingUserDeleted && !isImportEmbed;
+	let showRetry = canEdit && isFailed && !adminViewingUserDeleted && !retryBlockedImport;
 	let showCheckAgain =
 		isOwner &&
 		!adminViewingUserDeleted &&
@@ -1144,8 +1148,16 @@ function seedStripPlan(seed) {
 			(meta?.provider_error != null && typeof meta.provider_error === 'object'));
 	if (isGroup && seedGroupHasSourceMedia(group) && completed && !isAdmin) showMutate = true;
 	if (isGroup) {
-		showRetry = false;
 		showCheckAgain = false;
+		const memberNeedsRetry = Array.isArray(group.source_creations) && group.source_creations.some((source) => {
+			const memberStatus = String(source?.status || '').trim().toLowerCase();
+			const memberMeta = source?.meta && typeof source.meta === 'object' ? source.meta : null;
+			if (memberStatus === 'failed' || memberStatus === 'timed_out' || memberStatus === 'timeout') return true;
+			return isCreationTimedOutDisplay(memberStatus, memberMeta);
+		});
+		if (canEdit && !adminViewingUserDeleted && !retryBlockedImport && (isFailed || isCreationTimedOutDisplay(status, meta) || memberNeedsRetry)) {
+			showRetry = true;
+		}
 		if (!groupActionSupported(group, 'publish')) showPublish = false;
 		if (!groupActionSupported(group, 'edit')) showEdit = false;
 		if (!groupActionSupported(group, 'share')) showShare = false;

@@ -3846,6 +3846,10 @@ body.view-nsfw .creation-detail-image-wrapper.nsfw::after {
 	color: var(--text);
 }
 
+.creation-detail-action-strip-pill[hidden] {
+	display: none;
+}
+
 /* Publish stays the filled high-contrast action in this row. */
 .creation-detail-action-strip-pill[data-publish-btn] {
 	background: var(--text);

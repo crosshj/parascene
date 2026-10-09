@@ -1,6 +1,7 @@
 import { escapeHtml } from '../utils/dom.js';
 import { iconMarkup } from '../components/Icon/Icon.js';
 import { generatingGearsIcon } from '../icons/svg-strings.js';
+import { isCreationTimedOutDisplay } from './creationGpuWait.js';
 import { nsfwShouldBlur } from './nsfwPolicy.js';
 
 const html = String.raw;
@@ -227,7 +228,10 @@ function waveform() {
 	return `<svg class="creation-grid__waveform" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" aria-hidden="true">${bars.map((height, index) => `<rect x="${12 + index * 4.8}" y="${50 - height / 2}" width="3.5" height="${height}" rx="1.25"></rect>`).join('')}</svg>`;
 }
 
-function statusMarkup(status, queuePosition = null, { optimistic = false } = {}) {
+function statusMarkup(status, queuePosition = null, { optimistic = false, timedOut = false } = {}) {
+	if (timedOut) {
+		return `<span class="creation-grid__status is-timeout"><svg class="creation-grid__status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 2h4"></path><path d="M4.6 11a8 8 0 0 0 1.7 8.7 8 8 0 0 0 8.7 1.7"></path><path d="M7.4 7.4a8 8 0 0 1 10.3 1 8 8 0 0 1-1 10.3"></path><path d="m2 2 20 20"></path><path d="M12 12v-2"></path></svg><span>TIMED OUT</span></span>`;
+	}
 	const value = String(status || '').toLowerCase();
 	if (value === 'failed') {
 		return `<span class="creation-grid__status is-failed"><svg class="creation-grid__status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="m9 9 6 6M15 9l-6 6"></path></svg><span>FAILED</span></span>`;
@@ -274,10 +278,11 @@ function badges(item, { hideChallengeCorner = false, hidePublished = false } = {
 
 export function creationCardMarkup(item, { hidePublishedBadge = false, revealChallengeMedia = false, hideChallengeBadge = false } = {}) {
 	const status = String(item?.status || 'completed').toLowerCase();
-	const failed = status === 'failed';
-	const pending = status !== 'completed' && status !== 'failed';
-	const type = creationMediaType(item);
 	const meta = parseCreationMeta(item);
+	const timedOut = item?.is_moderated_error !== true && status !== 'completed' && isCreationTimedOutDisplay(status, meta);
+	const failed = status === 'failed' && !timedOut;
+	const pending = !timedOut && status !== 'completed' && status !== 'failed';
+	const type = creationMediaType(item);
 	const rawId = item?.created_image_id ?? item?.id;
  const creationId = String(rawId).startsWith("pending-") ? String(rawId) : Number(rawId);
 	const hasCreationId = Number.isFinite(creationId) && creationId > 0;
@@ -286,20 +291,22 @@ export function creationCardMarkup(item, { hidePublishedBadge = false, revealCha
 	const challengeBlur = !revealChallengeMedia && shouldBlurChallengeMedia(item);
 	const queuePosition = Number(meta?.line_place ?? meta?.provider_last_payload?.place);
 	const title = String(item?.title || '').trim() || (item?.published ? 'Untitled' : '');
-	const mediaClass = `feed-card-image${pending || failed ? ' creation-grid__status-card' : nsfw ? (nsfwBlur ? ' nsfw' : ' nsfw nsfw-revealed') : ''}${failed ? ' creation-grid__failed-card' : ''}${!failed && challengeBlur ? ' feed-card-image--challenge-pending' : ''}`;
+	const mediaClass = `feed-card-image${pending || failed || timedOut ? ' creation-grid__status-card' : nsfw ? (nsfwBlur ? ' nsfw' : ' nsfw nsfw-revealed') : ''}${failed ? ' creation-grid__failed-card' : ''}${!failed && !timedOut && challengeBlur ? ' feed-card-image--challenge-pending' : ''}`;
 	const optimistic = Boolean(item?.__optimistic) || String(rawId).startsWith('pending-');
-	const state = failed
+	const state = timedOut
+		? statusMarkup(status, queuePosition, { timedOut: true })
+		: failed
 		? statusMarkup(status)
 		: pending
 			? statusMarkup(status, queuePosition, { optimistic })
 			: creationNeedsAudioWaveformCover(item) ? waveform() : '';
-	const thumbnail = pending || failed ? '' : creationThumbnailUrl(item, { video: type === 'video', revealChallengeMedia });
-	const original = pending || failed ? '' : (nsfwBlur ? thumbnail : creationOriginalUrl(item));
-	const slides = pending || failed ? [] : groupSlides(item);
+	const thumbnail = pending || failed || timedOut ? '' : creationThumbnailUrl(item, { video: type === 'video', revealChallengeMedia });
+	const original = pending || failed || timedOut ? '' : (nsfwBlur ? thumbnail : creationOriginalUrl(item));
+	const slides = pending || failed || timedOut ? [] : groupSlides(item);
 	const challengeTrophy = hideChallengeBadge
 		? ''
 		: `<span class="creation-challenge-entered-badge" role="img" aria-label="Entered in challenge" title="Entered in challenge">${iconMarkup('trophy')}</span>`;
-	const challengeOverlay = !pending && !failed && challengeBlur
+	const challengeOverlay = !pending && !failed && !timedOut && challengeBlur
 		? `<span class="route-media-challenge-blur-overlay" aria-hidden="true"></span>${challengeTrophy}`
 		: '';
 	const group = meta?.group;
@@ -308,7 +315,7 @@ export function creationCardMarkup(item, { hidePublishedBadge = false, revealCha
 		? (Array.isArray(group?.source_creations) ? group.source_creations.length : 0)
 		: (Array.isArray(group?.items) ? group.items.length : 0);
 	const published = item?.published === true || item?.published === 1;
-	const processingStatus = failed || ['creating', 'pending', 'queued', 'processing', 'running'].includes(status) ? status : '';
+	const processingStatus = timedOut || failed || ['creating', 'pending', 'queued', 'processing', 'running'].includes(status) ? status : '';
 	const attributes = [
 		(hasCreationId || item.__optimistic) ? `data-creation-id="${escapeHtml(creationId)}"` : '',
 		hasCreationId ? `data-image-id="${escapeHtml(creationId)}"` : '',
@@ -324,7 +331,7 @@ export function creationCardMarkup(item, { hidePublishedBadge = false, revealCha
 		processingStatus ? `data-creation-status="${escapeHtml(processingStatus)}"` : ''
 	].filter(Boolean).join(' ');
 	return html`<div class="feed-card feed-card--image-only creation-grid__card" ${attributes} role="link" tabindex="0" aria-label="Open ${escapeHtml(title || `Creation ${creationId || ''}`)}">
-		<div class="${mediaClass}" aria-hidden="true" data-creation-id="${escapeHtml(creationId)}" data-media-type="${escapeHtml(type)}" data-bg-blur="${nsfwBlur || challengeBlur ? '1' : '0'}" data-bg-url="${escapeHtml(thumbnail)}" data-bg-fallback="${escapeHtml(original)}" data-group-slides="${escapeHtml(JSON.stringify(slides))}"><img class="feed-card-img" alt="${escapeHtml(title || 'Creation')}" loading="lazy" decoding="async">${state}${nsfwBlur && !pending && !failed ? `<span class="creation-grid__nsfw-badge" role="img" aria-label="NSFW">${iconMarkup('eyeHidden')}</span>` : ''}${challengeOverlay}${!failed && !pending ? badges(item, { hideChallengeCorner: hideChallengeBadge || challengeBlur, hidePublished: hidePublishedBadge }) : ''}</div>
+		<div class="${mediaClass}" aria-hidden="true" data-creation-id="${escapeHtml(creationId)}" data-media-type="${escapeHtml(type)}" data-bg-blur="${nsfwBlur || challengeBlur ? '1' : '0'}" data-bg-url="${escapeHtml(thumbnail)}" data-bg-fallback="${escapeHtml(original)}" data-group-slides="${escapeHtml(JSON.stringify(slides))}"><img class="feed-card-img" alt="${escapeHtml(title || 'Creation')}" loading="lazy" decoding="async">${state}${nsfwBlur && !pending && !failed && !timedOut ? `<span class="creation-grid__nsfw-badge" role="img" aria-label="NSFW">${iconMarkup('eyeHidden')}</span>` : ''}${challengeOverlay}${!failed && !pending && !timedOut ? badges(item, { hideChallengeCorner: hideChallengeBadge || challengeBlur, hidePublished: hidePublishedBadge }) : ''}</div>
 	</div>`;
 }
 
