@@ -151,6 +151,18 @@ let activeCreationDetailSeed = null;
 let activeCreationDetailNavigate = null;
 let activeCreateProvider = null;
 const creationDetailDocumentListeners = [];
+let creationDetailMoreMenuAbort = null;
+
+function releaseCreationDetailMoreMenu() {
+	creationDetailMoreMenuAbort?.abort();
+	creationDetailMoreMenuAbort = null;
+	const menu = document.querySelector('[data-creation-more-menu]');
+	if (!(menu instanceof HTMLElement)) return;
+	const wasOpen = menu.getAttribute('aria-hidden') !== 'true';
+	menu.setAttribute('aria-hidden', 'true');
+	menu.style.display = 'none';
+	if (wasOpen) document.body.style.overflow = '';
+}
 
 function addCreationDetailDocumentListener(type, listener, options) {
 	creationDetailDocumentListeners.push([type, listener, options]);
@@ -7443,7 +7455,11 @@ async function loadCreation() {
 			});
 		}
 
-		// Mobile more button popup: open/close and trigger same actions as meta row
+		// The more button and menu are kept across refreshes. A second listener
+		// on the same button opens the menu and the first one immediately closes it.
+		releaseCreationDetailMoreMenu();
+		creationDetailMoreMenuAbort = new AbortController();
+		const moreMenuSignal = creationDetailMoreMenuAbort.signal;
 		const moreBtn = detailContent.querySelector('[data-creation-more-btn]');
 		const moreMenu = detailContent.querySelector('[data-creation-more-menu]');
 		if (moreBtn instanceof HTMLButtonElement && moreMenu instanceof HTMLElement) {
@@ -7491,9 +7507,12 @@ async function loadCreation() {
 				moreMenu.style.left = `${Math.max(gap, Math.min(rect.right - menuW, window.innerWidth - menuW - gap))}px`;
 				moreMenu.setAttribute('aria-hidden', 'false');
 				document.body.style.overflow = 'hidden';
-				setTimeout(() => document.addEventListener('click', onDocumentClick), 0);
-				document.addEventListener('keydown', onMoreMenuEscape);
-			});
+				setTimeout(() => {
+					if (moreMenuSignal.aborted) return;
+					document.addEventListener('click', onDocumentClick, { signal: moreMenuSignal });
+				}, 0);
+				document.addEventListener('keydown', onMoreMenuEscape, { signal: moreMenuSignal });
+			}, { signal: moreMenuSignal });
 			moreMenu.addEventListener('click', (e) => {
 				const item = e.target?.closest?.('[data-creation-more-action]');
 				if (!item) return;
@@ -7688,7 +7707,7 @@ async function loadCreation() {
 				};
 				if (typeof targets[action] === 'function') targets[action]();
 				closeMobileMoreMenu();
-			});
+			}, { signal: moreMenuSignal });
 		}
 
 		// Admin: upload video to creation
@@ -8438,6 +8457,7 @@ export function renderCreationDetailView({ outlet, creationId, initialSeed = nul
 	window.__VPS_CREATION_DETAIL_SEED__ = initialSeed;
 	document.body.classList.add('creation-detail-page');
 	outlet.innerHTML = template;
+	bindAudioCoverModal();
 	outlet.querySelector('main')?.classList.add('creation-detail-layout-pending');
 	applyInitialDetailHeroLayout(outlet.querySelector('.creation-detail-image-wrapper'), activeCreationDetailSeed);
 	outlet.querySelector('.creation-detail-image-wrapper')?.insertAdjacentHTML('beforeend',
@@ -8458,6 +8478,7 @@ export function renderCreationDetailView({ outlet, creationId, initialSeed = nul
 		hasOpenEscapeTarget: creationDetailPageHasOpenEscapeTarget,
 		destroy() {
 			loadCreationSequence += 1;
+			releaseCreationDetailMoreMenu();
 			stopCreationDetailHeroPlayback();
 			listenerController.abort();
 			stopGroupNavigation();
@@ -8647,6 +8668,55 @@ function setAudioCoverError(message) {
 	errorEl.hidden = !text;
 }
 
+let audioCoverBusy = false;
+let audioCoverGenerateAvailable = false;
+let audioCoverCostToken = 0;
+
+function audioCoverModalEl() {
+	const modal = document.querySelector('[data-audio-cover-modal]');
+	return modal instanceof HTMLDialogElement ? modal : null;
+}
+
+function syncAudioCoverIdleControls(modal) {
+	if (!(modal instanceof HTMLElement)) return;
+	syncAudioCoverUrlSubmit(modal);
+	syncAudioCoverResetButton(modal);
+	modal.querySelectorAll('[data-audio-cover-tab], [data-audio-cover-pick], [data-audio-cover-url], [data-audio-cover-prompt], [data-audio-cover-file]').forEach((el) => {
+		if (el instanceof HTMLButtonElement || el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+			el.disabled = false;
+		}
+	});
+	const generateBtn = modal.querySelector('[data-audio-cover-generate]');
+	if (generateBtn instanceof HTMLButtonElement) generateBtn.disabled = !audioCoverGenerateAvailable;
+	const resetBtn = modal.querySelector('[data-audio-cover-reset]');
+	if (resetBtn instanceof HTMLButtonElement && !resetBtn.hidden) resetBtn.disabled = false;
+}
+
+function setAudioCoverBusy(activeSelector) {
+	const busy = Boolean(activeSelector);
+	audioCoverBusy = busy;
+	const modal = audioCoverModalEl();
+	if (!modal) return;
+	modal.classList.toggle('is-busy', busy);
+	modal.setAttribute('aria-busy', busy ? 'true' : 'false');
+	modal.querySelectorAll('button, input, textarea').forEach((el) => {
+		if (!(el instanceof HTMLButtonElement || el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) return;
+		el.classList.remove('is-loading');
+		el.removeAttribute('aria-busy');
+		if (el.matches('[data-audio-cover-close]')) {
+			el.disabled = busy;
+			return;
+		}
+		if (!busy) return;
+		el.disabled = true;
+		if (activeSelector && el.matches(activeSelector)) {
+			el.classList.add('is-loading');
+			el.setAttribute('aria-busy', 'true');
+		}
+	});
+	if (!busy) syncAudioCoverIdleControls(modal);
+}
+
 function isAudioCoverSourceValue(value) {
 	const raw = typeof value === 'string' ? value.trim() : '';
 	if (!raw) return false;
@@ -8674,20 +8744,21 @@ function syncAudioCoverUrlSubmit(modal) {
 }
 
 function openAudioCoverModal() {
-	const modal = document.querySelector('[data-audio-cover-modal]');
-	if (!(modal instanceof HTMLDialogElement)) return;
+	if (audioCoverBusy) return;
+	const modal = audioCoverModalEl();
+	if (!modal) return;
 	const promptEl = modal.querySelector('[data-audio-cover-prompt]');
 	const costEl = modal.querySelector('[data-audio-cover-cost]');
 	const urlEl = modal.querySelector('[data-audio-cover-url]');
 	if (promptEl) promptEl.value = defaultAudioCoverPrompt(lastCreationMeta);
 	if (costEl) costEl.textContent = '';
 	if (urlEl instanceof HTMLInputElement) urlEl.value = '';
+	audioCoverGenerateAvailable = false;
 	setAudioCoverError('');
 	setAudioCoverTab('upload');
-	syncAudioCoverUrlSubmit(modal);
-	syncAudioCoverResetButton(modal);
+	syncAudioCoverIdleControls(modal);
 	void refreshAudioCoverCost();
-	if (typeof modal.showModal === 'function') modal.showModal();
+	if (typeof modal.showModal === 'function' && !modal.open) modal.showModal();
 	queueMicrotask(() => urlEl?.focus?.());
 }
 
@@ -8718,10 +8789,16 @@ function setAudioCoverTab(tab) {
 }
 
 async function refreshAudioCoverCost() {
-	const modal = document.querySelector('[data-audio-cover-modal]');
+	const modal = audioCoverModalEl();
 	const costEl = modal?.querySelector('[data-audio-cover-cost]');
 	const creationId = getCreationId();
+	const token = ++audioCoverCostToken;
 	if (!costEl || !creationId) return;
+	audioCoverGenerateAvailable = false;
+	if (!audioCoverBusy) {
+		const generateBtn = modal.querySelector('[data-audio-cover-generate]');
+		if (generateBtn instanceof HTMLButtonElement) generateBtn.disabled = true;
+	}
 	costEl.textContent = 'Checking cost…';
 	try {
 		const prompt = modal.querySelector('[data-audio-cover-prompt]')?.value || '';
@@ -8732,40 +8809,61 @@ async function refreshAudioCoverCost() {
 			body: JSON.stringify({ prompt }),
 		});
 		const data = await res.json().catch(() => ({}));
+		if (token !== audioCoverCostToken) return;
 		if (!res.ok || data?.supported === false) {
-			costEl.textContent = data?.message || 'Generate is not available right now.';
+			audioCoverGenerateAvailable = false;
+			costEl.textContent = data?.message || data?.error || 'Generate is not available right now.';
 			return;
 		}
-		costEl.textContent = `This uses ${data.credits} credit${Number(data.credits) === 1 ? '' : 's'}.`;
+		audioCoverGenerateAvailable = true;
+		const credits = Number(data.credits);
+		const amount = Number.isFinite(credits) ? credits : 0;
+		costEl.textContent = `This uses ${amount} credit${amount === 1 ? '' : 's'}.`;
 	} catch {
+		if (token !== audioCoverCostToken) return;
+		audioCoverGenerateAvailable = false;
 		costEl.textContent = 'Could not check generate cost.';
+	} finally {
+		if (token === audioCoverCostToken && !audioCoverBusy && modal) syncAudioCoverIdleControls(modal);
 	}
 }
 
 async function uploadAudioCoverFile(file) {
 	const creationId = getCreationId();
-	if (!creationId || !file) return;
-	const formData = new FormData();
-	formData.append('image', file);
-	const res = await fetch(`/api/create/images/${encodeURIComponent(creationId)}/cover`, {
-		method: 'POST',
-		credentials: 'include',
-		body: formData,
-	});
-	const data = await res.json().catch(() => ({}));
-	if (!res.ok) throw new Error(data?.message || data?.error || 'Could not update cover');
-	document.querySelector('[data-audio-cover-modal]')?.close?.();
-	if (typeof showToast === 'function') showToast('Cover updated');
-	await refreshAfterMutation('status-changed', { creationId });
+	if (audioCoverBusy || !creationId || !file) return;
+	if (!(file instanceof File) || (file.type && !file.type.startsWith('image/'))) {
+		setAudioCoverError('Choose an image file.');
+		return;
+	}
+	setAudioCoverError('');
+	setAudioCoverBusy('[data-audio-cover-pick]');
+	try {
+		const formData = new FormData();
+		formData.append('image', file);
+		const res = await fetch(`/api/create/images/${encodeURIComponent(creationId)}/cover`, {
+			method: 'POST',
+			credentials: 'include',
+			body: formData,
+		});
+		const data = await res.json().catch(() => ({}));
+		if (!res.ok) throw new Error(data?.message || data?.error || 'Could not update cover');
+		audioCoverModalEl()?.close?.();
+		if (typeof showToast === 'function') showToast('Cover updated');
+		await refreshAfterMutation('status-changed', { creationId });
+	} catch (err) {
+		setAudioCoverError(err?.message || 'Could not update cover');
+	} finally {
+		setAudioCoverBusy(null);
+	}
 }
 
 async function applyAudioCoverFromUrl(rawUrl) {
 	const creationId = getCreationId();
 	const url = typeof rawUrl === 'string' ? rawUrl.trim() : '';
-	if (!creationId || !url) return;
-	const modal = document.querySelector('[data-audio-cover-modal]');
-	const submit = modal?.querySelector('[data-audio-cover-url-submit]');
-	if (submit instanceof HTMLButtonElement) submit.disabled = true;
+	if (audioCoverBusy || !creationId || !url || !isAudioCoverSourceValue(url)) return;
+	const modal = audioCoverModalEl();
+	setAudioCoverError('');
+	setAudioCoverBusy('[data-audio-cover-url-submit]');
 	try {
 		const res = await fetch(`/api/create/images/${encodeURIComponent(creationId)}/cover`, {
 			method: 'POST',
@@ -8778,18 +8876,19 @@ async function applyAudioCoverFromUrl(rawUrl) {
 		modal?.close?.();
 		if (typeof showToast === 'function') showToast('Cover updated');
 		await refreshAfterMutation('status-changed', { creationId });
+	} catch (err) {
+		setAudioCoverError(err?.message || 'Could not update cover');
 	} finally {
-		if (submit instanceof HTMLButtonElement) syncAudioCoverUrlSubmit(modal);
+		setAudioCoverBusy(null);
 	}
 }
 
 async function generateAudioCover() {
-	const modal = document.querySelector('[data-audio-cover-modal]');
+	const modal = audioCoverModalEl();
 	const creationId = getCreationId();
-	const generateBtn = modal?.querySelector('[data-audio-cover-generate]');
-	if (!creationId) return;
+	if (audioCoverBusy || !creationId || !audioCoverGenerateAvailable) return;
 	setAudioCoverError('');
-	if (generateBtn) generateBtn.disabled = true;
+	setAudioCoverBusy('[data-audio-cover-generate]');
 	try {
 		const prompt = modal?.querySelector('[data-audio-cover-prompt]')?.value || '';
 		const res = await fetch(`/api/create/images/${encodeURIComponent(creationId)}/cover`, {
@@ -8800,7 +8899,6 @@ async function generateAudioCover() {
 		});
 		const data = await res.json().catch(() => ({}));
 		if (!res.ok) throw new Error(data?.message || data?.error || 'Could not generate cover');
-		if (typeof showToast === 'function') showToast('Generating cover…');
 		await waitForAudioCoverJob(creationId);
 		modal?.close?.();
 		if (typeof showToast === 'function') showToast('Cover updated');
@@ -8808,19 +8906,20 @@ async function generateAudioCover() {
 	} catch (err) {
 		setAudioCoverError(err?.message || 'Could not generate cover');
 	} finally {
-		if (generateBtn) generateBtn.disabled = false;
+		setAudioCoverBusy(null);
 	}
 }
 
 async function waitForAudioCoverJob(creationId) {
 	const started = Date.now();
 	while (Date.now() - started < 120000) {
-		await new Promise((resolve) => setTimeout(resolve, 2000));
 		const res = await fetch(`/api/create/images/${encodeURIComponent(creationId)}`, { credentials: 'include' });
 		const data = await res.json().catch(() => ({}));
+		if (!res.ok) throw new Error(data?.message || data?.error || 'Could not check cover generation');
 		const status = data?.meta?.cover_generate?.status;
 		if (status === 'error') throw new Error(data.meta.cover_generate.message || 'Cover generation failed');
 		if (status !== 'loading') return;
+		await new Promise((resolve) => setTimeout(resolve, 2000));
 	}
 	throw new Error('Cover generation is taking longer than expected. Refresh in a moment.');
 }
@@ -8829,30 +8928,41 @@ function bindAudioCoverModal() {
 	const modal = document.querySelector('[data-audio-cover-modal]');
 	if (!(modal instanceof HTMLDialogElement) || modal.dataset.bound === '1') return;
 	modal.dataset.bound = '1';
-	modal.querySelector('[data-audio-cover-close]')?.addEventListener('click', () => modal.close());
+	modal.addEventListener('cancel', (event) => {
+		if (audioCoverBusy) event.preventDefault();
+	});
+	modal.querySelector('[data-audio-cover-close]')?.addEventListener('click', () => {
+		if (audioCoverBusy) return;
+		modal.close();
+	});
 	modal.querySelectorAll('[data-audio-cover-tab]').forEach((btn) => {
-		btn.addEventListener('click', () => setAudioCoverTab(btn.getAttribute('data-audio-cover-tab')));
+		btn.addEventListener('click', () => {
+			if (audioCoverBusy) return;
+			setAudioCoverTab(btn.getAttribute('data-audio-cover-tab'));
+		});
 	});
 	const fileInput = modal.querySelector('[data-audio-cover-file]');
 	const urlInput = modal.querySelector('[data-audio-cover-url]');
 	const urlSubmit = modal.querySelector('[data-audio-cover-url-submit]');
-	modal.querySelector('[data-audio-cover-pick]')?.addEventListener('click', () => fileInput?.click());
-	fileInput?.addEventListener('change', async () => {
+	modal.querySelector('[data-audio-cover-pick]')?.addEventListener('click', () => {
+		if (audioCoverBusy) return;
+		fileInput?.click();
+	});
+	fileInput?.addEventListener('change', () => {
 		const file = fileInput.files?.[0];
 		fileInput.value = '';
 		if (!file) return;
-		setAudioCoverError('');
-		try {
-			await uploadAudioCoverFile(file);
-		} catch (err) {
-			setAudioCoverError(err?.message || 'Could not update cover');
-		}
+		void uploadAudioCoverFile(file);
 	});
 	urlInput?.addEventListener('input', () => {
 		setAudioCoverError('');
 		syncAudioCoverUrlSubmit(modal);
 	});
 	urlInput?.addEventListener('paste', (e) => {
+		if (audioCoverBusy) {
+			e.preventDefault();
+			return;
+		}
 		const items = e.clipboardData?.items;
 		if (items) {
 			for (const item of items) {
@@ -8860,10 +8970,7 @@ function bindAudioCoverModal() {
 				e.preventDefault();
 				const file = item.getAsFile();
 				if (!file) return;
-				setAudioCoverError('');
-				void uploadAudioCoverFile(file).catch((err) => {
-					setAudioCoverError(err?.message || 'Could not update cover');
-				});
+				void uploadAudioCoverFile(file);
 				return;
 			}
 		}
@@ -8880,16 +8987,12 @@ function bindAudioCoverModal() {
 		const v = (urlInput.value || '').trim();
 		if (!isAudioCoverSourceValue(v)) return;
 		e.preventDefault();
-		void applyAudioCoverFromUrl(v).catch((err) => {
-			setAudioCoverError(err?.message || 'Could not update cover');
-		});
+		void applyAudioCoverFromUrl(v);
 	});
 	urlSubmit?.addEventListener('click', () => {
 		const v = (urlInput?.value || '').trim();
 		if (!isAudioCoverSourceValue(v)) return;
-		void applyAudioCoverFromUrl(v).catch((err) => {
-			setAudioCoverError(err?.message || 'Could not update cover');
-		});
+		void applyAudioCoverFromUrl(v);
 	});
 	modal.querySelector('[data-audio-cover-generate]')?.addEventListener('click', () => {
 		void generateAudioCover();
@@ -8901,10 +9004,10 @@ function bindAudioCoverModal() {
 
 async function resetAudioCover() {
 	const creationId = getCreationId();
-	const modal = document.querySelector('[data-audio-cover-modal]');
-	const resetBtn = modal?.querySelector('[data-audio-cover-reset]');
-	if (!creationId) return;
-	if (resetBtn) resetBtn.disabled = true;
+	const modal = audioCoverModalEl();
+	if (audioCoverBusy || !creationId) return;
+	setAudioCoverError('');
+	setAudioCoverBusy('[data-audio-cover-reset]');
 	try {
 		const res = await fetch(`/api/create/images/${encodeURIComponent(creationId)}/cover`, {
 			method: 'POST',
@@ -8918,9 +9021,9 @@ async function resetAudioCover() {
 		if (typeof showToast === 'function') showToast('Original cover restored');
 		await refreshAfterMutation('status-changed', { creationId });
 	} catch (err) {
-		if (typeof showToast === 'function') showToast(err?.message || 'Could not restore cover');
+		setAudioCoverError(err?.message || 'Could not restore cover');
 	} finally {
-		if (resetBtn) resetBtn.disabled = false;
+		setAudioCoverBusy(null);
 	}
 }
 

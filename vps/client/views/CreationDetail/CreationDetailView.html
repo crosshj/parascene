@@ -176,14 +176,15 @@
 	</main>
 
 	<dialog class="creation-detail-dialog audio-cover-modal" data-audio-cover-modal aria-labelledby="audio-cover-modal-title">
-		<h2 id="audio-cover-modal-title" class="dialog-title">Change cover</h2>
-		<button class="modal-close" type="button" aria-label="Close" data-audio-cover-close>
-			<svg class="modal-close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-				stroke-linecap="round" stroke-linejoin="round">
-				<line x1="18" y1="6" x2="6" y2="18"></line>
-				<line x1="6" y1="6" x2="18" y2="18"></line>
-			</svg>
-		</button>
+		<div class="audio-cover-header">
+			<h2 id="audio-cover-modal-title" class="dialog-title">Change cover</h2>
+			<button type="button" class="modal-dismiss" data-audio-cover-close aria-label="Close">
+				<svg class="modal-dismiss-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+					<line x1="18" y1="6" x2="6" y2="18"></line>
+					<line x1="6" y1="6" x2="18" y2="18"></line>
+				</svg>
+			</button>
+		</div>
 		<div class="audio-cover-methods" role="tablist" aria-label="How to set the cover">
 			<button type="button" class="audio-cover-method is-active" role="tab" aria-selected="true" aria-controls="audio-cover-panel-upload" id="audio-cover-tab-upload" data-audio-cover-tab="upload">Use an image</button>
 			<button type="button" class="audio-cover-method" role="tab" aria-selected="false" aria-controls="audio-cover-panel-generate" id="audio-cover-tab-generate" data-audio-cover-tab="generate">Generate one</button>
@@ -192,9 +193,15 @@
 			<p class="audio-cover-help">Use + to upload. Paste an image, or enter an image URL or creation link.</p>
 			<p class="image-picker-url-hint" data-audio-cover-url-hint>Enter an image URL (http:// or https://) or a creation link.</p>
 			<div class="image-picker-composer-row">
-				<button type="button" class="image-picker-composer-add" data-audio-cover-pick aria-label="Choose image file">+</button>
+				<button type="button" class="image-picker-composer-add" data-audio-cover-pick aria-label="Choose image file">
+					<span class="audio-cover-btn-label">+</span>
+					<span class="audio-cover-btn-spinner" aria-hidden="true"></span>
+				</button>
 				<input type="text" inputmode="url" class="image-url-input image-picker-composer-input" data-audio-cover-url placeholder="Paste image or enter URL" aria-label="Paste image or enter image URL" autocomplete="off" />
-				<button type="button" class="image-picker-composer-send" data-audio-cover-url-submit hidden disabled aria-label="Use this image URL">&#10148;</button>
+				<button type="button" class="image-picker-composer-send" data-audio-cover-url-submit hidden disabled aria-label="Use this image URL">
+					<span class="audio-cover-btn-label">&#10148;</span>
+					<span class="audio-cover-btn-spinner" aria-hidden="true"></span>
+				</button>
 			</div>
 			<input type="file" accept="image/*" hidden data-audio-cover-file />
 		</div>
@@ -203,9 +210,13 @@
 			<textarea id="audio-cover-prompt" class="audio-cover-prompt" data-audio-cover-prompt rows="4" maxlength="800" placeholder="Album cover, atmospheric, no text"></textarea>
 			<p class="audio-cover-cost" data-audio-cover-cost></p>
 			<button type="button" class="btn-primary" data-audio-cover-generate>
-				<span data-audio-cover-generate-label>Generate</span>
+				<span class="audio-cover-btn-label" data-audio-cover-generate-label>Generate</span>
+				<span class="audio-cover-btn-spinner" aria-hidden="true"></span>
 			</button>
 		</div>
-		<p class="audio-cover-error" data-audio-cover-error hidden></p>
-		<button type="button" class="btn-secondary audio-cover-reset" data-audio-cover-reset hidden>Use original cover</button>
+		<p class="audio-cover-error" data-audio-cover-error role="alert" hidden></p>
+		<button type="button" class="btn-secondary audio-cover-reset" data-audio-cover-reset hidden>
+			<span class="audio-cover-btn-label">Use original cover</span>
+			<span class="audio-cover-btn-spinner" aria-hidden="true"></span>
+		</button>
 	</dialog>

@@ -13,9 +13,15 @@ import {
 	isCreationGpuInFlight,
 } from "../services/create/creationGpuWait.js";
 import { runLandscapeJob } from "../services/create/landscapeJob.js";
-import { scheduleCreationJob } from "../services/create/scheduleCreationJob.js";
-
-import { runAudioCoverJob } from "../services/create/audioCoverGenerate.js";
+import { scheduleCreationJob, scheduleAudioCoverJob } from "../services/create/scheduleCreationJob.js";
+import { runAudioCoverJob, albumCoverPromptFromCreation, resolveAudioCoverGenerateTarget } from "../services/create/audioCoverGenerate.js";
+import {
+	applyAudioCoverBuffer,
+	bufferForAudioCoverSource,
+	canResetAudioCover,
+	isAudioCreationRow,
+	resetAudioCoverToOriginal,
+} from "../services/create/audioCoverApply.js";
 
 
 import { materializeBlueProviderAudioArgs, resolveAudioProviderArgs } from "../services/create/audioClips.js";
@@ -106,6 +112,46 @@ function parseMultipartCreate(req, { maxFileBytes = 50 * 1024 * 1024 } = {}) {
 	});
 }
 function asyncRoute(handler) { return (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next); }
+
+async function fetchCoverImageBuffer(imageUrl) {
+	let response;
+	try {
+		response = await fetch(imageUrl, {
+			method: "GET",
+			headers: { Accept: "image/*" },
+			redirect: "follow",
+			signal: AbortSignal.timeout(20000),
+		});
+	} catch {
+		const err = new Error("Could not load that image URL");
+		err.status = 400;
+		throw err;
+	}
+	if (!response.ok) {
+		const err = new Error("Could not load that image URL");
+		err.status = 400;
+		throw err;
+	}
+	const type = String(response.headers.get("content-type") || "").toLowerCase();
+	if (type && !type.startsWith("image/") && !type.includes("octet-stream")) {
+		const err = new Error("That URL is not an image");
+		err.status = 400;
+		throw err;
+	}
+	const buffer = Buffer.from(await response.arrayBuffer());
+	if (!buffer.length) {
+		const err = new Error("Could not load that image URL");
+		err.status = 400;
+		throw err;
+	}
+	return buffer;
+}
+
+function coverFailure(res, err, fallback) {
+	const message = typeof err?.message === "string" && err.message.trim() ? err.message.trim() : fallback;
+	const status = Number(err?.status) || (message === "File too large" ? 413 : 500);
+	return res.status(status).json({ error: fallback, message });
+}
 
 export default function createCreateRoutes({ queries, storage, canUseServer }) {
 const router = express.Router();
@@ -2339,6 +2385,212 @@ router.post("/api/create/images/:id/unpublish", asyncRoute(async (req, res) => {
 			return res.status(Number(err?.status) || 500).json({ error: err?.message || "Failed to unpublish creation" });
 		}
 	}));
+async function loadOwnedCompletedAudio(req, res) {
+		const user = await requireUser(req, res);
+		if (!user) return null;
+		const id = Number(req.params.id);
+		if (!Number.isFinite(id) || id <= 0) {
+			res.status(400).json({ error: "Invalid creation id" });
+			return null;
+		}
+		const image = await queries.selectCreatedImageById.get(id, user.id);
+		if (!image) {
+			res.status(404).json({ error: "Creation not found" });
+			return null;
+		}
+		if ((image.status || "") !== "completed") {
+			res.status(400).json({ error: "Only completed audio creations can change cover" });
+			return null;
+		}
+		const meta = parseMeta(image.meta) || {};
+		if (!isAudioCreationRow(image, meta)) {
+			res.status(400).json({ error: "Cover is only available for audio creations" });
+			return null;
+		}
+		return { user, image, meta };
+	}
+
+	async function listActiveCoverServers() {
+		if (typeof queries.selectActiveServers?.all !== "function") return [];
+		const servers = await queries.selectActiveServers.all();
+		return Array.isArray(servers) ? servers : [];
+	}
+
+	router.post("/api/create/images/:id/cover/query", asyncRoute(async (req, res) => {
+		const owned = await loadOwnedCompletedAudio(req, res);
+		if (!owned) return;
+		const prompt = albumCoverPromptFromCreation(owned.image, owned.meta, req.body?.prompt);
+		const target = resolveAudioCoverGenerateTarget(await listActiveCoverServers(), prompt);
+		if (!target) {
+			return res.json({ supported: false, message: "No image server is available for cover generation." });
+		}
+		return res.json({
+			supported: true,
+			credits: target.credits,
+			method: target.method,
+			server_id: target.server_id,
+			prompt,
+			can_reset: canResetAudioCover(owned.meta),
+		});
+	}));
+
+	router.post("/api/create/images/:id/cover", asyncRoute(async (req, res) => {
+		const owned = await loadOwnedCompletedAudio(req, res);
+		if (!owned) return;
+		const { user, image } = owned;
+		const existingMeta = owned.meta;
+
+		if (req.is("multipart/form-data")) {
+			try {
+				const { files } = await parseMultipartCreate(req, { maxFileBytes: 20 * 1024 * 1024 });
+				const imageFile = files?.image;
+				if (!imageFile || !Buffer.isBuffer(imageFile.buffer) || imageFile.buffer.length === 0) {
+					return res.status(400).json({ error: "No image file provided; use form field name 'image'" });
+				}
+				const mimeType = typeof imageFile.mimeType === "string" ? imageFile.mimeType.trim() : "";
+				if (mimeType && !mimeType.startsWith("image/")) {
+					return res.status(400).json({ error: "File must be an image" });
+				}
+				const applied = await applyAudioCoverBuffer({
+					queries,
+					storage,
+					image,
+					buffer: imageFile.buffer,
+					coverSource: "upload",
+				});
+				await bumpFeedVersionCounter(queries);
+				void invalidateFeedBetaCatalogSnapshot().catch(() => {});
+				return res.json({
+					ok: true,
+					url: applied.file_path,
+					width: applied.width,
+					height: applied.height,
+					cover_source: "upload",
+				});
+			} catch (err) {
+				return coverFailure(res, err, "Failed to update cover");
+			}
+		}
+
+		const mode = typeof req.body?.mode === "string" ? req.body.mode.trim() : "generate";
+		if (mode === "url") {
+			try {
+				const applied = await applyAudioCoverBuffer({
+					queries,
+					storage,
+					image,
+					buffer: await bufferForAudioCoverSource({
+						queries,
+						storage,
+						user,
+						raw: req.body?.url,
+						fetchBuffer: fetchCoverImageBuffer,
+					}),
+					coverSource: "upload",
+				});
+				await bumpFeedVersionCounter(queries);
+				void invalidateFeedBetaCatalogSnapshot().catch(() => {});
+				return res.json({
+					ok: true,
+					url: applied.file_path,
+					width: applied.width,
+					height: applied.height,
+					cover_source: "upload",
+				});
+			} catch (err) {
+				return coverFailure(res, err, "Failed to update cover");
+			}
+		}
+		if (mode === "reset") {
+			try {
+				const applied = await resetAudioCoverToOriginal({ queries, storage, image });
+				await bumpFeedVersionCounter(queries);
+				void invalidateFeedBetaCatalogSnapshot().catch(() => {});
+				return res.json({
+					ok: true,
+					url: applied.file_path,
+					width: applied.width,
+					height: applied.height,
+					cover_source: applied.meta?.cover_source || "procedural",
+					reset: true,
+				});
+			} catch (err) {
+				return coverFailure(res, err, "Failed to reset cover");
+			}
+		}
+		if (mode !== "generate") {
+			return res.status(400).json({ error: "mode must be generate, reset, url, or send a multipart image upload" });
+		}
+		if (existingMeta.cover_generate?.status === "loading") {
+			return res.status(409).json({ error: "Cover generation already in progress" });
+		}
+		const prompt = albumCoverPromptFromCreation(image, existingMeta, req.body?.prompt);
+		const target = resolveAudioCoverGenerateTarget(await listActiveCoverServers(), prompt);
+		if (!target) {
+			return res.status(400).json({ error: "No image server is available for cover generation." });
+		}
+
+		let credits = await queries.selectUserCredits.get(user.id);
+		if (!credits && queries.insertUserCredits?.run) {
+			await queries.insertUserCredits.run(user.id, 100, null);
+			credits = await queries.selectUserCredits.get(user.id);
+		}
+		if (!credits || credits.balance < target.credits) {
+			return res.status(402).json({
+				error: "Insufficient credits",
+				message: `Cover generation requires ${target.credits} credits. You have ${credits?.balance ?? 0} credits.`,
+				required: target.credits,
+				current: credits?.balance ?? 0,
+			});
+		}
+
+		const id = image.id;
+		const nextMeta = {
+			...existingMeta,
+			cover_generate: {
+				status: "loading",
+				started_at: new Date().toISOString(),
+				server_id: target.server_id,
+				method: target.method,
+				credit_cost: target.credits,
+			},
+		};
+		await queries.updateCreatedImageMeta.run(id, user.id, nextMeta);
+		await queries.updateUserCreditsBalance.run(user.id, -target.credits);
+
+		try {
+			await scheduleAudioCoverJob({
+				payload: {
+					job_type: "audio_cover",
+					created_image_id: id,
+					user_id: user.id,
+					server_id: target.server_id,
+					method: target.method,
+					args: { ...target.args, prompt },
+					credit_cost: target.credits,
+					async: target.async === true,
+				},
+				runAudioCoverJob: ({ payload }) => runAudioCoverJob({ queries, storage, payload }),
+			});
+		} catch (err) {
+			await queries.updateCreatedImageMeta.run(id, user.id, {
+				...existingMeta,
+				cover_generate: { status: "error", message: err?.message || "Failed to start cover generation" },
+			});
+			await queries.updateUserCreditsBalance.run(user.id, target.credits);
+			return res.status(500).json({ error: "Failed to start cover generation", message: err?.message });
+		}
+
+		const updatedCredits = await queries.selectUserCredits.get(user.id);
+		return res.json({
+			ok: true,
+			pending: true,
+			credits_remaining: updatedCredits?.balance ?? credits.balance,
+			credits: target.credits,
+			method: target.method,
+		});
+	}));
+
 registerCreationLibraryRoutes({ router, requireUser, queries, storage });
 return router;
 }

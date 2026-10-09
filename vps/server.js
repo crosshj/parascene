@@ -34,6 +34,7 @@ import { createFilesCors } from "./routes/middleware/filesCors.js";
 import { createAuthMiddleware } from "./routes/middleware/auth.js";
 import { createCdnHostBoundary } from "./routes/middleware/cdnHost.js";
 import createPageRoutes from "./routes/pages.js";
+import { createReportsRoutes } from "./routes/reports.js";
 import { createDb } from "./db/index.js";
 import { createAppDataRoutes } from "./routes/appData.js";
 import { createCreationsRoutes } from "./routes/creations.js";
@@ -98,6 +99,8 @@ app.use(createExploreRoutes({ explore: db.explore, users: db.users }));
 app.use(createCommentsRoutes({ comments: db.comments, users: db.users }));
 app.use(createCreationsRoutes({ creations: db.creations, users: db.users, appendChallengeEligibility: challengeCreations.appendEligibility }));
 app.use(createAuthRoutes({ users: db.users, sessions: db.sessions }));
+const reportsRoutes = createReportsRoutes();
+if (reportsRoutes) app.use(reportsRoutes);
 app.use(createPageRoutes({ pagesDir, users: db.users }));
 app.use(express.static(path.join(__dirname, "public")));
 app.use((error, req, res, next) => {

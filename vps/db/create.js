@@ -318,6 +318,17 @@ selectServerById: {
 				};
 			}
 		},
+selectActiveServers: {
+			all: async () => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("servers"))
+					.select("id, status, server_url, auth_token, server_config")
+					.eq("status", "active")
+					.order("id");
+				if (error) throw error;
+				return Array.isArray(data) ? data : [];
+			}
+		},
 selectPromptInjectionStyleBySlugForUser: {
 			get: async (userId, slug) => {
 				const uid = Number(userId);

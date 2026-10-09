@@ -267,7 +267,7 @@ connectedCallback() {
 		if (action === 'reports') {
 			e.preventDefault();
 			this.close();
-			window.location.assign('http://localhost:2367/reports/');
+			window.open('/reports/', '_blank', 'noopener,noreferrer');
 			return;
 		}
 		if (action === 'clear-cache') {

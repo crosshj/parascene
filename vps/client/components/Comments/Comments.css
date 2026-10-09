@@ -1758,6 +1758,12 @@
 	container-type: normal;
 }
 
+/* Same 19:6 Suno card. fit-content shrinks the iframe under 110px and the card hides its cover. */
+.comment-body .comment-text .connect-chat-creation-embed.connect-chat-creation-embed--audio-card,
+.connect-comment .comment-text .connect-chat-creation-embed.connect-chat-creation-embed--audio-card {
+	width: 100%;
+}
+
 /* Same visual weight as `.comment-text .user-text-inline-image` (max-height 250px), not full-column square */
 .comment-body .comment-text .connect-chat-creation-embed.connect-chat-creation-embed--square,
 .connect-comment .comment-text .connect-chat-creation-embed.connect-chat-creation-embed--square {
