@@ -2,7 +2,6 @@
 
 ## Remaining product work
 
-- [ ] challenge detail mobile, header doesn't have room for title and buttons; for mobile-only put the title of challenge in the page with the card for challenge, but don't put it in the title bar.  Or maybe the idea would be that mobile never shows buttons in the header and always relies on those being behing the caret menu.
 - [ ] queue from frame: Failed to execute 'toBlob' - tainted canvas
 - [ ] Use first frame as poster works where normal video gen seems to struggle with proper poster frame
 - [ ] does tipping work in vps?  it should

@@ -113,7 +113,10 @@ export const ChallengesView = Object.freeze({
     onClose: afterClose,
    });
   }
+  const mobileHeaderMedia = window.matchMedia('(max-width: 768px)');
+  let headerEligible = false;
   function header(eligible = false) {
+   headerEligible = eligible;
    const accessories = [];
    if (eligible && location.pathname === '/challenges') {
     accessories.push({
@@ -144,13 +147,30 @@ export const ChallengesView = Object.freeze({
      onClick: () => mounted?.openGlobalSettings?.(),
     });
    }
+   const refreshItem = { label: 'Refresh', action: 'refresh' };
+   const challengeSubpage = location.pathname === '/challenges/organize' || location.pathname.startsWith('/challenges/details');
+   if (mobileHeaderMedia.matches && challengeSubpage) {
+    setHeaderAccessories?.([]);
+    const actionItems = accessories.map((item) => ({ label: item.label, action: item.label, onClick: item.onClick }));
+    setHeaderMenu?.({
+     label: 'Challenges',
+     items: actionItems.length ? [...actionItems, { separator: true }, refreshItem] : [refreshItem],
+     onSelect(item) {
+      if (item?.action === 'refresh') { void refresh(); return; }
+      item?.onClick?.();
+     },
+    });
+    return;
+   }
    setHeaderAccessories?.(accessories);
    setHeaderMenu?.({
     label: 'Challenges',
-    items: [{ label: 'Refresh', action: 'refresh' }],
+    items: [refreshItem],
     onSelect() { void refresh(); },
    });
   }
+  function onHeaderMediaChange() { if (!destroyed) header(headerEligible); }
+  mobileHeaderMedia.addEventListener('change', onHeaderMediaChange);
   const afterClose = () => queueMicrotask(() => { if (!destroyed) controller?.repaint(); });
   function showPrevious(messages) {
    if (location.pathname !== '/challenges' || mounted || historyPainted) return;
@@ -265,6 +285,6 @@ export const ChallengesView = Object.freeze({
    void refresh();
   };
   document.addEventListener('creation-detail:mutation', onCreationMutation);
-  return { destroy() { destroyed = true; clearInterval(phaseTimer); document.removeEventListener('creation-detail:mutation', onCreationMutation); unsubscribeVotes(); controller?.destroy(); organizerTools?.destroy(); mounted?.destroy(); setHeaderAccessories?.(); challengeNav?.replaceChildren(); root.querySelectorAll('video,audio').forEach(media => media.pause()); wrapper.remove(); } };
+  return { destroy() { destroyed = true; mobileHeaderMedia.removeEventListener('change', onHeaderMediaChange); clearInterval(phaseTimer); document.removeEventListener('creation-detail:mutation', onCreationMutation); unsubscribeVotes(); controller?.destroy(); organizerTools?.destroy(); mounted?.destroy(); setHeaderAccessories?.(); challengeNav?.replaceChildren(); root.querySelectorAll('video,audio').forEach(media => media.pause()); wrapper.remove(); } };
  },
 });
