@@ -1499,11 +1499,16 @@
 	color: var(--text);
 }
 
-/* Reaction picker popover */
+/* Reaction picker popover. Anchored to the add button; stays under overlay and sheet headers. */
 .comment-reaction-picker {
 	position: fixed;
-	/* Above .modal-overlay (99999 !important); picker is portaled to body. */
-	z-index: 100050;
+	position-anchor: --comment-reaction-add;
+	top: anchor(bottom);
+	left: anchor(left);
+	margin-top: 8px;
+	position-try-fallbacks: flip-block, flip-inline;
+	position-visibility: anchors-visible;
+	z-index: 1;
 	background: var(--surface);
 	border: 1px solid var(--border);
 	border-radius: 10px;

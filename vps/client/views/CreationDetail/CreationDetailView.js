@@ -153,15 +153,23 @@ let activeCreateProvider = null;
 const creationDetailDocumentListeners = [];
 let creationDetailMoreMenuAbort = null;
 
+function clearCreationDetailMoreMenuPosition(menu) {
+	if (!(menu instanceof HTMLElement)) return;
+	menu.style.position = '';
+	menu.style.top = '';
+	menu.style.right = '';
+	menu.style.bottom = '';
+	menu.style.left = '';
+}
+
 function releaseCreationDetailMoreMenu() {
 	creationDetailMoreMenuAbort?.abort();
 	creationDetailMoreMenuAbort = null;
 	const menu = document.querySelector('[data-creation-more-menu]');
 	if (!(menu instanceof HTMLElement)) return;
-	const wasOpen = menu.getAttribute('aria-hidden') !== 'true';
 	menu.setAttribute('aria-hidden', 'true');
 	menu.style.display = 'none';
-	if (wasOpen) document.body.style.overflow = '';
+	clearCreationDetailMoreMenuPosition(menu);
 }
 
 function addCreationDetailDocumentListener(type, listener, options) {
@@ -7536,7 +7544,7 @@ async function loadCreation() {
 			const closeMobileMoreMenu = () => {
 				moreMenu.setAttribute('aria-hidden', 'true');
 				moreMenu.style.display = 'none';
-				document.body.style.overflow = '';
+				clearCreationDetailMoreMenuPosition(moreMenu);
 				document.removeEventListener('click', onDocumentClick);
 				document.removeEventListener('keydown', onMoreMenuEscape);
 			};
@@ -7549,23 +7557,9 @@ async function loadCreation() {
 					return;
 				}
 				pauseCreationDetailPlayingVideos();
-				const rect = moreBtn.getBoundingClientRect();
-				const gap = 8;
-				moreMenu.style.position = 'fixed';
+				clearCreationDetailMoreMenuPosition(moreMenu);
 				moreMenu.style.display = 'block';
-				moreMenu.style.bottom = '';
-				const menuW = moreMenu.offsetWidth || 200;
-				const menuH = moreMenu.offsetHeight || 200;
-				const spaceBelow = window.innerHeight - rect.bottom - gap;
-				const openAbove = spaceBelow < menuH && rect.top >= menuH + gap;
-				if (openAbove) {
-					moreMenu.style.top = `${Math.max(gap, rect.top - menuH - 4)}px`;
-				} else {
-					moreMenu.style.top = `${Math.min(window.innerHeight - menuH - gap, rect.bottom + 4)}px`;
-				}
-				moreMenu.style.left = `${Math.max(gap, Math.min(rect.right - menuW, window.innerWidth - menuW - gap))}px`;
 				moreMenu.setAttribute('aria-hidden', 'false');
-				document.body.style.overflow = 'hidden';
 				setTimeout(() => {
 					if (moreMenuSignal.aborted) return;
 					document.addEventListener('click', onDocumentClick, { signal: moreMenuSignal });

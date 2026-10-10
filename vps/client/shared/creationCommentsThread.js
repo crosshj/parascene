@@ -898,9 +898,19 @@ export async function mountCreationCommentsThread(container, options) {
 	}
 
 	let activeReactionPicker = null;
+	let activeReactionAnchor = null;
 	const pendingCommentReactions = new Set();
+	const REACTION_PICKER_ANCHOR = '--comment-reaction-add';
+
+	function reactionPickerParent(anchor) {
+		return anchor.closest('.beta-app-overlay, .chat-doom-comments-sheet, .modal-overlay, .beta-outlet__thread-body') || document.body;
+	}
 
 	function closeReactionPicker() {
+		if (activeReactionAnchor) {
+			activeReactionAnchor.style.removeProperty('anchor-name');
+			activeReactionAnchor = null;
+		}
 		if (activeReactionPicker && activeReactionPicker.parentNode) {
 			activeReactionPicker.parentNode.removeChild(activeReactionPicker);
 			document.removeEventListener('click', activeReactionPicker._outsideClick);
@@ -936,49 +946,9 @@ export async function mountCreationCommentsThread(container, options) {
 			grid.appendChild(btn);
 		}
 		panel.appendChild(grid);
-
-		document.body.appendChild(panel);
-
-		const rect = anchor.getBoundingClientRect();
-		const vw = window.innerWidth;
-		const vh = window.innerHeight;
-		const pad = 8;
-		const pickerW = 200;
-		const pickerH = Math.min(180, 36 * Math.ceil(unusedKeys.length / 5) + 24);
-
-		let top = rect.bottom + pad;
-		let left = rect.left;
-		const preferAbove = rect.top > vh / 2;
-		const preferLeft = rect.right > vw - pickerW - pad;
-
-		if (preferAbove && rect.top - pickerH - pad >= 0) {
-			top = rect.top - pickerH - pad;
-		} else if (!preferAbove && rect.bottom + pickerH + pad <= vh) {
-			top = rect.bottom + pad;
-		} else if (rect.top >= pickerH + pad) {
-			top = rect.top - pickerH - pad;
-		}
-
-		if (preferLeft && rect.right - pickerW >= pad) {
-			left = rect.right - pickerW;
-		} else if (!preferLeft && rect.left + pickerW <= vw - pad) {
-			left = rect.left;
-		} else {
-			left = Math.max(pad, Math.min(vw - pickerW - pad, rect.left));
-		}
-
-		panel.style.top = `${top}px`;
-		panel.style.left = `${left}px`;
-
-		const panelRect = panel.getBoundingClientRect();
-		let adjLeft = parseFloat(panel.style.left) || left;
-		let adjTop = parseFloat(panel.style.top) || top;
-		if (panelRect.right > vw - pad) adjLeft = vw - panelRect.width - pad;
-		if (panelRect.left < pad) adjLeft = pad;
-		if (panelRect.bottom > vh - pad) adjTop = vh - panelRect.height - pad;
-		if (panelRect.top < pad) adjTop = pad;
-		panel.style.left = `${adjLeft}px`;
-		panel.style.top = `${adjTop}px`;
+		anchor.style.anchorName = REACTION_PICKER_ANCHOR;
+		activeReactionAnchor = anchor;
+		reactionPickerParent(anchor).appendChild(panel);
 
 		const outsideClick = (e) => {
 			if (!panel.contains(e.target) && !anchor.contains(e.target)) {

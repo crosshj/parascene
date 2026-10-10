@@ -86,6 +86,8 @@
 }
 
 .chat-doom-comments-head {
+	position: relative;
+	z-index: 2;
 	flex-shrink: 0;
 	display: flex;
 	flex-direction: row;
@@ -241,12 +243,10 @@
 }
 
 /*
- * Reaction picker, attach popover, and sticker modal are appended to <body>.
+ * Attach popover and sticker modal are appended to <body>.
  * Lift them above this sheet (z-index 12000) while it is open.
+ * The reaction picker lives inside the sheet and uses the shared z-index.
  */
-html[data-chat-doom-comments-open='1'] .comment-reaction-picker {
-	z-index: 12100;
-}
 
 html[data-chat-doom-comments-open='1'] .comment-sticker-modal-overlay {
 	z-index: 12200;

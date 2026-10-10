@@ -23,6 +23,7 @@
 	flex-direction: column;
 	gap: 12px;
 	position: relative;
+	anchor-scope: --feed-card-more;
 }
 .explore-view--large .feed-card+.feed-card {
 	padding-top: 16px;
@@ -168,18 +169,22 @@
 .explore-view--large .feed-card-action-more {
 	padding: 8px;
 	margin: -8px -4px -8px 0;
-}
-.explore-view--large .feed-card {
-	position: relative;
+	anchor-name: --feed-card-more;
 }
 .explore-view--large .feed-card-menu {
-	position: absolute;
+	position: fixed;
+	position-anchor: --feed-card-more;
+	right: anchor(right);
+	bottom: anchor(top);
+	margin-bottom: 4px;
+	position-try-fallbacks: flip-block;
+	position-visibility: anchors-visible;
+	z-index: 2;
 	background: var(--surface);
 	border: 1px solid var(--border);
 	border-radius: 6px;
 	min-width: 220px;
 	overflow: hidden;
-	z-index: 1000;
 }
 .explore-view--large .feed-card-menu-item {
 	display: block;

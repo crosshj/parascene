@@ -729,18 +729,6 @@
 .comment-reaction-reply:hover .comment-reaction-reply-icon {
 	color: var(--text);
 }
-.comment-reaction-picker {
-	position: fixed;
-	/* Above .modal-overlay (99999 !important); picker is portaled to body. */
-	z-index: 100050;
-	background: var(--surface);
-	border: 1px solid var(--border);
-	border-radius: 10px;
-	box-shadow: var(--shadow);
-	padding: 12px;
-	min-width: 180px;
-	max-width: 240px;
-}
 
 .comment-reaction-picker-grid {
 	display: grid;
@@ -4968,9 +4956,6 @@ body.beta-layout .chat-page-messages .feed-card-image--group-carousel.nsfw:not(.
 
 .chat-page-messages .connect-chat-msg-hover-pin.is-pinned {
 	color: var(--color-purple-fg, var(--color-purple));
-}
-.comment-reaction-picker {
-	z-index: 100050 !important;
 }
 .connect-chat-msg-bubble--timed-invite-expired .chat-timed-message {
 	opacity: 0.88;

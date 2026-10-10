@@ -1917,15 +1917,6 @@ function buildFeedCreationCard(
 			menu.style.display = isVisible ? 'none' : 'block';
 
 			if (!isVisible) {
-				// Position menu above the button
-				const buttonRect = moreButton.getBoundingClientRect();
-				const cardRect = card.getBoundingClientRect();
-				menu.style.position = 'absolute';
-				menu.style.right = `${cardRect.right - buttonRect.right}px`;
-				menu.style.bottom = `${cardRect.bottom - buttonRect.top + 4}px`;
-				menu.style.zIndex = '1000';
-
-				// Add click listener to close on outside click
 				menuTimer = setTimeout(() => {
 					if (card.isConnected) document.addEventListener('click', closeMenu);
 				}, 0);
