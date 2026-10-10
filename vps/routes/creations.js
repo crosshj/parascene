@@ -6,7 +6,7 @@ import sharp from "sharp";
 import { requireAuth } from "./middleware/auth.js";
 import { creationAudioCdnId, creationMediaKey, creationMediaKeys, creationVideoMediaKey } from "../db/creations.js";
 import { extractVideoFrame as readVideoFrame, extractVideoThumbnail } from "./utils/media.js";
-import { verifyShareToken } from "./utils/shareLink.js";
+import { ACTIVE_SHARE_VERSION, mintShareToken, verifyShareToken } from "./utils/shareLink.js";
 import { costumeGroupV2Meta } from '../services/create/groupV2.js';
 import { computeChallengeEndedByImageId } from '../services/create/challengeSubmitShared.js';
 import { getSupabaseServiceClient } from '../services/create/supabaseService.js';
@@ -64,6 +64,44 @@ function withLineageProof(value, parentId) {
 	if (!value || !parentId) return value;
 	const separator = value.includes("?") ? "&" : "?";
 	return `${value}${separator}lineage_of=${encodeURIComponent(String(parentId))}`;
+}
+
+function positiveId(value) {
+	const n = Number.parseInt(String(value ?? ""), 10);
+	return Number.isInteger(n) && n > 0 ? n : 0;
+}
+
+function appendQuery(value, key, raw) {
+	if (typeof value !== "string" || !value) return value;
+	const [before, hash = ""] = value.split("#");
+	if (new RegExp(`[?&]${key}=`).test(before)) return value;
+	const next = `${before}${before.includes("?") ? "&" : "?"}${key}=${encodeURIComponent(String(raw))}`;
+	return hash ? `${next}#${hash}` : next;
+}
+
+function shareAudioUrl(row) {
+	try {
+		const token = mintShareToken({
+			version: ACTIVE_SHARE_VERSION,
+			imageId: Number(row.id),
+			sharedByUserId: Number(row.user_id)
+		});
+		return `/api/share/${encodeURIComponent(ACTIVE_SHARE_VERSION)}/${encodeURIComponent(token)}/cdn-audio`;
+	} catch {
+		return "";
+	}
+}
+
+function applyCommentProof(payload, row, commentId) {
+	const id = positiveId(commentId);
+	if (!id || !payload) return payload;
+	for (const field of ["url", "thumbnail_url", "fit_thumbnail_url", "video_thumbnail_url", "video_url"]) {
+		payload[field] = appendQuery(payload[field], "comment_id", id);
+	}
+	if (payload.media_type === "audio") {
+		payload.audio_url = shareAudioUrl(row) || appendQuery(payload.audio_url || `/api/creations/${row.id}/audio`, "comment_id", id);
+	}
+	return payload;
 }
 
 export function serializeCreation(row) {
@@ -214,6 +252,10 @@ export function createCreationsRoutes({ creations, users, appendChallengeEligibi
     const entry = await challengeCreationForViewer({ creations, viewer, creationId: req.query.creation_id, query: req.query });
     allowed = Boolean(entry && creationMediaKeys(entry).some(value => creations.safeKey(value) === key));
    }
+			if (!allowed && positiveId(req.query.comment_id) && typeof creations.byIdForCommentProof === "function") {
+				const proved = await creations.byIdForCommentProof(req.auth.userId, req.query.creation_id, req.query.comment_id);
+				allowed = Boolean(proved && creationMediaKeys(proved).some((value) => creations.safeKey(value) === key));
+			}
 			if (!allowed) return res.status(404).json({ error: "Media not found" });
 			const variant = String(req.query.variant || "").trim().toLowerCase();
 			// Video bytes stay on storage. This response is only the access check plus a
@@ -385,8 +427,15 @@ export function createCreationsRoutes({ creations, users, appendChallengeEligibi
 				row = await creations.lineageAncestorForViewer(req.auth.userId, req.params.id, req.query.lineage_of, { isAdmin: viewer.role === "admin" });
 			}
 			if (!row) row = await challengeCreationForViewer({ creations, viewer, creationId: req.params.id, query: req.query });
+			let commentProofId = 0;
+			if (!row && positiveId(req.query.comment_id) && typeof creations.byIdForCommentProof === "function") {
+				commentProofId = positiveId(req.query.comment_id);
+				row = await creations.byIdForCommentProof(req.auth.userId, req.params.id, commentProofId);
+				if (!row) commentProofId = 0;
+			}
 			if (!row) return res.status(404).json({ error: "Image not found" });
 			const payload = await serializeWithCreator(row);
+			if (commentProofId) applyCommentProof(payload, row, commentProofId);
 			if (req.query.lineage_of != null) {
 				for (const field of ["url", "thumbnail_url", "fit_thumbnail_url", "video_thumbnail_url", "video_url", "audio_url"]) {
 					payload[field] = withLineageProof(payload[field], req.query.lineage_of);
@@ -456,9 +505,15 @@ export function createCreationsRoutes({ creations, users, appendChallengeEligibi
 	router.get("/api/creations/:id", requireAuth, async (req, res, next) => {
 		try {
 			const viewer = await users.byId(req.auth.userId);
-			const row = await creations.byIdForViewer(req.auth.userId, req.params.id, {
+			let commentProofId = 0;
+			let row = await creations.byIdForViewer(req.auth.userId, req.params.id, {
 				isAdmin: viewer?.role === "admin"
 			});
+			if (!row && positiveId(req.query.comment_id) && typeof creations.byIdForCommentProof === "function") {
+				commentProofId = positiveId(req.query.comment_id);
+				row = await creations.byIdForCommentProof(req.auth.userId, req.params.id, commentProofId);
+				if (!row) commentProofId = 0;
+			}
 			if (!row) return res.status(404).json({ error: "Creation not found" });
 			const meta = row.meta && typeof row.meta === "object" ? row.meta : {};
 			if (meta.nsfw === true && viewer?.meta?.enableNsfw !== true && Number(row.user_id) !== Number(req.auth.userId) && viewer?.role !== "admin") {
@@ -467,6 +522,7 @@ export function createCreationsRoutes({ creations, users, appendChallengeEligibi
 			const creatorUser = Number(row.user_id) === Number(viewer?.id) ? viewer : await users.byId(row.user_id);
 			const creatorProfile = await users.profileByUserId(row.user_id);
 			const creation = serializeCreation(row);
+			if (commentProofId) applyCommentProof(creation, row, commentProofId);
 			return res.json({
 				...creation,
 				like_count: 0,
@@ -523,6 +579,9 @@ export function createCreationsRoutes({ creations, users, appendChallengeEligibi
 				row = await creations.lineageAncestorForViewer(req.auth.userId, req.params.id, req.query.lineage_of, { isAdmin: viewer?.role === "admin" });
 			}
 			if (!row) row = await challengeCreationForViewer({ creations, viewer, creationId: req.params.id, query: req.query });
+			if (!row && positiveId(req.query.comment_id) && typeof creations.byIdForCommentProof === "function") {
+				row = await creations.byIdForCommentProof(req.auth.userId, req.params.id, req.query.comment_id);
+			}
 			if (!row) return res.status(404).json({ error: "Audio not found" });
 			const meta = parseMeta(row.meta);
 			if (meta.nsfw === true && viewer?.meta?.enableNsfw !== true && Number(row.user_id) !== Number(req.auth.userId) && viewer?.role !== "admin") {

@@ -1,4 +1,5 @@
 import {creationEligibleForLatestCommentsStream} from '../services/create/latestCommentsVisibility.js';
+import { commentAllowsUnpublishedCreation } from '../services/create/postedCreationAccess.js';
 import {getActiveEditorialPins} from '../services/feed/editorialPin.js';
 import path from "node:path";
 
@@ -94,6 +95,27 @@ export function createCreationsStore({ client, supabaseUrl, serviceRoleKey }) {
 			const { data, error } = await query;
 			if (error) throw error;
 			return (Array.isArray(data) ? data : []).filter((row) => !isHiddenInGroupMeta(row?.meta));
+		},
+		async byIdForCommentProof(viewerId, creationId, commentId) {
+			const id = Number(creationId);
+			const cid = Number(commentId);
+			const uid = Number(viewerId);
+			if (![id, cid, uid].every((value) => Number.isInteger(value) && value > 0)) return null;
+			const imageResult = await client.from("prsn_created_images").select(CREATION_FIELDS).eq("id", id).maybeSingle();
+			if (imageResult.error) throw imageResult.error;
+			const image = imageResult.data;
+			if (!image) return null;
+			const commentResult = await client.from("prsn_comments_created_image").select("id, created_image_id, text").eq("id", cid).maybeSingle();
+			if (commentResult.error) throw commentResult.error;
+			const comment = commentResult.data;
+			if (!comment) return null;
+			let parent = null;
+			if (Number(comment.created_image_id) !== id) {
+				const parentResult = await client.from("prsn_created_images").select("id, user_id, published, unavailable_at").eq("id", comment.created_image_id).maybeSingle();
+				if (parentResult.error) throw parentResult.error;
+				parent = parentResult.data;
+			}
+			return commentAllowsUnpublishedCreation({ image, comment, parent, viewerId: uid }) ? image : null;
 		},
 		// Only call after verifying a share token for this exact creation.
 		async byIdForShare(creationId) {

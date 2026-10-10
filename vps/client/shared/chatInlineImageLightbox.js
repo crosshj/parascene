@@ -1,6 +1,6 @@
 import { copyIcon, linkIcon2 } from '../icons/svg-strings.js';
 import './chatInlineImageLightbox.css';
-import { DEFAULT_APP_ORIGIN, collectInlineMediaGroupGallery } from './userText.js';
+import { DEFAULT_APP_ORIGIN, collectInlineMediaGroupGallery, creationDetailLinkVisible } from './userText.js';
 import { createModalDismissButton } from './modalDismiss.js';
 import {
 	isCreationDetailEmbedFrame,
@@ -254,6 +254,33 @@ function serializeLightboxCreationMeta(creationMeta) {
  * @param {object} payload
  * @returns {boolean}
  */
+function creationAccessFields(source) {
+	if (!source || typeof source !== 'object') return {};
+	const access = {};
+	if (source.published === true || source.published === false) access.published = source.published;
+	const ownerId = source.ownerId != null ? String(source.ownerId).trim() : '';
+	if (ownerId) access.ownerId = ownerId;
+	return access;
+}
+
+function creationAccessFromWrap(wrap) {
+	if (!(wrap instanceof HTMLElement)) return {};
+	const flag = wrap.getAttribute('data-published');
+	return creationAccessFields({
+		published: flag === '1' ? true : flag === '0' ? false : undefined,
+		ownerId: wrap.getAttribute('data-owner-id') || undefined,
+	});
+}
+
+function showCreationDetailLink(access) {
+	const viewerId = Number(globalThis.__PARASCENE_BOOTSTRAP__?.user?.id);
+	return creationDetailLinkVisible({
+		published: access?.published,
+		ownerId: access?.ownerId,
+		viewerId,
+	});
+}
+
 function requestParentInlineLightboxOpen(kind, payload) {
 	if (!isCreationDetailEmbedFrame()) return false;
 	try {
@@ -291,7 +318,7 @@ export function closeChatInlineImageLightboxFromPopstateIfOpen() {
  * @param {HTMLElement} overlay
  * @param {string} creationIdRaw
  */
-function mountInlineImageLightboxCreationFooter(overlay, creationIdRaw) {
+function mountInlineImageLightboxCreationFooter(overlay, creationIdRaw, access) {
 	const cidRaw = String(creationIdRaw ?? '').trim();
 	if (!cidRaw) return;
 	const detailPath = `/creations/${encodeURIComponent(cidRaw)}`;
@@ -352,7 +379,7 @@ function mountInlineImageLightboxCreationFooter(overlay, creationIdRaw) {
 		}
 	});
 
-	footer.appendChild(goBtn);
+	if (showCreationDetailLink(access)) footer.appendChild(goBtn);
 	footer.appendChild(copyBtn);
 	overlay.appendChild(footer);
 }
@@ -605,7 +632,7 @@ export function openChatInlineImageLightbox(src, creationMeta, hooks) {
 		creationMeta && typeof creationMeta.creationId !== 'undefined'
 			? String(creationMeta.creationId).trim()
 			: '';
-	mountInlineImageLightboxCreationFooter(overlay, cidRaw);
+	mountInlineImageLightboxCreationFooter(overlay, cidRaw, creationMeta);
 
 	chatInlineImageLightboxKeydown = (e) => {
 		if (e.key === 'Escape') {
@@ -825,7 +852,7 @@ export function openChatVideoGalleryLightbox(slides, hooks) {
 		typeof hooks?.creationId === 'string' || typeof hooks?.creationId === 'number'
 			? String(hooks.creationId).trim()
 			: normalized.map((slide) => String(slide.creationId || '').trim()).find(Boolean) || '';
-	mountInlineImageLightboxCreationFooter(overlay, creationIdRaw);
+	mountInlineImageLightboxCreationFooter(overlay, creationIdRaw, hooks);
 
 	let activeIndex = startIndex;
 	let activePlayer = 0;
@@ -1298,9 +1325,11 @@ export function openChatInlineMediaGroupLightbox(slides, hooks) {
 
 	if (normalized.length === 1) {
 		const slide = normalized[0];
+		const access = creationAccessFields(hooks);
 		if (slide.kind === 'video') {
 			openChatAttachmentPreviewLightbox(slide.url, 'video', {
 				...openHooks,
+				...access,
 				...(slide.creationId ? { creationId: slide.creationId } : {}),
 				...(slide.sourceVideo instanceof HTMLVideoElement
 					? { sourceVideo: slide.sourceVideo }
@@ -1311,6 +1340,7 @@ export function openChatInlineMediaGroupLightbox(slides, hooks) {
 		openChatInlineImageLightbox(
 			slide.url,
 			{
+				...access,
 				...(slide.creationId ? { creationId: slide.creationId } : {}),
 				...(slide.sourceImg instanceof HTMLImageElement ? { sourceImg: slide.sourceImg } : {}),
 			},
@@ -1353,6 +1383,7 @@ export function openChatInlineMediaGroupLightbox(slides, hooks) {
 	openChatInlineImageLightbox(
 		normalized[startIndex].url,
 		{
+			...creationAccessFields(hooks),
 			...(hooks?.creationId != null && String(hooks.creationId).trim()
 				? { creationId: String(hooks.creationId).trim() }
 				: normalized[startIndex].creationId
@@ -1482,7 +1513,7 @@ function openChatMixedMediaGalleryLightbox(slides, hooks) {
 		typeof hooks?.creationId === 'string' || typeof hooks?.creationId === 'number'
 			? String(hooks.creationId).trim()
 			: normalized.map((slide) => String(slide.creationId || '').trim()).find(Boolean) || '';
-	mountInlineImageLightboxCreationFooter(overlay, creationIdRaw);
+	mountInlineImageLightboxCreationFooter(overlay, creationIdRaw, hooks);
 
 	let activeIndex = startIndex;
 	let advanceLock = false;
@@ -1946,7 +1977,7 @@ export function openChatAttachmentPreviewLightbox(src, kind, hooks) {
 
 	const previewCid =
 		hooks && typeof hooks.creationId !== 'undefined' ? String(hooks.creationId).trim() : '';
-	mountInlineImageLightboxCreationFooter(overlay, previewCid);
+	mountInlineImageLightboxCreationFooter(overlay, previewCid, hooks);
 
 	chatInlineImageLightboxKeydown = (e) => {
 		if (e.key !== 'Escape') return;
@@ -2018,6 +2049,7 @@ export function bindChatInlineImageLightboxClickDelegation(rootEl, options = {})
 				embedWrap instanceof HTMLElement
 					? String(embedWrap.getAttribute('data-creation-id') || '').trim()
 					: '';
+			const access = creationAccessFromWrap(embedWrap);
 			if (!creationId) return;
 			let galleryUrls = [];
 			try {
@@ -2084,6 +2116,7 @@ export function bindChatInlineImageLightboxClickDelegation(rootEl, options = {})
 						loopGallery: true,
 						autoAdvanceOnEnded: true,
 						creationId,
+						...access,
 						beforeOpen: openHooks.beforeOpen,
 					});
 					return;
@@ -2096,6 +2129,7 @@ export function bindChatInlineImageLightboxClickDelegation(rootEl, options = {})
 				src,
 				{
 					creationId,
+					...access,
 					...(galleryUrls.length > 1
 						? {
 								galleryUrls,
@@ -2129,6 +2163,7 @@ export function bindChatInlineImageLightboxClickDelegation(rootEl, options = {})
 			e.stopPropagation();
 			openChatAttachmentPreviewLightbox(src, 'audio', {
 				...openHooks,
+				...creationAccessFromWrap(wrap),
 				...(creationId ? { creationId } : {}),
 			});
 			return;
@@ -2145,6 +2180,7 @@ export function bindChatInlineImageLightboxClickDelegation(rootEl, options = {})
 				wrap instanceof HTMLElement
 					? String(wrap.getAttribute('data-creation-id') || '').trim()
 					: '';
+			const access = creationAccessFromWrap(wrap);
 			const inlineMediaGroup = wrap?.closest?.('.user-text-inline-media-group');
 			if (inlineMediaGroup instanceof HTMLElement) {
 				const gallery = collectInlineMediaGroupGallery(
@@ -2157,6 +2193,7 @@ export function bindChatInlineImageLightboxClickDelegation(rootEl, options = {})
 					e.stopPropagation();
 					openChatInlineMediaGroupLightbox(gallery.slides, {
 						...openHooks,
+						...access,
 						galleryLabel: 'Media',
 						startIndex: gallery.galleryIndex,
 						autoAdvanceOnEnded: false,
@@ -2171,6 +2208,7 @@ export function bindChatInlineImageLightboxClickDelegation(rootEl, options = {})
 			e.stopPropagation();
 			openChatAttachmentPreviewLightbox(src, 'video', {
 				...openHooks,
+				...access,
 				...(creationId ? { creationId } : {}),
 				sourceVideo: vid,
 			});
@@ -2196,6 +2234,7 @@ export function bindChatInlineImageLightboxClickDelegation(rootEl, options = {})
 			embedWrap instanceof HTMLElement
 				? String(embedWrap.getAttribute('data-creation-id') || '').trim()
 				: '';
+		const access = creationAccessFromWrap(embedWrap);
 		const inlineMediaGroup = a.closest('.user-text-inline-media-group');
 		let galleryUrls = [];
 		let galleryImgs = [];
@@ -2206,6 +2245,7 @@ export function bindChatInlineImageLightboxClickDelegation(rootEl, options = {})
 			if (gallery.slides.length > 1) {
 				openChatInlineMediaGroupLightbox(gallery.slides, {
 					...openHooks,
+					...access,
 					galleryLabel: 'Media',
 					startIndex: gallery.galleryIndex,
 					autoAdvanceOnEnded: false,
@@ -2223,6 +2263,7 @@ export function bindChatInlineImageLightboxClickDelegation(rootEl, options = {})
 		openChatInlineImageLightbox(
 			src,
 			{
+				...access,
 				...(groupCreationId ? { creationId: groupCreationId } : {}),
 				...(galleryUrls.length > 1
 					? {
@@ -2276,6 +2317,7 @@ export function bindChatInlineImageLightboxClickDelegation(rootEl, options = {})
 		e.stopPropagation();
 		openChatAttachmentPreviewLightbox(src, 'video', {
 			...openHooks,
+			...creationAccessFromWrap(wrap),
 			...(creationId ? { creationId } : {}),
 			sourceVideo: vid,
 		});

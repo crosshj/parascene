@@ -78,6 +78,8 @@ export function createConnectCommentRowElement(comment, opts = {}) {
 		rootClasses.push('is-disabled');
 	}
 	row.className = rootClasses.join(' ');
+	const commentId = Number(comment?.id);
+	if (Number.isFinite(commentId) && commentId > 0) row.dataset.commentId = String(commentId);
 	if (href) {
 		row.setAttribute('role', 'link');
 		row.tabIndex = 0;

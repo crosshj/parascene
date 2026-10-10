@@ -1966,7 +1966,37 @@ function attachChatCreationEmbedDetailLinkReveal(wrap) {
 	);
 }
 
-export async function fetchCreationEmbedPayload(id, shareOpts, challengeOpts) {
+export function creationDetailLinkVisible({ published, ownerId, viewerId } = {}) {
+	if (published === true || published === 1 || published === '1') return true;
+	if (published !== false && published !== 0 && published !== '0') return true;
+	const owner = Number(ownerId);
+	const viewer = Number(viewerId);
+	return Number.isInteger(owner) && owner > 0 && owner === viewer;
+}
+
+function stampCreationEmbedAccess(wrap, data) {
+	if (!(wrap instanceof HTMLElement) || !data) return;
+	if (data.published === true || data.published === 1) wrap.dataset.published = '1';
+	else if (data.published === false || data.published === 0) wrap.dataset.published = '0';
+	const ownerId = Number(data.user_id);
+	if (Number.isInteger(ownerId) && ownerId > 0) wrap.dataset.ownerId = String(ownerId);
+}
+
+export function creationAudioPlayerHref(data, creationId, commentId, viewerId) {
+	const viewer = viewerId != null ? viewerId : Number(globalThis.__PARASCENE_BOOTSTRAP__?.user?.id);
+	if (!creationDetailLinkVisible({ published: data?.published, ownerId: data?.user_id, viewerId: viewer })) return '';
+	const id = encodeURIComponent(String(creationId));
+	const proof = commentId ? `?comment_id=${encodeURIComponent(String(commentId))}` : '';
+	return `/creations/${id}${proof}`;
+}
+
+function commentProofIdFromAnchor(anchor) {
+	const row = anchor?.closest?.('.comment-item[data-comment-id], .connect-comment[data-comment-id]');
+	const raw = String(row?.getAttribute?.('data-comment-id') || '').trim();
+	return /^\d+$/.test(raw) && Number(raw) > 0 ? raw : '';
+}
+
+export async function fetchCreationEmbedPayload(id, shareOpts, challengeOpts, commentId) {
 	const shareVersion =
 		shareOpts && typeof shareOpts.shareVersion === 'string' ? shareOpts.shareVersion.trim() : '';
 	const shareToken =
@@ -1982,11 +2012,12 @@ export async function fetchCreationEmbedPayload(id, shareOpts, challengeOpts) {
 		Number.isSafeInteger(challengeMessageId) && challengeMessageId > 0
 			? String(challengeMessageId)
 			: '';
+	const commentKey = /^\d+$/.test(String(commentId || '')) && Number(commentId) > 0 ? String(commentId) : '';
 	const cacheKey =
 		shareVersion && shareToken
-			? `${id}\0${shareVersion}\0${shareToken}\0${challengeId}\0${messageKey}`
-			: challengeId || messageKey
-				? `${id}\0challenge:${challengeId}\0${messageKey}`
+			? `${id}\0${shareVersion}\0${shareToken}\0${challengeId}\0${messageKey}\0${commentKey}`
+			: challengeId || messageKey || commentKey
+				? `${id}\0challenge:${challengeId}\0${messageKey}\0${commentKey}`
 				: id;
 	if (creationEmbedDataCache.has(cacheKey)) {
 		return creationEmbedDataCache.get(cacheKey);
@@ -2002,6 +2033,7 @@ export async function fetchCreationEmbedPayload(id, shareOpts, challengeOpts) {
 			const params = new URLSearchParams();
 			if (challengeId) params.set('challenge_id', challengeId);
 			if (messageKey) params.set('challenge_message_id', messageKey);
+			if (commentKey) params.set('comment_id', commentKey);
 			const query = params.toString();
 			const qs = query ? `?${query}` : '';
 			const res = await fetch(`/api/create/images/${encodeURIComponent(id)}${qs}`, {
@@ -2069,6 +2101,7 @@ export function hydrateChatCreationEmbeds(rootEl) {
 			share && !detailId
 				? { shareVersion: share.shareVersion, shareToken: share.shareToken }
 				: null;
+		const commentId = commentProofIdFromAnchor(a);
 		a.dataset.chatCreationEmbed = 'true';
 		a.classList.add('connect-chat-creation-embed-paired-link');
 
@@ -2083,7 +2116,7 @@ export function hydrateChatCreationEmbeds(rootEl) {
 			'</div></div>';
 		a.insertAdjacentElement('afterend', wrap);
 
-		void fetchCreationEmbedPayload(creationId, shareOpts).then((data) => {
+		void fetchCreationEmbedPayload(creationId, shareOpts, null, commentId).then((data) => {
 			if (!wrap.parentNode) return;
 			wrap.classList.remove('connect-chat-creation-embed--loading');
 
@@ -2100,6 +2133,7 @@ export function hydrateChatCreationEmbeds(rootEl) {
 				return;
 			}
 
+			stampCreationEmbedAccess(wrap, data);
 			const titleDisplay = creationEmbedTitleDisplayText(data);
 
 			const moderated = !!data.is_moderated_error;
@@ -2314,7 +2348,7 @@ export function hydrateChatCreationEmbeds(rootEl) {
 					shareToken: shareOpts?.shareToken,
 				});
 				const durationSec = Number(parsedEmbedMeta?.audio?.duration);
-				const href = `/creations/${encodeURIComponent(String(creationId))}`;
+				const href = creationAudioPlayerHref(data, creationId, commentId);
 				const iframeSrc = resolveChatAudioPlayerSrc({
 					meta: parsedEmbedMeta,
 					title: titleRaw,
