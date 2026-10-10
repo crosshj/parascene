@@ -5,7 +5,7 @@ import path from "node:path";
 import sharp from "sharp";
 import { requireAuth } from "./middleware/auth.js";
 import { creationAudioCdnId, creationMediaKey, creationMediaKeys, creationVideoMediaKey } from "../db/creations.js";
-import { extractVideoThumbnail } from "./utils/media.js";
+import { extractVideoFrame as readVideoFrame, extractVideoThumbnail } from "./utils/media.js";
 import { verifyShareToken } from "./utils/shareLink.js";
 import { costumeGroupV2Meta } from '../services/create/groupV2.js';
 import { computeChallengeEndedByImageId } from '../services/create/challengeSubmitShared.js';
@@ -161,7 +161,7 @@ function gridThumbnail(input) {
 		.toBuffer();
 }
 
-export function createCreationsRoutes({ creations, users, appendChallengeEligibility, resolveChallengeEnded = images => computeChallengeEndedByImageId({ sb: getSupabaseServiceClient(), images }) }) {
+export function createCreationsRoutes({ creations, users, appendChallengeEligibility, resolveChallengeEnded = images => computeChallengeEndedByImageId({ sb: getSupabaseServiceClient(), images }), extractVideoFrame = readVideoFrame }) {
 	async function serializeList(rows) {
 		const items = rows.map(serializeCreation);
 		try {
@@ -318,6 +318,30 @@ export function createCreationsRoutes({ creations, users, appendChallengeEligibi
 		try {
 			const ids = typeof req.query.ids === "string" ? req.query.ids.split(",") : [];
 			return res.json(await creations.nsfwFlags(ids));
+		} catch (error) { return next(error); }
+	});
+
+	router.get("/api/creations/:id/video-frame", noStore, requireAuth, async (req, res, next) => {
+		try {
+			const { viewer, row } = await accessibleCreation(req);
+			if (!viewer || !row) return res.status(404).json({ error: "Creation not found" });
+			const key = creationVideoMediaKey(row);
+			if (!key) return res.status(404).json({ error: "Video not found" });
+			const requested = req.query.t == null || req.query.t === "" ? 0 : Number(req.query.t);
+			if (!Number.isFinite(requested) || requested < 0 || requested > 6 * 60 * 60) {
+				return res.status(400).json({ error: "Invalid frame time" });
+			}
+			const response = await creations.fetchMedia(key, { method: "GET" });
+			if (!response.ok || !response.body) return res.status(404).json({ error: "Video not found" });
+			const chunks = [];
+			for await (const chunk of Readable.fromWeb(response.body)) chunks.push(chunk);
+			const frame = await extractVideoFrame(Buffer.concat(chunks), requested);
+			if (!frame?.length) return res.status(404).json({ error: "Frame unavailable" });
+			res.status(200);
+			res.type("png");
+			res.set("Content-Length", String(frame.length));
+			res.set("Cache-Control", "private, no-store");
+			return res.send(frame);
 		} catch (error) { return next(error); }
 	});
 

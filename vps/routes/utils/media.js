@@ -175,3 +175,50 @@ export async function extractVideoThumbnail(input) {
 		await rm(directory, { recursive: true, force: true }).catch(() => undefined);
 	}
 }
+
+/**
+ * One PNG frame at `timeSec`. A fast seek lands near the timestamp, then a short
+ * decode lands on the requested frame. A failed seek falls back to the start.
+ * @param {Buffer} input
+ * @param {number} [timeSec]
+ * @returns {Promise<Buffer | null>}
+ */
+export async function extractVideoFrame(input, timeSec = 0) {
+	if (!Buffer.isBuffer(input) || input.length === 0) return null;
+	const requested = Number(timeSec);
+	const seek = Number.isFinite(requested) && requested > 0 ? requested : 0;
+	const directory = await mkdtemp(path.join(os.tmpdir(), "parascene-video-frame-"));
+	const sourcePath = path.join(directory, "source.bin");
+	try {
+		await writeFile(sourcePath, input);
+		for (const at of seek > 0 ? [seek, 0] : [0]) {
+			const frame = await readVideoFrame(sourcePath, at);
+			if (frame) return frame;
+		}
+		return null;
+	} finally {
+		await rm(directory, { recursive: true, force: true }).catch(() => undefined);
+	}
+}
+
+async function readVideoFrame(sourcePath, seek) {
+	const fast = Math.max(0, seek - 1);
+	const fine = Math.max(0, seek - fast);
+	try {
+		const result = await execFileAsync(FFMPEG_BIN, [
+			"-y", "-v", "error",
+			"-ss", fast.toFixed(3),
+			"-i", sourcePath,
+			"-ss", fine.toFixed(3),
+			"-map", "0:v:0",
+			"-frames:v", "1",
+			"-c:v", "png",
+			"-f", "image2pipe",
+			"pipe:1"
+		], { encoding: "buffer", maxBuffer: 25 * 1024 * 1024, timeout: 120_000 });
+		const frame = Buffer.isBuffer(result.stdout) ? result.stdout : Buffer.from(result.stdout || "");
+		return frame.length ? frame : null;
+	} catch {
+		return null;
+	}
+}

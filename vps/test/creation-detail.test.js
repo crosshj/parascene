@@ -27,8 +27,8 @@ test('group detail serializes child thumbnails with parent access for legacy and
 	}
 });
 
-async function withApp(run, { mediaResponse, canAccessMedia = async () => true, fetchMedia, signedPlaybackUrl } = {}) {
-	const row = {
+async function withApp(run, { mediaResponse, canAccessMedia = async () => true, fetchMedia, signedPlaybackUrl, extractVideoFrame, row: rowOverride } = {}) {
+	const row = rowOverride || {
 		id: 31885,
 		user_id: 42,
 		filename: 'creation.png',
@@ -58,7 +58,7 @@ async function withApp(run, { mediaResponse, canAccessMedia = async () => true, 
 	};
 	const app = express();
 	app.use((req, _res, next) => { if (req.headers.authorization === 'Bearer test') req.auth = { userId: 42 }; next(); });
-	app.use(createCreationsRoutes({ creations, users }));
+	app.use(createCreationsRoutes({ creations, users, extractVideoFrame }));
 	const server = app.listen(0);
 	try { await run(`http://127.0.0.1:${server.address().port}`); }
 	finally { await new Promise((resolve) => server.close(resolve)); }
@@ -202,4 +202,54 @@ test('feed video URLs serve authenticated GET and HEAD through the range-capable
 		},
 	});
 	assert.deepEqual(calls, ['GET', 'HEAD'].map(method => ({ mediaKey: key, method, range: 'bytes=0-3' })));
+});
+
+test('creation video frame is read on the server at the requested time', async () => {
+	const png = Buffer.from([137, 80, 78, 71]);
+	const calls = [];
+	await withApp(async (origin) => {
+		const headers = { Authorization: 'Bearer test' };
+		const response = await fetch(`${origin}/api/creations/31885/video-frame?t=12.5`, { headers });
+		assert.equal(response.status, 200);
+		assert.match(response.headers.get('content-type'), /^image\/png/);
+		assert.match(response.headers.get('cache-control'), /no-store/);
+		assert.deepEqual(Buffer.from(await response.arrayBuffer()), png);
+		const invalid = await fetch(`${origin}/api/creations/31885/video-frame?t=-1`, { headers });
+		assert.equal(invalid.status, 400);
+		const anon = await fetch(`${origin}/api/creations/31885/video-frame?t=1`);
+		assert.equal(anon.status, 401);
+	}, {
+		row: {
+			id: 31885,
+			user_id: 42,
+			filename: 'clip.mp4',
+			file_path: '42/clip.mp4',
+			status: 'completed',
+			published: false,
+			meta: { video: { file_path: '/api/videos/created/video/clip.mp4' } },
+		},
+		fetchMedia: async (mediaKey) => {
+			calls.push(mediaKey);
+			return new Response(Buffer.from('video-bytes'), { status: 200, headers: { 'Content-Type': 'video/mp4' } });
+		},
+		extractVideoFrame: async (input, timeSec) => {
+			calls.push({ bytes: Buffer.from(input).toString(), timeSec });
+			return png;
+		},
+	});
+	assert.deepEqual(calls, ['video/clip.mp4', { bytes: 'video-bytes', timeSec: 12.5 }]);
+});
+
+test('creation video frame rejects a creation that has no video', async () => {
+	let fetched = false;
+	await withApp(async (origin) => {
+		const response = await fetch(`${origin}/api/creations/31885/video-frame?t=1`, {
+			headers: { Authorization: 'Bearer test' },
+		});
+		assert.equal(response.status, 404);
+		assert.equal((await response.json()).error, 'Video not found');
+	}, {
+		fetchMedia: async () => { fetched = true; return new Response('no'); },
+	});
+	assert.equal(fetched, false);
 });

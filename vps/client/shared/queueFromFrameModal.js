@@ -38,130 +38,44 @@ export function clampFrameTime(timeSec, durationSec) {
 	return Math.max(0, Math.min(t, Math.max(0, duration - 0.001)));
 }
 
-export function drawVideoFrameToCanvas(video, canvas) {
-	if (!(video instanceof HTMLVideoElement) || !(canvas instanceof HTMLCanvasElement)) return false;
-	const w = video.videoWidth;
-	const h = video.videoHeight;
-	if (!w || !h || video.readyState < 2) return false;
-	const ctx = canvas.getContext('2d');
-	if (!ctx) return false;
-	if (canvas.width !== w) canvas.width = w;
-	if (canvas.height !== h) canvas.height = h;
-	ctx.drawImage(video, 0, 0, w, h);
-	return true;
-}
-
-export async function captureCanvasFrameBlob(canvas) {
-	if (!(canvas instanceof HTMLCanvasElement) || canvas.width <= 0 || canvas.height <= 0) {
-		throw new Error('No frame selected');
-	}
-	return new Promise((resolve, reject) => {
-		canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Could not encode frame'))), 'image/png');
-	});
-}
-
 /**
- * @param {HTMLVideoElement} video
- * @returns {Promise<{ width: number, height: number }>}
+ * Width and height from a PNG IHDR, or zeros when the bytes are not a PNG.
+ * @param {Uint8Array} bytes
  */
-export async function waitForVideoIntrinsicDimensions(video) {
-	if (!(video instanceof HTMLVideoElement)) {
-		throw new Error('Video is not available');
-	}
-	if (video.videoWidth > 0 && video.videoHeight > 0) {
-		return { width: video.videoWidth, height: video.videoHeight };
-	}
-	await new Promise((resolve, reject) => {
-		const onError = () => reject(new Error('Could not load video'));
-		const onMeta = () => {
-			video.removeEventListener('error', onError);
-			video.removeEventListener('loadedmetadata', onMeta);
-			resolve();
-		};
-		video.addEventListener('error', onError, { once: true });
-		video.addEventListener('loadedmetadata', onMeta, { once: true });
-	});
-	if (video.videoWidth > 0 && video.videoHeight > 0) {
-		return { width: video.videoWidth, height: video.videoHeight };
-	}
-	throw new Error('Video dimensions are not available yet');
+export function pngSize(bytes) {
+	const png = bytes instanceof Uint8Array ? bytes : new Uint8Array();
+	const signature = [137, 80, 78, 71, 13, 10, 26, 10];
+	if (png.length < 24 || signature.some((byte, index) => png[index] !== byte)) return { width: 0, height: 0 };
+	const view = new DataView(png.buffer, png.byteOffset, png.byteLength);
+	return { width: view.getUint32(16), height: view.getUint32(20) };
 }
 
 /**
- * @param {HTMLVideoElement} video
- * @param {number} timeSec
- */
-async function seekVideoToTime(video, timeSec) {
-	video.pause();
-	const duration = Number(video.duration);
-	const target = Number.isFinite(duration) && duration > 0
-		? clampFrameTime(timeSec, duration)
-		: 0;
-	video.currentTime = target;
-	await new Promise((resolve) => {
-		video.addEventListener('seeked', resolve, { once: true });
-		window.setTimeout(resolve, 800);
-	});
-}
-
-/**
- * Load a video URL, seek to the first frame at native resolution, and return a PNG File.
- * @param {string} videoUrl
+ * Ask the server for a frame. Playback stays on the signed video; the server
+ * reads the stored file, so the browser never exports a tainted canvas.
  * @param {number} sourceId
- * @param {{ existingVideo?: HTMLVideoElement | null }} [options]
+ * @param {number} timeSec
  * @returns {Promise<{ file: File, width: number, height: number }>}
  */
-export async function captureVideoFirstFrameFile(videoUrl, sourceId, options = {}) {
-	const url = typeof videoUrl === 'string' ? videoUrl.trim() : '';
+export async function fetchServerVideoFrameFile(sourceId, timeSec) {
 	const id = Number(sourceId);
-	if (!url || !Number.isFinite(id) || id <= 0) {
-		throw new Error('Video is not available');
+	if (!Number.isFinite(id) || id <= 0) throw new Error('Video is not available');
+	const time = Number(timeSec);
+	const t = Number.isFinite(time) && time > 0 ? time : 0;
+	const res = await fetch(`/api/creations/${id}/video-frame?t=${encodeURIComponent(t.toFixed(3))}`, {
+		credentials: 'include',
+	});
+	if (!res.ok) {
+		const data = await res.json().catch(() => ({}));
+		throw new Error(data?.error || 'Could not read frame');
 	}
-
-	const existingVideo = options.existingVideo instanceof HTMLVideoElement
-		? options.existingVideo
-		: null;
-	const video = existingVideo || document.createElement('video');
-	const shouldDispose = !existingVideo;
-
-	if (!existingVideo) {
-		video.muted = true;
-		video.playsInline = true;
-		video.setAttribute('playsinline', '');
-		video.preload = 'auto';
-		video.src = url;
-		try { video.load(); } catch { /* ignore */ }
-	} else if (!video.currentSrc && !video.src) {
-		video.src = url;
-		try { video.load(); } catch { /* ignore */ }
-	}
-
-	const canvas = document.createElement('canvas');
-
-	try {
-		await waitForVideoIntrinsicDimensions(video);
-		await seekVideoToTime(video, 0);
-
-		if (!drawVideoFrameToCanvas(video, canvas)) {
-			throw new Error('First frame is not available yet');
-		}
-
-		const width = canvas.width;
-		const height = canvas.height;
-		if (!(width > 0 && height > 0)) {
-			throw new Error('First frame has invalid dimensions');
-		}
-
-		const blob = await captureCanvasFrameBlob(canvas);
-		const file = new File([blob], `poster-${id}.png`, { type: 'image/png' });
-		return { file, width, height };
-	} finally {
-		if (shouldDispose) {
-			video.pause();
-			video.removeAttribute('src');
-			try { video.load(); } catch { /* ignore */ }
-		}
-	}
+	const bytes = new Uint8Array(await res.arrayBuffer());
+	if (!bytes.byteLength) throw new Error('Could not read frame');
+	const { width, height } = pngSize(bytes);
+	const type = typeof res.headers?.get === 'function' && String(res.headers.get('content-type') || '').startsWith('image/')
+		? String(res.headers.get('content-type')).split(';')[0]
+		: 'image/png';
+	return { file: new File([bytes], `frame-${id}.png`, { type }), width, height };
 }
 
 function getModalElements() {
@@ -169,7 +83,6 @@ function getModalElements() {
 	return {
 		overlay: modalRoot,
 		video: modalRoot.querySelector('[data-queue-from-frame-video]'),
-		canvas: modalRoot.querySelector('[data-queue-from-frame-canvas]'),
 		scrub: modalRoot.querySelector('[data-queue-from-frame-scrub]'),
 		timeLabel: modalRoot.querySelector('[data-queue-from-frame-time]'),
 		status: modalRoot.querySelector('[data-queue-from-frame-status]'),
@@ -284,7 +197,6 @@ function ensureModalDom() {
 			<p class="creation-detail-queue-frame-hint">Scrub to the frame you want, then add it to your mutate queue.</p>
 			<div class="creation-detail-queue-frame-preview">
 				<video class="creation-detail-queue-frame-video" data-queue-from-frame-video playsinline muted preload="auto"></video>
-				<canvas class="creation-detail-queue-frame-canvas" data-queue-from-frame-canvas hidden aria-hidden="true"></canvas>
 			</div>
 			<div class="creation-detail-queue-frame-scrub-row">
 				<input type="range" class="creation-detail-queue-frame-scrub" data-queue-from-frame-scrub min="0" max="0" step="0.01" value="0" aria-label="Frame position" disabled />
@@ -349,29 +261,14 @@ function wireModalEvents(root) {
 		const deps = activeDeps;
 		const els = getModalElements();
 		if (!deps || !els) return;
-		const { canvas, scrub: s, confirmBtn: btn } = els;
-		if (!(canvas instanceof HTMLCanvasElement) || !(s instanceof HTMLInputElement) || !(btn instanceof HTMLButtonElement)) return;
+		const { scrub: s, confirmBtn: btn } = els;
+		if (!(s instanceof HTMLInputElement) || !(btn instanceof HTMLButtonElement)) return;
 		if (btn.disabled) return;
 
 		setModalStatus('');
 		setModalBusy(true);
 		try {
-			seekPickerTo(Number(s.value));
-			if (pickerVideo instanceof HTMLVideoElement) {
-				await new Promise((resolve) => {
-					const done = () => {
-						pickerVideo?.removeEventListener('seeked', done);
-						resolve();
-					};
-					pickerVideo.addEventListener('seeked', done, { once: true });
-					window.setTimeout(done, 800);
-				});
-			}
-			if (!drawVideoFrameToCanvas(pickerVideo, canvas)) {
-				throw new Error('Frame is not available yet');
-			}
-			const blob = await captureCanvasFrameBlob(canvas);
-			const file = new File([blob], `frame-${deps.sourceId}.png`, { type: 'image/png' });
+			const { file } = await fetchServerVideoFrameFile(deps.sourceId, Number(s.value));
 			if (deps.mode === 'video-placeholder') {
 				if (typeof deps.onPlaceholderConfirm !== 'function') {
 					throw new Error('Poster save is not available');

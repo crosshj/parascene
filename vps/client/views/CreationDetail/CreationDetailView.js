@@ -91,7 +91,6 @@ let applyHeroAspectLayoutToElement;
 let getLandscapeOutpaintEligibility;
 let canSetVideoPosterFromFirstFrame;
 let videoHeroDimensionsFromCreation;
-let captureVideoFirstFrameFile;
 let openShareAudioModal;
 let openAdjustImageModal;
 let creationMetaHasActiveChallengeFeedPin;
@@ -460,7 +459,6 @@ const audioCoverWaveformMod = creationDetailDependencies.audioCoverWaveform;
 		mountAudioCoverWaveform = audioCoverWaveformMod.mountAudioCoverWaveform;
 	removeAudioCoverWaveform = audioCoverWaveformMod.removeAudioCoverWaveform;
 	openQueueFromFrameModal = queueFromFrameBundledMod.openQueueFromFrameModal;
-	captureVideoFirstFrameFile = queueFromFrameBundledMod.captureVideoFirstFrameFile;
 	openShareAudioModal = shareAudioBundledMod.openShareAudioModal;
 	openAdjustImageModal = adjustImageBundledMod.openAdjustImageModal;
 
@@ -4928,12 +4926,7 @@ async function loadCreation() {
 			void Promise.resolve(saveVideoFirstFramePosterBundledMod).then((mod) => {
 				if (!isCurrentLoad()) return;
 				if (typeof mod.maybeSaveVideoFirstFramePoster !== 'function') return;
-				const heroVideo = document.querySelector('video[data-video]');
-				const existingVideo =
-					heroVideo instanceof HTMLVideoElement && heroVideo.videoWidth > 0
-						? heroVideo
-						: null;
-				return mod.maybeSaveVideoFirstFramePoster(creation, { existingVideo });
+				return mod.maybeSaveVideoFirstFramePoster(creation);
 			});
 		}
 		const groupSourcesRaw = Array.isArray(groupMeta?.source_creations) ? groupMeta.source_creations : [];
@@ -7691,41 +7684,9 @@ async function loadCreation() {
 					'set-video-poster': async () => {
 						if (!actionsContext.showSetVideoPoster || !creation.video_url) return;
 						closeMobileMoreMenu();
-						if (typeof captureVideoFirstFrameFile !== 'function') return;
 						try {
 							showToast('Saving poster…');
-							const heroVideo = document.querySelector('video[data-video]');
-							const useHeroVideo =
-								heroVideo instanceof HTMLVideoElement &&
-								heroVideo.videoWidth > 0 &&
-								heroVideo.videoHeight > 0;
-							const { file, width, height } = await captureVideoFirstFrameFile(
-								String(creation.video_url),
-								Number(creationId),
-								{ existingVideo: useHeroVideo ? heroVideo : null }
-							);
-							const formData = new FormData();
-							formData.append('image', file);
-							formData.append('video_width', String(width));
-							formData.append('video_height', String(height));
-							const res = await fetch(`/api/create/images/${creationId}/video-placeholder`, {
-								method: 'POST',
-								credentials: 'include',
-								body: formData,
-							});
-							const data = await res.json().catch(() => ({}));
-							if (!res.ok) {
-								showToast(data?.message || data?.error || 'Could not set poster');
-								return;
-							}
-							document.dispatchEvent(new CustomEvent('creation-video-placeholder-updated', {
-								detail: {
-									creationId: Number(creationId),
-									url: data?.url,
-									width: data?.width,
-									height: data?.height,
-								},
-							}));
+							await saveVideoFirstFramePosterBundledMod.saveVideoFirstFramePoster(creation);
 							showToast('Poster updated');
 						} catch (err) {
 							showToast(err?.message || 'Could not set poster');

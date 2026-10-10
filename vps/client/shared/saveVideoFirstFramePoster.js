@@ -1,11 +1,9 @@
 /**
- * Persist a video's first frame as the stored poster (browser capture, no ffmpeg).
- * Used when a job completes, on publish, and from "Use first frame as poster".
- *
- * Dependencies are statically owned by the VPS client bundle.
+ * Persist a video's first frame as the stored poster.
+ * The server extracts the frame. Used when a job completes, on publish, and from "Use first frame as poster".
  */
 import { shouldAutoSetVideoPosterFromFirstFrame } from './aspectRatio.js';
-import { captureVideoFirstFrameFile } from './queueFromFrameModal.js';
+import { fetchServerVideoFrameFile } from './queueFromFrameModal.js';
 
 /** @type {Set<number>} */
 const inFlight = new Set();
@@ -34,7 +32,7 @@ export function dispatchVideoPosterUpdated(detail) {
 /**
  * Capture the first frame and POST it as the stored poster.
  * @param {object} creation
- * @param {{ existingVideo?: HTMLVideoElement | null, dispatch?: boolean }} [options]
+ * @param {{ dispatch?: boolean }} [options]
  * @returns {Promise<{ url?: string, width?: number, height?: number }>}
  */
 export async function saveVideoFirstFramePoster(creation, options = {}) {
@@ -43,11 +41,7 @@ export async function saveVideoFirstFramePoster(creation, options = {}) {
 	if (!creationId || !videoUrl) {
 		throw new Error('Video is not available');
 	}
-	const existingVideo =
-		options.existingVideo instanceof HTMLVideoElement ? options.existingVideo : null;
-	const { file, width, height } = await captureVideoFirstFrameFile(videoUrl, creationId, {
-		existingVideo,
-	});
+	const { file, width, height } = await fetchServerVideoFrameFile(creationId, 0);
 	const formData = new FormData();
 	formData.append('image', file);
 	formData.append('video_width', String(width));
@@ -76,7 +70,7 @@ export async function saveVideoFirstFramePoster(creation, options = {}) {
  * Best-effort persist when the stored poster is still a placeholder or character sheet.
  * Skips if already saved, in flight, or previously attempted this page load.
  * @param {object|null|undefined} creation
- * @param {{ existingVideo?: HTMLVideoElement | null }} [options]
+ * @param {{ dispatch?: boolean }} [options]
  * @returns {Promise<object|null>}
  */
 export async function maybeSaveVideoFirstFramePoster(creation, options = {}) {

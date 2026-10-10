@@ -2,8 +2,6 @@
 
 ## Remaining product work
 
-- [ ] queue from frame: Failed to execute 'toBlob' - tainted canvas
-- [ ] Use first frame as poster works where normal video gen seems to struggle with proper poster frame
 - [ ] does tipping work in vps?  it should
 - [ ] queue for later seems not to work
 - [ ] I should be able to paste an audio creation that is not published into comments of another creation and have it play; for now it only shows up if I publish it - not ideal

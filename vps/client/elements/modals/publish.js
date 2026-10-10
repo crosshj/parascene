@@ -4,7 +4,7 @@ import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
 import { getNsfwContentEnabled } from '../../shared/nsfwView.js';
 import { attachPromptInlineSuggest } from '../../shared/triggeredSuggest.js';
 import { shouldAutoSetVideoPosterOnPublish } from '../../shared/aspectRatio.js';
-import { captureVideoFirstFrameFile } from '../../shared/queueFromFrameModal.js';
+import { saveVideoFirstFramePoster } from '../../shared/saveVideoFirstFramePoster.js';
 import * as creationDetailRuntime from '../../shared/creationDetailRuntime.js';
 import * as creationDetailSeed from '../../shared/creationDetailSeed.js';
 
@@ -531,44 +531,7 @@ class AppModalPublish extends HTMLElement {
 		if (typeof shouldAutoSetVideoPosterOnPublish !== 'function' || !shouldAutoSetVideoPosterOnPublish(creation)) {
 			return;
 		}
-		if (typeof captureVideoFirstFrameFile !== 'function') return;
-
-		const videoUrl = typeof creation.video_url === 'string' ? creation.video_url.trim() : '';
-		if (!videoUrl) return;
-
-		const heroVideo = document.querySelector('video[data-video]');
-		const useHeroVideo =
-			heroVideo instanceof HTMLVideoElement &&
-			heroVideo.videoWidth > 0 &&
-			heroVideo.videoHeight > 0;
-		const { file, width, height } = await captureVideoFirstFrameFile(
-			videoUrl,
-			Number(creationId),
-			{ existingVideo: useHeroVideo ? heroVideo : null }
-		);
-
-		const formData = new FormData();
-		formData.append('image', file);
-		formData.append('video_width', String(width));
-		formData.append('video_height', String(height));
-		const res = await fetch(`/api/create/images/${creationId}/video-placeholder`, {
-			method: 'POST',
-			credentials: 'include',
-			body: formData,
-		});
-		const data = await res.json().catch(() => ({}));
-		if (!res.ok) {
-			throw new Error(data?.message || data?.error || 'Could not set video poster');
-		}
-
-		document.dispatchEvent(new CustomEvent('creation-video-placeholder-updated', {
-			detail: {
-				creationId: Number(creationId),
-				url: data?.url,
-				width: data?.width,
-				height: data?.height,
-			},
-		}));
+		await saveVideoFirstFramePoster(creation);
 	}
 
 	async handlePublishSubmit(title, description, nsfw, doomScrollFullHeight) {

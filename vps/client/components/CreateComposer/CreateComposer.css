@@ -6964,15 +6964,6 @@ app-route-create .create-route-blog-campaign-simple-note {
 	background: #000;
 }
 
-.creation-detail-queue-frame-canvas {
-	position: absolute;
-	width: 0;
-	height: 0;
-	opacity: 0;
-	pointer-events: none;
-	overflow: hidden;
-}
-
 .creation-detail-queue-frame-overlay.is-preview-loading .creation-detail-queue-frame-video {
 	opacity: 0.45;
 }

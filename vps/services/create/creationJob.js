@@ -10,6 +10,7 @@ import { UPLOAD_IMAGE_METHOD_KEY } from "../../client/shared/generationDefaults.
 import { normalizeProviderArgsForAspectRatio } from "./normalizeProviderInputImages.js";
 import { resolveEphemeralStillProviderArgs } from "./importEphemeralStill.js";
 import sharp from "sharp";
+import { extractVideoFrame } from "../../routes/utils/media.js";
 import {
 	buildAudioClipCreationSnapshot,
 	materializeBlueProviderAudioArgs,
@@ -790,6 +791,33 @@ async function resolveVideoJobPosterAndDimensions({
 	return { imageBuffer, width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT };
 }
 
+/**
+ * The completion poster is a placeholder or the source still. The finished video
+ * is already in memory here, so use its first frame the same way the manual action does.
+ * @param {Buffer | null} videoBuffer
+ * @param {{ imageBuffer: Buffer, width: number, height: number }} fallback
+ */
+async function posterFromCompletedVideo(videoBuffer, fallback) {
+	if (!Buffer.isBuffer(videoBuffer) || videoBuffer.length === 0) return { ...fallback, fromFrame: false };
+	try {
+		const frame = await extractVideoFrame(videoBuffer, 0);
+		if (!frame?.length) return { ...fallback, fromFrame: false };
+		let width = fallback.width;
+		let height = fallback.height;
+		try {
+			const meta = await sharp(frame, { failOn: "none" }).metadata();
+			if (typeof meta.width === "number" && meta.width > 0) width = meta.width;
+			if (typeof meta.height === "number" && meta.height > 0) height = meta.height;
+		} catch {
+			// Keep the fallback dimensions when the frame metadata cannot be read.
+		}
+		return { imageBuffer: frame, width, height, fromFrame: true };
+	} catch (err) {
+		logCreationWarn("Failed to extract first video frame for poster", safeErrorMessage(err));
+		return { ...fallback, fromFrame: false };
+	}
+}
+
 async function createPlaceholderImageBufferInternal(width = DEFAULT_WIDTH, height = DEFAULT_HEIGHT) {
 	try {
 		return await sharp({
@@ -855,6 +883,7 @@ async function finalizeCreationJob({
 	audioBuffer = null,
 	audioContentType = null,
 	voiceId = null,
+	videoPosterFromFrame = false,
 }) {
 	let audioMeta = null;
 	let audioCoverPlaceholder = false;
@@ -1012,6 +1041,7 @@ async function finalizeCreationJob({
 					content_type: videoContentType || "video/mp4",
 				},
 				source_image_url: sourceImageUrlForMeta,
+				...(videoPosterFromFrame ? { video_placeholder_manual: true } : {}),
 			}
 			: {}),
 		...(isAudio && audioMeta ? { audio: audioMeta } : {}),
@@ -1194,6 +1224,7 @@ async function runCreationJobInternal({ queries, storage, payload }) {
 	let videoBuffer = null;
 	let videoContentType = null;
 	let sourceImageUrlForMeta = null;
+	let videoPosterFromFrame = false;
 	let isAudio = false;
 	let audioBuffer = null;
 	let audioContentType = null;
@@ -1407,9 +1438,11 @@ async function runCreationJobInternal({ queries, storage, payload }) {
 				sourceImageUrl: videoPosterSourceImageUrl(method, argsForProvider),
 				fetchBuffer: fetchImageBufferFromUrl,
 			});
-			imageBuffer = posterResolved.imageBuffer;
-			width = posterResolved.width;
-			height = posterResolved.height;
+			const framedPoster = await posterFromCompletedVideo(videoBuffer, posterResolved);
+			imageBuffer = framedPoster.imageBuffer;
+			width = framedPoster.width;
+			height = framedPoster.height;
+			videoPosterFromFrame = framedPoster.fromFrame;
 		} else if (providerContentType.startsWith("audio/")) {
 			isAudio = true;
 			audioContentType = providerContentType || "audio/mpeg";
@@ -1503,6 +1536,7 @@ async function runCreationJobInternal({ queries, storage, payload }) {
 		audioBuffer,
 		audioContentType,
 		voiceId,
+		videoPosterFromFrame,
 	});
 }
 
@@ -1756,6 +1790,7 @@ export async function runProviderPollJob({ queries, storage, payload }) {
 	let videoBuffer = null;
 	let videoContentType = null;
 	let sourceImageUrlForMeta = null;
+	let videoPosterFromFrame = false;
 	let isAudio = false;
 	let audioBuffer = null;
 	let audioContentType = null;
@@ -1986,9 +2021,11 @@ export async function runProviderPollJob({ queries, storage, payload }) {
 						detail ? `Poll: ${msg}: ${detail}` : `Poll: ${msg}`
 					),
 			});
-			imageBuffer = posterResolved.imageBuffer;
-			width = posterResolved.width;
-			height = posterResolved.height;
+			const framedPoster = await posterFromCompletedVideo(videoBuffer, posterResolved);
+			imageBuffer = framedPoster.imageBuffer;
+			width = framedPoster.width;
+			height = framedPoster.height;
+			videoPosterFromFrame = framedPoster.fromFrame;
 		} else if (providerContentType.startsWith("audio/")) {
 			isAudio = true;
 			audioContentType = providerContentType || "audio/mpeg";
@@ -2072,6 +2109,7 @@ export async function runProviderPollJob({ queries, storage, payload }) {
 		audioBuffer,
 		audioContentType,
 		voiceId,
+		videoPosterFromFrame,
 	});
 }
 
