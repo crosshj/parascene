@@ -6,10 +6,12 @@ import { formatDate, formatFileSize } from '../../utils/format.js';
 import template from './FileManagerView.html';
 import './FileManagerView.css';
 import { createMediaLightbox } from '../../components/MediaLightbox/MediaLightbox.js';
-import { creationTypeBadgeMarkup } from '../../shared/creationGrid.js';
+import { creationGridStatusMarkup, creationTypeBadgeMarkup } from '../../shared/creationGrid.js';
 import { gridSkeletonMarkup } from '../../components/CreationGrid/skeleton.js';
 import { openImagePickerModal } from '../../components/ProviderFields/ProviderFields.js';
 import '../../components/CreationGrid/CreationGrid.css';
+import '../../components/Modal/Modal.css';
+import { createModalDismissButton } from '../../shared/modalDismiss.js';
 
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
@@ -80,7 +82,7 @@ export function renderFileManagerView({ outlet, filesApi, filesQuery, onUnauthor
 	const root = mountTemplate(outlet, template);
 	const refs = bindRefs(root);
 	setTitle('My Files · parascene beta');
-	const { dialog, dialogTitle, dismiss, grid, loadMore, message, progress, status } = refs;
+	const { grid, loadMore, status } = refs;
 	const lightbox = createMediaLightbox();
 	const cardOptions = { filesApi, onViewFile: viewFile };
 	setHeaderAccessories?.([
@@ -94,10 +96,14 @@ export function renderFileManagerView({ outlet, filesApi, filesQuery, onUnauthor
 	let nextOffset = null;
 	let destroyed = false;
 	let dragDepth = 0;
-	let busy = false;
 	let loadingMore = false;
 	let disposeUploadPicker = null;
+	let applyingLocalFile = false;
+	let drainingUploads = false;
+	let uploadSerial = 0;
 	const uploadedNames = new Map();
+	const uploadQueue = [];
+	const uploadJobs = new Map();
  const removedIds = new Set();
  const bulk = createBulkActions({ root, grid, cardSelector: '.file-card[data-file-id]', noun: 'files', permanent: true,
   getItem: card => { const file = card.__fileRecord; return file ? { id: file.id, label: file.display_name || file.id, file } : null; },
@@ -122,7 +128,7 @@ export function renderFileManagerView({ outlet, filesApi, filesQuery, onUnauthor
    if (nextOffset !== null) nextOffset = Math.max(0, nextOffset - 1);
   }
   bulk.sync();
-  if (!grid.querySelector('[data-file-id]')) showEmptyState();
+  if (!grid.querySelector('[data-file-id], [data-upload-id]')) showEmptyState();
  }
 
  function viewFile(file) {
@@ -148,35 +154,21 @@ export function renderFileManagerView({ outlet, filesApi, filesQuery, onUnauthor
   ];
   lightbox.open({ title: file.display_name || file.id, metadata: `${formatFileSize(file.size)} · ${formatDate(file.created_at || file.updated_at)} · ${file.content_type || 'application/octet-stream'}`, kind, url: fileContentUrl(file, filesApi), artwork: artworkUrlFor(file.public_url), actions: actionsList });
  }
- function showSkeleton() { grid.innerHTML = gridSkeletonMarkup(); grid.hidden = false; grid.setAttribute('aria-busy', 'true'); status.hidden = true; }
+ function showSkeleton() {
+  const uploads = uploadCards();
+  for (const card of uploads) card.remove();
+  grid.innerHTML = gridSkeletonMarkup();
+  if (uploads.length) grid.prepend(...uploads);
+  grid.hidden = false; grid.setAttribute('aria-busy', 'true'); status.hidden = true;
+ }
 
 	function showEmptyState() {
 		grid.hidden = true;
 		status.hidden = false;
 		status.textContent = 'No files are stored in your personal folder yet.';
 	}
-	function insertFile(file) {
-		file = normalizeFileRecord(file);
-		const displayFile = !file.display_name && uploadedNames.has(file.id) ? { ...file, display_name: uploadedNames.get(file.id) } : file;
-		const current = filesQuery?.data;
-		if (current && Array.isArray(current.files)) {
-			const files = [displayFile, ...current.files.filter((row) => String(row.id) !== String(displayFile.id))];
-			filesQuery.setData({ ...current, files, pagination: {...current.pagination,next_offset:Number.isInteger(current.pagination?.next_offset)?current.pagination.next_offset+(current.files.some(row=>String(row.id)===String(displayFile.id))?0:1):null} });
-		} else {
-			const card = createFileCard(displayFile, cardOptions);
-			card.dataset.fileId = String(file.id);
-			grid.prepend(card);
-   bulk.sync();
-		}
-		status.hidden = true;
-		grid.hidden = false;
-	}
-
-	function setBusy(value) {
-		busy = value;
-	}
 	function openUploadPicker() {
-		if (busy || destroyed) return;
+		if (destroyed) return;
 		disposeUploadPicker = openImagePickerModal({
 			modalParent: document.body,
 			allowAnyFile: true,
@@ -184,25 +176,150 @@ export function renderFileManagerView({ outlet, filesApi, filesQuery, onUnauthor
 				disposeUploadPicker = null;
 				if (value instanceof File) return uploadFiles([value]);
 				if (Array.isArray(value)) return uploadFiles(value);
-				showUploadError('My Files stores uploaded files. Choose a file or paste an image from your clipboard.');
+				showPickerError('My Files stores uploaded files. Choose a file or paste an image from your clipboard.');
 			},
 		});
 	}
-	function showDialog() { if (!dialog.open) dialog.showModal(); }
-	function showUploadError(text) {
-		dialog.classList.add('is-error');
-		dialogTitle.textContent = 'Upload failed';
-		message.textContent = text;
-		progress.hidden = true;
-		dismiss.hidden = false;
-		showDialog();
+	function uploadCards() {
+		return [...grid.querySelectorAll(':scope > [data-upload-id]')];
+	}
+	function revealGrid() {
+		grid.hidden = false;
+		if (!status.classList.contains('is-error') && !status.classList.contains('is-stale')) status.hidden = true;
+	}
+	function syncGridVisibility() {
+		const occupied = grid.querySelector('[data-file-id], [data-upload-id], .skeleton-grid-tile');
+		if (occupied) revealGrid();
+		else showEmptyState();
+	}
+	function paintUploadCard(card, { name, phase, place = null, error = '' }) {
+		card.dataset.uploadPhase = phase;
+		card.dataset.uploadName = name;
+		const preview = card.querySelector('.feed-card-image');
+		const markup = phase === 'generating'
+			? creationGridStatusMarkup('creating', null, { optimistic: false, label: 'UPLOADING…' })
+			: phase === 'failed'
+				? creationGridStatusMarkup('failed')
+				: creationGridStatusMarkup('queued', place, { optimistic: true });
+		if (preview) preview.innerHTML = markup;
+		const failed = phase === 'failed';
+		card.classList.toggle('is-upload-pending', !failed);
+		card.classList.toggle('is-upload-failed', failed);
+		if (failed) {
+			card.setAttribute('role', 'button');
+			card.tabIndex = 0;
+			card.setAttribute('aria-label', `Upload failed for ${name}`);
+			card.title = error || 'Upload failed';
+		} else {
+			card.setAttribute('role', 'img');
+			card.removeAttribute('tabindex');
+			card.removeAttribute('title');
+			card.setAttribute('aria-label', phase === 'generating' ? `Uploading ${name}` : `Queued ${name}`);
+		}
+	}
+	function dismissUpload(card) {
+		const id = card.dataset.uploadId;
+		uploadJobs.delete(id);
+		const index = uploadQueue.findIndex(item => item.id === id);
+		if (index >= 0) uploadQueue.splice(index, 1);
+		card.remove();
+		refreshQueuedPlaces();
+		syncGridVisibility();
+	}
+	function retryUpload(card) {
+		const job = uploadJobs.get(card.dataset.uploadId);
+		if (!job || destroyed || uploadQueue.some(item => item.id === job.id)) return;
+		paintUploadCard(card, { name: job.file?.name || 'file', phase: 'queued' });
+		uploadQueue.push(job);
+		refreshQueuedPlaces();
+		void drainUploads();
+	}
+	let failureDialog = null;
+	function closeFailureDialog() {
+		const dialog = failureDialog;
+		if (!dialog) return;
+		failureDialog = null;
+		if (dialog.open) dialog.close();
+		dialog.remove();
+	}
+	function openFailureDialog(card) {
+		const job = uploadJobs.get(card.dataset.uploadId);
+		if (!job || destroyed) return;
+		closeFailureDialog();
+		const dialog = document.createElement('dialog');
+		dialog.className = 'app-dialog';
+		dialog.setAttribute('aria-labelledby', 'file-upload-failed-title');
+		dialog.innerHTML = '<header class="app-dialog__header"><h2 id="file-upload-failed-title" class="app-dialog__title">Upload failed</h2></header><div class="app-dialog__body"></div><footer class="app-dialog__footer"><button type="button" class="btn-secondary" data-upload-dismiss>Dismiss</button><button type="button" class="btn-primary" data-upload-retry>Retry</button></footer>';
+		const body = dialog.querySelector('.app-dialog__body');
+		const name = document.createElement('p');
+		name.textContent = job.file?.name || 'file';
+		const message = document.createElement('p');
+		message.textContent = job.error || 'Unable to upload the file.';
+		body.append(name, message);
+		const closeBtn = createModalDismissButton();
+		dialog.querySelector('header').append(closeBtn);
+		closeBtn.addEventListener('click', () => closeFailureDialog());
+		dialog.addEventListener('click', event => { if (event.target === dialog) closeFailureDialog(); });
+		dialog.querySelector('[data-upload-dismiss]').addEventListener('click', () => { closeFailureDialog(); dismissUpload(card); });
+		dialog.querySelector('[data-upload-retry]').addEventListener('click', () => { closeFailureDialog(); retryUpload(card); });
+		dialog.addEventListener('close', () => { if (failureDialog === dialog) failureDialog = null; dialog.remove(); });
+		document.body.append(dialog);
+		failureDialog = dialog;
+		dialog.showModal();
+	}
+	function createUploadCard(job) {
+		const card = document.createElement('div');
+		card.className = 'file-card creation-grid__card is-upload-pending';
+		card.dataset.uploadId = job.id;
+		const preview = document.createElement('div');
+		preview.className = 'feed-card-image creation-grid__status-card';
+		preview.setAttribute('aria-hidden', 'true');
+		card.append(preview);
+		paintUploadCard(card, { name: job.file.name || 'file', phase: 'queued' });
+		const openIfFailed = () => { if (card.dataset.uploadPhase === 'failed') openFailureDialog(card); };
+		card.addEventListener('click', event => {
+			if (!card.dataset.uploadId) return;
+			event.preventDefault();
+			event.stopPropagation();
+			openIfFailed();
+		});
+		card.addEventListener('keydown', event => {
+			if (!card.dataset.uploadId || (event.key !== 'Enter' && event.key !== ' ')) return;
+			if (card.dataset.uploadPhase !== 'failed') return;
+			event.preventDefault();
+			openIfFailed();
+		});
+		return card;
+	}
+	function refreshQueuedPlaces() {
+		let place = 1;
+		for (const job of uploadQueue) {
+			const card = grid.querySelector(`[data-upload-id="${job.id}"]`);
+			if (!card || card.dataset.uploadPhase === 'failed') continue;
+			paintUploadCard(card, { name: job.file.name || 'file', phase: 'queued', place });
+			place += 1;
+		}
+	}
+	function showPickerError(text) {
+		status.hidden = false;
+		status.classList.add('is-error');
+		status.textContent = text;
 	}
 	function renderSnapshot(data) {
 		if (destroyed) return;
+		if (applyingLocalFile) {
+			nextOffset = Number.isInteger(data?.pagination?.next_offset) ? data.pagination.next_offset : null;
+			loadMore.hidden = nextOffset === null;
+			revealGrid();
+			bulk.sync();
+			return;
+		}
+		const uploads = uploadCards();
+		for (const card of uploads) card.remove();
 		grid.removeAttribute('aria-busy');
   grid.querySelectorAll('.skeleton-grid-tile').forEach(tile => tile.remove());
 		const files = (Array.isArray(data?.files) ? data.files : []).filter(file => !removedIds.has(String(file.id)));
-		const existing = new Map([...grid.children].map((card) => [card.dataset.fileId, card]));
+		const existing = new Map([...grid.children].filter(card => card.dataset.fileId).map((card) => [card.dataset.fileId, card]));
 		let targetIndex = 0;
 		for (const file of files) {
 			const normalizedFile = normalizeFileRecord(file);
@@ -219,15 +336,17 @@ export function renderFileManagerView({ outlet, filesApi, filesQuery, onUnauthor
 			targetIndex++;
 			existing.delete(key);
 		}
-		for (const card of existing.values()) card.remove();
+		for (const card of existing.values()) if (card.dataset.fileId) card.remove();
+		if (uploads.length) grid.prepend(...uploads);
 		nextOffset = Number.isInteger(data?.pagination?.next_offset) ? data.pagination.next_offset : null;
 		loadMore.hidden = nextOffset === null;
-		grid.hidden = files.length === 0;
-		if (!files.length) {
+		const occupied = files.length > 0 || uploads.length > 0;
+		grid.hidden = !occupied;
+		if (!occupied) {
 			status.hidden = false;
 			status.classList.remove('is-error', 'is-stale');
 			status.textContent = 'No files are stored in your personal folder yet.';
-		} else status.hidden = true;
+		} else if (!status.classList.contains('is-error') && !status.classList.contains('is-stale')) status.hidden = true;
   bulk.sync();
 	}
 	function onQueryState(snapshot) {
@@ -285,29 +404,87 @@ export function renderFileManagerView({ outlet, filesApi, filesQuery, onUnauthor
 		}
 		catch (error) { if (error?.name === 'AbortError') return; if (error?.status === 401) return onUnauthorized(); throw error; }
 	}
-	async function uploadFile(file) {
-		if (file.size > MAX_UPLOAD_BYTES) { showUploadError('This file exceeds the 50 MB upload limit.'); return; }
-		setBusy(true); dialog.classList.remove('is-error'); dialogTitle.textContent = 'Uploading file'; dismiss.hidden = true; progress.hidden = false; progress.value = 0; message.textContent = `Uploading ${file.name}…`; showDialog();
+	function rememberUploadedFile(file) {
+		const current = filesQuery?.data;
+		if (!(current && Array.isArray(current.files))) { bulk.sync(); return; }
+		const exists = current.files.some(row => String(row.id) === String(file.id));
+		const files = [file, ...current.files.filter(row => String(row.id) !== String(file.id))];
+		applyingLocalFile = true;
+		filesQuery.setData({ ...current, files, pagination: { ...current.pagination, next_offset: Number.isInteger(current.pagination?.next_offset) ? current.pagination.next_offset + (exists ? 0 : 1) : null } });
+		applyingLocalFile = false;
+	}
+	function finishUpload(card, file) {
+		file = normalizeFileRecord(file);
+		const name = card.dataset.uploadName;
+		const displayFile = !file.display_name && name ? { ...file, display_name: name } : file;
+		uploadJobs.delete(card.dataset.uploadId);
+		if (displayFile?.id) uploadedNames.set(displayFile.id, name || displayFile.display_name || '');
+		const next = createFileCard(displayFile, cardOptions);
+		next.dataset.fileId = String(displayFile.id);
+		card.replaceWith(next);
+		rememberUploadedFile(displayFile);
+		revealGrid();
+	}
+	function failUpload(card, job, message) {
+		if (!card || !job) return;
+		job.error = message;
+		paintUploadCard(card, { name: job.file?.name || 'file', phase: 'failed', error: message });
+	}
+	async function runUpload(job) {
+		const card = grid.querySelector(`[data-upload-id="${job.id}"]`);
+		if (!card || destroyed) return;
+		if (job.file.size > MAX_UPLOAD_BYTES) { failUpload(card, job, 'This file exceeds the 50 MB upload limit.'); return; }
+		paintUploadCard(card, { name: job.file.name || 'file', phase: 'generating' });
 		try {
-			const result = await filesApi.upload(file, { signal: controller.signal, onProgress(loaded, total) { progress.value = total ? Math.round((loaded / total) * 100) : 0; message.textContent = `Uploading ${file.name} — ${formatFileSize(loaded)} of ${formatFileSize(total)}`; } });
+			const result = await filesApi.upload(job.file, { signal: controller.signal });
 			if (destroyed) return;
-			if (result?.file?.id) {
-				uploadedNames.set(result.file.id, file.name);
-				insertFile(result.file);
+			if (result?.file?.id) finishUpload(card, result.file);
+			else failUpload(card, job, 'Unable to upload the file.');
+		} catch (error) {
+			if (destroyed || error?.name === 'AbortError') return;
+			if (error?.status === 401) { failUpload(card, job, error?.message || 'Sign in to upload files.'); onUnauthorized(); return 'auth'; }
+			failUpload(card, job, error?.message || 'Unable to upload the file.');
+		}
+	}
+	async function drainUploads() {
+		if (drainingUploads) return;
+		drainingUploads = true;
+		try {
+			while (uploadQueue.length && !destroyed) {
+				const job = uploadQueue.shift();
+				refreshQueuedPlaces();
+				const outcome = await runUpload(job);
+				if (outcome === 'auth') {
+					while (uploadQueue.length) {
+						const pending = uploadQueue.shift();
+						failUpload(grid.querySelector(`[data-upload-id="${pending.id}"]`), pending, 'Sign in to upload files.');
+					}
+					break;
+				}
 			}
-			progress.value = 100; dialogTitle.textContent = 'Upload complete'; message.textContent = `${file.name} uploaded successfully.`; dismiss.hidden = false;
-		} catch (error) { if (error?.name === 'AbortError') return; if (error?.status === 401) return onUnauthorized(); showUploadError(error?.message || 'Unable to upload the file.'); }
-		finally { setBusy(false); }
+		} finally {
+			drainingUploads = false;
+			if (uploadQueue.length && !destroyed) void drainUploads();
+		}
+	}
+	function uploadFiles(files) {
+		if (destroyed || !files?.length) return;
+		const jobs = [...files].map(file => ({ id: `upload-${++uploadSerial}`, file }));
+		for (const job of jobs) uploadJobs.set(job.id, job);
+		const cards = jobs.map(job => createUploadCard(job));
+		const existing = uploadCards();
+		const anchor = existing.length ? existing.at(-1).nextSibling : grid.firstChild;
+		for (const card of cards) grid.insertBefore(card, anchor);
+		revealGrid();
+		uploadQueue.push(...jobs);
+		void drainUploads();
 	}
 	loadMore.addEventListener('click', () => load({ append: true }));
-	dismiss.addEventListener('click', () => dialog.close());
-	dialog.addEventListener('cancel', (event) => { if (busy) event.preventDefault(); });
-	async function uploadFiles(files) { if (busy || destroyed) return; for (const file of files) { if (destroyed) break; await uploadFile(file); } }
 	root.addEventListener('dragenter', event => { if (!event.dataTransfer?.types.includes('Files')) return; event.preventDefault(); dragDepth++; root.classList.add('is-dragging'); });
 	root.addEventListener('dragover', event => { if (event.dataTransfer?.types.includes('Files')) event.preventDefault(); });
 	root.addEventListener('dragleave', () => { if (--dragDepth <= 0) root.classList.remove('is-dragging'); });
 	root.addEventListener('drop', event => { if (!event.dataTransfer?.files.length) return; event.preventDefault(); dragDepth = 0; root.classList.remove('is-dragging'); void uploadFiles([...event.dataTransfer.files]); });
-	const loadObserver = typeof IntersectionObserver === 'function' ? new IntersectionObserver(entries => { if (entries.some(entry => entry.isIntersecting) && nextOffset !== null && !loadingMore && !busy && !status.classList.contains('is-error')) void load({ append: true }); }, { root: root.closest('.beta-outlet__scroll'), rootMargin: '1000px' }) : null;
+	const loadObserver = typeof IntersectionObserver === 'function' ? new IntersectionObserver(entries => { if (entries.some(entry => entry.isIntersecting) && nextOffset !== null && !loadingMore && !status.classList.contains('is-error')) void load({ append: true }); }, { root: root.closest('.beta-outlet__scroll'), rootMargin: '1000px' }) : null;
 	loadObserver?.observe(loadMore);
 	const unsubscribeQuery = filesQuery?.subscribe(onQueryState);
 	if (filesQuery) void filesQuery.loadIfNeeded().catch(() => undefined);
@@ -317,10 +494,10 @@ export function renderFileManagerView({ outlet, filesApi, filesQuery, onUnauthor
   bulk.destroy();
 		disposeUploadPicker?.();
 		disposeUploadPicker = null;
+		closeFailureDialog();
 		setHeaderAccessories?.([]);
 		setHeaderMenu?.();
 		loadObserver?.disconnect();
-		if (dialog.open) dialog.close();
   lightbox.destroy();
   unsubscribeQuery?.();
   controller.abort();

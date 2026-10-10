@@ -228,7 +228,7 @@ function waveform() {
 	return `<svg class="creation-grid__waveform" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" aria-hidden="true">${bars.map((height, index) => `<rect x="${12 + index * 4.8}" y="${50 - height / 2}" width="3.5" height="${height}" rx="1.25"></rect>`).join('')}</svg>`;
 }
 
-function statusMarkup(status, queuePosition = null, { optimistic = false, timedOut = false } = {}) {
+function statusMarkup(status, queuePosition = null, { optimistic = false, timedOut = false, label = '' } = {}) {
 	if (timedOut) {
 		return `<span class="creation-grid__status is-timeout"><svg class="creation-grid__status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 2h4"></path><path d="M4.6 11a8 8 0 0 0 1.7 8.7 8 8 0 0 0 8.7 1.7"></path><path d="M7.4 7.4a8 8 0 0 1 10.3 1 8 8 0 0 1-1 10.3"></path><path d="m2 2 20 20"></path><path d="M12 12v-2"></path></svg><span>TIMED OUT</span></span>`;
 	}
@@ -239,13 +239,19 @@ function statusMarkup(status, queuePosition = null, { optimistic = false, timedO
 	// Queued is the local wait before a server read. `creating` is that read
 	// telling us the job exists and is underway, same as processing/running.
 	if (!optimistic && ['creating', 'processing', 'running'].includes(value)) {
-		return `<span class="creation-grid__status is-generating">${generatingGearsIcon()}<span>GENERATING…</span></span>`;
+		const activeLabel = String(label || '').trim() || 'GENERATING…';
+		return `<span class="creation-grid__status is-generating">${generatingGearsIcon()}<span>${escapeHtml(activeLabel)}</span></span>`;
 	}
 	const place = Number(queuePosition);
 	const positionBadge = Number.isFinite(place) && place > 0
 		? `<span class="creation-grid__status-place">${escapeHtml(String(place))}</span>`
 		: '';
 	return `<span class="creation-grid__status is-queued"><span class="creation-grid__status-watch-wrap"><svg class="creation-grid__status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="6"></circle><polyline points="12 10 12 12 13.5 13"></polyline><path d="m16.13 7.66-.81-1.41a2 2 0 0 0-1.74-1h-3.16a2 2 0 0 0-1.74 1l-.81 1.41M16.13 16.34l-.81 1.41a2 2 0 0 1-1.74 1h-3.16a2 2 0 0 1-1.74-1l-.81-1.41"></path></svg>${positionBadge}</span><span>QUEUED</span></span>`;
+}
+
+/** Same queued / generating / failed tile My Creations paints, for other grids. */
+export function creationGridStatusMarkup(status, queuePosition = null, options = {}) {
+	return statusMarkup(status, queuePosition, options);
 }
 
 function filledAdornmentIcon(name) {

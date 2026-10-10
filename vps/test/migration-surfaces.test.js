@@ -139,3 +139,78 @@ test('Profile returns from cache before refresh completes and updates without re
   returned.destroy();h.services.providers.profile.destroy();
  } finally {release?.();h.close()}
 });
+
+test('My Files uploads use creation placeholder cards', { skip: !vm.SourceTextModule }, async () => {
+	const h = await harness('/files', async () => response({}));
+	const pending = [];
+	const file = { id: 'first', display_name: 'One.png', content_type: 'image/png', size: 50, public_url: '/one.png', created_at: '2026-10-01' };
+	let subscriber;
+	const query = {
+		data: { files: [file], pagination: { next_offset: 1 } },
+		subscribe(fn) { subscriber = fn; fn({ status: 'ready', data: this.data }); return () => { subscriber = null; }; },
+		loadIfNeeded: async () => {},
+		setData(data) { this.data = data; subscriber?.({ status: 'ready', data }); },
+	};
+	const filesApi = {
+		url: (value) => value,
+		upload(item) {
+			return new Promise((resolve, reject) => pending.push({ name: item.name, resolve, reject }));
+		},
+	};
+	let cleanup;
+	try {
+		const { renderFileManagerView } = await h.load('views/FileManager/FileManagerView.js');
+		let headerActions;
+		cleanup = renderFileManagerView({ ...h, filesApi, filesQuery: query, onUnauthorized() {}, setHeaderAccessories: (value) => { headerActions = value; } });
+		headerActions[0].onClick();
+		const picker = h.w.document.querySelector('[data-image-picker-modal]');
+		const input = picker.querySelector('input[type="file"]');
+		Object.defineProperty(input, 'files', { value: [new h.w.File(['a'], 'a.png', { type: 'image/png' }), new h.w.File(['b'], 'b.png', { type: 'image/png' })] });
+		input.dispatchEvent(new h.w.Event('change'));
+		await tick();
+		const uploads = [...h.outlet.querySelectorAll('[data-upload-id]')];
+		assert.equal(uploads.length, 2);
+		assert.equal(h.outlet.querySelector('.file-manager-view__upload-dialog'), null);
+		assert.match(uploads[0].textContent, /UPLOADING…/);
+		assert.doesNotMatch(uploads[0].textContent, /GENERATING/);
+		assert.ok(uploads[0].querySelector('.icon-gears'));
+		assert.match(uploads[1].textContent, /QUEUED/);
+		assert.equal(uploads[1].querySelector('.creation-grid__status-place')?.textContent, '1');
+		uploads[0].click();
+		uploads[1].click();
+		assert.equal(h.w.document.querySelector('.chat-inline-image-lightbox'), null);
+		assert.equal(pending.length, 1);
+		pending[0].resolve({ file: { ...file, id: 'a.png', display_name: 'a.png' } });
+		await tick();
+		assert.ok(h.outlet.querySelector('[data-file-id="a.png"]'));
+		const waiting = h.outlet.querySelector('[data-upload-id]');
+		assert.match(waiting.textContent, /UPLOADING…/);
+		pending[1].reject(Object.assign(new Error('Upload rejected'), { status: 500 }));
+		await tick();
+		const failed = h.outlet.querySelector('[data-upload-id]');
+		assert.match(failed.textContent, /FAILED/);
+		assert.equal(failed.querySelector('[data-upload-retry]'), null);
+		failed.click();
+		const popup = h.w.document.querySelector('.app-dialog');
+		assert.ok(popup?.open);
+		assert.match(popup.textContent, /Upload rejected/);
+		assert.match(popup.textContent, /b\.png/);
+		popup.querySelector('.modal-dismiss').click();
+		assert.equal(h.w.document.querySelector('.app-dialog'), null);
+		assert.equal(failed.isConnected, true);
+		failed.click();
+		h.w.document.querySelector('.app-dialog [data-upload-retry]').click();
+		await tick();
+		const retried = h.outlet.querySelector('[data-upload-id]');
+		assert.match(retried.textContent, /UPLOADING…/);
+		assert.equal(h.w.document.querySelector('.app-dialog'), null);
+		pending.at(-1).reject(Object.assign(new Error('Upload rejected'), { status: 500 }));
+		await tick();
+		h.outlet.querySelector('[data-upload-id]').click();
+		h.w.document.querySelector('.app-dialog [data-upload-dismiss]').click();
+		assert.equal(h.outlet.querySelector('[data-upload-id]'), null);
+		assert.equal(h.w.document.querySelector('.app-dialog'), null);
+		h.outlet.querySelector('[data-file-id="a.png"]').click();
+		assert.ok(h.w.document.querySelector('.chat-inline-image-lightbox'));
+	} finally { cleanup?.(); h.close(); }
+});

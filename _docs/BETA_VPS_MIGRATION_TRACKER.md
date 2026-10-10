@@ -3,7 +3,7 @@
 ## Remaining product work
 
 - [ ] Audit CSS across vps. The same rules are redefined in too many stylesheets, and JS is doing layout, positioning, and presentation work that CSS should own. Find the duplicates and those script-driven styles, then fix them.
-- [ ] files uploading dialog is not consistent with my creations approach of queued, generating, done approach with placeholder card
+- [ ] update share menu to look like youtube/suno
 
 ## Public pages and discoverability
 
