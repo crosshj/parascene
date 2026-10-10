@@ -48,6 +48,32 @@ test('reports menu item is absent on a deployed host', { skip: !vm.SourceTextMod
 	}
 });
 
+test('gear lab menu item shows for oceanman', { skip: !vm.SourceTextModule }, async () => {
+	const { dom, menu } = await loadMenu('http://localhost:3000/');
+	try {
+		const item = menu.shadowRoot.querySelector('[data-gear-lab-item]');
+		assert.ok(item);
+		assert.equal(item.hidden, true);
+		assert.equal(item.getAttribute('href'), '/gear-lab');
+		menu.viewerUserName = 'OceanMan';
+		await menu.open();
+		assert.equal(item.hidden, false);
+	} finally {
+		dom.window.close();
+	}
+});
+
+test('gear lab menu item stays hidden for other accounts', { skip: !vm.SourceTextModule }, async () => {
+	const { dom, menu } = await loadMenu('http://localhost:3000/');
+	try {
+		menu.viewerUserName = 'paperman';
+		await menu.open();
+		assert.equal(menu.shadowRoot.querySelector('[data-gear-lab-item]').hidden, true);
+	} finally {
+		dom.window.close();
+	}
+});
+
 test('reports menu item shows on localhost when opened from the sidebar', { skip: !vm.SourceTextModule }, async () => {
 	const { dom, menu } = await loadMenu('http://localhost:3000/');
 	try {

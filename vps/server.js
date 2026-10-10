@@ -35,6 +35,7 @@ import { createAuthMiddleware } from "./routes/middleware/auth.js";
 import { createCdnHostBoundary } from "./routes/middleware/cdnHost.js";
 import createPageRoutes from "./routes/pages.js";
 import { createReportsRoutes } from "./routes/reports.js";
+import { createGearLabRoutes } from "./routes/gearLab.js";
 import { createDb } from "./db/index.js";
 import { createAppDataRoutes } from "./routes/appData.js";
 import { createCreationsRoutes } from "./routes/creations.js";
@@ -101,6 +102,7 @@ app.use(createCreationsRoutes({ creations: db.creations, users: db.users, append
 app.use(createAuthRoutes({ users: db.users, sessions: db.sessions }));
 const reportsRoutes = createReportsRoutes();
 if (reportsRoutes) app.use(reportsRoutes);
+app.use(createGearLabRoutes({ users: db.users }));
 app.use(createPageRoutes({ pagesDir, users: db.users }));
 app.use(express.static(path.join(__dirname, "public")));
 app.use((error, req, res, next) => {

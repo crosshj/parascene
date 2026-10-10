@@ -28,6 +28,7 @@ const settings=document.createElement('app-modal-profile'),about=document.create
 	}
 
 	function renderState(appState = state.get()) {
+		accountMenu.viewerUserName = session.user?.profile?.user_name || '';
 		view.update(model());
 		view.syncRoute(routePath(appState.navigation));
 		view.updateAccount(session.user);
