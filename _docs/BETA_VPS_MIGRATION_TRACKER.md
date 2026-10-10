@@ -2,9 +2,8 @@
 
 ## Remaining product work
 
-- [ ] the thing that makes sounds in www when a notification is recieved - is that in vps now?
-- [ ] feed should continue to add items on scroll, it does not - just frozen after a point and no new items added
 - [ ] Audit CSS across vps. The same rules are redefined in too many stylesheets, and JS is doing layout, positioning, and presentation work that CSS should own. Find the duplicates and those script-driven styles, then fix them.
+- [ ] files uploading dialog is not consistent with my creations approach of queued, generating, done approach with placeholder card
 
 ## Public pages and discoverability
 

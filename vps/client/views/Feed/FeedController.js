@@ -17,7 +17,7 @@ export function createFeedController({ root, actions, services, setHeaderMenu })
  const content = root.querySelector('[data-feed-content]'), status = root.querySelector('[role="status"]'), more = root.querySelector('button');
  const scroll = createScrollContext(root);
  const lifetime = new AbortController();
- let request, fetchPage, rows = [], hasMore = false, busy = false, destroyed = false, epoch = 0, routeWrap, cards, version, versionBusy = false, challengeLease, voteModal, voteBusy = false, overlayActive = false;
+ let request, fetchPage, rows = [], hasMore = false, emptyPages = 0, busy = false, destroyed = false, epoch = 0, routeWrap, cards, version, versionBusy = false, challengeLease, voteModal, voteBusy = false, overlayActive = false;
  const mobile = () => matchMedia('(max-width: 768px)').matches;
  const videoTargets = new Set();
  const visibleVideos = new Set();
@@ -50,7 +50,12 @@ export function createFeedController({ root, actions, services, setHeaderMenu })
   }, { root: scroll.intersectionRoot, threshold: .5 });
   for (const target of videoTargets) videoObserver.observe(target);
   observer = new IntersectionObserver(entries => { if (entries.some(entry=>entry.isIntersecting) && hasMore && !busy && status.hidden) void load(); }, { root: scroll.intersectionRoot, rootMargin:'800px' });
-  if (more) observer.observe(more);
+  if (more && !more.hidden) observer.observe(more);
+ }
+ function rearmFeedSentinel() {
+  if (!observer || !more || more.hidden || destroyed) return;
+  observer.unobserve(more);
+  observer.observe(more);
  }
  document.addEventListener('beta-mobile-scroll-owner-changed', bindScrollObservers);
  bindScrollObservers();
@@ -125,6 +130,8 @@ export function createFeedController({ root, actions, services, setHeaderMenu })
    const seen = new Set(rows.map(getChatFeedItemKey));
    const fresh = page.pageItems.filter(item => { const key = getChatFeedItemKey(item); if (seen.has(key)) return false; seen.add(key); return true; });
    rows.push(...fresh); hasMore = page.hasMore;
+   if (reset || fresh.length) emptyPages = 0; else emptyPages += 1;
+   if (emptyPages >= 2) hasMore = false;
    if (reset) {
     disposeCards(); content.replaceChildren(); bindScrollObservers();
     const result = createChatFeedChannelElementsFromSegments(mobile() ? partitionChatFeedMobileAlternating(rows, { reserveChallengeSlot: true }).segments : [{ type: 'cards', items: rows }], render, { resolveSpotlightHref: doomHref, performSpotlightNavigation: (href, _event, item) => { beginDoomFromFeedTap(href, item); actions.navigate(href, { seed: item }); } });
@@ -140,7 +147,7 @@ export function createFeedController({ root, actions, services, setHeaderMenu })
    if (error.status === 401) { services.session.redirectToLogin(); return; }
    if (reset) content.replaceChildren();
    show(error.message || 'Unable to load your feed.'); more.hidden = false; more.textContent = 'Retry';
-  } finally { if (!destroyed && token === epoch) { removeChatFeedLoadMoreSkeleton(cards); busy = false; more.disabled = false; root.removeAttribute('aria-busy'); } }
+  } finally { if (!destroyed && token === epoch) { removeChatFeedLoadMoreSkeleton(cards); busy = false; more.disabled = false; root.removeAttribute('aria-busy'); if (hasMore && status.hidden) rearmFeedSentinel(); } }
  }
  async function vote(event) {
   if (destroyed || event.detail?.source !== 'feed_challenge_card') return;
