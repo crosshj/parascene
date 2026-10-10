@@ -190,6 +190,52 @@ if ((!owner && !discussable && !isAdmin) || (unavailable && !isAdmin)) return nu
 			const comments = data || [];
 			return { commentCount: Number(count) || 0, rows: await enrichCreationComments(client, comments, viewerId) };
 		},
+		async tips(creationId, { order = "asc", limit = 50, offset = 0 } = {}) {
+			const ascending = order !== "desc";
+			const safeLimit = Math.min(200, Math.max(1, Number(limit) || 50));
+			const safeOffset = Math.max(0, Number(offset) || 0);
+			const { data, error } = await client
+				.from("prsn_tip_activity")
+				.select("id, from_user_id, created_image_id, amount, message, source, meta, created_at, updated_at")
+				.eq("created_image_id", Number(creationId))
+				.order("created_at", { ascending })
+				.range(safeOffset, safeOffset + safeLimit - 1);
+			if (error) throw error;
+			const tips = data || [];
+			const userIds = positiveIds(tips.map((row) => row.from_user_id), 400);
+			let profiles = [];
+			let users = [];
+			if (userIds.length) {
+				const [profilesResult, usersResult] = await Promise.all([
+					client.from("prsn_user_profiles").select("user_id, user_name, display_name, avatar_url").in("user_id", userIds),
+					client.from("prsn_users").select("id, meta").in("id", userIds)
+				]);
+				if (profilesResult.error) throw profilesResult.error;
+				if (usersResult.error) throw usersResult.error;
+				profiles = profilesResult.data || [];
+				users = usersResult.data || [];
+			}
+			const profileByUser = new Map(profiles.map((row) => [Number(row.user_id), row]));
+			const planByUser = new Map(users.map((row) => [Number(row.id), row?.meta?.plan === "founder" ? "founder" : "free"]));
+			return tips.map((row) => {
+				const profile = profileByUser.get(Number(row.from_user_id));
+				return {
+					id: row.id,
+					user_id: row.from_user_id,
+					created_image_id: row.created_image_id,
+					amount: row.amount,
+					message: row.message,
+					source: row.source,
+					meta: row.meta,
+					created_at: row.created_at,
+					updated_at: row.updated_at,
+					user_name: profile?.user_name ?? null,
+					display_name: profile?.display_name ?? null,
+					avatar_url: profile?.avatar_url ?? null,
+					plan: planByUser.get(Number(row.from_user_id)) || "free"
+				};
+			});
+		},
 		async related(creationId, { limit = 10, excludeIds = [], viewerEnableNsfw = false, seenCount = 0, forceRandom = false } = {}) {
 			const seedId = Number(creationId);
 			const safeLimit = Math.min(40, Math.max(1, Number(limit) || 10));

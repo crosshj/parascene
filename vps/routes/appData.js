@@ -167,6 +167,20 @@ export function createAppDataRoutes({ users, credits, notifications, servers }) 
 			return res.status(result.success ? 200 : 400).json({ ...result, viewer_id: Number(req.auth.userId) });
 		} catch (error) { return next(error); }
 	});
+	router.post('/api/credits/tip', noStore, requireAuth, async (req, res, next) => {
+		try {
+			const sender = await users.byId(req.auth.userId);
+			if (!sender) return res.status(404).json({ error: 'User not found' });
+			const result = await credits.tip({
+				sender,
+				toUserId: req.body?.toUserId,
+				amount: req.body?.amount,
+				createdImageId: req.body?.createdImageId,
+				message: req.body?.message
+			});
+			return res.status(result.status).json(result.body);
+		} catch (error) { return next(error); }
+	});
 
 	router.get('/api/notifications/unread-count', noStore, requireAuth, async (req, res, next) => {
 		try {

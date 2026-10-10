@@ -1,3 +1,6 @@
+import { createChallengeQueries } from './challenges.js';
+import { performCreditTip } from '../services/credits/tip.js';
+
 const TABLE = 'prsn_user_credits';
 
 function utcDayStart(value = new Date()) {
@@ -53,5 +56,30 @@ export function createCreditsStore(client) {
 		return { success: true, balance: Number(data.balance) || 0, lastClaimDate: data.last_daily_claim_at, message: 'Daily credits claimed successfully' };
 	}
 
-	return { get, claimDaily };
+	async function tip(input) {
+		const queries = createChallengeQueries(client);
+		return performCreditTip({
+			...input,
+			findUser: async (id) => {
+				const { data, error } = await client.from('prsn_users').select('id').eq('id', id).maybeSingle();
+				if (error) throw error;
+				return data || null;
+			},
+			findCreation: async (id) => {
+				const { data, error } = await client.from('prsn_created_images').select('id').eq('id', id).maybeSingle();
+				if (error) throw error;
+				return data || null;
+			},
+			policyValue: async () => {
+				const { data, error } = await client.from('prsn_policy_knobs').select('value').eq('key', 'min_days_before_tip').maybeSingle();
+				if (error) throw error;
+				return data?.value ?? null;
+			},
+			transfer: (fromUserId, toUserId, amount) => queries.transferCredits.run(fromUserId, toUserId, amount),
+			recordTip: (...args) => queries.insertTipActivity.run(...args),
+			notify: (...args) => queries.insertNotification.run(...args)
+		});
+	}
+
+	return { get, claimDaily, tip };
 }

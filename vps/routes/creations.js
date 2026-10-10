@@ -421,13 +421,35 @@ export function createCreationsRoutes({ creations, users, appendChallengeEligibi
 		try {
 			const { viewer, row } = await accessibleCreation(req);
 			if (!viewer || !row) return res.status(404).json({ error: "Image not found" });
+			const order = req.query.order === "desc" ? "desc" : "asc";
 			const result = await creations.comments(row.id, {
-				order: req.query.order === "desc" ? "desc" : "asc",
+				order,
 				limit: integer(req.query.limit, 50, 1, 200),
 				offset: integer(req.query.offset, 0, 0, 100000),
 				viewerId: viewer.id
 			});
-			return res.json({ items: result.rows.map((comment) => ({ type: "comment", ...comment })), comment_count: result.commentCount });
+			let tips = [];
+			if (typeof creations.tips === "function") {
+				try {
+					const allTips = await creations.tips(row.id, { order, limit: 200, offset: 0 }) ?? [];
+					const isCreator = Number(row.user_id) === Number(viewer.id);
+					const isAdmin = String(viewer.role) === "admin";
+					tips = isCreator || isAdmin
+						? allTips
+						: allTips.filter((tip) => Number(tip.user_id) === Number(viewer.id));
+				} catch {
+					tips = [];
+				}
+			}
+			const items = [
+				...result.rows.map((comment) => ({ type: "comment", ...comment })),
+				...tips.map((tip) => ({ type: "tip", ...tip }))
+			];
+			items.sort((a, b) => {
+				const cmp = String(a.created_at ?? "").localeCompare(String(b.created_at ?? ""));
+				return order === "desc" ? -cmp : cmp;
+			});
+			return res.json({ items, comment_count: result.commentCount });
 		} catch (error) { return next(error); }
 	});
 

@@ -2,7 +2,6 @@
 
 ## Remaining product work
 
-- [ ] does tipping work in vps?  it should
 - [ ] I should be able to paste an audio creation that is not published into comments of another creation and have it play; for now it only shows up if I publish it - not ideal
 - [ ] the thing that makes sounds in www when a notification is recieved - is that in vps now?
 - [ ] feed should continue to add items on scroll, it does not - just frozen after a point and no new items added

@@ -27,7 +27,7 @@ test('group detail serializes child thumbnails with parent access for legacy and
 	}
 });
 
-async function withApp(run, { mediaResponse, canAccessMedia = async () => true, fetchMedia, signedPlaybackUrl, extractVideoFrame, row: rowOverride } = {}) {
+async function withApp(run, { mediaResponse, canAccessMedia = async () => true, fetchMedia, signedPlaybackUrl, extractVideoFrame, row: rowOverride, tips, viewer } = {}) {
 	const row = rowOverride || {
 		id: 31885,
 		user_id: 42,
@@ -45,7 +45,8 @@ async function withApp(run, { mediaResponse, canAccessMedia = async () => true, 
 		nsfwFlags: async (ids) => Object.fromEntries(ids.map((id) => [String(id), Number(id) === 31884])),
 		likeMeta: async () => ({ like_count: 2, viewer_liked: true, liked_by: ['@creator', '@friend'] }),
 		setLiked: async (_userId, _creationId, liked) => ({ like_count: liked ? 2 : 1, viewer_liked: liked, liked_by: liked ? ['@creator', '@friend'] : ['@friend'] }),
-		comments: async () => ({ commentCount: 1, rows: [{ id: 7, user_id: 42, text: 'hello', reactions: {}, viewer_reactions: [] }] }),
+		comments: async () => ({ commentCount: 1, rows: [{ id: 7, user_id: 42, text: 'hello', created_at: '2026-02-01T00:00:00.000Z', reactions: {}, viewer_reactions: [] }] }),
+		...(typeof tips === 'function' ? { tips } : {}),
 		related: async () => ({ rows: [{ ...row, id: 31921, published: true }], hasMore: false }),
 		canAccessMedia,
 		safeKey: (key) => key,
@@ -53,7 +54,7 @@ async function withApp(run, { mediaResponse, canAccessMedia = async () => true, 
 		signedPlaybackUrl,
 	};
 	const users = {
-		byId: async () => ({ id: 42, email: 'creator@example.com', role: 'consumer', meta: {} }),
+		byId: async () => viewer || ({ id: 42, email: 'creator@example.com', role: 'consumer', meta: {} }),
 		profileByUserId: async () => ({ user_id: 42, user_name: 'creator', display_name: 'Creator', avatar_url: null }),
 	};
 	const app = express();
@@ -102,6 +103,26 @@ test('creation detail dependent APIs expose likes, comments, lineage, flags, and
 		assert.equal(flags['31884'], true);
 		assert.equal(related.items[0].created_image_id, 31921);
 		assert.equal(related.hasMore, false);
+	});
+});
+
+test('creation activity merges tips using the www visibility rule', async () => {
+	const tipRows = [
+		{ id: 3, user_id: 7, amount: 1.5, message: 'nice', created_at: '2026-01-01T00:00:00.000Z', user_name: 'other' },
+		{ id: 4, user_id: 42, amount: 2, message: 'mine', created_at: '2026-03-01T00:00:00.000Z', user_name: 'creator' }
+	];
+	await withApp(async (origin) => {
+		const activity = await fetch(`${origin}/api/created-images/31885/activity`, { headers: { Authorization: 'Bearer test' } }).then((res) => res.json());
+		assert.deepEqual(activity.items.map((item) => item.type), ['tip', 'comment', 'tip']);
+		assert.equal(activity.comment_count, 1);
+		assert.equal(activity.items[2].amount, 2);
+	}, { tips: async () => tipRows });
+	await withApp(async (origin) => {
+		const activity = await fetch(`${origin}/api/created-images/31885/activity`, { headers: { Authorization: 'Bearer test' } }).then((res) => res.json());
+		assert.deepEqual(activity.items.map((item) => `${item.type}:${item.user_id}`), ['comment:42', 'tip:42']);
+	}, {
+		row: { id: 31885, user_id: 99, filename: 'creation.png', file_path: '42/creation.png', status: 'completed', published: false, meta: {} },
+		tips: async () => tipRows
 	});
 });
 
