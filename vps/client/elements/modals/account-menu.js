@@ -200,10 +200,6 @@ connectedCallback() {
 					<span class="account-menu-label">About</span>
 				</button>
 				${reportsItem}
-				<a class="account-menu-link" href="/gear-lab" data-gear-lab-item hidden role="menuitem">
-					${gearIcon('account-menu-svg')}
-					<span class="account-menu-label">Gear lab</span>
-				</a>
 				<button type="button" class="account-menu-item" data-action="clear-cache" role="menuitem">
 					${gearIcon('account-menu-svg')}
 					<span class="account-menu-label">Clear cache</span>
@@ -308,18 +304,10 @@ connectedCallback() {
 		item.hidden = !(isLocalDevHost() && fromSidebar);
 	}
 
-	_syncGearLabItem() {
-		const item = this.shadowRoot.querySelector('[data-gear-lab-item]');
-		if (!item) return;
-		const name = String(this.viewerUserName || window.__PARASCENE_BOOTSTRAP__?.user?.profile?.user_name || '').trim().toLowerCase();
-		item.hidden = name !== 'oceanman';
-	}
-
 	async open(anchor) {
 		await this._initPromise;
 		const el = resolveMenuAnchor(anchor);
 		this._syncReportsItem(el);
-		this._syncGearLabItem();
 		const rect = el?.getBoundingClientRect?.() ?? null;
 		const r = rect && Number.isFinite(rect.top) ? rect : fallbackAnchorRect();
 		const panel = this.shadowRoot.querySelector('.account-menu-panel');

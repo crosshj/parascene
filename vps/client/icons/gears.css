@@ -25,7 +25,7 @@
 	left: 0;
 	width: 72%;
 	height: 72%;
-	animation: icon-gears-spin 4.5s linear infinite;
+	animation: icon-gears-spin 14s linear infinite;
 }
 
 .icon-gears__cog--sm {
@@ -33,23 +33,22 @@
 	bottom: 4%;
 	width: 46%;
 	height: 46%;
-	animation: icon-gears-spin 3.15s linear infinite reverse;
+	animation: icon-gears-spin 14s linear infinite reverse;
 }
 
 /* `rotate` stays on its own layer. A `transform` spin is dropped on Android
-   Chrome when an ancestor clips with overflow or paint containment. */
+   Chrome when an ancestor clips with overflow or paint containment.
+   One turn, then a rest, so the spin stays slow. */
 @keyframes icon-gears-spin {
-	from {
+	0% {
 		rotate: 0deg;
 	}
 
-	to {
+	40% {
 		rotate: 360deg;
 	}
-}
 
-@media (prefers-reduced-motion: reduce) {
-	.icon-gears__cog {
-		animation: none;
+	100% {
+		rotate: 360deg;
 	}
 }

@@ -236,7 +236,10 @@ body.is-resizing-viewport .creation-detail-suno-play {
 		--beta-canvas-background: var(--bg);
 		--beta-panel-background: var(--bg);
 	}
-	html,
+	html { background-color: var(--bg); }
+	@media (prefers-color-scheme: dark) {
+		html { background-color: var(--surface); }
+	}
 	body.beta-layout,
 	body.beta-layout #app-shell,
 	body.beta-layout main#app-outlet,
