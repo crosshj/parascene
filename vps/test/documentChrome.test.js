@@ -172,8 +172,8 @@ test('a ready daily credit claim is part of the shared attention count', () => {
 	documentProvider.start();
 	assert.equal(tab.title, '(3) parascene');
 	assert.equal(tab.link.href, '/favicon-unread.svg');
-	assert.equal(documentProvider.attention().bell.text, '3');
-	assert.equal(documentProvider.attention().bell.label, 'Notifications, 3 unread');
+	assert.equal(documentProvider.attention().bell.text, '2');
+	assert.equal(documentProvider.attention().bell.label, 'Notifications, 2 unread');
 	assert.equal(documentProvider.attention().dailyClaim, 1);
 	assert.match(documentProvider.explain().text, /1 daily credit claim/);
 	credits.state.value = { canClaim: false, lastClaimDate: '2026-10-07T01:00:00.000Z' };

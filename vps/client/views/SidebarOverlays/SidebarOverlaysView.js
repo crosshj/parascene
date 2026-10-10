@@ -82,6 +82,9 @@ export function mountSidebarOverlays({ onAction, credits, notifications, onClaim
 	function syncCredits(snapshot = creditsQuery?.getSnapshot?.()) {
 		const view = credits?.viewState(snapshot) || { known: false, claimAvailable: false, balanceText: '' };
 		const data = snapshot?.data;
+		const solid = Boolean(view.claimAvailable || claiming);
+		claimButton.classList.toggle('btn-primary', solid);
+		claimButton.classList.toggle('ps-outline-button', !solid);
 		if (!view.known) {
 			claimButton.disabled = true;
 			retryCreditsButton.hidden = snapshot?.status !== 'error';

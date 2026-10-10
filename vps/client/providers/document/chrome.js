@@ -42,8 +42,8 @@ export function composeAttention({
 		? Math.max(0, Math.floor(Number(notifications.attention)))
 		: notificationCount;
 	const claim = claimKnown && Number(dailyClaim) > 0 ? 1 : 0;
-	const bellCount = (notificationsKnown ? notificationCount : 0) + claim;
-	const bellKnown = notificationsKnown || claim > 0;
+	const bellCount = notificationsKnown ? notificationCount : 0;
+	const bellKnown = notificationsKnown;
 	return {
 		total: attentionCount(messageCount, notificationsKnown ? notificationAttention : 0, claim),
 		messageCount,

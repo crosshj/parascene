@@ -281,6 +281,9 @@ class AppModalCredits extends HTMLElement {
 		const canClaim = this.canClaim;
 		const claimed = canClaim === null ? this.isClaimedToday() : !canClaim;
 		if (claimButton) {
+			const solid = canClaim === true;
+			claimButton.classList.toggle('btn-primary', solid);
+			claimButton.classList.toggle('btn-outlined', !solid);
 			claimButton.disabled = this._claimInFlight || (canClaim === null ? claimed : !canClaim);
 			claimButton.textContent = this._claimInFlight ? 'Claiming…' : 'Claim 10 credits';
 			claimButton.setAttribute('aria-busy', this._claimInFlight ? 'true' : 'false');
@@ -492,7 +495,7 @@ class AppModalCredits extends HTMLElement {
           flex-wrap: wrap;
         }
         /* Modal-specific: ensure button maintains min-width when disabled */
-        app-modal-credits .btn-primary {
+        app-modal-credits .credits-claim-button {
           min-width: 140px;
         }
         /* Ensure btn-secondary matches button height in this modal */
@@ -530,7 +533,7 @@ class AppModalCredits extends HTMLElement {
               <h3>Claim daily free credits</h3>
               <p>Claim 10 credits once per day.</p>
               <div class="credits-action-row">
-                <button class="btn-primary credits-claim-button" type="button">Claim 10 credits</button>
+                <button class="btn-outlined credits-claim-button" type="button">Claim 10 credits</button>
                 <span class="credits-claim-note">Come back tomorrow for more credits.</span>
               </div>
             </div>
