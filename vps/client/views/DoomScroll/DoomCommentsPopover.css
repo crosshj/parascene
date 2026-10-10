@@ -248,6 +248,26 @@
  * The reaction picker lives inside the sheet and uses the shared z-index.
  */
 
+html[data-chat-doom-comments-open='1'] {
+	--chat-doom-sheet-keyboard-cover: 45dvh;
+}
+
+/* The Add Image dialog is portaled to the page, outside the sheet. overlays-content
+   keeps the layout full height, so center the dialog in the band above the keyboard. */
+@media (max-width: 768px) {
+	html[data-chat-doom-comments-open='1'] :where(.create-workflow-root) .image-picker-modal-overlay.open,
+	html[data-chat-doom-comments-open='1'] :where(.create-workflow-root) [data-image-picker-modal].open {
+		top: 0 !important;
+		bottom: auto !important;
+		height: calc(100dvh - var(--chat-doom-sheet-keyboard-cover)) !important;
+	}
+
+	html[data-chat-doom-comments-open='1'] :where(.create-workflow-root) .image-picker-modal-overlay.open .image-picker-modal,
+	html[data-chat-doom-comments-open='1'] :where(.create-workflow-root) [data-image-picker-modal].open .image-picker-modal {
+		max-height: 100%;
+	}
+}
+
 html[data-chat-doom-comments-open='1'] .comment-sticker-modal-overlay {
 	z-index: 12200;
 }

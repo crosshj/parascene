@@ -54,3 +54,22 @@ test('Add Image modal centers in the visible viewport above the keyboard', () =>
 		page.restore();
 	}
 });
+
+test('doom comments reserve the keyboard band when the visual viewport stays full height', () => {
+	const page = mount();
+	try {
+		page.view.innerHeight = 800;
+		page.view.document.documentElement.dataset.chatDoomCommentsOpen = '1';
+		page.view.visualViewport.offsetTop = 0;
+		page.view.visualViewport.height = 800;
+		page.wired.openModal();
+		page.flush();
+		assert.equal(page.refs.modalOverlay.style.getPropertyValue('--image-picker-vv-top'), '0px');
+		assert.equal(page.refs.modalOverlay.style.getPropertyValue('--image-picker-vv-height'), '440px');
+		page.view.visualViewport.height = 420;
+		page.view.visualViewport.dispatchEvent(new page.view.Event('resize'));
+		assert.equal(page.refs.modalOverlay.style.getPropertyValue('--image-picker-vv-height'), '420px');
+	} finally {
+		page.restore();
+	}
+});

@@ -286,10 +286,23 @@ export function wireImagePickerModal(refs, options) {
 			clearViewportGeometry();
 			return;
 		}
-		modalOverlay.style.setProperty('--image-picker-vv-top', `${viewport.offsetTop}px`);
+		let top = viewport.offsetTop;
+		let height = viewport.height;
+		const layoutHeight = view.innerHeight;
+		const doomComments = view.document.documentElement.dataset.chatDoomCommentsOpen === '1';
+		const covered = layoutHeight - (viewport.offsetTop + viewport.height);
+		// Doom comments use overlays-content, so the keyboard draws on top of a
+		// full-height page. On this phone the visual viewport stays full height,
+		// which left the dialog centered underneath the keypad. Reserve the same
+		// keyboard band the comments sheet uses when the viewport did not shrink.
+		if (doomComments && covered < 80) {
+			top = 0;
+			height = Math.max(0, layoutHeight - Math.round(layoutHeight * 0.45));
+		}
+		modalOverlay.style.setProperty('--image-picker-vv-top', `${top}px`);
 		modalOverlay.style.setProperty('--image-picker-vv-left', `${viewport.offsetLeft}px`);
 		modalOverlay.style.setProperty('--image-picker-vv-width', `${viewport.width}px`);
-		modalOverlay.style.setProperty('--image-picker-vv-height', `${viewport.height}px`);
+		modalOverlay.style.setProperty('--image-picker-vv-height', `${height}px`);
 	}
 
 	function clearViewportRetries() {
@@ -407,7 +420,7 @@ export function wireImagePickerModal(refs, options) {
 		setModalAlert('');
 		bindViewport();
 		applyViewportGeometry();
-		pasteInput.focus();
+		pasteInput.focus({ preventScroll: true });
 		scheduleViewportRetries();
 		updatePasteSubmitState();
 	}
