@@ -263,6 +263,73 @@ export function wireImagePickerModal(refs, options) {
 	let pastePreviewUrl = null;
 	let pendingPasteFile = null;
 	let pendingUploadFile = null;
+	let viewportBound = false;
+	const viewportRetryTimers = [];
+	const VIEWPORT_RETRY_MS = [0, 50, 120, 220, 400];
+
+	function modalView() {
+		return modalOverlay.ownerDocument?.defaultView || null;
+	}
+
+	function clearViewportGeometry() {
+		modalOverlay.style.removeProperty('--image-picker-vv-top');
+		modalOverlay.style.removeProperty('--image-picker-vv-left');
+		modalOverlay.style.removeProperty('--image-picker-vv-width');
+		modalOverlay.style.removeProperty('--image-picker-vv-height');
+	}
+
+	function applyViewportGeometry() {
+		const view = modalView();
+		const viewport = view?.visualViewport;
+		const mobile = view?.matchMedia?.('(max-width: 768px)')?.matches === true;
+		if (!view || !viewport || !mobile || modalOverlay.hidden) {
+			clearViewportGeometry();
+			return;
+		}
+		modalOverlay.style.setProperty('--image-picker-vv-top', `${viewport.offsetTop}px`);
+		modalOverlay.style.setProperty('--image-picker-vv-left', `${viewport.offsetLeft}px`);
+		modalOverlay.style.setProperty('--image-picker-vv-width', `${viewport.width}px`);
+		modalOverlay.style.setProperty('--image-picker-vv-height', `${viewport.height}px`);
+	}
+
+	function clearViewportRetries() {
+		const view = modalView();
+		for (const timer of viewportRetryTimers) view?.clearTimeout(timer);
+		viewportRetryTimers.length = 0;
+	}
+
+	function scheduleViewportRetries() {
+		const view = modalView();
+		if (!view) return;
+		clearViewportRetries();
+		for (const delay of VIEWPORT_RETRY_MS) {
+			viewportRetryTimers.push(view.setTimeout(applyViewportGeometry, delay));
+		}
+	}
+
+	function bindViewport() {
+		if (viewportBound) return;
+		const view = modalView();
+		if (!view) return;
+		viewportBound = true;
+		view.visualViewport?.addEventListener('resize', applyViewportGeometry);
+		view.visualViewport?.addEventListener('scroll', applyViewportGeometry);
+		view.addEventListener('resize', applyViewportGeometry);
+		view.addEventListener('orientationchange', applyViewportGeometry);
+	}
+
+	function unbindViewport() {
+		const view = modalView();
+		clearViewportRetries();
+		if (view && viewportBound) {
+			view.visualViewport?.removeEventListener('resize', applyViewportGeometry);
+			view.visualViewport?.removeEventListener('scroll', applyViewportGeometry);
+			view.removeEventListener('resize', applyViewportGeometry);
+			view.removeEventListener('orientationchange', applyViewportGeometry);
+		}
+		viewportBound = false;
+		clearViewportGeometry();
+	}
 
 	function revokePastePreview() {
 		if (pastePreviewUrl) {
@@ -289,6 +356,7 @@ export function wireImagePickerModal(refs, options) {
 	}
 
 	function closeModal() {
+		unbindViewport();
  document.removeEventListener('keydown', handleEscape, true);
 		modalOverlay.classList.remove('open');
 		modalOverlay.hidden = true;
@@ -337,7 +405,10 @@ export function wireImagePickerModal(refs, options) {
 		linkPanel.hidden = true;
 		uploadPanel.hidden = true;
 		setModalAlert('');
+		bindViewport();
+		applyViewportGeometry();
 		pasteInput.focus();
+		scheduleViewportRetries();
 		updatePasteSubmitState();
 	}
 

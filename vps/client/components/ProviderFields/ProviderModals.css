@@ -53,6 +53,23 @@ body:has(.image-picker-modal-overlay.open) {
 		padding-bottom: max(8px, env(safe-area-inset-bottom, 0px));
 		padding-left: max(8px, env(safe-area-inset-left, 0px));
 	}
+
+	/* Doom comments keep the keyboard over the page. Pin the picker to the
+	   visible viewport so it stays centered in the space above the keypad. */
+	:where(.create-workflow-root) .image-picker-modal-overlay.open,
+	:where(.create-workflow-root) [data-image-picker-modal].open {
+		top: var(--image-picker-vv-top, 0px) !important;
+		left: var(--image-picker-vv-left, 0px) !important;
+		width: var(--image-picker-vv-width, 100%) !important;
+		height: var(--image-picker-vv-height, 100%) !important;
+		right: auto !important;
+		bottom: auto !important;
+	}
+
+	:where(.create-workflow-root) .image-picker-modal-overlay.open .image-picker-modal,
+	:where(.create-workflow-root) [data-image-picker-modal].open .image-picker-modal {
+		max-height: 90%;
+	}
 }
 :where(.create-workflow-root) .modal,
 :where(.create-workflow-root) .image-picker-modal,

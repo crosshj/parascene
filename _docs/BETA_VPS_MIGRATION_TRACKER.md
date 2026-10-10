@@ -2,7 +2,6 @@
 
 ## Remaining product work
 
-- [ ] on mobile, doomscroll comments, click plus button, upload image selection - the add Image modal doesn't center vertical in the space left over from keypad taking up space.  This makes the modal sit under the keypad, not good.  Elsewhere in the app we don't have this problem.
 - [ ] create detail three dots menu should lock scroll behind it while visible (or move with scroll via anchor)
 - [ ] challenge detail mobile, header doesn't have room for title and buttons; for mobile-only put the title of challenge in the page with the card for challenge, but don't put it in the title bar.  Or maybe the idea would be that mobile never shows buttons in the header and always relies on those being behing the caret menu.
 - [ ] queue from frame: Failed to execute 'toBlob' - tainted canvas
@@ -12,7 +11,7 @@
 - [ ] I should be able to paste an audio creation that is not published into comments of another creation and have it play; for now it only shows up if I publish it - not ideal
 - [ ] "Generating" graphic on creations still doesn't animate on mobile.  Consider different approaches.
 - [ ] the thing that makes sounds in www when a notification is recieved - is that in vps now?
-- [ ] ...
+- [ ] feed should continue to add items on scroll, it does not - just frozen after a point and no new items added
 
 ## Public pages and discoverability
 
