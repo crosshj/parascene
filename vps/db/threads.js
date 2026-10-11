@@ -12,6 +12,9 @@ import {
 	isSystemEventMessageRow,
 	viewerCanPinChannelMessages,
 } from '../shared/channelPin.js';
+import { normalizeTag } from '../services/account/tag.js';
+
+const RESERVED_HASHTAG_CHANNEL_SLUGS = new Set(['comments', 'feed', 'explore', 'creations', 'feedback']);
 
 function fail(status, message) { throw Object.assign(new Error(message), { status }); }
 async function result(request) {
@@ -442,10 +445,42 @@ export function createThreadsStore(client, users, { broadcast = broadcastThreadH
 		const pin = await resolvePinnedMessage(userId, { ...thread, meta: nextMeta });
 		return { ok: true, pinned_message_id: pin.pinned_message_id, pinned_message: pin.pinned_message };
 	}
+	async function hashtagResolve(userId, rawSlug) {
+		if (!userId) fail(401, 'Unauthorized');
+		const slug = normalizeTag(rawSlug);
+		if (!slug) fail(400, 'Invalid tag');
+		let channelExists = RESERVED_HASHTAG_CHANNEL_SLUGS.has(slug);
+		if (!channelExists) {
+			const thread = await result(
+				client.from('prsn_chat_threads')
+					.select('id, meta')
+					.eq('type', 'channel')
+					.eq('channel_slug', slug)
+					.maybeSingle()
+			);
+			channelExists = Boolean(thread?.id) && thread?.meta?.visibility !== 'private';
+		}
+		let tagExists = false;
+		const tagNeedle = `#${slug}`;
+		const [descriptionRes, titleRes, commentsRes] = await Promise.all([
+			client.from('prsn_created_images').select('id').eq('published', true).is('unavailable_at', null).ilike('description', `%${tagNeedle}%`).limit(1),
+			client.from('prsn_created_images').select('id').eq('published', true).is('unavailable_at', null).ilike('title', `%${tagNeedle}%`).limit(1),
+			client.from('prsn_comments_created_image').select('created_image_id').ilike('text', `%${tagNeedle}%`).limit(1),
+		]);
+		if (descriptionRes.error) throw descriptionRes.error;
+		if (titleRes.error) throw titleRes.error;
+		if (commentsRes.error) throw commentsRes.error;
+		tagExists = Boolean(
+			(descriptionRes.data && descriptionRes.data.length) ||
+			(titleRes.data && titleRes.data.length) ||
+			(commentsRes.data && commentsRes.data.length)
+		);
+		return { slug, channelExists, tagExists };
+	}
 	const canvases = createThreadCanvases({ client, users, threadForMember, privateSecret, decrypt, broadcast });
 	return {
 		canvases, inbox, openPublicChannel, openDm, listPublicChannelSlugs, hideThread, leaveThread, messages, unread,
-		threadForMember, threadDetail, pinMessage, markRead, send, edit, react, remove,
+		threadForMember, threadDetail, pinMessage, hashtagResolve, markRead, send, edit, react, remove,
 		async getPrivateKey(userId, threadId) { const thread = await threadForMember(userId, threadId); if (thread.visibility !== 'private') fail(400, 'Not a private channel'); const k = await privateSecret(userId, threadId); if (!k) fail(403, 'Private channel key missing'); return { k }; },
 	};
 }

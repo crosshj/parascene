@@ -76,9 +76,6 @@ class AppModalPublish extends HTMLElement {
 	render() {
 		this.innerHTML = html`
 			<dialog class="app-dialog publish-dialog" data-publish-modal aria-labelledby="publish-modal-title">
-				<div class="publish-modal-loading">
-					<div class="publish-spinner"></div>
-				</div>
 				<header class="app-dialog__header">
 					<h2 id="publish-modal-title" class="app-dialog__title" data-modal-title>Publish Creation</h2>
 				</header>
@@ -118,12 +115,15 @@ class AppModalPublish extends HTMLElement {
 				</div>
 				<footer class="app-dialog__footer">
 					<a href="#" class="publish-cancel-link">Cancel</a>
-					<button class="btn-primary publish-submit-btn" data-publish-submit disabled>
-						<svg class="publish-submit-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-							<path d="M1.5 8L14.5 1.5L10.5 14.5L8 9L1.5 8Z" stroke="currentColor" stroke-width="1.5"
-								stroke-linecap="round" stroke-linejoin="round" fill="none" />
-						</svg>
-						<span data-submit-text>Publish</span>
+					<button type="button" class="btn-primary publish-submit-btn" data-publish-submit disabled>
+						<span class="publish-submit-label">
+							<svg class="publish-submit-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+								<path d="M1.5 8L14.5 1.5L10.5 14.5L8 9L1.5 8Z" stroke="currentColor" stroke-width="1.5"
+									stroke-linecap="round" stroke-linejoin="round" fill="none" />
+							</svg>
+							<span data-submit-text>Publish</span>
+						</span>
+						<span class="publish-submit-spinner" aria-hidden="true"></span>
 					</button>
 				</footer>
 			</dialog>
@@ -353,10 +353,10 @@ class AppModalPublish extends HTMLElement {
 
 		if (this._mode === 'edit') {
 			if (titleEl) titleEl.textContent = 'Edit Creation';
-			if (submitTextEl) submitTextEl.textContent = 'Save Changes';
+			if (submitTextEl) submitTextEl.textContent = 'Save';
 			if (submitBtn) {
 				submitBtn.disabled = false;
-				const icon = submitBtn.querySelector('svg path');
+				const icon = submitBtn.querySelector('.publish-submit-icon path');
 				if (icon) icon.setAttribute('d', 'M11.5 2.5L13.5 4.5L5.5 12.5H3.5V10.5L11.5 2.5Z');
 			}
 			if (titleInput) titleInput.removeAttribute('required');
@@ -365,7 +365,7 @@ class AppModalPublish extends HTMLElement {
 			if (submitTextEl) submitTextEl.textContent = 'Publish';
 			if (submitBtn) {
 				submitBtn.disabled = false;
-				const icon = submitBtn.querySelector('svg path');
+				const icon = submitBtn.querySelector('.publish-submit-icon path');
 				if (icon) icon.setAttribute('d', 'M1.5 8L14.5 1.5L10.5 14.5L8 9L1.5 8Z');
 			}
 			if (titleInput) titleInput.removeAttribute('required');
@@ -389,6 +389,7 @@ class AppModalPublish extends HTMLElement {
 		if (!opts.fromDialog && dialog?.open && typeof dialog.close === 'function') {
 			dialog.close();
 		}
+		this.resetSubmitLoadingUi();
 		const titleInput = this.querySelector('#publish-title');
 		const descriptionTextarea = this.querySelector('#publish-description');
 		const nsfwCheckbox = this.querySelector('#publish-nsfw');
@@ -421,26 +422,44 @@ class AppModalPublish extends HTMLElement {
 		}
 	}
 
-	resetSubmitLoadingUi() {
+	setSubmitLoading(loading) {
+		const busy = Boolean(loading);
+		this._loading = busy;
+		const dialog = this.dialog;
 		const titleInput = this.querySelector('#publish-title');
 		const descriptionTextarea = this.querySelector('#publish-description');
 		const nsfwCheckbox = this.querySelector('#publish-nsfw');
 		const doomFullHeightCheckbox = this.querySelector('#publish-doom-full-height');
-		const loadingOverlay = this.querySelector('.publish-modal-loading');
 		const submitBtn = this.querySelector('[data-publish-submit]');
 		const cancelLink = this.querySelector('.publish-cancel-link');
-		if (loadingOverlay) loadingOverlay.classList.remove('active');
-		if (titleInput) titleInput.disabled = false;
-		if (descriptionTextarea) descriptionTextarea.disabled = false;
-		if (nsfwCheckbox) nsfwCheckbox.disabled = false;
+		const dismissBtn = this.querySelector('.modal-dismiss');
+
+		if (dialog) {
+			dialog.classList.toggle('is-busy', busy);
+			dialog.setAttribute('aria-busy', busy ? 'true' : 'false');
+		}
+		if (titleInput) titleInput.disabled = busy;
+		if (descriptionTextarea) descriptionTextarea.disabled = busy;
+		if (nsfwCheckbox) nsfwCheckbox.disabled = busy;
 		if (doomFullHeightCheckbox) {
-			doomFullHeightCheckbox.disabled = !this._creationIsVideo;
+			doomFullHeightCheckbox.disabled = busy || !this._creationIsVideo;
 		}
-		if (submitBtn) submitBtn.disabled = false;
-		if (cancelLink) {
-			cancelLink.classList.remove('is-loading');
+		if (submitBtn) {
+			const fixedWidth = busy ? submitBtn.getBoundingClientRect().width : 0;
+			submitBtn.disabled = busy;
+			submitBtn.classList.toggle('is-loading', busy);
+			submitBtn.setAttribute('aria-busy', busy ? 'true' : 'false');
+			submitBtn.style.width = busy && fixedWidth ? `${fixedWidth}px` : '';
 		}
-		this._loading = false;
+		if (cancelLink) cancelLink.classList.toggle('is-loading', busy);
+		if (dismissBtn instanceof HTMLElement) {
+			dismissBtn.disabled = busy;
+			dismissBtn.setAttribute('aria-disabled', busy ? 'true' : 'false');
+		}
+	}
+
+	resetSubmitLoadingUi() {
+		this.setSubmitLoading(false);
 	}
 
 	async handleSubmit() {
@@ -455,11 +474,8 @@ class AppModalPublish extends HTMLElement {
 		const descriptionTextarea = this.querySelector('#publish-description');
 		const nsfwCheckbox = this.querySelector('#publish-nsfw');
 		const doomFullHeightCheckbox = this.querySelector('#publish-doom-full-height');
-		const loadingOverlay = this.querySelector('.publish-modal-loading');
-		const submitBtn = this.querySelector('[data-publish-submit]');
-		const cancelLink = this.querySelector('.publish-cancel-link');
 
-		if (!titleInput || !loadingOverlay) return;
+		if (!titleInput) return;
 
 		const title = titleInput.value.trim();
 		const description = descriptionTextarea ? descriptionTextarea.value.trim() : '';
@@ -468,20 +484,8 @@ class AppModalPublish extends HTMLElement {
 			? doomFullHeightCheckbox.checked
 			: undefined;
 
-		// Hide any existing alert
 		this.hideAlert();
-
-		// Show loading state
-		this._loading = true;
-		loadingOverlay.classList.add('active');
-		titleInput.disabled = true;
-		if (descriptionTextarea) descriptionTextarea.disabled = true;
-		if (nsfwCheckbox) nsfwCheckbox.disabled = true;
-		if (doomFullHeightCheckbox) doomFullHeightCheckbox.disabled = true;
-		if (submitBtn) submitBtn.disabled = true;
-		if (cancelLink) {
-			cancelLink.classList.add('is-loading');
-		}
+		this.setSubmitLoading(true);
 
 		try {
 			if (this._mode === 'edit') {
@@ -489,24 +493,10 @@ class AppModalPublish extends HTMLElement {
 			} else {
 				await this.handlePublishSubmit(title, description, nsfw, doomScrollFullHeight);
 			}
-			if (creationDetailRuntime.isCreationDetailEmbed()) {
-				this.resetSubmitLoadingUi();
-			}
+			this.resetSubmitLoadingUi();
 		} catch (error) {
-			// console.error(`Error ${this._mode === 'edit' ? 'updating' : 'publishing'} creation:`, error);
 			this.showAlert(error.message || `Failed to ${this._mode === 'edit' ? 'update' : 'publish'} creation. Please try again.`, true);
-
-			// Hide loading state
-			loadingOverlay.classList.remove('active');
-			titleInput.disabled = false;
-			if (descriptionTextarea) descriptionTextarea.disabled = false;
-			if (nsfwCheckbox) nsfwCheckbox.disabled = false;
-			if (doomFullHeightCheckbox) doomFullHeightCheckbox.disabled = !this._creationIsVideo;
-			if (submitBtn) submitBtn.disabled = false;
-			if (cancelLink) {
-				cancelLink.classList.remove('is-loading');
-			}
-			this._loading = false;
+			this.resetSubmitLoadingUi();
 		}
 	}
 

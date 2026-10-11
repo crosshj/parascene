@@ -1873,14 +1873,25 @@ export async function mountCreationCommentsThread(container, options) {
 
 	function setCommentGenBusy(isBusy) {
 		commentGenBusy = Boolean(isBusy);
-		const busyEl = commentGenModal?.querySelector?.('[data-comment-gen-busy]');
-		if (busyEl instanceof HTMLElement) busyEl.hidden = !commentGenBusy;
+		const modalCard = commentGenModal?.querySelector?.('.comment-sticker-modal');
+		if (modalCard instanceof HTMLElement) {
+			modalCard.classList.toggle('is-busy', commentGenBusy);
+			modalCard.setAttribute('aria-busy', commentGenBusy ? 'true' : 'false');
+		}
 		const promptEl = commentGenModal?.querySelector?.('[data-comment-gen-prompt]');
 		if (promptEl instanceof HTMLTextAreaElement) promptEl.disabled = commentGenBusy;
+		const closeBtn = commentGenModal?.querySelector?.('[data-comment-gen-close]');
+		if (closeBtn instanceof HTMLButtonElement) {
+			closeBtn.disabled = commentGenBusy;
+			closeBtn.setAttribute('aria-disabled', commentGenBusy ? 'true' : 'false');
+		}
 		const submitBtn = commentGenModal?.querySelector?.('[data-comment-gen-submit]');
 		if (submitBtn instanceof HTMLButtonElement) {
+			const fixedWidth = commentGenBusy ? submitBtn.getBoundingClientRect().width : 0;
 			submitBtn.disabled = commentGenBusy;
 			submitBtn.classList.toggle('is-loading', commentGenBusy);
+			submitBtn.setAttribute('aria-busy', commentGenBusy ? 'true' : 'false');
+			submitBtn.style.width = commentGenBusy && fixedWidth ? `${fixedWidth}px` : '';
 		}
 	}
 
@@ -2083,10 +2094,10 @@ export async function mountCreationCommentsThread(container, options) {
 				<textarea class="comment-textarea comment-gen-modal-prompt" rows="3" maxlength="4000" placeholder="Describe the sticker" data-comment-gen-prompt></textarea>
 				<span class="comment-sticker-modal-status" data-comment-gen-status aria-live="polite"></span>
 				<div class="comment-gen-modal-actions">
-					<button type="button" class="btn-primary" data-comment-gen-submit>Generate</button>
-				</div>
-				<div class="comment-sticker-modal-busy" data-comment-gen-busy hidden aria-hidden="true">
-					<span class="comment-sticker-modal-busy-spinner"></span>
+					<button type="button" class="btn-primary comment-gen-modal-submit" data-comment-gen-submit>
+						<span class="comment-gen-modal-submit-label">Generate</span>
+						<span class="comment-action-btn-spinner" aria-hidden="true"></span>
+					</button>
 				</div>
 			</div>
 		`;
@@ -2094,7 +2105,7 @@ export async function mountCreationCommentsThread(container, options) {
 			if (e.target === overlay && !commentGenBusy) closeCommentGenModal();
 		});
 		overlay.querySelector('[data-comment-gen-close]')?.addEventListener('click', () => {
-			closeCommentGenModal();
+			if (!commentGenBusy) closeCommentGenModal();
 		});
 		overlay.querySelector('[data-comment-gen-submit]')?.addEventListener('click', () => {
 			void submitCommentGenModal();
@@ -2137,6 +2148,7 @@ export async function mountCreationCommentsThread(container, options) {
 				if (!(commentGenModal instanceof HTMLElement)) return;
 				if (commentGenModal.getAttribute('aria-hidden') === 'true') return;
 				if (!commentGenModal.classList.contains('open')) return;
+				if (commentGenBusy) return;
 				e.preventDefault();
 				closeCommentGenModal();
 			});
@@ -2169,16 +2181,13 @@ export async function mountCreationCommentsThread(container, options) {
 				<input type="file" hidden accept="image/*" data-comment-sticker-upload-input />
 				<div class="comment-sticker-grid" data-comment-sticker-grid></div>
 				<span class="comment-sticker-modal-status" data-comment-sticker-status aria-live="polite"></span>
-				<div class="comment-sticker-modal-busy" data-comment-sticker-busy hidden aria-hidden="true">
-					<span class="comment-sticker-modal-busy-spinner"></span>
-				</div>
 			</div>
 		`;
 		overlay.addEventListener('click', (e) => {
-			if (e.target === overlay) closeCommentStickerModal();
+			if (e.target === overlay && !commentStickerModalBusy) closeCommentStickerModal();
 		});
 		overlay.querySelector('[data-comment-sticker-close]')?.addEventListener('click', () => {
-			closeCommentStickerModal();
+			if (!commentStickerModalBusy) closeCommentStickerModal();
 		});
 		document.body.appendChild(overlay);
 		commentStickerModal = overlay;
@@ -2205,13 +2214,36 @@ export async function mountCreationCommentsThread(container, options) {
 		status.classList.toggle('is-error', tone === 'error');
 	}
 
-	function setCommentStickerModalBusy(isBusy) {
+	function setCommentStickerModalBusy(isBusy, activePickBtn = null) {
 		commentStickerModalBusy = Boolean(isBusy);
 		const modalCard = commentStickerModal?.querySelector?.('.comment-sticker-modal');
 		if (!(modalCard instanceof HTMLElement)) return;
 		modalCard.classList.toggle('is-busy', commentStickerModalBusy);
-		const busyEl = modalCard.querySelector('[data-comment-sticker-busy]');
-		if (busyEl instanceof HTMLElement) busyEl.hidden = !commentStickerModalBusy;
+		modalCard.setAttribute('aria-busy', commentStickerModalBusy ? 'true' : 'false');
+		const closeBtn = modalCard.querySelector('[data-comment-sticker-close]');
+		if (closeBtn instanceof HTMLButtonElement) {
+			closeBtn.disabled = commentStickerModalBusy;
+			closeBtn.setAttribute('aria-disabled', commentStickerModalBusy ? 'true' : 'false');
+		}
+		modalCard.querySelectorAll('[data-comment-sticker-pick]').forEach((btn) => {
+			if (!(btn instanceof HTMLButtonElement)) return;
+			btn.classList.remove('is-loading');
+			btn.removeAttribute('aria-busy');
+			if (!commentStickerModalBusy) return;
+			btn.disabled = true;
+			if (activePickBtn && btn === activePickBtn) {
+				btn.classList.add('is-loading');
+				btn.setAttribute('aria-busy', 'true');
+				if (!btn.querySelector('.comment-action-btn-spinner')) {
+					btn.insertAdjacentHTML('beforeend', '<span class="comment-action-btn-spinner" aria-hidden="true"></span>');
+				}
+			}
+		});
+		if (!commentStickerModalBusy) {
+			modalCard.querySelectorAll('[data-comment-sticker-pick]').forEach((btn) => {
+				if (btn instanceof HTMLButtonElement) btn.disabled = false;
+			});
+		}
 	}
 
 	async function refreshStickerGrid() {
@@ -2251,7 +2283,7 @@ export async function mountCreationCommentsThread(container, options) {
 				if (!url) return;
 				if (commentQuickSubmitInFlight) return;
 				commentQuickSubmitInFlight = true;
-				setCommentStickerModalBusy(true);
+				setCommentStickerModalBusy(true, btn instanceof HTMLButtonElement ? btn : null);
 				setCommentComposerBusy(true, 'Posting...');
 				const attachBtn = resolveAttachButton(commentAttachContext);
 				if (attachBtn instanceof HTMLButtonElement) attachBtn.disabled = true;
@@ -2329,6 +2361,7 @@ export async function mountCreationCommentsThread(container, options) {
 				if (!(commentStickerModal instanceof HTMLElement)) return;
 				if (commentStickerModal.getAttribute('aria-hidden') === 'true') return;
 				if (!commentStickerModal.classList.contains('open')) return;
+				if (commentStickerModalBusy) return;
 				e.preventDefault();
 				closeCommentStickerModal();
 			});

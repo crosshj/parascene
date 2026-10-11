@@ -612,29 +612,37 @@
 	display: inline-block;
 }
 
-/* Blocking overlay while generating avatar */
-:where(.user-profile-view) .user-profile-edit-generating-overlay {
+:where(.user-profile-view) .user-profile-edit-save {
+	position: relative;
+	min-width: 96px;
+}
+
+:where(.user-profile-view) .user-profile-edit-save.is-loading .user-profile-edit-save-label {
+	visibility: hidden;
+}
+
+:where(.user-profile-view) .user-profile-edit-save-spinner {
 	display: none;
+}
+
+:where(.user-profile-view) .user-profile-edit-save.is-loading .user-profile-edit-save-spinner {
+	display: inline-block;
 	position: absolute;
-	inset: 0;
-	z-index: 10;
-	background: rgba(0, 0, 0, 0.5);
-	align-items: center;
-	justify-content: center;
-	pointer-events: auto;
-}
-
-:where(.user-profile-view) .user-profile-edit-generating-overlay:not([hidden]) {
-	display: flex;
-}
-
-:where(.user-profile-view) .user-profile-edit-generating-spinner {
-	width: 40px;
-	height: 40px;
-	border: 4px solid var(--border);
-	border-top-color: var(--accent);
+	left: 50%;
+	top: 50%;
+	width: 1em;
+	height: 1em;
+	margin: -0.5em 0 0 -0.5em;
+	border: 2px solid color-mix(in srgb, currentColor 40%, transparent);
+	border-top-color: currentColor;
 	border-radius: 50%;
 	animation: spin 0.8s linear infinite;
+}
+
+:where(.user-profile-view) .modal.is-busy .modal-close,
+:where(.user-profile-view) .modal.is-busy [data-profile-edit-cancel] {
+	pointer-events: none;
+	opacity: 0.5;
 }
 
 /* Generate avatar confirm modal (over edit modal) */

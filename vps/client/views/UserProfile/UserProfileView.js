@@ -815,10 +815,10 @@ function renderProfilePage(
 				</div>
 				<div class="modal-footer">
 					<button class="btn-secondary" type="button" data-profile-edit-cancel>Cancel</button>
-					<button class="btn-primary" type="button" data-profile-edit-save>Save</button>
-				</div>
-				<div class="user-profile-edit-generating-overlay" data-profile-edit-generating-overlay hidden aria-busy="true" aria-live="polite">
-					<div class="user-profile-edit-generating-spinner" aria-hidden="true"></div>
+					<button class="btn-primary user-profile-edit-save" type="button" data-profile-edit-save>
+						<span class="user-profile-edit-save-label">Save</span>
+						<span class="user-profile-edit-save-spinner" aria-hidden="true"></span>
+					</button>
 				</div>
 			</div>
 			<div class="user-profile-generate-confirm-overlay" data-profile-generate-confirm-overlay hidden>
@@ -1590,32 +1590,21 @@ function renderPersonalityDiscoveryPage(
 			}
 		});
 	} else {
-		const discoveryAvatarInitial = safePersonality.trim().charAt(0).toUpperCase() || '?';
-		const discoveryAvatarColor = getAvatarColor(safePersonality);
-		const discoveryAvatarHtml = avatarMod.avatarPendingFaceHtml('', discoveryAvatarInitial, {
-			imgClass: 'user-profile-avatar-img',
-			fallbackClass: 'user-profile-avatar-fallback avatar-fallback-label',
-			fallbackStyle: `--user-profile-avatar-bg: ${discoveryAvatarColor}`,
-		});
-		const discoveryHeroHtml = renderSharedProfileHeroHtml({
-			bannerStyle: '',
-			avatarBlockHtml: discoveryAvatarHtml,
-			handle: handleStr,
-			actionsInnerHtml,
-			actionsHostAttrs: actionsInnerHtml ? ' data-persona-discovery-actions=""' : '',
-		});
 		container.innerHTML = html`
-		${discoveryHeroHtml}
-		<div class="user-profile-content user-profile-persona-discovery-content">
-			<div class="route-cards content-cards-image-grid" data-personality-grid>
-				<div class="route-empty route-empty-image-grid route-loading">
-					<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
-				</div>
+		<div class="route-header">
+			<div class="route-header-title-row">
+				<h3>${escapeHtml(token)}</h3>
+				${actionsInnerHtml}
 			</div>
-			${hasMore ? html`<div class="route-empty">
-				<div class="route-empty-message">Showing top results. Refine the personality name to narrow matches.</div>
-			</div>` : ''}
 		</div>
+		<div class="route-cards content-cards-image-grid" data-personality-grid>
+			<div class="route-empty route-empty-image-grid route-loading">
+				<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
+			</div>
+		</div>
+		${hasMore ? html`<div class="route-empty">
+			<div class="route-empty-message">Showing top results. Refine the personality name to narrow matches.</div>
+		</div>` : ''}
 		${promoteSetupModalHtml}
 	`;
 	}
@@ -2160,12 +2149,27 @@ async function init() {
 if(!lifetime.active)return;
 const targetInfo=getPathUserTarget();
 if(targetInfo.mode==='username'){const found=await fetchJsonWithStatusDeduped('/api/users/by-username/'+encodeURIComponent(targetInfo.userName)+'/profile',{credentials:'include'});profileContext={requested:{type:'user-name',user_name:targetInfo.userName},resolved:{target_exists:found.status!==404}};}
+else if(targetInfo.mode==='tag'&&targetInfo.userName){profileContext={requested:{type:'tag',user_id:null,user_name:targetInfo.userName},resolved:{target_exists:false,user_id:null,user_name:null},target_kind:'tag'};}
 if(!lifetime.active)return;
 
 	const container = mountRoot;
 	if (!container) return;
 
-	container.innerHTML = renderProfilePageSkeleton();
+	if (targetInfo.mode === 'tag' && targetInfo.userName) {
+		const tagToken = `#${String(targetInfo.userName).trim().toLowerCase()}`;
+		container.innerHTML = html`
+			<div class="route-header">
+				<div class="route-header-title-row">
+					<h3>${escapeHtml(tagToken)}</h3>
+				</div>
+			</div>
+			<div class="route-cards content-cards-image-grid" aria-busy="true" aria-label="Loading">
+				${renderGridSkeleton(25)}
+			</div>
+		`;
+	} else {
+		container.innerHTML = renderProfilePageSkeleton();
+	}
 
 
 	const serverContext = getServerProfileContext();
@@ -2274,7 +2278,7 @@ if(!lifetime.active)return;
 		const tag = String(serverContext?.requested?.user_name || target?.userName || '').trim().toLowerCase();
 		if (!tag) {
 			renderProfileUnavailableState(container, {
-				title: 'Tag not found',
+				title: 'Tagged items not found',
 				message: 'No results found.',
 				icon: 'warning'
 			});
@@ -2284,9 +2288,9 @@ if(!lifetime.active)return;
 			const result = await loadTagCreations(tag, { limit: 100, offset: 0 });
 			if (!Array.isArray(result.items) || result.items.length === 0) {
 				renderProfileUnavailableState(container, {
-					title: 'Tag not found',
+					title: 'Tagged items not found',
 					message: `No results found for #${tag}.`,
-					icon: 'user-not-found'
+					icon: 'warning'
 				});
 				return;
 			}
@@ -2864,8 +2868,6 @@ if(!lifetime.active)return;
 	const saveButton = container.querySelector('[data-profile-edit-save]');
 	const form = container.querySelector('[data-profile-edit-form]');
 	const errorBox = container.querySelector('[data-profile-edit-error]');
-	const generatingOverlay = container.querySelector('[data-profile-edit-generating-overlay]');
-	const avatarGeneratingPlaceholder = container.querySelector('[data-avatar-generating-placeholder]');
 	const generateConfirmOverlay = container.querySelector('[data-profile-generate-confirm-overlay]');
 	const generateConfirmClose = container.querySelector('[data-profile-generate-confirm-close]');
 	const generateConfirmCancel = container.querySelector('[data-profile-generate-confirm-cancel]');
@@ -3170,6 +3172,28 @@ if(!lifetime.active)return;
 		btn.addEventListener('click', closeModal);
 	});
 
+	function setProfileEditSaveLoading(loading) {
+		if (!saveButton) return;
+		const busy = Boolean(loading);
+		const fixedWidth = busy ? saveButton.getBoundingClientRect().width : 0;
+		saveButton.disabled = busy;
+		saveButton.classList.toggle('is-loading', busy);
+		saveButton.setAttribute('aria-busy', busy ? 'true' : 'false');
+		saveButton.style.width = busy && fixedWidth ? `${fixedWidth}px` : '';
+		if (cancelButton) cancelButton.disabled = busy;
+		if (closeButton) {
+			closeButton.disabled = busy;
+			closeButton.setAttribute('aria-disabled', busy ? 'true' : 'false');
+		}
+		if (overlay) {
+			const modalCard = overlay.querySelector('.modal');
+			if (modalCard instanceof HTMLElement) {
+				modalCard.classList.toggle('is-busy', busy);
+				modalCard.setAttribute('aria-busy', busy ? 'true' : 'false');
+			}
+		}
+	}
+
 	async function saveProfile(opts) {
 		const keepEditOpen = opts && opts.keepEditOpen === true;
 		if (!form || !saveButton) return;
@@ -3187,7 +3211,7 @@ if(!lifetime.active)return;
 			return;
 		}
 
-		saveButton.disabled = true;
+		setProfileEditSaveLoading(true);
 		let result;
 
 		if (isAdmin && !isSelf && user?.id) {
@@ -3272,9 +3296,8 @@ if(!lifetime.active)return;
 			}
 		}
 
-		saveButton.disabled = false;
-
 		if (!result.ok) {
+			setProfileEditSaveLoading(false);
 			const message = result.status === 0
 				? 'Network error. Check your connection and try again.'
 				: (result.data?.error || 'Failed to save profile.');
@@ -3286,8 +3309,10 @@ if(!lifetime.active)return;
 		}
 
 		if (keepEditOpen) {
+			setProfileEditSaveLoading(false);
 			return;
 		}
+		setProfileEditSaveLoading(false);
 		closeModal();
 		window.location.reload();
 	}

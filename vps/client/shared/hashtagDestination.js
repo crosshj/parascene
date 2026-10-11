@@ -231,22 +231,26 @@ export function showHashtagChoiceModal(slug, handlers) {
 
 /**
  * @param {string} slug
- * @returns {Promise<boolean>}
+ * @returns {Promise<{ channelExists: boolean, tagExists: boolean }>}
  */
-async function fetchHashtagChannelExists(slug) {
+async function fetchHashtagResolve(slug) {
 	const safe = normalizeHashtagSlug(slug);
-	if (!safe) return false;
+	if (!safe) return { channelExists: false, tagExists: false };
 	const res = await fetch(`/api/chat/hashtag-channel-exists/${encodeURIComponent(safe)}`, {
 		credentials: 'include',
 	});
-	if (res.status === 401) return false;
+	if (res.status === 401) return { channelExists: false, tagExists: false };
 	const data = await res.json().catch(() => ({}));
-	if (!res.ok) return false;
-	return data.channelExists === true;
+	if (!res.ok) return { channelExists: false, tagExists: false };
+	return {
+		channelExists: data.channelExists === true,
+		tagExists: data.tagExists === true,
+	};
 }
 
 /**
- * Resolve a hashtag click: specials, channel-vs-tag chooser, or tag page.
+ * Resolve a hashtag click: specials, channel-vs-tag chooser, or direct hop.
+ * Channel only → channel. Tag only (or neither) → tag page. Both → prompt.
  * @param {string} slug
  * @param {{
  *   navigate: (href: string) => void | Promise<void>,
@@ -277,13 +281,17 @@ export async function openHashtagDestination(slug, options) {
 	const channelHref = `/ch/${encodeURIComponent(safe)}`;
 
 	try {
-		const exists = await fetchHashtagChannelExists(safe);
-		if (exists) {
+		const { channelExists, tagExists } = await fetchHashtagResolve(safe);
+		if (channelExists && tagExists) {
 			if (onBeforeChoice) onBeforeChoice();
 			showHashtagChoiceModal(safe, {
 				onPickChannel: () => go(channelHref),
 				onPickTag: () => go(tagHref),
 			});
+			return;
+		}
+		if (channelExists) {
+			await go(channelHref);
 			return;
 		}
 	} catch {

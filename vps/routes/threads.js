@@ -22,6 +22,14 @@ export function createThreadsRoutes({ threads }) {
 	}));
 	router.post('/api/chat/dm', handle((req) => threads.openDm(req.auth.userId, { otherUserId: req.body?.other_user_id, otherUserName: req.body?.other_user_name })));
 	router.get('/api/chat/channel-slugs', handle(() => threads.listPublicChannelSlugs()));
+	router.get('/api/chat/hashtag-channel-exists/:rawSlug', handle(async (req) => {
+		const resolved = await threads.hashtagResolve(req.auth.userId, req.params.rawSlug);
+		return {
+			slug: resolved.slug,
+			channelExists: resolved.channelExists === true,
+			tagExists: resolved.tagExists === true,
+		};
+	}));
 	router.post('/api/chat/threads/:threadId/hide', handle((req) => threads.hideThread(req.auth.userId, id(req), req.body?.hidden !== false)));
 	router.post('/api/chat/threads/:threadId/leave', handle((req) => threads.leaveThread(req.auth.userId, id(req))));
 	router.get('/api/chat/unread-summary', handle((req) => threads.unread(req.auth.userId)));
