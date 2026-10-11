@@ -69,8 +69,14 @@ export function isLyricsLikeField(fieldKey, field) {
 	return /lyrics/i.test(key) || /lyrics/i.test(label);
 }
 
+export function isAbcLikeField(fieldKey, field) {
+	const key = String(fieldKey || '').trim();
+	const label = String(field?.label || '').trim();
+	return /^abc$/i.test(key) || /^abc$/i.test(label);
+}
+
 export function isPromptEditorField(fieldKey, field) {
-	return isPromptLikeField(fieldKey, field) || isLyricsLikeField(fieldKey, field);
+	return isPromptLikeField(fieldKey, field) || isLyricsLikeField(fieldKey, field) || isAbcLikeField(fieldKey, field);
 }
 
 export function isMultilineField(fieldKey, field) {
@@ -948,7 +954,26 @@ function sortedProviderFieldKeys(fields, context) {
 		else if (t === 'audio_clip') audioKeys.push(fieldKey);
 		else restKeys.push(fieldKey);
 	}
-	return [...restKeys, ...audioKeys, ...imageKeys];
+	return [...placeAbcAfterPrompt(placeStyleBeforeLyrics(restKeys, fields, context), fields), ...audioKeys, ...imageKeys];
+}
+
+function placeStyleBeforeLyrics(keys, fields, context) {
+	const promptKey = keys.find((key) => isTextToMusicPromptField(key, context));
+	const lyricsKey = keys.find((key) => isLyricsLikeField(key, fields[key]));
+	if (!promptKey || !lyricsKey || keys.indexOf(promptKey) < keys.indexOf(lyricsKey)) return keys;
+	const next = keys.filter((key) => key !== promptKey);
+	next.splice(next.indexOf(lyricsKey), 0, promptKey);
+	return next;
+}
+
+function placeAbcAfterPrompt(keys, fields) {
+	const abcKey = keys.find((key) => isAbcLikeField(key, fields[key]));
+	if (!abcKey) return keys;
+	const promptKey = keys.find((key) => key !== abcKey && isPromptLikeField(key, fields[key]));
+	if (!promptKey) return keys;
+	const next = keys.filter((key) => key !== abcKey);
+	next.splice(next.indexOf(promptKey) + 1, 0, abcKey);
+	return next;
 }
 
 /**

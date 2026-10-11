@@ -36,12 +36,22 @@ export function extraFieldsFromSelectOptions(fields, values = {}) {
 	return extra;
 }
 
+function isAbcField(key, field) {
+	const name = String(key || '').trim();
+	const label = String(field?.label || '').trim();
+	return /^abc$/i.test(name) || /^abc$/i.test(label);
+}
+
 export function resolveRenderableFields(fields, values = {}) {
 	const base = fields && typeof fields === 'object' ? fields : {};
 	const extra = extraFieldsFromSelectOptions(base, values);
 	const merged = { ...base };
 	for (const [key, field] of Object.entries(extra)) {
 		if (!(key in merged)) merged[key] = field;
+	}
+	for (const [key, field] of Object.entries(merged)) {
+		if (!field || typeof field !== 'object' || !isAbcField(key, field) || field.show_when?.field) continue;
+		merged[key] = { ...field, show_when: { field: 'model', equals: 'yue2' } };
 	}
 	return merged;
 }

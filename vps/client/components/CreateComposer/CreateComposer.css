@@ -2082,12 +2082,21 @@ app-route-create .create-route .image-field-error {
 	visibility: hidden;
 }
 
+/* Overlay link color is more specific than this class; keep the clear control muted. */
+.beta-app-overlay__content a.create-prompt-clear,
+app-route-create .create-prompt-clear {
+	color: var(--text-muted);
+	text-decoration: underline;
+}
+
 .create-prompt-clear.is-visible {
 	pointer-events: auto;
 	visibility: visible;
 }
 
-.create-prompt-clear:hover {
+.create-prompt-clear:hover,
+.beta-app-overlay__content a.create-prompt-clear:hover,
+app-route-create .create-prompt-clear:hover {
 	color: var(--text);
 }
 

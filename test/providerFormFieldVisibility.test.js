@@ -73,6 +73,19 @@ describe('resolveRenderableFields', () => {
 		expect(fields.emotion.options[0].value).toBe('auto');
 	});
 
+	test('shows ABC only for the yue2 model', () => {
+		const fields = resolveRenderableFields({
+			model: { type: 'select', options: [{ value: 'yue2' }, { value: 'ltx25_t2a' }] },
+			prompt: { type: 'text', label: 'Prompt' },
+			lyrics: { type: 'text', label: 'Lyrics' },
+			abc: { type: 'text', label: 'ABC' },
+		}, { model: 'ltx25_t2a' });
+		expect(fields.abc.show_when).toEqual({ field: 'model', equals: 'yue2' });
+		expect(fieldMatchesShowWhen(fields.abc, { model: 'yue2' })).toBe(true);
+		expect(fieldMatchesShowWhen(fields.abc, { model: 'ltx25_t2a' })).toBe(false);
+		expect(fieldMatchesShowWhen(fields.abc, { model: 'minimax_music3' })).toBe(false);
+	});
+
 	test('does not overwrite extras already merged with defaults', () => {
 		const voice = { type: 'select', default: 'custom', options: [{ value: 'custom', label: 'Custom' }] };
 		const fields = resolveRenderableFields(
