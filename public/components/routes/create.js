@@ -2670,6 +2670,7 @@ class AppRouteCreate extends HTMLElement {
 			serverId: this.selectedServer?.id,
 			methodKey: this.getMethodKey(),
 			modelValue: this.resolveEffectiveModelValue(),
+			intent: this.selectedMethod?.intent,
 			fields: this.getRenderableMethodFields(),
 		};
 	}
