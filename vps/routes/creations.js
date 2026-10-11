@@ -92,14 +92,17 @@ function shareAudioUrl(row) {
 	}
 }
 
-function applyCommentProof(payload, row, commentId) {
-	const id = positiveId(commentId);
-	if (!id || !payload) return payload;
+function applyPostedProof(payload, row, proof) {
+	const commentId = positiveId(proof?.commentId);
+	const chatMessageId = positiveId(proof?.chatMessageId);
+	const key = commentId ? "comment_id" : chatMessageId ? "chat_message_id" : "";
+	const id = commentId || chatMessageId;
+	if (!key || !payload) return payload;
 	for (const field of ["url", "thumbnail_url", "fit_thumbnail_url", "video_thumbnail_url", "video_url"]) {
-		payload[field] = appendQuery(payload[field], "comment_id", id);
+		payload[field] = appendQuery(payload[field], key, id);
 	}
 	if (payload.media_type === "audio") {
-		payload.audio_url = shareAudioUrl(row) || appendQuery(payload.audio_url || `/api/creations/${row.id}/audio`, "comment_id", id);
+		payload.audio_url = shareAudioUrl(row) || appendQuery(payload.audio_url || `/api/creations/${row.id}/audio`, key, id);
 	}
 	return payload;
 }
@@ -213,6 +216,20 @@ export function createCreationsRoutes({ creations, users, appendChallengeEligibi
 	const router = express.Router();
 	const noStore = (_req, res, next) => { res.set("Cache-Control", "private, no-store"); next(); };
 
+	async function creationViaPostedProof(req, creationId) {
+		const commentId = positiveId(req.query.comment_id);
+		if (commentId && typeof creations.byIdForCommentProof === "function") {
+			const row = await creations.byIdForCommentProof(req.auth.userId, creationId, commentId);
+			if (row) return { row, commentId, chatMessageId: 0 };
+		}
+		const chatMessageId = positiveId(req.query.chat_message_id);
+		if (chatMessageId && typeof creations.byIdForChatMessageProof === "function") {
+			const row = await creations.byIdForChatMessageProof(req.auth.userId, creationId, chatMessageId);
+			if (row) return { row, commentId: 0, chatMessageId };
+		}
+		return null;
+	}
+
 	async function accessibleCreation(req) {
 		const viewer = await users.byId(req.auth.userId);
 		if (!viewer) return { viewer: null, row: null };
@@ -252,9 +269,9 @@ export function createCreationsRoutes({ creations, users, appendChallengeEligibi
     const entry = await challengeCreationForViewer({ creations, viewer, creationId: req.query.creation_id, query: req.query });
     allowed = Boolean(entry && creationMediaKeys(entry).some(value => creations.safeKey(value) === key));
    }
-			if (!allowed && positiveId(req.query.comment_id) && typeof creations.byIdForCommentProof === "function") {
-				const proved = await creations.byIdForCommentProof(req.auth.userId, req.query.creation_id, req.query.comment_id);
-				allowed = Boolean(proved && creationMediaKeys(proved).some((value) => creations.safeKey(value) === key));
+			if (!allowed) {
+				const proved = await creationViaPostedProof(req, req.query.creation_id);
+				allowed = Boolean(proved && creationMediaKeys(proved.row).some((value) => creations.safeKey(value) === key));
 			}
 			if (!allowed) return res.status(404).json({ error: "Media not found" });
 			const variant = String(req.query.variant || "").trim().toLowerCase();
@@ -427,15 +444,11 @@ export function createCreationsRoutes({ creations, users, appendChallengeEligibi
 				row = await creations.lineageAncestorForViewer(req.auth.userId, req.params.id, req.query.lineage_of, { isAdmin: viewer.role === "admin" });
 			}
 			if (!row) row = await challengeCreationForViewer({ creations, viewer, creationId: req.params.id, query: req.query });
-			let commentProofId = 0;
-			if (!row && positiveId(req.query.comment_id) && typeof creations.byIdForCommentProof === "function") {
-				commentProofId = positiveId(req.query.comment_id);
-				row = await creations.byIdForCommentProof(req.auth.userId, req.params.id, commentProofId);
-				if (!row) commentProofId = 0;
-			}
+			const posted = row ? null : await creationViaPostedProof(req, req.params.id);
+			if (posted) row = posted.row;
 			if (!row) return res.status(404).json({ error: "Image not found" });
 			const payload = await serializeWithCreator(row);
-			if (commentProofId) applyCommentProof(payload, row, commentProofId);
+			if (posted) applyPostedProof(payload, row, posted);
 			if (req.query.lineage_of != null) {
 				for (const field of ["url", "thumbnail_url", "fit_thumbnail_url", "video_thumbnail_url", "video_url", "audio_url"]) {
 					payload[field] = withLineageProof(payload[field], req.query.lineage_of);
@@ -506,15 +519,11 @@ export function createCreationsRoutes({ creations, users, appendChallengeEligibi
 		try {
 			const viewer = await users.byId(req.auth.userId);
 			if (!viewer) return res.status(404).json({ error: "User not found" });
-			let commentProofId = 0;
 			let row = await creations.byIdForViewer(req.auth.userId, req.params.id, {
 				isAdmin: viewer.role === "admin"
 			});
-			if (!row && positiveId(req.query.comment_id) && typeof creations.byIdForCommentProof === "function") {
-				commentProofId = positiveId(req.query.comment_id);
-				row = await creations.byIdForCommentProof(req.auth.userId, req.params.id, commentProofId);
-				if (!row) commentProofId = 0;
-			}
+			const posted = row ? null : await creationViaPostedProof(req, req.params.id);
+			if (posted) row = posted.row;
 			if (!row) return res.status(404).json({ error: "Creation not found" });
 			const meta = parseMeta(row.meta);
 			if (meta.nsfw === true && viewer.meta?.enableNsfw !== true && Number(row.user_id) !== Number(req.auth.userId) && viewer.role !== "admin") {
@@ -523,7 +532,7 @@ export function createCreationsRoutes({ creations, users, appendChallengeEligibi
 			const creatorUser = Number(row.user_id) === Number(viewer.id) ? viewer : await users.byId(row.user_id);
 			const creatorProfile = await users.profileByUserId(row.user_id);
 			const creation = serializeCreation(row);
-			if (commentProofId) applyCommentProof(creation, row, commentProofId);
+			if (posted) applyPostedProof(creation, row, posted);
 			const payload = {
 				...creation,
 				like_count: 0,
@@ -583,8 +592,9 @@ export function createCreationsRoutes({ creations, users, appendChallengeEligibi
 				row = await creations.lineageAncestorForViewer(req.auth.userId, req.params.id, req.query.lineage_of, { isAdmin: viewer?.role === "admin" });
 			}
 			if (!row) row = await challengeCreationForViewer({ creations, viewer, creationId: req.params.id, query: req.query });
-			if (!row && positiveId(req.query.comment_id) && typeof creations.byIdForCommentProof === "function") {
-				row = await creations.byIdForCommentProof(req.auth.userId, req.params.id, req.query.comment_id);
+			if (!row) {
+				const posted = await creationViaPostedProof(req, req.params.id);
+				if (posted) row = posted.row;
 			}
 			if (!row) return res.status(404).json({ error: "Audio not found" });
 			const meta = parseMeta(row.meta);

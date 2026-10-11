@@ -36,3 +36,11 @@ export function commentAllowsUnpublishedCreation({ image, comment, parent, viewe
 	if (Number(parent.user_id) === viewer) return true;
 	return parent.published === true || parent.published === 1;
 }
+
+export function chatMessageAllowsUnpublishedCreation({ image, message, member }) {
+	if (!image || !message || member !== true) return false;
+	if (image.unavailable_at != null && image.unavailable_at !== "") return false;
+	const threadId = Number(message.thread_id);
+	if (!Number.isInteger(threadId) || threadId <= 0) return false;
+	return postedTextReferencesCreation(message.body, image.id);
+}

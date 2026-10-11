@@ -1,5 +1,5 @@
 import {creationEligibleForLatestCommentsStream} from '../services/create/latestCommentsVisibility.js';
-import { commentAllowsUnpublishedCreation } from '../services/create/postedCreationAccess.js';
+import { chatMessageAllowsUnpublishedCreation, commentAllowsUnpublishedCreation } from '../services/create/postedCreationAccess.js';
 import {getActiveEditorialPins} from '../services/feed/editorialPin.js';
 import path from "node:path";
 
@@ -116,6 +116,25 @@ export function createCreationsStore({ client, supabaseUrl, serviceRoleKey }) {
 				parent = parentResult.data;
 			}
 			return commentAllowsUnpublishedCreation({ image, comment, parent, viewerId: uid }) ? image : null;
+		},
+		async byIdForChatMessageProof(viewerId, creationId, messageId) {
+			const id = Number(creationId);
+			const mid = Number(messageId);
+			const uid = Number(viewerId);
+			if (![id, mid, uid].every((value) => Number.isInteger(value) && value > 0)) return null;
+			const imageResult = await client.from("prsn_created_images").select(CREATION_FIELDS).eq("id", id).maybeSingle();
+			if (imageResult.error) throw imageResult.error;
+			const image = imageResult.data;
+			if (!image) return null;
+			const messageResult = await client.from("prsn_chat_messages").select("id, thread_id, body").eq("id", mid).maybeSingle();
+			if (messageResult.error) throw messageResult.error;
+			const message = messageResult.data;
+			if (!message) return null;
+			const threadId = Number(message.thread_id);
+			if (!Number.isInteger(threadId) || threadId <= 0) return null;
+			const memberResult = await client.from("prsn_chat_members").select("user_id").eq("thread_id", threadId).eq("user_id", uid).maybeSingle();
+			if (memberResult.error) throw memberResult.error;
+			return chatMessageAllowsUnpublishedCreation({ image, message, member: Boolean(memberResult.data) }) ? image : null;
 		},
 		// Only call after verifying a share token for this exact creation.
 		async byIdForShare(creationId) {

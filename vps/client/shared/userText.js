@@ -1982,21 +1982,58 @@ function stampCreationEmbedAccess(wrap, data) {
 	if (Number.isInteger(ownerId) && ownerId > 0) wrap.dataset.ownerId = String(ownerId);
 }
 
-export function creationAudioPlayerHref(data, creationId, commentId, viewerId) {
+export function creationAudioPlayerHref(data, creationId, commentId, viewerId, chatMessageId) {
 	const viewer = viewerId != null ? viewerId : Number(globalThis.__PARASCENE_BOOTSTRAP__?.user?.id);
 	if (!creationDetailLinkVisible({ published: data?.published, ownerId: data?.user_id, viewerId: viewer })) return '';
 	const id = encodeURIComponent(String(creationId));
-	const proof = commentId ? `?comment_id=${encodeURIComponent(String(commentId))}` : '';
-	return `/creations/${id}${proof}`;
+	return `/creations/${id}${postedProofQuery(commentId, chatMessageId)}`;
+}
+
+function positiveProofId(raw) {
+	const value = String(raw || '').trim();
+	return /^\d+$/.test(value) && Number(value) > 0 ? value : '';
+}
+
+function postedProofQuery(commentId, chatMessageId) {
+	const params = new URLSearchParams();
+	const comment = positiveProofId(commentId);
+	const message = positiveProofId(chatMessageId);
+	if (comment) params.set('comment_id', comment);
+	if (message) params.set('chat_message_id', message);
+	const query = params.toString();
+	return query ? `?${query}` : '';
 }
 
 function commentProofIdFromAnchor(anchor) {
 	const row = anchor?.closest?.('.comment-item[data-comment-id], .connect-comment[data-comment-id]');
-	const raw = String(row?.getAttribute?.('data-comment-id') || '').trim();
-	return /^\d+$/.test(raw) && Number(raw) > 0 ? raw : '';
+	return positiveProofId(row?.getAttribute?.('data-comment-id'));
 }
 
-export async function fetchCreationEmbedPayload(id, shareOpts, challengeOpts, commentId) {
+function chatMessageProofIdFromAnchor(anchor) {
+	const row = anchor?.closest?.('.connect-chat-msg[data-chat-message-id]');
+	return positiveProofId(row?.getAttribute?.('data-chat-message-id'));
+}
+
+function stampPostedProofOnAnchor(anchor, commentId, chatMessageId) {
+	if (!(anchor instanceof HTMLAnchorElement)) return;
+	const query = postedProofQuery(commentId, chatMessageId);
+	if (!query) return;
+	const href = anchor.getAttribute('href') || '';
+	if (!href || !/\/creations\/\d+/i.test(href)) return;
+	let url;
+	try {
+		url = new URL(href, window.location.origin);
+	} catch {
+		return;
+	}
+	const proof = new URLSearchParams(query.slice(1));
+	for (const [key, value] of proof) {
+		if (!url.searchParams.has(key)) url.searchParams.set(key, value);
+	}
+	anchor.setAttribute('href', `${url.pathname}${url.search}${url.hash}`);
+}
+
+export async function fetchCreationEmbedPayload(id, shareOpts, challengeOpts, commentId, chatMessageId) {
 	const shareVersion =
 		shareOpts && typeof shareOpts.shareVersion === 'string' ? shareOpts.shareVersion.trim() : '';
 	const shareToken =
@@ -2012,12 +2049,13 @@ export async function fetchCreationEmbedPayload(id, shareOpts, challengeOpts, co
 		Number.isSafeInteger(challengeMessageId) && challengeMessageId > 0
 			? String(challengeMessageId)
 			: '';
-	const commentKey = /^\d+$/.test(String(commentId || '')) && Number(commentId) > 0 ? String(commentId) : '';
+	const commentKey = positiveProofId(commentId);
+	const chatMessageKey = positiveProofId(chatMessageId);
 	const cacheKey =
 		shareVersion && shareToken
-			? `${id}\0${shareVersion}\0${shareToken}\0${challengeId}\0${messageKey}\0${commentKey}`
-			: challengeId || messageKey || commentKey
-				? `${id}\0challenge:${challengeId}\0${messageKey}\0${commentKey}`
+			? `${id}\0${shareVersion}\0${shareToken}\0${challengeId}\0${messageKey}\0${commentKey}\0${chatMessageKey}`
+			: challengeId || messageKey || commentKey || chatMessageKey
+				? `${id}\0challenge:${challengeId}\0${messageKey}\0${commentKey}\0${chatMessageKey}`
 				: id;
 	if (creationEmbedDataCache.has(cacheKey)) {
 		return creationEmbedDataCache.get(cacheKey);
@@ -2034,6 +2072,7 @@ export async function fetchCreationEmbedPayload(id, shareOpts, challengeOpts, co
 			if (challengeId) params.set('challenge_id', challengeId);
 			if (messageKey) params.set('challenge_message_id', messageKey);
 			if (commentKey) params.set('comment_id', commentKey);
+			if (chatMessageKey) params.set('chat_message_id', chatMessageKey);
 			const query = params.toString();
 			const qs = query ? `?${query}` : '';
 			const res = await fetch(`/api/create/images/${encodeURIComponent(id)}${qs}`, {
@@ -2102,13 +2141,18 @@ export function hydrateChatCreationEmbeds(rootEl) {
 				? { shareVersion: share.shareVersion, shareToken: share.shareToken }
 				: null;
 		const commentId = commentProofIdFromAnchor(a);
+		const chatMessageId = chatMessageProofIdFromAnchor(a);
+		if (a.closest('.connect-chat-msg') && !chatMessageId && !commentId) continue;
 		a.dataset.chatCreationEmbed = 'true';
 		a.classList.add('connect-chat-creation-embed-paired-link');
+		stampPostedProofOnAnchor(a, commentId, chatMessageId);
 
 		const wrap = document.createElement('div');
 		wrap.className =
 			'connect-chat-creation-embed connect-chat-creation-embed--loading connect-chat-creation-embed--square';
 		wrap.setAttribute('data-creation-id', creationId);
+		if (chatMessageId) wrap.setAttribute('data-chat-message-id', chatMessageId);
+		if (commentId) wrap.setAttribute('data-comment-id', commentId);
 		wrap.innerHTML =
 			'<div class="connect-chat-creation-embed-media">' +
 			'<div class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--loading-shell">' +
@@ -2116,7 +2160,7 @@ export function hydrateChatCreationEmbeds(rootEl) {
 			'</div></div>';
 		a.insertAdjacentElement('afterend', wrap);
 
-		void fetchCreationEmbedPayload(creationId, shareOpts, null, commentId).then((data) => {
+		void fetchCreationEmbedPayload(creationId, shareOpts, null, commentId, chatMessageId).then((data) => {
 			if (!wrap.parentNode) return;
 			wrap.classList.remove('connect-chat-creation-embed--loading');
 
@@ -2348,7 +2392,7 @@ export function hydrateChatCreationEmbeds(rootEl) {
 					shareToken: shareOpts?.shareToken,
 				});
 				const durationSec = Number(parsedEmbedMeta?.audio?.duration);
-				const href = creationAudioPlayerHref(data, creationId, commentId);
+				const href = creationAudioPlayerHref(data, creationId, commentId, undefined, chatMessageId);
 				const iframeSrc = resolveChatAudioPlayerSrc({
 					meta: parsedEmbedMeta,
 					title: titleRaw,

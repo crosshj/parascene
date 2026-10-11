@@ -20,6 +20,7 @@ const [
 	audioClipPickerMod,
 	createWorkflowHostMod,
 	fieldVisibilityMod,
+	generationDefaultsMod,
 ] = await Promise.all([
 	import(`./aspectRatio.js${_qs}`),
 	import(`./autogrow.js${_qs}`),
@@ -30,6 +31,7 @@ const [
 	import(`./audioClipPickerField.js${_qs}`),
 	import(`./createWorkflowHost.js${_qs}`),
 	import(`./providerFormFieldVisibility.js${_qs}`),
+	import(`./generationDefaults.js${_qs}`),
 ]);
 const { parseAspectRatioString, shouldUseAspectRatioSelector, ASPECT_RATIO_SELECTOR_LABELS } = aspectRatioMod;
 const { attachAutoGrowTextarea } = autogrowMod;
@@ -47,6 +49,7 @@ const {
 	fieldMatchesShowWhen,
 	collectNamedFieldValues,
 } = fieldVisibilityMod;
+const { PARASCENE_BLUE_SERVER_ID, REPLICATE_MUSIC_METHOD_KEY } = generationDefaultsMod;
 
 export {
 	isAlwaysHiddenField,
@@ -923,16 +926,33 @@ function sortedProviderFieldKeys(fields, context) {
 		else if (t === 'audio_clip') audioKeys.push(fieldKey);
 		else restKeys.push(fieldKey);
 	}
-	return [...placeAbcAfterPrompt(restKeys, fields), ...audioKeys, ...imageKeys];
+	return [...placeAbcAfterLyrics(placeStyleBeforeLyrics(restKeys, fields, context), fields), ...audioKeys, ...imageKeys];
 }
 
-function placeAbcAfterPrompt(keys, fields) {
+function isTextToMusicPromptField(fieldKey, formContext) {
+	if (fieldKey !== 'prompt') return false;
+	if (String(formContext?.methodKey || '') === REPLICATE_MUSIC_METHOD_KEY) return true;
+	return Number(formContext?.serverId) === PARASCENE_BLUE_SERVER_ID &&
+		String(formContext?.intent || '') === 'audio_generate';
+}
+
+function placeStyleBeforeLyrics(keys, fields, context) {
+	const promptKey = keys.find((key) => isTextToMusicPromptField(key, context));
+	const lyricsKey = keys.find((key) => isLyricsLikeField(key, fields[key]));
+	if (!promptKey || !lyricsKey || keys.indexOf(promptKey) < keys.indexOf(lyricsKey)) return keys;
+	const next = keys.filter((key) => key !== promptKey);
+	next.splice(next.indexOf(lyricsKey), 0, promptKey);
+	return next;
+}
+
+function placeAbcAfterLyrics(keys, fields) {
 	const abcKey = keys.find((key) => isAbcLikeField(key, fields[key]));
 	if (!abcKey) return keys;
-	const promptKey = keys.find((key) => key !== abcKey && isPromptLikeField(key, fields[key]));
-	if (!promptKey) return keys;
+	const lyricsKey = keys.find((key) => isLyricsLikeField(key, fields[key]));
+	const anchorKey = lyricsKey || keys.find((key) => key !== abcKey && isPromptLikeField(key, fields[key]));
+	if (!anchorKey) return keys;
 	const next = keys.filter((key) => key !== abcKey);
-	next.splice(next.indexOf(promptKey) + 1, 0, abcKey);
+	next.splice(next.indexOf(anchorKey) + 1, 0, abcKey);
 	return next;
 }
 

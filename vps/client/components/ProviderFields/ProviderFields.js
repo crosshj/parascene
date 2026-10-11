@@ -954,7 +954,7 @@ function sortedProviderFieldKeys(fields, context) {
 		else if (t === 'audio_clip') audioKeys.push(fieldKey);
 		else restKeys.push(fieldKey);
 	}
-	return [...placeAbcAfterPrompt(placeStyleBeforeLyrics(restKeys, fields, context), fields), ...audioKeys, ...imageKeys];
+	return [...placeAbcAfterLyrics(placeStyleBeforeLyrics(restKeys, fields, context), fields), ...audioKeys, ...imageKeys];
 }
 
 function placeStyleBeforeLyrics(keys, fields, context) {
@@ -966,13 +966,14 @@ function placeStyleBeforeLyrics(keys, fields, context) {
 	return next;
 }
 
-function placeAbcAfterPrompt(keys, fields) {
+function placeAbcAfterLyrics(keys, fields) {
 	const abcKey = keys.find((key) => isAbcLikeField(key, fields[key]));
 	if (!abcKey) return keys;
-	const promptKey = keys.find((key) => key !== abcKey && isPromptLikeField(key, fields[key]));
-	if (!promptKey) return keys;
+	const lyricsKey = keys.find((key) => isLyricsLikeField(key, fields[key]));
+	const anchorKey = lyricsKey || keys.find((key) => key !== abcKey && isPromptLikeField(key, fields[key]));
+	if (!anchorKey) return keys;
 	const next = keys.filter((key) => key !== abcKey);
-	next.splice(next.indexOf(promptKey) + 1, 0, abcKey);
+	next.splice(next.indexOf(anchorKey) + 1, 0, abcKey);
 	return next;
 }
 
