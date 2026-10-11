@@ -19,7 +19,13 @@ import { mergeBetaPage, sortFeedBetaRowsNewestFirst } from "./mergeBetaPage.js";
 import { drawMobileEditorialSlotPackPage } from "./mobileSlotPack.js";
 import { buildFeedBetaScoreContext, sampleThreadRows } from "./pools.js";
 import { computeBetaHasMore } from "./hasMore.js";
-import { ensureBetaPageFilledToLimit } from "./fillPageToLimit.js";
+import { ensureBetaPageFilledToLimit, fillBetaPageFromPast } from "./fillPageToLimit.js";
+import {
+	createFeedBetaSession,
+	isFeedBetaSessionStoreAvailable,
+	loadFeedBetaSession,
+	saveFeedBetaSession
+} from "./feedSession.js";
 import { loadFeedBetaSeenSetForUser } from "./seen.js";
 import { feedRowCreationIdKey, normalizeFeedBetaMediaFields } from "./rowMedia.js";
 import { appendFeedBetaMergeReason } from "./reason.js";
@@ -110,6 +116,11 @@ export async function pullFeedBetaRows({
 		'pull.likes',
 		canLoadLikes ? loadViewerLikedCreationIdSetForUser(queries, userId) : Promise.resolve(null)
 	);
+	const sessionPromise = !isFeedBetaSessionStoreAvailable()
+		? Promise.resolve(null)
+		: pageIndex === 1
+			? Promise.resolve(createFeedBetaSession())
+			: wrapTimedPromise(timing, 'pull.session', loadFeedBetaSession(userId, feedBetaAck?.session_id));
 	const catalogPromise = wrapTimedPromise(
 		timing,
 		'pull.catalog',
@@ -118,7 +129,7 @@ export async function pullFeedBetaRows({
 		})
 	);
 	const parallelWallStart = performance.now();
-	const [seen, bundle, likedSet] = await Promise.all([seenPromise, catalogPromise, likedPromise]);
+	const [seen, bundle, likedSet, session] = await Promise.all([seenPromise, catalogPromise, likedPromise, sessionPromise]);
 	timing?.add('pull.parallel_io_wall', performance.now() - parallelWallStart);
 	let { catalog, publishedCount: catalogPublishedCount, fromSnapshot, snapshotNewcomer, videoHead } = bundle;
 	if (likedSet instanceof Set) {
@@ -153,6 +164,7 @@ export async function pullFeedBetaRows({
 		pageSeed,
 		pageIndex,
 		seen,
+		sessionServed: session?.served ?? null,
 		enableNsfw,
 		showOwnPosts: showOwnPosts === true,
 		shuffleSeed
@@ -229,7 +241,18 @@ export async function pullFeedBetaRows({
 		return norm;
 	});
 
-	if (rows.length < safeLimit) {
+	// Ranked pools ran dry for this visit: continue through the past instead of random backfill.
+	if (session && pageIndex > 1 && rows.length < safeLimit) {
+		const pastOpts = { rows, safeLimit, session, pageIndex, pageSeed, enableNsfw, showOwnPosts: showOwnPosts === true };
+		rows = await (timing
+			? timing.timeAsync('pull.past_fill', () => fillBetaPageFromPast(queries, userId, pastOpts))
+			: fillBetaPageFromPast(queries, userId, pastOpts));
+		rows = rows.map((row) => {
+			const norm = normalizeFeedBetaMediaFields(row);
+			if (row?.feed_beta_why) norm.feed_beta_why = row.feed_beta_why;
+			return norm;
+		});
+	} else if (rows.length < safeLimit) {
 		rows = await (timing
 			? timing.timeAsync('pull.page_fill', () =>
 					ensureBetaPageFilledToLimit(queries, userId, {
@@ -287,7 +310,18 @@ export async function pullFeedBetaRows({
 		sitewideCatalogSize = null;
 	}
 
-	const hasMore = timing
+	if (session) {
+		for (const key of creationIdsFromBetaRows(rows)) session.served.add(key);
+		await (timing
+			? timing.timeAsync('pull.session_save', () => saveFeedBetaSession(userId, session))
+			: saveFeedBetaSession(userId, session));
+	}
+
+	// With a session, the feed ends only when this visit has walked back past the oldest creation;
+	// seen coverage of the site no longer ends scroll for heavy viewers.
+	const hasMore = session
+		? rows.length > 0 && !session.tailExhausted
+		: timing
 		? timing.time('pull.has_more', () =>
 				computeBetaHasMore({
 					pageIndex,
@@ -319,17 +353,20 @@ export async function pullFeedBetaRows({
 		mobileChatSlotPackContinuation: isContinuation && !isSlotPackPageOne,
 		feedBetaServedIds: creationIdsFromBetaRows(rows),
 		feedBetaPageCursor: buildBetaPageFeedCursor(pageIndex),
-		feedBetaContinuation: buildFeedBetaContinuation({
-			pageIndex,
-			rows,
-			safeLimit,
-			catalog,
-			servedSeen: seen,
-			params,
-			isSlotPackPageOne,
-			sitewideCatalogSize,
-			hasMore
-		}),
+		feedBetaContinuation: {
+			...buildFeedBetaContinuation({
+				pageIndex,
+				rows,
+				safeLimit,
+				catalog,
+				servedSeen: seen,
+				params,
+				isSlotPackPageOne,
+				sitewideCatalogSize,
+				hasMore
+			}),
+			...(session ? { session_id: session.id, past_active: session.tail != null } : {})
+		},
 		feedBetaTimingMeta: {
 			pageIndex,
 			fromSnapshot,

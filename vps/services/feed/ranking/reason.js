@@ -6,7 +6,7 @@
  * outside that batch are not considered for the newcomer pool on this page.
  */
 
-/** @typedef {'hot_24h'|'hot_7d'|'new'|'newcomer'|'recent_comment'|'own_activity'|'catalog_unseen'|'catalog_relaxed'|'follow_sprinkle'|'fill_remainder'|'site_video_head'|'db_random_fallback'|'page_fill'} FeedBetaPoolId */
+/** @typedef {'hot_24h'|'hot_7d'|'new'|'newcomer'|'recent_comment'|'own_activity'|'catalog_unseen'|'catalog_relaxed'|'follow_sprinkle'|'fill_remainder'|'site_video_head'|'db_random_fallback'|'page_fill'|'from_the_past'} FeedBetaPoolId */
 
 /** Short user-facing label per pool (why modal + cards). */
 export const FEED_BETA_POOL_LABELS = {
@@ -22,7 +22,8 @@ export const FEED_BETA_POOL_LABELS = {
 	fill_remainder: 'Filling this page',
 	site_video_head: 'Mobile spotlight video',
 	db_random_fallback: 'Random from catalog',
-	page_fill: 'Filling this page'
+	page_fill: 'Filling this page',
+	from_the_past: 'From the archive'
 };
 
 const POOL_USER = {
@@ -43,7 +44,9 @@ const POOL_USER = {
 	db_random_fallback:
 		'Ranked pools did not fill this page — it was added as a random pick from the catalog.',
 	page_fill:
-		'Ranked pools and the creator cap left open slots — it was added to fill the page to your requested size.'
+		'Ranked pools and the creator cap left open slots — it was added to fill the page to your requested size.',
+	from_the_past:
+		'You have scrolled past the ranked picks for this visit — the feed now walks back through older creations, newest first, skipping anything already shown.'
 };
 
 const MERGE_USER = {

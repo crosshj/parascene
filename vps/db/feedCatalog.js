@@ -271,6 +271,61 @@ export function createSelectFeedBetaSitewideCatalog(serviceClient, deps) {
 			return rows.slice(0, lim);
 		},
 
+		/**
+		 * Keyset page of published feed_items strictly older than the cursor, newest first.
+		 * Ids in `exclude` are skipped before hydration; the cursor still advances past them.
+		 * @param {number|null|undefined} viewerId
+		 * @param {{ beforeCreatedAt?: string|null, beforeId?: number|string|null, limit?: number, exclude?: Set<string>|null }} [opts]
+		 * @returns {Promise<{ rows: object[], cursor: { created_at: string, created_image_id: number }|null, exhausted: boolean }>}
+		 */
+		getOlderThan: async (viewerId, { beforeCreatedAt = null, beforeId = null, limit = 28, exclude = null } = {}) => {
+			const lim = Math.min(Math.max(1, Number(limit) || 28), 100);
+			const scan = 200;
+			const cursorAt = String(beforeCreatedAt ?? '').trim();
+			const cursorId = Number(beforeId);
+			let query = serviceClient
+				.from(prefixedTable('feed_items'))
+				.select('created_at, created_image_id, prsn_created_images!inner(user_id, unavailable_at)')
+				.not('prsn_created_images.user_id', 'is', null)
+				.is('prsn_created_images.unavailable_at', null);
+			if (cursorAt) query = query.lte('created_at', cursorAt);
+			const { data, error } = await query
+				.order('created_at', { ascending: false })
+				.order('created_image_id', { ascending: false })
+				.limit(scan);
+			if (error) throw error;
+			const scanned = (data ?? []).filter((row) => {
+				if (!cursorAt) return true;
+				const at = String(row?.created_at ?? '');
+				if (at < cursorAt) return true;
+				if (at > cursorAt) return false;
+				return Number.isFinite(cursorId) && Number(row?.created_image_id) < cursorId;
+			});
+			const picked = [];
+			let last = null;
+			for (const row of scanned) {
+				last = row;
+				const key = row?.created_image_id != null ? String(row.created_image_id) : '';
+				if (!key || (exclude instanceof Set && exclude.has(key))) continue;
+				picked.push(row.created_image_id);
+				if (picked.length >= lim) break;
+			}
+			const exhausted = (data ?? []).length < scan && (scanned.length === 0 || last === scanned[scanned.length - 1]);
+			const cursor = last ? { created_at: String(last.created_at), created_image_id: Number(last.created_image_id) } : null;
+			if (picked.length === 0) return { rows: [], cursor, exhausted };
+			const rows = await fetchFeedItemRows(viewerId, () =>
+				serviceClient
+					.from(prefixedTable('feed_items'))
+					.select(BETA_COLS)
+					.in('created_image_id', picked)
+					.not('prsn_created_images.user_id', 'is', null)
+					.is('prsn_created_images.unavailable_at', null)
+			);
+			const order = new Map(picked.map((id, index) => [String(id), index]));
+			rows.sort((a, b) => (order.get(String(a.created_image_id)) ?? 0) - (order.get(String(b.created_image_id)) ?? 0));
+			return { rows, cursor, exhausted };
+		},
+
 		getCandidates: (viewerId, opts = {}) => getRecent(viewerId, opts),
 
 		/** Published sitewide feed_items count (available creations). Used for hasMore exhaustion. */

@@ -159,10 +159,13 @@ export function createLayout({ root, views, services } = {}) {
 	function syncMobileScrollPolicy(composition = appliedComposition) {
 		const mobile = mobilePresentation(composition || {});
 		const documentScroll = mobileMedia.matches && mobile.backgroundScrollOwner === 'document';
-		scrollRegion.dataset.scrollOwner = documentScroll ? 'document' : 'outlet';
+		const owner = documentScroll ? 'document' : 'outlet';
+		const changed = scrollRegion.dataset.scrollOwner !== owner;
+		scrollRegion.dataset.scrollOwner = owner;
 		document.documentElement.classList.toggle('beta-mobile-document-scroll', documentScroll);
 		document.body.classList.toggle('beta-mobile-document-scroll', documentScroll);
-		root.dataset.mobileScrollOwner = documentScroll ? 'document' : 'outlet';
+		root.dataset.mobileScrollOwner = owner;
+		return changed;
 	}
 	function onMobileBreakpointChange() {
 		syncMobileActions();
@@ -526,8 +529,8 @@ export function createLayout({ root, views, services } = {}) {
 		root.dataset.mobileBackgroundFooter = String(backgroundMobile.footer);
 		root.dataset.mobileBackgroundHeader = String(backgroundMobile.appHeader);
 		syncMobileActions();
-		scrollRegion.dataset.scrollOwner = mobileMedia.matches && mobile.backgroundScrollOwner === 'document' ? 'document' : 'outlet';
-		syncMobileScrollPolicy(composition);
+		// Mounted background routes bind paging and media observers to the scroll owner.
+		if (syncMobileScrollPolicy(composition)) document.dispatchEvent(new CustomEvent('beta-mobile-scroll-owner-changed'));
 		mounted.mobile?.handle?.update?.({ navigation: composition, actions });
 		const revision = ++backgroundRevision;
 		const overlayChanged = mounted.overlay?.key !== composition.overlay?.key;

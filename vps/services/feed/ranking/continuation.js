@@ -69,10 +69,12 @@ export function parseFeedBetaAckFromQuery(query) {
 		const data = JSON.parse(json);
 		const completed = Number(data?.completed_page);
 		if (!Number.isFinite(completed) || completed < 1) return null;
+		const sessionId = typeof data?.session_id === 'string' ? data.session_id.trim().slice(0, 64) : '';
 		return {
 			completed_page: completed,
 			page_filled: data?.page_filled === true,
-			served_count: Math.max(0, Number(data?.served_count) || 0)
+			served_count: Math.max(0, Number(data?.served_count) || 0),
+			...(sessionId ? { session_id: sessionId } : {})
 		};
 	} catch {
 		return null;

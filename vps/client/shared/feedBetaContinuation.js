@@ -28,7 +28,8 @@ export function encodeFeedBetaAck(feedBeta) {
 		v: 1,
 		completed_page: completed,
 		page_filled: feedBeta.page_filled === true,
-		served_count: Number(feedBeta.served_count) || 0
+		served_count: Number(feedBeta.served_count) || 0,
+		...(typeof feedBeta.session_id === 'string' && feedBeta.session_id ? { session_id: feedBeta.session_id } : {})
 	};
 	try {
 		const json = JSON.stringify(payload);
@@ -64,7 +65,8 @@ export function decodeFeedBetaAck(raw) {
 			v: Number(data?.v) || 1,
 			completed_page: completed,
 			page_filled: data?.page_filled === true,
-			served_count: Math.max(0, Number(data?.served_count) || 0)
+			served_count: Math.max(0, Number(data?.served_count) || 0),
+			...(typeof data?.session_id === 'string' && data.session_id ? { session_id: data.session_id } : {})
 		};
 	} catch {
 		return null;

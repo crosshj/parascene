@@ -181,10 +181,12 @@ export function drawThreadPageFromCatalog(catalog, opts) {
 		relax_filters: relaxed
 	};
 
+	/** Already served in this feed session: excluded even on relaxed pages so pools can run dry. */
+	const sessionServed = opts.sessionServed instanceof Set ? opts.sessionServed : null;
 	const threadRows = filterThreadCatalog(catalog, thread, enableNsfw, viewerUserId, showOwnPosts).filter(
 		(row) => {
 			const key = feedRowCreationIdKey(row);
-			return key && !isFeedBetaRowExcludedFromPools(row, seen, { relaxed });
+			return key && !sessionServed?.has(key) && !isFeedBetaRowExcludedFromPools(row, seen, { relaxed });
 		}
 	);
 
@@ -225,6 +227,7 @@ export function drawThreadPageFromCatalog(catalog, opts) {
 		const ownRows = filterThreadCatalog(catalog, thread, enableNsfw, viewerUserId, true).filter(
 			(row) =>
 				String(row.user_id) === String(viewerUserId) &&
+				!sessionServed?.has(feedRowCreationIdKey(row)) &&
 				(Number(row.like_count ?? 0) > 0 || Number(row.comment_count ?? 0) > 0)
 		);
 		ownActivityPool = ownRows
@@ -361,6 +364,7 @@ export async function sampleThreadRows(queries, userId, opts) {
 		thread: opts.thread,
 		take: opts.take,
 		seen: opts.seen,
+		sessionServed: opts.sessionServed,
 		ignoreSeen: opts.ignoreSeen === true,
 		shuffleSeed: opts.shuffleSeed,
 		pageIndex: opts.pageIndex,

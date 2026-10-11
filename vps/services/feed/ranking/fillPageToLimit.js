@@ -143,6 +143,72 @@ export function fillBetaPageFromCatalog(rows, catalog, opts) {
 }
 
 /**
+ * Once ranked pools stop filling pages, walk the sitewide catalog newest → oldest from the
+ * session cursor, skipping anything served this session. Seen items stay eligible: heavy
+ * viewers can have seen most of the site, and this walk is what keeps their feed going.
+ * Mutates `session`.
+ *
+ * @param {object} queries
+ * @param {number} userId
+ * @param {object} opts
+ * @param {object[]} opts.rows
+ * @param {number} opts.safeLimit
+ * @param {{ served: Set<string>, tail: object|null, tailExhausted: boolean }} opts.session
+ * @param {number} opts.pageIndex
+ * @param {string} opts.pageSeed
+ * @param {boolean} opts.enableNsfw
+ * @param {boolean} opts.showOwnPosts
+ * @returns {Promise<object[]>}
+ */
+export async function fillBetaPageFromPast(queries, userId, opts) {
+	let rows = Array.isArray(opts.rows) ? opts.rows : [];
+	const safeLimit = Math.min(Math.max(1, Number(opts.safeLimit) || 20), 100);
+	const session = opts.session;
+	const getOlderThan = queries?.selectFeedBetaSitewideCatalog?.getOlderThan;
+	if (!session || typeof getOlderThan !== 'function') return rows;
+
+	const exclude = new Set(session.served);
+	for (const row of rows) {
+		const key = feedRowCreationIdKey(row);
+		if (key) exclude.add(key);
+	}
+	const stampBase = {
+		pool: 'from_the_past',
+		thread: null,
+		page_index: opts.pageIndex ?? 1,
+		page_seed: opts.pageSeed ?? null,
+		source: 'session_past',
+		relax_filters: true
+	};
+	for (let attempt = 0; attempt < 5 && rows.length < safeLimit && !session.tailExhausted; attempt += 1) {
+		const page = await getOlderThan(userId, {
+			beforeCreatedAt: session.tail?.created_at ?? null,
+			beforeId: session.tail?.created_image_id ?? null,
+			limit: safeLimit - rows.length,
+			exclude
+		});
+		if (page.cursor) session.tail = page.cursor;
+		if (page.exhausted) session.tailExhausted = true;
+		for (const row of page.rows) {
+			const key = feedRowCreationIdKey(row);
+			if (key) exclude.add(key);
+		}
+		rows = appendBetaPageFillCandidates(rows, page.rows, {
+			safeLimit,
+			servedSeen: new Set(),
+			relaxFilters: true,
+			enableNsfw: opts.enableNsfw === true,
+			showOwnPosts: opts.showOwnPosts === true,
+			viewerUserId: userId,
+			pageIndex: opts.pageIndex,
+			pageSeed: opts.pageSeed,
+			stampBase
+		});
+	}
+	return rows;
+}
+
+/**
  * Honor client `limit`: ranked merge + creator cap can under-fill; backfill with
  * diversity-first catalog/random rows (relaxed seen/liked on page 1 fill).
  *

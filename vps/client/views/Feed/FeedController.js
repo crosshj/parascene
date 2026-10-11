@@ -17,7 +17,7 @@ export function createFeedController({ root, actions, services, setHeaderMenu })
  const content = root.querySelector('[data-feed-content]'), status = root.querySelector('[role="status"]'), more = root.querySelector('button');
  const scroll = createScrollContext(root);
  const lifetime = new AbortController();
- let request, fetchPage, rows = [], hasMore = false, emptyPages = 0, busy = false, destroyed = false, epoch = 0, routeWrap, cards, version, versionBusy = false, challengeLease, voteModal, voteBusy = false, overlayActive = false;
+ let request, fetchPage, rows = [], hasMore = false, busy = false, destroyed = false, epoch = 0, routeWrap, cards, version, versionBusy = false, challengeLease, voteModal, voteBusy = false, overlayActive = false;
  const mobile = () => matchMedia('(max-width: 768px)').matches;
  const videoTargets = new Set();
  const visibleVideos = new Set();
@@ -37,9 +37,30 @@ export function createFeedController({ root, actions, services, setHeaderMenu })
  }
  let videoObserver = null;
  let observer = null;
+ let scrollTarget = null;
+ let nearEndFrame = 0;
+ function sentinelNearEnd() {
+  if (!more || more.hidden) return false;
+  const rect = more.getBoundingClientRect();
+  if (!rect.width && !rect.height) return false;
+  const rootBottom = scroll.documentOwned || !scroll.region ? window.innerHeight : scroll.region.getBoundingClientRect().bottom;
+  return rect.top <= rootBottom + 800;
+ }
+ function maybeLoadMore() {
+  if (!destroyed && hasMore && !busy && status.hidden && sentinelNearEnd()) void load();
+ }
+ // IntersectionObserver can stay silent after the sentinel is re-observed until the next
+ // scroll movement, which stalls paging when the user stops at the bottom.
+ function scheduleNearEndCheck() {
+  if (nearEndFrame) return;
+  nearEndFrame = requestAnimationFrame(() => { nearEndFrame = 0; maybeLoadMore(); });
+ }
  function bindScrollObservers() {
   videoObserver?.disconnect();
   observer?.disconnect();
+  scrollTarget?.removeEventListener('scroll', scheduleNearEndCheck);
+  scrollTarget = scroll.eventTarget || null;
+  scrollTarget?.addEventListener('scroll', scheduleNearEndCheck, { passive: true });
   if (typeof IntersectionObserver !== 'function') return;
   videoObserver = new IntersectionObserver(entries => {
   for (const {target, isIntersecting, intersectionRatio} of entries) {
@@ -125,13 +146,17 @@ export function createFeedController({ root, actions, services, setHeaderMenu })
   const token = reset ? ++epoch : epoch; busy = true; more.disabled = true; root.setAttribute('aria-busy','true'); show();
   if (!reset && cards) mountChatFeedLoadMoreSkeleton(cards);
   try {
-   const page = await fetchPage({ initial: reset, items: rows });
-   if (destroyed || token !== epoch) return;
    const seen = new Set(rows.map(getChatFeedItemKey));
-   const fresh = page.pageItems.filter(item => { const key = getChatFeedItemKey(item); if (seen.has(key)) return false; seen.add(key); return true; });
-   rows.push(...fresh); hasMore = page.hasMore;
-   if (reset || fresh.length) emptyPages = 0; else emptyPages += 1;
-   if (emptyPages >= 2) hasMore = false;
+   let fresh = [];
+   // Ranked pages repeat earlier items; skip ahead past all-duplicate pages like WWW's pager.
+   for (let attempt = 0; attempt < (reset ? 1 : 6) && !fresh.length; attempt++) {
+    const page = await fetchPage({ initial: reset, items: rows });
+    if (destroyed || token !== epoch) return;
+    fresh = page.pageItems.filter(item => { const key = getChatFeedItemKey(item); if (seen.has(key)) return false; seen.add(key); return true; });
+    hasMore = page.hasMore;
+    if (!hasMore) break;
+   }
+   rows.push(...fresh);
    if (reset) {
     disposeCards(); content.replaceChildren(); bindScrollObservers();
     const result = createChatFeedChannelElementsFromSegments(mobile() ? partitionChatFeedMobileAlternating(rows, { reserveChallengeSlot: true }).segments : [{ type: 'cards', items: rows }], render, { resolveSpotlightHref: doomHref, performSpotlightNavigation: (href, _event, item) => { beginDoomFromFeedTap(href, item); actions.navigate(href, { seed: item }); } });
@@ -147,7 +172,7 @@ export function createFeedController({ root, actions, services, setHeaderMenu })
    if (error.status === 401) { services.session.redirectToLogin(); return; }
    if (reset) content.replaceChildren();
    show(error.message || 'Unable to load your feed.'); more.hidden = false; more.textContent = 'Retry';
-  } finally { if (!destroyed && token === epoch) { removeChatFeedLoadMoreSkeleton(cards); busy = false; more.disabled = false; root.removeAttribute('aria-busy'); if (hasMore && status.hidden) rearmFeedSentinel(); } }
+  } finally { if (!destroyed && token === epoch) { removeChatFeedLoadMoreSkeleton(cards); busy = false; more.disabled = false; root.removeAttribute('aria-busy'); if (hasMore && status.hidden) { rearmFeedSentinel(); scheduleNearEndCheck(); } } }
  }
  async function vote(event) {
   if (destroyed || event.detail?.source !== 'feed_challenge_card') return;
@@ -210,5 +235,5 @@ export function createFeedController({ root, actions, services, setHeaderMenu })
  setHeaderMenu?.({label:'Feed',items:[{label:'Refresh',action:'refresh'}],onSelect:()=>void load(true)});
  setFeedBetaEnabledClient(true);
  void load(true); void checkVersion();
- return { destroy() { destroyed=true; ++epoch; lifetime.abort(); unsubscribeState?.(); request?.abort(); clearInterval(timer); document.removeEventListener('beta-mobile-scroll-owner-changed', bindScrollObservers); observer?.disconnect(); videoObserver?.disconnect(); voteModal?.destroy(); challengeLease?.release(); disposeCards(); } };
+ return { destroy() { destroyed=true; ++epoch; lifetime.abort(); unsubscribeState?.(); request?.abort(); clearInterval(timer); document.removeEventListener('beta-mobile-scroll-owner-changed', bindScrollObservers); scrollTarget?.removeEventListener('scroll', scheduleNearEndCheck); if (nearEndFrame) cancelAnimationFrame(nearEndFrame); observer?.disconnect(); videoObserver?.disconnect(); voteModal?.destroy(); challengeLease?.release(); disposeCards(); } };
 }
