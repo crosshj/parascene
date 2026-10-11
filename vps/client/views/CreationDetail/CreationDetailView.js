@@ -3320,23 +3320,6 @@ async function pollCreationDetailGroupMembersOnce(creationId) {
 	scheduleCreationDetailGroupMemberPoll(creationId);
 }
 
-function attachHeroTimeoutActions(wrapper, { checkAgain = false } = {}) {
-	if (!(wrapper instanceof HTMLElement)) return;
-	const wait = wrapper.querySelector('[data-creation-gpu-wait].is-timeout');
-	wait?.querySelector('[data-hero-timeout-actions]')?.remove();
-	if (!(wait instanceof HTMLElement) || !checkAgain) return;
-	const row = document.createElement('span');
-	row.className = 'creation-detail-timeout-actions';
-	row.setAttribute('data-hero-timeout-actions', '');
-	const check = document.createElement('button');
-	check.type = 'button';
-	check.className = 'creation-detail-timeout-retry';
-	check.setAttribute('data-check-again-btn', '');
-	check.textContent = 'Check again';
-	row.append(check);
-	wait.append(row);
-}
-
 async function loadCreation() {
 	applyCreationDetailNsfwMedia = () => { void loadCreation(); };
 	stopCreationDetailHeroPlayback();
@@ -5077,9 +5060,8 @@ async function loadCreation() {
 		if (timedOutDisplay && canRetryCreation) {
 			actionsContext.showRetry = true;
 		}
-		attachHeroTimeoutActions(imageWrapper, {
-			checkAgain: Boolean(actionsContext.showCheckAgain),
-		});
+		// Check again belongs in the action strip only — never under the hero wait icon.
+		imageWrapper?.querySelector?.('[data-hero-timeout-actions]')?.remove();
 
 		actionsContext.showDownloadVideo =
 			isOwner &&
@@ -9518,7 +9500,7 @@ async function handleCheckAgain() {
 		return;
 	}
 
-	const checkBtn = document.querySelector('[data-check-again-btn]');
+	const checkBtn = document.querySelector('[data-detail-content] [data-check-again-btn], .creation-detail-action-strip [data-check-again-btn]');
 	if (checkBtn) checkBtn.disabled = true;
 
 	try {

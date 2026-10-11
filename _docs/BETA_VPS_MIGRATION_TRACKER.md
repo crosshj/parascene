@@ -2,7 +2,7 @@
 
 ## Remaining product work
 
-_(none currently tracked)_
+- [ ] in www when a user clicks on a #link, we check if there's a channel or if the tag has been used.  Dpeending on that we may ask user to chose between channel or tag.  If we can send them to one or the other based on existence, we do. Otherwise we prompt.
 
 ## Public pages and discoverability
 

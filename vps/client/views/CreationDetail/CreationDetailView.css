@@ -19,32 +19,6 @@
 
 /* Moderated content: hide default ::after and show injected icon (eye) instead */
 
-.creation-detail-timeout-actions {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 8px;
-	justify-content: center;
-	pointer-events: auto;
-}
-
-.creation-detail-timeout-retry {
-	padding: 8px 14px;
-	border: 0;
-	border-radius: 999px;
-	background: var(--text);
-	color: var(--bg);
-	font: inherit;
-	font-size: 0.875rem;
-	font-weight: 650;
-	line-height: 1;
-	cursor: pointer;
-}
-
-.creation-detail-timeout-retry:disabled {
-	opacity: 0.6;
-	cursor: default;
-}
-
 /* Extended landscape loading: solid surface placeholder, no card chrome */
 
 /* Creation Detail Page */
