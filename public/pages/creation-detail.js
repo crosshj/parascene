@@ -1323,6 +1323,16 @@ function lyricsTextFromArgs(args) {
 	return '';
 }
 
+function abcTextFromArgs(args) {
+	if (!args || typeof args !== 'object' || Array.isArray(args)) return '';
+	for (const [key, val] of Object.entries(args)) {
+		if (!/^abc$/i.test(key) || typeof val !== 'string') continue;
+		const trimmed = val.trim();
+		if (trimmed) return trimmed;
+	}
+	return '';
+}
+
 function creationDetailCopyLabelRowHtml(label, dataAttr) {
 	const lower = String(label).toLowerCase();
 	return html`<div class="creation-detail-prompt-label-row">
@@ -4934,6 +4944,7 @@ async function loadCreation() {
 				const sourceArgsPrompt = typeof sourceArgs?.prompt === 'string' ? sourceArgs.prompt.trim() : '';
 				const sourcePrompt = promptTextForMainUi(sourceStoredPrompt, sourceArgsPrompt);
 				const sourceLyrics = lyricsTextFromArgs(sourceArgs);
+				const sourceAbc = abcTextFromArgs(sourceArgs);
 				const sourceServerName = typeof sourceMeta?.server_name === 'string' && sourceMeta.server_name.trim()
 					? sourceMeta.server_name.trim()
 					: (sourceMeta?.server_id != null ? String(sourceMeta.server_id) : '');
@@ -5011,6 +5022,7 @@ async function loadCreation() {
 					createdAt: sourceCreatedAt,
 					prompt: sourcePrompt,
 					lyrics: sourceLyrics,
+					abc: sourceAbc,
 					generationInfo: sourceGenerationInfo,
 					metaParts: sourceMetaParts,
 					meta: sourceMeta
@@ -5266,6 +5278,8 @@ async function loadCreation() {
 		const hasPrompt = promptText.length > 0;
 		const lyricsText = lyricsTextFromArgs(args);
 		const hasLyrics = lyricsText.length > 0;
+		const abcText = abcTextFromArgs(args);
+		const hasAbc = abcText.length > 0;
 		const legacyHydratedPromptOnly = !hasPrompt && isHydratedProviderPromptJson(rawArgsPrompt);
 		const hasPromptSection = hasPrompt || legacyHydratedPromptOnly;
 		const serverName = typeof meta?.server_name === 'string' && meta.server_name.trim()
@@ -5361,6 +5375,7 @@ async function loadCreation() {
 			(descriptionText ||
 				hasPromptSection ||
 				hasLyrics ||
+				hasAbc ||
 				hasStyle ||
 				hasAudioClip ||
 				lineageSectionHtml ||
@@ -5391,6 +5406,12 @@ async function loadCreation() {
 				descriptionParts.push(
 					`<p class="creation-detail-prompt-legacy">The original prompt was not stored for this creation. Open <strong>More Info</strong> for the full provider payload (hydrated mentions and style).</p>`
 				);
+			}
+
+			if (hasAbc) {
+				if (descriptionParts.length) descriptionParts.push('<br><br>');
+				descriptionParts.push(creationDetailCopyLabelRowHtml('ABC', 'data-copy-abc-btn'));
+				descriptionParts.push(processUserText(abcText));
 			}
 
 			if (hasLyrics) {
@@ -6027,6 +6048,14 @@ async function loadCreation() {
 				await copyTextToClipboard(promptText);
 			});
 		}
+		const copyAbcBtn = detailContent.querySelector('[data-copy-abc-btn]');
+		if (copyAbcBtn instanceof HTMLButtonElement) {
+			copyAbcBtn.addEventListener('click', async (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				await copyTextToClipboard(abcText);
+			});
+		}
 		const copyLyricsBtn = detailContent.querySelector('[data-copy-lyrics-btn]');
 		if (copyLyricsBtn instanceof HTMLButtonElement) {
 			copyLyricsBtn.addEventListener('click', async (e) => {
@@ -6339,6 +6368,10 @@ async function loadCreation() {
 			const promptSection = pText
 				? `<div class="creation-detail-lineage-modal-copy"><div class="creation-detail-prompt-label-row"><span class="creation-detail-prompt-label">Prompt</span></div><div class="creation-detail-description creation-detail-lineage-modal-prose creation-detail-lineage-modal-prose--prompt">${processUserText(pText)}</div></div>`
 				: '';
+			const abcText = abcTextFromArgs(isPo ? args : null);
+			const abcSection = abcText
+				? `<div class="creation-detail-lineage-modal-copy"><div class="creation-detail-prompt-label-row"><span class="creation-detail-prompt-label">ABC</span></div><div class="creation-detail-description creation-detail-lineage-modal-prose">${processUserText(abcText)}</div></div>`
+				: '';
 			const lyricsText = lyricsTextFromArgs(isPo ? args : null);
 			const lyricsSection = lyricsText
 				? `<div class="creation-detail-lineage-modal-copy"><div class="creation-detail-prompt-label-row"><span class="creation-detail-prompt-label">Lyrics</span></div><div class="creation-detail-description creation-detail-lineage-modal-prose">${processUserText(lyricsText)}</div></div>`
@@ -6441,6 +6474,7 @@ async function loadCreation() {
 					${currentBadge}
 					${descSection}
 					${promptSection}
+					${abcSection}
 					${lyricsSection}
 				${styleSection}
 				${serverMethodMetaLine}
@@ -7880,6 +7914,11 @@ async function loadCreation() {
 						if (descriptionParts.length > 0) descriptionParts.push('<br><br>');
 						descriptionParts.push('<div class="creation-detail-prompt-label">Prompt</div>');
 						descriptionParts.push(processUserText(source.prompt));
+					}
+					if (source.abc) {
+						if (descriptionParts.length > 0) descriptionParts.push('<br><br>');
+						descriptionParts.push('<div class="creation-detail-prompt-label">ABC</div>');
+						descriptionParts.push(processUserText(source.abc));
 					}
 					if (source.lyrics) {
 						if (descriptionParts.length > 0) descriptionParts.push('<br><br>');

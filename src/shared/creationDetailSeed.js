@@ -919,6 +919,17 @@ function seedLyricsText(meta) {
 	return '';
 }
 
+function seedAbcText(meta) {
+	const args = meta?.args;
+	if (!args || typeof args !== 'object' || Array.isArray(args)) return '';
+	for (const [key, val] of Object.entries(args)) {
+		if (!/^abc$/i.test(key) || typeof val !== 'string') continue;
+		const trimmed = val.trim();
+		if (trimmed) return trimmed;
+	}
+	return '';
+}
+
 function seedDisplayModel(meta) {
 	const args = meta?.args;
 	if (!args || typeof args !== 'object' || Array.isArray(args)) return '';
@@ -1292,6 +1303,7 @@ export function creationDetailChromeHtmlFromSeed(seed) {
 
 	const meta = seedMetaObject(seed);
 	const prompt = seedPromptText(meta);
+	const abc = seedAbcText(meta);
 	const lyrics = seedLyricsText(meta);
 	const caption = typeof seed.summary === 'string' ? seed.summary.trim() : '';
 	const showCaption = caption && caption !== prompt;
@@ -1379,9 +1391,17 @@ export function creationDetailChromeHtmlFromSeed(seed) {
 	<button type="button" class="creation-detail-copy-prompt" data-copy-lyrics-btn aria-label="Copy lyrics" title="Copy lyrics">${SEED_COPY_SVG}</button>
 </div>${esc(lyrics)}`
 			: '';
+	const abcBlock = hideIdentify
+		? ''
+		: abc
+			? `<div class="creation-detail-prompt-label-row">
+	<span class="creation-detail-prompt-label">ABC</span>
+	<button type="button" class="creation-detail-copy-prompt" data-copy-abc-btn aria-label="Copy ABC" title="Copy ABC">${SEED_COPY_SVG}</button>
+</div>${esc(abc)}`
+			: '';
 	const descriptionInner = hideIdentify
 		? ''
-		: [showCaption ? esc(caption) : '', promptBlock, lyricsBlock].filter(Boolean).join('<br><br>');
+		: [showCaption ? esc(caption) : '', promptBlock, abcBlock, lyricsBlock].filter(Boolean).join('<br><br>');
 	const descriptionPlain = descriptionInner.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 	const collapseDescription = descriptionPlain.length > 140;
 	const descriptionHtml =
