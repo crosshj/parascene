@@ -11,6 +11,7 @@ import { appViews as views } from './views/index.js';
 import { initCommandPalette } from './shared/commandPalette/commandPalette.js';
 import { initNsfwViewPreference, setNsfwContentEnabled } from './shared/nsfwView.js';
 import { setAfterCreateSubmitHandoff } from './shared/createPageRuntime.js';
+import { installConsoleGen } from './shared/consoleGen.js';
 
 function hydrateNsfwFromBootstrap(user) {
 	const meta = user?.meta && typeof user.meta === 'object' ? user.meta : null;
@@ -225,6 +226,7 @@ const routeDefinitions = [
 
 const bootstrap = window.__PARASCENE_BOOTSTRAP__ || {};
 hydrateNsfwFromBootstrap(bootstrap.user);
+installConsoleGen();
 const state = createApplicationState({ bootstrap });
 const providers = createAppProviders({ bootstrap });
 // Avatar-bearing dialogs and overlays can be mounted beside the app shell.

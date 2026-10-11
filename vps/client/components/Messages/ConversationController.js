@@ -32,9 +32,14 @@ export function createConversationController({ view, provider, route, viewerId, 
 				),
 				...outgoing.values(),
 			];
+			const data = lease.query.data;
 			view.render({
-				...lease.query.data,
+				...data,
 				viewerIsAdmin: provider.query.data?.viewerIsAdmin === true,
+				viewerCanPinMessages: provider.query.data?.viewerCanPinMessages === true,
+				channelPinEligible: thread?.type === 'channel' && thread?.channel_slug !== 'challenges',
+				pinnedMessageId: data.pinned_message_id ?? null,
+				pinnedMessage: data.pinned_message ?? null,
 				editable: thread?.channel_slug !== 'challenges',
 				messages,
 			});
@@ -158,7 +163,17 @@ export function createConversationController({ view, provider, route, viewerId, 
 			try {
 				await provider.remove(thread, Number(id));
 				if (destroyed) return false;
-				lease.query.update((data) => ({ ...data, messages: data.messages.filter((row) => Number(row.id) !== Number(id)).map((row) => Number(row.meta?.reply?.referenced_id) === Number(id) ? { ...row, reply_parent_exists: false } : row) }));
+				lease.query.update((data) => {
+					const next = {
+						...data,
+						messages: data.messages.filter((row) => Number(row.id) !== Number(id)).map((row) => Number(row.meta?.reply?.referenced_id) === Number(id) ? { ...row, reply_parent_exists: false } : row),
+					};
+					if (Number(data.pinned_message_id) === Number(id)) {
+						next.pinned_message_id = null;
+						next.pinned_message = null;
+					}
+					return next;
+				});
 				return true;
 			} catch (reason) { if (!destroyed && reason?.status === 401) onUnauthorized?.(); throw reason; }
 		},
@@ -202,6 +217,23 @@ export function createConversationController({ view, provider, route, viewerId, 
 			} catch (reason) { if (!destroyed && reason?.status === 401) onUnauthorized?.(); throw reason; }
 		},
 		retrySend(id) { const record = outgoing.get(id); if (record) void deliver(record); },
+		async pinMessage(messageId) {
+			if (destroyed || !thread || thread.type !== 'channel' || !lease?.query.data) return false;
+			if (provider.query.data?.viewerCanPinMessages !== true) return false;
+			try {
+				const currentId = Number(lease.query.data.pinned_message_id);
+				const target = Number(messageId);
+				const clear = Number.isFinite(currentId) && currentId > 0 && currentId === target;
+				const response = await provider.api.pinMessage(thread.id, clear ? null : target, { signal: abort.signal });
+				if (destroyed) return false;
+				lease.query.update((data) => ({
+					...data,
+					pinned_message_id: response.pinned_message_id ?? null,
+					pinned_message: response.pinned_message ?? null,
+				}));
+				return true;
+			} catch (reason) { if (!destroyed && reason?.status === 401) onUnauthorized?.(); throw reason; }
+		},
 		destroy() { destroyed = true; abort.abort(); unsubscribe?.(); lease?.release(); },
 	};
 }

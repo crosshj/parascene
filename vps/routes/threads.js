@@ -25,10 +25,11 @@ export function createThreadsRoutes({ threads }) {
 	router.post('/api/chat/threads/:threadId/hide', handle((req) => threads.hideThread(req.auth.userId, id(req), req.body?.hidden !== false)));
 	router.post('/api/chat/threads/:threadId/leave', handle((req) => threads.leaveThread(req.auth.userId, id(req))));
 	router.get('/api/chat/unread-summary', handle((req) => threads.unread(req.auth.userId)));
-	router.get('/api/chat/threads/:threadId', handle(async (req) => ({ thread: await threads.threadForMember(req.auth.userId, id(req)) })));
+	router.get('/api/chat/threads/:threadId', handle(async (req) => ({ thread: await threads.threadDetail(req.auth.userId, id(req)) })));
 	router.get('/api/chat/threads/:threadId/canvases', handle(req => threads.canvases.list(req.auth.userId, id(req))));
 	router.post('/api/chat/threads/:threadId/canvases', handle(req => threads.canvases.create(req.auth.userId, id(req), req.body)));
 	router.post('/api/chat/threads/:threadId/pinned-canvas', handle(req => threads.canvases.pin(req.auth.userId, id(req), req.body?.message_id)));
+	router.post('/api/chat/threads/:threadId/pinned-message', handle(req => threads.pinMessage(req.auth.userId, id(req), req.body?.message_id ?? req.body?.messageId)));
 	router.get('/api/chat/threads/:threadId/member-status', handle(req => threads.canvases.members(req.auth.userId, id(req))));
 	router.get('/api/chat/threads/:threadId/messages', handle((req) => threads.messages(req.auth.userId, id(req), {
 		limit: Math.min(100, Math.max(1, Math.floor(Number(req.query.limit) || 40))), before: req.query.before,

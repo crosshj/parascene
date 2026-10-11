@@ -17,10 +17,12 @@ import {
  createChatMessageRowElement, isChatMessageGroupContinue as continues,
  trimTrailingWhitespaceAfterChatEmbed, trimChatCreationEmbedWhitespace,
 } from './MessageRow.js';
+import { processUserText } from '../../shared/userText.js';
+import { pinIcon, closeIcon } from '../../icons/svg-strings.js';
 
 const clone = createTemplateFactory(markup);
 
-function createRow(message, previous, viewerId, canEdit = false, canReply = true, replyOptions = {}) {
+function createRow(message, previous, viewerId, canEdit = false, canReply = true, replyOptions = {}, pinOpts = {}) {
  const index = previous ? 1 : 0;
  // The WWW builder requires a numeric identity to construct its toolbar.
  // Render the full structure now; reconciliation assigns every control its
@@ -29,24 +31,68 @@ function createRow(message, previous, viewerId, canEdit = false, canReply = true
  const row = createChatMessageRowElement(presentation, index, previous ? [previous, presentation] : [presentation], viewerId, {
   effectiveUnread: false, vStart: -1, vEnd: -1, showAdminDelete: canEdit,
   showHoverBar: canReply, replyOptions,
+  showChannelPin: pinOpts.showChannelPin === true,
+  pinnedMessageId: pinOpts.pinnedMessageId ?? null,
  });
 
  return row;
 }
 
-export function mountMessages({ outlet, viewerId, onLoadOlder, onRetry, onRetrySend, onRead, onEdit, onReply, onReplyJump, onReact, onDelete }) {
+export function mountMessages({ outlet, viewerId, onLoadOlder, onRetry, onRetrySend, onRead, onEdit, onReply, onReplyJump, onReact, onDelete, onPin }) {
 	const root = clone('stream');
+	const banner = clone('pinnedBanner');
 	const sentinel = clone('history');
 	const errorLine = clone('error');
 	const status = errorLine.querySelector('span');
 	const retry = errorLine.querySelector('button');
-	outlet.append(root, errorLine);
+	outlet.append(banner, root, errorLine);
 	const viewport = root;
 	const lifetime = new AbortController();
 	const shellScroll = outlet.closest('.beta-outlet__scroll'); shellScroll?.classList.add('chat-page-thread-body');
 	let hasMore = false;
 	let loadingOlder = false;
 	let historyObserver = null;
+	let pinState = { eligible: false, canPin: false, id: null, message: null };
+	function syncPinnedBanner() {
+		const previewEl = banner.querySelector('[data-chat-pinned-banner-preview]');
+		const moreEl = banner.querySelector('[data-chat-pinned-banner-more]');
+		const unpinBtn = banner.querySelector('[data-chat-pinned-banner-unpin]');
+		const iconEl = banner.querySelector('[data-chat-pinned-banner-icon]');
+		const pinId = Number(pinState.id);
+		const show = pinState.eligible && Number.isFinite(pinId) && pinId > 0;
+		banner.hidden = !show;
+		shellScroll?.classList.toggle('chat-page-thread-body--has-pin', show);
+		if (!show) {
+			if (previewEl) { previewEl.textContent = ''; previewEl.classList.remove('is-loading'); }
+			if (moreEl) moreEl.hidden = true;
+			if (unpinBtn) unpinBtn.hidden = true;
+			return;
+		}
+		if (iconEl && !iconEl.querySelector('svg')) iconEl.innerHTML = pinIcon('chat-page-pinned-banner-pin-icon');
+		if (previewEl) {
+			if (!pinState.message) {
+				previewEl.textContent = '…';
+				previewEl.classList.add('is-loading');
+				if (moreEl) moreEl.hidden = true;
+			} else {
+				const body = String(pinState.message.body || '').trim();
+				const line = (body.split(/\r?\n/).find((part) => part.trim()) || body || 'Pinned message').trim();
+				previewEl.innerHTML = processUserText(line);
+				previewEl.classList.remove('is-loading');
+				if (moreEl) moreEl.hidden = body.split(/\r?\n/).filter(Boolean).length < 2 && body.length < 120;
+			}
+		}
+		if (unpinBtn) {
+			unpinBtn.hidden = !pinState.canPin;
+			if (pinState.canPin && !unpinBtn.querySelector('svg')) unpinBtn.innerHTML = closeIcon('chat-page-pinned-banner-unpin-icon');
+		}
+		for (const btn of root.querySelectorAll('.connect-chat-msg-hover-pin')) {
+			const mid = Number(btn.dataset.chatMessageId);
+			const isPinned = mid === pinId;
+			btn.classList.toggle('is-pinned', isPinned);
+			btn.setAttribute('aria-label', isPinned ? 'Unpin from channel' : 'Pin to channel');
+		}
+	}
 	function requestOlderIfNear() {
 		if (!hasMore || loadingOlder || !records.size || destroyed) return;
 		const margin = Math.max(1200, Math.round(viewport.clientHeight * .75));
@@ -104,7 +150,10 @@ export function mountMessages({ outlet, viewerId, onLoadOlder, onRetry, onRetryS
 		const record = records.get(editing.key);
 		editing = null;
 		if (record) {
-			const node = createRow(record.message, record.previous, viewerId, record.canEdit, record.canReply, replyOptions);
+			const node = createRow(record.message, record.previous, viewerId, record.canEdit, record.canReply, replyOptions, {
+				showChannelPin: pinState.eligible && pinState.canPin,
+				pinnedMessageId: pinState.id,
+			});
 			record.node.replaceWith(node); record.node = node;
 			reactions.update(node, record.message, record.canReply);
 			node.classList.toggle('connect-chat-msg--reply-target', String(record.message.id) === replyTargetId);
@@ -172,6 +221,12 @@ export function mountMessages({ outlet, viewerId, onLoadOlder, onRetry, onRetryS
 			if (record) applyDeleting(record.node, key);
 			Promise.resolve(onDelete?.(key)).catch((reason) => { if (!destroyed) { status.textContent = reason.message || 'Could not delete message.'; errorLine.hidden = false; } }).finally(() => { deleting.delete(key); if (!destroyed) { const current = records.get(key); if (current) applyDeleting(current.node, key); } });
 		}
+		const pin = event.target.closest('[data-chat-hover-pin]');
+		if (pin && pinState.canPin) {
+			Promise.resolve(onPin?.(pin.dataset.chatMessageId)).catch((reason) => {
+				if (!destroyed) { status.textContent = reason.message || 'Could not update pin.'; errorLine.hidden = false; }
+			});
+		}
 		if (matchMedia('(hover: none), (pointer: coarse)').matches && !event.target.closest('button, a, textarea, input, video, audio, iframe')) {
 			const row = event.target.closest('.connect-chat-msg');
 			const open = row && !row.classList.contains('connect-chat-msg--toolbar-open');
@@ -180,7 +235,19 @@ export function mountMessages({ outlet, viewerId, onLoadOlder, onRetry, onRetryS
 		}
 	}
 	function onVisibility() { scroll.capture(); scroll.restore(); }
+	function onBannerClick(event) {
+		const unpin = event.target.closest('[data-chat-pinned-banner-unpin]');
+		if (unpin && pinState.canPin && pinState.id != null) {
+			Promise.resolve(onPin?.(pinState.id)).catch((reason) => {
+				if (!destroyed) { status.textContent = reason.message || 'Could not unpin message.'; errorLine.hidden = false; }
+			});
+			return;
+		}
+		const open = event.target.closest('[data-chat-pinned-banner-open]');
+		if (open && pinState.id != null) jumpToMessage(pinState.id);
+	}
 	root.addEventListener('click', rowAction);
+	banner.addEventListener('click', onBannerClick);
 	viewport.addEventListener('scroll', requestOlderIfNear, { passive: true });
 	setupFloatingWhoTooltips(root, { signal: lifetime.signal });
 	function jumpToMessage(id) {
@@ -235,23 +302,34 @@ export function mountMessages({ outlet, viewerId, onLoadOlder, onRetry, onRetryS
 			delete root.dataset.chatMessagesScrollLock;
 			if (!errorLine.contains(retry)) errorLine.append(retry);
 			const messages = data.messages || [];
+			pinState = {
+				eligible: data.channelPinEligible === true,
+				canPin: data.viewerCanPinMessages === true,
+				id: data.pinnedMessageId ?? null,
+				message: data.pinnedMessage ?? null,
+			};
+			syncPinnedBanner();
 			for (const child of [...root.children]) if (!child.matches('.connect-chat-msg, .chat-page-thread-load-sentinel')) child.remove();
 			hasMore = data.hasMore === true; syncHistoryObserver();
 			let position = sentinel.isConnected ? sentinel.nextSibling : root.firstChild;
 			const next = new Map();
+			const pinOpts = {
+				showChannelPin: pinState.eligible && pinState.canPin,
+				pinnedMessageId: pinState.id,
+			};
 			for (let index = 0; index < messages.length; index++) {
 				const message = messages[index];
 				const key = String(message.id);
 				const canEdit = data.editable !== false && (data.viewerIsAdmin || Number(message.sender_id) === Number(viewerId));
 				const { id, clientKey, delivery, reactions: bucket, viewer_reactions: selected, ...body } = message;
-				const signature = JSON.stringify([body, continues(messages[index - 1], message), canEdit, data.editable !== false]);
+				const signature = JSON.stringify([body, continues(messages[index - 1], message), canEdit, data.editable !== false, pinOpts.showChannelPin, pinOpts.pinnedMessageId]);
 				const reactionSignature = JSON.stringify([bucket, selected, data.editable !== false, !!message.delivery]);
 				let record = records.get(key) || (message.clientKey ? [...records.values()].find((item) => item.message.clientKey === message.clientKey) : null);
 				// A send acknowledgement adopts the server identity without replacing
 				// the body, hydrated media, avatar, or timestamp already on screen.
 				if (record?.message.delivery && !message.delivery && message.clientKey === record.message.clientKey) record.signature = signature;
 				if (record?.signature !== signature && editing?.key !== key) {
-					const node = createRow(message, messages[index - 1], viewerId, canEdit, data.editable !== false, replyOptions);
+					const node = createRow(message, messages[index - 1], viewerId, canEdit, data.editable !== false, replyOptions, pinOpts);
 					if (position === record?.node) position = node;
 					record?.node.replaceWith(node);
 					record = { node, signature };
@@ -305,9 +383,11 @@ export function mountMessages({ outlet, viewerId, onLoadOlder, onRetry, onRetryS
 			hideFloatingWhoTooltip();
 			retry.removeEventListener('click', retryLoad);
 			root.removeEventListener('click', rowAction);
+			banner.removeEventListener('click', onBannerClick);
 			document.removeEventListener('visibilitychange', onVisibility);
-			shellScroll?.classList.remove('chat-page-thread-body');
+			shellScroll?.classList.remove('chat-page-thread-body', 'chat-page-thread-body--has-pin');
 			errorLine.remove();
+			banner.remove();
 			root.remove();
 		},
 	};

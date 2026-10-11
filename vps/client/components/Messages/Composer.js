@@ -11,6 +11,13 @@ import {
 	isTriggeredSuggestPopupOpen,
 } from '../../shared/triggeredSuggest.js';
 import { composerEnterShouldSend } from '../../shared/composerEnterGuard.js';
+import {
+	COMPOSER_GEN_POLL_MS,
+	COMPOSER_GEN_PREVIEW_PLACEHOLDER,
+	parseGenCommand,
+	pollComposerGenOnce,
+	startComposerGenFromPrompt,
+} from '../../shared/composerGen.js';
 
 const clone = createTemplateFactory(markup);
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
@@ -61,6 +68,7 @@ export function bindMessageComposer({
 	const replyText = form.querySelector('.chat-page-composer-reply-text');
 	const dismiss = replyBar.querySelector('button');
 	const attachments = new Map();
+	const genPollTimers = new Map();
 	let ready = false;
 	let reply = null;
 	let submitting = false;
@@ -72,9 +80,23 @@ export function bindMessageComposer({
 		onReplyChange?.(null);
 	}
 
+	function stopGenPoll(id) {
+		const timer = genPollTimers.get(String(id));
+		if (timer != null) {
+			clearInterval(timer);
+			genPollTimers.delete(String(id));
+		}
+	}
+
+	function stopAllGenPolls() {
+		for (const timer of genPollTimers.values()) clearInterval(timer);
+		genPollTimers.clear();
+	}
+
 	function sync() {
 		const text = input.value.trim();
-		const pending = [...attachments.values()].some((item) => item.status === 'uploading');
+		// Match WWW: in-flight /gen attachments do not block sending other ready media.
+		const pending = [...attachments.values()].some((item) => item.status === 'uploading' && item.source !== 'gen');
 		const hasReadyAttachment = [...attachments.values()].some((item) => item.status === 'ready');
 		const hasContent = Boolean(text || hasReadyAttachment);
 		input.disabled = !ready;
@@ -152,9 +174,82 @@ export function bindMessageComposer({
 	function removeAttachment(id) {
 		const item = attachments.get(id);
 		if (!item) return;
+		stopGenPoll(id);
 		attachments.delete(id);
-		if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+		if (item.previewUrl && item.previewUrl.startsWith('blob:')) URL.revokeObjectURL(item.previewUrl);
 		renderAttachments();
+	}
+
+	function startGenPoll(attachmentId) {
+		const idKey = String(attachmentId || '');
+		if (!idKey || genPollTimers.has(idKey)) return;
+		const tick = async () => {
+			const item = attachments.get(idKey);
+			if (!item || destroyed) {
+				stopGenPoll(idKey);
+				return;
+			}
+			if (!Number.isFinite(Number(item.generationId)) || Number(item.generationId) <= 0) return;
+			const result = await pollComposerGenOnce(item.generationId);
+			if (destroyed || !attachments.has(idKey)) {
+				stopGenPoll(idKey);
+				return;
+			}
+			if (result.state === 'pending') return;
+			if (result.state === 'ready') {
+				item.status = 'ready';
+				item.url = result.url;
+				item.previewUrl = result.thumbnailUrl || result.fullImageUrl || item.previewUrl;
+				item.error = '';
+				stopGenPoll(idKey);
+				renderAttachments();
+				return;
+			}
+			item.status = 'error';
+			item.error = result.error || 'Generation failed';
+			uploadError.textContent = item.error;
+			uploadError.hidden = false;
+			stopGenPoll(idKey);
+			renderAttachments();
+		};
+		genPollTimers.set(idKey, setInterval(() => { void tick(); }, COMPOSER_GEN_POLL_MS));
+		void tick();
+	}
+
+	async function runGenCommand(prompt) {
+		const id = crypto.randomUUID();
+		const item = {
+			id,
+			file: null,
+			name: 'creation.png',
+			previewUrl: COMPOSER_GEN_PREVIEW_PLACEHOLDER,
+			kind: 'image',
+			status: 'uploading',
+			url: '',
+			source: 'gen',
+			generationId: null,
+			error: '',
+		};
+		attachments.set(id, item);
+		renderAttachments();
+		try {
+			const creationId = await startComposerGenFromPrompt(prompt);
+			if (destroyed || !attachments.has(id)) return;
+			item.generationId = creationId;
+			startGenPoll(id);
+		} catch (error) {
+			if (destroyed || !attachments.has(id)) return;
+			item.status = 'error';
+			item.error =
+				String(error?.message || '') === 'Cancelled /gen.'
+					? 'Cancelled'
+					: error?.message || 'Could not start /gen.';
+			if (String(error?.message || '') !== 'Cancelled /gen.') {
+				uploadError.textContent = item.error;
+				uploadError.hidden = false;
+			}
+			renderAttachments();
+		}
 	}
 
 	function addFiles(fileList) {
@@ -200,8 +295,20 @@ export function bindMessageComposer({
 
 	function submit(event) {
 		event.preventDefault();
-		if (!ready || submitting || send.disabled) return;
+		if (!ready || submitting) return;
 		const text = input.value.trim();
+		const genCmd = parseGenCommand(text);
+		if (genCmd) {
+			uploadError.hidden = true;
+			uploadError.textContent = '';
+			input.value = '';
+			sync();
+			void runGenCommand(genCmd.prompt);
+			input.focus();
+			return;
+		}
+		const pendingUpload = [...attachments.values()].some((item) => item.status === 'uploading' && item.source !== 'gen');
+		if (pendingUpload || send.disabled) return;
 		const urls = [...attachments.values()].filter((item) => item.status === 'ready').map((item) => item.url).filter(Boolean);
 		const body = text ? (urls.length ? `${urls.join('\n')} ${text}` : text) : urls.join('\n');
 		if (!body || body.length > MAX_BODY_CHARS) {
@@ -213,8 +320,14 @@ export function bindMessageComposer({
 		sync();
 		if (onSend(body, reply) !== false) {
 			input.value = '';
-			for (const item of attachments.values()) if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+			// Keep in-flight /gen attachments after send (WWW clears only ready media).
+			const keep = [...attachments.values()].filter((item) => item.source === 'gen' && item.status === 'uploading');
+			for (const item of attachments.values()) {
+				if (item.source === 'gen' && item.status === 'uploading') continue;
+				if (item.previewUrl && item.previewUrl.startsWith('blob:')) URL.revokeObjectURL(item.previewUrl);
+			}
 			attachments.clear();
+			for (const item of keep) attachments.set(item.id, item);
 			clearReply();
 			uploadError.hidden = true;
 		} else {
@@ -277,6 +390,7 @@ export function bindMessageComposer({
 		setReady(value) { ready = value; if (value) submitting = false; sync(); },
 		destroy() {
 			destroyed = true;
+			stopAllGenPolls();
 			disposeTriggeredSuggestFields(form);
 			dismiss.removeEventListener('click', clearReply);
 			attachmentButton.removeEventListener('click', onPickFiles);
@@ -284,7 +398,9 @@ export function bindMessageComposer({
 			input.removeEventListener('keydown', keydown);
 			input.removeEventListener('paste', paste);
 			form.removeEventListener('submit', submit);
-			for (const item of attachments.values()) if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+			for (const item of attachments.values()) {
+				if (item.previewUrl && item.previewUrl.startsWith('blob:')) URL.revokeObjectURL(item.previewUrl);
+			}
 			attachments.clear();
 			input.disabled = false;
 			input.value = '';

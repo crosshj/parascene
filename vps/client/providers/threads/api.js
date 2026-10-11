@@ -23,12 +23,20 @@ export function createThreadsApi() {
 				servers: servers.servers.filter((row) => row?.is_member),
 				viewerIsAdmin: threads.viewer_is_admin === true,
 				viewerIsFounder: threads.viewer_is_founder === true,
+				viewerCanPinMessages: threads.viewer_can_pin_messages === true,
 				unreadSummary
 			};
 		},
 		loadCanvases(threadId, options = {}) { return requestJson(`/api/chat/threads/${threadId}/canvases`, options); },
 		createCanvas(threadId, payload, options = {}) { return requestJson(`/api/chat/threads/${threadId}/canvases`, { ...options, method: 'POST', body: payload }); },
 		pinCanvas(threadId, messageId, options = {}) { return requestJson(`/api/chat/threads/${threadId}/pinned-canvas`, { ...options, method: 'POST', body: { message_id: messageId } }); },
+		pinMessage(threadId, messageId, options = {}) {
+			return requestJson(`/api/chat/threads/${threadId}/pinned-message`, {
+				...options,
+				method: 'POST',
+				body: { message_id: messageId },
+			});
+		},
 		loadMembers(threadId, options = {}) { return requestJson(`/api/chat/threads/${threadId}/member-status`, options); },
 		getThread(threadId, options = {}) {
 			return requestJson(`/api/chat/threads/${encodeURIComponent(threadId)}`, options);

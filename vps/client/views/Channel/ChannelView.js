@@ -22,6 +22,7 @@ export const ChannelView = Object.freeze({
 			onReplyJump: (id) => controller?.jumpToReply(id),
 			onReact: (id, emoji) => controller?.react(id, emoji),
 			onDelete: (id) => controller?.remove(id),
+			onPin: (id) => controller?.pinMessage(id),
 		});
 		const binding = bindMessageComposer({ form: composer, onSend: (body, reply) => controller?.send(body, reply) ?? false, onReplyChange: (id) => view.setReplyTarget(id) });
 		view.setReady = (ready) => binding.setReady(ready);

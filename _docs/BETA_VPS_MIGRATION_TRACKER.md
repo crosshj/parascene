@@ -2,9 +2,7 @@
 
 ## Remaining product work
 
-- [ ] vynly api's missing
-- [ ] no button visible for submit to challenge on creation detail
-- [ ] pinned posts not showing in channels
+_(none currently tracked)_
 
 ## Public pages and discoverability
 

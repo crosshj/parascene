@@ -505,9 +505,10 @@ export function createCreationsRoutes({ creations, users, appendChallengeEligibi
 	router.get("/api/creations/:id", requireAuth, async (req, res, next) => {
 		try {
 			const viewer = await users.byId(req.auth.userId);
+			if (!viewer) return res.status(404).json({ error: "User not found" });
 			let commentProofId = 0;
 			let row = await creations.byIdForViewer(req.auth.userId, req.params.id, {
-				isAdmin: viewer?.role === "admin"
+				isAdmin: viewer.role === "admin"
 			});
 			if (!row && positiveId(req.query.comment_id) && typeof creations.byIdForCommentProof === "function") {
 				commentProofId = positiveId(req.query.comment_id);
@@ -515,15 +516,15 @@ export function createCreationsRoutes({ creations, users, appendChallengeEligibi
 				if (!row) commentProofId = 0;
 			}
 			if (!row) return res.status(404).json({ error: "Creation not found" });
-			const meta = row.meta && typeof row.meta === "object" ? row.meta : {};
-			if (meta.nsfw === true && viewer?.meta?.enableNsfw !== true && Number(row.user_id) !== Number(req.auth.userId) && viewer?.role !== "admin") {
+			const meta = parseMeta(row.meta);
+			if (meta.nsfw === true && viewer.meta?.enableNsfw !== true && Number(row.user_id) !== Number(req.auth.userId) && viewer.role !== "admin") {
 				return res.status(404).json({ error: "Creation not found" });
 			}
-			const creatorUser = Number(row.user_id) === Number(viewer?.id) ? viewer : await users.byId(row.user_id);
+			const creatorUser = Number(row.user_id) === Number(viewer.id) ? viewer : await users.byId(row.user_id);
 			const creatorProfile = await users.profileByUserId(row.user_id);
 			const creation = serializeCreation(row);
 			if (commentProofId) applyCommentProof(creation, row, commentProofId);
-			return res.json({
+			const payload = {
 				...creation,
 				like_count: 0,
 				viewer_liked: false,
@@ -541,7 +542,10 @@ export function createCreationsRoutes({ creations, users, appendChallengeEligibi
 					avatar_url: creatorProfile?.avatar_url ?? null,
 					plan: creatorUser.meta?.plan === "founder" ? "founder" : "free"
 				} : null
-			});
+			};
+			await appendChallengeEligibility?.(req, viewer, row, meta, payload);
+			await appendChallengeEntryState(meta, payload);
+			return res.json(payload);
 		} catch (error) { return next(error); }
 	});
 

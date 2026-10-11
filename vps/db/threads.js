@@ -4,6 +4,14 @@ import { broadcastThreadHint } from './threadBroadcast.js';
 import { plainTextReplyPreview } from '../shared/plainTextReplyPreview.js';
 import { REACTION_ORDER, normalizeReactionBucket } from '../shared/reactions.js';
 import { collectChatMiscGenericKeysFromMessageBody, isChatMiscGenericKeyOwnedByUser } from './threadAttachmentKeys.js';
+import {
+	buildThreadMetaWithChannelPin,
+	getChannelPinnedMessageIdFromThreadRow,
+	getPinnedCanvasMessageIdFromThreadRow,
+	isCanvasMessageRow,
+	isSystemEventMessageRow,
+	viewerCanPinChannelMessages,
+} from '../shared/channelPin.js';
 
 function fail(status, message) { throw Object.assign(new Error(message), { status }); }
 async function result(request) {
@@ -51,6 +59,46 @@ export function createThreadsStore(client, users, { broadcast = broadcastThreadH
 		if (!thread) fail(404, 'Thread not found');
 		return { ...thread, ...member, visibility: thread.meta?.visibility === 'private' ? 'private' : 'public' };
 	}
+	async function resolvePinnedMessage(userId, thread) {
+		const pinned_canvas_message_id = getPinnedCanvasMessageIdFromThreadRow(thread);
+		let pinned_message_id = getChannelPinnedMessageIdFromThreadRow(thread);
+		let pinned_message = null;
+		if (pinned_message_id == null || thread.type !== 'channel') {
+			return { pinned_message_id: thread.type === 'channel' ? pinned_message_id : null, pinned_message: null, pinned_canvas_message_id };
+		}
+		const pinMsg = await result(
+			client.from('prsn_chat_messages')
+				.select('id, thread_id, sender_id, body, reactions, meta, created_at')
+				.eq('id', pinned_message_id)
+				.eq('thread_id', thread.id)
+				.maybeSingle()
+		);
+		if (!pinMsg) {
+			const nextMeta = buildThreadMetaWithChannelPin(thread.meta, null);
+			await result(client.from('prsn_chat_threads').update({ meta: nextMeta }).eq('id', thread.id));
+			return { pinned_message_id: null, pinned_message: null, pinned_canvas_message_id };
+		}
+		const [enriched] = await enrichReactions([{
+			...pinMsg,
+			sender_user_name: null,
+			sender_avatar_url: null,
+			sender_plan: 'free',
+		}], userId, thread.channel_slug === 'challenges');
+		const profile = await result(client.from('prsn_user_profiles').select('user_name, avatar_url').eq('user_id', pinMsg.sender_id).maybeSingle());
+		const senderUser = await result(client.from('prsn_users').select('meta').eq('id', pinMsg.sender_id).maybeSingle());
+		pinned_message = {
+			...enriched,
+			sender_user_name: profile?.user_name ?? null,
+			sender_avatar_url: profile?.avatar_url ?? null,
+			sender_plan: senderUser?.meta?.plan === 'founder' ? 'founder' : 'free',
+		};
+		return { pinned_message_id, pinned_message, pinned_canvas_message_id };
+	}
+	async function threadDetail(userId, threadId) {
+		const thread = await threadForMember(userId, threadId);
+		const pin = await resolvePinnedMessage(userId, thread);
+		return { ...thread, ...pin };
+	}
 	async function inbox(userId) {
 		const rows = await result(client.rpc('prsn_chat_threads_for_user', { p_user_id: userId })) || [];
 		const ids = rows.map((row) => Number(row.thread_id));
@@ -90,7 +138,14 @@ export function createThreadsStore(client, users, { broadcast = broadcastThreadH
 				last_message: row.last_message_id ? { id: Number(row.last_message_id), body: visibility === 'private' ? '[Encrypted message]' : row.last_message_body, created_at: row.last_message_at, sender_id: Number(row.last_sender_id) } : null,
 			};
 		});
-		return { viewer_id: Number(userId), viewer_is_admin: viewer?.role === 'admin', viewer_is_founder: viewer?.meta?.plan === 'founder', threads };
+		const profile = typeof users.profileByUserId === 'function' ? await users.profileByUserId(userId) : null;
+		return {
+			viewer_id: Number(userId),
+			viewer_is_admin: viewer?.role === 'admin',
+			viewer_is_founder: viewer?.meta?.plan === 'founder',
+			viewer_can_pin_messages: viewerCanPinChannelMessages(viewer, profile),
+			threads,
+		};
 	}
 	async function openPublicChannel(userId, tag) {
 		const slug = typeof tag === 'string' ? tag.trim().replace(/^#+/, '').trim().toLowerCase() : '';
@@ -199,7 +254,13 @@ export function createThreadsStore(client, users, { broadcast = broadcastThreadH
 			};
 		});
 		const first = page[0];
-		return { messages: await enrichReactions(messages, userId, thread.channel_slug === 'challenges'), hasMore, nextBefore: hasMore && first ? Buffer.from(JSON.stringify({ c: first.created_at, i: Number(first.id) })).toString('base64url') : null };
+		const pin = await resolvePinnedMessage(userId, thread);
+		return {
+			messages: await enrichReactions(messages, userId, thread.channel_slug === 'challenges'),
+			hasMore,
+			nextBefore: hasMore && first ? Buffer.from(JSON.stringify({ c: first.created_at, i: Number(first.id) })).toString('base64url') : null,
+			...pin,
+		};
 	}
 	async function unread(userId) {
 		const [total, roster] = await Promise.all([result(client.rpc('prsn_chat_unread_total', { p_user_id: userId })), inbox(userId)]);
@@ -349,8 +410,42 @@ export function createThreadsStore(client, users, { broadcast = broadcastThreadH
 		})();
 		return { ok: true, deleted_id: messageId, thread_id: thread.id };
 	}
+	async function pinMessage(userId, threadId, messageIdOrNull) {
+		const thread = await threadForMember(userId, threadId);
+		if (thread.type !== 'channel') fail(400, 'Message pin is only for channels');
+		const viewer = await users.byId(userId);
+		const profile = typeof users.profileByUserId === 'function' ? await users.profileByUserId(userId) : null;
+		if (!viewerCanPinChannelMessages(viewer, profile)) fail(403, 'You cannot pin messages in this channel');
+		const clearPin = messageIdOrNull == null || messageIdOrNull === '' || messageIdOrNull === false;
+		const messageId = clearPin ? null : Number(messageIdOrNull);
+		if (clearPin || !Number.isFinite(messageId) || messageId <= 0) {
+			const cur = getChannelPinnedMessageIdFromThreadRow(thread);
+			if (cur == null) return { ok: true, pinned_message_id: null, pinned_message: null };
+			const nextMeta = buildThreadMetaWithChannelPin(thread.meta, null);
+			await result(client.from('prsn_chat_threads').update({ meta: nextMeta }).eq('id', threadId));
+			void broadcast(client, `room:${threadId}`, { roomId: String(threadId), afterMessageId: '0' });
+			return { ok: true, pinned_message_id: null, pinned_message: null };
+		}
+		const msg = await result(
+			client.from('prsn_chat_messages')
+				.select('id, thread_id, sender_id, body, reactions, meta, created_at')
+				.eq('id', messageId)
+				.maybeSingle()
+		);
+		if (!msg) fail(404, 'Message not found');
+		if (Number(msg.thread_id) !== Number(threadId)) fail(400, 'Message is not in this thread');
+		if (isSystemEventMessageRow(msg)) fail(400, 'System messages cannot be pinned');
+		if (isCanvasMessageRow(msg)) fail(400, 'Use canvas pin for canvas messages');
+		const nextMeta = buildThreadMetaWithChannelPin(thread.meta, messageId, userId);
+		await result(client.from('prsn_chat_threads').update({ meta: nextMeta }).eq('id', threadId));
+		void broadcast(client, `room:${threadId}`, { roomId: String(threadId), afterMessageId: String(messageId) });
+		const pin = await resolvePinnedMessage(userId, { ...thread, meta: nextMeta });
+		return { ok: true, pinned_message_id: pin.pinned_message_id, pinned_message: pin.pinned_message };
+	}
 	const canvases = createThreadCanvases({ client, users, threadForMember, privateSecret, decrypt, broadcast });
-	return { canvases, inbox, openPublicChannel, openDm, listPublicChannelSlugs, hideThread, leaveThread, messages, unread, threadForMember, markRead, send, edit, react, remove,
+	return {
+		canvases, inbox, openPublicChannel, openDm, listPublicChannelSlugs, hideThread, leaveThread, messages, unread,
+		threadForMember, threadDetail, pinMessage, markRead, send, edit, react, remove,
 		async getPrivateKey(userId, threadId) { const thread = await threadForMember(userId, threadId); if (thread.visibility !== 'private') fail(400, 'Not a private channel'); const k = await privateSecret(userId, threadId); if (!k) fail(403, 'Private channel key missing'); return { k }; },
 	};
 }

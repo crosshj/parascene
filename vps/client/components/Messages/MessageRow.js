@@ -15,7 +15,6 @@ const clone = createTemplateFactory(markup);
 const CHAT_MESSAGE_GROUP_GAP_MS = 7 * 60 * 1000;
 const CHAT_HOVER_QUICK_REACTION_KEYS = REACTION_ORDER.slice(0, 3);
 const activePseudoChannelSlug = '';
-const activeThreadPinnedMessageId = null;
 function escapeHtml(value) { return String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[char]); }
 
 export function parseChatMessageCreatedMs(m) {
@@ -305,7 +304,8 @@ export function buildChatMessageHoverBarElement(m, viewerId, rowOpts) {
 				typeof m.meta.system_event === 'object'
 			);
 		if (canPin) {
-			const isPinned = Number(activeThreadPinnedMessageId) === messageId;
+			const pinnedId = Number(rowOpts.pinnedMessageId);
+			const isPinned = Number.isFinite(pinnedId) && pinnedId > 0 && pinnedId === messageId;
 			const pinBtn = clone('pin');
 			pinBtn.setAttribute('data-chat-hover-pin', '1');
 			pinBtn.dataset.chatMessageId = String(messageId);
@@ -529,7 +529,9 @@ export function createChatMessageRowElement(m, i, messages, viewerId, rowOpts) {
 			}
 		}
 		if (!isGroupContinue && !shouldRenderAsSystemEvent) {
-			const metaLine = buildConnectChatMsgMetaElement(m, { viewerId });
+			const pinnedId = Number(rowOpts.pinnedMessageId);
+			const showPinMark = Number.isFinite(pinnedId) && pinnedId > 0 && pinnedId === Number(m.id);
+			const metaLine = buildConnectChatMsgMetaElement(m, { viewerId, showPinMark });
 			if (metaLine) inner.appendChild(metaLine);
 		}
 		inner.appendChild(bubble);
