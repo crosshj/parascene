@@ -4619,6 +4619,8 @@
 :where(.create-workflow-root) .creation-detail-group-thumb-wrap {
 	position: relative;
 	aspect-ratio: 1 / 1;
+	/* Keep move-left / kind badge z-index local so the anchored more-menu stays above. */
+	isolation: isolate;
 }
 
 :where(.create-workflow-root) .creation-detail-group-item {
