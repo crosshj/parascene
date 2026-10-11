@@ -446,12 +446,33 @@
 	height: 100%;
 	z-index: 0;
 	pointer-events: none;
+	opacity: 0;
 }
 
 .feed-view .feed-card-image--creation-processing .feed-card-video {
 	opacity: 0;
 	visibility: hidden;
 	pointer-events: none;
+}
+
+/* Used outside .feed-view (Explore, etc.) and for waveform/error conceal. */
+.feed-card-img.is-feed-media-concealed,
+.feed-card-video.is-feed-media-concealed {
+	opacity: 0;
+	visibility: hidden;
+	pointer-events: none;
+}
+
+.feed-card-menu:not([hidden]) {
+	display: block;
+}
+
+.feed-card.feed-card--nav {
+	cursor: pointer;
+}
+
+.feed-card.feed-card--nav .feed-card-actions {
+	cursor: default;
 }
 .feed-view .feed-card-image--creation-processing .feed-card-creation-processing-label,
 .feed-view .feed-card-image--creation-processing [data-creation-gpu-wait] {
@@ -779,11 +800,6 @@ body.view-nsfw .feed-view .feed-card-image--nsfw-group > .creation-group-badge,
 	align-items: center;
 	justify-content: center;
 	pointer-events: none;
-}
-
-.feed-view .sequential-video-player-slot .sequential-video-player-play-overlay[hidden],
-.feed-view .sequential-video-player-slot .chat-doom-play-overlay[hidden] {
-	display: none !important;
 }
 
 .feed-view .sequential-video-player-slot .chat-doom-play-overlay-inner {

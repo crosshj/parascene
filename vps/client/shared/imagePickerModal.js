@@ -131,12 +131,6 @@ export function createImagePickerModalDom(linkPanelInputClassName) {
 	fileInput.type = 'file';
 	fileInput.className = 'image-file-input';
 	fileInput.accept = 'image/*';
-	fileInput.style.position = 'absolute';
-	fileInput.style.left = '-9999px';
-	fileInput.style.width = '1px';
-	fileInput.style.height = '1px';
-	fileInput.style.opacity = '0';
-	fileInput.style.pointerEvents = 'none';
 	chooseLabel.appendChild(chooseSpan);
 	chooseLabel.appendChild(fileInput);
 	const uploadReady = document.createElement('div');

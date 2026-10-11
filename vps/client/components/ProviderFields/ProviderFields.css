@@ -362,10 +362,6 @@
 	display: block;
 }
 
-:where(.create-workflow-root) app-tabs>tab[hidden] {
-	display: none;
-}
-
 :where(.create-workflow-root) app-tabs .app-tabs {
 	display: flex;
 	align-items: center;
@@ -1212,10 +1208,6 @@
 	cursor: pointer;
 }
 
-:where(.create-workflow-root) .audio-clip-picker-search-clear[hidden] {
-	display: none;
-}
-
 :where(.create-workflow-root) .audio-clip-picker-search-clear:hover {
 	background: color-mix(in srgb, var(--text) 8%, transparent);
 	color: var(--text);
@@ -1538,11 +1530,6 @@
 	width: 100%;
 	height: 100%;
 	color: color-mix(in srgb, var(--text-muted) 80%, transparent);
-}
-
-:where(.create-workflow-root) .audio-clip-edit-thumb-placeholder[hidden],
-:where(.create-workflow-root) .audio-clip-edit-thumb-preview[hidden] {
-	display: none;
 }
 
 :where(.create-workflow-root) .audio-clip-edit-thumb-actions {

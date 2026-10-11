@@ -13,6 +13,21 @@
 	padding: 6px 0;
 }
 
+.triggered-suggest-item-route-icon-wrap {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 18px;
+	height: 18px;
+	color: #fff;
+}
+
+.triggered-suggest-item-route-icon-wrap svg {
+	display: block;
+	width: 18px;
+	height: 18px;
+}
+
 /* When open above the input, keep normal top-to-bottom reading order. */
 .triggered-suggest-popup--above {
 	flex-direction: column;

@@ -1,15 +1,12 @@
 .creations-view { --creations-lane-max: 960px; --creations-tile-min: 220px; --creations-card-placeholder: var(--skeleton, #e2e3e6); min-width: 0; width: 100%; max-width: var(--creations-lane-max); margin: 0 auto; }
 @media (prefers-color-scheme: dark) { .creations-view { --creations-card-placeholder: color-mix(in srgb, var(--surface, #1a1628) 76%, var(--text, #ede9fe) 24%); } }
 .creations-view__status { padding: 32px; color: var(--beta-text-muted); text-align: center; }
-.creations-view__status[hidden] { display: none; }
 .creations-view__status.is-error { color: #b91c1c; }
 .creations-view__scroll-top { position: sticky; top: calc(var(--beta-chrome-row-height) + 8px); z-index: 2; display: grid; width: 52px; height: 38px; margin: 0 auto -38px; place-items: center; padding: 0; border: 1px solid color-mix(in srgb, currentColor 22%, transparent); border-radius: 12px; color: rgb(255 255 255 / 92%); background: rgb(18 18 24 / 82%); box-shadow: 0 2px 8px rgb(0 0 0 / 11%); cursor: pointer; }
 .creations-view__scroll-top:hover { background: rgb(18 18 24 / 96%); }
 .creations-view__scroll-top:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 .creations-view__scroll-top svg { width: 17px; height: 17px; }
-.creations-view__scroll-top[hidden] { display: none; }
 .creations-view__sentinel { position: absolute; left: 0; z-index: -1; width: 1px; height: 1px; margin: 0; overflow: hidden; pointer-events: none; }
 .creations-view__load-more { display: block; min-width: 120px; margin: 24px auto 8px; padding: 9px 14px; border: 1px solid color-mix(in srgb, currentColor 24%, transparent); border-radius: 999px; color: inherit; background: transparent; font: inherit; font-weight: 650; cursor: pointer; }
-.creations-view__load-more[hidden] { display: none; }
 .creations-view__load-more:disabled { cursor: wait; opacity: .5; }
 @media (max-width: 768px) { .creations-view__scroll-top { top: 66px; } }

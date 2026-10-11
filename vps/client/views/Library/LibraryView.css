@@ -9,7 +9,6 @@
 .library-view__status { padding: 24px 0; color: var(--text-muted); }
 .library-view__status.is-error { color: var(--danger, #b91c1c); }
 .library-view__more { display: block; margin: 24px auto; }
-.library-view [hidden] { display: none !important; }
 
 .library-style-modal .style-detail-panel { border: 0; box-shadow: none; background: transparent; padding: 0; }
 .library-style-modal .style-detail-title--form { display: none; }

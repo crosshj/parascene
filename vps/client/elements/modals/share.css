@@ -9,7 +9,29 @@ app-modal-share {
 	--share-google-photos: #4285f4;
 }
 
-app-modal-share .share-modal-body { min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+app-modal-share .share-dialog {
+	--app-modal-max-width: 500px;
+	width: min(94vw, 500px);
+	max-width: 500px;
+}
+
+app-modal-share .share-dialog[open] {
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+
+app-modal-share .share-dialog .app-dialog__body {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+}
+
+app-modal-share .share-modal-body {
+	min-height: 0;
+	overflow-y: auto;
+	-webkit-overflow-scrolling: touch;
+}
 app-modal-share .share-modal-note { margin: 0 0 16px; color: var(--text-muted); line-height: 1.6; }
 app-modal-share .share-modal-note-strong { color: var(--text-muted); font-weight: 500; }
 app-modal-share .share-action-list { display: flex; flex-direction: column; overflow: visible; background: transparent; border: none; }
@@ -63,7 +85,13 @@ app-modal-share .share-option-icon {
 app-modal-share .share-option-icon svg { display: block; width: 20px; height: 20px; }
 app-modal-share .share-option-icon-x svg { fill: currentcolor; }
 app-modal-share .share-option-icon.is-brand { border-color: transparent; color: var(--share-brand-text); }
-app-modal-share .share-option-icon-x { background: var(--share-x-bg); color: var(--share-x-fg); }
+/* Force pair so .is-brand's white text cannot win over a light X tile. */
+app-modal-share .share-option-icon-x,
+app-modal-share .share-option-icon-x.is-brand {
+	background: var(--share-x-bg);
+	color: var(--share-x-fg);
+	border-color: var(--share-x-border, transparent);
+}
 app-modal-share .share-option-icon-facebook { background: var(--share-facebook); }
 app-modal-share .share-option-icon-reddit { background: var(--share-reddit); }
 app-modal-share .share-option-icon-linkedin { background: var(--share-linkedin); }
@@ -107,27 +135,104 @@ app-modal-share .share-action-cta-google-photos { background: var(--share-google
 app-modal-share .share-modal-cancel { width: 100%; margin-top: 14px; padding: 0; background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-weight: 600; text-align: center; }
 app-modal-share .share-modal-cancel:hover { color: var(--text); filter: none; }
 app-modal-share .share-modal-status { min-height: 18px; margin-top: 12px; color: var(--text-muted); font-weight: 600; }
-app-modal-share .qr-modal-overlay { z-index: 100000; background: color-mix(in srgb, var(--text) 42%, transparent); }
-app-modal-share .qr-modal { position: relative; max-width: min(90vw, 320px); background: var(--surface); border-radius: 14px; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35); }
-app-modal-share .qr-modal-header { position: absolute; top: 0; right: 0; z-index: 1; padding: 12px; }
-app-modal-share .qr-modal-close { width: 36px; height: 36px; background: var(--surface-strong); }
-app-modal-share .qr-modal-body { display: flex; align-items: center; justify-content: center; padding: 48px 24px 24px; }
-app-modal-share .qr-modal-svg-wrap { display: flex; align-items: center; justify-content: center; padding: 12px; background: var(--surface); border-radius: 10px; }
-app-modal-share .qr-modal-svg-wrap svg { display: block; width: 256px; height: 256px; background: var(--surface); }
+app-modal-share .share-qr-dialog {
+	--app-modal-max-width: 320px;
+	width: min(90vw, 320px);
+	max-width: 320px;
+	padding: 0;
+	overflow: hidden;
+}
+
+app-modal-share .share-qr-dialog[open] {
+	display: flex;
+	flex-direction: column;
+}
+
+app-modal-share .qr-modal-header {
+	position: absolute;
+	top: 0;
+	right: 0;
+	z-index: 1;
+	display: flex;
+	justify-content: flex-end;
+	padding: 12px;
+	border: none;
+}
+
+app-modal-share .qr-modal-close {
+	width: 36px;
+	height: 36px;
+	background: var(--surface-strong);
+}
+
+app-modal-share .qr-modal-body {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 48px 24px 24px;
+}
+
+app-modal-share .qr-modal-svg-wrap {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 12px;
+	background: var(--surface);
+	border-radius: 10px;
+}
+
+app-modal-share .qr-modal-svg-wrap svg {
+	display: block;
+	width: 256px;
+	height: 256px;
+	background: var(--surface);
+}
+
 app-modal-share .qr-modal-svg-wrap svg path:first-of-type,
-app-modal-share .qr-modal-svg-wrap svg path[fill] { fill: var(--surface) !important; }
-app-modal-share .qr-modal-svg-wrap svg path:last-of-type { stroke: var(--text) !important; }
+app-modal-share .qr-modal-svg-wrap svg path[fill] {
+	fill: var(--surface) !important;
+}
 
-@keyframes share-modal-spin { to { transform: rotate(360deg); } }
+app-modal-share .qr-modal-svg-wrap svg path:last-of-type {
+	stroke: var(--text) !important;
+}
 
+@keyframes share-modal-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+/*
+ * Light: black tile / white glyph (default above) — reads on white --surface.
+ * Dark: invert tile (white / black glyph) — black-on-dark would disappear into --surface.
+ * CTA uses the same tokens so icon + Post button stay paired.
+ */
 @media (prefers-color-scheme: dark) {
-	app-modal-share { --share-x-bg: #fff; --share-x-fg: #0b0b0b; }
+	app-modal-share {
+		--share-x-bg: #fff;
+		--share-x-fg: #0b0b0b;
+		--share-x-border: color-mix(in srgb, var(--border) 70%, transparent);
+	}
 }
 
 @media (max-width: 768px) {
-	app-modal-share .modal { width: calc(100% - 16px); max-width: none; max-height: calc(100vh - 16px); }
-	app-modal-share .modal-header { padding: 16px; }
-	app-modal-share .share-modal-body { padding: 14px 12px calc(38px + env(safe-area-inset-bottom)); }
-	app-modal-share .share-action-row { padding: 10px 12px; }
-	app-modal-share .share-action-cta { min-width: 76px; }
+	app-modal-share .share-dialog {
+		width: calc(100% - 16px);
+		max-width: none;
+		max-height: calc(100vh - 16px);
+		max-height: calc(100dvh - 16px);
+	}
+
+	app-modal-share .share-modal-body {
+		padding: 14px 12px calc(38px + env(safe-area-inset-bottom));
+	}
+
+	app-modal-share .share-action-row {
+		padding: 10px 12px;
+	}
+
+	app-modal-share .share-action-cta {
+		min-width: 76px;
+	}
 }

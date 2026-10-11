@@ -1,5 +1,5 @@
-import './base.css';
 import './creation-details.css';
+import { createModalDismissButton } from '../../shared/modalDismiss.js';
 
 const html = String.raw;
 
@@ -11,9 +11,9 @@ class AppModalCreationDetails extends HTMLElement {
 		this._creationId = null;
 		this._description = '';
 		this._groupContext = null;
-		this.handleEscape = this.handleEscape.bind(this);
 		this.handleOpen = this.handleOpen.bind(this);
 		this.handleCloseAllModals = this.handleCloseAllModals.bind(this);
+		this.handleDialogClose = this.handleDialogClose.bind(this);
 	}
 
 	connectedCallback() {
@@ -23,80 +23,73 @@ class AppModalCreationDetails extends HTMLElement {
 	}
 
 	disconnectedCallback() {
-		document.removeEventListener("keydown", this.handleEscape);
-		document.removeEventListener("open-creation-details-modal", this.handleOpen);
-		document.removeEventListener("close-all-modals", this.handleCloseAllModals);
+		document.removeEventListener('open-creation-details-modal', this.handleOpen);
+		document.removeEventListener('close-all-modals', this.handleCloseAllModals);
+		const dialog = this.querySelector('dialog[data-overlay]');
+		dialog?.removeEventListener('close', this.handleDialogClose);
+	}
+
+	/** @returns {HTMLDialogElement | null} */
+	get dialog() {
+		const el = this.querySelector('dialog[data-overlay]');
+		return el?.tagName === 'DIALOG' ? /** @type {HTMLDialogElement} */ (el) : null;
 	}
 
 	render() {
 		this.innerHTML = html`
-			<div class="modal-overlay" data-overlay>
-				<div class="modal modal-medium">
-					<div class="modal-header">
-						<h3>More Info</h3>
-						<button class="modal-close" type="button" aria-label="Close">
-							<svg class="modal-close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-								stroke-linecap="round" stroke-linejoin="round">
-								<line x1="18" y1="6" x2="6" y2="18"></line>
-								<line x1="6" y1="6" x2="18" y2="18"></line>
-							</svg>
-						</button>
+			<dialog class="app-dialog creation-details-dialog" data-overlay aria-labelledby="creation-details-title">
+				<header class="app-dialog__header">
+					<h2 id="creation-details-title" class="app-dialog__title">More Info</h2>
+				</header>
+				<div class="app-dialog__body">
+					<div class="field" data-group-context-field hidden>
+						<div class="label">Grouped creation</div>
+						<p class="creation-details-args-hint" data-group-context-hint></p>
+						<pre class="creation-details-args" data-group-context></pre>
 					</div>
-					<div class="modal-body">
-						<div class="field" data-group-context-field style="display: none;">
-							<div class="label">Grouped creation</div>
-							<p class="creation-details-args-hint" data-group-context-hint></p>
-							<pre class="creation-details-args" data-group-context></pre>
-						</div>
-						<div class="field" data-args-field>
-							<div class="label">Sent to provider</div>
-							<p class="creation-details-args-hint" data-args-hint>Exact <code>method</code> and <code>args</code> payload used for the generation job.</p>
-							<pre class="creation-details-args" data-args></pre>
-						</div>
-						<div class="field" data-provider-error-field style="display: none;">
-							<div class="label">Provider error</div>
-							<pre class="creation-details-args" data-provider-error></pre>
-						</div>
+					<div class="field" data-args-field>
+						<div class="label">Sent to provider</div>
+						<p class="creation-details-args-hint" data-args-hint>Exact <code>method</code> and <code>args</code> payload used for the generation job.</p>
+						<pre class="creation-details-args" data-args></pre>
 					</div>
-					<div class="modal-footer">
-						<button type="button" class="btn-secondary" data-close-secondary>Close</button>
+					<div class="field" data-provider-error-field hidden>
+						<div class="label">Provider error</div>
+						<pre class="creation-details-args" data-provider-error></pre>
 					</div>
 				</div>
-			</div>
+				<footer class="app-dialog__footer">
+					<button type="button" class="btn-secondary" data-close-secondary>Close</button>
+				</footer>
+			</dialog>
 		`;
-
+		const dialog = this.dialog;
+		const header = dialog?.querySelector('header');
+		if (dialog && header) {
+			const dismiss = createModalDismissButton();
+			dismiss.addEventListener('click', () => this.close());
+			header.append(dismiss);
+		}
 	}
 
 	setupEventListeners() {
-		document.addEventListener("keydown", this.handleEscape);
-		document.addEventListener("open-creation-details-modal", this.handleOpen);
-		document.addEventListener("close-all-modals", this.handleCloseAllModals);
+		document.addEventListener('open-creation-details-modal', this.handleOpen);
+		document.addEventListener('close-all-modals', this.handleCloseAllModals);
 
-		const overlay = this.querySelector("[data-overlay]");
-		const closeBtn = this.querySelector(".modal-close");
-		const closeSecondary = this.querySelector("[data-close-secondary]");
+		const dialog = this.dialog;
+		const closeSecondary = this.querySelector('[data-close-secondary]');
 
-		if (overlay) {
-			overlay.addEventListener("click", (e) => {
-				if (e.target === overlay) {
-					this.close();
-				}
-			});
-		}
-
-		if (closeBtn) {
-			closeBtn.addEventListener("click", () => this.close());
-		}
+		dialog?.addEventListener('click', (e) => {
+			if (e.target === dialog) this.close();
+		});
+		dialog?.addEventListener('close', this.handleDialogClose);
 
 		if (closeSecondary) {
-			closeSecondary.addEventListener("click", () => this.close());
+			closeSecondary.addEventListener('click', () => this.close());
 		}
 	}
 
-	handleEscape(event) {
-		if (event.key === "Escape" && this._isOpen) {
-			this.close();
-		}
+	handleDialogClose() {
+		this._isOpen = false;
 	}
 
 	handleCloseAllModals() {
@@ -116,29 +109,29 @@ class AppModalCreationDetails extends HTMLElement {
 	updateContent() {
 		const meta = this._meta || {};
 		const groupContext = this._groupContext;
-		const groupField = this.querySelector("[data-group-context-field]");
-		const groupHint = this.querySelector("[data-group-context-hint]");
-		const groupEl = this.querySelector("[data-group-context]");
-		const argsEl = this.querySelector("[data-args]");
-		const argsField = this.querySelector("[data-args-field]");
-		const argsHint = this.querySelector("[data-args-hint]");
-		const providerErrorField = this.querySelector("[data-provider-error-field]");
-		const providerErrorEl = this.querySelector("[data-provider-error]");
+		const groupField = this.querySelector('[data-group-context-field]');
+		const groupHint = this.querySelector('[data-group-context-hint]');
+		const groupEl = this.querySelector('[data-group-context]');
+		const argsEl = this.querySelector('[data-args]');
+		const argsField = this.querySelector('[data-args-field]');
+		const argsHint = this.querySelector('[data-args-hint]');
+		const providerErrorField = this.querySelector('[data-provider-error-field]');
+		const providerErrorEl = this.querySelector('[data-provider-error]');
 
 		if (groupField instanceof HTMLElement && groupEl) {
 			if (!groupContext) {
-				groupField.style.display = "none";
-				groupEl.textContent = "";
-				if (groupHint) groupHint.textContent = "";
+				groupField.hidden = true;
+				groupEl.textContent = '';
+				if (groupHint) groupHint.textContent = '';
 			} else {
-				groupField.style.display = "";
+				groupField.hidden = false;
 				const selectedTitle =
-					typeof groupContext.selectedSourceTitle === "string" && groupContext.selectedSourceTitle.trim()
+					typeof groupContext.selectedSourceTitle === 'string' && groupContext.selectedSourceTitle.trim()
 						? groupContext.selectedSourceTitle.trim()
-						: (groupContext.selectedSourceId != null ? `#${groupContext.selectedSourceId}` : "—");
+						: (groupContext.selectedSourceId != null ? `#${groupContext.selectedSourceId}` : '—');
 				if (groupHint) {
 					groupHint.textContent =
-						`Group row #${groupContext.groupCreationId ?? "—"} · ${groupContext.sourceCount ?? 0} sources · showing generation info for the selected image (${selectedTitle}).`;
+						`Group row #${groupContext.groupCreationId ?? '—'} · ${groupContext.sourceCount ?? 0} sources · showing generation info for the selected image (${selectedTitle}).`;
 				}
 				try {
 					groupEl.textContent = JSON.stringify(groupContext, null, 2);
@@ -149,52 +142,50 @@ class AppModalCreationDetails extends HTMLElement {
 		}
 
 		const args = meta.args ?? null;
-		const isPlainObject = args && typeof args === "object" && !Array.isArray(args);
+		const isPlainObject = args && typeof args === 'object' && !Array.isArray(args);
 
-		if (argsField) {
-			argsField.style.display = isPlainObject ? "" : "none";
+		if (argsField instanceof HTMLElement) {
+			argsField.hidden = !isPlainObject;
 		}
-		if (argsHint) {
-			argsHint.style.display = isPlainObject
-				? (groupContext ? "none" : "")
-				: "none";
-		}
-		if (argsHint && isPlainObject && groupContext) {
-			argsHint.textContent = "Provider payload for the selected group source (not the group row).";
-			argsHint.style.display = "";
-		} else if (argsHint && isPlainObject) {
-			argsHint.textContent = "Exact method and args payload used for the generation job.";
+		if (argsHint instanceof HTMLElement) {
+			if (!isPlainObject) {
+				argsHint.hidden = true;
+			} else if (groupContext) {
+				argsHint.textContent = 'Provider payload for the selected group source (not the group row).';
+				argsHint.hidden = false;
+			} else {
+				argsHint.textContent = 'Exact method and args payload used for the generation job.';
+				argsHint.hidden = false;
+			}
 		}
 		if (argsEl && isPlainObject) {
 			try {
 				const payload = {
-					method: typeof meta.method === "string" ? meta.method : null,
+					method: typeof meta.method === 'string' ? meta.method : null,
 					server_id: meta.server_id != null ? meta.server_id : null,
 					args
 				};
 				argsEl.textContent = JSON.stringify(payload, null, 2);
 			} catch {
-				argsEl.textContent = String(args ?? "");
+				argsEl.textContent = String(args ?? '');
 			}
 		} else if (argsEl) {
-			argsEl.textContent = "";
+			argsEl.textContent = '';
 		}
 
-		// Provider error details (non-2xx payloads captured from provider)
 		const providerError = meta.provider_error ?? null;
 		if (providerErrorField instanceof HTMLElement && providerErrorEl) {
-			if (!providerError || typeof providerError !== "object") {
-				providerErrorField.style.display = "none";
-				providerErrorEl.textContent = "";
+			if (!providerError || typeof providerError !== 'object') {
+				providerErrorField.hidden = true;
+				providerErrorEl.textContent = '';
 			} else {
-				providerErrorField.style.display = "";
+				providerErrorField.hidden = false;
 				try {
-					// Prefer showing provider's own error/message if present.
 					const body = providerError.body;
 					const msg =
-						body && typeof body === "object"
-							? (typeof body.error === "string" ? body.error : (typeof body.message === "string" ? body.message : ""))
-							: (typeof body === "string" ? body : "");
+						body && typeof body === 'object'
+							? (typeof body.error === 'string' ? body.error : (typeof body.message === 'string' ? body.message : ''))
+							: (typeof body === 'string' ? body : '');
 					if (msg) {
 						providerErrorEl.textContent = msg;
 					} else {
@@ -208,22 +199,23 @@ class AppModalCreationDetails extends HTMLElement {
 	}
 
 	open() {
-		if (this._isOpen) return;
+		const dialog = this.dialog;
+		if (!dialog) return;
+		if (this._isOpen && dialog.open) return;
 		this._isOpen = true;
-		const overlay = this.querySelector("[data-overlay]");
-		if (overlay) {
-			overlay.classList.add("open");
-		}
+		if (!dialog.open && typeof dialog.showModal === 'function') dialog.showModal();
 	}
 
 	close() {
-		if (!this._isOpen) return;
-		this._isOpen = false;
-		const overlay = this.querySelector("[data-overlay]");
-		if (overlay) {
-			overlay.classList.remove("open");
+		const dialog = this.dialog;
+		if (!dialog) {
+			this._isOpen = false;
+			return;
 		}
+		if (!this._isOpen && !dialog.open) return;
+		this._isOpen = false;
+		if (dialog.open && typeof dialog.close === 'function') dialog.close();
 	}
 }
 
-customElements.define("app-modal-creation-details", AppModalCreationDetails);
+customElements.define('app-modal-creation-details', AppModalCreationDetails);

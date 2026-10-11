@@ -2,7 +2,9 @@
 
 ## Remaining product work
 
-- [ ] Audit CSS across vps. The same rules are redefined in too many stylesheets, and JS is doing layout, positioning, and presentation work that CSS should own. Find the duplicates and those script-driven styles, then fix them.
+- [ ] vynly api's missing
+- [ ] no button visible for submit to challenge on creation detail
+- [ ] pinned posts not showing in channels
 
 ## Public pages and discoverability
 

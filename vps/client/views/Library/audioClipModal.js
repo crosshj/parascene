@@ -1,4 +1,3 @@
-import '../../components/Modal/Modal.css';
 import { createModalDismissButton } from '../../shared/modalDismiss.js';
 import { AudioClipDetailView } from '../AudioClipDetail/AudioClipDetailView.js';
 

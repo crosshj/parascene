@@ -1,5 +1,4 @@
 .ps-overlays { position: relative; z-index: 1000; }
-.ps-overlays [hidden] { display: none !important; }
 .ps-overlay-popover {
 	position: fixed;
 	z-index: 1002;
@@ -94,29 +93,40 @@
 .ps-notifications-list .ps-notification span { font-size: .9rem; white-space: normal; }
 .ps-notifications-list .ps-notification time { font-size: .85rem; }
 .ps-notifications-list .ps-notification::after { content: none; }
-.ps-overlays .modal-footer .ps-secondary-button { width: 100%; }
-.ps-secondary-button,
-.ps-outline-button {
-	box-sizing: border-box;
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
+.ps-overlays-dialog[open] {
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+
+.ps-overlays-dialog--wide {
+	--app-modal-max-width: 760px;
+	width: min(94vw, 760px);
+	max-width: 760px;
+	height: min(92dvh, 560px);
+}
+
+.ps-overlays-dialog .app-dialog__body {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+}
+
+.ps-overlays-dialog .app-dialog__footer {
+	justify-content: stretch;
+}
+
+.ps-overlays-dialog .app-dialog__footer .btn-secondary {
+	width: 100%;
+}
+
+.ps-overlays :is(.btn-secondary, .btn-outlined, .btn-primary),
+.ps-overlays-dialog :is(.btn-secondary, .btn-outlined, .btn-primary) {
 	gap: 9px;
 	height: 40px;
-	min-height: 40px;
-	padding: 0 16px;
-	border: 1px solid var(--border);
-	border-radius: 8px;
-	color: inherit;
-	background: transparent;
-	font: inherit;
 	font-size: 16px;
 	font-weight: 600;
-	text-decoration: none;
-	cursor: pointer;
 }
-.ps-secondary-button:hover,
-.ps-outline-button:hover { background: color-mix(in srgb, var(--text) 6%, transparent); }
 .ps-credits-content p { margin: 0 0 12px; color: var(--text-muted); font-size: 16px; line-height: 1.5; }
 .ps-credits-balance { margin-bottom: 18px !important; font-size: 16px !important; }
 .ps-credits-balance strong { color: var(--text); font-weight: 650; }
@@ -125,10 +135,11 @@
 .ps-credits-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
 .ps-credits-actions span { color: var(--text-muted); font-size: 15px; }
 .ps-credits-retry { padding: 0; border: 0; color: inherit; background: none; font: inherit; font-size: .8125rem; text-decoration: underline; cursor: pointer; }
-.ps-credits-retry[hidden] { display: none; }
 .ps-credits-actions [data-overlay-action="claim-credits"] { min-width: 140px; }
-.ps-outline-button.is-green { border-color: var(--color-green); color: var(--color-green-fg); }
-.ps-outline-button svg { width: 20px; height: 20px; }
+.ps-overlays .btn-outlined.is-green,
+.ps-overlays-dialog .btn-outlined.is-green { border-color: var(--color-green); color: var(--color-green-fg); }
+.ps-overlays .btn-outlined svg,
+.ps-overlays-dialog .btn-outlined svg { width: 20px; height: 20px; }
 
 @media (max-width: 768px) {
 	.ps-overlay-popover--notifications.is-sheet {
@@ -144,23 +155,26 @@
 	}
 	.ps-overlay-popover--notifications.is-sheet .ps-notification { padding: 14px 16px; }
 	.ps-overlay-popover--notifications.is-sheet .ps-notification span,
-	.ps-overlays [data-modal="notifications"] .ps-notification span {
+	.ps-overlays-dialog[data-modal="notifications"] .ps-notification span {
 		white-space: normal;
 		display: -webkit-box;
 		-webkit-line-clamp: 3;
 		-webkit-box-orient: vertical;
 	}
 	.ps-overlay-popover--notifications.is-sheet .ps-preview-all { padding: 14px 16px; font-size: 1rem; }
-	.ps-overlays .modal-overlay[data-modal="notifications"] { padding: 0; }
-	.ps-overlays .modal-overlay[data-modal="notifications"] .modal {
-		width: 100%;
+	.ps-overlays-dialog[data-modal="notifications"] {
+		width: 100vw;
 		max-width: none;
-		height: 100%;
+		height: 100dvh;
 		max-height: none;
 		border: 0;
 		border-radius: 0;
 	}
-	.ps-overlays [data-modal="notifications"] .modal-header { padding-top: calc(16px + env(safe-area-inset-top)); }
-	.ps-overlays [data-modal="notifications"] .modal-footer { padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
+	.ps-overlays-dialog[data-modal="notifications"] .app-dialog__header {
+		padding-top: calc(16px + env(safe-area-inset-top));
+	}
+	.ps-overlays-dialog[data-modal="notifications"] .app-dialog__footer {
+		padding-bottom: calc(16px + env(safe-area-inset-bottom));
+	}
 	.ps-notifications-list .ps-notification { padding: 14px 16px; }
 }

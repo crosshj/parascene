@@ -16,9 +16,7 @@ function renderProviderCapabilities(container, capabilities) {
 
 	if (methodKeys.length === 0) {
 		const noMethods = document.createElement("div");
-		noMethods.style.padding = "1rem";
-		noMethods.style.textAlign = "center";
-		noMethods.style.color = "var(--text-muted)";
+		noMethods.className = "provider-capabilities-empty";
 		noMethods.textContent = "No generation methods available.";
 		methodsContainer.appendChild(noMethods);
 	} else {
@@ -210,7 +208,7 @@ class AppModalServer extends HTMLElement {
 			body.innerHTML = html`<div class="server-loading">Loading...</div>`;
 		}
 		if (actions) {
-			actions.style.display = 'none';
+			actions.hidden = true;
 			actions.innerHTML = '';
 		}
 
@@ -411,6 +409,16 @@ class AppModalServer extends HTMLElement {
 					margin: 0;
 					flex-shrink: 0;
 					background: var(--surface);
+				}
+
+				[hidden] {
+					display: none !important;
+				}
+
+				.provider-capabilities-empty {
+					padding: 1rem;
+					text-align: center;
+					color: var(--text-muted);
 				}
 
 				.server-modal-actions button {
@@ -797,7 +805,7 @@ class AppModalServer extends HTMLElement {
 					<div class="server-modal-body" data-modal-body>
 						<div class="server-loading">Loading...</div>
 					</div>
-					<div class="server-modal-actions" data-modal-actions style="display: none;"></div>
+					<div class="server-modal-actions" data-modal-actions hidden></div>
 				</div>
 			</div>
 		`;
@@ -838,7 +846,7 @@ class AppModalServer extends HTMLElement {
 		}
 
 		if (actions) {
-			actions.style.display = 'flex';
+			actions.hidden = false;
 			actions.innerHTML = html`
 				<button type="button" class="btn-secondary" data-test-btn>Test Server</button>
 				<button type="button" class="btn-primary" data-register-btn>Register</button>
@@ -976,7 +984,7 @@ class AppModalServer extends HTMLElement {
 		}
 
 		if (actions) {
-			actions.style.display = 'flex';
+			actions.hidden = false;
 			actions.innerHTML = html`
 				<button type="button" class="btn-secondary" data-test-btn>Test Server</button>
 				<button type="button" class="btn-secondary" data-refresh-btn>Refresh Methods</button>
@@ -1071,12 +1079,12 @@ class AppModalServer extends HTMLElement {
 		if (actions) {
 			// Public generation servers cannot be joined or left.
 			if (this.hidesMembershipActions()) {
-				actions.style.display = 'none';
+				actions.hidden = true;
 				actions.innerHTML = '';
 				return;
 			}
 
-			actions.style.display = 'flex';
+			actions.hidden = false;
 			if (this.serverData.is_member && !this.serverData.is_owner) {
 				actions.innerHTML = html`
 					<button type="button" class="btn-secondary" data-leave-btn>Leave</button>
@@ -1094,7 +1102,7 @@ class AppModalServer extends HTMLElement {
 					joinBtn.addEventListener('click', () => this.handleJoin());
 				}
 			} else {
-				actions.style.display = 'none';
+				actions.hidden = true;
 			}
 		}
 	}

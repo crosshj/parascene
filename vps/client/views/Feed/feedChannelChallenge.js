@@ -47,12 +47,6 @@ export function createChatFeedChallengePlaceholderElement() {
 	shell.className =
 		'feed-card-engagement-inner feed-card-engagement-inner-challenge feed-card-engagement-inner-challenge--loading skeleton';
 	shell.setAttribute('aria-hidden', 'true');
-	/* Inline so height holds before chat.bundle.css picks up page rules. */
-	shell.style.minHeight = '370px';
-	shell.style.padding = '0';
-	shell.style.background = 'var(--skeleton)';
-	shell.style.border = 'none';
-	shell.style.boxShadow = 'none';
 
 	el.appendChild(shell);
 	return el;

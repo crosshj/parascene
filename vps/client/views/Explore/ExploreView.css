@@ -4,7 +4,6 @@
 .explore-view__more { display: block; margin: 24px auto; }
 .explore-view--large .route-cards { grid-template-columns: minmax(0, 1fr); gap: 16px; }
 .explore-view--large { max-width: 720px; }
-.explore-view [hidden] { display: none !important; }
 
 /* Scoped rules from the active WWW Explore search and large cards. */
 @media (max-width: 768px) {

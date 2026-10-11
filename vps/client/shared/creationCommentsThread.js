@@ -289,8 +289,8 @@ export async function mountCreationCommentsThread(container, options) {
 				</div>
 			</div>
 			` : ''}
-			<div class="creation-detail-comments-section" data-comments-section${knownZeroComments || keepEmptyList || keepSkeletonList || !Number.isFinite(initialCommentCount) ? '' : ' style="display: none;"'}>
-				<div class="comments-toolbar"${knownZeroComments ? ' style="display: none;"' : ''}>
+			<div class="creation-detail-comments-section" data-comments-section${knownZeroComments || keepEmptyList || keepSkeletonList || !Number.isFinite(initialCommentCount) ? '' : ' hidden'}>
+				<div class="comments-toolbar"${knownZeroComments ? ' hidden' : ''}>
 					<h3 class="comments-heading"><span data-comment-count>${commentsHeading}</span></h3>
 					<div class="comments-sort">
 						<label class="comments-sort-label" for="comments-sort-${creationId}">Sort by</label>
@@ -382,11 +382,11 @@ export async function mountCreationCommentsThread(container, options) {
 	function renderCommentsLoadingSkeleton() {
 		const row = `
 			<div class="creation-comments-skeleton-row">
-				<div class="skeleton skeleton-circle" style="width:32px;height:32px;border-radius:50%"></div>
+				<div class="skeleton skeleton-circle"></div>
 				<div class="creation-comments-skeleton-body">
 					<div class="skeleton skeleton-line skeleton-line--short"></div>
 					<div class="skeleton skeleton-line skeleton-line--medium"></div>
-					<div class="skeleton skeleton-line" style="max-width:72%"></div>
+					<div class="skeleton skeleton-line skeleton-line--max72"></div>
 				</div>
 			</div>
 		`;
@@ -649,7 +649,7 @@ export async function mountCreationCommentsThread(container, options) {
 		if (list.length === 0) {
 			commentInlineReplyParentId = null;
 			if (commentsToolbarEl instanceof HTMLElement) {
-				commentsToolbarEl.style.display = 'none';
+				commentsToolbarEl.hidden = true;
 			}
 			if (!force && commentListEl.querySelector('.comments-empty')) {
 				lastRenderedActivitySig = 'empty';
@@ -665,7 +665,7 @@ export async function mountCreationCommentsThread(container, options) {
 		lastRenderedActivitySig = nextSig;
 
 		if (commentsToolbarEl instanceof HTMLElement) {
-			commentsToolbarEl.style.display = '';
+			commentsToolbarEl.hidden = false;
 		}
 
 		const viewerAllowsCommentReplyUi = viewerAllowsCommentReplyUiNow();
@@ -1407,7 +1407,7 @@ export async function mountCreationCommentsThread(container, options) {
 		const reactionEpoch = commentReactionEpoch;
 
 		const commentsSection = root.querySelector('[data-comments-section]');
-		if (commentsSection instanceof HTMLElement) commentsSection.style.display = '';
+		if (commentsSection instanceof HTMLElement) commentsSection.hidden = false;
 
 		const listAlreadyEmpty = Boolean(commentListEl.querySelector('.comments-empty'));
 		const listAlreadySkeleton = Boolean(
@@ -1436,7 +1436,7 @@ export async function mountCreationCommentsThread(container, options) {
 			if (loadGeneration !== commentsLoadGeneration || reactionEpoch !== commentReactionEpoch) return;
 
 			if (!res.ok) {
-				if (commentsToolbarEl instanceof HTMLElement) commentsToolbarEl.style.display = 'none';
+				if (commentsToolbarEl instanceof HTMLElement) commentsToolbarEl.hidden = true;
 				commentListEl.innerHTML = renderEmptyState({ className: 'comments-empty', title: 'Unable to load comments' });
 				lastRenderedActivitySig = 'error';
 				return;
@@ -1445,7 +1445,7 @@ export async function mountCreationCommentsThread(container, options) {
 			const items = Array.isArray(res.data?.items) ? res.data.items : [];
 			const commentCount = Number(res.data?.comment_count ?? items.length);
 			if (commentsToolbarEl instanceof HTMLElement) {
-				commentsToolbarEl.style.display = items.length > 0 ? '' : 'none';
+				commentsToolbarEl.hidden = items.length === 0;
 			}
 			commentsState.activity = items;
 			setCommentCount(commentCount);
@@ -1496,7 +1496,6 @@ export async function mountCreationCommentsThread(container, options) {
 		if (commentAttachBtn instanceof HTMLButtonElement) {
 			// Single-mode: typed text OR media/sticker quick-send.
 			commentAttachBtn.hidden = false;
-			commentAttachBtn.style.visibility = 'visible';
 			commentAttachBtn.disabled = commentQuickSubmitInFlight;
 			commentAttachBtn.classList.toggle('comment-input-attach--text-disabled', hasText);
 			if (hasText) closeCommentAttachChoiceModal();

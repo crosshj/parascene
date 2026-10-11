@@ -2,10 +2,6 @@
 
 /* Embed iframe: scrollbar hiding (clearance is in global.css). */
 
-
-
-
-
 .audio-clip-detail-view.audio-clip-detail-embed .audio-clip-detail-route {
 	padding-right: 0;
 	padding-left: 0;
@@ -151,7 +147,6 @@
 }
 
 .audio-clip-detail-view { max-width: 960px; margin: auto; width: 100%; }
-.audio-clip-detail-view [hidden] { display: none !important; }
 
 .audio-clip-detail-skeleton { display: grid; gap: 12px; }
 .audio-clip-detail-skeleton > div:not(.audio-clip-detail-skeleton__section),

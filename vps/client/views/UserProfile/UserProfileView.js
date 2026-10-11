@@ -789,7 +789,7 @@ function renderProfilePage(
 							<div class="user-profile-help">Add a full URL for each site. Only valid links are saved, and only filled links show as icons on your profile.</div>
 						</div>
 
-						<div class="user-profile-form-section user-profile-account-section" data-account-email-section ${(isAdmin && !isSelf) ? 'style="display: none;"' : ''}>
+						<div class="user-profile-form-section user-profile-account-section" data-account-email-section${(isAdmin && !isSelf) ? " hidden" : ""}>
 							<h3 class="user-profile-form-section-title">Account</h3>
 							<div class="field">
 								<label>Current email</label>
@@ -807,10 +807,10 @@ function renderProfilePage(
 									placeholder="Required to change email" autocomplete="current-password">
 							</div>
 							<button type="button" class="btn-secondary" data-account-email-submit>Update email</button>
-							<div class="user-profile-account-message" data-account-email-message style="display: none;"></div>
+							<div class="user-profile-account-message" data-account-email-message hidden></div>
 						</div>
 
-						<div class="alert error" data-profile-edit-error style="display: none;"></div>
+						<div class="alert error" data-profile-edit-error hidden></div>
 					</form>
 				</div>
 				<div class="modal-footer">
@@ -834,7 +834,7 @@ function renderProfilePage(
 					</div>
 					<div class="modal-body" data-profile-generate-confirm-body>
 						<p>This costs <strong>3 credits</strong> and requires the <strong>Character</strong> field to be filled out (at least 12 characters) in the form behind this dialog.</p>
-						<div class="alert error" data-profile-generate-confirm-error style="display: none;"></div>
+						<div class="alert error" data-profile-generate-confirm-error hidden></div>
 					</div>
 					<div class="modal-footer">
 						<button class="btn-secondary" type="button" data-profile-generate-confirm-cancel>Cancel</button>
@@ -905,8 +905,7 @@ function renderImageGrid(
 		const card = document.createElement('div');
 		card.className = 'route-card route-card-image'
 			+ (showPersonaAvatarBtn ? ' route-card-image--persona-mentions-avatar' : '');
-		card.style.cursor = 'pointer';
-		card.addEventListener('click', () => {
+				card.addEventListener('click', () => {
 			navigateToCreation(`/creations/${item.id}`, item);
 		});
 
@@ -1003,8 +1002,7 @@ function appendImageGridCards(grid, items, showBadge = false) {
 	items.forEach((item) => {
 		const card = document.createElement('div');
 		card.className = 'route-card route-card-image';
-		card.style.cursor = 'pointer';
-		card.addEventListener('click', () => { navigateToCreation(`/creations/${item.id}`, item); });
+				card.addEventListener('click', () => { navigateToCreation(`/creations/${item.id}`, item); });
 
 		const isPublished = item.published === true || item.published === 1;
 		const userDeleted = Boolean(item.user_deleted);
@@ -1392,7 +1390,7 @@ function renderPersonaLibraryEditModalHtml(personaCatalog, slugDisplayFallback, 
 								` : ''}
 							</div>
 						</div>
-						<div class="alert error" data-persona-library-edit-error style="display: none;"></div>
+						<div class="alert error" data-persona-library-edit-error hidden></div>
 					</form>
 				</div>
 				<div class="modal-footer">
@@ -1413,7 +1411,7 @@ function renderPersonaLibraryEditModalHtml(personaCatalog, slugDisplayFallback, 
 					</div>
 					<div class="modal-body" data-persona-library-generate-confirm-body>
 						<p>This costs <strong>3 credits</strong> and uses the <strong>Character</strong> field in this form (at least 12 characters).</p>
-						<div class="alert error" data-persona-library-generate-confirm-error style="display: none;"></div>
+						<div class="alert error" data-persona-library-generate-confirm-error hidden></div>
 					</div>
 					<div class="modal-footer">
 						<button class="btn-secondary" type="button" data-persona-library-generate-confirm-cancel>Cancel</button>
@@ -1666,21 +1664,21 @@ function wirePersonaLibraryEditModal(container, personality) {
 
 	function hideError() {
 		if (!errorBox) return;
-		errorBox.style.display = 'none';
+		errorBox.hidden = true;
 		errorBox.textContent = '';
 	}
 
 	function showError(msg) {
 		if (!errorBox) return;
 		errorBox.textContent = msg;
-		errorBox.style.display = '';
+		errorBox.hidden = false;
 	}
 
 	function closePersonaGenerateConfirm() {
 		if (generateConfirmOverlay) generateConfirmOverlay.hidden = true;
 		const confirmError = overlay.querySelector('[data-persona-library-generate-confirm-error]');
 		if (confirmError) {
-			confirmError.style.display = 'none';
+			confirmError.hidden = true;
 			confirmError.textContent = '';
 		}
 	}
@@ -1800,8 +1798,6 @@ function wirePersonaLibraryEditModal(container, personality) {
 		generateConfirmCta.disabled = loading;
 		if (textEl) textEl.hidden = loading;
 		if (spinnerEl) spinnerEl.hidden = !loading;
-		if (generateConfirmBody) generateConfirmBody.style.pointerEvents = loading ? 'none' : '';
-		if (generateConfirmBody) generateConfirmBody.style.opacity = loading ? '0.6' : '';
 		if (generateConfirmCancel) generateConfirmCancel.disabled = loading;
 		if (generateConfirmClose) {
 			generateConfirmClose.disabled = loading;
@@ -1844,13 +1840,13 @@ function wirePersonaLibraryEditModal(container, personality) {
 			const confirmErrorEl = overlay.querySelector('[data-persona-library-generate-confirm-error]');
 			if (description.length < 12) {
 				if (confirmErrorEl) {
-					confirmErrorEl.style.display = 'block';
+					confirmErrorEl.hidden = false;
 					confirmErrorEl.textContent = 'Character description must be at least 12 characters.';
 				}
 				return;
 			}
 			if (confirmErrorEl) {
-				confirmErrorEl.style.display = 'none';
+				confirmErrorEl.hidden = true;
 				confirmErrorEl.textContent = '';
 			}
 			isGeneratingPersonaAvatar = true;
@@ -1885,7 +1881,7 @@ function wirePersonaLibraryEditModal(container, personality) {
 			} catch (err) {
 				const msg = String(err?.message || '').trim() || 'Generation failed.';
 				if (confirmErrorEl) {
-					confirmErrorEl.style.display = 'block';
+					confirmErrorEl.hidden = false;
 					confirmErrorEl.textContent = msg;
 				}
 			} finally {
@@ -3049,13 +3045,13 @@ if(!lifetime.active)return;
 			const description = (characterField.value || '').trim();
 			if (description.length < 12) {
 				if (errorBox) {
-					errorBox.style.display = 'block';
+					errorBox.hidden = false;
 					errorBox.textContent = 'Add a character description (at least 12 characters) to generate an avatar.';
 				}
 				return;
 			}
 			if (errorBox) {
-				errorBox.style.display = 'none';
+				errorBox.hidden = true;
 				errorBox.textContent = '';
 			}
 			openGenerateConfirmModal();
@@ -3070,7 +3066,7 @@ if(!lifetime.active)return;
 		if (generateConfirmOverlay) generateConfirmOverlay.hidden = true;
 		const confirmError = container.querySelector('[data-profile-generate-confirm-error]');
 		if (confirmError) {
-			confirmError.style.display = 'none';
+			confirmError.hidden = true;
 			confirmError.textContent = '';
 		}
 	}
@@ -3082,8 +3078,6 @@ if(!lifetime.active)return;
 		generateConfirmCta.disabled = loading;
 		if (textEl) textEl.hidden = loading;
 		if (spinnerEl) spinnerEl.hidden = !loading;
-		if (generateConfirmBody) generateConfirmBody.style.pointerEvents = loading ? 'none' : '';
-		if (generateConfirmBody) generateConfirmBody.style.opacity = loading ? '0.6' : '';
 		if (generateConfirmCancel) generateConfirmCancel.disabled = loading;
 		if (generateConfirmClose) {
 			generateConfirmClose.disabled = loading;
@@ -3111,14 +3105,14 @@ if(!lifetime.active)return;
 			if (description.length < 12) {
 				const confirmError = container.querySelector('[data-profile-generate-confirm-error]');
 				if (confirmError) {
-					confirmError.style.display = 'block';
+					confirmError.hidden = false;
 					confirmError.textContent = 'Character description must be at least 12 characters.';
 				}
 				return;
 			}
 			const confirmErrorEl = container.querySelector('[data-profile-generate-confirm-error]');
 			if (confirmErrorEl) {
-				confirmErrorEl.style.display = 'none';
+				confirmErrorEl.hidden = true;
 				confirmErrorEl.textContent = '';
 			}
 			isGeneratingAvatar = true;
@@ -3151,7 +3145,7 @@ if(!lifetime.active)return;
 			} catch (err) {
 				const msg = String(err?.message || '').trim() || 'Generation failed.';
 				if (confirmErrorEl) {
-					confirmErrorEl.style.display = 'block';
+					confirmErrorEl.hidden = false;
 					confirmErrorEl.textContent = msg;
 				}
 			} finally {
@@ -3180,14 +3174,14 @@ if(!lifetime.active)return;
 		const keepEditOpen = opts && opts.keepEditOpen === true;
 		if (!form || !saveButton) return;
 		if (errorBox) {
-			errorBox.style.display = 'none';
+			errorBox.hidden = true;
 			errorBox.textContent = '';
 		}
 
 		const socialCheck = validateProfileSocialForm(form);
 		if (!socialCheck.ok) {
 			if (errorBox) {
-				errorBox.style.display = 'block';
+				errorBox.hidden = false;
 				errorBox.textContent = socialCheck.error || 'Enter a valid URL for that site.';
 			}
 			return;
@@ -3285,7 +3279,7 @@ if(!lifetime.active)return;
 				? 'Network error. Check your connection and try again.'
 				: (result.data?.error || 'Failed to save profile.');
 			if (errorBox) {
-				errorBox.style.display = 'block';
+				errorBox.hidden = false;
 				errorBox.textContent = message;
 			}
 			return;
@@ -3315,20 +3309,20 @@ if(!lifetime.active)return;
 			const newEmail = (accountNewEmailInput.value || '').trim();
 			const password = accountPasswordInput.value || '';
 
-			accountEmailMessage.style.display = 'none';
+			accountEmailMessage.hidden = true;
 			accountEmailMessage.textContent = '';
 			accountEmailMessage.classList.remove('error', 'success');
 
 			if (!newEmail) {
 				accountEmailMessage.textContent = 'Enter a new email address.';
 				accountEmailMessage.classList.add('error');
-				accountEmailMessage.style.display = 'block';
+				accountEmailMessage.hidden = false;
 				return;
 			}
 			if (!password) {
 				accountEmailMessage.textContent = 'Enter your current password to change email.';
 				accountEmailMessage.classList.add('error');
-				accountEmailMessage.style.display = 'block';
+				accountEmailMessage.hidden = false;
 				return;
 			}
 
@@ -3345,7 +3339,7 @@ if(!lifetime.active)return;
 			if (result.ok) {
 				accountEmailMessage.textContent = 'Email updated.';
 				accountEmailMessage.classList.add('success');
-				accountEmailMessage.style.display = 'block';
+				accountEmailMessage.hidden = false;
 				if (accountCurrentEmailEl) accountCurrentEmailEl.textContent = result.data?.email ?? newEmail;
 				accountNewEmailInput.value = '';
 				accountPasswordInput.value = '';
@@ -3353,7 +3347,7 @@ if(!lifetime.active)return;
 				const message = result.data?.message || result.data?.error || 'Could not update email.';
 				accountEmailMessage.textContent = message;
 				accountEmailMessage.classList.add('error');
-				accountEmailMessage.style.display = 'block';
+				accountEmailMessage.hidden = false;
 			}
 		});
 	}

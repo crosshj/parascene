@@ -3,7 +3,6 @@
 .content-cards-image-grid { position: relative; grid-template-columns: repeat(auto-fill, minmax(min(var(--creations-tile-min), 100%), 1fr)); gap: 10px; width: 100%; min-width: 0; box-sizing: border-box; }
 .skeleton-grid-tile { position: relative; width: 100%; min-width: 0; aspect-ratio: 1 / 1; overflow: hidden; border-radius: 11px; background-color: var(--skeleton, #e2e3e6); }
 .skeleton-grid-tile::after { display: none; }
-.creation-browse-grid[hidden] { display: none; }
 .creation-grid__card { position: relative; isolation: isolate; min-width: 0; width: 100%; padding: 0; background: transparent; border: 0; cursor: pointer; }
 .creation-grid__card:focus, .creation-grid__card:focus-visible { outline: none; box-shadow: none; }
 .creation-browse-grid .feed-card-image { position: relative; width: 100%; aspect-ratio: 1 / 1; overflow: hidden; border-radius: 11px; corner-shape: squircle; background-color: color-mix(in srgb, var(--creations-card-placeholder) 72%, transparent); }

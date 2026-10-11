@@ -136,10 +136,10 @@ connectedCallback() {
 					text-decoration: none;
 					font: inherit;
 				}
-				.account-menu-item[hidden],
-				.account-menu-link[hidden] {
+				[hidden] {
 					display: none !important;
 				}
+
 				.account-menu-item:hover,
 				.account-menu-link:hover {
 					background: var(--surface-strong);

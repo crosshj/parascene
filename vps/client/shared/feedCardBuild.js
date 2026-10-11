@@ -172,9 +172,9 @@ export function teardownFeedCardCreationProcessingUi(imageContainer) {
 	imageContainer.querySelector('[data-creation-gpu-wait]')?.remove();
 	const videoEl = imageContainer.querySelector('.feed-card-video');
 	if (videoEl instanceof HTMLVideoElement) {
-		videoEl.style.removeProperty('opacity');
-		videoEl.style.removeProperty('visibility');
+		videoEl.classList.remove('is-feed-media-concealed');
 	}
+	imageContainer.querySelector('.feed-card-img')?.classList?.remove?.('is-feed-media-concealed');
 }
 
 /**
@@ -196,15 +196,14 @@ export function applyFeedCardCreationProcessingState(imageContainer, imageEl) {
 	if (imageEl instanceof HTMLImageElement) {
 		imageEl.removeAttribute('src');
 		imageEl.removeAttribute('data-feed-image-url');
-		imageEl.style.opacity = '0';
+		imageEl.classList.add('is-feed-media-concealed');
 	}
 	const videoEl = imageContainer.querySelector('.feed-card-video');
 	if (videoEl instanceof HTMLVideoElement) {
 		videoEl.removeAttribute('poster');
 		videoEl.removeAttribute('src');
 		delete videoEl.dataset.feedVideoSrc;
-		videoEl.style.opacity = '0';
-		videoEl.style.visibility = 'hidden';
+		videoEl.classList.add('is-feed-media-concealed');
 	}
 	const card = imageContainer.closest('[data-creation-status]');
 	const st = (card?.getAttribute('data-creation-status') || '').toLowerCase();
@@ -366,7 +365,7 @@ export function setupFeedCardGroupVideoPlaylist(imageContainer, item, options = 
 
 	const imgEl = imageContainer.querySelector('.feed-card-img');
 	if (imgEl instanceof HTMLImageElement) {
-		imgEl.style.opacity = '0';
+		imgEl.classList.add('is-feed-media-concealed');
 		imgEl.removeAttribute('src');
 		imgEl.removeAttribute('data-feed-image-url');
 	}
@@ -552,7 +551,7 @@ export function markFeedCardImageUnavailable(imageContainer, imageEl, attrs = {}
 		imageContainer.appendChild(moderatedIconEl);
 	}
 	if (imageEl instanceof HTMLImageElement) {
-		imageEl.style.opacity = '0';
+		imageEl.classList.add('is-feed-media-concealed');
 		imageEl.removeAttribute('src');
 		imageEl.removeAttribute('data-feed-image-url');
 	}
@@ -572,7 +571,7 @@ function applyFeedAudioWaveformCover(imageContainer, imageEl, item) {
 	imageContainer.removeAttribute('aria-label');
 	imageContainer.removeAttribute('role');
 	if (imageEl instanceof HTMLImageElement) {
-		imageEl.style.opacity = '0';
+		imageEl.classList.add('is-feed-media-concealed');
 		imageEl.removeAttribute('src');
 		imageEl.removeAttribute('data-feed-image-url');
 	}
@@ -636,7 +635,7 @@ export function attachFeedCardImage(imageEl, imageContainer, item, itemIndex, pr
 			const existingModIcon = imageContainer.querySelector('.route-media-error-moderated-icon');
 			if (existingModIcon) existingModIcon.remove();
 			if (imageEl instanceof HTMLImageElement) {
-				imageEl.style.removeProperty('opacity');
+				imageEl.classList.remove('is-feed-media-concealed');
 			}
 		};
 
@@ -696,7 +695,7 @@ export function attachFeedCardImage(imageEl, imageContainer, item, itemIndex, pr
 				const existingModIcon = imageContainer.querySelector('.route-media-error-moderated-icon');
 				if (existingModIcon) existingModIcon.remove();
 				if (imageEl instanceof HTMLImageElement) {
-					imageEl.style.removeProperty('opacity');
+					imageEl.classList.remove('is-feed-media-concealed');
 				}
 			},
 			onFail: () => {
@@ -1816,7 +1815,7 @@ function buildFeedCreationCard(
               <circle cx="12" cy="19" r="1.6"></circle>
             </svg>
           </button>
-          <div class="feed-card-menu" data-feed-menu style="display: none;">
+          <div class="feed-card-menu" data-feed-menu hidden>
             ${item.feed_beta_why ? `<button class="feed-card-menu-item" type="button" data-feed-beta-why>Why am I seeing this?</button>` : ''}
             <button class="feed-card-menu-item" type="button" data-hide-item>Hide from my feed</button>
           </div>
@@ -1886,7 +1885,7 @@ function buildFeedCreationCard(
 		whyButton.addEventListener('click', (e) => {
 			e.preventDefault();
 			e.stopPropagation();
-			menu.style.display = 'none';
+			menu.hidden = true;
 			openFeedBetaWhyModal(item.feed_beta_why, { signal: tooltipLifetime.signal });
 		});
 	}
@@ -1898,7 +1897,7 @@ function buildFeedCreationCard(
 		// Close any open menus when clicking outside
 		const closeMenu = (e) => {
 			if (!menu.contains(e.target) && !moreButton.contains(e.target)) {
-				menu.style.display = 'none';
+				menu.hidden = true;
 				document.removeEventListener('click', closeMenu);
 			}
 		};
@@ -1909,12 +1908,12 @@ function buildFeedCreationCard(
 
 			// Close other open menus first
 			document.querySelectorAll('[data-feed-menu]').forEach(m => {
-				if (m !== menu) m.style.display = 'none';
+				if (m !== menu) m.hidden = true;
 			});
 
 			// Toggle this menu
-			const isVisible = menu.style.display !== 'none';
-			menu.style.display = isVisible ? 'none' : 'block';
+			const isVisible = !menu.hidden;
+			menu.hidden = isVisible;
 
 			if (!isVisible) {
 				menuTimer = setTimeout(() => {
@@ -1933,10 +1932,10 @@ function buildFeedCreationCard(
 			addHiddenFeedItem(String(itemId));
 
 			// Hide the card
-			card.style.display = 'none';
+			card.hidden = true;
 
 			// Close menu
-			menu.style.display = 'none';
+			menu.hidden = true;
 			document.removeEventListener('click', closeMenu);
 		});
 	}
@@ -2075,7 +2074,7 @@ function finishFeedCreationCardMediaAndClick(
 				teardownFeedCardCreationProcessingUi(imageContainer);
 				imageEl?.removeAttribute?.('src');
 				imageEl?.removeAttribute?.('data-feed-image-url');
-				imageEl?.style?.removeProperty?.('opacity');
+				imageEl?.classList?.remove?.('is-feed-media-concealed');
 				imageContainer.classList.remove('loading', 'error', 'feed-card-image-error-moderated');
 				imageContainer.removeAttribute('data-feed-img-state');
 				imageContainer.removeAttribute('role');
@@ -2127,7 +2126,7 @@ function finishFeedCreationCardMediaAndClick(
 
 	if (item.created_image_id) {
 		// Make the entire card clickable except the actions row (including when preview URL is missing)
-		card.style.cursor = 'pointer';
+		card.classList.add('feed-card--nav');
 
 		const navigateFeedCardToCreation = (e) => {
 			if (creationsBulkChrome && card.closest('.is-bulk-mode')) return;
@@ -2168,7 +2167,6 @@ function finishFeedCreationCardMediaAndClick(
 		// Prevent actions row from triggering card click
 		const actionsRow = card.querySelector('.feed-card-actions');
 		if (actionsRow) {
-			actionsRow.style.cursor = 'default';
 			actionsRow.addEventListener('click', (e) => {
 				e.stopPropagation();
 			});
@@ -2406,7 +2404,7 @@ export function createFeedSpotlightVideoTile(item, itemIndex, options = {}) {
 				teardownFeedCardCreationProcessingUi(imageContainer);
 				img?.removeAttribute?.("src");
 				img?.removeAttribute?.("data-feed-image-url");
-				img?.style?.removeProperty?.("opacity");
+				img?.classList?.remove?.("is-feed-media-concealed");
 				imageContainer.classList.remove("loading", "error", "feed-card-image-error-moderated");
 				imageContainer.removeAttribute("data-feed-img-state");
 				imageContainer.removeAttribute("aria-label");

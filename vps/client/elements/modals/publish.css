@@ -1,6 +1,20 @@
-app-modal-publish .publish-modal {
-	width: 94%;
+app-modal-publish .publish-dialog {
+	--app-modal-max-width: 580px;
+	position: relative;
+	width: min(94vw, 580px);
 	max-width: 580px;
+}
+
+app-modal-publish .publish-dialog[open] {
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+
+app-modal-publish .publish-dialog .app-dialog__body {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
 }
 
 app-modal-publish .publish-alert {
@@ -130,10 +144,20 @@ app-modal-publish .publish-cancel-link:hover {
 	color: var(--text);
 }
 
+app-modal-publish .publish-cancel-link.is-loading {
+	pointer-events: none;
+	opacity: 0.5;
+}
+
 app-modal-publish .publish-submit-btn {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
+}
+
+app-modal-publish .publish-submit-icon {
+	margin-right: 6px;
+	vertical-align: middle;
 }
 
 app-modal-publish .publish-modal-loading {
@@ -144,7 +168,7 @@ app-modal-publish .publish-modal-loading {
 	align-items: center;
 	justify-content: center;
 	background: rgba(0, 0, 0, 0.7);
-	border-radius: 14px;
+	border-radius: var(--app-modal-radius, 14px);
 }
 
 app-modal-publish .publish-modal-loading.active {
@@ -165,42 +189,45 @@ app-modal-publish .publish-spinner {
 }
 
 @media (min-width: 768px) {
-	app-modal-publish .publish-modal { max-width: 680px; }
+	app-modal-publish .publish-dialog {
+		--app-modal-max-width: 680px;
+		max-width: 680px;
+		width: min(94vw, 680px);
+	}
 }
 
 @media (max-width: 768px) {
-	app-modal-publish .publish-modal-overlay {
-		align-items: stretch;
-		justify-content: flex-start;
-		padding: 0;
-		background: var(--surface);
-	}
-
-	app-modal-publish .publish-modal {
-		flex: 1;
+	app-modal-publish .publish-dialog {
 		width: 100%;
-		min-height: 0;
 		max-width: none;
 		max-height: none;
+		height: 100%;
+		height: 100dvh;
 		border: none;
 		border-radius: 0;
 		box-shadow: none;
-		transform: none;
 	}
 
-	app-modal-publish .publish-modal-overlay.open .publish-modal { transform: none; }
-	app-modal-publish .publish-modal-header {
+	app-modal-publish .publish-dialog .app-dialog__header {
 		padding: max(6px, env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px)) 8px max(12px, env(safe-area-inset-left, 0px));
 	}
-	app-modal-publish .publish-modal-header :is(h2, h3) { font-size: 1.125rem; line-height: 1.3; }
-	app-modal-publish .publish-modal-close { min-width: 36px; min-height: 36px; padding: 4px; }
-	app-modal-publish .publish-modal-body {
+
+	app-modal-publish .publish-dialog .app-dialog__title {
+		font-size: 1.125rem;
+		line-height: 1.3;
+	}
+
+	app-modal-publish .publish-dialog .app-dialog__body {
 		padding: 16px max(12px, env(safe-area-inset-right, 0px)) 16px max(12px, env(safe-area-inset-left, 0px));
 	}
-	app-modal-publish .publish-modal-footer {
+
+	app-modal-publish .publish-dialog .app-dialog__footer {
 		padding: 12px max(12px, env(safe-area-inset-right, 0px)) max(14px, env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px));
 	}
-	app-modal-publish .publish-field textarea { min-height: min(200px, 42vh); }
+
+	app-modal-publish .publish-field textarea {
+		min-height: min(200px, 42vh);
+	}
 }
 
 @media (prefers-color-scheme: light) {

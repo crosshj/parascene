@@ -693,9 +693,10 @@ class AppModalProfile extends HTMLElement {
           cursor: pointer;
           accent-color: var(--accent);
         }
-        [data-nsfw-obscure-wrap][hidden] {
-          display: none !important;
+        [hidden] {
+        	display: none !important;
         }
+
       </style>
       <div class="profile-overlay">
         <div class="profile-modal" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">

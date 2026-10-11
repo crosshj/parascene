@@ -354,15 +354,15 @@ class AppRouteCreate extends HTMLElement {
                   <option value="">Select a server...</option>
                 </select>
               </div>
-              <div class="form-group" data-method-group style="display: none;">
+              <div class="form-group" data-method-group hidden>
                 <label class="form-label" for="method-select">Generation Method</label>
                 <select class="form-select" id="method-select" data-method-select required>
                   <option value="">Select a method...</option>
                 </select>
               </div>
-              <div class="form-group" data-fields-group style="display: none;">
+              <div class="form-group" data-fields-group hidden>
                 <div data-fields-container></div>
-                <div class="create-fields-toggle" data-fields-toggle style="display: none;">
+                <div class="create-fields-toggle" data-fields-toggle hidden>
                   <a href="#" class="create-fields-toggle-link" data-toggle-hidden-fields>Show hidden fields</a>
                 </div>
                 <div class="create-fields-hidden-slot" data-fields-hidden-slot></div>
@@ -1538,7 +1538,7 @@ class AppRouteCreate extends HTMLElement {
 		}
 
 		if (!this.selectedServer) {
-			methodGroup.style.display = 'none';
+			methodGroup.hidden = true;
 			return;
 		}
 
@@ -1550,13 +1550,13 @@ class AppRouteCreate extends HTMLElement {
 				this.selectedServer.server_config = serverConfig;
 			} catch (e) {
 				// console.warn('Failed to parse server_config:', e);
-				methodGroup.style.display = 'none';
+				methodGroup.hidden = true;
 				return;
 			}
 		}
 
 		if (!serverConfig || !serverConfig.methods) {
-			methodGroup.style.display = 'none';
+			methodGroup.hidden = true;
 			return;
 		}
 
@@ -1575,7 +1575,7 @@ class AppRouteCreate extends HTMLElement {
 			methodSelect.appendChild(option);
 		});
 
-		methodGroup.style.display = 'flex';
+		methodGroup.hidden = false;
 
 		// Auto-select method: prefer one with default: true, otherwise first (unless skipping auto-select)
 		if (!skipAutoSelect && methodKeys.length > 0) {
@@ -1646,7 +1646,7 @@ class AppRouteCreate extends HTMLElement {
  disposeProviderFormFields(fieldsGroup);
 
 		if (!this.selectedMethod || !this.selectedMethod.fields) {
-			fieldsGroup.style.display = 'none';
+			fieldsGroup.hidden = true;
 			this._crossMethodImageCarryover = null;
 			return;
 		}
@@ -1666,7 +1666,7 @@ class AppRouteCreate extends HTMLElement {
 		this._crossMethodImageCarryover = null;
 
 		if (Object.keys(fields).length === 0) {
-			fieldsGroup.style.display = 'none';
+			fieldsGroup.hidden = true;
 			return;
 		}
 
@@ -1716,12 +1716,12 @@ class AppRouteCreate extends HTMLElement {
 			const toggleLink = this.querySelector("[data-toggle-hidden-fields]");
 			if (toggleWrap && toggleLink && hiddenFieldsSlot) {
 				if (hasHiddenFields) {
-					toggleWrap.style.display = '';
+					toggleWrap.hidden = false;
 					this.showHiddenFields = false;
 					hiddenFieldsSlot.classList.remove("show-hidden-fields");
 					toggleLink.textContent = "Show hidden fields";
 				} else {
-					toggleWrap.style.display = 'none';
+					toggleWrap.hidden = true;
 					hiddenFieldsSlot.innerHTML = '';
 					hiddenFieldsSlot.classList.remove("show-hidden-fields");
 				}
@@ -1730,7 +1730,7 @@ class AppRouteCreate extends HTMLElement {
 			this._renderingFields = false;
 		}
 
-		fieldsGroup.style.display = 'flex';
+		fieldsGroup.hidden = false;
 		this.applyUrlPromptToBasicFields();
 		if (typeof attachPromptInlineSuggest === 'function') {
 			fieldsGroup.querySelectorAll(".prompt-editor").forEach((el) => attachPromptInlineSuggest(el));
@@ -1742,13 +1742,13 @@ class AppRouteCreate extends HTMLElement {
 	hideMethodGroup() {
 		const methodGroup = this.querySelector("[data-method-group]");
 		const methodSelect = this.querySelector("[data-method-select]");
-		if (methodGroup) methodGroup.style.display = 'none';
+		if (methodGroup) methodGroup.hidden = true;
 		if (methodSelect) methodSelect.value = '';
 	}
 
 	hideFieldsGroup() {
 		const fieldsGroup = this.querySelector("[data-fields-group]");
-		if (fieldsGroup) fieldsGroup.style.display = 'none';
+		if (fieldsGroup) fieldsGroup.hidden = true;
 	}
 
 	handleCreditsUpdated(event) {
@@ -1962,7 +1962,7 @@ class AppRouteCreate extends HTMLElement {
 				input = input.querySelector('.form-switch-input');
 			}
 			const group = input?.closest?.('.form-group');
-			if (group && group.style.display === 'none') return;
+			if (group && (group.hidden || group.style.display === 'none')) return;
 			if (input?.disabled) return;
 			if (input) {
 				if (field?.type === 'boolean' || input.type === 'checkbox') {

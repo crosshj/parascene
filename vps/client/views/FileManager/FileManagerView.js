@@ -10,7 +10,6 @@ import { creationGridStatusMarkup, creationTypeBadgeMarkup } from '../../shared/
 import { gridSkeletonMarkup } from '../../components/CreationGrid/skeleton.js';
 import { openImagePickerModal } from '../../components/ProviderFields/ProviderFields.js';
 import '../../components/CreationGrid/CreationGrid.css';
-import '../../components/Modal/Modal.css';
 import { createModalDismissButton } from '../../shared/modalDismiss.js';
 
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;

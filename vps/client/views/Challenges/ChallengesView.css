@@ -2046,10 +2046,6 @@
 	gap: 8px;
 }
 
-.challenge-pane-admin-prize-amounts[hidden] {
-	display: none;
-}
-
 .challenge-pane-admin-prize-amount {
 	min-width: 0;
 }
@@ -2101,10 +2097,6 @@
 	flex-direction: column;
 	gap: 6px;
 	min-width: 0;
-}
-
-.challenge-pane-admin-results-highlights[hidden] {
-	display: none;
 }
 
 .challenge-pane-admin-submit {
@@ -2488,10 +2480,6 @@
 	flex-direction: column;
 	min-height: 0;
 	overflow: hidden;
-}
-
-.chat-page-challenges-organizer-sidebar[hidden] {
-	display: none !important;
 }
 
 .chat-page-challenges-organizer-sidebar-inner {
@@ -2933,10 +2921,6 @@
 
 .challenge-pane-organizer-results-panel[data-challenge-results-panel='stats'] {
 	padding-bottom: 48px;
-}
-
-.challenge-pane-organizer-results-panel[hidden] {
-	display: none !important;
 }
 
 .challenge-pane-organizer-stats-view {

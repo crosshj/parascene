@@ -1,4 +1,3 @@
-import '../../components/Modal/Modal.css';
 import { MODAL_DISMISS_ICON_SVG } from '../../shared/modalDismiss.js';
 import { pickAudioRecorderMimeType } from '../../shared/extractVideoAudio.js';
 

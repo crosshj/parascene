@@ -254,10 +254,6 @@
 	filter: none;
 }
 
-.chat-doom-topbar .creation-detail-video-muted-badge [hidden] {
-	display: none !important;
-}
-
 .chat-doom-scroller {
 	position: relative;
 	flex: 1 1 auto;
@@ -370,11 +366,16 @@
 	object-fit: cover;
 	object-position: center;
 	background: #000;
+	opacity: 0;
 	transition: opacity 0.12s ease-out;
 }
 
 .chat-doom-video.chat-doom-video--fit-contain {
 	object-fit: contain;
+}
+
+.chat-doom-video.is-doom-media-revealed {
+	opacity: 1;
 }
 
 .chat-doom-youtube-iframe {
@@ -385,7 +386,12 @@
 	height: 100%;
 	border: 0;
 	background: #000;
+	opacity: 0;
 	pointer-events: none;
+}
+
+.chat-doom-youtube-iframe.is-doom-media-revealed {
+	opacity: 1;
 }
 
 .chat-doom-play-overlay {
@@ -397,10 +403,6 @@
 	align-items: center;
 	justify-content: center;
 	pointer-events: none;
-}
-
-.chat-doom-play-overlay[hidden] {
-	display: none !important;
 }
 
 .chat-doom-play-overlay-inner {
@@ -748,10 +750,6 @@
 	max-width: 100%;
 }
 
-.chat-doom-follow-slot[hidden] {
-	display: none !important;
-}
-
 .chat-doom-creator-text {
 	display: inline-flex;
 	align-items: center;
@@ -856,7 +854,6 @@
 	margin: 0 0 16px;
 	opacity: 0.85;
 }
-
 
 .doom-scroll-view {position:absolute;inset:0;background:#000;color:#fff;overflow:hidden;}
 .doom-scroll-view .chat-doom-scroll-root {height:100%;}
@@ -1030,6 +1027,5 @@
 		width: 38%;
 	}
 }
-
 
 .doom-scroll-view .chat-doom-back {display:inline-flex;}

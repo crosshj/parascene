@@ -1,5 +1,5 @@
-import './base.css';
 import './publish.css';
+import { createModalDismissButton } from '../../shared/modalDismiss.js';
 import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
 import { getNsfwContentEnabled } from '../../shared/nsfwView.js';
 import { attachPromptInlineSuggest } from '../../shared/triggeredSuggest.js';
@@ -45,12 +45,12 @@ class AppModalPublish extends HTMLElement {
 		this._creationIsVideo = false;
 		this._loading = false;
 		this._openRequestId = 0;
-		this.handleEscape = this.handleEscape.bind(this);
 		this.handleOpenPublish = this.handleOpenPublish.bind(this);
 		this.handleOpenEdit = this.handleOpenEdit.bind(this);
 		this.handleClose = this.handleClose.bind(this);
 		this.handleCloseAllModals = this.handleCloseAllModals.bind(this);
 		this.handleSubmit = this.handleSubmit.bind(this);
+		this.handleDialogClose = this.handleDialogClose.bind(this);
 	}
 
 	connectedCallback() {
@@ -60,108 +60,103 @@ class AppModalPublish extends HTMLElement {
 	}
 
 	disconnectedCallback() {
-		document.removeEventListener('keydown', this.handleEscape);
 		document.removeEventListener('open-publish-modal', this.handleOpenPublish);
 		document.removeEventListener('open-edit-modal', this.handleOpenEdit);
 		document.removeEventListener('close-publish-modal', this.handleClose);
 		document.removeEventListener('close-all-modals', this.handleCloseAllModals);
+		this.dialog?.removeEventListener('close', this.handleDialogClose);
+	}
+
+	/** @returns {HTMLDialogElement | null} */
+	get dialog() {
+		const el = this.querySelector('dialog[data-publish-modal]');
+		return el?.tagName === 'DIALOG' ? /** @type {HTMLDialogElement} */ (el) : null;
 	}
 
 	render() {
 		this.innerHTML = html`
-			<div class="publish-modal-overlay">
-				<div class="publish-modal">
-					<div class="publish-modal-loading">
-						<div class="publish-spinner"></div>
-					</div>
-					<div class="publish-modal-header">
-						<h2 data-modal-title>Publish Creation</h2>
-						<button class="publish-modal-close" aria-label="Close">
-							<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+			<dialog class="app-dialog publish-dialog" data-publish-modal aria-labelledby="publish-modal-title">
+				<div class="publish-modal-loading">
+					<div class="publish-spinner"></div>
+				</div>
+				<header class="app-dialog__header">
+					<h2 id="publish-modal-title" class="app-dialog__title" data-modal-title>Publish Creation</h2>
+				</header>
+				<div class="app-dialog__body">
+					<div class="publish-alert" data-publish-alert hidden>
+						<span class="publish-alert-message" data-publish-alert-message></span>
+						<button class="publish-alert-close" data-publish-alert-close aria-label="Close alert">
+							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
 								stroke-linecap="round" stroke-linejoin="round">
 								<line x1="18" y1="6" x2="6" y2="18"></line>
 								<line x1="6" y1="6" x2="18" y2="18"></line>
 							</svg>
 						</button>
 					</div>
-					<div class="publish-modal-body">
-						<div class="publish-alert" data-publish-alert style="display: none;">
-							<span class="publish-alert-message" data-publish-alert-message></span>
-							<button class="publish-alert-close" data-publish-alert-close aria-label="Close alert">
-								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-									stroke-linecap="round" stroke-linejoin="round">
-									<line x1="18" y1="6" x2="6" y2="18"></line>
-									<line x1="6" y1="6" x2="18" y2="18"></line>
-								</svg>
-							</button>
-						</div>
-						<div class="publish-field">
-							<label for="publish-title">Title</label>
-							<input type="text" id="publish-title" name="title" placeholder="Enter a title for your creation (optional)"
-								autocapitalize="off" autocorrect="off" spellcheck="false" />
-						</div>
-						<div class="publish-field">
-							<label for="publish-description">Description</label>
-							<textarea id="publish-description" name="description" rows="8"
-								placeholder="Describe your creation..."></textarea>
-						</div>
-						<div class="publish-field publish-field-checkbox">
-							<label class="publish-checkbox-label">
-								<input type="checkbox" id="publish-nsfw" name="nsfw" />
-								<span>Not Suitable for Work (NSFW)</span>
-							</label>
-						</div>
-						<div class="publish-field publish-field-checkbox" data-doom-full-height-row style="display: none;">
-							<label class="publish-checkbox-label">
-								<input type="checkbox" id="publish-doom-full-height" name="doom_full_height" />
-								<span>Full-height in doom scroll</span>
-							</label>
-						</div>
+					<div class="publish-field">
+						<label for="publish-title">Title</label>
+						<input type="text" id="publish-title" name="title" placeholder="Enter a title for your creation (optional)"
+							autocapitalize="off" autocorrect="off" spellcheck="false" />
 					</div>
-					<div class="publish-modal-footer">
-						<a href="#" class="publish-cancel-link">Cancel</a>
-						<button class="btn-primary publish-submit-btn" data-publish-submit disabled>
-							<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"
-								style="margin-right: 6px; vertical-align: middle;">
-								<path d="M1.5 8L14.5 1.5L10.5 14.5L8 9L1.5 8Z" stroke="currentColor" stroke-width="1.5"
-									stroke-linecap="round" stroke-linejoin="round" fill="none" />
-							</svg>
-							<span data-submit-text>Publish</span>
-						</button>
+					<div class="publish-field">
+						<label for="publish-description">Description</label>
+						<textarea id="publish-description" name="description" rows="8"
+							placeholder="Describe your creation..."></textarea>
+					</div>
+					<div class="publish-field publish-field-checkbox">
+						<label class="publish-checkbox-label">
+							<input type="checkbox" id="publish-nsfw" name="nsfw" />
+							<span>Not Suitable for Work (NSFW)</span>
+						</label>
+					</div>
+					<div class="publish-field publish-field-checkbox" data-doom-full-height-row hidden>
+						<label class="publish-checkbox-label">
+							<input type="checkbox" id="publish-doom-full-height" name="doom_full_height" />
+							<span>Full-height in doom scroll</span>
+						</label>
 					</div>
 				</div>
-			</div>
+				<footer class="app-dialog__footer">
+					<a href="#" class="publish-cancel-link">Cancel</a>
+					<button class="btn-primary publish-submit-btn" data-publish-submit disabled>
+						<svg class="publish-submit-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+							<path d="M1.5 8L14.5 1.5L10.5 14.5L8 9L1.5 8Z" stroke="currentColor" stroke-width="1.5"
+								stroke-linecap="round" stroke-linejoin="round" fill="none" />
+						</svg>
+						<span data-submit-text>Publish</span>
+					</button>
+				</footer>
+			</dialog>
 		`;
+		const dialog = this.dialog;
+		const header = dialog?.querySelector('header');
+		if (dialog && header) {
+			const dismiss = createModalDismissButton();
+			dismiss.addEventListener('click', () => {
+				if (!this._loading) this.close();
+			});
+			header.append(dismiss);
+		}
 	}
 
 	setupEventListeners() {
-		document.addEventListener('keydown', this.handleEscape);
 		document.addEventListener('open-publish-modal', this.handleOpenPublish);
 		document.addEventListener('open-edit-modal', this.handleOpenEdit);
 		document.addEventListener('close-publish-modal', this.handleClose);
 		document.addEventListener('close-all-modals', this.handleCloseAllModals);
 
-		const overlay = this.querySelector('.publish-modal-overlay');
-		const closeButton = this.querySelector('.publish-modal-close');
+		const dialog = this.dialog;
 		const cancelLink = this.querySelector('.publish-cancel-link');
 		const submitBtn = this.querySelector('[data-publish-submit]');
 		const alertClose = this.querySelector('[data-publish-alert-close]');
 
-		if (overlay) {
-			overlay.addEventListener('click', (e) => {
-				if (e.target === overlay && !this._loading) {
-					this.close();
-				}
-			});
-		}
-
-		if (closeButton) {
-			closeButton.addEventListener('click', () => {
-				if (!this._loading) {
-					this.close();
-				}
-			});
-		}
+		dialog?.addEventListener('click', (e) => {
+			if (e.target === dialog && !this._loading) this.close();
+		});
+		dialog?.addEventListener('close', this.handleDialogClose);
+		dialog?.addEventListener('cancel', (e) => {
+			if (this._loading) e.preventDefault();
+		});
 
 		if (cancelLink) {
 			cancelLink.addEventListener('click', (e) => {
@@ -193,10 +188,8 @@ class AppModalPublish extends HTMLElement {
 		}
 	}
 
-	handleEscape(e) {
-		if (e.key === 'Escape' && this.isOpen() && !this._loading) {
-			this.close();
-		}
+	handleDialogClose() {
+		if (this._isOpen) this.close({ fromDialog: true });
 	}
 
 	handleOpenPublish(e) {
@@ -226,7 +219,7 @@ class AppModalPublish extends HTMLElement {
 		const row = this.querySelector('[data-doom-full-height-row]');
 		const checkbox = this.querySelector('#publish-doom-full-height');
 		if (row instanceof HTMLElement) {
-			row.style.display = this._creationIsVideo ? '' : 'none';
+			row.hidden = !this._creationIsVideo;
 		}
 		if (checkbox instanceof HTMLInputElement) {
 			checkbox.checked = this._creationIsVideo ? Boolean(checked) : false;
@@ -382,23 +375,20 @@ class AppModalPublish extends HTMLElement {
 	open() {
 		if (this._isOpen) return;
 		this._isOpen = true;
-		const overlay = this.querySelector('.publish-modal-overlay');
-		if (overlay) {
-			overlay.classList.add('open');
+		const dialog = this.dialog;
+		if (dialog && !dialog.open && typeof dialog.showModal === 'function') {
+			dialog.showModal();
 		}
-		// Body scroll prevention is handled globally in global.js
 		this.hideAlert();
 	}
 
-	close() {
-		if (!this._isOpen) return;
+	close(opts = {}) {
+		if (!this._isOpen && !opts.fromDialog) return;
 		this._isOpen = false;
-		const overlay = this.querySelector('.publish-modal-overlay');
-		if (overlay) {
-			overlay.classList.remove('open');
+		const dialog = this.dialog;
+		if (!opts.fromDialog && dialog?.open && typeof dialog.close === 'function') {
+			dialog.close();
 		}
-		// Body scroll restoration is handled globally in global.js
-		// Clear form
 		const titleInput = this.querySelector('#publish-title');
 		const descriptionTextarea = this.querySelector('#publish-description');
 		const nsfwCheckbox = this.querySelector('#publish-nsfw');
@@ -420,14 +410,14 @@ class AppModalPublish extends HTMLElement {
 		if (alert && alertMessage) {
 			alertMessage.textContent = message;
 			alert.className = `publish-alert ${isError ? 'publish-alert-error' : 'publish-alert-success'}`;
-			alert.style.display = 'flex';
+			alert.hidden = false;
 		}
 	}
 
 	hideAlert() {
 		const alert = this.querySelector('[data-publish-alert]');
 		if (alert) {
-			alert.style.display = 'none';
+			alert.hidden = true;
 		}
 	}
 
@@ -448,8 +438,7 @@ class AppModalPublish extends HTMLElement {
 		}
 		if (submitBtn) submitBtn.disabled = false;
 		if (cancelLink) {
-			cancelLink.style.pointerEvents = '';
-			cancelLink.style.opacity = '';
+			cancelLink.classList.remove('is-loading');
 		}
 		this._loading = false;
 	}
@@ -491,8 +480,7 @@ class AppModalPublish extends HTMLElement {
 		if (doomFullHeightCheckbox) doomFullHeightCheckbox.disabled = true;
 		if (submitBtn) submitBtn.disabled = true;
 		if (cancelLink) {
-			cancelLink.style.pointerEvents = 'none';
-			cancelLink.style.opacity = '0.5';
+			cancelLink.classList.add('is-loading');
 		}
 
 		try {
@@ -516,8 +504,7 @@ class AppModalPublish extends HTMLElement {
 			if (doomFullHeightCheckbox) doomFullHeightCheckbox.disabled = !this._creationIsVideo;
 			if (submitBtn) submitBtn.disabled = false;
 			if (cancelLink) {
-				cancelLink.style.pointerEvents = '';
-				cancelLink.style.opacity = '';
+				cancelLink.classList.remove('is-loading');
 			}
 			this._loading = false;
 		}

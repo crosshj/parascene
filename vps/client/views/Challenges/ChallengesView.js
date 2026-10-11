@@ -11,7 +11,6 @@ import { detailOrganizerHeaderActions } from './views/organizeBoardView.js';
 import { challengesMessagesFingerprint } from '../../shared/challenges/challengesChannelCache.js';
 import { REACTION_ICONS } from '../../icons/svg-strings.js';
 import { renderChallengePaneSkeleton, renderChallengesOrganizeBoardSkeleton } from '../../shared/skeleton.js';
-import '../../components/Modal/Modal.css';
 import '../../components/ChallengeCard/ChallengeCard.css';
 import '../../components/CreationGrid/CreationGrid.css';
 import '../../components/SegmentedControl/SegmentedControl.css';

@@ -9,7 +9,6 @@
  .mobile-header-view .logo { height: 36px; width: auto; fill: currentColor; }
  .mobile-header-view .header-actions { display: flex; gap: 4px; margin-left: auto; }
 }
-.mobile-header-view[hidden] { display: none; }
 /* Header action items */
 .mobile-header-view .action-item {
 	display: inline-flex;

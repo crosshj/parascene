@@ -57,13 +57,7 @@ function doomPreferMuted() {
 
 function parkGestureVideo(video) {
 	if (typeof document === 'undefined' || video.isConnected) return;
-	video.style.position = 'fixed';
-	video.style.width = '1px';
-	video.style.height = '1px';
-	video.style.opacity = '0';
-	video.style.pointerEvents = 'none';
-	video.style.left = '0';
-	video.style.top = '0';
+	video.classList.add('is-doom-video-parked');
 	document.body.appendChild(video);
 }
 
@@ -149,13 +143,7 @@ export function claimWarmedDoomVideo(url) {
 	const video = warmByUrl.get(key) || null;
 	warmByUrl.delete(key);
 	if (video instanceof HTMLVideoElement) {
-		video.style.removeProperty('position');
-		video.style.removeProperty('width');
-		video.style.removeProperty('height');
-		video.style.removeProperty('opacity');
-		video.style.removeProperty('pointer-events');
-		video.style.removeProperty('left');
-		video.style.removeProperty('top');
+		video.classList.remove('is-doom-video-parked');
 	}
 	return video instanceof HTMLVideoElement ? video : null;
 }

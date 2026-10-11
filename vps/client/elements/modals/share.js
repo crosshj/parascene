@@ -1,5 +1,5 @@
-import './base.css';
 import './share.css';
+import { createModalDismissButton } from '../../shared/modalDismiss.js';
 import {
 	googlePhotosAuthMessageFromPayload,
 	googlePhotosReconnectUrl,
@@ -7,7 +7,6 @@ import {
 	isGooglePhotosReconnectPayload
 } from "../../shared/googlePhotosClient.js";
 import {
-	closeIcon,
 	xIcon,
 	facebookIcon,
 	redditIcon,
@@ -116,10 +115,11 @@ class AppModalShare extends HTMLElement {
 		this._imageExportEligible = false;
 		this._isGroupCreation = false;
 
-		this.handleEscape = this.handleEscape.bind(this);
 		this.handleOpen = this.handleOpen.bind(this);
 		this.handleCloseAllModals = this.handleCloseAllModals.bind(this);
 		this.closeQrModal = this.closeQrModal.bind(this);
+		this.handleDialogClose = this.handleDialogClose.bind(this);
+		this.handleQrDialogClose = this.handleQrDialogClose.bind(this);
 	}
 
 	connectedCallback() {
@@ -130,42 +130,48 @@ class AppModalShare extends HTMLElement {
 	}
 
 	disconnectedCallback() {
-		document.removeEventListener("keydown", this.handleEscape);
 		document.removeEventListener("open-share-modal", this.handleOpen);
 		document.removeEventListener("close-all-modals", this.handleCloseAllModals);
+		this.dialog?.removeEventListener("close", this.handleDialogClose);
+		this.qrDialog?.removeEventListener("close", this.handleQrDialogClose);
 
 		for (const t of this._ctaTimers) clearTimeout(t);
 		this._ctaTimers.clear();
 	}
 
+	/** @returns {HTMLDialogElement | null} */
+	get dialog() {
+		const el = this.querySelector("dialog[data-overlay]");
+		return el?.tagName === "DIALOG" ? /** @type {HTMLDialogElement} */ (el) : null;
+	}
+
+	/** @returns {HTMLDialogElement | null} */
+	get qrDialog() {
+		const el = this.querySelector("dialog[data-qr-overlay]");
+		return el?.tagName === "DIALOG" ? /** @type {HTMLDialogElement} */ (el) : null;
+	}
+
 	render() {
-		const iconClose = closeIcon('modal-close-icon');
-		const iconCloseQr = closeIcon('qr-modal-close-icon');
-		const iconX = xIcon('share-option-icon share-option-icon-x is-brand');
-		const iconFacebook = facebookIcon('share-option-icon share-option-icon-facebook is-brand');
-		const iconReddit = redditIcon('share-option-icon share-option-icon-reddit is-brand');
-		const iconLinkedin = linkedinIcon('share-option-icon share-option-icon-linkedin is-brand');
+		/* Tile chrome classes stay on the wrapping <span>; do not put them on the SVG
+		   (20×20 + border-radius 10px becomes a circle around the glyph). */
+		const iconX = xIcon();
+		const iconFacebook = facebookIcon();
+		const iconReddit = redditIcon();
+		const iconLinkedin = linkedinIcon();
 		const iconSms = smsIcon();
 		const iconEmail = emailIcon();
 		const iconShare = shareIcon();
 		const iconQrCode = qrCodeIcon();
 		const iconLink = linkIcon();
 		const iconPicture = pictureIcon();
-		const iconGooglePhotos = googlePhotosIcon(
-			"share-option-icon share-option-icon-google-photos is-brand"
-		);
+		const iconGooglePhotos = googlePhotosIcon();
 
 		this.innerHTML = html`
-			<div class="modal-overlay" data-overlay>
-				<div class="modal modal-medium">
-					<div class="modal-header">
-						<h3>Share</h3>
-						<button class="modal-close" type="button" aria-label="Close">
-							${iconClose}
-						</button>
-					</div>
-			
-					<div class="modal-body share-modal-body">
+			<dialog class="app-dialog share-dialog" data-overlay aria-labelledby="share-modal-title">
+				<header class="app-dialog__header">
+					<h2 id="share-modal-title" class="app-dialog__title">Share</h2>
+				</header>
+				<div class="app-dialog__body share-modal-body">
 						<!--
 												<p class="share-modal-note">
 													<span class="share-modal-note-strong">You may be rewarded if someone joins after viewing.</span>
@@ -221,7 +227,7 @@ class AppModalShare extends HTMLElement {
 										class="share-action-cta-label">Share</span></span>
 							</button>
 
-							<button type="button" class="share-action-row" data-share-google-photos style="display: none;">
+							<button type="button" class="share-action-row" data-share-google-photos hidden>
 								<span class="share-action-left">
 									<span class="share-option-icon share-option-icon-google-photos is-brand">${iconGooglePhotos}</span>
 									<span class="share-action-text">
@@ -232,7 +238,7 @@ class AppModalShare extends HTMLElement {
 								<span class="share-action-cta share-action-cta-google-photos" data-cta><span class="share-action-cta-label">Send</span></span>
 							</button>
 			
-							<button type="button" class="share-action-row" data-share-vynly style="display: none;">
+							<button type="button" class="share-action-row" data-share-vynly hidden>
 								<span class="share-action-left">
 									<span class="share-option-icon share-option-icon-vynly is-brand">${iconShare}</span>
 									<span class="share-action-text">
@@ -266,7 +272,7 @@ class AppModalShare extends HTMLElement {
 								<span class="share-action-cta" data-cta><span class="share-action-cta-label">Send</span></span>
 							</button>
 			
-							<button type="button" class="share-action-row" data-native-share style="display: none;">
+							<button type="button" class="share-action-row" data-native-share hidden>
 								<span class="share-action-left">
 									<span class="share-option-icon">${iconShare}</span>
 									<span class="share-action-text">
@@ -277,7 +283,7 @@ class AppModalShare extends HTMLElement {
 								<span class="share-action-cta" data-cta><span class="share-action-cta-label">Open</span></span>
 							</button>
 
-							<button type="button" class="share-action-row" data-share-image-file style="display: none;">
+							<button type="button" class="share-action-row" data-share-image-file hidden>
 								<span class="share-action-left">
 									<span class="share-option-icon">${iconPicture}</span>
 									<span class="share-action-text">
@@ -323,31 +329,42 @@ class AppModalShare extends HTMLElement {
 						</div>
 			
 						<button type="button" class="share-modal-cancel" data-cancel>Cancel</button>
-					</div>
 				</div>
-			</div>
-			
-			<div class="modal-overlay qr-modal-overlay" data-qr-overlay aria-hidden="true" inert>
-				<div class="modal qr-modal">
-					<div class="qr-modal-header">
-						<button class="modal-close qr-modal-close" type="button"
-							aria-label="Close">${iconCloseQr}</button>
-					</div>
-					<div class="qr-modal-body">
-						<div class="qr-modal-svg-wrap" data-qr-content></div>
-					</div>
+			</dialog>
+
+			<dialog class="app-dialog share-qr-dialog" data-qr-overlay aria-label="QR code">
+				<header class="qr-modal-header"></header>
+				<div class="qr-modal-body">
+					<div class="qr-modal-svg-wrap" data-qr-content></div>
 				</div>
-			</div>
+			</dialog>
 		`;
+
+		const dialog = this.dialog;
+		const shareHeader = dialog?.querySelector("header");
+		if (dialog && shareHeader) {
+			const dismiss = createModalDismissButton();
+			dismiss.addEventListener("click", () => {
+				if (!this._loading) this.close();
+			});
+			shareHeader.append(dismiss);
+		}
+
+		const qrDialog = this.qrDialog;
+		const qrHeader = qrDialog?.querySelector(".qr-modal-header");
+		if (qrDialog && qrHeader) {
+			const qrDismiss = createModalDismissButton({ attrs: { "data-qr-close": "" } });
+			qrDismiss.classList.add("qr-modal-close");
+			qrDismiss.addEventListener("click", () => this.closeQrModal());
+			qrHeader.append(qrDismiss);
+		}
 	}
 
 	setupEventListeners() {
-		document.addEventListener("keydown", this.handleEscape);
 		document.addEventListener("open-share-modal", this.handleOpen);
 		document.addEventListener("close-all-modals", this.handleCloseAllModals);
 
-		const overlay = this.querySelector("[data-overlay]");
-		const closeBtn = this.querySelector(".modal-close");
+		const dialog = this.dialog;
 		const cancelBtn = this.querySelector("[data-cancel]");
 		const copyBtn = this.querySelector("[data-copy-link]");
 		const openWatermarkedBtn = this.querySelector("[data-open-watermarked]");
@@ -363,14 +380,13 @@ class AppModalShare extends HTMLElement {
 		const redditBtn = this.querySelector("[data-share-reddit]");
 		const liBtn = this.querySelector("[data-share-linkedin]");
 
-		if (overlay) {
-			overlay.addEventListener("click", (e) => {
-				if (e.target === overlay && !this._loading) {
-					this.close();
-				}
-			});
-		}
-		if (closeBtn) closeBtn.addEventListener("click", () => this.close());
+		dialog?.addEventListener("click", (e) => {
+			if (e.target === dialog && !this._loading) this.close();
+		});
+		dialog?.addEventListener("close", this.handleDialogClose);
+		dialog?.addEventListener("cancel", (e) => {
+			if (this._loading) e.preventDefault();
+		});
 		if (cancelBtn) cancelBtn.addEventListener("click", () => this.close());
 
 		if (copyBtn) copyBtn.addEventListener("click", (e) => void this.handleCopy(e.currentTarget));
@@ -384,14 +400,11 @@ class AppModalShare extends HTMLElement {
 			googlePhotosBtn.addEventListener("click", (e) => void this.handleShareGooglePhotos(e.currentTarget));
 		}
 
-		const qrOverlay = this.querySelector("[data-qr-overlay]");
-		const qrCloseBtn = this.querySelector(".qr-modal-close");
-		if (qrOverlay) {
-			qrOverlay.addEventListener("click", (e) => {
-				if (e.target === qrOverlay) this.closeQrModal();
-			});
-		}
-		if (qrCloseBtn) qrCloseBtn.addEventListener("click", () => this.closeQrModal());
+		const qrDialog = this.qrDialog;
+		qrDialog?.addEventListener("click", (e) => {
+			if (e.target === qrDialog) this.closeQrModal();
+		});
+		qrDialog?.addEventListener("close", this.handleQrDialogClose);
 
 		if (smsBtn) smsBtn.addEventListener("click", (e) => void this.handleSms(e.currentTarget));
 		if (emailBtn) emailBtn.addEventListener("click", (e) => void this.handleEmail(e.currentTarget));
@@ -402,15 +415,14 @@ class AppModalShare extends HTMLElement {
 		if (liBtn) liBtn.addEventListener("click", (e) => void this.handleLinkedIn(e.currentTarget));
 	}
 
-	handleEscape(e) {
-		if (e.key !== "Escape") return;
-		if (this._qrModalOpen) {
-			this.closeQrModal();
-			return;
-		}
-		if (this._isOpen && !this._loading) {
-			this.close();
-		}
+	handleDialogClose() {
+		if (this._isOpen) this.close({ fromDialog: true });
+	}
+
+	handleQrDialogClose() {
+		this._qrModalOpen = false;
+		const content = this.querySelector("[data-qr-content]");
+		if (content) content.innerHTML = "";
 	}
 
 	handleOpen(e) {
@@ -452,9 +464,9 @@ class AppModalShare extends HTMLElement {
 			const vynlyRow = this.querySelector("[data-share-vynly]");
 			if (vynlyRow instanceof HTMLButtonElement) {
 				if (this._vynlyShareEligible === false) {
-					vynlyRow.style.display = "none";
+					vynlyRow.hidden = true;
 				} else if (typeof options.vynlyConfigured === "boolean") {
-					vynlyRow.style.display = options.vynlyConfigured ? "" : "none";
+					vynlyRow.hidden = !options.vynlyConfigured;
 				} else {
 					await this.refreshVynlyRowVisibility();
 					if (openGen !== this._openRequestId) return;
@@ -468,12 +480,12 @@ class AppModalShare extends HTMLElement {
 		}
 
 		this._isOpen = true;
-		const overlay = this.querySelector("[data-overlay]");
-		if (overlay) overlay.classList.add("open");
+		const dialog = this.dialog;
+		if (dialog && !dialog.open && typeof dialog.showModal === "function") dialog.showModal();
 		this.updateButtons();
 	}
 
-	close() {
+	close(opts = {}) {
 		this.closeQrModal();
 		this._isOpen = false;
 		this._loading = false;
@@ -488,8 +500,10 @@ class AppModalShare extends HTMLElement {
 		this._googlePhotosAuthMessage = "";
 		this._imageExportEligible = false;
 		this._isGroupCreation = false;
-		const overlay = this.querySelector("[data-overlay]");
-		if (overlay) overlay.classList.remove("open");
+		const dialog = this.dialog;
+		if (!opts.fromDialog && dialog?.open && typeof dialog.close === "function") {
+			dialog.close();
+		}
 		this.resetAllCtas();
 	}
 
@@ -502,7 +516,7 @@ class AppModalShare extends HTMLElement {
 		]) {
 			const row = this.querySelector(selector);
 			if (row instanceof HTMLElement) {
-				row.style.display = "none";
+				row.hidden = true;
 			}
 		}
 	}
@@ -510,7 +524,7 @@ class AppModalShare extends HTMLElement {
 	updateButtons() {
 		const nativeBtn = this.querySelector("[data-native-share]");
 		if (nativeBtn instanceof HTMLButtonElement) {
-			nativeBtn.style.display = typeof navigator.share === "function" ? "" : "none";
+			nativeBtn.hidden = typeof navigator.share !== "function";
 		}
 		if (this._isGroupCreation) {
 			this.hideSingleImageShareRows();
@@ -519,12 +533,12 @@ class AppModalShare extends HTMLElement {
 		const shareImageFileBtn = this.querySelector("[data-share-image-file]");
 		if (shareImageFileBtn instanceof HTMLButtonElement) {
 			const showImageFile = this._imageExportEligible && canShareImageFiles();
-			shareImageFileBtn.style.display = showImageFile ? "" : "none";
+			shareImageFileBtn.hidden = !showImageFile;
 		}
 		const googlePhotosBtn = this.querySelector("[data-share-google-photos]");
 		if (googlePhotosBtn instanceof HTMLButtonElement) {
 			const showGoogle = this._googlePhotosConfigured && this._imageExportEligible;
-			googlePhotosBtn.style.display = showGoogle ? "" : "none";
+			googlePhotosBtn.hidden = !showGoogle;
 			this.applyGooglePhotosRowState();
 		}
 	}
@@ -533,7 +547,7 @@ class AppModalShare extends HTMLElement {
 		const row = this.querySelector("[data-share-google-photos]");
 		if (!(row instanceof HTMLButtonElement)) return;
 
-		row.style.display = "none";
+		row.hidden = true;
 		this._googlePhotosRowState = "hidden";
 		this._googlePhotosAuthMessage = "";
 		if (this._isGroupCreation || !this._imageExportEligible) return;
@@ -551,7 +565,7 @@ class AppModalShare extends HTMLElement {
 				data,
 				"Your Google Photos connection expired. Reconnect to send photos."
 			);
-			row.style.display = this._googlePhotosConfigured && this._imageExportEligible ? "" : "none";
+			row.hidden = !(this._googlePhotosConfigured && this._imageExportEligible);
 			this.applyGooglePhotosRowState();
 		} catch {
 			// ignore
@@ -591,7 +605,7 @@ class AppModalShare extends HTMLElement {
 		const row = this.querySelector("[data-share-vynly]");
 		if (!(row instanceof HTMLButtonElement)) return;
 
-		row.style.display = "none";
+		row.hidden = true;
 		if (this._isGroupCreation || this._vynlyShareEligible === false) {
 			return;
 		}
@@ -605,7 +619,7 @@ class AppModalShare extends HTMLElement {
 			const data = await res.json().catch(() => null);
 			if (requestId !== this._vynlyStatusRequestId) return;
 			if (data && data.configured === true) {
-				row.style.display = "";
+				row.hidden = false;
 			}
 		} catch {
 			// ignore
@@ -711,20 +725,16 @@ class AppModalShare extends HTMLElement {
 	}
 
 	closeQrModal() {
-		this._qrModalOpen = false;
-		const overlay = this.querySelector("[data-qr-overlay]");
-		if (overlay) {
-			// Move focus out before hiding so we never have focus inside an aria-hidden/inert subtree.
-			if (overlay.contains(document.activeElement)) {
+		const qrDialog = this.qrDialog;
+		if (qrDialog?.open && typeof qrDialog.close === "function") {
+			if (qrDialog.contains(document.activeElement)) {
 				const qrTrigger = this.querySelector("[data-qr-code]");
 				if (qrTrigger instanceof HTMLElement) qrTrigger.focus();
 			}
-			overlay.classList.remove("open");
-			overlay.setAttribute("aria-hidden", "true");
-			overlay.setAttribute("inert", "");
+			qrDialog.close();
+		} else {
+			this.handleQrDialogClose();
 		}
-		const content = this.querySelector("[data-qr-content]");
-		if (content) content.innerHTML = "";
 	}
 
 	async handleQrCode(buttonEl) {
@@ -737,11 +747,9 @@ class AppModalShare extends HTMLElement {
 			if (!content) return;
 			content.innerHTML = svgText;
 			this._qrModalOpen = true;
-			const overlay = this.querySelector("[data-qr-overlay]");
-			if (overlay) {
-				overlay.classList.add("open");
-				overlay.setAttribute("aria-hidden", "false");
-				overlay.removeAttribute("inert");
+			const qrDialog = this.qrDialog;
+			if (qrDialog && !qrDialog.open && typeof qrDialog.showModal === "function") {
+				qrDialog.showModal();
 			}
 		}, { successLabel: "Show", errorLabel: "Failed", resetMs: 800 });
 	}

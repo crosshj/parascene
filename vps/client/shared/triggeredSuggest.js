@@ -29,7 +29,6 @@ const ITEM_CLASS = "triggered-suggest-item";
 const ITEM_SELECTED_CLASS = "triggered-suggest-item--selected";
 const ATTR_ATTACHED = "data-triggered-suggest-attached";
 
-const POPUP_MAX_HEIGHT = 280;
 const POPUP_OPEN_ABOVE_THRESHOLD = 240;
 const DEFAULT_SUGGEST_LIMIT = 10;
 
@@ -54,8 +53,7 @@ function getPopup() {
 	sharedPopup.className = POPUP_CLASS;
 	sharedPopup.setAttribute("role", "listbox");
 	sharedPopup.setAttribute("aria-hidden", "true");
-	sharedPopup.style.display = "none";
-	sharedPopup.style.maxHeight = `${POPUP_MAX_HEIGHT}px`;
+	sharedPopup.hidden = true;
 	document.body.appendChild(sharedPopup);
 	return sharedPopup;
 }
@@ -742,7 +740,7 @@ function closePopupFor(textarea) {
 	const popup = getPopup();
 	if (popupOwner === textarea) {
 		popupOwner = null;
-		popup.style.display = "none";
+		popup.hidden = true;
 		popup.setAttribute("aria-hidden", "true");
 		popup.innerHTML = "";
 	}
@@ -910,20 +908,8 @@ function renderPopup(textarea, mode) {
 				icon.style.background = "transparent";
 				const glyph = document.createElement("span");
 				glyph.className = "triggered-suggest-item-route-icon-wrap";
-				glyph.style.display = "inline-flex";
-				glyph.style.alignItems = "center";
-				glyph.style.justifyContent = "center";
-				glyph.style.width = "18px";
-				glyph.style.height = "18px";
-				glyph.style.color = "#fff";
 				glyph.innerHTML = iconHtml;
 				icon.appendChild(glyph);
-				const svg = glyph.querySelector("svg");
-				if (svg) {
-					svg.style.width = "18px";
-					svg.style.height = "18px";
-					svg.style.display = "block";
-				}
 				return true;
 			};
 			if (item?.type === "pseudo_channel" && setPseudoChannelIcon()) {
@@ -1009,7 +995,7 @@ function renderPopup(textarea, mode) {
 	}
 
 	positionPopup(textarea, popup);
-	popup.style.display = "flex";
+	popup.hidden = false;
 	popup.setAttribute("aria-hidden", "false");
 
 	state.isOpen = true;

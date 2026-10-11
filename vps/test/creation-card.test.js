@@ -186,15 +186,18 @@ test('grouped NSFW creation seeds use parent-authorized media URLs for the hero 
 });
 
 test('creation detail ships the shared card, comment thread, and related-grid styles', async () => {
-	const [styleIndex, cardCss, commentsCss, detailCss] = await Promise.all([
+	const [styleIndex, cardCss, commentsCss, detailCss, sharedCss, layoutJs] = await Promise.all([
 		readFile(new URL('../client/styles/index.js', import.meta.url), 'utf8'),
 		readFile(new URL('../client/components/CreationCard/CreationCard.css', import.meta.url), 'utf8'),
 		readFile(new URL('../client/components/Comments/Comments.css', import.meta.url), 'utf8'),
 		readFile(new URL('../client/views/CreationDetail/CreationDetailView.css', import.meta.url), 'utf8'),
+		readFile(new URL('../client/components/CreateComposer/CreateComposer.css', import.meta.url), 'utf8'),
+		readFile(new URL('../client/core/layout.js', import.meta.url), 'utf8'),
 	]);
 
 	assert.match(styleIndex, /CreationCard\/CreationCard\.css/);
 	assert.match(styleIndex, /Comments\/Comments\.css/);
+	assert.match(layoutJs, /CreateComposer\/CreateComposer\.css/);
 	assert.match(cardCss, /\.route-card-image\s*\{/);
 	assert.match(cardCss, /\.route-media\s*\{/);
 	assert.match(commentsCss, /\.comment-inline-reply\s*\{/);
@@ -208,5 +211,5 @@ test('creation detail ships the shared card, comment thread, and related-grid st
 	assert.match(detailCss, /\.creation-detail-related-grid\s*\{/);
 	assert.match(detailCss, /body\.beta-layout\.creation-detail-page \.beta-app-overlay__content > main \{ padding: 0; \}/);
 	assert.match(detailCss, /body\.beta-layout\.creation-detail-page \.creation-detail-image-wrapper \{\s*width: 100%;\s*max-width: 100%;/);
-	assert.match(detailCss, /\.creation-detail-image-wrapper\.hero-layout-portrait \{[\s\S]*?width: 100%;[\s\S]*?max-width: 100%;/);
+	assert.match(sharedCss, /\.creation-detail-image-wrapper\.hero-layout-portrait \{[\s\S]*?width: 100%;[\s\S]*?max-width: 100%;/);
 });

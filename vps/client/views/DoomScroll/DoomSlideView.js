@@ -254,7 +254,7 @@ export function playDoomYoutubeSlide(slide, opts = {}) {
 		youtubePlayerCommand(iframe, muted ? 'mute' : 'unMute');
 		youtubePlayerCommand(iframe, 'playVideo');
 	}
-	iframe.style.opacity = '1';
+	iframe.classList.add('is-doom-media-revealed');
 	disableDoomYoutubeCaptions(iframe);
 	revealDoomSlideVideoPlayback(slide);
 	return true;
@@ -270,7 +270,7 @@ export function pauseDoomYoutubeSlide(slide, opts = {}) {
 	if (!iframe) return;
 	if (opts.rewind !== false) {
 		iframe.removeAttribute('src');
-		iframe.style.opacity = '0';
+		iframe.classList.remove('is-doom-media-revealed');
 		const posterImg = slide.querySelector('img.chat-doom-poster');
 		if (posterImg instanceof HTMLImageElement) posterImg.hidden = false;
 		return;
@@ -397,15 +397,14 @@ export function bindDoomVideoAspectFit(video, mediaWrap, mediaFrame, opts = {}) 
 			}
 		}
 		if (!Number.isFinite(vw) || !Number.isFinite(vh) || vw <= 0 || vh <= 0) {
-			mediaFrame.style.cssText =
-				'position:absolute;inset:0;width:100%;height:100%;overflow:hidden;';
+			/* Fill frame is the CSS default on .chat-doom-slide-media-frame. */
+			mediaFrame.removeAttribute('style');
 			return;
 		}
 
 		const useContain = !forceCover && vw >= vh;
 		if (!useContain) {
-			mediaFrame.style.cssText =
-				'position:absolute;inset:0;width:100%;height:100%;overflow:hidden;';
+			mediaFrame.removeAttribute('style');
 			return;
 		}
 
@@ -414,6 +413,7 @@ export function bindDoomVideoAspectFit(video, mediaWrap, mediaFrame, opts = {}) 
 		const dispH = vh * scale;
 		const left = (W - dispW) / 2;
 		const top = (H - dispH) / 2;
+		/* Measured contain box — geometry stays in JS. */
 		mediaFrame.style.cssText = [
 			'position:absolute',
 			`left:${left}px`,
@@ -459,7 +459,7 @@ export function bindDoomVideoAspectFit(video, mediaWrap, mediaFrame, opts = {}) 
 	}
 
 	/* Video stacks above the poster; keep poster visible until playback paints (feed / detail behavior). */
-	video.style.opacity = '0';
+	video.classList.remove('is-doom-media-revealed');
 	const slideEl = video.closest('.chat-doom-slide');
 	bindDoomVideoRevealWhenFrameReady(video, slideEl, {
 		shouldReveal: () => slideEl instanceof HTMLElement && slideEl.classList.contains('chat-doom-slide--active')
@@ -578,7 +578,7 @@ export function revealDoomSlideVideoPlayback(slide) {
 		if (posterImg instanceof HTMLImageElement) posterImg.hidden = true;
 	};
 	if (video instanceof HTMLVideoElement) {
-		if (video.style.opacity === '1') {
+		if (video.classList.contains('is-doom-media-revealed')) {
 			hidePoster();
 		} else {
 			const onEnd = (event) => {
@@ -587,7 +587,7 @@ export function revealDoomSlideVideoPlayback(slide) {
 				hidePoster();
 			};
 			video.addEventListener('transitionend', onEnd);
-			video.style.opacity = '1';
+			video.classList.add('is-doom-media-revealed');
 			window.setTimeout(() => {
 				video.removeEventListener('transitionend', onEnd);
 				hidePoster();
@@ -596,7 +596,7 @@ export function revealDoomSlideVideoPlayback(slide) {
 	} else {
 		hidePoster();
 	}
-	if (iframe instanceof HTMLIFrameElement) iframe.style.opacity = '1';
+	if (iframe instanceof HTMLIFrameElement) iframe.classList.add('is-doom-media-revealed');
 }
 
 /**
@@ -803,7 +803,6 @@ export function createDoomSlideElement(item, viewerUserId, slideOpts = {}) {
 		);
 		iframe.setAttribute('allowfullscreen', '');
 		iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
-		iframe.style.opacity = '0';
 		bindDoomYoutubeCaptionSuppress(iframe);
 		mediaFrame.appendChild(iframe);
 	} else {

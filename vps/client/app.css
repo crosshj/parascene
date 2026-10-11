@@ -162,7 +162,6 @@ h1 { margin: 0; font-size: clamp(2rem, 5vw, 3.25rem); letter-spacing: -.045em; }
 	font-weight: 700;
 	cursor: pointer;
 }
-.load-more-button[hidden] { display: none; }
 
 @media (prefers-color-scheme: dark) {
 	.files-status.is-error,

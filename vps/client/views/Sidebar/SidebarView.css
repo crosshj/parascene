@@ -205,7 +205,6 @@
 .sidebar-view__menu-item.is-active .sidebar-view__route-icon { color: inherit; }
 .sidebar-view__menu-item .sidebar-view__nav-badge-slot { display: inline-flex; flex: 0 0 28px; width: 28px; align-items: center; justify-content: center; margin-left: auto; }
 .sidebar-view__roster-status { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 4px 12px 10px; color: color-mix(in srgb, currentColor 64%, transparent); font-size: .75rem; }
-.sidebar-view__roster-status[hidden] { display: none; }
 .sidebar-view__roster-status button { padding: 0; border: 0; color: inherit; background: none; font: inherit; text-decoration: underline; cursor: pointer; }
 .sidebar-view__row-link {
 	display: flex;
@@ -244,7 +243,6 @@
 .ps-avatar--channel { font-size: .82rem; }
 .ps-avatar img,
 .sidebar-view__avatar img { display: block; width: 100%; height: 100%; object-fit: cover; }
-.sidebar-view__avatar img[hidden] { display: none; }
 .sidebar-view__row-label {
 	flex: 1 1 auto;
 	min-width: 0;
@@ -256,7 +254,6 @@
 	white-space: nowrap;
 }
 .sidebar-view__unread { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; box-sizing: border-box; min-width: 16px; height: 16px; padding: 0 5px; border-radius: 999px; color: var(--beta-accent-text); background: var(--beta-accent); font-size: .6rem; font-weight: 700; line-height: normal; }
-.sidebar-view__unread[hidden] { display: none; }
 .sidebar-view__row-controls { position: absolute; top: 50%; right: var(--beta-sidebar-control-inset); width: 56px; height: 28px; transform: translateY(-50%); }
 /* The unread badge shares the gear's box. It must not take the click, including when the slot is empty. */
 .sidebar-view__badge-slot { position: absolute; top: 50%; right: 0; display: inline-flex; width: 28px; height: 28px; align-items: center; justify-content: center; transform: translateY(-50%); pointer-events: none; }
@@ -291,7 +288,6 @@
 .sidebar-view__row-menu-icon { display: block; width: 16px; height: 16px; stroke-width: 2; }
 .sidebar-view__collapsible,
 .sidebar-view__collapsible-rest { display: flex; flex-direction: column; gap: 0; width: 100%; }
-.sidebar-view__collapsible-rest[hidden] { display: none; }
 .sidebar-view__collapsible.is-expanded .sidebar-view__expander-wrap--more { display: none; }
 .sidebar-view__expander-wrap {
 	display: flex;

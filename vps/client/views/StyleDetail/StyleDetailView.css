@@ -304,10 +304,6 @@
 	z-index: 10050;
 }
 
-:where(.style-detail-view) .style-detail-thumb-modal[hidden] {
-	display: none !important;
-}
-
 :where(.style-detail-view) .style-detail-thumb-modal:not([hidden]) {
 	display: block;
 }

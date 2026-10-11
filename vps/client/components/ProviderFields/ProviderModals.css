@@ -251,11 +251,3 @@ body:has(.image-picker-modal-overlay.open) {
 }
 
 /* Closed pickers stay out of the field layout, including before styles settle. */
-:where(.create-workflow-root) [data-image-picker-modal][hidden],
-:where(.create-workflow-root) [data-audio-clip-picker-modal][hidden] {
- display: none !important;
-}
-
-:where(.create-workflow-root) .image-picker-modal [hidden] {
-	display: none !important;
-}

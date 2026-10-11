@@ -167,7 +167,6 @@ function releaseCreationDetailMoreMenu() {
 	const menu = document.querySelector('[data-creation-more-menu]');
 	if (!(menu instanceof HTMLElement)) return;
 	menu.setAttribute('aria-hidden', 'true');
-	menu.style.display = 'none';
 	clearCreationDetailMoreMenuPosition(menu);
 }
 
@@ -215,6 +214,8 @@ function shellOut(href) {
 function creationDetailHostModalIsOpen(host) {
 	if (!(host instanceof HTMLElement)) return false;
 	if (host.shadowRoot?.querySelector('.open')) return true;
+	const dialog = host.querySelector('dialog');
+	if (dialog instanceof HTMLDialogElement && dialog.open) return true;
 	const overlay = host.querySelector(
 		'.modal-overlay, .publish-modal-overlay, [data-overlay], [data-tip-creator-modal], [data-publish-modal]'
 	);
@@ -466,23 +467,23 @@ const html = String.raw;
 
 const CREATION_COMMENTS_LIST_SKELETON_HTML = `<div class="creation-comments-loading" role="status" aria-live="polite" aria-busy="true">
 	<div class="creation-comments-skeleton-row">
-		<div class="skeleton skeleton-circle" style="width:32px;height:32px;border-radius:50%"></div>
+		<div class="skeleton skeleton-circle"></div>
 		<div class="creation-comments-skeleton-body">
 			<div class="skeleton skeleton-line skeleton-line--short"></div>
 			<div class="skeleton skeleton-line skeleton-line--medium"></div>
-			<div class="skeleton skeleton-line" style="max-width:72%"></div>
+			<div class="skeleton skeleton-line skeleton-line--max72"></div>
 		</div>
 	</div>
 	<div class="creation-comments-skeleton-row">
-		<div class="skeleton skeleton-circle" style="width:32px;height:32px;border-radius:50%"></div>
+		<div class="skeleton skeleton-circle"></div>
 		<div class="creation-comments-skeleton-body">
 			<div class="skeleton skeleton-line skeleton-line--medium"></div>
 			<div class="skeleton skeleton-line skeleton-line--short"></div>
-			<div class="skeleton skeleton-line" style="max-width:58%"></div>
+			<div class="skeleton skeleton-line skeleton-line--max58"></div>
 		</div>
 	</div>
 	<div class="creation-comments-skeleton-row">
-		<div class="skeleton skeleton-circle" style="width:32px;height:32px;border-radius:50%"></div>
+		<div class="skeleton skeleton-circle"></div>
 		<div class="creation-comments-skeleton-body">
 			<div class="skeleton skeleton-line skeleton-line--short"></div>
 			<div class="skeleton skeleton-line"></div>
@@ -505,33 +506,33 @@ const CREATION_COMMENTS_TOOLBAR_HTML = `<div class="comments-toolbar">
 /** Static skeleton for detail content and SSR first paint. */
 const CREATION_DETAIL_CONTENT_SKELETON_HTML = `<div class="creation-detail-skeleton" role="status" aria-label="Loading creation" aria-busy="true">
 	<div class="creation-detail-title-row">
-		<div class="skeleton skeleton-line" style="width:72%;max-width:320px;height:28px;border-radius:6px"></div>
+		<div class="skeleton skeleton-line skeleton-line--title"></div>
 	</div>
 	<div class="creation-detail-action-strip">
 		<div class="creation-detail-action-strip-scroll">
-			<div class="creation-detail-action-strip-avatar"><span class="skeleton skeleton-circle" style="width: 40px; height: 40px;" aria-hidden="true"></span></div>
+			<div class="creation-detail-action-strip-avatar"><span class="skeleton skeleton-circle skeleton-circle--40" aria-hidden="true"></span></div>
 			<div class="creation-detail-action-strip-creator-info">
-				<div class="skeleton skeleton-line skeleton-line--short" style="width:96px;margin-bottom:6px"></div>
-				<div class="skeleton skeleton-line skeleton-line--medium" style="width:72px"></div>
+				<div class="skeleton skeleton-line skeleton-line--px96 skeleton-line--gap-sm"></div>
+				<div class="skeleton skeleton-line skeleton-line--px72"></div>
 			</div>
-			<span class="skeleton skeleton-pill" style="width:72px;height:34px" aria-hidden="true"></span>
-			<span class="skeleton skeleton-pill" style="width: 64px; height: 34px;" aria-hidden="true"></span>
-			<span class="skeleton skeleton-pill" style="width: 88px; height: 34px;" aria-hidden="true"></span>
-			<span class="skeleton skeleton-circle" style="width: 34px; height: 34px;" aria-hidden="true"></span>
+			<span class="skeleton skeleton-pill skeleton-pill--w72" aria-hidden="true"></span>
+			<span class="skeleton skeleton-pill skeleton-pill--w64" aria-hidden="true"></span>
+			<span class="skeleton skeleton-pill skeleton-pill--w88" aria-hidden="true"></span>
+			<span class="skeleton skeleton-circle skeleton-circle--34" aria-hidden="true"></span>
 		</div>
 	</div>
 	<div class="creation-detail-skeleton-description" aria-hidden="true">
-		<span class="skeleton skeleton-line" style="display: block; margin-bottom: 8px;"></span>
-		<span class="skeleton skeleton-line" style="display: block; margin-bottom: 12px; width: 95%;"></span>
+		<span class="skeleton skeleton-line skeleton-line--block skeleton-line--gap-md"></span>
+		<span class="skeleton skeleton-line skeleton-line--block skeleton-line--gap-lg skeleton-line--w95"></span>
 	</div>
 </div>`;
 
 const CREATION_DETAIL_COMMENTS_SKELETON_HTML = `<div class="creation-detail-skeleton creation-detail-skeleton--pending" data-creation-detail-pending-skeleton aria-label="Loading comments" aria-busy="true">
 	<div data-creation-comments-host>
 	<div class="comment-input" data-comment-input-skeleton>
-		<div class="comment-avatar"><span class="skeleton skeleton-circle" style="width: 32px; height: 32px;" aria-hidden="true"></span></div>
+		<div class="comment-avatar"><span class="skeleton skeleton-circle" aria-hidden="true"></span></div>
 		<div class="comment-input-body">
-			<span class="skeleton skeleton-line" style="display: block; height: 40px; border-radius: 8px;"></span>
+			<span class="skeleton skeleton-line skeleton-line--block skeleton-line--input"></span>
 		</div>
 	</div>
 	<div class="creation-detail-comments-section" data-comments-section>
@@ -916,7 +917,7 @@ function prepareCreationDetailHeroForLoad(
 		);
 		clearCreationDetailSunoPlayer(imageWrapper);
 		if (imageEl instanceof HTMLImageElement) {
-			imageEl.style.visibility = 'hidden';
+			imageEl.classList.add('is-hero-concealed');
 		}
 	}
 }
@@ -1052,7 +1053,7 @@ function getCreationDetailActionDefs() {
 			dataAttr: 'data-publish-btn',
 			btnClass: 'btn-primary',
 			inKebabMenu: false,
-			inner: html`<svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="margin-right: 6px; vertical-align: middle;">
+			inner: html`<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
 	<path d="M1.5 8L14.5 1.5L10.5 14.5L8 9L1.5 8Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
 		stroke-linejoin="round" fill="none" />
 </svg>
@@ -1086,7 +1087,7 @@ Share`,
 			dataAttr: 'data-edit-btn',
 			btnClass: 'btn-outlined',
 			inKebabMenu: false,
-			inner: html`<svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="margin-right: 6px; vertical-align: middle;">
+			inner: html`<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
 	<path d="M11.5 2.5L13.5 4.5L5.5 12.5H3.5V10.5L11.5 2.5Z" stroke="currentColor" stroke-width="1.5"
 		stroke-linecap="round" stroke-linejoin="round" fill="none" />
 </svg>
@@ -1099,7 +1100,7 @@ Edit`,
 			dataAttr: 'data-unpublish-btn',
 			btnClass: 'btn-outlined',
 			inKebabMenu: true,
-			inner: html`<svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="margin-right: 6px; vertical-align: middle;">
+			inner: html`<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
 	<path d="M1.5 8L14.5 1.5L10.5 14.5L8 9L1.5 8Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
 		stroke-linejoin="round" fill="none" />
 </svg>
@@ -1112,7 +1113,7 @@ Un-publish`,
 			dataAttr: 'data-retry-btn',
 			btnClass: 'btn-outlined',
 			inKebabMenu: false,
-			inner: html`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="margin-right: 6px; vertical-align: middle;">
+			inner: html`<svg width="16" height="16" viewBox="0 0 24 24" fill="none">
 	<path d="M3 12a9 9 0 1 0 3-6.708" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
 		stroke-linejoin="round" />
 	<polyline points="3 4 3 10 9 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
@@ -1127,7 +1128,7 @@ Retry`,
 			dataAttr: 'data-check-again-btn',
 			btnClass: 'btn-outlined',
 			inKebabMenu: false,
-			inner: html`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="margin-right: 6px; vertical-align: middle;">
+			inner: html`<svg width="16" height="16" viewBox="0 0 24 24" fill="none">
 	<path d="M3 12a9 9 0 1 0 3-6.708" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
 		stroke-linejoin="round" />
 	<polyline points="3 4 3 10 9 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
@@ -1157,7 +1158,7 @@ More Info`,
 			dataAttr: 'data-delete-btn',
 			btnClass: 'btn-outlined btn-danger-outlined',
 			inKebabMenu: true,
-			inner: html`<svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="margin-right: 6px; vertical-align: middle;">
+			inner: html`<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
 	<path
 		d="M2 4H14M12.5 4V13.5C12.5 14.3284 11.8284 15 11 15H5C4.17157 15 3.5 14.3284 3.5 13.5V4M5.5 4V2.5C5.5 1.67157 6.17157 1 7 1H9C9.82843 1 10.5 1.67157 10.5 2.5V4M6.5 7.5V11.5M9.5 7.5V11.5"
 		stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
@@ -1172,7 +1173,7 @@ More Info`,
 			dataAttr: 'data-delete-btn',
 			btnClass: 'btn-outlined btn-danger-outlined',
 			inKebabMenu: false,
-			inner: html`<svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="margin-right: 6px; vertical-align: middle;">
+			inner: html`<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
 	<path
 		d="M2 4H14M12.5 4V13.5C12.5 14.3284 11.8284 15 11 15H5C4.17157 15 3.5 14.3284 3.5 13.5V4M5.5 4V2.5C5.5 1.67157 6.17157 1 7 1H9C9.82843 1 10.5 1.67157 10.5 2.5V4M6.5 7.5V11.5M9.5 7.5V11.5"
 		stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
@@ -1662,7 +1663,7 @@ function renderLineageOffspringThumbLinks(items, ctx) {
 				data-child-id="${cid}"${dataCreationId}
 			>
 				<span class="creation-detail-history-fallback" data-child-fallback>#${cid}</span>
-				<img class="creation-detail-history-thumb" data-child-img alt="" loading="lazy" style="display: none;" data-bg-url="${escapeHtml(thumbUrl)}" />
+				<img class="creation-detail-history-thumb" data-child-img alt="" loading="lazy" hidden data-bg-url="${escapeHtml(thumbUrl)}" />
 			</a>
 		`;
 	}).join('');
@@ -1719,8 +1720,8 @@ function buildLineageSectionHtmlFromPrefetch(lineagePrefetch, ctx) {
 			if (slot.mode === 'lineage-open') {
 				const t = nsfwMediaUrl((slot.thumb || '').trim(), { nsfw }, { sourceVariant: 'original' });
 				const inner = t
-					? `<span class="creation-detail-history-fallback" data-history-fallback style="display: none;">#${id}</span><img class="creation-detail-history-thumb" src="${escapeHtml(t)}" alt="" loading="lazy" />`
-					: `<span class="creation-detail-history-fallback" data-history-fallback>#${id}</span><img class="creation-detail-history-thumb" data-history-img alt="" loading="lazy" style="display: none;" />`;
+					? `<span class="creation-detail-history-fallback" data-history-fallback hidden>#${id}</span><img class="creation-detail-history-thumb" src="${escapeHtml(t)}" alt="" loading="lazy" />`
+					: `<span class="creation-detail-history-fallback" data-history-fallback>#${id}</span><img class="creation-detail-history-thumb" data-history-img alt="" loading="lazy" hidden />`;
 				const pubHint = slot.published ? 'Published — open for details or full page' : 'Open for details';
 				return `
 				<button
@@ -2093,7 +2094,7 @@ function initRelatedSection(root, currentCreationId, options = {}) {
 			const res = await fetch(`/api/creations/${currentCreationId}/related?${params}`, { credentials: 'include', signal: controller.signal });
 			if (!active) return;
 			if (!res.ok) {
-				container.style.display = 'none';
+				container.hidden = true;
 				return;
 			}
 			const data = await res.json();
@@ -2120,7 +2121,7 @@ function initRelatedSection(root, currentCreationId, options = {}) {
 				});
 			}
 			if (items.length > 0) {
-				container.style.display = '';
+				container.hidden = false;
 				const renderStart = performance.now();
 				appendRelatedCards(items);
 				notifyFirstRelatedBatch({
@@ -2134,10 +2135,10 @@ function initRelatedSection(root, currentCreationId, options = {}) {
 			if (!hasMore) {
 				randomMode = true;
 				hasMore = true;
-				if (sentinel) sentinel.style.display = '';
+				if (sentinel) sentinel.hidden = false;
 			}
 		} catch (error) {
-			if (error?.name !== 'AbortError' && active) container.style.display = 'none';
+			if (error?.name !== 'AbortError' && active) container.hidden = true;
 		} finally {
 			isLoading = false;
 			if (requestController === controller) requestController = null;
@@ -2683,7 +2684,6 @@ function resetCreationDetailHeroVideoElement() {
 			'hero-video-paused',
 			'hero-video-hover'
 		);
-		videoEl.style.display = 'none';
 		videoEl.style.removeProperty('opacity');
 		try {
 			videoEl.pause();
@@ -3400,7 +3400,7 @@ async function loadCreation() {
 			imageEl.dataset.currentUrl = url;
 			setHeroBackgroundUrl(url);
 		}
-		imageEl.style.visibility = 'visible';
+		imageEl.classList.remove('is-hero-concealed');
 		markHeroReady({ state: 'image' });
 	}
 
@@ -3421,7 +3421,7 @@ async function loadCreation() {
 	}
 
 	function ensureHeroImageVisible() {
-		imageEl.style.visibility = 'visible';
+		imageEl.classList.remove('is-hero-concealed');
 		if (!heroVideoAwaitingReveal()) {
 			imageWrapper?.classList.remove('image-loading', 'image-error', 'image-error-moderated', 'hero-aspect-pending');
 		}
@@ -3491,12 +3491,12 @@ async function loadCreation() {
 	}
 
 	function hasLoadedHeroImage() {
-		return Boolean(imageEl.src && imageEl.complete && imageEl.naturalWidth > 0 && imageEl.style.visibility !== 'hidden');
+		return Boolean(imageEl.src && imageEl.complete && imageEl.naturalWidth > 0 && !imageEl.classList.contains('is-hero-concealed'));
 	}
 
 	function clearHeroImage() {
 		setHeroBackgroundUrl('');
-		imageEl.style.visibility = 'hidden';
+		imageEl.classList.add('is-hero-concealed');
 		imageEl.removeAttribute('src');
 		delete imageEl.dataset.currentUrl;
 		delete imageEl.dataset.pendingUrl;
@@ -3608,7 +3608,6 @@ async function loadCreation() {
 			'hero-video-paused',
 			'hero-video-hover'
 		);
-		videoEl.style.display = 'none';
 		videoEl.style.removeProperty('opacity');
 		videoEl.pause?.();
 		videoEl.controls = false;
@@ -3725,7 +3724,7 @@ async function loadCreation() {
 		imageWrapper?.classList.remove('image-error', 'image-error-moderated');
 		imageWrapper?.classList.toggle('image-loading', !keepCurrentImageVisible);
 		if (!keepCurrentImageVisible) {
-			imageEl.style.visibility = 'hidden';
+			imageEl.classList.add('is-hero-concealed');
 		}
 		imageEl.dataset.pendingUrl = url;
 		if (heroImageWarmUrls.has(url)) {
@@ -3852,7 +3851,6 @@ async function loadCreation() {
 		}
 
 		imageWrapper.classList.add('group-carousel-active');
-		imageEl.style.display = 'none';
 		if (!setGroupHeroCarouselActive(activeId)) {
 			const first = usable[0];
 			setGroupHeroCarouselActive(first.id);
@@ -4022,7 +4020,7 @@ async function loadCreation() {
 			// Clearing the hero src while mounting the timeout overlay fires this.
 			// Leave the timed-out clock in place instead of the unavailable-image mark.
 			if (imageWrapper?.dataset.heroTimeout === '1') {
-				imageEl.style.visibility = 'hidden';
+				imageEl.classList.add('is-hero-concealed');
 				return;
 			}
 			// In overlay/embed mode the server-rendered hero <img> may carry a src the viewer
@@ -4044,7 +4042,7 @@ async function loadCreation() {
 			imageWrapper?.classList.add('image-error');
 			setHeroBackgroundUrl('');
 			// Hide default browser broken-image UI
-			imageEl.style.visibility = 'hidden';
+			imageEl.classList.add('is-hero-concealed');
 			markHeroReady({ state: 'image-error' });
 		});
 	}
@@ -4092,7 +4090,6 @@ async function loadCreation() {
 				imageWrapper?.classList.remove('image-loading');
 				imageWrapper?.classList.add('image-error');
 				setHeroBackgroundUrl('');
-				videoEl.style.display = 'none';
 				videoEl.removeAttribute('src');
 				try {
 					videoEl.load();
@@ -5895,7 +5892,7 @@ async function loadCreation() {
 					<button type="button" class="btn-secondary creation-detail-admin-provider-repair" data-admin-provider-repair>Fetch video from provider</button>
 					<p class="creation-detail-admin-provider-repair-status" data-admin-provider-repair-status role="status" hidden></p>
 				</div>
-				<p class="creation-detail-admin-video-error" data-admin-video-error role="alert" style="display: none;"></p>
+				<p class="creation-detail-admin-video-error" data-admin-video-error role="alert" hidden></p>
 			</div>
 			` : ''}
 			
@@ -5915,7 +5912,7 @@ async function loadCreation() {
 				` : ''}
 				${copyLinkButtonHtml}
 				${setAvatarButtonHtml}
-				<button class="feed-card-action" type="button" data-landscape-btn aria-label="Landscape" style="display: none;">
+				<button class="feed-card-action" type="button" data-landscape-btn aria-label="Landscape" hidden>
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
 						stroke-linejoin="round" aria-hidden="true">
 						<rect x="2" y="6" width="20" height="12" rx="1.5" /></svg>
@@ -5929,7 +5926,7 @@ async function loadCreation() {
 			${(isPublished || showCommentsWithoutPublish) && !isFailed ? html`
 			<div data-creation-comments-host></div>
 
-			${isPublished && !hideIdentifyActionChrome ? html`<section class="creation-detail-related" data-related-container aria-label="More like this" style="display: none;">
+			${isPublished && !hideIdentifyActionChrome ? html`<section class="creation-detail-related" data-related-container aria-label="More like this" hidden>
 				<div class="creation-detail-related-inner">
 					<h2 class="creation-detail-related-heading">More like this</h2>
 					<div class="route-cards content-cards-image-grid creation-detail-related-grid" data-related-grid role="list">
@@ -6029,10 +6026,10 @@ async function loadCreation() {
 			landscapeBtn.dataset.landscapeIsSelf = isOwner ? '1' : '0';
 			landscapeBtn.dataset.landscapeHasUrl = hasLandscapeUrl ? '1' : '0';
 			if (!showLandscapeMenu) {
-				landscapeBtn.style.display = 'none';
+				landscapeBtn.hidden = true;
 				landscapeBtn.disabled = true;
 			} else {
-				landscapeBtn.style.display = '';
+				landscapeBtn.hidden = false;
 				landscapeBtn.disabled = false;
 				const labelEl = landscapeBtn.querySelector('[data-landscape-btn-text]');
 				if (labelEl) labelEl.textContent = 'Landscape';
@@ -6591,9 +6588,9 @@ async function loadCreation() {
 				const url = r.status === 'fulfilled' ? r.value : null;
 				if (!url || !(img instanceof HTMLImageElement)) continue;
 				img.src = url;
-				img.style.display = '';
+				img.hidden = false;
 				const fallback = img.closest('button')?.querySelector('[data-history-fallback]');
-				if (fallback instanceof HTMLElement) fallback.style.display = 'none';
+				if (fallback instanceof HTMLElement) fallback.hidden = true;
 			}
 		}
 
@@ -6606,13 +6603,13 @@ async function loadCreation() {
 				const bgUrl = (img.getAttribute('data-bg-url') || '').trim();
 				if (!bgUrl) continue;
 				img.src = bgUrl;
-				img.style.display = '';
+				img.hidden = false;
 				const link = img.closest('a');
 				if (link && showUnobscured && link.classList.contains('nsfw')) {
 					link.classList.add('nsfw-revealed');
 				}
 				const fallback = link?.querySelector('[data-child-fallback]');
-				if (fallback instanceof HTMLElement) fallback.style.display = 'none';
+				if (fallback instanceof HTMLElement) fallback.hidden = true;
 			}
 		}
 
@@ -6653,9 +6650,9 @@ async function loadCreation() {
 					if (!(t instanceof HTMLImageElement) || !t.classList.contains('creation-detail-history-thumb')) return;
 					const historyRoot = detailContent.querySelector('[data-creation-history]');
 					if (!historyRoot || !historyRoot.contains(t)) return;
-					t.style.display = 'none';
+					t.hidden = true;
 					const fb = t.closest('button')?.querySelector('[data-history-fallback]');
-					if (fb instanceof HTMLElement) fb.style.removeProperty('display');
+					if (fb instanceof HTMLElement) fb.hidden = false;
 				},
 				true
 			);
@@ -6752,14 +6749,14 @@ async function loadCreation() {
 		if (!shareMountedPrivate) {
 			likeButtons.forEach((btn) => { initLikeButton(btn, creationWithLikes); setCreationLikeLoading(btn, likeMetadataLoading); });
 		} else {
-			likeButtons.forEach((btn) => { btn.style.display = 'none'; });
+			likeButtons.forEach((btn) => { btn.hidden = true; });
 		}
 
 		const copyLinkBtn = detailContent.querySelector('button[data-copy-link-button]');
 		const copyLinkLabel = detailContent.querySelector('[data-copy-link-label]');
 		if (copyLinkBtn instanceof HTMLButtonElement) {
 			if (shareMountedPrivate) {
-				copyLinkBtn.style.display = 'none';
+				copyLinkBtn.hidden = true;
 			}
 			copyLinkBtn.addEventListener('click', async () => {
 				const url = getPrimaryLinkUrl(creationId);
@@ -6891,13 +6888,13 @@ async function loadCreation() {
 				if (!adminVideoInput?.files?.length) {
 					if (adminVideoError) {
 						adminVideoError.textContent = 'Please select a video file.';
-						adminVideoError.style.display = '';
+						adminVideoError.hidden = false;
 					}
 					return;
 				}
 				if (adminVideoError) {
 					adminVideoError.textContent = '';
-					adminVideoError.style.display = 'none';
+					adminVideoError.hidden = true;
 				}
 				if (adminVideoSubmit) {
 					adminVideoSubmit.disabled = true;
@@ -6914,7 +6911,7 @@ async function loadCreation() {
 					if (!res.ok) {
 						if (adminVideoError) {
 							adminVideoError.textContent = data?.message || data?.error || 'Upload failed.';
-							adminVideoError.style.display = '';
+							adminVideoError.hidden = false;
 						}
 						return;
 					}
@@ -6922,7 +6919,7 @@ async function loadCreation() {
 				} catch {
 					if (adminVideoError) {
 						adminVideoError.textContent = 'Upload failed. Please try again.';
-						adminVideoError.style.display = '';
+						adminVideoError.hidden = false;
 					}
 				} finally {
 					if (adminVideoSubmit) {
@@ -6979,7 +6976,7 @@ async function loadCreation() {
 				adminProviderRepairBtn.disabled = true;
 				if (adminVideoErrorEl) {
 					adminVideoErrorEl.textContent = '';
-					adminVideoErrorEl.style.display = 'none';
+					adminVideoErrorEl.hidden = true;
 				}
 				try {
 					const res = await fetch(`/admin/creations/${creationId}/provider-async-video-recovery`, {
@@ -7006,7 +7003,7 @@ async function loadCreation() {
 						await refreshAfterMutation('status-changed', { creationId });
 					} else if (adminVideoErrorEl && (detail || !res.ok)) {
 						adminVideoErrorEl.textContent = adminProviderRepairStatus?.textContent || detail || 'Recovery failed';
-						adminVideoErrorEl.style.display = '';
+						adminVideoErrorEl.hidden = false;
 					}
 				} catch (err) {
 					if (adminProviderRepairStatus) {
@@ -7045,7 +7042,7 @@ async function loadCreation() {
 				currentUserId === creatorId ||
 				(currentUserCredits !== null && currentUserCredits < TIP_MIN_VISIBLE_BALANCE)
 			) {
-				tipCreatorBtn.style.display = 'none';
+				tipCreatorBtn.hidden = true;
 			}
 			tipCreatorBtn.addEventListener('click', () => {
 				document.dispatchEvent(new CustomEvent('open-tip-creator-modal', {
@@ -7136,7 +7133,7 @@ async function loadCreation() {
 				invalidateCreatorProfileCache(targetId);
 
 				// Once the viewer follows the creator, hide all follow buttons.
-				followButtons.forEach((btn) => { btn.style.display = 'none'; });
+				followButtons.forEach((btn) => { btn.hidden = true; });
 				busy = false;
 			});
 		});
@@ -7536,7 +7533,6 @@ async function loadCreation() {
 			};
 			const closeMobileMoreMenu = () => {
 				moreMenu.setAttribute('aria-hidden', 'true');
-				moreMenu.style.display = 'none';
 				clearCreationDetailMoreMenuPosition(moreMenu);
 				document.removeEventListener('click', onDocumentClick);
 				document.removeEventListener('keydown', onMoreMenuEscape);
@@ -7551,7 +7547,6 @@ async function loadCreation() {
 				}
 				pauseCreationDetailPlayingVideos();
 				clearCreationDetailMoreMenuPosition(moreMenu);
-				moreMenu.style.display = 'block';
 				moreMenu.setAttribute('aria-hidden', 'false');
 				setTimeout(() => {
 					if (moreMenuSignal.aborted) return;
@@ -7734,7 +7729,7 @@ async function loadCreation() {
 			if (fileInput) {
 				fileInput.addEventListener('change', () => {
 					if (submitBtn) submitBtn.disabled = !(fileInput.files && fileInput.files.length > 0);
-					if (errorEl) { errorEl.textContent = ''; errorEl.style.display = 'none'; }
+					if (errorEl) { errorEl.textContent = ''; errorEl.hidden = true; }
 				});
 			}
 			if (form && submitBtn) {
@@ -7743,11 +7738,11 @@ async function loadCreation() {
 					if (!fileInput?.files?.length) return;
 					const file = fileInput.files[0];
 					if (!file || !file.type.startsWith('video/')) {
-						if (errorEl) { errorEl.textContent = 'Please choose a video file.'; errorEl.style.display = 'block'; }
+						if (errorEl) { errorEl.textContent = 'Please choose a video file.'; errorEl.hidden = false; }
 						return;
 					}
 					submitBtn.disabled = true;
-					if (errorEl) { errorEl.textContent = ''; errorEl.style.display = 'none'; }
+					if (errorEl) { errorEl.textContent = ''; errorEl.hidden = true; }
 					try {
 						const fd = new FormData();
 						fd.append('video', file);
@@ -7760,7 +7755,7 @@ async function loadCreation() {
 						if (!res.ok) {
 							if (errorEl) {
 								errorEl.textContent = data?.error || data?.message || `Upload failed (${res.status})`;
-								errorEl.style.display = 'block';
+								errorEl.hidden = false;
 							}
 							submitBtn.disabled = false;
 							return;
@@ -7771,7 +7766,7 @@ async function loadCreation() {
 					} catch (err) {
 						if (errorEl) {
 							errorEl.textContent = err?.message || 'Upload failed';
-							errorEl.style.display = 'block';
+							errorEl.hidden = false;
 						}
 						submitBtn.disabled = false;
 					}
@@ -8338,7 +8333,7 @@ function paintCreationDetailFromSeed(seed, detailContent, imageEl, chromeHtmlFro
 		applyInitialDetailHeroLayout(wrap, seed);
 	}
 	if (imageEl instanceof HTMLImageElement && imgUrl) {
-		imageEl.style.visibility = '';
+		imageEl.classList.remove('is-hero-concealed');
 		if (!imageEl.getAttribute('src')) imageEl.src = src;
 		const markHeroSettled = () => {
 			if (!(wrap instanceof HTMLElement)) return;
@@ -9063,7 +9058,6 @@ const landscapeCostCancel = document.querySelector('[data-landscape-cost-cancel]
 const landscapeCostContinue = document.querySelector('[data-landscape-cost-continue]');
 const landscapePrimaryBtn = document.querySelector('[data-landscape-primary-btn]');
 const landscapePrimaryBtnText = landscapePrimaryBtn?.querySelector?.('[data-landscape-btn-text]') ?? null;
-const landscapePrimaryBtnSpinner = document.querySelector('[data-landscape-btn-spinner]');
 const landscapeRemoveBtn = document.querySelector('[data-landscape-remove-btn]');
 const landscapeCloseBtn = document.querySelector('[data-landscape-close-btn]');
 const landscapeCopyDebugBtn = document.querySelector('[data-landscape-copy-debug]');
@@ -9084,8 +9078,6 @@ function setLandscapePrimaryButtonLoading(loading) {
 	if (!landscapePrimaryBtn) return;
 	landscapePrimaryBtn.classList.toggle('is-loading', !!loading);
 	landscapePrimaryBtn.disabled = !!loading;
-	if (landscapePrimaryBtnSpinner) landscapePrimaryBtnSpinner.style.display = loading ? 'block' : 'none';
-	if (landscapePrimaryBtnText) landscapePrimaryBtnText.style.visibility = loading ? 'hidden' : '';
 }
 
 function openLandscapeModalFromLoadedCreation() {
@@ -9126,31 +9118,31 @@ function openLandscapeModal(creationId, { landscapeUrl, isOwner, isLoading, erro
 	}
 
 	if (landscapeGeneratePrompt) {
-		landscapeGeneratePrompt.style.display = !hasImage && !showSpinner && !errorMsg ? 'block' : 'none';
+		landscapeGeneratePrompt.hidden = !(!hasImage && !showSpinner && !errorMsg);
 	}
 	if (landscapePlaceholder) {
-		landscapePlaceholder.style.display = showPlaceholder ? 'flex' : 'none';
+		landscapePlaceholder.hidden = !showPlaceholder;
 		landscapePlaceholder.classList.toggle('is-loading', !!showSpinner);
 	}
 	if (landscapePlaceholderSpinner) {
-		landscapePlaceholderSpinner.style.display = showSpinner ? 'block' : 'none';
+		landscapePlaceholderSpinner.hidden = !showSpinner;
 	}
 	if (landscapeImage) {
-		landscapeImage.style.display = hasImage && !showSpinner ? 'block' : 'none';
+		landscapeImage.hidden = !(hasImage && !showSpinner);
 		if (hasImage && landscapeUrl) landscapeImage.src = landscapeUrl;
 	}
 	if (landscapeErrorEl) {
-		landscapeErrorEl.style.display = errorMsg ? 'block' : 'none';
+		landscapeErrorEl.hidden = !errorMsg;
 		landscapeErrorEl.textContent = errorMsg || '';
 	}
 
 	if (landscapePrimaryBtn) {
-		landscapePrimaryBtn.style.display = isOwner && canGenerate ? '' : 'none';
+		landscapePrimaryBtn.hidden = !(isOwner && canGenerate);
 		landscapePrimaryBtn.disabled = !!isLoading;
 		if (landscapePrimaryBtnText) landscapePrimaryBtnText.textContent = hasImage ? 'Re-generate' : 'Generate';
 	}
 	if (landscapeRemoveBtn) {
-		landscapeRemoveBtn.style.display = isOwner && hasImage ? '' : 'none';
+		landscapeRemoveBtn.hidden = !(isOwner && hasImage);
 		landscapeRemoveBtn.disabled = !!isLoading;
 	}
 	if (landscapeCloseBtn) {

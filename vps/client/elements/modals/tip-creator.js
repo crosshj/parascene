@@ -1,5 +1,5 @@
-import './base.css';
 import './tip-creator.css';
+import { createModalDismissButton } from '../../shared/modalDismiss.js';
 import { refreshAfterMutation } from '../../shared/creationDetailRuntime.js';
 
 /**
@@ -9,7 +9,6 @@ import { refreshAfterMutation } from '../../shared/creationDetailRuntime.js';
  */
 const html = String.raw;
 
-const TIP_MIN_VISIBLE_BALANCE = 10.0;
 const TIP_LARGE_AMOUNT_WARNING = 5.0;
 
 class AppModalTipCreator extends HTMLElement {
@@ -19,41 +18,39 @@ class AppModalTipCreator extends HTMLElement {
 		this._userName = null;
 		this._createdImageId = null;
 		this._viewerBalance = null;
-		this._overlay = null;
 		this._form = null;
 		this._amountInput = null;
 		this._errorEl = null;
 		this._submitBtn = null;
 		this._cancelBtn = null;
-		this._closeBtn = null;
 		this._recipientEl = null;
 		this._balanceHintEl = null;
 		this._warningEl = null;
-		this._boundEscape = (e) => {
-			if (e.key === 'Escape') this.close();
-		};
 		this._boundOpen = (e) => this.open(e.detail);
+		this._boundCloseAll = () => this.close();
+		this._boundDialogClose = () => {
+			document.dispatchEvent(new CustomEvent('modal-closed'));
+		};
 	}
 
 	connectedCallback() {
 		this.setAttribute('data-modal', '');
 		this.render();
-		this._overlay = this.querySelector('[data-tip-creator-modal-overlay]');
 		this._form = this.querySelector('[data-tip-creator-form]');
 		this._amountInput = this.querySelector('#tip-creator-modal-amount');
 		this._errorEl = this.querySelector('[data-tip-creator-error]');
 		this._submitBtn = this.querySelector('[data-tip-creator-submit]');
 		this._cancelBtn = this.querySelector('[data-tip-creator-cancel]');
-		this._closeBtn = this.querySelector('[data-tip-creator-close]');
 		this._recipientEl = this.querySelector('[data-tip-creator-recipient]');
 		this._balanceHintEl = this.querySelector('[data-tip-creator-balance-hint]');
 		this._warningEl = this.querySelector('[data-tip-creator-warning]');
 
-		this._overlay?.addEventListener('click', (e) => {
-			if (e.target?.dataset?.tipCreatorModalClose !== undefined || e.target === this._overlay) this.close();
+		const dialog = this.dialog;
+		dialog?.addEventListener('click', (e) => {
+			if (e.target === dialog) this.close();
 		});
+		dialog?.addEventListener('close', this._boundDialogClose);
 		this._form?.addEventListener('submit', (e) => this.handleSubmit(e));
-		this._closeBtn?.addEventListener('click', () => this.close());
 		this._cancelBtn?.addEventListener('click', () => this.close());
 		this._submitBtn?.addEventListener('click', () => this._form?.requestSubmit());
 
@@ -61,54 +58,64 @@ class AppModalTipCreator extends HTMLElement {
 			this._amountInput.addEventListener('input', () => this.updateStateFromAmount());
 		}
 
-		document.addEventListener('keydown', this._boundEscape);
 		document.addEventListener('open-tip-creator-modal', this._boundOpen);
+		document.addEventListener('close-all-modals', this._boundCloseAll);
 	}
 
 	disconnectedCallback() {
-		document.removeEventListener('keydown', this._boundEscape);
 		document.removeEventListener('open-tip-creator-modal', this._boundOpen);
+		document.removeEventListener('close-all-modals', this._boundCloseAll);
+		this.dialog?.removeEventListener('close', this._boundDialogClose);
+	}
+
+	/** @returns {HTMLDialogElement | null} */
+	get dialog() {
+		const el = this.querySelector('dialog[data-tip-creator-modal]');
+		return el?.tagName === 'DIALOG' ? /** @type {HTMLDialogElement} */ (el) : null;
 	}
 
 	render() {
 		this.innerHTML = html`
-			<div class="publish-modal-overlay" data-tip-creator-modal-overlay data-tip-creator-modal hidden
-				aria-label="Tip" role="dialog" aria-modal="true">
-				<div class="publish-modal tip-creator-modal">
-					<header class="publish-modal-header">
-						<h3>Tip</h3>
-						<button type="button" class="publish-modal-close" data-tip-creator-close aria-label="Close">✕</button>
-					</header>
-					<div class="publish-modal-body">
-						<p class="tip-creator-recipient" data-tip-creator-recipient></p>
-						<form class="tip-creator-form" data-tip-creator-form>
-							<input type="hidden" name="toUserId" value="" />
-							<input type="hidden" name="createdImageId" value="" />
-							<div class="tip-creator-label">
-								<label for="tip-creator-modal-amount">Amount (credits)</label>
-								<input id="tip-creator-modal-amount" type="number" name="amount" min="0.1" step="0.1"
-									inputmode="decimal" required placeholder="0.0" />
-							</div>
-							<p class="tip-creator-balance-hint" data-tip-creator-balance-hint></p>
-							<div class="tip-creator-label">
-								<label for="tip-creator-modal-message">Message (optional)</label>
-								<textarea id="tip-creator-modal-message" name="message" rows="2" maxlength="500"
-									class="tip-creator-message" placeholder="Optional note to the creator"></textarea>
-							</div>
-							<p class="tip-creator-warning" data-tip-creator-warning hidden></p>
-							<div class="alert error tip-creator-error" data-tip-creator-error hidden></div>
-						</form>
-					</div>
-					<footer class="publish-modal-footer">
-						<button type="button" class="btn-secondary" data-tip-creator-cancel>Cancel</button>
-						<button type="button" class="btn-primary tip-creator-submit" data-tip-creator-submit>
-							<span class="tip-creator-submit-label">Tip</span>
-							<span class="tip-creator-spinner" aria-hidden="true"></span>
-						</button>
-					</footer>
+			<dialog class="app-dialog tip-creator-dialog" data-tip-creator-modal aria-labelledby="tip-creator-title">
+				<header class="app-dialog__header">
+					<h2 id="tip-creator-title" class="app-dialog__title">Tip</h2>
+				</header>
+				<div class="app-dialog__body">
+					<p class="tip-creator-recipient" data-tip-creator-recipient></p>
+					<form class="tip-creator-form" data-tip-creator-form>
+						<input type="hidden" name="toUserId" value="" />
+						<input type="hidden" name="createdImageId" value="" />
+						<div class="tip-creator-label">
+							<label for="tip-creator-modal-amount">Amount (credits)</label>
+							<input id="tip-creator-modal-amount" type="number" name="amount" min="0.1" step="0.1"
+								inputmode="decimal" required placeholder="0.0" />
+						</div>
+						<p class="tip-creator-balance-hint" data-tip-creator-balance-hint></p>
+						<div class="tip-creator-label">
+							<label for="tip-creator-modal-message">Message (optional)</label>
+							<textarea id="tip-creator-modal-message" name="message" rows="2" maxlength="500"
+								class="tip-creator-message" placeholder="Optional note to the creator"></textarea>
+						</div>
+						<p class="tip-creator-warning" data-tip-creator-warning hidden></p>
+						<div class="alert error tip-creator-error" data-tip-creator-error hidden></div>
+					</form>
 				</div>
-			</div>
+				<footer class="app-dialog__footer">
+					<button type="button" class="btn-secondary" data-tip-creator-cancel>Cancel</button>
+					<button type="button" class="btn-primary tip-creator-submit" data-tip-creator-submit>
+						<span class="tip-creator-submit-label">Tip</span>
+						<span class="tip-creator-spinner" aria-hidden="true"></span>
+					</button>
+				</footer>
+			</dialog>
 		`;
+		const dialog = this.dialog;
+		const header = dialog?.querySelector('header');
+		if (dialog && header) {
+			const dismiss = createModalDismissButton({ attrs: { 'data-tip-creator-close': '' } });
+			dismiss.addEventListener('click', () => this.close());
+			header.append(dismiss);
+		}
 	}
 
 	open(detail) {
@@ -156,22 +163,19 @@ class AppModalTipCreator extends HTMLElement {
 
 		this.updateStateFromAmount();
 
-		if (this._overlay) {
-			this._overlay.hidden = false;
-			this._overlay.classList.add('open');
+		const dialog = this.dialog;
+		if (dialog && !dialog.open && typeof dialog.showModal === 'function') {
+			dialog.showModal();
 			if (this._amountInput) setTimeout(() => this._amountInput.focus(), 100);
 		}
 		document.dispatchEvent(new CustomEvent('modal-opened'));
 	}
 
 	close() {
-		if (this._overlay) {
-			this._overlay.classList.remove('open');
-			setTimeout(() => {
-				if (this._overlay) this._overlay.hidden = true;
-			}, 200);
+		const dialog = this.dialog;
+		if (dialog?.open && typeof dialog.close === 'function') {
+			dialog.close();
 		}
-		document.dispatchEvent(new CustomEvent('modal-closed'));
 	}
 
 	updateStateFromAmount() {
@@ -187,7 +191,6 @@ class AppModalTipCreator extends HTMLElement {
 				const balance = this._viewerBalance;
 
 				if (!Number.isFinite(amount) || amount <= 0) {
-					// No amount yet: show current balance so the space is reserved and UI doesn't jump.
 					hintText = `You have ${balance.toFixed(1)} credits.`;
 				} else {
 					const remaining = balance - amount;
@@ -252,16 +255,16 @@ class AppModalTipCreator extends HTMLElement {
 			});
 			const data = await response.json().catch(() => ({}));
 			if (!response.ok) {
-				const message = data?.error || 'Failed to tip credits.';
+				const errMessage = data?.error || 'Failed to tip credits.';
 				const messageHtml = data?.errorHtml;
 				if (this._errorEl) {
 					this._errorEl.hidden = false;
 					if (messageHtml && typeof messageHtml === 'string') {
 						this._errorEl.innerHTML = messageHtml;
 					} else {
-						this._errorEl.textContent = message;
+						this._errorEl.textContent = errMessage;
 					}
-				} else alert(message);
+				} else alert(errMessage);
 				return;
 			}
 
@@ -278,11 +281,11 @@ class AppModalTipCreator extends HTMLElement {
 				await refreshAfterMutation('status-changed', { creationId: createdImageId });
 			}
 		} catch (err) {
-			const message = err?.message || 'Failed to tip credits.';
+			const errMessage = err?.message || 'Failed to tip credits.';
 			if (this._errorEl) {
 				this._errorEl.hidden = false;
-				this._errorEl.textContent = message;
-			} else alert(message);
+				this._errorEl.textContent = errMessage;
+			} else alert(errMessage);
 		} finally {
 			if (this._submitBtn) {
 				this._submitBtn.disabled = false;

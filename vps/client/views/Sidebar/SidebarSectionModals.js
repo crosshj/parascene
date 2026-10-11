@@ -3,7 +3,6 @@ import { requestJson } from '../../core/request.js';
 import { createModalDismissButton } from '../../shared/modalDismiss.js';
 import { getAvatarColor } from '../../shared/avatar.js';
 import { escapeHtml } from '../../utils/dom.js';
-import '../../components/Modal/Modal.css';
 import './SidebarSectionModals.css';
 
 function normalizeChannelTag(input) {

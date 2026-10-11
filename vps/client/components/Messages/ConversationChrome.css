@@ -1086,13 +1086,11 @@ body.beta-layout .chat-page-canvas-panel-body {
 .beta-right-sidebar__content .chat-page-canvas-panel-scroll { padding-top: 14px; }
 .beta-right-sidebar__content .chat-page-canvas-default-shell { height: 100%; }
 .chat-page-canvas-panel-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.chat-page-canvas-default-shell [hidden] { display: none !important; }
 .chat-page-canvas-default-shell [role=alert] { color: var(--danger, #d33); padding: 0 12px; }
 dialog.chat-canvas-create-dialog::backdrop, dialog.chat-private-members-dialog::backdrop { background: #0008; }
 dialog.chat-canvas-create-dialog, dialog.chat-private-members-dialog { color: var(--text); background: var(--surface); border: 0; border-radius: 16px; width: min(540px, calc(100vw - 40px)); box-sizing: border-box; }
 .chat-canvas-create-dialog form { display: flex; flex-direction: column; gap: 12px; }
 .chat-private-members-head { display: flex; align-items: center; justify-content: space-between; }
-
 
 @keyframes chat-history-copy-progress-cycle {
 	from {
@@ -1265,7 +1263,6 @@ dialog.chat-canvas-create-dialog, dialog.chat-private-members-dialog { color: va
 		width: 100%;
 	}
 }
-
 
 .share-audio-modal .modal-close,
 .publish-modal-close {

@@ -1,5 +1,6 @@
-/* Shared styles for creations + creation detail */
-
+/* Canonical shared create-workflow stylesheet (imported from core/layout.js).
+   CreateView.css and CreationDetailView.css keep only surface-specific overrides.
+   Re-run: node scripts/dedupe-create-workflow-css.js */
 /* Create page: enough top padding so sticky header doesn't cover first row (e.g. Input Images Remove buttons) */
 body.create-page main {
 	max-width: 1400px;
@@ -231,7 +232,6 @@ html.chat-page--use-app-mobile-header body.chat-page .chat-route:has(> .chat-pag
 	background: rgba(8, 7, 14, .68);
 	backdrop-filter: blur(4px);
 }
-.create-composer-lyrics-overlay[hidden] { display: none !important; }
 .create-composer-lyrics-dialog {
 	--create-composer-accent: var(--color-amber, #d97706);
 	width: min(1100px, 100%);
@@ -804,7 +804,6 @@ body.prsn-creation-composer-drag-active .create-composer:not(.is-drop-target) .c
 	pointer-events: none;
 }
 
-
 .create-composer-toolbar {
 	display: flex;
 	flex-direction: row;
@@ -904,10 +903,6 @@ body.prsn-creation-composer-drag-active .create-composer:not(.is-drop-target) .c
 	height: 1rem;
 	margin: 0 0.35rem;
 	background: color-mix(in srgb, var(--text-muted) 28%, transparent);
-}
-
-.create-composer-toolbar-divider[hidden] {
-	display: none;
 }
 
 .create-composer-toolbar-chip {
@@ -1015,11 +1010,6 @@ body.prsn-creation-composer-drag-active .create-composer:not(.is-drop-target) .c
 
 .create-composer-aspect-popover .aspect-ratio-option:disabled.is-selected {
 	opacity: 0.65;
-}
-
-.create-composer-aspect-popover[hidden],
-.create-composer-model-popover[hidden] {
-	display: none;
 }
 
 .create-composer-aspect-popover,
@@ -1259,21 +1249,6 @@ app-route-create app-tabs.create-route-tabs-embed .app-tabs {
 }
 
 /* Create route: blank until servers loaded */
-app-route-create .create-route .create-route-loading[hidden] {
-	display: none;
-}
-
-app-route-create .create-route .create-route-content[hidden] {
-	display: none;
-}
-
-app-route-create .create-route .create-route-form-wrap[hidden] {
-	display: none;
-}
-
-app-route-create .create-route .create-route-empty-wrap[hidden] {
-	display: none;
-}
 
 app-route-create .create-route .create-form {
 	display: flex;
@@ -2682,7 +2657,6 @@ body.creation-detail-page main>section:first-of-type {
 	--hero-max-height: min(80vh, calc(100svh - 10.5rem));
 }
 
-
 .creation-detail-background {
 	position: absolute;
 	inset: 0;
@@ -2851,10 +2825,6 @@ body.creation-detail-page main>section:first-of-type {
 	stroke-linejoin: round;
 	fill: none;
 	pointer-events: none;
-}
-
-.creation-detail-hero-nav[hidden] {
-	display: none;
 }
 
 .creation-detail-hero-nav:hover {
@@ -3049,6 +3019,14 @@ body.creation-detail-page main>section:first-of-type {
 	display: none;
 }
 
+.creation-detail-image-wrapper > img[data-image].is-hero-concealed {
+	visibility: hidden;
+}
+
+.creation-detail-image-wrapper.group-carousel-active > img[data-image] {
+	display: none !important;
+}
+
 .creation-detail-group-hero-video-stack {
 	position: absolute;
 	inset: 0;
@@ -3138,10 +3116,6 @@ body.creation-detail-page main>section:first-of-type {
 	flex-direction: column;
 	align-items: center;
 	justify-content: center;
-}
-
-.creation-detail-group-hero-video-slot .chat-doom-play-overlay[hidden] {
-	display: none !important;
 }
 
 .creation-detail-group-hero-video-slot .chat-doom-play-overlay-inner {
@@ -3294,10 +3268,6 @@ body.view-nsfw .creation-detail-image-wrapper.nsfw::after {
 	height: 100%;
 }
 
-.creation-detail-video-muted-glyph[hidden] {
-	display: none !important;
-}
-
 .creation-detail-video-muted-badge svg {
 	width: 22px;
 	height: 22px;
@@ -3308,10 +3278,6 @@ body.view-nsfw .creation-detail-image-wrapper.nsfw::after {
 	stroke-linejoin: round;
 	fill: none;
 	pointer-events: none;
-}
-
-.creation-detail-video-muted-badge[hidden] {
-	display: none !important;
 }
 
 .creation-detail-video-muted-badge:hover {
@@ -3629,10 +3595,6 @@ body.view-nsfw .creation-detail-image-wrapper.nsfw::after {
 	color: var(--error, #c00);
 }
 
-.creation-detail-user-deleted-restore-error[hidden] {
-	display: none;
-}
-
 .creation-detail-admin-upload-video {
 	margin-bottom: 12px;
 	padding: 10px 12px;
@@ -3659,6 +3621,13 @@ body.view-nsfw .creation-detail-image-wrapper.nsfw::after {
 }
 
 .creation-detail-admin-upload-video-error {
+	font-size: 0.85rem;
+	color: var(--error, #c00);
+	margin-top: 8px;
+	margin-bottom: 0;
+}
+
+.creation-detail-admin-video-error {
 	font-size: 0.85rem;
 	color: var(--error, #c00);
 	margin-top: 8px;
@@ -3844,10 +3813,6 @@ body.view-nsfw .creation-detail-image-wrapper.nsfw::after {
 	line-height: 1;
 	background: color-mix(in srgb, var(--text) 16%, var(--surface));
 	color: var(--text);
-}
-
-.creation-detail-action-strip-pill[hidden] {
-	display: none;
 }
 
 /* Publish stays the filled high-contrast action in this row. */
@@ -4562,10 +4527,6 @@ body.view-nsfw .creation-detail-image-wrapper.nsfw::after {
 	transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
 
-.creation-detail-audio-clip-action[hidden] {
-	display: none;
-}
-
 .creation-detail-audio-clip-action:hover {
 	border-color: color-mix(in srgb, var(--accent) 45%, transparent);
 	background: color-mix(in srgb, var(--accent) 8%, var(--surface));
@@ -4994,10 +4955,6 @@ button.creation-detail-group-item {
 	padding: 0;
 	cursor: pointer;
 	-webkit-tap-highlight-color: transparent;
-}
-
-.creation-detail-history-play-lineage-btn[hidden] {
-	display: none !important;
 }
 
 .creation-detail-history-play-lineage-btn:focus-visible {

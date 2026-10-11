@@ -745,7 +745,6 @@ export function openChatVideoGalleryLightbox(slides, hooks) {
 	const videoSlot = document.createElement('div');
 	videoSlot.className =
 		'chat-inline-image-lightbox-video-slot chat-inline-image-lightbox-video-slot--gallery';
-	videoSlot.style.setProperty('--chat-lightbox-video-ar', '16 / 9');
 
 	const applyGallerySlideAspectToSlot = (slide) => {
 		if (!slide) return;
@@ -1076,11 +1075,10 @@ export function openChatVideoGalleryLightbox(slides, hooks) {
 		syncVideoSlotAspect(incoming);
 		incoming.currentTime = 0;
 
-		incoming.classList.add('is-active');
-		incoming.style.zIndex = '2';
+		incoming.classList.add('is-active', 'is-lightbox-crossfade-front');
 		if (outgoing instanceof HTMLVideoElement) {
 			outgoing.classList.add('is-active');
-			outgoing.style.zIndex = '1';
+			outgoing.classList.remove('is-lightbox-crossfade-front');
 		}
 
 		let handedOff = false;
@@ -1089,10 +1087,9 @@ export function openChatVideoGalleryLightbox(slides, hooks) {
 			handedOff = true;
 			if (outgoing instanceof HTMLVideoElement) {
 				outgoing.pause();
-				outgoing.classList.remove('is-active');
-				outgoing.style.removeProperty('z-index');
+				outgoing.classList.remove('is-active', 'is-lightbox-crossfade-front');
 			}
-			incoming.style.removeProperty('z-index');
+			incoming.classList.remove('is-lightbox-crossfade-front');
 			setActivePlayerVisible(incomingPlayer);
 			videoSlot.classList.add('chat-inline-image-lightbox-video-slot--playing');
 			syncPlayPauseOverlay();
@@ -1451,7 +1448,6 @@ function openChatMixedMediaGalleryLightbox(slides, hooks) {
 	const videoSlot = document.createElement('div');
 	videoSlot.className =
 		'chat-inline-image-lightbox-video-slot chat-inline-image-lightbox-video-slot--gallery';
-	videoSlot.style.setProperty('--chat-lightbox-video-ar', '16 / 9');
 	videoSlot.hidden = true;
 
 	const galleryPlaceholder = document.createElement('div');
@@ -1928,7 +1924,6 @@ export function openChatAttachmentPreviewLightbox(src, kind, hooks) {
 		const slot = document.createElement('div');
 		slot.className =
 			'creation-detail-image-wrapper creation-audio-cover hero-audio-playing chat-inline-image-lightbox-audio-slot';
-		slot.style.pointerEvents = 'auto';
 
 		const waveWrap = document.createElement('div');
 		waveWrap.className = 'chat-inline-image-lightbox-audio-cover';

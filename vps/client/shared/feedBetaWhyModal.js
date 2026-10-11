@@ -1,4 +1,3 @@
-import '../components/Modal/Modal.css';
 import './feedBetaWhyModal.css';
 import { createModalDismissButton } from './modalDismiss.js';
 

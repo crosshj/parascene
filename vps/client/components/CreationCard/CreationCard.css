@@ -482,11 +482,6 @@ body.view-nsfw .feed-card-image--group-carousel.nsfw::after {
 	pointer-events: none;
 }
 
-.sequential-video-player-slot .sequential-video-player-play-overlay[hidden],
-.sequential-video-player-slot .chat-doom-play-overlay[hidden] {
-	display: none !important;
-}
-
 .sequential-video-player-slot .chat-doom-play-overlay-inner {
 	width: 72px;
 	height: 72px;
@@ -637,6 +632,7 @@ body.view-nsfw .feed-card-image--group-carousel.nsfw::after {
 	display: flex;
 	align-items: stretch;
 	padding: 0;
+	cursor: pointer;
 }
 
 .route-media {

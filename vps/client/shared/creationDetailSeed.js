@@ -282,7 +282,7 @@ function seedGroupSectionHtml(seed) {
 					? `<img src="${esc(entry.url)}" alt="" loading="eager" decoding="async">`
 					: waiting
 						? creationGpuWaitMarkup(entry.status, null, { escapeHtml: esc, meta: entry.meta })
-						: `<span class="skeleton" style="display: block; width: 100%; height: 100%;" aria-hidden="true"></span>`;
+						: `<span class="skeleton skeleton-fill" aria-hidden="true"></span>`;
 			const fallbackClass = needsWave
 				? ' creation-detail-group-thumb--audio creation-audio-cover'
 				: entry.url
@@ -1181,10 +1181,10 @@ function seedStripPlan(seed) {
 	};
 }
 
-const SEED_ACTION_SKELETONS = `<span class="skeleton skeleton-pill" style="width: 72px; height: 34px;" aria-hidden="true"></span>
-					<span class="skeleton skeleton-pill" style="width: 64px; height: 34px;" aria-hidden="true"></span>
-					<span class="skeleton skeleton-pill" style="width: 88px; height: 34px;" aria-hidden="true"></span>
-					<span class="skeleton skeleton-circle" style="width: 34px; height: 34px;" aria-hidden="true"></span>`;
+const SEED_ACTION_SKELETONS = `<span class="skeleton skeleton-pill skeleton-pill--w72" aria-hidden="true"></span>
+					<span class="skeleton skeleton-pill skeleton-pill--w64" aria-hidden="true"></span>
+					<span class="skeleton skeleton-pill skeleton-pill--w88" aria-hidden="true"></span>
+					<span class="skeleton skeleton-circle skeleton-circle--34" aria-hidden="true"></span>`;
 
 function seedShowComments(seed) {
 	if (seedStatus(seed) === 'failed') return false;
@@ -1201,10 +1201,10 @@ function seedCommentComposerHtml(seed) {
 	const esc = escapeSeedHtml;
 	if (!seedViewerComposerReady(seed)) {
 		return `<div class="comment-input" data-comment-input data-comment-input-skeleton>
-				<div class="comment-avatar"><span class="skeleton skeleton-circle" style="width: 32px; height: 32px;" aria-hidden="true"></span></div>
+				<div class="comment-avatar"><span class="skeleton skeleton-circle" aria-hidden="true"></span></div>
 				<div class="comment-input-body">
 					<div class="comment-composer-row">
-						<span class="skeleton skeleton-line" style="display: block; height: 40px; border-radius: 8px; flex: 1;"></span>
+						<span class="skeleton skeleton-line skeleton-line--block skeleton-line--input skeleton-line--flex"></span>
 					</div>
 				</div>
 			</div>`;
@@ -1251,11 +1251,11 @@ function seedCommentsHtml(seed) {
 	const emptyList =
 		'<div class="route-empty route-empty-state comments-empty"><div class="route-empty-title">No comments yet</div><div class="route-empty-message">Be the first to say something.</div></div>';
 	const skeletonRow = `<div class="creation-comments-skeleton-row">
-				<div class="skeleton skeleton-circle" style="width:32px;height:32px;border-radius:50%"></div>
+				<div class="skeleton skeleton-circle"></div>
 				<div class="creation-comments-skeleton-body">
 					<div class="skeleton skeleton-line skeleton-line--short"></div>
 					<div class="skeleton skeleton-line skeleton-line--medium"></div>
-					<div class="skeleton skeleton-line" style="max-width:72%"></div>
+					<div class="skeleton skeleton-line skeleton-line--max72"></div>
 				</div>
 			</div>`;
 	const skeletonList = `<div class="creation-comments-loading" role="status" aria-live="polite" aria-busy="true">${skeletonRow.repeat(
@@ -1268,7 +1268,7 @@ function seedCommentsHtml(seed) {
 			<div class="creation-comments-thread" data-creation-comments-thread>
 				${seedCommentComposerHtml(seed)}
 				<div class="creation-detail-comments-section" data-comments-section>
-					<div class="comments-toolbar"${known && count === 0 ? ' style="display: none;"' : ''}>
+					<div class="comments-toolbar"${known && count === 0 ? ' hidden' : ''}>
 						<h3 class="comments-heading"><span data-comment-count>${heading}</span></h3>
 						<div class="comments-sort">
 							<label class="comments-sort-label" for="${sortId}">Sort by</label>
@@ -1297,10 +1297,10 @@ const SEED_CHALLENGE_COG_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="cur
 
 const SEED_CHALLENGE_SKELETON = `<div class="creation-detail-challenge-slot is-challenge-pending" data-creation-detail-challenge-slot aria-busy="true">
 		<div class="creation-detail-challenge-skeleton" aria-hidden="true">
-			<span class="skeleton skeleton-circle" style="width: 22px; height: 22px;"></span>
+			<span class="skeleton skeleton-circle skeleton-circle--22"></span>
 			<span class="creation-detail-challenge-skeleton-copy">
-				<span class="skeleton skeleton-line" style="width: 38%; height: 14px;"></span>
-				<span class="skeleton skeleton-line" style="width: 86%; height: 12px;"></span>
+				<span class="skeleton skeleton-line skeleton-line--w38 skeleton-line--h14"></span>
+				<span class="skeleton skeleton-line skeleton-line--w86 skeleton-line--h12"></span>
 			</span>
 		</div>
 	</div>`;

@@ -1,16 +1,12 @@
 /* Doom scroll comments bottom sheet.
    Mounted on document.body, outside .beta-app-overlay__content.
-   WWW gets border-box and [hidden] from global.css; this sheet has to carry them. */
+   Box-sizing is local; [hidden] comes from primitives.css. */
 
 .chat-doom-comments-overlay,
 .chat-doom-comments-overlay *,
 .chat-doom-comments-overlay *::before,
 .chat-doom-comments-overlay *::after {
 	box-sizing: border-box;
-}
-
-.chat-doom-comments-overlay [hidden] {
-	display: none !important;
 }
 
 .chat-doom-comments-overlay {
@@ -22,10 +18,6 @@
 	box-sizing: border-box;
 	padding: 0;
 	margin: 0;
-}
-
-.chat-doom-comments-overlay[hidden] {
-	display: none !important;
 }
 
 .chat-doom-comments-backdrop {

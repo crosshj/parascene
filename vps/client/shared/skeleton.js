@@ -1,35 +1,98 @@
 /**
- * Shared skeleton loader markup. Use with global.css skeleton classes for consistent,
- * subtle loading placeholders. Pages compose these into layout-specific skeletons.
+ * Shared skeleton loader markup. Prefer size classes from primitives.css
+ * (`.skeleton-circle--36`, `.skeleton-line--w72`, …) over inline styles.
  */
 
+const LINE_WIDTH_CLASS = {
+	'16%': 'skeleton-line--w16',
+	'34%': 'skeleton-line--short',
+	'38%': 'skeleton-line--w38',
+	'40%': 'skeleton-line--w40',
+	'42%': 'skeleton-line--w42',
+	'45%': 'skeleton-line--w45',
+	'48%': 'skeleton-line--w48',
+	'50%': 'skeleton-line--w50',
+	'52%': 'skeleton-line--w52',
+	'55%': 'skeleton-line--w55',
+	'56%': 'skeleton-line--w56',
+	'60%': 'skeleton-line--w60',
+	'62%': 'skeleton-line--medium',
+	'64%': 'skeleton-line--w64',
+	'70%': 'skeleton-line--w70',
+	'72%': 'skeleton-line--w72',
+	'75%': 'skeleton-line--w75',
+	'78%': 'skeleton-line--w78',
+	'85%': 'skeleton-line--w85',
+	'86%': 'skeleton-line--w86',
+	'88%': 'skeleton-line--w88',
+	'90%': 'skeleton-line--w90',
+	'95%': 'skeleton-line--w95',
+};
+
+const CIRCLE_SIZE_CLASS = {
+	18: 'skeleton-circle--18',
+	22: 'skeleton-circle--22',
+	28: 'skeleton-circle--28',
+	32: '',
+	34: 'skeleton-circle--34',
+	36: 'skeleton-circle--36',
+	40: 'skeleton-circle--40',
+};
+
+const PILL_WIDTH_CLASS = {
+	'36px': 'skeleton-pill--w36',
+	'48px': 'skeleton-pill--w48',
+	'64px': 'skeleton-pill--w64',
+	'72px': 'skeleton-pill--w72',
+	'88px': 'skeleton-pill--w88',
+	'90px': 'skeleton-pill--w90',
+	'96px': 'skeleton-pill--w96',
+};
+
+const PILL_HEIGHT_CLASS = {
+	18: 'skeleton-pill--h18',
+	34: '',
+	36: 'skeleton-pill--h36',
+	44: 'skeleton-pill--h44',
+};
+
 /**
- * @param {string} [width] - CSS width (e.g. '40%', '120px'). Omit for full width.
- * @param {string} [modifier] - Optional class modifier, e.g. 'skeleton-line--short'.
- * @returns {string} HTML for a skeleton line
+ * @param {string} [width] - CSS width percent (e.g. '72%'). Omit for full width.
+ * @param {string} [modifier] - Extra classes (e.g. 'skeleton-line--gap-md').
+ * @returns {string}
  */
 export function skeletonLine(width, modifier = '') {
-	const style = width ? ` style="width: ${width};"` : '';
-	const mod = modifier ? ` ${modifier}` : '';
-	return `<span class="skeleton skeleton-line${mod}"${style} aria-hidden="true"></span>`;
+	const widthClass = width ? LINE_WIDTH_CLASS[String(width).trim()] || '' : '';
+	const classes = ['skeleton', 'skeleton-line', widthClass, modifier]
+		.filter(Boolean)
+		.join(' ')
+		.replace(/\s+/g, ' ')
+		.trim();
+	return `<span class="${classes}" aria-hidden="true"></span>`;
 }
 
 /**
  * @param {number} [size] - Pixel size (default 32).
- * @returns {string} HTML for a skeleton circle (e.g. avatar)
+ * @returns {string}
  */
 export function skeletonCircle(size = 32) {
-	return `<span class="skeleton skeleton-circle" style="width: ${size}px; height: ${size}px;" aria-hidden="true"></span>`;
+	const sizeClass = CIRCLE_SIZE_CLASS[Number(size)] ?? '';
+	const classes = ['skeleton', 'skeleton-circle', sizeClass].filter(Boolean).join(' ');
+	return `<span class="${classes}" aria-hidden="true"></span>`;
 }
 
 /**
- * @param {string} [width] - CSS width (e.g. '80px', '20%'). Omit for default pill width.
+ * @param {string} [width] - CSS width (e.g. '80px'). Omit for default pill width.
  * @param {number} [height] - Pixel height (default 34).
- * @returns {string} HTML for a skeleton pill (e.g. button)
+ * @returns {string}
  */
 export function skeletonPill(width, height = 34) {
-	const w = width ? `width: ${width}; ` : '';
-	return `<span class="skeleton skeleton-pill" style="${w}height: ${height}px;" aria-hidden="true"></span>`;
+	const widthClass = width ? PILL_WIDTH_CLASS[String(width).trim()] || '' : '';
+	const heightClass = PILL_HEIGHT_CLASS[Number(height)] ?? '';
+	const classes = ['skeleton', 'skeleton-pill', widthClass, heightClass]
+		.filter(Boolean)
+		.join(' ');
+	return `<span class="${classes}" aria-hidden="true"></span>`;
 }
 
 /**
@@ -41,8 +104,8 @@ export function renderFeedCardSkeleton() {
 		<div class="skeleton-feed-card-footer">
 			${skeletonCircle(36)}
 			<div class="skeleton-feed-card-content">
-				${skeletonLine('72%', 'skeleton-line--short')}
-				${skeletonLine('62%', 'skeleton-line--medium')}
+				${skeletonLine('72%')}
+				${skeletonLine('62%')}
 			</div>
 			<div class="skeleton-feed-card-actions">
 				${skeletonPill('36px', 18)}
@@ -60,8 +123,8 @@ export function renderMobileFeedCardSkeleton() {
 		<div class="skeleton-feed-card-footer">
 			${skeletonCircle(36)}
 			<div class="skeleton-feed-card-content">
-				${skeletonLine('72%', 'skeleton-line--short')}
-				${skeletonLine('62%', 'skeleton-line--medium')}
+				${skeletonLine('72%')}
+				${skeletonLine('62%')}
 			</div>
 		</div>
 		<div class="skeleton-feed-card-actions">
@@ -128,10 +191,10 @@ export function renderCommentRowSkeleton() {
 		<div class="skeleton-comment-row-thumb"></div>
 		<div class="skeleton-comment-row-body">
 			${skeletonLine('85%')}
-			${skeletonLine('50%', 'skeleton-line--short')}
+			${skeletonLine('50%')}
 			${skeletonLine('95%')}
-			${skeletonLine('70%', 'skeleton-line--medium')}
-			${skeletonLine('40%', 'skeleton-line--short')}
+			${skeletonLine('70%')}
+			${skeletonLine('40%')}
 		</div>
 	</div>`;
 }
@@ -155,7 +218,7 @@ export function renderProfileHeroSkeleton() {
 			<div class="skeleton-profile-hero-row">
 				<span class="skeleton skeleton-circle skeleton-profile-avatar" aria-hidden="true"></span>
 				<div class="skeleton-profile-identity">
-					${skeletonLine('42%', 'skeleton-line--short skeleton-profile-handle')}
+					${skeletonLine('42%', 'skeleton-profile-handle')}
 					${skeletonPill('96px', 34)}
 				</div>
 			</div>
@@ -166,13 +229,13 @@ export function renderProfileHeroSkeleton() {
 			</div>
 			<div class="skeleton-profile-hero-meta">
 				${skeletonLine('95%')}
-				${skeletonLine('85%', 'skeleton-line--medium')}
+				${skeletonLine('85%')}
 				${skeletonLine('90%')}
-				${skeletonLine('70%', 'skeleton-line--medium')}
-				${skeletonLine('60%', 'skeleton-line--short')}
-				${skeletonLine('75%', 'skeleton-line--medium')}
-				${skeletonLine('50%', 'skeleton-line--short')}
-				${skeletonLine('40%', 'skeleton-line--short')}
+				${skeletonLine('70%')}
+				${skeletonLine('60%')}
+				${skeletonLine('75%')}
+				${skeletonLine('50%')}
+				${skeletonLine('40%')}
 			</div>
 		</div>
 	</div>`;
@@ -206,7 +269,7 @@ export function renderProfilePageSkeleton() {
 export function renderServerCardSkeleton() {
 	return `<div class="skeleton-server-card" aria-hidden="true">
 		${skeletonLine('70%')}
-		${skeletonLine('90%', 'skeleton-line--medium')}
+		${skeletonLine('90%')}
 	</div>`;
 }
 
@@ -225,7 +288,7 @@ export function renderServerCardsSkeleton(count = 4) {
  */
 export function renderChallengePaneSkeleton() {
 	return `<div class="challenge-pane-skeleton" aria-hidden="true">
-		<span class="skeleton skeleton-line challenge-pane-skeleton-blob-title" style="width: 56%;" aria-hidden="true"></span>
+		<span class="skeleton skeleton-line challenge-pane-skeleton-blob-title skeleton-line--w56" aria-hidden="true"></span>
 		<div class="challenge-pane-skeleton-strip"></div>
 		<div class="challenge-pane-skeleton-blob"></div>
 		<div class="challenge-pane-skeleton-blob challenge-pane-skeleton-blob--short"></div>
@@ -245,25 +308,25 @@ export function renderChallengesOrganizeCardSkeleton() {
  * @returns {string}
  */
 export function renderChallengesOrganizeBoardSkeleton() {
-	const header = (width) =>
-		`<span class="skeleton skeleton-line challenges-organize-skeleton-header" style="width: ${width};" aria-hidden="true"></span>`;
+	const header = (widthClass) =>
+		`<span class="skeleton skeleton-line challenges-organize-skeleton-header ${widthClass}" aria-hidden="true"></span>`;
 	const card = () => renderChallengesOrganizeCardSkeleton();
 	return `<div class="challenges-organize-board challenges-organize-board--skeleton" aria-hidden="true">
 		<section class="challenges-organize-current">
-			${header('72px')}
+			${header('skeleton-line--px72')}
 			<div class="challenges-organize-card-list challenges-organize-card-list--main">
 				${card()}
 				${card()}
 			</div>
 		</section>
 		<section class="challenges-organize-draft">
-			${header('56px')}
+			${header('skeleton-line--px56')}
 			<div class="challenges-organize-card-list">
 				${card()}
 			</div>
 		</section>
 		<section class="challenges-organize-past">
-			${header('48px')}
+			${header('skeleton-line--px48')}
 			<div class="challenges-organize-card-list">
 				${card()}
 				${card()}
@@ -285,8 +348,8 @@ export function renderChatThreadMessageSkeleton(lineWidths = ['72%', '48%']) {
 		<div class="skeleton-chat-msg-inner">
 			<div class="skeleton-chat-msg-meta">
 				${skeletonCircle(28)}
-				${skeletonLine('34%', 'skeleton-line--short')}
-				${skeletonLine('16%', 'skeleton-line--short')}
+				${skeletonLine('34%')}
+				${skeletonLine('16%')}
 			</div>
 			<div class="skeleton-chat-msg-bubble">${lines}</div>
 		</div>

@@ -164,7 +164,6 @@
 .feed-view { width:100%; padding:0 0 24px; }
 .feed-view__status { color:var(--text-muted); padding:16px; }
 .feed-view__more { display:block; margin:20px auto; }
-.feed-view [hidden] { display:none !important; }
 
 /* WWW mobile Feed is full-bleed; keep its loading cards on the same rhythm. */
 @media (max-width: 768px) {

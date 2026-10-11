@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "check:client-boundary": "node scripts/check-client-boundary.js",
+    "audit:css": "node scripts/css-audit.js",
     "build": "npm run check:client-boundary && rollup -c rollup.config.mjs",
     "dev": "node scripts/dev.js",
     "test": "node --test",

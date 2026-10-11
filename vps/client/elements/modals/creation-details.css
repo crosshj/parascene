@@ -1,3 +1,21 @@
+app-modal-creation-details .creation-details-dialog {
+	--app-modal-max-width: 500px;
+	width: min(94vw, 500px);
+	max-width: 500px;
+}
+
+app-modal-creation-details .creation-details-dialog[open] {
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+
+app-modal-creation-details .creation-details-dialog .app-dialog__body {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+}
+
 app-modal-creation-details .field {
 	margin: 12px 0;
 }

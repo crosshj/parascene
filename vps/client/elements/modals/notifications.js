@@ -186,7 +186,7 @@ class AppModalNotifications extends HTMLElement {
 		} catch (error) {
 			// console.error('Error loading notifications:', error);
 			if (content) {
-				content.innerHTML = html`<p style="color: var(--text-muted);">Failed to load notifications.</p>`;
+				content.innerHTML = html`<p class="notifications-status-message">Failed to load notifications.</p>`;
 			}
 		} finally {
 			this._isLoading = false;
@@ -265,7 +265,7 @@ class AppModalNotifications extends HTMLElement {
 		if (!content) return;
 
 		if (!this.notifications.length) {
-			content.innerHTML = html`<p style="color: var(--text-muted);">No notifications.</p>`;
+			content.innerHTML = html`<p class="notifications-status-message">No notifications.</p>`;
 			return;
 		}
 
@@ -331,7 +331,7 @@ class AppModalNotifications extends HTMLElement {
 		const markAllReadBtn = this.shadowRoot.querySelector('[data-action="mark-all-read"]');
 		if (footer && markAllReadBtn) {
 			const hasUnread = this.notifications.some((n) => !n.acknowledged_at);
-			footer.style.display = this.notifications.length > 0 ? 'block' : 'none';
+			footer.hidden = this.notifications.length === 0;
 			markAllReadBtn.disabled = !hasUnread;
 		}
 	}
@@ -341,7 +341,7 @@ class AppModalNotifications extends HTMLElement {
 		if (!content) return;
 
 		if (!this.notifications.length) {
-			content.innerHTML = html`<p style="color: var(--text-muted);">No notifications.</p>`;
+			content.innerHTML = html`<p class="notifications-status-message">No notifications.</p>`;
 			return;
 		}
 
@@ -489,11 +489,19 @@ class AppModalNotifications extends HTMLElement {
         .notifications-content {
           min-height: 100px;
         }
+        .notifications-status-message {
+          margin: 0;
+          color: var(--text-muted);
+        }
         .notifications-list-footer {
           padding: 16px 20px;
           border-top: 1px solid var(--border);
           flex-shrink: 0;
         }
+        [hidden] {
+        	display: none !important;
+        }
+
         .notifications-list-footer .notification-action {
           width: 100%;
         }
@@ -695,7 +703,7 @@ class AppModalNotifications extends HTMLElement {
           <div class="notifications-body">
             <div class="notifications-content"></div>
           </div>
-          <div class="notifications-list-footer" data-mark-all-read-footer style="display: none;">
+          <div class="notifications-list-footer" data-mark-all-read-footer hidden>
             <button type="button" class="notification-action notification-action-muted" data-action="mark-all-read">Mark All Read</button>
           </div>
         </div>

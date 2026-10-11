@@ -76,10 +76,6 @@
 	width: 100%;
 }
 
-.pricing-success-state-content[hidden] {
-	display: none;
-}
-
 /* When showing success state, hide the tier grid and CTAs; header stays in same place (no centering) */
 .pricing-view.pricing-success-state .pricing-content {
 	display: none !important;

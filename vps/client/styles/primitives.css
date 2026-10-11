@@ -12,7 +12,6 @@
 .beta-app-overlay__content button { color: inherit; }
 .beta-app-overlay__content :is(.btn-primary, a.btn-primary) { color: var(--accent-text); }
 .beta-app-overlay__content :is(.btn-secondary, .btn-outlined, .route-empty-button, a.btn-secondary, a.btn-outlined) { color: var(--text); }
-.beta-app-overlay__content [hidden] { display: none !important; }
 
 .btn-primary,
 .btn-secondary,
@@ -65,8 +64,62 @@
 .skeleton-line { width: 100%; height: 12px; border-radius: 999px; }
 .skeleton-line--short { width: 34%; }
 .skeleton-line--medium { width: 62%; }
-.skeleton-circle { border-radius: 50%; }
-.skeleton-pill { border-radius: 999px; }
+.skeleton-line--w16 { width: 16%; }
+.skeleton-line--w34 { width: 34%; }
+.skeleton-line--w38 { width: 38%; }
+.skeleton-line--w40 { width: 40%; }
+.skeleton-line--w42 { width: 42%; }
+.skeleton-line--w45 { width: 45%; }
+.skeleton-line--w48 { width: 48%; }
+.skeleton-line--w50 { width: 50%; }
+.skeleton-line--w52 { width: 52%; }
+.skeleton-line--w55 { width: 55%; }
+.skeleton-line--w56 { width: 56%; }
+.skeleton-line--w60 { width: 60%; }
+.skeleton-line--w64 { width: 64%; }
+.skeleton-line--w70 { width: 70%; }
+.skeleton-line--w72 { width: 72%; }
+.skeleton-line--w75 { width: 75%; }
+.skeleton-line--w78 { width: 78%; }
+.skeleton-line--w85 { width: 85%; }
+.skeleton-line--w86 { width: 86%; }
+.skeleton-line--w88 { width: 88%; }
+.skeleton-line--w90 { width: 90%; }
+.skeleton-line--w95 { width: 95%; }
+.skeleton-line--px48 { width: 48px; }
+.skeleton-line--px56 { width: 56px; }
+.skeleton-line--px72 { width: 72px; }
+.skeleton-line--px96 { width: 96px; }
+.skeleton-line--max58 { max-width: 58%; }
+.skeleton-line--max72 { max-width: 72%; }
+.skeleton-line--block { display: block; }
+.skeleton-line--gap-sm { margin-bottom: 6px; }
+.skeleton-line--gap-md { margin-bottom: 8px; }
+.skeleton-line--gap-lg { margin-bottom: 12px; }
+.skeleton-line--title { width: 72%; max-width: 320px; height: 28px; border-radius: 6px; }
+.skeleton-line--input { height: 40px; border-radius: 8px; }
+.skeleton-line--flex { flex: 1 1 auto; min-width: 0; }
+.skeleton-line--h12 { height: 12px; }
+.skeleton-line--h14 { height: 14px; }
+.skeleton-circle { width: 32px; height: 32px; border-radius: 50%; }
+.skeleton-circle--18 { width: 18px; height: 18px; }
+.skeleton-circle--22 { width: 22px; height: 22px; }
+.skeleton-circle--28 { width: 28px; height: 28px; }
+.skeleton-circle--34 { width: 34px; height: 34px; }
+.skeleton-circle--36 { width: 36px; height: 36px; }
+.skeleton-circle--40 { width: 40px; height: 40px; }
+.skeleton-pill { width: 80px; height: 34px; border-radius: 999px; }
+.skeleton-pill--h18 { height: 18px; }
+.skeleton-pill--h36 { height: 36px; }
+.skeleton-pill--h44 { height: 44px; }
+.skeleton-pill--w36 { width: 36px; }
+.skeleton-pill--w48 { width: 48px; }
+.skeleton-pill--w64 { width: 64px; }
+.skeleton-pill--w72 { width: 72px; }
+.skeleton-pill--w88 { width: 88px; }
+.skeleton-pill--w90 { width: 90px; }
+.skeleton-pill--w96 { width: 96px; }
+.skeleton-fill { display: block; width: 100%; height: 100%; }
 
 .route-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; min-height: 180px; padding: 32px 20px; color: var(--text-muted); text-align: center; }
 .route-empty-state { max-width: 440px; margin: auto; }
@@ -81,6 +134,7 @@
 	.skeleton-circle::after,
 	.skeleton-pill::after { animation: none; }
 }
+/* Canonical show/hide util — prefer `el.hidden = …` over per-feature `[hidden]` CSS. */
 [hidden] { display: none !important; }
 
 /* Avatar images start muted with no initial. The colored letter shows when there is no image, or after the image fails. */
@@ -177,4 +231,34 @@ img[data-avatar-src].is-avatar-unresolved {
 
 .mobile-header-view .profile-button.has-avatar:has(.profile-avatar.is-avatar-unresolved) .icon {
 	display: block;
+}
+
+/* Clip-hide native file inputs (label still receives clicks). */
+.image-file-input {
+	position: absolute;
+	left: -9999px;
+	width: 1px;
+	height: 1px;
+	opacity: 0;
+	pointer-events: none;
+	overflow: hidden;
+}
+
+/* IntersectionObserver sentinel — keep layout footprint tiny. */
+.infinite-scroll-sentinel {
+	height: 1px;
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+}
+
+/* Park a gesture-primed video off-layout until claimed by a slide. */
+.is-doom-video-parked {
+	position: fixed;
+	left: 0;
+	top: 0;
+	width: 1px;
+	height: 1px;
+	opacity: 0;
+	pointer-events: none;
 }

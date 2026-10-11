@@ -53,10 +53,6 @@ export function createInfiniteScroll(options) {
 	const sentinelEl = document.createElement('div');
 	sentinelEl.className = sentinelClassName;
 	sentinelEl.setAttribute('aria-hidden', 'true');
-	sentinelEl.style.height = '1px';
-	sentinelEl.style.margin = '0';
-	sentinelEl.style.padding = '0';
-	sentinelEl.style.overflow = 'hidden';
 	listContainer.after(sentinelEl);
 	sentinel = sentinelEl;
 

@@ -2,7 +2,7 @@ import { iconMarkup } from '../../components/Icon/Icon.js';
 import { escapeHtml } from '../../utils/dom.js';
 import { formatDateTime, formatRelativeTime } from '../../shared/datetime.js';
 import { isDirectMessageMention, notificationDestination, notificationSlots } from '../../providers/notifications/preview.js';
-import '../../elements/modals/base.css';
+import { createModalDismissButton } from '../../shared/modalDismiss.js';
 import './SidebarOverlaysView.css';
 
 const accountItems = [
@@ -34,6 +34,26 @@ function notificationMarkup(item) {
 	</button>`;
 }
 
+/**
+ * @param {{ title: string, labelledBy: string, wide?: boolean, bodyClass?: string, footerHtml?: string, bodyHtml: string, modalName: string }} opts
+ */
+function buildOverlayDialog(opts) {
+	const dialog = document.createElement('dialog');
+	dialog.className = `app-dialog ps-overlays-dialog${opts.wide ? ' ps-overlays-dialog--wide' : ''}`;
+	dialog.setAttribute('data-modal', opts.modalName);
+	dialog.setAttribute('aria-labelledby', opts.labelledBy);
+	dialog.innerHTML = `
+		<header class="app-dialog__header">
+			<h2 id="${opts.labelledBy}" class="app-dialog__title">${escapeHtml(opts.title)}</h2>
+		</header>
+		<div class="app-dialog__body${opts.bodyClass ? ` ${opts.bodyClass}` : ''}">${opts.bodyHtml}</div>
+		${opts.footerHtml ? `<footer class="app-dialog__footer">${opts.footerHtml}</footer>` : ''}
+	`;
+	const dismiss = createModalDismissButton({ attrs: { 'data-close-modal': '' } });
+	dialog.querySelector('header')?.append(dismiss);
+	return dialog;
+}
+
 export function mountSidebarOverlays({ onAction, credits, notifications, onClaimCredits, onRefreshCredits } = {}) {
 	const creditsQuery = credits?.query;
 	const listQuery = notifications?.listQuery;
@@ -46,30 +66,31 @@ export function mountSidebarOverlays({ onAction, credits, notifications, onClaim
 			<div class="ps-preview-divider" data-notification-divider></div>
 			<button class="ps-preview-all" type="button" data-overlay-action="notifications">View all</button>
 		</div>
-		<div class="modal-overlay" data-modal="notifications">
-			<div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="ps-notifications-title">
-				<div class="modal-header">
-					<h2 id="ps-notifications-title">Notifications</h2>
-					<button class="modal-close" type="button" aria-label="Close" data-close-modal>${iconMarkup('close', 'modal-close-icon')}</button>
-				</div>
-				<div class="modal-body"><div class="ps-notifications-list" data-notification-all></div></div>
-				<div class="modal-footer"><button class="ps-secondary-button" type="button" data-overlay-action="mark-all-read" disabled>Mark all read</button></div>
-			</div>
-		</div>
-		<div class="modal-overlay" data-modal="credits">
-			<div class="modal" role="dialog" aria-modal="true" aria-labelledby="ps-credits-title">
-				<div class="modal-header">
-					<h2 id="ps-credits-title">Credits</h2>
-					<button class="modal-close" type="button" aria-label="Close" data-close-modal>${iconMarkup('close', 'modal-close-icon')}</button>
-				</div>
-				<div class="modal-body ps-credits-content" data-credits-content>
-					<p class="ps-credits-balance">You have <strong data-credits-balance>—</strong> credits available.</p>
-					<section><h3>Claim daily free credits</h3><p>Claim 10 credits once per day.</p><div class="ps-credits-actions"><button class="ps-outline-button" data-overlay-action="claim-credits" disabled>Claim 10 credits</button><span data-credits-claim-status aria-live="polite">Checking daily credit availability…</span><button class="ps-credits-retry" data-overlay-action="retry-credits" hidden>Retry</button></div></section>
-					<section><h3>Get more credits</h3><p>Buy a credit pack or subscribe on the pricing page.</p><a class="ps-outline-button is-green" href="/pricing" data-spa-link>${iconMarkup('credits')}View pricing</a></section>
-					<section><h3>Run a server</h3><p>Run a server and earn credits for supporting the community.</p><a class="ps-outline-button" href="/servers/new" data-spa-link>${iconMarkup('help')}Learn More</a></section>
-				</div>
-			</div>
-		</div>`;
+	`;
+
+	const notificationsDialog = buildOverlayDialog({
+		modalName: 'notifications',
+		title: 'Notifications',
+		labelledBy: 'ps-notifications-title',
+		wide: true,
+		bodyHtml: '<div class="ps-notifications-list" data-notification-all></div>',
+		footerHtml: '<button class="btn-secondary" type="button" data-overlay-action="mark-all-read" disabled>Mark all read</button>',
+	});
+	const creditsDialog = buildOverlayDialog({
+		modalName: 'credits',
+		title: 'Credits',
+		labelledBy: 'ps-credits-title',
+		bodyClass: 'ps-credits-content',
+		bodyHtml: `
+			<p class="ps-credits-balance">You have <strong data-credits-balance>—</strong> credits available.</p>
+			<section><h3>Claim daily free credits</h3><p>Claim 10 credits once per day.</p><div class="ps-credits-actions"><button class="btn-outlined" data-overlay-action="claim-credits" disabled>Claim 10 credits</button><span data-credits-claim-status aria-live="polite">Checking daily credit availability…</span><button class="ps-credits-retry" data-overlay-action="retry-credits" hidden>Retry</button></div></section>
+			<section><h3>Get more credits</h3><p>Buy a credit pack or subscribe on the pricing page.</p><a class="btn-outlined is-green" href="/pricing" data-spa-link>${iconMarkup('credits')}View pricing</a></section>
+			<section><h3>Run a server</h3><p>Run a server and earn credits for supporting the community.</p><a class="btn-outlined" href="/servers/new" data-spa-link>${iconMarkup('help')}Learn More</a></section>
+		`,
+	});
+	creditsDialog.querySelector('.app-dialog__body')?.setAttribute('data-credits-content', '');
+
+	host.append(notificationsDialog, creditsDialog);
 	document.body.append(host);
 	let anchor = null;
 	let activePopover = null;
@@ -84,7 +105,7 @@ export function mountSidebarOverlays({ onAction, credits, notifications, onClaim
 		const data = snapshot?.data;
 		const solid = Boolean(view.claimAvailable || claiming);
 		claimButton.classList.toggle('btn-primary', solid);
-		claimButton.classList.toggle('ps-outline-button', !solid);
+		claimButton.classList.toggle('btn-outlined', !solid);
 		if (!view.known) {
 			claimButton.disabled = true;
 			retryCreditsButton.hidden = snapshot?.status !== 'error';
@@ -177,13 +198,10 @@ export function mountSidebarOverlays({ onAction, credits, notifications, onClaim
 		anchor = null;
 		activePopover = null;
 	}
-	function setModalVisible(panel, visible) {
-		if (panel.classList.contains('modal-overlay')) panel.classList.toggle('open', visible);
-		else panel.hidden = !visible;
-	}
 	function closeModal() {
 		if (!activeModal) return;
-		setModalVisible(host.querySelector(`[data-modal="${activeModal}"]`), false);
+		const panel = host.querySelector(`[data-modal="${activeModal}"]`);
+		if (panel instanceof HTMLDialogElement && panel.open) panel.close();
 		activeModal = null;
 		document.body.classList.remove('ps-modal-open');
 	}
@@ -192,8 +210,9 @@ export function mountSidebarOverlays({ onAction, credits, notifications, onClaim
 		closeModal();
 		activeModal = name;
 		const panel = host.querySelector(`[data-modal="${name}"]`);
-		setModalVisible(panel, true);
+		if (!(panel instanceof HTMLDialogElement)) return;
 		document.body.classList.add('ps-modal-open');
+		if (!panel.open) panel.showModal();
 		panel.querySelector('[data-close-modal]')?.focus();
 	}
 	function openPopover(name, nextAnchor) {
@@ -229,20 +248,41 @@ export function mountSidebarOverlays({ onAction, credits, notifications, onClaim
 		try { await notifications.acknowledgeAll(); }
 		finally { paintNotifications(); }
 	}
-	function onClick(event) {
+	function onDialogClick(event) {
+		const dialog = event.currentTarget;
+		if (!(dialog instanceof HTMLDialogElement)) return;
+		if (event.target === dialog || event.target.closest('[data-close-modal]')) {
+			closeModal();
+			return;
+		}
 		const note = event.target.closest('[data-notification-id]');
-		if (note) { void openNotification(note.dataset.notificationId); return; }
-		const close = event.target.closest('[data-close-modal]');
-		if (close || event.target.matches('.modal-overlay')) { closeModal(); return; }
-		const modal = event.target.closest('[data-modal]');
-		if (modal && activeModal) {
-			if (event.target.closest('a[data-spa-link]')) { closeModal(); return; }
-			const action = event.target.closest('[data-overlay-action]')?.dataset.overlayAction;
-			if (action === 'notifications') openModal('notifications');
-			else if (action === 'mark-all-read') void markAllRead();
-			else if (action === 'claim-credits') void claimDailyCredits();
-			else if (action === 'retry-credits') void refreshCredits();
-			else if (action) onAction?.({ action });
+		if (note) {
+			void openNotification(note.dataset.notificationId);
+			return;
+		}
+		if (event.target.closest('a[data-spa-link]')) {
+			closeModal();
+			return;
+		}
+		const action = event.target.closest('[data-overlay-action]')?.dataset.overlayAction;
+		if (action === 'mark-all-read') void markAllRead();
+		else if (action === 'claim-credits') void claimDailyCredits();
+		else if (action === 'retry-credits') void refreshCredits();
+		else if (action) onAction?.({ action });
+	}
+	function onDialogClose(event) {
+		const dialog = event.currentTarget;
+		if (!(dialog instanceof HTMLDialogElement)) return;
+		if (activeModal && dialog.getAttribute('data-modal') === activeModal) {
+			activeModal = null;
+			document.body.classList.remove('ps-modal-open');
+		}
+	}
+	function onClick(event) {
+		if (event.target.closest('dialog[data-modal]')) return;
+		const note = event.target.closest('[data-notification-id]');
+		if (note) {
+			void openNotification(note.dataset.notificationId);
 			return;
 		}
 		const account = event.target.closest('[data-account-action]');
@@ -255,7 +295,11 @@ export function mountSidebarOverlays({ onAction, credits, notifications, onClaim
 	function onPointerDown(event) {
 		if (activePopover && !host.querySelector(`[data-popover="${activePopover}"]`).contains(event.target) && !anchor?.contains(event.target)) closePopover();
 	}
-	function onKeydown(event) { if (event.key === 'Escape') { closePopover(); closeModal(); } }
+	function onKeydown(event) { if (event.key === 'Escape') { closePopover(); /* dialog handles its own Escape */ } }
+	notificationsDialog.addEventListener('click', onDialogClick);
+	creditsDialog.addEventListener('click', onDialogClick);
+	notificationsDialog.addEventListener('close', onDialogClose);
+	creditsDialog.addEventListener('close', onDialogClose);
 	host.addEventListener('click', onClick);
 	document.addEventListener('pointerdown', onPointerDown, true);
 	document.addEventListener('keydown', onKeydown);
@@ -280,6 +324,10 @@ export function mountSidebarOverlays({ onAction, credits, notifications, onClaim
 		destroy() {
 			unsubscribeCredits?.();
 			unsubscribeNotifications?.();
+			notificationsDialog.removeEventListener('click', onDialogClick);
+			creditsDialog.removeEventListener('click', onDialogClick);
+			notificationsDialog.removeEventListener('close', onDialogClose);
+			creditsDialog.removeEventListener('close', onDialogClose);
 			host.removeEventListener('click', onClick);
 			document.removeEventListener('pointerdown', onPointerDown, true);
 			document.removeEventListener('keydown', onKeydown);

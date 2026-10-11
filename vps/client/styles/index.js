@@ -2,6 +2,7 @@ import './tokens.css';
 import './primitives.css';
 import '../icons/gears.css';
 import '../app.css';
+import '../components/Modal/Modal.css';
 import '../components/CreationCard/CreationCard.css';
 import '../components/Comments/Comments.css';
 import '../components/TriggeredSuggest/TriggeredSuggest.css';

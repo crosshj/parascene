@@ -1,4 +1,3 @@
-import '../../components/Modal/Modal.css';
 import { createModalDismissButton } from '../../shared/modalDismiss.js';
 import { StyleDetailView } from '../StyleDetail/StyleDetailView.js';
 
