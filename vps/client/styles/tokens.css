@@ -8,6 +8,8 @@
 	--border: #e2e8f0;
 	--accent: #7c3aed;
 	--founder-flair-name: #9657c2;
+	/* Offline founder handle: muted purple (light mode). */
+	--founder-flair-name-muted: color-mix(in srgb, var(--founder-flair-name) 72%, #525a6b);
 	--accent-text: #ffffff;
 	--accent-switch: var(--accent);
 	--switch-track-off: var(--border);
@@ -44,6 +46,8 @@
 		--text: #ede9fe;
 		--text-muted: #b3b7c3;
 		--border: #3d3552;
+		/* Offline founder handle: pastel vs full --founder-flair-name. */
+		--founder-flair-name-muted: color-mix(in srgb, var(--founder-flair-name) 48%, white);
 		--accent: #05c76f;
 		--accent-text: #0f0d1a;
 		--accent-switch: var(--focus);

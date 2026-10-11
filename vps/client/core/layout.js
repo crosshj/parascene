@@ -322,15 +322,23 @@ export function createLayout({ root, views, services } = {}) {
 			},
 			setHeaderTitle(title) { setPageTitle({ title }); },
 			rightSidebar,
-			setConversationIdentity({ title, avatarHtml, href }) {
+			setConversationIdentity({ title, avatarHtml, href, isFounder = false }) {
 				pageTitle.replaceChildren();
+				pageIcon.classList.toggle('has-founder-flair', Boolean(isFounder));
 				if (typeof avatarHtml === 'string') pageIcon.innerHTML = avatarHtml;
+				const titleNode = (() => {
+					if (!isFounder) return document.createTextNode(title ?? '');
+					const name = document.createElement('span');
+					name.className = 'founder-name';
+					name.textContent = title ?? '';
+					return name;
+				})();
 				if (href) {
 					const titleLink = document.createElement('a');
 					titleLink.className = 'beta-outlet__profile-link';
 					titleLink.href = href;
 					titleLink.dataset.profileLink = '';
-					titleLink.textContent = title;
+					titleLink.append(titleNode);
 					pageTitle.append(titleLink);
 					const avatarLink = document.createElement('a');
 					avatarLink.className = 'beta-outlet__profile-avatar-link';
@@ -340,7 +348,7 @@ export function createLayout({ root, views, services } = {}) {
 					while (pageIcon.firstChild) avatarLink.append(pageIcon.firstChild);
 					pageIcon.append(avatarLink);
 				} else {
-					pageTitle.textContent = title;
+					pageTitle.append(titleNode);
 				}
 				services.providers.document.setTitle(`${title} - parascene beta`);
 			},

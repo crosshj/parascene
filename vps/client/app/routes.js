@@ -57,7 +57,7 @@ export function createAppRoutes({ definitions = [] } = {}) {
 		const params = route.params || {};
 		const titleMode = route.titleMode;
 		const title = titleMode === 'channel' ? `#${params.slug}` :
-			titleMode === 'feedback' ? '#feedback' :
+			titleMode === 'feedback' ? 'Feedback' :
 			titleMode === 'dm' ? `@${params.slug}` :
 			titleMode === 'notes' ? 'My Notes' : null;
 		const defaults = fallbackChrome(url.pathname);

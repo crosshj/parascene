@@ -1067,7 +1067,7 @@ export function buildChatThreadRowAvatarHtml(t, deps) {
 			displayName,
 			color: getAvatarColor(seed),
 			href: '',
-			isFounder: false,
+			isFounder: ou?.plan === 'founder',
 			flairSize: 'xs'
 		});
 	}

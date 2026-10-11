@@ -24,11 +24,12 @@ function rosterRowMarkup(item, kind) {
 	const presenceClass = kind === 'dm' ? (item.online ? ' is-online' : ' is-offline') : '';
 	const unread = Number(item.unread) || 0;
 	const unreadClass = unread > 0 ? ' has-unread' : '';
+	const labelClass = item.isFounder ? 'sidebar-view__row-label founder-name' : 'sidebar-view__row-label';
 	return `<div class="sidebar-view__row${presenceClass}${unreadClass}" data-sidebar-item="${escapeHtml(item.id)}">
 		<a class="sidebar-view__row-link" href="${escapeHtml(item.path)}" data-spa-link>
 			${item.avatarHtml || avatarMarkup({ ...item, kind }, 'sidebar-view__row-avatar')}
 			<span class="sidebar-view__row-body"><span class="sidebar-view__row-title-line">
-				<span class="sidebar-view__row-label">${escapeHtml(item.label)}</span>
+				<span class="${labelClass}">${escapeHtml(item.label)}</span>
 			</span></span>
 		</a>
 		<span class="sidebar-view__row-controls">
@@ -64,8 +65,12 @@ function patchRosterRow(current, next) {
 	const nextLink = next.querySelector('.sidebar-view__row-link');
 	if (liveLink.getAttribute('href') !== nextLink.getAttribute('href')) liveLink.setAttribute('href', nextLink.getAttribute('href'));
 	const liveLabel = current.querySelector('.sidebar-view__row-label');
-	const nextLabel = next.querySelector('.sidebar-view__row-label')?.textContent || '';
-	if (liveLabel.textContent !== nextLabel) liveLabel.textContent = nextLabel;
+	const nextLabelEl = next.querySelector('.sidebar-view__row-label');
+	const nextLabel = nextLabelEl?.textContent || '';
+	if (liveLabel && nextLabelEl) {
+		if (liveLabel.textContent !== nextLabel) liveLabel.textContent = nextLabel;
+		if (liveLabel.className !== nextLabelEl.className) liveLabel.className = nextLabelEl.className;
+	}
 	const liveUnread = current.querySelector('.sidebar-view__unread');
 	const nextUnread = next.querySelector('.sidebar-view__unread');
 	if (!nextUnread) liveUnread?.remove();

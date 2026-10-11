@@ -1417,9 +1417,14 @@ export function creationDetailChromeHtmlFromSeed(seed) {
 		: `<div class="creation-detail-action-strip-avatar" aria-hidden="true">${avatarHtml}</div>`;
 	const followerCount = pickFollowerCount(seed.creator_follower_count, seed.follower_count);
 	const followerKnown = followerCount != null;
+	const creatorNameHtml = handle
+		? (profileHref
+			? `<a class="creation-detail-action-strip-creator-name" href="${esc(profileHref)}" aria-label="View ${esc(`@${handle}`)} profile">${esc(`@${handle}`)}</a>`
+			: `<div class="creation-detail-action-strip-creator-name">${esc(`@${handle}`)}</div>`)
+		: '';
 	const creatorInfo = handle
 		? `<div class="creation-detail-action-strip-creator-info">
-						<div class="creation-detail-action-strip-creator-name">${esc(`@${handle}`)}</div>
+						${creatorNameHtml}
 						<div class="creation-detail-action-strip-creator-followers">${
 							followerKnown
 								? `${followerCount} Followers`

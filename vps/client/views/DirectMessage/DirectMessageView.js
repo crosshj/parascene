@@ -31,14 +31,23 @@ export const DirectMessageView = Object.freeze({
 			chrome.setThread(thread, inbox);
 			const isNotes = isSelfDmThread(thread, services.providers.viewerId);
 			const otherUser = thread.other_user || {};
-			const displayName = isNotes ? 'My Notes' : otherUser.display_name?.trim() || otherUser.user_name?.trim() || title || 'Direct message';
+			const userName = typeof otherUser.user_name === 'string'
+				? otherUser.user_name.trim().replace(/^@/, '')
+				: '';
+			const titleLabel = isNotes
+				? 'My Notes'
+				: userName
+					? `@${userName}`
+					: (title || 'Direct message');
+			const isFounder = !isNotes && otherUser.plan === 'founder';
 			const profileHref = !isNotes && Number(thread.other_user_id) !== Number(services.providers.viewerId)
 				? buildProfilePath({ userName: otherUser.user_name, userId: thread.other_user_id })
 				: null;
 			setConversationIdentity?.({
-				title: displayName,
+				title: titleLabel,
 				avatarHtml: isNotes ? iconMarkup('notes') : buildChatThreadRowAvatarHtml(thread, { getAvatarColor, renderCommentAvatarHtml }),
 				href: profileHref,
+				isFounder,
 			});
 		};
 		controller = createDirectMessageController({ view, services, slug: slug || "self" });

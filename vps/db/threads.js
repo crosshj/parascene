@@ -63,6 +63,8 @@ export function createThreadsStore(client, users, { broadcast = broadcastThreadH
 		}))];
 		const profiles = otherIds.length ? await result(client.from('prsn_user_profiles').select('user_id, user_name, display_name, avatar_url').in('user_id', otherIds)) : [];
 		const profileById = new Map(profiles.map((row) => [Number(row.user_id), row]));
+		const otherUsers = otherIds.length ? await result(client.from('prsn_users').select('id, meta').in('id', otherIds)) : [];
+		const planById = new Map(otherUsers.map((row) => [Number(row.id), row?.meta?.plan === 'founder' ? 'founder' : 'free']));
 		const threads = rows.map((row) => {
 			const id = Number(row.thread_id);
 			const meta = metaById.get(id) || {};
@@ -78,7 +80,13 @@ export function createThreadsStore(client, users, { broadcast = broadcastThreadH
 				id, type: row.thread_type, channel_slug: row.channel_slug, dm_pair_key: row.dm_pair_key,
 				title, visibility, unread_count: Math.max(0, Number(row.unread_count) || 0), last_read_message_id: row.last_read_message_id,
 				other_user_id: row.thread_type === 'dm' ? otherId : null,
-				other_user: row.thread_type === 'dm' ? { id: otherId, user_name: profile?.user_name, display_name: profile?.display_name, avatar_url: profile?.avatar_url } : null,
+				other_user: row.thread_type === 'dm' ? {
+					id: otherId,
+					user_name: profile?.user_name,
+					display_name: profile?.display_name,
+					avatar_url: profile?.avatar_url,
+					plan: planById.get(otherId) || 'free',
+				} : null,
 				last_message: row.last_message_id ? { id: Number(row.last_message_id), body: visibility === 'private' ? '[Encrypted message]' : row.last_message_body, created_at: row.last_message_at, sender_id: Number(row.last_sender_id) } : null,
 			};
 		});

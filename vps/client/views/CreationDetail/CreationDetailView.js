@@ -1203,7 +1203,9 @@ const STRIP_SEGMENT_DEFS = [
 		show: () => true,
 		render: (d, escapeFn) => html`
 					<div class="creation-detail-action-strip-creator-info">
-						<div class="creation-detail-action-strip-creator-name">${escapeFn(d.creatorName)}</div>
+						${d.creatorProfileHref
+							? html`<a class="creation-detail-action-strip-creator-name" href="${d.creatorProfileHref}" aria-label="View ${escapeFn(d.creatorName)} profile">${escapeFn(d.creatorName)}</a>`
+							: html`<div class="creation-detail-action-strip-creator-name">${escapeFn(d.creatorName)}</div>`}
 						<div class="creation-detail-action-strip-creator-followers">${d.creatorFollowerCount} Followers</div>
 					</div>`
 	},

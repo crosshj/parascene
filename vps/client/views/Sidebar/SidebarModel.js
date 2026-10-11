@@ -49,6 +49,7 @@ function rosterModel(roster = {}, presence) {
 		return {
 			id: `dm-${row.id}`, section: 'dm', label: `@${username}`,
 			path: buildChatThreadUrl(row), avatarHtml: avatar(row), online: isOnline(row),
+			isFounder: other.plan === 'founder',
 			unread: Number(row.unread_count) || 0,
 			lastMessageId: Number(row.last_message?.id) || 0,
 			pinKey, pinned: Boolean(pinKey && isDmPinKeyActive(pinKey)),

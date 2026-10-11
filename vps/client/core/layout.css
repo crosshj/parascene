@@ -57,8 +57,41 @@ body.beta-layout main#app-outlet {
 .beta-outlet__header { position: absolute; z-index: 3; inset: 0 0 auto; display: flex; align-items: center; gap: 8px; box-sizing: border-box; width: 100%; min-height: 0; height: var(--beta-chrome-row-height); padding: 0 12px; border: 0; border-radius: 0; background: color-mix(in srgb, var(--beta-panel-background) 94%, transparent); -webkit-backdrop-filter: none; backdrop-filter: none; }
 .beta-outlet__identity { display: flex; flex: 0 1 auto; align-items: center; gap: 8px; min-width: 0; }
 .beta-outlet__icon { display: grid; flex: 0 0 24px; width: 24px; height: 24px; place-items: center; color: inherit; }
+.beta-outlet__icon.has-founder-flair,
+.beta-outlet__icon:has(.avatar-with-founder-flair) { overflow: visible; }
+.beta-outlet__icon .comment-avatar {
+	width: 24px;
+	height: 24px;
+	min-width: 24px;
+	min-height: 24px;
+	max-height: 24px;
+	margin: 0;
+	padding: 0;
+	align-items: center;
+	justify-content: center;
+}
+.beta-outlet__icon .comment-avatar:has(.avatar-with-founder-flair) {
+	overflow: visible;
+	background: transparent;
+	height: 24px;
+	min-height: 24px;
+	max-height: 24px;
+	padding: 0;
+	align-items: center;
+}
+.beta-outlet__icon .avatar-with-founder-flair--xs {
+	--founder-flair-size: 24px;
+	--founder-flair-ring-inset: -2px;
+	width: 24px;
+	height: 24px;
+	flex: 0 0 24px;
+}
+.beta-outlet__icon .avatar-with-founder-flair::after { display: none; }
 .beta-outlet__icon svg { display: block; flex: none; width: 18px !important; height: 18px !important; max-width: 18px; max-height: 18px; }
+.beta-outlet__icon .comment-avatar svg { width: 100% !important; height: 100% !important; max-width: none; max-height: none; }
 .beta-outlet__title { overflow: hidden; margin: 0; font-size: 1.0625rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.beta-outlet__title .founder-name { color: var(--founder-flair-name); }
+.beta-outlet__profile-link:hover .founder-name { filter: brightness(1.08); }
 .beta-outlet__title-text--breadcrumb { display: inline-flex; align-items: center; gap: 0; min-width: 0; overflow: hidden; }
 .beta-outlet__breadcrumb-link { flex-shrink: 0; color: var(--text-muted); font-weight: 500; text-decoration: none; }
 .beta-outlet__breadcrumb-link:hover, .beta-outlet__breadcrumb-link:focus-visible { color: var(--text); text-decoration: underline; text-underline-offset: 2px; }
