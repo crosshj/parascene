@@ -32,16 +32,15 @@ export function createCreditsStore(client) {
 			return { success: false, balance: Number(current.balance) || 0, lastClaimDate: current.last_daily_claim_at, message: 'Daily credits already claimed today' };
 		}
 
-		// Include the previously observed claim timestamp in the update predicate. This
-		// makes concurrent requests compete for the same daily claim instead of both
-		// succeeding. Credits stay server-authoritative; the browser never awards them.
+		// Double-precision balances do not round-trip through an exact equality filter.
+		// Use the row's updated_at as the revision, same as other credit writes, so a
+		// concurrent change retries instead of failing the claim every time.
 		let query = client.from(TABLE).update({
 			balance: (Number(current.balance) || 0) + amount,
 			last_daily_claim_at: new Date().toISOString(),
 			updated_at: new Date().toISOString()
 		}).eq('user_id', userId);
-		query = query.eq('balance', current.balance);
-		query = lastClaim ? query.eq('last_daily_claim_at', current.last_daily_claim_at) : query.is('last_daily_claim_at', null);
+		query = current.updated_at == null ? query.is('updated_at', null) : query.eq('updated_at', current.updated_at);
 		const { data, error } = await query.select('balance, last_daily_claim_at').maybeSingle();
 		if (error) throw error;
 		if (!data) {

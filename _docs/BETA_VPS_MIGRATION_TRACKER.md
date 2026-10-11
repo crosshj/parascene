@@ -2,7 +2,6 @@
 
 ## Remaining product work
 
-- [ ] update share menu to look like youtube/suno
 - [ ] Audit CSS across vps. The same rules are redefined in too many stylesheets, and JS is doing layout, positioning, and presentation work that CSS should own. Find the duplicates and those script-driven styles, then fix them.
 
 ## Public pages and discoverability
