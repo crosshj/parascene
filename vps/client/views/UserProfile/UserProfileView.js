@@ -423,16 +423,15 @@ function buildBannerStyle(coverImageUrl) {
 }
 
 /**
- * Shared top-of-page hero: banner, avatar, identity (name + actions, handle, optional stats + meta).
+ * Shared top-of-page hero: banner, avatar, identity (@handle + actions, optional stats + meta).
  * Used for user profiles and Prompt Library–linked personality pages so layout stays one visual system.
+ * Title is the @handle only (same as creation detail / comments), not a separate display name.
  */
 function renderSharedProfileHeroHtml({
 	bannerStyle = '',
 	avatarBlockHtml,
-	displayName,
-	nameExtraClass = '',
 	handle,
-	handleExtraClass = '',
+	nameExtraClass = '',
 	actionsInnerHtml = '',
 	actionsHostAttrs = '',
 	statsBlockHtml = '',
@@ -440,8 +439,7 @@ function renderSharedProfileHeroHtml({
 	identityExtraHtml = '',
 	heroFooterHtml = ''
 }) {
-	const dn = String(displayName ?? '').trim() || '—';
-	const h = String(handle ?? '').trim() || '';
+	const h = String(handle ?? '').trim() || '@user';
 	return html`
 		<div class="user-profile-hero">
 			<div class="user-profile-banner" style="${bannerStyle}"></div>
@@ -449,14 +447,13 @@ function renderSharedProfileHeroHtml({
 				<div class="user-profile-avatar">${avatarBlockHtml}</div>
 				<div class="user-profile-identity">
 					<div class="user-profile-title-row">
-						<div class="user-profile-name${nameExtraClass}">${escapeHtml(dn)}</div>
+						<div class="user-profile-name${nameExtraClass}">${escapeHtml(h)}</div>
 						<div class="user-profile-actions"${actionsHostAttrs}>${actionsInnerHtml}</div>
 					</div>
-					<div class="user-profile-handle${handleExtraClass}">${escapeHtml(h)}</div>
 					${identityExtraHtml}
-					${statsBlockHtml}
-					${metaBlockHtml}
 				</div>
+				${statsBlockHtml}
+				${metaBlockHtml}
 			</div>
 			${heroFooterHtml}
 		</div>
@@ -528,12 +525,11 @@ function renderProfilePage(
 		(user?.email_prefix && String(user.email_prefix).trim()) ||
 		(isSelf && user?.email ? String(user.email).split('@')[0] : '') ||
 		'';
+	const handle = guessHandle({ user, profile });
 	const displayName =
 		(profile?.display_name && String(profile.display_name).trim()) ||
 		(profile?.user_name && String(profile.user_name).trim()) ||
 		(fallbackName || `User ${user?.id ?? ''}`);
-
-	const handle = guessHandle({ user, profile });
 	const about = typeof profile?.about === 'string' ? profile.about.trim() : '';
 	const characterDescription = typeof profile?.character_description === 'string' ? profile.character_description.trim() : '';
 	const socialsHtml = renderProfileSocialsHtml(profile?.socials);
@@ -542,7 +538,7 @@ function renderProfilePage(
 	const userNameValue = profile?.user_name && String(profile.user_name).trim() ? String(profile.user_name).trim() : '';
 	const userNameLocked = Boolean(userNameValue);
 
-	const avatarInitial = displayName.trim().charAt(0).toUpperCase() || '?';
+	const avatarInitial = (userNameValue || displayName).trim().charAt(0).toUpperCase() || '?';
 	const avatarColor = getAvatarColor(profile?.user_name || user?.email_prefix || user?.email || String(user?.id || ''));
 	const isFounder = plan === 'founder';
 
@@ -624,10 +620,8 @@ function renderProfilePage(
 	const profileHeroHtml = renderSharedProfileHeroHtml({
 		bannerStyle: buildBannerStyle(coverUrl),
 		avatarBlockHtml,
-		displayName,
-		nameExtraClass: isFounder ? ' founder-name' : '',
 		handle,
-		handleExtraClass: isFounder ? ' founder-name' : '',
+		nameExtraClass: isFounder ? ' founder-name' : '',
 		actionsInnerHtml,
 		statsBlockHtml,
 		metaBlockHtml: `${metaBlockHtml}${socialsHtml}`
@@ -1510,35 +1504,35 @@ function renderPersonalityDiscoveryPage(
 				: canEditPersonaCatalog
 					? '<span class="persona-library-notes-empty">No about text yet.</span>'
 					: '';
-		const aboutBlockHtml =
-			desc || canEditPersonaCatalog
-				? html`
-					<div class="user-profile-persona-detail">
-						<div class="user-profile-persona-detail-label">About</div>
-						<div class="user-profile-persona-detail-body user-profile-persona-bio${desc ? '' : ' user-profile-persona-bio--empty'}" data-persona-library-description>${aboutInner}</div>
-					</div>
-					`
-				: '';
-
 		const characterInner =
 			char
 				? processUserText(char)
 				: canEditPersonaCatalog
 					? '<span class="persona-library-notes-empty">Add character details in Edit persona.</span>'
 					: '';
-		const characterBlockHtml =
-			char || canEditPersonaCatalog
+		// Same meta row layout as member profiles (About / Character under the hero grid).
+		const metaBlockHtml =
+			desc || char || canEditPersonaCatalog
 				? html`
-					<div class="user-profile-persona-detail">
-						<div class="user-profile-persona-detail-label">Character</div>
-						<div class="user-profile-persona-detail-body user-profile-persona-character${char ? '' : ' user-profile-persona-bio--empty'}" data-persona-library-character>${characterInner}</div>
+					<div class="user-profile-meta">
+						${desc || canEditPersonaCatalog
+							? html`
+						<div class="user-profile-meta-row">
+							<span class="user-profile-meta-label">About</span>
+							<span class="user-profile-meta-text${desc ? '' : ' user-profile-meta-text--empty'}" data-persona-library-description>${aboutInner}</span>
+						</div>
+						`
+							: ''}
+						${char || canEditPersonaCatalog
+							? html`
+						<div class="user-profile-meta-row">
+							<span class="user-profile-meta-label">Character</span>
+							<span class="user-profile-meta-text${char ? '' : ' user-profile-meta-text--empty'}" data-persona-library-character>${characterInner}</span>
+						</div>
+						`
+							: ''}
 					</div>
 					`
-				: '';
-
-		const identityExtraHtml =
-			aboutBlockHtml || characterBlockHtml
-				? html`<div class="user-profile-persona-details">${aboutBlockHtml}${characterBlockHtml}</div>`
 				: '';
 
 		const heroFooterHtml = html`
@@ -1551,13 +1545,11 @@ function renderPersonalityDiscoveryPage(
 		const heroHtml = renderSharedProfileHeroHtml({
 			bannerStyle: '',
 			avatarBlockHtml,
-			displayName: displayTitle,
 			handle: handleStr,
 			actionsInnerHtml,
 			actionsHostAttrs: ' data-persona-discovery-actions=""',
 			statsBlockHtml: '',
-			metaBlockHtml: '',
-			identityExtraHtml,
+			metaBlockHtml,
 			heroFooterHtml
 		});
 
@@ -1600,21 +1592,32 @@ function renderPersonalityDiscoveryPage(
 			}
 		});
 	} else {
+		const discoveryAvatarInitial = safePersonality.trim().charAt(0).toUpperCase() || '?';
+		const discoveryAvatarColor = getAvatarColor(safePersonality);
+		const discoveryAvatarHtml = avatarMod.avatarPendingFaceHtml('', discoveryAvatarInitial, {
+			imgClass: 'user-profile-avatar-img',
+			fallbackClass: 'user-profile-avatar-fallback avatar-fallback-label',
+			fallbackStyle: `--user-profile-avatar-bg: ${discoveryAvatarColor}`,
+		});
+		const discoveryHeroHtml = renderSharedProfileHeroHtml({
+			bannerStyle: '',
+			avatarBlockHtml: discoveryAvatarHtml,
+			handle: handleStr,
+			actionsInnerHtml,
+			actionsHostAttrs: actionsInnerHtml ? ' data-persona-discovery-actions=""' : '',
+		});
 		container.innerHTML = html`
-		<div class="route-header">
-			<div class="route-header-title-row">
-				<h3>${escapeHtml(token)}</h3>
-				${actionsInnerHtml}
+		${discoveryHeroHtml}
+		<div class="user-profile-content user-profile-persona-discovery-content">
+			<div class="route-cards content-cards-image-grid" data-personality-grid>
+				<div class="route-empty route-empty-image-grid route-loading">
+					<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
+				</div>
 			</div>
+			${hasMore ? html`<div class="route-empty">
+				<div class="route-empty-message">Showing top results. Refine the personality name to narrow matches.</div>
+			</div>` : ''}
 		</div>
-		<div class="route-cards content-cards-image-grid" data-personality-grid>
-			<div class="route-empty route-empty-image-grid route-loading">
-				<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
-			</div>
-		</div>
-		${hasMore ? html`<div class="route-empty">
-			<div class="route-empty-message">Showing top results. Refine the personality name to narrow matches.</div>
-		</div>` : ''}
 		${promoteSetupModalHtml}
 	`;
 	}
@@ -2054,28 +2057,26 @@ function wirePersonaLibraryEditModal(container, personality) {
 					const about = container.dataset.personaLibraryDescription || '';
 					if (about) {
 						descEl.innerHTML = processUserText(about);
-						descEl.classList.remove('user-profile-persona-bio--empty');
+						descEl.classList.remove('user-profile-meta-text--empty');
 						hydrateUserTextLinks(descEl);
 					} else {
 						descEl.innerHTML = '<span class="persona-library-notes-empty">No about text yet.</span>';
-						descEl.classList.add('user-profile-persona-bio--empty');
+						descEl.classList.add('user-profile-meta-text--empty');
 					}
 				}
 				if (charEl) {
 					const ch = container.dataset.personaLibraryCharacter || '';
 					if (ch) {
 						charEl.innerHTML = processUserText(ch);
-						charEl.classList.remove('user-profile-persona-bio--empty');
+						charEl.classList.remove('user-profile-meta-text--empty');
 						hydrateUserTextLinks(charEl);
 					} else {
 						charEl.innerHTML = '<span class="persona-library-notes-empty">Add character details in Edit persona.</span>';
-						charEl.classList.add('user-profile-persona-bio--empty');
+						charEl.classList.add('user-profile-meta-text--empty');
 					}
 				}
 				const nameEl = container.querySelector('.user-profile-name');
-				if (nameEl && typeof result.data?.persona?.title === 'string') {
-					nameEl.textContent = result.data.persona.title.trim();
-				}
+				if (nameEl) nameEl.textContent = `@${tag}`;
 				if (result.data?.persona) {
 					applyPersonaHeroAvatarFromResponse(container, tag, result.data.persona);
 				}
@@ -2382,15 +2383,15 @@ if(!lifetime.active)return;
 			const scratch = document.createElement('div');
 			renderProfilePage(scratch, { user, profile, stats: fresh.stats || {}, plan: fresh.plan, isSelf, viewerFollows: fresh.viewer_follows, isAdmin, viewerUserId });
 			// Keep action buttons, tabs, edit forms and their listeners mounted.
-			for (const selector of ['.user-profile-banner', '.user-profile-avatar', '.user-profile-name', '.user-profile-handle', '.user-profile-stats']) {
+			for (const selector of ['.user-profile-banner', '.user-profile-avatar', '.user-profile-name', '.user-profile-stats']) {
 				const existing = container.querySelector(selector), next = scratch.querySelector(selector);
 				if (existing && next) existing.replaceWith(next);
 			}
-			const identity = container.querySelector('.user-profile-identity');
+			const heroInner = container.querySelector('.user-profile-hero-inner');
 			for (const selector of ['.user-profile-meta', '.user-profile-socials']) {
 				container.querySelector(selector)?.remove();
 				const next = scratch.querySelector(selector);
-				if (next) identity?.append(next);
+				if (next) heroInner?.append(next);
 			}
 			hydrateUserTextLinks(container);
 		}));

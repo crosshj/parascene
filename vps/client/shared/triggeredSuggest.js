@@ -11,6 +11,7 @@
  * - attachMentionSuggest(field) — @ only
  * - attachCommentComposerSuggest(field) — @ and /gen
  * - attachChatMentionSuggest(field) — @ only + chat special mentions
+ * - attachChatComposerSuggest(field) — @, #, / (no $ styles; those stay on create surfaces)
  * - attachPromptInlineSuggest(field) — @ and $ (styles)
  * - attachCreateComposerSuggest(field) — @ (users, personas, styles) and $ (styles)
  * - isTriggeredSuggestPopupOpen(field) — true while this field owns the open listbox (for Enter-to-send guards)
@@ -420,9 +421,21 @@ function orderMentionItemsForPopup(items) {
 	for (const it of items) {
 		if (it?.type === "special_mention") specialMentions.push(it);
 		else if (it?.type === "persona") personas.push(it);
+		else if (it?.type === "style") continue;
 		else users.push(it);
 	}
 	return [...users, ...personas, ...specialMentions];
+}
+
+/** Create-composer @: people, then personas, then styles (section headers assume this order). */
+export function orderCreateComposerItemsForPopup(items) {
+	const styles = [];
+	const rest = [];
+	for (const it of items) {
+		if (it?.type === "style") styles.push(it);
+		else rest.push(it);
+	}
+	return [...orderMentionItemsForPopup(rest), ...styles];
 }
 
 function limitMentionItemsKeepingSpecial(items, limitNum) {
@@ -592,10 +605,12 @@ function getCommandSuggestions({ q, limit }) {
 }
 
 function getCreateComposerLocalCandidates(qLower) {
-	return mergeUniqueItems([
-		...getMentionLocalCandidates(qLower, false),
-		...filterAndSortStyleItems(getCachedEntriesForSource("styles").flat(), qLower),
-	]);
+	return orderCreateComposerItemsForPopup(
+		mergeUniqueItems([
+			...getMentionLocalCandidates(qLower, false),
+			...filterAndSortStyleItems(getCachedEntriesForSource("styles").flat(), qLower),
+		])
+	);
 }
 
 function getCreateComposerInlineSuggestions({ source, q, limit }, signal) {
@@ -607,10 +622,9 @@ function getCreateComposerInlineSuggestions({ source, q, limit }, signal) {
 		return Promise.all([
 			getMentionSuggestions({ source: "users", q, limit: mentionLimit }, signal),
 			getStyleSuggestions({ source: "styles", q, limit: styleLimit }, signal),
-		]).then(([mentions, styles]) => {
-			const orderedMentions = orderMentionItemsForPopup(mentions);
-			return mergeUniqueItems([...orderedMentions, ...styles]).slice(0, cap);
-		});
+		]).then(([mentions, styles]) =>
+			orderCreateComposerItemsForPopup(mergeUniqueItems([...mentions, ...styles])).slice(0, cap)
+		);
 	}
 	return getCombinedInlineSuggestions({ source, q, limit }, signal);
 }
@@ -1164,7 +1178,9 @@ function requestSuggestions(textarea, ctx, reason) {
 	const mentionOrderedLocals =
 		ctx.trigger.source === "users" || ctx.trigger.source === "chat_mentions"
 			? orderMentionItemsForPopup(localMatches)
-			: localMatches;
+			: isCreateComposer
+				? orderCreateComposerItemsForPopup(localMatches)
+				: localMatches;
 	setItems(state, mentionOrderedLocals);
 	state.displayedQuery = requestedQuery;
 
@@ -1175,7 +1191,7 @@ function requestSuggestions(textarea, ctx, reason) {
 			: ctx.trigger.source;
 	const exactCacheKey = `${suggestCacheSource}:${qLower}:${DEFAULT_SUGGEST_LIMIT}`;
 	const exactCached = cacheGet(exactCacheKey);
-	if (exactCached) {
+	if (exactCached && !isCreateComposer) {
 		const ordered = finalizeMentionPopupItems(localMatches, exactCached, DEFAULT_SUGGEST_LIMIT);
 		setItems(state, ordered);
 		renderPopup(textarea, ordered.length > 0 ? undefined : "empty");
@@ -1224,7 +1240,9 @@ function requestSuggestions(textarea, ctx, reason) {
 					? orderMentionItemsForPopup(
 							limitMentionItemsKeepingSpecial(mergedNext, DEFAULT_SUGGEST_LIMIT)
 						)
-					: mergedNext.slice(0, DEFAULT_SUGGEST_LIMIT);
+					: nowIsCreateComposer
+						? orderCreateComposerItemsForPopup(mergedNext.slice(0, DEFAULT_SUGGEST_LIMIT))
+						: mergedNext.slice(0, DEFAULT_SUGGEST_LIMIT);
 
 			current.triggerStart = nowCtx.start;
 			current.currentTrigger = nowCtx.trigger;
@@ -1464,7 +1482,6 @@ export function attachChatComposerSuggest(textarea) {
 		triggers: [
 			{ char: "@", minChars: 1, source: "chat_mentions" },
 			{ char: "#", minChars: 1, source: "chat_hashtags" },
-			{ char: "$", minChars: 1, source: "styles" },
 			{ char: "/", minChars: 1, source: "chat_commands" }
 		],
 		getSuggestions: getCombinedInlineSuggestions

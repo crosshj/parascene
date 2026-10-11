@@ -2,9 +2,6 @@
 
 ## Remaining product work
 
-- [ ] user profile page needs a mobile-only formatting (CSS) that otpmizes for display on mobile
-- [ ] @username and $style helpers should be in composers (+etc) from www, this includes full range of helpers and fully supported across the app
-- [ ] www has several means (including in create composer) for adding suno/youtube/etc link as creations; vps needs to support
 - [ ] Audit CSS across vps. The same rules are redefined in too many stylesheets, and JS is doing layout, positioning, and presentation work that CSS should own. Find the duplicates and those script-driven styles, then fix them.
 
 ## Public pages and discoverability

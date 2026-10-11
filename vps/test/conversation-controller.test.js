@@ -1,7 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createConversationController } from '../client/components/Messages/ConversationController.js';
-import { createQuery } from '../client/core/query.js';
+import { register } from 'node:module';
+
+const loader = `data:text/javascript,${encodeURIComponent(`
+	export async function load(url, context, nextLoad) {
+		if (url.endsWith('.css')) return { format: 'module', source: 'export default "";', shortCircuit: true };
+		return nextLoad(url, context);
+	}
+`)}`;
+register(loader);
+
+const { createConversationController } = await import('../client/components/Messages/ConversationController.js');
+const { createQuery } = await import('../client/core/query.js');
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 function fixture(send, getViewer) {

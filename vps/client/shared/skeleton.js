@@ -146,17 +146,17 @@ export function renderCommentRowsSkeleton(count = 10) {
 }
 
 /**
- * @returns {string} HTML for profile hero skeleton (banner + avatar, name, stats, meta lines)
+ * @returns {string} HTML for profile hero skeleton (banner + avatar, @handle row, stats, meta lines)
  */
 export function renderProfileHeroSkeleton() {
 	return `<div class="skeleton-profile-hero" aria-hidden="true">
 		<div class="skeleton-profile-banner"></div>
 		<div class="skeleton-profile-hero-inner">
 			<div class="skeleton-profile-hero-row">
-				${skeletonCircle(96)}
-				<div style="display: flex; flex-direction: column; gap: 8px; flex: 1; min-width: 0;">
-					${skeletonLine('45%', 'skeleton-line--short')}
-					${skeletonLine('35%', 'skeleton-line--short')}
+				<span class="skeleton skeleton-circle skeleton-profile-avatar" aria-hidden="true"></span>
+				<div class="skeleton-profile-identity">
+					${skeletonLine('42%', 'skeleton-line--short skeleton-profile-handle')}
+					${skeletonPill('96px', 34)}
 				</div>
 			</div>
 			<div class="skeleton-profile-hero-stats">

@@ -5,6 +5,12 @@ import { sendIcon } from '../../icons/svg-strings.js';
 import { uploadChatFile } from '../../shared/chatFileUpload.js';
 import { openChatInlineImageLightbox } from '../../shared/chatInlineImageLightbox.js';
 import { openImagePickerModal } from '../ProviderFields/ProviderFields.js';
+import {
+	attachChatComposerSuggest,
+	disposeTriggeredSuggestFields,
+	isTriggeredSuggestPopupOpen,
+} from '../../shared/triggeredSuggest.js';
+import { composerEnterShouldSend } from '../../shared/composerEnterGuard.js';
 
 const clone = createTemplateFactory(markup);
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
@@ -39,7 +45,12 @@ function clipboardImageFiles(clipboardData) {
 }
 
 // Shared shell composer binding. Controllers supply send intent and own its lifetime.
-export function bindMessageComposer({ form, onSend, onReplyChange }) {
+export function bindMessageComposer({
+	form,
+	onSend,
+	onReplyChange,
+	isSuggestOpen = isTriggeredSuggestPopupOpen,
+}) {
 	const input = form.querySelector('textarea');
 	const send = form.querySelector('[type="submit"]');
 	const attachmentButton = form.querySelector('.chat-page-composer-attach-inline');
@@ -216,7 +227,15 @@ export function bindMessageComposer({ form, onSend, onReplyChange }) {
 
 	function keydown(event) {
 		if (event.key === 'Escape' && reply) { event.preventDefault(); clearReply(); return; }
-		if (event.key === 'Enter' && !event.shiftKey && !event.isComposing && matchMedia('(hover: hover) and (pointer: fine)').matches) submit(event);
+		if (
+			composerEnterShouldSend(event, {
+				field: input,
+				isSuggestOpen,
+				finePointerMatches: matchMedia('(hover: hover) and (pointer: fine)').matches,
+			})
+		) {
+			submit(event);
+		}
 	}
 	function paste(event) {
 		if (!ready || submitting) return;
@@ -245,6 +264,7 @@ export function bindMessageComposer({ form, onSend, onReplyChange }) {
 	input.addEventListener('paste', paste);
 	form.addEventListener('submit', submit);
 	input.maxLength = MAX_BODY_CHARS;
+	attachChatComposerSuggest(input);
 	sync();
 	return {
 		setReply(value) {
@@ -257,6 +277,7 @@ export function bindMessageComposer({ form, onSend, onReplyChange }) {
 		setReady(value) { ready = value; if (value) submitting = false; sync(); },
 		destroy() {
 			destroyed = true;
+			disposeTriggeredSuggestFields(form);
 			dismiss.removeEventListener('click', clearReply);
 			attachmentButton.removeEventListener('click', onPickFiles);
 			input.removeEventListener('input', sync);

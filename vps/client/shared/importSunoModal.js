@@ -9,12 +9,48 @@ import {
 } from './importMedia.js';
 import { getCreateWorkflowModalParent } from './createWorkflowHost.js';
 
+const IMPORT_MODAL_PORTAL = 'import-suno';
+
 function escapeHtml(text) {
 	return String(text ?? '')
 		.replace(/&/g, '&amp;')
 		.replace(/</g, '&lt;')
 		.replace(/>/g, '&gt;')
 		.replace(/"/g, '&quot;');
+}
+
+/** Remove any open import overlay and its temporary create-workflow-root portal. */
+function removeExistingImportModal() {
+	const existing = document.querySelector('[data-import-suno-modal]');
+	if (!existing) return;
+	const portal = existing.closest(`[data-modal-portal="${IMPORT_MODAL_PORTAL}"]`);
+	existing.remove();
+	portal?.remove();
+}
+
+/**
+ * Append overlay under Create host when present; otherwise wrap in a
+ * create-workflow-root portal so scoped Create CSS still applies.
+ * @param {HTMLElement} overlay
+ * @returns {{ detach: () => void }}
+ */
+function mountImportModalOverlay(overlay) {
+	const requestedParent = getCreateWorkflowModalParent();
+	const parent = requestedParent.matches?.('.create-workflow-root')
+		? requestedParent
+		: document.createElement('div');
+	if (parent !== requestedParent) {
+		parent.className = 'create-workflow-root';
+		parent.dataset.modalPortal = IMPORT_MODAL_PORTAL;
+		requestedParent.appendChild(parent);
+	}
+	parent.appendChild(overlay);
+	return {
+		detach() {
+			overlay.remove();
+			if (parent.dataset.modalPortal === IMPORT_MODAL_PORTAL) parent.remove();
+		},
+	};
 }
 
 /**
@@ -26,8 +62,7 @@ function escapeHtml(text) {
  * }} [options]
  */
 export function openImportMediaModal(options = {}) {
-	const existing = document.querySelector('[data-import-suno-modal]');
-	if (existing) existing.remove();
+	removeExistingImportModal();
 
 	const overlay = document.createElement('div');
 	overlay.className = 'import-suno-modal-overlay';
@@ -81,7 +116,7 @@ export function openImportMediaModal(options = {}) {
 		</div>
 	`;
 
-	getCreateWorkflowModalParent().appendChild(overlay);
+	const mount = mountImportModalOverlay(overlay);
 
 	const urlInput = overlay.querySelector('[data-import-suno-url]');
 	const fileInput = overlay.querySelector('[data-import-media-file]');
@@ -137,7 +172,7 @@ export function openImportMediaModal(options = {}) {
 		closed = true;
 		busy = false;
 		document.removeEventListener('keydown', onKeyDown, true);
-		overlay.remove();
+		mount.detach();
 	}
 
 	function onKeyDown(e) {
@@ -274,8 +309,7 @@ export function openImportMediaConfirmModal(options = {}) {
 		return { close() {} };
 	}
 
-	const existing = document.querySelector('[data-import-suno-modal]');
-	if (existing) existing.remove();
+	removeExistingImportModal();
 
 	const isYoutube = detected.provider === 'youtube';
 	const confirmTitle = isYoutube ? 'Create a Video post?' : 'Create a Music post?';
@@ -327,7 +361,7 @@ export function openImportMediaConfirmModal(options = {}) {
 		</div>
 	`;
 
-	getCreateWorkflowModalParent().appendChild(overlay);
+	const mount = mountImportModalOverlay(overlay);
 
 	const checkingEl = overlay.querySelector('[data-import-suno-checking]');
 	const confirmEl = overlay.querySelector('[data-import-suno-confirm]');
@@ -365,7 +399,7 @@ export function openImportMediaConfirmModal(options = {}) {
 		if (closed) return;
 		closed = true;
 		document.removeEventListener('keydown', onKeyDown, true);
-		overlay.remove();
+		mount.detach();
 		if (cancelled && typeof options.onCancel === 'function') options.onCancel();
 	}
 

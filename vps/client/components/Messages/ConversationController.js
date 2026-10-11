@@ -1,5 +1,6 @@
 import { encryptThreadText } from '../../providers/threads/private.js';
 import { plainTextReplyPreview } from '../../shared/plainTextReplyPreview.js';
+import { syncChatComposerSuggestCaches } from '../../shared/chatComposerSuggestCaches.js';
 
 export function createConversationController({ view, provider, route, viewerId, getViewer = () => null, onUnauthorized }) {
 	const abort = new AbortController();
@@ -7,6 +8,7 @@ export function createConversationController({ view, provider, route, viewerId, 
 	let lease = null;
 	let unsubscribe = null;
 	let thread = null;
+	let inbox = null;
 	let loadingOlder = false;
 	let lastData = null;
 	let lastRead = 0;
@@ -16,7 +18,29 @@ export function createConversationController({ view, provider, route, viewerId, 
 	const outgoing = new Map();
 	const confirmed = new Map();
 	const reacting = new Set();
-	function render() { if (!destroyed && lease?.query.data) view.render({ ...lease.query.data, viewerIsAdmin: provider.query.data?.viewerIsAdmin === true, editable: thread?.channel_slug !== 'challenges', messages: [...lease.query.data.messages.map((message) => confirmed.has(String(message.id)) ? { ...message, clientKey: confirmed.get(String(message.id)).clientKey, created_at: confirmed.get(String(message.id)).created_at } : message), ...outgoing.values()] }); }
+	function syncSuggestCaches(messages) {
+		if (destroyed) return;
+		syncChatComposerSuggestCaches({ thread, inbox, messages });
+	}
+	function render() {
+		if (!destroyed && lease?.query.data) {
+			const messages = [
+				...lease.query.data.messages.map((message) =>
+					confirmed.has(String(message.id))
+						? { ...message, clientKey: confirmed.get(String(message.id)).clientKey, created_at: confirmed.get(String(message.id)).created_at }
+						: message
+				),
+				...outgoing.values(),
+			];
+			view.render({
+				...lease.query.data,
+				viewerIsAdmin: provider.query.data?.viewerIsAdmin === true,
+				editable: thread?.channel_slug !== 'challenges',
+				messages,
+			});
+			syncSuggestCaches(messages);
+		}
+	}
 	function error(reason) {
 		if (destroyed || reason?.name === 'AbortError') return;
 		if (reason?.status === 401) return onUnauthorized?.();
@@ -29,29 +53,31 @@ export function createConversationController({ view, provider, route, viewerId, 
 	async function start() {
 		view.setStatus({ isLoading: true });
 		try {
-			let inbox = provider.query.data;
-			if (inbox) { if (provider.query.isStale()) void provider.query.refresh().catch(() => undefined); }
-			else inbox = await provider.query.loadIfNeeded();
+			let nextInbox = provider.query.data;
+			if (nextInbox) { if (provider.query.isStale()) void provider.query.refresh().catch(() => undefined); }
+			else nextInbox = await provider.query.loadIfNeeded();
 			if (destroyed) return;
-			thread = inbox.threads.find((row) => route.kind === 'channel'
+			thread = nextInbox.threads.find((row) => route.kind === 'channel'
 				? row.type === 'channel' && (route.threadId ? Number(row.id) === Number(route.threadId) : row.channel_slug === route.slug)
 				: row.type === 'dm' && (route.slug === 'self' ? Number(row.other_user_id) === Number(viewerId) : String(row.other_user_id) === route.slug || row.other_user?.user_name?.toLowerCase() === route.slug.toLowerCase()));
-			if (!thread && provider.query.data === inbox) {
-				inbox = await provider.query.refresh();
+			if (!thread && provider.query.data === nextInbox) {
+				nextInbox = await provider.query.refresh();
 				if (destroyed) return;
-				thread = inbox.threads.find((row) => route.kind === 'channel'
+				thread = nextInbox.threads.find((row) => route.kind === 'channel'
 					? row.type === 'channel' && (route.threadId ? Number(row.id) === Number(route.threadId) : row.channel_slug === route.slug)
 					: row.type === 'dm' && (route.slug === 'self' ? Number(row.other_user_id) === Number(viewerId) : String(row.other_user_id) === route.slug || row.other_user?.user_name?.toLowerCase() === route.slug.toLowerCase()));
 			}
 			if (!thread && route.kind === 'channel' && !route.threadId) {
 				await provider.api.openChannel(route.slug, { signal: abort.signal });
 				if (destroyed) return;
-				inbox = await provider.query.refresh({ force: true });
+				nextInbox = await provider.query.refresh({ force: true });
 				if (destroyed) return;
-				thread = inbox.threads.find(row => row.type === 'channel' && row.channel_slug === route.slug);
+				thread = nextInbox.threads.find(row => row.type === 'channel' && row.channel_slug === route.slug);
 			}
 			if (!thread) throw new Error('This conversation is not in your thread list yet.');
+			inbox = nextInbox;
 			view.setThread?.(thread, inbox);
+			syncSuggestCaches([]);
 			lastRead = Number(thread.last_read_message_id) || 0;
 			view.setUnreadBoundary?.(lastRead);
 			lease = provider.acquireMessages(thread.id, { persist: thread.type === 'channel' && thread.visibility !== 'private' });

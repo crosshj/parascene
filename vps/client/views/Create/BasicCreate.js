@@ -342,15 +342,15 @@ function runCreatePageInit(root, lifetime, refreshAutoGrowTextareas, createSetti
 		});
 	}
 
-	// @mention suggestions on prompt fields (restored from pre-4d5956d)
+	// @mention + $style suggestions on prompt fields
 	savedFormReady = true;
  saveCurrentForm();
 
 
 	try {
-(({ attachMentionSuggest }) => {
+(({ attachPromptInlineSuggest }) => {
  if (!lifetime.active) return;
-		root.querySelectorAll('.create-content .create-prompt-input').forEach((el) => attachMentionSuggest(el));
+		root.querySelectorAll('.create-content .create-prompt-input').forEach((el) => attachPromptInlineSuggest(el));
 	})(triggeredSuggestModule);
 } catch (error) {
 (() => {})(error);
