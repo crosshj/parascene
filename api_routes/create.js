@@ -6582,7 +6582,7 @@ export default function createCreateRoutes({ queries, storage }) {
 		}
 	});
 
-	// POST /api/create/images/:id/video-placeholder — Owner/admin: set poster image for t2v rows with a broken placeholder.
+	// POST /api/create/images/:id/video-placeholder — Owner/admin: set poster from a video frame.
 	router.post("/api/create/images/:id/video-placeholder", async (req, res) => {
 		const user = await requireUser(req, res);
 		if (!user) return;

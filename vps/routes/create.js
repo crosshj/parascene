@@ -23,6 +23,7 @@ import {
 	isAudioCreationRow,
 	resetAudioCoverToOriginal,
 } from "../services/create/audioCoverApply.js";
+import { applyVideoPosterBuffer, creationRowCanSetVideoPoster } from "../services/create/videoPoster.js";
 
 
 import { materializeBlueProviderAudioArgs, resolveAudioProviderArgs } from "../services/create/audioClips.js";
@@ -2590,6 +2591,63 @@ async function loadOwnedCompletedAudio(req, res) {
 			credits: target.credits,
 			method: target.method,
 		});
+	}));
+
+	router.post("/api/create/images/:id/video-placeholder", asyncRoute(async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+		const id = Number(req.params.id);
+		if (!Number.isFinite(id) || id <= 0) {
+			return res.status(400).json({ error: "Invalid creation id" });
+		}
+		let image = await queries.selectCreatedImageById?.get(id, user.id);
+		if (!image) {
+			image = await queries.selectCreatedImageByIdAnyUser?.get(id);
+			if (!image) return res.status(404).json({ error: "Creation not found" });
+			if (Number(image.user_id) !== Number(user.id) && user.role !== "admin") {
+				return res.status(403).json({ error: "Forbidden" });
+			}
+		}
+		if ((image.status || "") !== "completed") {
+			return res.status(400).json({ error: "Only completed creations can have a poster set" });
+		}
+		if (!creationRowCanSetVideoPoster(image)) {
+			return res.status(400).json({ error: "This creation cannot have its poster set from video" });
+		}
+		if (!req.is("multipart/form-data")) {
+			return res.status(400).json({ error: "Request must be multipart/form-data with an image file" });
+		}
+		try {
+			const { fields, files } = await parseMultipartCreate(req, { maxFileBytes: 20 * 1024 * 1024 });
+			const imageFile = files?.image;
+			if (!imageFile || !Buffer.isBuffer(imageFile.buffer) || imageFile.buffer.length === 0) {
+				return res.status(400).json({ error: "No image file provided; use form field name 'image'" });
+			}
+			const mimeType = typeof imageFile.mimeType === "string" ? imageFile.mimeType.trim() : "";
+			if (mimeType && !mimeType.startsWith("image/")) {
+				return res.status(400).json({ error: "File must be an image" });
+			}
+			const targetWidth = Number(fields?.video_width);
+			const targetHeight = Number(fields?.video_height);
+			const applied = await applyVideoPosterBuffer({
+				queries,
+				storage,
+				image,
+				buffer: imageFile.buffer,
+				targetWidth,
+				targetHeight,
+			});
+			await bumpFeedVersionCounter(queries);
+			void invalidateFeedBetaCatalogSnapshot().catch(() => {});
+			return res.json({
+				ok: true,
+				url: applied.file_path,
+				width: applied.width,
+				height: applied.height,
+			});
+		} catch (err) {
+			return coverFailure(res, err, "Failed to set poster");
+		}
 	}));
 
 registerCreationLibraryRoutes({ router, requireUser, queries, storage });

@@ -544,30 +544,33 @@ export function hasProperVideoPlaceholderDimensions(creation) {
 	return Math.abs(ratioW - ratioE) <= 0.02;
 }
 
-/** Temporary: show "Use first frame as poster" even after a manual capture. Set false before release. */
-export const TEMP_ALLOW_REPEAT_VIDEO_POSTER = true;
-
 /**
- * Completed videos whose stored poster is not a start frame (t2v placeholder or r2v character sheet).
+ * Completed videos can set their stored poster from the first frame.
+ * Offered for every video method and aspect ratio, including after a poster was already saved.
  * @param {{ status?: unknown, width?: unknown, height?: unknown, meta?: unknown, media_type?: unknown, video_url?: unknown } | null | undefined} creation
  * @returns {boolean}
  */
 export function canSetVideoPosterFromFirstFrame(creation) {
 	if (!creation || typeof creation !== 'object') return false;
 	if (String(creation.status || '').toLowerCase() !== 'completed') return false;
-	if (!isText2VideoCreation(creation) && !isReferenceToVideoCreation(creation)) return false;
+	if (!creationHasVideo(creation)) return false;
 	const meta = normalizeCreationMeta(creation?.meta);
-	if (!TEMP_ALLOW_REPEAT_VIDEO_POSTER && meta?.video_placeholder_manual === true) return false;
+	if (meta?.group && typeof meta.group === 'object' && meta.group.kind === 'group_creations') {
+		return false;
+	}
 	return true;
 }
 
 /**
  * Publish / complete: capture first frame when still on auto placeholder / character-sheet poster.
+ * Limited to text-to-video and reference-to-video so an image-to-video source still is left alone.
  * @param {{ status?: unknown, width?: unknown, height?: unknown, meta?: unknown, media_type?: unknown, video_url?: unknown } | null | undefined} creation
  * @returns {boolean}
  */
 export function shouldAutoSetVideoPosterFromFirstFrame(creation) {
-	if (!canSetVideoPosterFromFirstFrame(creation)) return false;
+	if (!creation || typeof creation !== 'object') return false;
+	if (String(creation.status || '').toLowerCase() !== 'completed') return false;
+	if (!isText2VideoCreation(creation) && !isReferenceToVideoCreation(creation)) return false;
 	const meta = normalizeCreationMeta(creation?.meta);
 	if (meta?.group && typeof meta.group === 'object' && meta.group.kind === 'group_creations') {
 		return false;

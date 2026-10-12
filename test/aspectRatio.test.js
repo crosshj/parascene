@@ -7,7 +7,6 @@ import {
 	dimensionsForAspectRatioLongEdge,
 	dimensionsMatchAspectRatio,
 	videoHeroDimensionsFromCreation,
-	TEMP_ALLOW_REPEAT_VIDEO_POSTER,
 	canSetVideoPosterFromFirstFrame,
 	shouldAutoSetVideoPosterOnPublish,
 	shouldAutoSetVideoPosterFromFirstFrame,
@@ -233,17 +232,31 @@ describe('video poster from first frame eligibility', () => {
 		expect(canSetVideoPosterFromFirstFrame({ ...t2vBase, width: 1024, height: 1024 })).toBe(true);
 	});
 
-	test('does not offer for image-to-video creations', () => {
+	test('offers poster action for image-to-video at any aspect', () => {
 		expect(
 			canSetVideoPosterFromFirstFrame({
 				...t2vBase,
+				width: 1024,
+				height: 1024,
 				meta: {
 					...t2vBase.meta,
 					method: 'image2video',
-					args: { aspect_ratio: '9:16', input_images: ['https://example.com/a.png'] },
+					args: { aspect_ratio: '1:1', input_images: ['https://example.com/a.png'] },
 				},
 			})
-		).toBe(false);
+		).toBe(true);
+		expect(
+			canSetVideoPosterFromFirstFrame({
+				...t2vBase,
+				width: 1280,
+				height: 720,
+				meta: {
+					method: 'image2video',
+					media_type: 'video',
+					args: { aspect_ratio: '16:9', image_url: 'https://example.com/a.png' },
+				},
+			})
+		).toBe(true);
 	});
 
 	test('offers for Parascene Blue image2video without source image', () => {
@@ -259,21 +272,42 @@ describe('video poster from first frame eligibility', () => {
 		).toBe(true);
 	});
 
-	test('manual poster suppresses repeat capture unless TEMP_ALLOW_REPEAT_VIDEO_POSTER', () => {
+	test('offers poster action again after a poster was already saved', () => {
 		const row = {
 			...t2vBase,
+			width: 720,
+			height: 1280,
 			meta: { ...t2vBase.meta, video_placeholder_manual: true },
 		};
-		expect(canSetVideoPosterFromFirstFrame(row)).toBe(TEMP_ALLOW_REPEAT_VIDEO_POSTER);
+		expect(canSetVideoPosterFromFirstFrame(row)).toBe(true);
 	});
 
-	test('shouldAutoSetVideoPosterOnPublish skips manual posters', () => {
+	test('does not offer poster action for grouped creations', () => {
+		expect(
+			canSetVideoPosterFromFirstFrame({
+				...t2vBase,
+				meta: { ...t2vBase.meta, group: { kind: 'group_creations' } },
+			})
+		).toBe(false);
+	});
+
+	test('shouldAutoSetVideoPosterOnPublish skips manual posters and image-to-video', () => {
 		expect(shouldAutoSetVideoPosterOnPublish({ ...t2vBase, width: 576, height: 1024 })).toBe(true);
 		expect(shouldAutoSetVideoPosterFromFirstFrame({ ...t2vBase, width: 576, height: 1024 })).toBe(true);
 		expect(
 			shouldAutoSetVideoPosterOnPublish({
 				...t2vBase,
 				meta: { ...t2vBase.meta, video_placeholder_manual: true },
+			})
+		).toBe(false);
+		expect(
+			shouldAutoSetVideoPosterFromFirstFrame({
+				...t2vBase,
+				meta: {
+					method: 'image2video',
+					media_type: 'video',
+					args: { aspect_ratio: '16:9', input_images: ['https://example.com/a.png'] },
+				},
 			})
 		).toBe(false);
 	});
