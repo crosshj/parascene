@@ -1,10 +1,10 @@
 # Parascene VPS beta
 
 This is the focused beta deployment, not a second copy of the full Parascene
-application. `server.js` is the process entrypoint, `routes/` contains
-route and middleware code, and `db/` composes focused Supabase adapters for
+application. `server/server.js` is the process entrypoint, `server/routes/` contains
+route and middleware code, and `server/db/` composes focused Supabase adapters for
 users, sessions, and profile files. Each route receives only the adapter it
-uses. `pages/` contains server-rendered HTML modules (including `pages/index/` and
+uses. `server/pages/` contains server-rendered HTML modules (including `pages/index/` and
 `pages/auth/`). The authenticated SPA source lives in `client/`: `app.js`
 composes the application, `core/` owns routing and session infrastructure,
 `api/` contains browser API clients, and `pages/` contains client-side page
@@ -36,7 +36,7 @@ available only on the beta hostname.
 
 ## Local development
 
-From `vps/`, install dependencies and run:
+From the repo root, install dependencies and run:
 
 ```sh
 npm install
@@ -59,10 +59,12 @@ the link are both required to view the file; the private listing, upload,
 delete, and owner content routes remain owner-scoped. The link is temporary
 proof behavior, not the final sharing model.
 
-The host Nginx site is versioned at `infra/nginx/parascene.conf`. The CI deploy
-installs it over the currently enabled `parascene` site, validates the complete
-Nginx configuration, restores the prior file on failure, and reloads Nginx
-before public health checks. Unless deployments run as root, the SSH deploy
-user therefore needs non-interactive sudo permission for the required Nginx
-backup, install, validation, reload, and cleanup commands. Certificates and
-private keys remain host-owned and are never copied into the repository.
+The host Nginx site is rendered from `infra/nginx/parascene.conf`. A push to
+`beta` installs `parascene-beta` and proxies that site's names to port 3000.
+A push to `prod` installs `parascene-prod` and proxies its names to port 3001.
+Each deploy validates the complete Nginx configuration, restores the prior
+file on failure, and reloads Nginx before public health checks. Unless
+deployments run as root, the SSH deploy user therefore needs non-interactive
+sudo permission for the required Nginx backup, install, validation, reload,
+and cleanup commands. Certificates and private keys remain host-owned and are
+never copied into the repository.

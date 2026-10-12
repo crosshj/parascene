@@ -5,8 +5,8 @@ Source of truth: `schedules.cjs`. Apply to Upstash like DB migrations.
 ## Prerequisites
 
 - `.env` with `UPSTASH_QSTASH_TOKEN`, `UPSTASH_QSTASH_URL`
-- Vercel env: same + `UPSTASH_QSTASH_CURRENT_SIGNING_KEY`, `UPSTASH_QSTASH_NEXT_SIGNING_KEY`
-- Callback host: `api.parascene.com` (see `api_routes/utils/url.js` → `getQStashCallbackBaseUrl()`)
+- Deploy env: same + `UPSTASH_QSTASH_CURRENT_SIGNING_KEY`, `UPSTASH_QSTASH_NEXT_SIGNING_KEY`
+- Callback host: `getQStashCallbackBaseUrl()` in `server/services/create/url.js`. Prod is `https://api.parascene.com` when `API_HOSTNAME` is `api.parascene.com`.
 
 ## Apply / update schedules
 

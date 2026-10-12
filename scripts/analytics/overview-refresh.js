@@ -24,16 +24,17 @@ import { REPO_ROOT, loadEnv } from "../repo-root.cjs";
 import {
 	usEastDayKey,
 	usEastDayStartMs,
-	yesterdayUsEastDayKey
-} from "../../api_routes/utils/visitPulseCore.js";
+	yesterdayUsEastDayKey,
+	buildDaySnapshotFromRedis
+} from "../../server/services/feed/visitPulse.js";
 import { SCHEMA_VERSION, CORE_ACTION_TYPES, RANKED_FEED_DEFAULT_ROLLOUT_AT } from "./overview/metrics.js";
-import { findChallengesChannelThreadId } from "../../api_routes/utils/challengeSubmitShared.js";
-import { extractChallengeEvents } from "../../src/chat/challenges/model/extractEvents.js";
-import { summarizeLatestChallengeConfigs } from "../../src/chat/challenges/model/organizerSummaries.js";
-import { mergeFullChallengeConfigForChallenge, pickChallengeConfigTimestamp } from "../../src/chat/challenges/challengeAdmin.js";
-import { deriveChallengePhase } from "../../src/chat/challenges/model/phases.js";
-import { buildReactionsByMessageId } from "../../src/chat/challenges/model/participantSlice.js";
-import { CHALLENGE_SCORE_REACTION_KEYS, challengeReactionKeyToScore } from "../../src/chat/challenges/constants.js";
+import { findChallengesChannelThreadId } from "../../server/services/create/challengeSubmitShared.js";
+import { extractChallengeEvents } from "../../client/shared/challenges/model/extractEvents.js";
+import { summarizeLatestChallengeConfigs } from "../../client/shared/challenges/model/organizerSummaries.js";
+import { mergeFullChallengeConfigForChallenge, pickChallengeConfigTimestamp } from "../../client/shared/challenges/challengeAdmin.js";
+import { deriveChallengePhase } from "../../client/shared/challenges/model/phases.js";
+import { buildReactionsByMessageId } from "../../client/shared/challenges/model/participantSlice.js";
+import { CHALLENGE_SCORE_REACTION_KEYS, challengeReactionKeyToScore } from "../../client/shared/challenges/constants.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 loadEnv();
@@ -181,7 +182,7 @@ function buildVisitDay(row) {
 }
 
 async function loadUsers() {
-	const { openDb } = await import("../../db/index.js");
+	const { openDb } = await import("../../_legacy/db/index.js");
 	const dbInstance = await openDb({ quiet: true });
 	const usersRaw = await dbInstance?.queries?.selectUsers?.all?.();
 	const allowed = (Array.isArray(usersRaw) ? usersRaw : [])
@@ -213,8 +214,8 @@ async function loadUsers() {
 async function resolveUserLabels(userIds) {
 	const ids = [...new Set(userIds.filter((id) => Number.isFinite(Number(id))).map(Number))];
 	if (!ids.length) return new Map();
-	const { openDb } = await import("../../db/index.js");
-	const { getNotificationDisplayName } = await import("../../api_routes/utils/displayName.js");
+	const { openDb } = await import("../../_legacy/db/index.js");
+	const { getNotificationDisplayName } = await import("../../_legacy/api_routes/utils/displayName.js");
 	const { queries } = await openDb({ quiet: true });
 	const profiles =
 		typeof queries.selectUserProfilesByUserIds === "function" ? await queries.selectUserProfilesByUserIds(ids) : new Map();
@@ -372,7 +373,6 @@ async function loadFunnelDaily(client, { sinceDay } = {}) {
 /** Best-effort live snapshot of today's US-East partition from Redis. */
 async function loadTodayLive() {
 	try {
-		const { buildDaySnapshotFromRedis } = await import("../../api_routes/utils/visitPulseCore.js");
 		const { Redis } = await import("@upstash/redis");
 		const redis = Redis.fromEnv();
 		const dayKey = usEastDayKey();

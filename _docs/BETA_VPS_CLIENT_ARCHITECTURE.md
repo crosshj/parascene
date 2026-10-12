@@ -1,6 +1,6 @@
 # VPS client: architecture and cleanup contract
 
-This is the target pattern for `vps/client`, not a claim that the migration is complete. Use ordinary ES modules and explicit dependencies. No new framework is required.
+This is the target pattern for `client/`, not a claim that the migration is complete. Use ordinary ES modules and explicit dependencies. No new framework is required.
 
 ## The short version: what goes where
 

@@ -23,24 +23,24 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { createClient } from '@supabase/supabase-js';
 import { REPO_ROOT, loadEnv } from '../repo-root.cjs';
-import { findChallengesChannelThreadId } from '../../api_routes/utils/challengeSubmitShared.js';
-import { extractChallengeEvents } from '../../src/chat/challenges/model/extractEvents.js';
-import { summarizeLatestChallengeConfigs } from '../../src/chat/challenges/model/organizerSummaries.js';
+import { findChallengesChannelThreadId } from '../../server/services/create/challengeSubmitShared.js';
+import { extractChallengeEvents } from '../../client/shared/challenges/model/extractEvents.js';
+import { summarizeLatestChallengeConfigs } from '../../client/shared/challenges/model/organizerSummaries.js';
 import {
 	mergeFullChallengeConfigForChallenge,
 	pickChallengeConfigTimestamp
-} from '../../src/chat/challenges/challengeAdmin.js';
-import { resolveChallengePrizes } from '../../src/chat/challenges/model/prizes.js';
-import { deriveChallengePhase } from '../../src/chat/challenges/model/phases.js';
+} from '../../client/shared/challenges/challengeAdmin.js';
+import { resolveChallengePrizes } from '../../client/shared/challenges/model/prizes.js';
+import { deriveChallengePhase } from '../../client/shared/challenges/model/phases.js';
 import {
 	buildReactionsByMessageId
-} from '../../src/chat/challenges/model/participantSlice.js';
+} from '../../client/shared/challenges/model/participantSlice.js';
 import {
 	CHALLENGE_SCORE_REACTION_KEYS,
 	challengeReactionKeyToScore,
 	totalVoteCountFromChallengeReactions,
 	parseIso
-} from '../../src/chat/challenges/constants.js';
+} from '../../client/shared/challenges/constants.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 loadEnv();

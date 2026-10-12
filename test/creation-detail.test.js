@@ -1,0 +1,276 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import express from 'express';
+import { createCreationsRoutes, serializeCreation } from '../server/routes/creations.js';
+import { creationMediaKeys } from '../server/db/creations.js';
+
+test('group detail serializes child thumbnails with parent access for legacy and v2 groups', () => {
+	const legacy = { id: 42, meta: { group: { kind: 'group_creations', source_creations: [
+		{ id: 1, file_path: '/api/images/created/one.png?creation_id=1' },
+		{ id: 2, file_path: '/api/creations/media/two.png?creation_id=2', meta: { media_type: 'video', video: { file_path: '/api/videos/created/video/two.mp4' } } }
+	] } } };
+	const v2 = { id: 42, meta: { group: { kind: 'group_v2', items: [
+		{ pointer: { kind: 'creation', creationId: 1 }, view: { filePath: '/api/images/created/one.png', mediaType: 'image' }, cover: true },
+		{ pointer: { kind: 'creation', creationId: 2 }, view: { filePath: '/api/creations/media/two.png', mediaType: 'video', videoUrl: '/api/videos/created/video/two.mp4' } }
+	] } } };
+	for (const row of [legacy, v2]) {
+		const before = structuredClone(row);
+		const payload = serializeCreation(row);
+		assert.equal(payload.meta.group.kind, 'group_creations');
+		const children = payload.meta.group.source_creations;
+		assert.equal(children.length, 2);
+		assert.equal(children[0].thumbnail_url, '/api/creations/media/one.png?creation_id=42&variant=thumbnail');
+		assert.equal(children[1].thumbnail_url, '/api/creations/media/video/two.mp4?creation_id=42&variant=video_thumbnail');
+		assert.equal(children[1].meta.video.file_path, '/api/creations/media/video/two.mp4?creation_id=42');
+		assert.deepEqual(creationMediaKeys(row).sort(), ['one.png', 'two.png', 'video/two.mp4']);
+		assert.deepEqual(row, before);
+	}
+});
+
+async function withApp(run, { mediaResponse, canAccessMedia = async () => true, fetchMedia, signedPlaybackUrl, extractVideoFrame, row: rowOverride, tips, viewer } = {}) {
+	const row = rowOverride || {
+		id: 31885,
+		user_id: 42,
+		filename: 'creation.png',
+		file_path: '42/creation.png',
+		status: 'completed',
+		published: false,
+		meta: {},
+	};
+	const creations = {
+		byIdForViewer: async (userId, id) => Number(userId) === 42 && Number(id) === row.id ? row : null,
+		lineageAncestorForViewer: async (_userId, id, parentId) => Number(id) === 31884 && Number(parentId) === row.id
+			? { ...row, id: 31884, published: false }
+			: null,
+		nsfwFlags: async (ids) => Object.fromEntries(ids.map((id) => [String(id), Number(id) === 31884])),
+		likeMeta: async () => ({ like_count: 2, viewer_liked: true, liked_by: ['@creator', '@friend'] }),
+		setLiked: async (_userId, _creationId, liked) => ({ like_count: liked ? 2 : 1, viewer_liked: liked, liked_by: liked ? ['@creator', '@friend'] : ['@friend'] }),
+		comments: async () => ({ commentCount: 1, rows: [{ id: 7, user_id: 42, text: 'hello', created_at: '2026-02-01T00:00:00.000Z', reactions: {}, viewer_reactions: [] }] }),
+		...(typeof tips === 'function' ? { tips } : {}),
+		related: async () => ({ rows: [{ ...row, id: 31921, published: true }], hasMore: false }),
+		canAccessMedia,
+		safeKey: (key) => key,
+		fetchMedia: fetchMedia || (async () => mediaResponse || new Response('media')),
+		signedPlaybackUrl,
+	};
+	const users = {
+		byId: async () => viewer || ({ id: 42, email: 'creator@example.com', role: 'consumer', meta: {} }),
+		profileByUserId: async () => ({ user_id: 42, user_name: 'creator', display_name: 'Creator', avatar_url: null }),
+	};
+	const app = express();
+	app.use((req, _res, next) => { if (req.headers.authorization === 'Bearer test') req.auth = { userId: 42 }; next(); });
+	app.use(createCreationsRoutes({ creations, users, extractVideoFrame }));
+	const server = app.listen(0);
+	try { await run(`http://127.0.0.1:${server.address().port}`); }
+	finally { await new Promise((resolve) => server.close(resolve)); }
+}
+
+test('creation detail uses the canonical VPS creation endpoint', async () => {
+	await withApp(async (origin) => {
+		const response = await fetch(`${origin}/api/creations/31885`, { headers: { Authorization: 'Bearer test' } });
+		assert.equal(response.status, 200);
+		const creation = await response.json();
+		assert.equal(creation.id, 31885);
+		assert.equal(creation.creator.user_name, 'creator');
+		assert.deepEqual(creation.lineage_descendants, []);
+	});
+});
+
+test('creation detail rejects missing creations and unauthenticated viewers', async () => {
+	await withApp(async (origin) => {
+		const missing = await fetch(`${origin}/api/creations/999`, { headers: { Authorization: 'Bearer test' } });
+		assert.equal(missing.status, 404);
+		const unauthenticated = await fetch(`${origin}/api/creations/31885`);
+		assert.equal(unauthenticated.status, 401);
+	});
+});
+
+test('creation detail dependent APIs expose likes, comments, lineage, flags, and related creations', async () => {
+	await withApp(async (origin) => {
+		const headers = { Authorization: 'Bearer test' };
+		const [likes, activity, lineage, flags, related] = await Promise.all([
+			fetch(`${origin}/api/created-images/31885/like`, { headers }).then((res) => res.json()),
+			fetch(`${origin}/api/created-images/31885/activity?order=asc&limit=50&offset=0`, { headers }).then((res) => res.json()),
+			fetch(`${origin}/api/create/images/31884?lineage_of=31885`, { headers }).then((res) => res.json()),
+			fetch(`${origin}/api/creations/nsfw-flags?ids=31884,31885`, { headers }).then((res) => res.json()),
+			fetch(`${origin}/api/creations/31885/related?limit=40`, { headers }).then((res) => res.json())
+		]);
+		assert.equal(likes.like_count, 2);
+		assert.equal(activity.items[0].type, 'comment');
+		assert.equal(activity.comment_count, 1);
+		assert.equal(lineage.id, 31884);
+		assert.match(lineage.thumbnail_url, /lineage_of=31885/);
+		assert.equal(flags['31884'], true);
+		assert.equal(related.items[0].created_image_id, 31921);
+		assert.equal(related.hasMore, false);
+	});
+});
+
+test('creation activity merges tips using the www visibility rule', async () => {
+	const tipRows = [
+		{ id: 3, user_id: 7, amount: 1.5, message: 'nice', created_at: '2026-01-01T00:00:00.000Z', user_name: 'other' },
+		{ id: 4, user_id: 42, amount: 2, message: 'mine', created_at: '2026-03-01T00:00:00.000Z', user_name: 'creator' }
+	];
+	await withApp(async (origin) => {
+		const activity = await fetch(`${origin}/api/created-images/31885/activity`, { headers: { Authorization: 'Bearer test' } }).then((res) => res.json());
+		assert.deepEqual(activity.items.map((item) => item.type), ['tip', 'comment', 'tip']);
+		assert.equal(activity.comment_count, 1);
+		assert.equal(activity.items[2].amount, 2);
+	}, { tips: async () => tipRows });
+	await withApp(async (origin) => {
+		const activity = await fetch(`${origin}/api/created-images/31885/activity`, { headers: { Authorization: 'Bearer test' } }).then((res) => res.json());
+		assert.deepEqual(activity.items.map((item) => `${item.type}:${item.user_id}`), ['comment:42', 'tip:42']);
+	}, {
+		row: { id: 31885, user_id: 99, filename: 'creation.png', file_path: '42/creation.png', status: 'completed', published: false, meta: {} },
+		tips: async () => tipRows
+	});
+});
+
+test('creation likes can be toggled through the www-compatible route', async () => {
+	await withApp(async (origin) => {
+		const headers = { Authorization: 'Bearer test' };
+		const liked = await fetch(`${origin}/api/created-images/31885/like`, { method: 'POST', headers }).then((res) => res.json());
+		const unliked = await fetch(`${origin}/api/created-images/31885/like`, { method: 'DELETE', headers }).then((res) => res.json());
+		assert.equal(liked.viewer_liked, true);
+		assert.equal(unliked.viewer_liked, false);
+	});
+});
+
+test('creation video media preserves partial-content status and range headers', async () => {
+	const bytes = Buffer.from('video-chunk');
+	const mediaResponse = new Response(bytes, {
+		status: 206,
+		headers: {
+			'Content-Type': 'video/mp4',
+			'Content-Length': String(bytes.length),
+			'Content-Range': `bytes 0-${bytes.length - 1}/1000`,
+			'Accept-Ranges': 'bytes',
+		},
+	});
+
+	await withApp(async (origin) => {
+		const response = await fetch(`${origin}/api/creations/media/42%2Fvideo.mp4?creation_id=31885`, {
+			headers: { Authorization: 'Bearer test', Range: 'bytes=0-10' },
+		});
+		assert.equal(response.status, 206);
+		assert.equal(response.headers.get('content-type'), 'video/mp4');
+		assert.equal(response.headers.get('content-range'), `bytes 0-${bytes.length - 1}/1000`);
+		assert.equal(response.headers.get('accept-ranges'), 'bytes');
+		assert.deepEqual(Buffer.from(await response.arrayBuffer()), bytes);
+	}, { mediaResponse });
+});
+
+test('creation video playback redirects to storage after the access check', async () => {
+	let fetched = false;
+	await withApp(async (origin) => {
+		const headers = { Authorization: 'Bearer test' };
+		const target = 'https://example.supabase.co/storage/v1/object/sign/clip.mp4?token=abc';
+		for (const method of ['GET', 'HEAD']) {
+			const response = await fetch(`${origin}/api/videos/created/video/clip.mp4?creation_id=31885`, {
+				method,
+				headers,
+				redirect: 'manual',
+			});
+			assert.equal(response.status, 302);
+			assert.equal(response.headers.get('location'), target);
+			assert.match(response.headers.get('cache-control'), /no-store/);
+		}
+		const image = await fetch(`${origin}/api/images/created/creation.png?creation_id=31885`, { headers });
+		assert.equal(image.status, 200);
+		assert.equal(await image.text(), 'still-proxied');
+	}, {
+		signedPlaybackUrl: async (key) => key === 'video/clip.mp4'
+			? 'https://example.supabase.co/storage/v1/object/sign/clip.mp4?token=abc'
+			: null,
+		fetchMedia: async () => {
+			fetched = true;
+			return new Response('still-proxied', { status: 200, headers: { 'Content-Type': 'image/png' } });
+		},
+	});
+	assert.equal(fetched, true);
+});
+
+test('feed video URLs serve authenticated GET and HEAD through the range-capable media handler', async () => {
+	const key = 'video/19_32279_1791193625600_ya7ofo0.mp4';
+	const calls = [];
+	await withApp(async (origin) => {
+		const url = `${origin}/api/videos/created/${key}?creation_id=32279`;
+		assert.equal((await fetch(url)).status, 401);
+		for (const method of ['GET', 'HEAD']) {
+			const response = await fetch(url, {
+				method,
+				headers: { Authorization: 'Bearer test', Range: 'bytes=0-3' },
+			});
+			assert.equal(response.status, 206);
+			assert.equal(response.headers.get('content-type'), 'video/mp4');
+			assert.equal(response.headers.get('content-range'), 'bytes 0-3/1000');
+			assert.equal(response.headers.get('accept-ranges'), 'bytes');
+			assert.equal(await response.text(), method === 'HEAD' ? '' : 'clip');
+		}
+	}, {
+		canAccessMedia: async (viewerId, creationId, mediaKey) => {
+			assert.equal(viewerId, 42);
+			assert.equal(creationId, '32279');
+			assert.equal(mediaKey, key);
+			return true;
+		},
+		fetchMedia: async (mediaKey, options) => {
+			calls.push({ mediaKey, method: options.method, range: options.range });
+			return new Response(options.method === 'HEAD' ? null : 'clip', {
+				status: 206,
+				headers: { 'Content-Type': 'video/mp4', 'Content-Length': '4', 'Content-Range': 'bytes 0-3/1000', 'Accept-Ranges': 'bytes' },
+			});
+		},
+	});
+	assert.deepEqual(calls, ['GET', 'HEAD'].map(method => ({ mediaKey: key, method, range: 'bytes=0-3' })));
+});
+
+test('creation video frame is read on the server at the requested time', async () => {
+	const png = Buffer.from([137, 80, 78, 71]);
+	const calls = [];
+	await withApp(async (origin) => {
+		const headers = { Authorization: 'Bearer test' };
+		const response = await fetch(`${origin}/api/creations/31885/video-frame?t=12.5`, { headers });
+		assert.equal(response.status, 200);
+		assert.match(response.headers.get('content-type'), /^image\/png/);
+		assert.match(response.headers.get('cache-control'), /no-store/);
+		assert.deepEqual(Buffer.from(await response.arrayBuffer()), png);
+		const invalid = await fetch(`${origin}/api/creations/31885/video-frame?t=-1`, { headers });
+		assert.equal(invalid.status, 400);
+		const anon = await fetch(`${origin}/api/creations/31885/video-frame?t=1`);
+		assert.equal(anon.status, 401);
+	}, {
+		row: {
+			id: 31885,
+			user_id: 42,
+			filename: 'clip.mp4',
+			file_path: '42/clip.mp4',
+			status: 'completed',
+			published: false,
+			meta: { video: { file_path: '/api/videos/created/video/clip.mp4' } },
+		},
+		fetchMedia: async (mediaKey) => {
+			calls.push(mediaKey);
+			return new Response(Buffer.from('video-bytes'), { status: 200, headers: { 'Content-Type': 'video/mp4' } });
+		},
+		extractVideoFrame: async (input, timeSec) => {
+			calls.push({ bytes: Buffer.from(input).toString(), timeSec });
+			return png;
+		},
+	});
+	assert.deepEqual(calls, ['video/clip.mp4', { bytes: 'video-bytes', timeSec: 12.5 }]);
+});
+
+test('creation video frame rejects a creation that has no video', async () => {
+	let fetched = false;
+	await withApp(async (origin) => {
+		const response = await fetch(`${origin}/api/creations/31885/video-frame?t=1`, {
+			headers: { Authorization: 'Bearer test' },
+		});
+		assert.equal(response.status, 404);
+		assert.equal((await response.json()).error, 'Video not found');
+	}, {
+		fetchMedia: async () => { fetched = true; return new Response('no'); },
+	});
+	assert.equal(fetched, false);
+});

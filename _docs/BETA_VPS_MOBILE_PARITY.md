@@ -187,7 +187,7 @@ native browser refresh must also be verified on real iOS Safari and Android
 Chrome. Record installed-app behavior separately if that mode is supported.
 No page is complete while its refresh result is missing or failing.
 
-Run relevant existing tests plus `npm run build` in `vps/`. Report separately:
+Run relevant existing tests plus `npm run build` from the repo root. Report separately:
 automated results, browser comparisons, physical-device checks and unverified
 states. Build success is not visual acceptance. Keep desktop regression coverage
 in every mobile slice.

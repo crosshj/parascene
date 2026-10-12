@@ -127,7 +127,7 @@ After cover change on detail, reload grids that should show the new cover.
 
 Share link: in-page hero + one unfurl debugger (see `_docs/UNFURL.md`).
 
-Debug: `scripts/compare_grouped_vs_regular_creation.js`.
+Debug: `scripts/debug/compare_grouped_vs_regular_creation.js`.
 
 ## New grid or embed
 

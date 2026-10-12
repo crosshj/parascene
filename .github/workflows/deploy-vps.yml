@@ -3,17 +3,19 @@ name: Deploy to VPS
 on:
   push:
     branches:
-      - main
+      - beta
+      - prod
   workflow_dispatch:
 
 concurrency:
-  group: deploy-vps
+  group: deploy-vps-${{ github.ref_name }}
   cancel-in-progress: true
 
 jobs:
   deploy:
+    if: github.ref_name == 'beta' || github.ref_name == 'prod'
     runs-on: ubuntu-latest
-    environment: beta
+    environment: ${{ github.ref_name }}
 
     steps:
       - name: Check out repository
@@ -21,6 +23,7 @@ jobs:
 
       - name: Deploy VPS
         env:
+          DEPLOY_ENV: ${{ github.ref_name }}
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
@@ -38,4 +41,4 @@ jobs:
           UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
           UPSTASH_REDIS_REST_URL: ${{ vars.UPSTASH_REDIS_REST_URL }}
           GITHUB_SHA: ${{ github.sha }}
-        run: bash vps/scripts/deploy-from-ci.sh
+        run: bash scripts/deploy-from-ci.sh

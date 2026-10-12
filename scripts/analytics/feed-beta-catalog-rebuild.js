@@ -5,8 +5,8 @@
  *   node scripts/analytics/feed-beta-catalog-rebuild.js
  */
 import 'dotenv/config';
-import { openDb } from '../../db/index.js';
-import { runFeedBetaCatalogRebuild } from '../../api_routes/feedBeta/catalogRebuild.js';
+import { openDb } from '../../_legacy/db/index.js';
+import { runFeedBetaCatalogRebuild } from '../../_legacy/api_routes/feedBeta/catalogRebuild.js';
 
 async function main() {
 	const { queries } = await openDb();

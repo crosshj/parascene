@@ -1,0 +1,11 @@
+.git
+.github
+.cursor
+.output
+.vercel
+_legacy
+_docs
+node_modules
+build
+*.log
+*.env

@@ -1,0 +1,106 @@
+import express from "express";
+import fs from "node:fs/promises";
+import path from "node:path";
+import { createSpaFallback } from "./middleware/spa.js";
+import { getAppAssetNames } from "./utils/appAssets.js";
+import { filesOriginForRequest } from "./utils/origins.js";
+import { buildMetaTags } from "./utils/buildMetaTags.js";
+
+const PAGE_ROUTES = {
+	"/": "index/index.html",
+	"/index.html": "index/index.html",
+	"/auth": "auth/auth.html",
+	"/auth.html": "auth/auth.html"
+};
+
+const DEFAULT_CANONICAL_ORIGIN = "https://www.parascene.com";
+
+function escapeHtml(value) {
+	return String(value)
+		.replaceAll("&", "&amp;")
+		.replaceAll("<", "&lt;")
+		.replaceAll(">", "&gt;")
+		.replaceAll('"', "&quot;")
+		.replaceAll("'", "&#39;");
+}
+
+function canonicalUrlForRequest(req) {
+	const pathOnly = (req.originalUrl || req.path || "/").split("?")[0] || "/";
+	const origin = (process.env.APP_ORIGIN || DEFAULT_CANONICAL_ORIGIN).replace(/\/$/, "");
+	return `${origin}${pathOnly.startsWith("/") ? pathOnly : `/${pathOnly}`}`;
+}
+
+function serializeBootstrap(value) {
+	return JSON.stringify(value)
+		.replaceAll("<", "\\u003c")
+		.replaceAll(">", "\\u003e")
+		.replaceAll("&", "\\u0026")
+		.replaceAll("/", "\\u002f");
+}
+
+async function sendPage(req, res, next, filePath, users, buildDir) {
+	try {
+		let html = await fs.readFile(filePath, "utf8");
+		const assets = await getAppAssetNames(buildDir);
+		html = html.replace("</head>", `${buildMetaTags(assets.appBuild)}\n\t</head>`);
+		html = html.replace("{{CANONICAL_LINK}}", `<link rel="canonical" href="${escapeHtml(canonicalUrlForRequest(req))}" />`);
+		if (html.includes("{{APP_BOOTSTRAP}}")) {
+			const userId = req.auth?.userId;
+			let user = null;
+			let profile = null;
+			if (userId) {
+				const cached = users?.getCachedBootstrap?.(userId);
+				if (cached) {
+					user = cached.user;
+					profile = cached.profile;
+				} else {
+					[user, profile] = await Promise.all([
+						users?.byId(userId) ?? null,
+						users?.profileByUserId(userId) ?? null
+					]);
+				}
+			}
+			const bootstrap = {
+				user: user ? { ...user, profile: profile || null } : null,
+				clientRoute: req.originalUrl || req.path || "/",
+				filesOrigin: filesOriginForRequest(req)
+			};
+			html = html.replace("{{APP_BOOTSTRAP}}", `<script>window.__PARASCENE_BOOTSTRAP__=${serializeBootstrap(bootstrap)};</script>`);
+		}
+		if (html.includes("{{APP_JS}}") || html.includes("{{APP_CSS}}")) {
+			html = html.replaceAll("{{APP_JS}}", assets.js).replaceAll("{{APP_CSS}}", assets.css);
+		}
+		res.type("html").send(html);
+	} catch (error) {
+		next(error);
+	}
+}
+
+/** Serve page modules and their CSS/JS/assets from pages/<page>/. */
+export default function createPageRoutes({ pagesDir, users }) {
+	const router = express.Router();
+	// pagesDir is server/pages. Rollup writes the bundle at the repo root.
+	const buildDir = path.join(pagesDir, "..", "..", "build");
+
+	for (const [route, relativePath] of Object.entries(PAGE_ROUTES)) {
+		router.get(route, (req, res, next) => {
+			const pagePath = (route === "/" || route === "/index.html") && req.auth?.userId
+				? path.join(pagesDir, "app/app.html")
+				: path.join(pagesDir, relativePath);
+			sendPage(req, res, next, pagePath, users, buildDir);
+		});
+	}
+
+	// Keep the on-disk page-module layout private; expose assets at page-relative URLs.
+	router.use(express.static(pagesDir, { index: false }));
+	router.use("/build", express.static(buildDir, {
+		index: false,
+		maxAge: "1y",
+		immutable: true
+	}));
+	router.use(createSpaFallback({ appPagePath: path.join(pagesDir, "app/app.html"), users, buildDir }));
+
+	return router;
+}
+
+export { PAGE_ROUTES };

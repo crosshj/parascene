@@ -1,12 +1,13 @@
 {
-  "name": "Parascene",
-  "short_name": "Parascene",
-  "description": "A community powered by technology, creativity, and algorithms.",
-  "start_url": "/",
+  "id": "/?app=parascene-beta",
+  "name": "Parascene Beta",
+  "short_name": "Para Beta",
+  "description": "Beta app for Parascene.",
+  "start_url": "/?app=parascene-beta",
   "scope": "/",
   "display": "standalone",
   "background_color": "#f6f7fb",
-  "theme_color": "#242131",
+  "theme_color": "#1a1628",
   "icons": [
     {
       "src": "/icons/icon-192.png",

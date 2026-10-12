@@ -2,7 +2,7 @@
  * Declarative QStash schedules (source of truth).
  * Apply with: node infra/qstash/sync.cjs
  *
- * destinationPath is appended to getQStashCallbackBaseUrl() (api.parascene.com in prod).
+ * destinationPath is appended to getQStashCallbackBaseUrl() (https://api.parascene.com in prod).
  * Upstash-Schedule-Id is stable — re-run sync to update cron/body in place.
  */
 

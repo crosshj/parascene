@@ -105,7 +105,7 @@ async function main() {
 		}
 	}
 
-	const { getQStashCallbackBaseUrl } = await import("../../api_routes/utils/url.js");
+	const { getQStashCallbackBaseUrl } = await import("../../server/services/create/url.js");
 	const apiBase = getQStashCallbackBaseUrl();
 
 	console.log("QStash schedule sync");

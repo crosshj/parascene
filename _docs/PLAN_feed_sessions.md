@@ -2,7 +2,7 @@
 
 Goal: a feed that never stalls or loops, stays interesting, and is simple to run. Lead with the best of recent, let the archive compete, and allow repeats once they are far enough back.
 
-Scope: VPS only (`vps/services/feed/ranking`). WWW keeps its current feed.
+Scope: the app feed ranking in `server/services/feed/ranking`. WWW keeps its current feed.
 
 Why: hard "seen" exclusion dries up the pools for heavy viewers (oceanman has seen 5,734 of 5,984 published). Relaxed pages then redraw the same top items. The stopgap added on 2026-10-10 (session served set plus a newest-to-oldest walk) fixes the stall but adds another layer.
 

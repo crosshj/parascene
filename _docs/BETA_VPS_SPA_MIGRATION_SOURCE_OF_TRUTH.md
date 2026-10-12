@@ -22,18 +22,20 @@ Before writing or moving VPS frontend code:
 
 ## Deployment and build boundary
 
-**VPS code must never import runtime code from outside the `vps/` directory.**
+The app root is the repo root. The previous www app lives in `_legacy/` for reference. The server process is `server/server.js`, with `server/routes`, `server/pages`, `server/services`, `server/db`, and `server/utils` beside it. `client/` stays at the root.
 
-That means no imports from `api_routes/`, `public/`, `src/`, or other legacy/application trees in VPS server or client modules. Those trees may be inspected as references, but required behavior must be deliberately ported into a VPS-owned module. The Docker deployment contains `vps/`; an import that works only because the monorepo happens to have a parent directory is a deployment bug.
+**App code must never import runtime code from `_legacy/`.**
+
+That includes `_legacy/api_routes/`, `_legacy/public/`, `_legacy/src/`, and the rest of that tree. Those files may be inspected as references, but required behavior must be deliberately ported into the app. The Docker image excludes `_legacy/`. An import from `_legacy/` is a deployment bug.
 
 When shared behavior is needed:
 
-- use the active WWW SPA code as the reference;
-- port the required implementation into `vps/`;
+- use the active WWW SPA code under `_legacy/` as the reference;
+- port the required implementation into the app root;
 - keep the port’s boundary and ownership clear;
 - verify the module graph from the Docker image’s `/app` root before deploying.
 
-**The server must not import `vps/client/`, including `vps/client/shared`.** That tree is client-only. Code shared by client and server lives in `vps/shared`. If the server needs a helper that currently sits under `vps/client/shared`, move the helper into `vps/shared` and have the client import it. A server import of a client module loads that module in Node, and a CSS import there exits the process on startup.
+**The server must not import `client/`, including `client/shared`.** That tree is client-only. Code shared by client and server lives in `shared`. If the server needs a helper that currently sits under `client/shared`, move the helper into `shared` and have the client import it. A server import of a client module loads that module in Node, and a CSS import there exits the process on startup.
 
 ## Creations example
 
@@ -66,17 +68,17 @@ Doom Scroll uses the active `src/chat/feed/doomScrollMount.js` and
 mute/progress controls, follow, likes, sharing and comments. VPS owns its native
 overlay and comments dialog, with router-owned slide URL changes. The API port
 retains WWW ranking, catalog fallback, composition, editorial pins, challenge
-engagement, seen/impression tracking and timeline selection under `vps/`.
+engagement, seen/impression tracking and timeline selection in `server/services/feed`.
 
 The Feed and Doom Scroll ports, including live beta review, are complete. These
 behaviors are regression criteria for future changes.
 
 ## Import adaptation
 
-- Port required modules into their canonical VPS owner; do not create `vps/client/vendor` or a mirrored WWW source tree.
+- Port required modules into their canonical owner; do not create `client/vendor` or a mirrored WWW source tree.
 - Adapt imports in source files using native VPS dependencies. Do not use Rollup aliases, path remapping, dynamic-import rewriting or file-specific transforms to compensate for WWW paths.
 - Keep Rollup limited to general build responsibilities: HTML/CSS loading, output, minification and boundary validation.
-- `npm run build` in `vps/` must pass before a frontend change is complete. Unresolved local runtime imports remain incomplete even if output is generated.
+- `npm run build` from the repo root must pass before a frontend change is complete. Unresolved local runtime imports remain incomplete even if output is generated.
 
 ## Creation-detail overlay and routing
 

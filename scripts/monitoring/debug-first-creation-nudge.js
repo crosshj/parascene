@@ -1,4 +1,4 @@
-import { openDb } from "../../db/index.js";
+import { openDb } from "../../_legacy/db/index.js";
 import { loadEnv } from "../repo-root.cjs";
 
 loadEnv();

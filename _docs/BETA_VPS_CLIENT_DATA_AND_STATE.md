@@ -16,8 +16,8 @@ data source has a lifecycle, an owner, and a reconciliation rule.
 The server embeds small, request-specific data in the HTML before the client
 bundle starts. VPS currently embeds the authenticated user/profile, requested
 route, and files API origin in `window.__PARASCENE_BOOTSTRAP__` (see
-`vps/routes/pages.js` and `vps/routes/middleware/spa.js`). The client reads it
-once in `vps/client/app.js`; `createSession` uses the user as its initial value
+`server/routes/pages.js` and `server/routes/middleware/spa.js`). The client reads it
+once in `client/app.js`; `createSession` uses the user as its initial value
 and then refreshes it from `/api/me`.
 
 Bootstrap data is immediately renderable, but it is a snapshot—not a permanent
@@ -64,7 +64,7 @@ resources are fetched when the selected route/thread needs them
 (`src/chat/chatPage.js`). The shared `renderEmptyState` helper in
 `src/shared/emptyState.js` distinguishes loading from empty and error content.
 
-VPS `createFilesApi` (`vps/client/providers/files/api.js`) is a network API boundary. The
+VPS `createFilesApi` (`client/providers/files/api.js`) is a network API boundary. The
 Files view owns request/loading/error/empty state and supports cancellation for
 its route lifetime. **Files is the target example for a cache-then-update-inline
 experience:** render a usable cached listing immediately, fetch the current
@@ -105,7 +105,7 @@ Keep these separate from server-authoritative records. Document key/version,
 scope (per user, per browser, or per tab), expiry/migration behavior, and what
 happens when storage is unavailable. VPS currently persists the home-page
 sidebar display choice and width locally; these are presentation preferences,
-not roster data (`vps/client/app.js`, `vps/client/views/Sidebar/SidebarView.js`).
+not roster data (`client/app.js`, `client/views/Sidebar/SidebarView.js`).
 
 ### 6. Asynchronous events from connected clients
 
@@ -128,7 +128,7 @@ transport warning as a content error unless the user action/data truly failed.
 
 The URL is durable, shareable application state: selected route, resource ids,
 query filters, and sometimes view modes. `www` uses route state alongside
-history/popstate, and the VPS router (`vps/client/core/router.js`) reads
+history/popstate, and the VPS router (`client/core/router.js`) reads
 `location.pathname`, intercepts internal links, supports `navigate()`, and
 rerenders on `popstate`. Sidebar active state, outlet identity, and page header
 must derive from the same normalized location (or a single router state), not
@@ -161,8 +161,8 @@ so a slow optional source does not make the entire view look broken.
 
 ### 10. Live sidebar rosters (DMs, channels, servers)
 
-The sidebar fixture belongs to `server/mocks/sidebar.js`; client views do not
-import mock roster records. The `client/providers/chat/api.js` boundary requests the
+The sidebar roster comes from the chat and server endpoints. Client views do not
+import roster records. The `client/providers/chat/api.js` boundary requests the
 `www`-shaped endpoints, and `client/views/Sidebar/SidebarModel.js` adapts those
 chat rows to the sidebar presentation model. Static product navigation and popup-menu
 definitions are kept separately in `client/config/sidebar.js`. The Home page's
@@ -478,7 +478,7 @@ completions cannot overwrite newer selections, prompts, or edit contexts.
 Cancellation before POST stops submission; accepted requests finish pending
 tracking.
 
-The focused contract check is `cd vps && npm run verify:create-draft`.
+The focused contract check is `npm run verify:create-draft` from the repo root.
 
 ### Challenges history and durable vote intent (2026-10-05)
 

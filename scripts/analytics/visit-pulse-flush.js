@@ -31,10 +31,10 @@ function hasFlag(name) {
 }
 
 async function main() {
-	const { runVisitPulseFlush } = await import("../../api_routes/utils/visitPulseFlush.js");
+	const { runVisitPulseFlush } = await import("../../_legacy/api_routes/utils/visitPulseFlush.js");
 	let day = getArg("day");
 	if (hasFlag("today")) {
-		const { usEastDayKey } = await import("../../api_routes/utils/visitPulseCore.js");
+		const { usEastDayKey } = await import("../../server/services/feed/visitPulse.js");
 		day = usEastDayKey();
 	}
 	const args = { ...(day ? { day } : {}), ...(hasFlag("force") ? { force: true } : {}) };
