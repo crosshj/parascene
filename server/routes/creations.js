@@ -605,6 +605,9 @@ export function createCreationsRoutes({ creations, users, appendChallengeEligibi
 			if (!cdnId || mediaType(row) !== "audio") return res.status(404).json({ error: "Audio not found" });
 			const target = await creations.mintAudioPlaybackUrl(cdnId);
 			res.set("Cache-Control", "private, no-store");
+			if (req.query.format === "json" || String(req.headers.accept || "").toLowerCase().includes("application/json")) {
+				return res.json({ url: target, expires_at: null });
+			}
 			return res.redirect(302, target);
 		} catch (error) { return next(error); }
 	});

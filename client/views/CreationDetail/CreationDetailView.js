@@ -2864,12 +2864,18 @@ async function downloadHostedCreationAudio() {
 		headers: { Accept: 'application/json' }
 	});
 	if (!linkRes.ok) throw new Error('Could not download audio');
-	const linkData = await linkRes.json().catch(() => null);
-	const fileUrl = typeof linkData?.url === 'string' ? linkData.url.trim() : '';
-	if (!fileUrl) throw new Error('Could not download audio');
-	const res = await fetch(fileUrl, { credentials: 'omit' });
-	if (!res.ok) throw new Error('Could not download audio');
-	const blob = await res.blob();
+	const linkType = String(linkRes.headers.get('content-type') || '').toLowerCase();
+	let blob;
+	if (linkType.includes('json')) {
+		const linkData = await linkRes.json().catch(() => null);
+		const fileUrl = typeof linkData?.url === 'string' ? linkData.url.trim() : '';
+		if (!fileUrl) throw new Error('Could not download audio');
+		const res = await fetch(fileUrl, { credentials: 'omit' });
+		if (!res.ok) throw new Error('Could not download audio');
+		blob = await res.blob();
+	} else {
+		blob = await linkRes.blob();
+	}
 	const objectUrl = URL.createObjectURL(blob);
 	triggerAnchorDownload(objectUrl, filename);
 	window.setTimeout(() => URL.revokeObjectURL(objectUrl), 4000);

@@ -1,8 +1,23 @@
 # VPS migration tracker
 
-## Remaining product work
+## Before prod
 
-- [ ] ...
+Help, the signed-in app, and the pricing screen already run here. The pricing screen calls billing routes that still live on the current site. The remaining product surface is admin, share pages, blog, and Stripe.
+
+- Admin. The admin console is still the old app. This app only saves another user's profile. Creation-detail admin actions call routes that are not mounted here.
+- Share pages. The share hostname already allows `/s/...`, and share tokens are already minted for media. Nothing renders the public share page or its logged-out preview.
+- Blog. Published posts already show on the first feed page and link to `/blog` and `/blog/{slug}`. Those pages, and the editor, are not served here.
+- Stripe. Founder checkout, credit-pack checkout, the return from Checkout, and switching back to Free. The webhook at `/api/webhooks/stripe` writes the plan and grants credits after Checkout.
+
+The overview leaves out the work that still runs only because `api.parascene.com` points at the current site:
+
+- Hourly notification email, at `/api/worker/notifications`
+- The jobs worker, at `/api/worker/jobs`: visit-pulse flush, feed catalog rebuild, and embeddings
+- Creation callbacks. This app publishes those to `/api/worker/create`. The route it mounts is `/api/create/worker`. On the container, new creations run in-process, so that mismatch shows up when an outside callback hits the container.
+
+Those have to move before `api` points at the prod container. Standing the container up while `www` and `api` stay where they are does not need them.
+
+Two smaller holes sit next to that list. OAuth consent sends an unfinished profile to `/welcome`, and that page is not in this app. Social link previews and the sitemap belong with the share and blog pages.
 
 ## Public pages and discoverability
 

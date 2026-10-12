@@ -78,6 +78,12 @@ test('comment proof returns playable unpublished audio and its cover', async () 
 		const audioResponse = await fetch(`${origin}/api/creations/9/audio?comment_id=4`, { headers, redirect: 'manual' });
 		assert.equal(audioResponse.status, 302);
 		assert.equal(audioResponse.headers.get('location'), 'https://cdn.example/song.mp3');
+		const download = await fetch(`${origin}/api/creations/9/audio?comment_id=4&format=json`, {
+			headers: { ...headers, Accept: 'application/json' }
+		});
+		assert.equal(download.status, 200);
+		assert.equal(download.headers.get('content-type')?.includes('application/json'), true);
+		assert.deepEqual(await download.json(), { url: 'https://cdn.example/song.mp3', expires_at: null });
 		const cover = await fetch(`${origin}/api/creations/media/7/song.png?creation_id=9&comment_id=4`, { headers });
 		assert.equal(cover.status, 200);
 		assert.equal(await cover.text(), 'cover');

@@ -155,6 +155,10 @@ export async function mountCreationCommentsThread(container, options) {
 		throw new Error('mountCreationCommentsThread: createdImageId required');
 	}
 
+	if (typeof container.__creationCommentsTeardown === 'function') {
+		container.__creationCommentsTeardown({ preserveDom: true });
+	}
+
 	const deps = commentsThreadDeps;
 	const {
 		formatDateTime,
@@ -1608,6 +1612,8 @@ export async function mountCreationCommentsThread(container, options) {
 		const text = commentTextarea.value.trim();
 		if (!text) return;
 		if (commentQuickSubmitInFlight) return;
+		if (commentSubmitBtn instanceof HTMLButtonElement && commentSubmitBtn.disabled) return;
+		commentQuickSubmitInFlight = true;
 		if (commentSubmitBtn instanceof HTMLButtonElement) {
 			commentSubmitBtn.disabled = true;
 			setCommentActionButtonLoading(commentSubmitBtn, true);
@@ -1632,10 +1638,11 @@ export async function mountCreationCommentsThread(container, options) {
 		} catch (err) {
 			alert(err?.message || 'Failed to post comment');
 		} finally {
+			commentQuickSubmitInFlight = false;
 			if (commentSubmitBtn instanceof HTMLButtonElement) {
-				commentSubmitBtn.disabled = false;
 				setCommentActionButtonLoading(commentSubmitBtn, false);
 			}
+			setSubmitVisibility();
 		}
 	};
 
@@ -2546,9 +2553,10 @@ export async function mountCreationCommentsThread(container, options) {
 	void loadComments({ scrollIfHash: autoScrollOnHash });
 
 	let isTorn = false;
-	function teardown() {
+	function teardown(options) {
 		if (isTorn) return;
 		isTorn = true;
+		const preserveDom = options?.preserveDom === true;
 		setCommentsLoading(false);
 		try { closeReactionPicker(); } catch { /* ignore */ }
 		try { closeCommentAttachChoiceModal(); } catch { /* ignore */ }
@@ -2593,8 +2601,15 @@ export async function mountCreationCommentsThread(container, options) {
 		if (commentAttachInput instanceof HTMLInputElement) {
 			commentAttachInput.removeEventListener('change', onAttachInputChange);
 		}
-		try { container.innerHTML = ''; } catch { /* ignore */ }
+		if (!preserveDom) {
+			try { container.innerHTML = ''; } catch { /* ignore */ }
+		}
+		if (container.__creationCommentsTeardown === teardown) {
+			container.__creationCommentsTeardown = null;
+		}
 	}
+
+	container.__creationCommentsTeardown = teardown;
 
 	return {
 		teardown,

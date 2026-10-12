@@ -318,6 +318,30 @@ test("cdn host exposes CDN routes but never falls through to the site app", asyn
 	});
 });
 
+test("localhost serves My Files when NODE_ENV is production", async () => {
+	const previous = process.env.NODE_ENV;
+	process.env.NODE_ENV = "production";
+	const profileFiles = { async list() { return []; } };
+	const app = express();
+	app.use((req, _res, next) => { req.auth = { userId: 42 }; next(); });
+	app.use(createCdnHostBoundary(createCdnRoutes(profileFiles)));
+	app.use((req, res) => res.status(404).type("html").send(`Cannot GET ${req.path}`));
+	try {
+		await withServer(app, async (base) => {
+			const local = await fetch(`${base}/api/files?limit=100&offset=0`);
+			assert.equal(local.status, 200);
+			assert.deepEqual(await local.json(), { files: [], pagination: { limit: 100, offset: 0, next_offset: null } });
+
+			const site = await requestWithHost(base, "/api/files?limit=100&offset=0", "www.parascene.com");
+			assert.equal(site.status, 404);
+			assert.match(site.text, /Cannot GET \/api\/files/);
+		});
+	} finally {
+		if (previous === undefined) delete process.env.NODE_ENV;
+		else process.env.NODE_ENV = previous;
+	}
+});
+
 test("compatibility generic route preserves upload URL shape and owner delete", async () => {
 	const calls = [];
 	const genericFiles = {

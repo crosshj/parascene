@@ -11,15 +11,26 @@ export function cdnHostnames() {
 	return new Set([cdnHostname(), ...aliases]);
 }
 
+function requestHostname(req) {
+	return String(req?.get?.("host") || "").trim().toLowerCase().split(":")[0];
+}
+
 export function isCdnRequest(req) {
-	const host = String(req?.get?.("host") || "").trim().toLowerCase().split(":")[0];
-	return cdnHostnames().has(host);
+	return cdnHostnames().has(requestHostname(req));
+}
+
+function isLoopbackHost(req) {
+	const host = requestHostname(req);
+	return host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]";
 }
 
 export function createCdnHostBoundary(cdnRouter) {
 	return function cdnHostBoundary(req, res, next) {
-		const localDev = process.env.NODE_ENV !== "production" && /^(\/api\/files(?:\/|$)|\/api\/images\/generic(?:\/|$)|\/s\/)/.test(String(req.path || ""));
-		if (!isCdnRequest(req) && !localDev) return next();
+		const filesPath = /^(\/api\/files(?:\/|$)|\/api\/images\/generic(?:\/|$)|\/s\/)/.test(String(req.path || ""));
+		// Localhost serves My Files even when NODE_ENV is production. Other hosts
+		// only get these routes on the CDN hostname.
+		const localFiles = filesPath && (process.env.NODE_ENV !== "production" || isLoopbackHost(req));
+		if (!isCdnRequest(req) && !localFiles) return next();
 		return cdnRouter(req, res, next);
 	};
 }
