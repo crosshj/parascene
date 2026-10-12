@@ -4,7 +4,7 @@
  */
 
 import { getHiddenFeedItems } from "../../shared/feedHiddenItems.js";
-import { encodeFeedBetaAck } from "../../shared/feedBetaContinuation.js";
+import { encodeFeedAck } from "../../shared/feedContinuation.js";
 
 export const FEED_CHANNEL_PAGE_SIZE = 28;
 
@@ -55,7 +55,7 @@ export function createChatFeedFetchPage(opts) {
 			: FEED_CHANNEL_PAGE_SIZE;
 	const useSlotPack = Boolean(opts.mobileChatSlotPack);
 	const cursorRef = { after_image_created_at: null, after_image_id: null };
-	let lastFeedBeta = null;
+	let lastContinuation = null;
 
 	function applyFeedCursor(cursor) {
 		const norm = normalizeFeedCursorFromApi(cursor);
@@ -72,12 +72,12 @@ export function createChatFeedFetchPage(opts) {
 			qs.set('slot_pack', 'mobile_chat_v1');
 			cursorRef.after_image_created_at = null;
 			cursorRef.after_image_id = null;
-			lastFeedBeta = null;
+			lastContinuation = null;
 		} else if (!initial && cursorRef.after_image_created_at && cursorRef.after_image_id) {
 			qs.set('feed_after_image_created_at', cursorRef.after_image_created_at);
 			qs.set('feed_after_image_id', cursorRef.after_image_id);
-			const ack = encodeFeedBetaAck(lastFeedBeta);
-			if (ack) qs.set('feed_beta_ack', ack);
+			const ack = encodeFeedAck(lastContinuation);
+			if (ack) qs.set('feed_ack', ack);
 		} else if (!initial && useSlotPack) {
 			qs.set('offset', String(items.length));
 		} else {
@@ -105,14 +105,14 @@ export function createChatFeedFetchPage(opts) {
 		if (feed.data?.feed_cursor) {
 			applyFeedCursor(feed.data.feed_cursor);
 		}
-		if (feed.data?.feed_beta && typeof feed.data.feed_beta === 'object') {
-			lastFeedBeta = feed.data.feed_beta;
+		if (feed.data?.feed_continuation && typeof feed.data.feed_continuation === 'object') {
+			lastContinuation = feed.data.feed_continuation;
 		}
 
 		return {
 			pageItems,
 			hasMore: Boolean(feed.data?.hasMore),
-			feedBeta: lastFeedBeta
+			continuation: lastContinuation
 		};
 	};
 }

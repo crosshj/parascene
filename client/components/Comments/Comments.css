@@ -536,7 +536,7 @@
 }
 
 /* The SPA overlay gives buttons their inherited text color; keep the send affordance accented. */
-.beta-app-overlay__content .comment-submit-btn--composer {
+.app-overlay__content .comment-submit-btn--composer {
 	color: var(--focus);
 }
 

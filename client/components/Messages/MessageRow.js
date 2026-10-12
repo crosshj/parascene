@@ -1,6 +1,6 @@
 import markup from './MessageRow.html';
 import { createTemplateFactory } from '../../utils/dom.js';
-// Active WWW SPA message builders, ported into the shared VPS messages component.
+// Active WWW SPA message builders, ported into the shared messages component.
 import { processUserText } from '../../shared/userText.js';
 import { formatRelativeTime } from '../../shared/datetime.js';
 import { renderCommentAvatarHtml } from '../../shared/commentItem.js';

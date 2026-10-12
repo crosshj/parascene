@@ -136,7 +136,7 @@ function mountSidebarPresentation({ outlet, model = {}, onAction }) {
 
 	function setSidebarWidth(value, { persist = true, announce = true } = {}) {
 		sidebarWidth = clampWidth(value);
-		document.body.style.setProperty('--beta-sidebar-width', `${sidebarWidth}px`);
+		document.body.style.setProperty('--app-sidebar-width', `${sidebarWidth}px`);
 		if (announce) refs.resizeHandle.setAttribute('aria-valuenow', String(sidebarWidth));
 		if (persist) {
 			try { localStorage.setItem('prsn-chat-sidebar-width-px', String(sidebarWidth)); } catch { /* Ignore storage failures. */ }

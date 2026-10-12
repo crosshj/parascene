@@ -218,7 +218,7 @@ test('creation detail ships the shared card, comment thread, and related-grid st
 	assert.match(commentsCss, /\.mention-link\s*\{/);
 	assert.match(detailCss, /\.creation-detail-related\s*\{/);
 	assert.match(detailCss, /\.creation-detail-related-grid\s*\{/);
-	assert.match(detailCss, /body\.beta-layout\.creation-detail-page \.beta-app-overlay__content > main \{ padding: 0; \}/);
-	assert.match(detailCss, /body\.beta-layout\.creation-detail-page \.creation-detail-image-wrapper \{\s*width: 100%;\s*max-width: 100%;/);
+	assert.match(detailCss, /body\.app-layout\.creation-detail-page \.app-overlay__content > main \{ padding: 0; \}/);
+	assert.match(detailCss, /body\.app-layout\.creation-detail-page \.creation-detail-image-wrapper \{\s*width: 100%;\s*max-width: 100%;/);
 	assert.match(sharedCss, /\.creation-detail-image-wrapper\.hero-layout-portrait \{[\s\S]*?width: 100%;[\s\S]*?max-width: 100%;/);
 });

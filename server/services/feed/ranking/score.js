@@ -1,4 +1,4 @@
-import { FEED_BETA_DEFAULT_PARAMS } from "./params.js";
+import { FEED_DEFAULT_PARAMS } from "./params.js";
 import { rowMentionsNewcomerHandle } from "./context.js";
 
 /**
@@ -6,8 +6,8 @@ import { rowMentionsNewcomerHandle } from "./context.js";
  * @param {object} ctx
  * @returns {{ score: number, engagement: number, ageHours: number, inHot24: boolean, inHot7: boolean, isNewPublish: boolean, isNewcomer: boolean, isFollow: boolean }}
  */
-export function scoreFeedBetaRow(row, ctx) {
-	const params = ctx.params ?? FEED_BETA_DEFAULT_PARAMS;
+export function scoreFeedRow(row, ctx) {
+	const params = ctx.params ?? FEED_DEFAULT_PARAMS;
 	const nowMs = Number(ctx.nowMs) || Date.now();
 	const createdMs = Date.parse(String(row?.created_at ?? ''));
 	const ageHours = Number.isFinite(createdMs)

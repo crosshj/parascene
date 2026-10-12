@@ -1,7 +1,7 @@
 /**
  * Group carousel / video playlist and cover thumbs for `.route-media` grids.
  *
- * Dependencies are ordinary static imports owned by the VPS client bundle.
+ * Dependencies are ordinary static imports owned by the client bundle.
  */
 import { nsfwMediaUrl, nsfwShouldBlur } from './nsfwPolicy.js';
 import {

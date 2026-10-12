@@ -1,6 +1,6 @@
 // Session placeholders are scoped to the viewer; the mounted grid owns their presentation.
 export function createPendingCreationsStore(viewerId) {
- const key = `prsn-vps-pending-creations:${viewerId || 'anonymous'}`;
+ const key = `prsn-pending-creations:${viewerId || 'anonymous'}`;
  function read() {
   try { const value = JSON.parse(sessionStorage.getItem(key) || '[]'); return Array.isArray(value) ? value : []; }
   catch { return []; }

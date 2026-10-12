@@ -12,12 +12,12 @@ import { fileURLToPath } from "node:url";
 import postcss from "postcss";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const VPS = path.resolve(__dirname, "../..");
+const appRoot = path.resolve(__dirname, "../..");
 const SCOPE = ":where(.create-workflow-root)";
 
-const COMPOSER = path.join(VPS, "client/components/CreateComposer/CreateComposer.css");
-const CREATE = path.join(VPS, "client/views/Create/CreateView.css");
-const DETAIL = path.join(VPS, "client/views/CreationDetail/CreationDetailView.css");
+const COMPOSER = path.join(appRoot, "client/components/CreateComposer/CreateComposer.css");
+const CREATE = path.join(appRoot, "client/views/Create/CreateView.css");
+const DETAIL = path.join(appRoot, "client/views/CreationDetail/CreationDetailView.css");
 
 function stripScope(selector) {
 	return selector

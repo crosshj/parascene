@@ -32,32 +32,32 @@ export function createLayout({ root, views, services } = {}) {
 	const mobileHeaderRegion = document.createElement('div');
 	mobileHeaderRegion.dataset.layoutRegion = 'mobile-header';
 	root.prepend(mobileHeaderRegion);
-	pageRegion.classList.add('beta-outlet');
+	pageRegion.classList.add('app-outlet');
 	pageRegion.innerHTML = `
-		<div class="beta-outlet__frame">
-			<div class="beta-outlet__thread-body">
-			<header class="beta-outlet__header">
-				<a class="beta-outlet__action beta-outlet__mobile-back" href="/chat#channels" data-spa-link aria-label="Back to Chat">${CHAT_PAGE_BACK_ICON_HTML}</a>
-				<div class="beta-outlet__identity"><span class="beta-outlet__icon"></span><h1 class="beta-outlet__title"></h1></div>
-				<div class="beta-outlet__actions">
-					<button class="beta-outlet__action beta-outlet__more" type="button" aria-label="More options" aria-haspopup="menu" aria-expanded="false">${iconMarkup('more')}</button>
+		<div class="app-outlet__frame">
+			<div class="app-outlet__thread-body">
+			<header class="app-outlet__header">
+				<a class="app-outlet__action app-outlet__mobile-back" href="/chat#channels" data-spa-link aria-label="Back to Chat">${CHAT_PAGE_BACK_ICON_HTML}</a>
+				<div class="app-outlet__identity"><span class="app-outlet__icon"></span><h1 class="app-outlet__title"></h1></div>
+				<div class="app-outlet__actions">
+					<button class="app-outlet__action app-outlet__more" type="button" aria-label="More options" aria-haspopup="menu" aria-expanded="false">${iconMarkup('more')}</button>
 				</div>
 			</header>
-			<div class="beta-outlet__scroll"><div class="beta-outlet__content"></div></div>
+			<div class="app-outlet__scroll"><div class="app-outlet__content"></div></div>
 			</div>
-			<div class="beta-outlet__creation-composer" data-layout-creation-composer hidden><div class="chat-page-create-composer-host" data-create-composer-host></div></div>
+			<div class="app-outlet__creation-composer" data-layout-creation-composer hidden><div class="chat-page-create-composer-host" data-create-composer-host></div></div>
 		</div>`;
 
-	const outletRegion = pageRegion.querySelector('.beta-outlet__content');
-	const scrollRegion = pageRegion.querySelector('.beta-outlet__scroll');
-	const pageTitle = pageRegion.querySelector('.beta-outlet__title');
-	const pageIcon = pageRegion.querySelector('.beta-outlet__icon');
+	const outletRegion = pageRegion.querySelector('.app-outlet__content');
+	const scrollRegion = pageRegion.querySelector('.app-outlet__scroll');
+	const pageTitle = pageRegion.querySelector('.app-outlet__title');
+	const pageIcon = pageRegion.querySelector('.app-outlet__icon');
 	const composer = createMessageComposerElement();
-	const frame = pageRegion.querySelector('.beta-outlet__frame');
+	const frame = pageRegion.querySelector('.app-outlet__frame');
 	const conversationViewport = bindConversationVisualViewport({ frame, root });
 	const searchComposer = createSearchComposerElement();
 	const challengeNav = document.createElement('div');
-	challengeNav.className = 'beta-outlet__composer beta-outlet__challenge-nav';
+	challengeNav.className = 'app-outlet__composer app-outlet__challenge-nav';
 	challengeNav.hidden = true;
 	challengeNav.setAttribute('data-challenge-detail-nav', '');
 	frame.append(composer, searchComposer, challengeNav);
@@ -74,12 +74,12 @@ export function createLayout({ root, views, services } = {}) {
 	const measureChallengeNav = () => frame.style.setProperty('--challenge-nav-height', `${challengeNav.hidden ? 0 : challengeNav.getBoundingClientRect().height}px`);
 	const challengeNavResize = new ResizeObserver(measureChallengeNav);
 	challengeNavResize.observe(challengeNav);
-	const menuButton = pageRegion.querySelector('.beta-outlet__more');
-	const pageActions = pageRegion.querySelector('.beta-outlet__actions');
-	const pageHeader = pageRegion.querySelector('.beta-outlet__header');
+	const menuButton = pageRegion.querySelector('.app-outlet__more');
+	const pageActions = pageRegion.querySelector('.app-outlet__actions');
+	const pageHeader = pageRegion.querySelector('.app-outlet__header');
 	const mobileMenuButton = document.createElement('button');
 	mobileMenuButton.type = 'button';
-	mobileMenuButton.className = 'beta-outlet__mobile-menu';
+	mobileMenuButton.className = 'app-outlet__mobile-menu';
 	mobileMenuButton.hidden = true;
 	mobileMenuButton.setAttribute('aria-label', 'Open page menu');
 	mobileMenuButton.setAttribute('aria-haspopup', 'menu');
@@ -87,11 +87,11 @@ export function createLayout({ root, views, services } = {}) {
 	mobileMenuButton.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
 	pageHeader.insertBefore(mobileMenuButton, pageActions);
 	const mobileMenuSheet = document.createElement('div');
-	mobileMenuSheet.className = 'beta-outlet__mobile-menu-sheet';
+	mobileMenuSheet.className = 'app-outlet__mobile-menu-sheet';
 	mobileMenuSheet.hidden = true;
-	mobileMenuSheet.innerHTML = '<button class="beta-outlet__mobile-menu-scrim" type="button" aria-label="Dismiss page menu"></button><div class="beta-outlet__mobile-menu-panel"><div class="beta-outlet__mobile-menu-items" role="menu"></div></div>';
+	mobileMenuSheet.innerHTML = '<button class="app-outlet__mobile-menu-scrim" type="button" aria-label="Dismiss page menu"></button><div class="app-outlet__mobile-menu-panel"><div class="app-outlet__mobile-menu-items" role="menu"></div></div>';
 	root.append(mobileMenuSheet);
-	const mobileMenuItems = mobileMenuSheet.querySelector('.beta-outlet__mobile-menu-items');
+	const mobileMenuItems = mobileMenuSheet.querySelector('.app-outlet__mobile-menu-items');
 	let mobileSwitcherConfig = null;
 	let mobileMenuConfig = null;
 	let sidebarMobileMenuButton = null;
@@ -99,21 +99,21 @@ export function createLayout({ root, views, services } = {}) {
 		mobileMenuSheet.hidden = true;
 		mobileMenuButton.setAttribute('aria-expanded', 'false');
 		sidebarMobileMenuButton?.setAttribute('aria-expanded', 'false');
-		document.body.classList.remove('beta-mobile-menu-open');
+		document.body.classList.remove('app-mobile-menu-open');
 	}
 	function renderMobileMenu() {
 		mobileMenuItems.replaceChildren();
 		const appendItem = (item, onSelect) => {
 			if (item.section) {
-				const section = document.createElement('div'); section.className = 'beta-outlet__mobile-menu-section'; section.textContent = item.section; mobileMenuItems.append(section); return;
+				const section = document.createElement('div'); section.className = 'app-outlet__mobile-menu-section'; section.textContent = item.section; mobileMenuItems.append(section); return;
 			}
 			if (item.separator) {
-				const separator = document.createElement('div'); separator.className = 'beta-outlet__mobile-menu-separator'; separator.setAttribute('role', 'separator'); mobileMenuItems.append(separator); return;
+				const separator = document.createElement('div'); separator.className = 'app-outlet__mobile-menu-separator'; separator.setAttribute('role', 'separator'); mobileMenuItems.append(separator); return;
 			}
 			const button = item.href ? document.createElement('a') : document.createElement('button');
 			if (!item.href) button.type = 'button';
 			else { button.href = item.href; button.dataset.spaLink = ''; }
-			button.className = `beta-outlet__mobile-menu-item${item.current ? ' is-current' : ''}`;
+			button.className = `app-outlet__mobile-menu-item${item.current ? ' is-current' : ''}`;
 			button.setAttribute('role', 'menuitem');
 			button.textContent = item.label;
 			button.addEventListener('click', () => { closeMobileMenu(); if (!item.href) onSelect?.(item); });
@@ -124,7 +124,7 @@ export function createLayout({ root, views, services } = {}) {
 		}
 		if (mobileMenuConfig?.items?.length) {
 			if (mobileSwitcherConfig?.items?.length) {
-				const separator = document.createElement('div'); separator.className = 'beta-outlet__mobile-menu-separator'; separator.setAttribute('role', 'separator'); mobileMenuItems.append(separator);
+				const separator = document.createElement('div'); separator.className = 'app-outlet__mobile-menu-separator'; separator.setAttribute('role', 'separator'); mobileMenuItems.append(separator);
 			}
 			for (const item of mobileMenuConfig.items) appendItem(item, (selected) => mobileMenuConfig?.onSelect?.(selected));
 		}
@@ -143,10 +143,10 @@ export function createLayout({ root, views, services } = {}) {
 			mobileMenuSheet.hidden = false;
 			mobileMenuButton.setAttribute('aria-expanded', 'true');
 			sidebarMobileMenuButton?.setAttribute('aria-expanded', 'true');
-			document.body.classList.add('beta-mobile-menu-open');
+			document.body.classList.add('app-mobile-menu-open');
 		} else closeMobileMenu();
 	});
-	mobileMenuSheet.querySelector('.beta-outlet__mobile-menu-scrim').addEventListener('click', closeMobileMenu);
+	mobileMenuSheet.querySelector('.app-outlet__mobile-menu-scrim').addEventListener('click', closeMobileMenu);
 	document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !mobileMenuSheet.hidden) closeMobileMenu(); });
 	const mobileMedia = window.matchMedia('(max-width: 768px)');
 	function syncMobileActions() {
@@ -162,8 +162,8 @@ export function createLayout({ root, views, services } = {}) {
 		const owner = documentScroll ? 'document' : 'outlet';
 		const changed = scrollRegion.dataset.scrollOwner !== owner;
 		scrollRegion.dataset.scrollOwner = owner;
-		document.documentElement.classList.toggle('beta-mobile-document-scroll', documentScroll);
-		document.body.classList.toggle('beta-mobile-document-scroll', documentScroll);
+		document.documentElement.classList.toggle('app-mobile-document-scroll', documentScroll);
+		document.body.classList.toggle('app-mobile-document-scroll', documentScroll);
 		root.dataset.mobileScrollOwner = owner;
 		return changed;
 	}
@@ -171,7 +171,7 @@ export function createLayout({ root, views, services } = {}) {
 		syncMobileActions();
 		renderMobileMenu();
 		syncMobileScrollPolicy();
-		document.dispatchEvent(new CustomEvent('beta-mobile-scroll-owner-changed'));
+		document.dispatchEvent(new CustomEvent('app-mobile-scroll-owner-changed'));
 	}
 	mobileMedia.addEventListener('change', onMobileBreakpointChange);
 	let menu = null;
@@ -185,40 +185,40 @@ export function createLayout({ root, views, services } = {}) {
 	let mobileDocumentScrollLockStyles = null;
 
 	const overlayHost = document.createElement('div');
-	overlayHost.className = 'beta-app-overlay-host';
+	overlayHost.className = 'app-overlay-host';
 	overlayHost.hidden = true;
 	overlayHost.innerHTML = `
-		<section class="beta-app-overlay">
-			<div class="beta-app-overlay__chrome">
-				<button type="button" class="beta-app-overlay__back" aria-label="Back">
+		<section class="app-overlay">
+			<div class="app-overlay__chrome">
+				<button type="button" class="app-overlay__back" aria-label="Back">
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"></path><path d="M11 6 5 12l6 6"></path></svg>
 				</button>
-				<h1 id="beta-app-overlay-title" class="beta-app-overlay__title" data-overlay-title></h1>
-				<button type="button" class="beta-app-overlay__close" aria-label="Close">
-					<svg class="beta-app-overlay__close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+				<h1 id="app-overlay-title" class="app-overlay__title" data-overlay-title></h1>
+				<button type="button" class="app-overlay__close" aria-label="Close">
+					<svg class="app-overlay__close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
 				</button>
 			</div>
-			<div class="beta-app-overlay__content" data-overlay-content></div>
+			<div class="app-overlay__content" data-overlay-content></div>
 		</section>`;
 	root.append(overlayHost);
 	const overlayContent = overlayHost.querySelector('[data-overlay-content]');
 	const overlayTitle = overlayHost.querySelector('[data-overlay-title]');
-	const overlayBack = overlayHost.querySelector('.beta-app-overlay__back');
-	const overlayClose = overlayHost.querySelector('.beta-app-overlay__close');
+	const overlayBack = overlayHost.querySelector('.app-overlay__back');
+	const overlayClose = overlayHost.querySelector('.app-overlay__close');
 
 	const rightSidebar = createRightSidebar({ root });
 	sidebarMobileMenuButton = mobileMenuButton.cloneNode(true);
-	sidebarMobileMenuButton.classList.add('beta-right-sidebar__menu');
-	rightSidebar.header.insertBefore(sidebarMobileMenuButton, rightSidebar.header.querySelector('.beta-right-sidebar__close'));
+	sidebarMobileMenuButton.classList.add('app-right-sidebar__menu');
+	rightSidebar.header.insertBefore(sidebarMobileMenuButton, rightSidebar.header.querySelector('.app-right-sidebar__close'));
 	sidebarMobileMenuButton.addEventListener('click', () => mobileMenuButton.click());
 	const headerAccessories = document.createElement('span');
-	headerAccessories.className = 'beta-outlet__accessories';
+	headerAccessories.className = 'app-outlet__accessories';
 	menuButton.before(headerAccessories);
 	function setHeaderAccessories(items = []) {
 		headerAccessories.replaceChildren();
 		for (const item of items) {
 			const button = document.createElement('button');
-			button.type = 'button'; button.className = 'beta-outlet__pin';
+			button.type = 'button'; button.className = 'app-outlet__pin';
 			button.textContent = item.label; button.setAttribute('aria-label', item.ariaLabel || item.label);
 			button.addEventListener('click', item.onClick); headerAccessories.append(button);
 		}
@@ -246,18 +246,18 @@ export function createLayout({ root, views, services } = {}) {
 		pageTitle.replaceChildren();
 		if (chrome.breadcrumb) {
 			const breadcrumb = document.createElement('span');
-			breadcrumb.className = 'beta-outlet__title-text beta-outlet__title-text--breadcrumb';
+			breadcrumb.className = 'app-outlet__title-text app-outlet__title-text--breadcrumb';
 			const parent = document.createElement('a');
-			parent.className = 'beta-outlet__breadcrumb-link';
+			parent.className = 'app-outlet__breadcrumb-link';
 			parent.href = chrome.breadcrumb.href;
 			parent.dataset.spaLink = '';
 			parent.textContent = chrome.breadcrumb.parent;
 			const separator = document.createElement('span');
-			separator.className = 'beta-outlet__breadcrumb-sep';
+			separator.className = 'app-outlet__breadcrumb-sep';
 			separator.setAttribute('aria-hidden', 'true');
 			separator.textContent = '›';
 			const current = document.createElement('span');
-			current.className = 'beta-outlet__breadcrumb-current';
+			current.className = 'app-outlet__breadcrumb-current';
 			current.textContent = chrome.breadcrumb.current;
 			breadcrumb.append(parent, separator, current);
 			pageTitle.append(breadcrumb);
@@ -335,13 +335,13 @@ export function createLayout({ root, views, services } = {}) {
 				})();
 				if (href) {
 					const titleLink = document.createElement('a');
-					titleLink.className = 'beta-outlet__profile-link';
+					titleLink.className = 'app-outlet__profile-link';
 					titleLink.href = href;
 					titleLink.dataset.profileLink = '';
 					titleLink.append(titleNode);
 					pageTitle.append(titleLink);
 					const avatarLink = document.createElement('a');
-					avatarLink.className = 'beta-outlet__profile-avatar-link';
+					avatarLink.className = 'app-outlet__profile-avatar-link';
 					avatarLink.href = href;
 					avatarLink.dataset.profileLink = '';
 					avatarLink.setAttribute('aria-label', `View ${title} profile`);
@@ -350,7 +350,7 @@ export function createLayout({ root, views, services } = {}) {
 				} else {
 					pageTitle.append(titleNode);
 				}
-				services.providers.document.setTitle(`${title} - parascene beta`);
+				services.providers.document.setTitle(`${title} - parascene`);
 			},
 			composer,
 			searchComposer,
@@ -410,7 +410,7 @@ export function createLayout({ root, views, services } = {}) {
 	}
 
 	function setBackgroundSuppressed(suppressed) {
-		const lockDocumentScroll = suppressed && document.body.classList.contains('beta-mobile-document-scroll');
+		const lockDocumentScroll = suppressed && document.body.classList.contains('app-mobile-document-scroll');
 		if (lockDocumentScroll && mobileDocumentScrollLockTop === null) {
 			mobileDocumentScrollLockTop = window.scrollY || document.documentElement.scrollTop || 0;
 			mobileDocumentScrollLockStyles = {
@@ -422,8 +422,8 @@ export function createLayout({ root, views, services } = {}) {
 			document.body.style.setProperty('top', '-' + mobileDocumentScrollLockTop + 'px');
 			document.body.style.width = '100%';
 		}
-		document.body.classList.toggle('beta-creation-overlay-open', suppressed);
-		document.documentElement.classList.toggle('beta-mobile-document-scroll-locked', suppressed && document.body.classList.contains('beta-mobile-document-scroll'));
+		document.body.classList.toggle('app-creation-overlay-open', suppressed);
+		document.documentElement.classList.toggle('app-mobile-document-scroll-locked', suppressed && document.body.classList.contains('app-mobile-document-scroll'));
 		if (!suppressed && mobileDocumentScrollLockTop !== null) {
 			const top = mobileDocumentScrollLockTop;
 			mobileDocumentScrollLockTop = null;
@@ -438,7 +438,7 @@ export function createLayout({ root, views, services } = {}) {
 
 	function setSidebarLayoutReady(ready) {
 		sidebarLayoutReady = Boolean(ready);
-		document.documentElement.classList.toggle('beta-sidebar-layout-pending', !sidebarLayoutReady);
+		document.documentElement.classList.toggle('app-sidebar-layout-pending', !sidebarLayoutReady);
 	}
 
 	function onViewportResize() {
@@ -456,7 +456,7 @@ export function createLayout({ root, views, services } = {}) {
 		setBackgroundSuppressed(visible);
 		if (visible) {
 			overlayTitle.textContent = descriptor.title || 'Detail';
-			if (mounted.overlay) document.documentElement.classList.remove('beta-overlay-route-pending');
+			if (mounted.overlay) document.documentElement.classList.remove('app-overlay-route-pending');
 		}
 		if (!visible) overlayContent.scrollTop = 0;
 	}
@@ -524,7 +524,7 @@ export function createLayout({ root, views, services } = {}) {
 		root.dataset.mobileMode = mobile.mode;
 		conversationViewport.sync();
 		if (mobile.mode === 'primary' || mobile.mode === 'roster') closeMobileMenu();
-		const mobileBack = pageRegion.querySelector('.beta-outlet__mobile-back');
+		const mobileBack = pageRegion.querySelector('.app-outlet__mobile-back');
 		if (mobileBack) {
 			const challengeSubpage = mobile.mode === 'challenge-subpage';
 			mobileBack.href = challengeSubpage ? '/challenges' : '/chat#channels';
@@ -538,7 +538,7 @@ export function createLayout({ root, views, services } = {}) {
 		root.dataset.mobileBackgroundHeader = String(backgroundMobile.appHeader);
 		syncMobileActions();
 		// Mounted background routes bind paging and media observers to the scroll owner.
-		if (syncMobileScrollPolicy(composition)) document.dispatchEvent(new CustomEvent('beta-mobile-scroll-owner-changed'));
+		if (syncMobileScrollPolicy(composition)) document.dispatchEvent(new CustomEvent('app-mobile-scroll-owner-changed'));
 		mounted.mobile?.handle?.update?.({ navigation: composition, actions });
 		const revision = ++backgroundRevision;
 		const overlayChanged = mounted.overlay?.key !== composition.overlay?.key;
@@ -595,10 +595,10 @@ export function createLayout({ root, views, services } = {}) {
 		delete root.dataset.mobileHeader;
 		delete root.dataset.mobileBackgroundFooter;
 		delete root.dataset.mobileBackgroundHeader;
-		document.documentElement.classList.remove('beta-mobile-document-scroll-locked');
+		document.documentElement.classList.remove('app-mobile-document-scroll-locked');
 		delete root.dataset.mobileScrollOwner;
-		document.documentElement.classList.remove('beta-mobile-document-scroll');
-		document.body.classList.remove('beta-mobile-document-scroll');
+		document.documentElement.classList.remove('app-mobile-document-scroll');
+		document.body.classList.remove('app-mobile-document-scroll');
 		unmount('mobileHeader', mobileHeaderRegion);
 		mobileHeaderRegion.remove();
 		composerResize.disconnect();
@@ -626,10 +626,10 @@ export function createLayout({ root, views, services } = {}) {
 		window.removeEventListener('prsn:navigate', onComposerNavigate);
 		window.clearTimeout(viewportResizeTimer);
 		viewportResizeTimer = 0;
-		document.documentElement.classList.remove('beta-overlay-route-pending');
+		document.documentElement.classList.remove('app-overlay-route-pending');
 		overlayHost.remove();
-		document.body.classList.remove('beta-layout', 'is-resizing-sidebar', 'is-resizing-viewport');
-		document.body.style.removeProperty('--beta-sidebar-width');
+		document.body.classList.remove('app-layout', 'is-resizing-sidebar', 'is-resizing-viewport');
+		document.body.style.removeProperty('--app-sidebar-width');
 		appliedComposition = null;
 	}
 
@@ -642,7 +642,7 @@ export function createLayout({ root, views, services } = {}) {
 	window.addEventListener('resize', onViewportResize, { passive: true });
 	window.addEventListener('message', onEmbeddedCreationNavigate);
 	window.addEventListener('prsn:navigate', onComposerNavigate);
-	document.body.classList.add('beta-layout');
+	document.body.classList.add('app-layout');
 	setSidebarLayoutReady(false);
 
 	return {

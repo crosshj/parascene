@@ -28,7 +28,7 @@ Why: hard "seen" exclusion dries up the pools for heavy viewers (oceanman has se
 - Page request: read slice, hydrate rows, refill the batch when it runs low.
 - Cursor: session id plus offset in the list (replaces the page-index sentinel cursor).
 - hasMore: true while the published catalog is non-empty.
-- Delete: `hasMoreThroughPage`, `maxPageIndex`, random page fill retries, the `from_the_past` walk (`fillBetaPageFromPast`, `getOlderThan`), and most of `hasMore.js` and `continuation.js`.
+- Delete: `hasMoreThroughPage`, `maxPageIndex`, random page fill retries, the `from_the_past` walk (`fillFeedPageFromPast`, `getOlderThan`), and most of `hasMore.js` and `continuation.js`.
 - Done when: page 2+ costs one Redis read plus hydration, and the ranking code is one scoring function plus one batch builder.
 
 ## Open questions
@@ -40,5 +40,5 @@ Why: hard "seen" exclusion dries up the pools for heavy viewers (oceanman has se
 
 ## Related
 
-- Intent: `_docs/PLAN_feed_beta_chatgpt.md` (feed session, diversity, underseen catalog)
-- Current architecture: `_docs/PLAN_feed_beta.md`
+- Intent: `_docs/PLAN_feed_chatgpt.md` (feed session, diversity, underseen catalog)
+- Current architecture: `_docs/PLAN_feed_continuation.md`

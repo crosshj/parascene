@@ -38,6 +38,7 @@ Likely future direction for rich links: have the client ask the server for a pre
 - [ ] Complete the reversible CDN rollout, retain the WWW transport as rollback until stable, then remove the temporary legacy transport switch
 - [ ] Creation videos follow the files video path. Local dev serves them on the local host. Beta and prod send playback only through `cdn.parascene.com`, with a signed link a video element can load without the session cookie. Do not leave playback on the app host or on a raw Supabase signed URL.
 - [ ] Deployment readiness: secrets/configuration, process and schedule ownership, logs/alerts, backups/restore, rate limits, rollback, and removal of old-runtime dependencies
+- [ ] Align the beta deploy names with prod. The home directory is parascene-vps and the container is parascene. Prod uses parascene-prod for both. Switch beta to home directory parascene-beta and container parascene-beta. Before the first deploy that uses those names, stop and remove the live parascene container or rename it, and rename or leave the old home directory. It still holds port 3000, so the new container will not start until it is gone. The Nginx site is already parascene-beta. The image tag stays parascene:beta.
 
 Resumable uploads, a durable upload ledger, per-file sharing/privacy controls,
 richer duration metadata, and more reliable video posters are separate follow-up

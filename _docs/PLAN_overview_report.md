@@ -112,7 +112,7 @@ Retired the standalone reports now fully covered by the overview (script + `.htm
 - `inception-outlook-report` + `user-growth-story` → Time Range + milestone/projection card (removed together; outlook imported the story).
 - `landingFunnelReport.js` helper removed with its only consumers (the two pulse reports).
 
-Kept (unique value, not in the overview): `challenge-participation-export` (deep per-submission/vote LLM export), `user-taste-profile` (content affinity, WIP), `hn-today` (external). Shared `report-styles.js` retained (still used by those). Non-report utilities untouched (`overview-refresh`, `visit-pulse-flush`, `restore-visit-pulse-*`, `feed-beta-catalog-rebuild`).
+Kept (unique value, not in the overview): `challenge-participation-export` (deep per-submission/vote LLM export), `user-taste-profile` (content affinity, WIP), `hn-today` (external). Shared `report-styles.js` retained (still used by those). Non-report utilities untouched (`overview-refresh`, `visit-pulse-flush`, `restore-visit-pulse-*`, `feed-catalog-rebuild`).
 
 ## Done criteria
 

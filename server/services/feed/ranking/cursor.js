@@ -1,15 +1,15 @@
-import { FEED_BETA_CURSOR_SENTINEL_AT } from "../../../../client/shared/feedBetaContinuation.js";
+import { FEED_CURSOR_SENTINEL_AT } from "../../../../client/shared/feedContinuation.js";
 
-export { FEED_BETA_CURSOR_SENTINEL_AT };
+export { FEED_CURSOR_SENTINEL_AT };
 
 /**
  * @param {string|undefined|null} afterAt
  * @param {number} afterIdNum
  * @returns {boolean}
  */
-export function isFeedBetaPageCursor(afterAt, afterIdNum) {
+export function isFeedPageCursor(afterAt, afterIdNum) {
 	return (
-		String(afterAt ?? '').trim() === FEED_BETA_CURSOR_SENTINEL_AT &&
+		String(afterAt ?? '').trim() === FEED_CURSOR_SENTINEL_AT &&
 		Number.isFinite(afterIdNum) &&
 		afterIdNum > 0
 	);
@@ -20,7 +20,7 @@ export function isFeedBetaPageCursor(afterAt, afterIdNum) {
  * @param {number} completedPage — from `feed_after_image_id`
  * @returns {number}
  */
-export function pageIndexAfterBetaCursor(completedPage) {
+export function pageIndexAfterFeedCursor(completedPage) {
 	const n = Number(completedPage);
 	if (!Number.isFinite(n) || n < 1) return 1;
 	return n + 1;
@@ -30,10 +30,10 @@ export function pageIndexAfterBetaCursor(completedPage) {
  * @param {number} completedPage — pages delivered so far (1 = page 1 done)
  * @returns {{ created_at: string, created_image_id: number }}
  */
-export function buildBetaPageFeedCursor(completedPage) {
+export function buildFeedPageCursor(completedPage) {
 	const page = Math.max(1, Math.floor(Number(completedPage) || 1));
 	return {
-		created_at: FEED_BETA_CURSOR_SENTINEL_AT,
+		created_at: FEED_CURSOR_SENTINEL_AT,
 		created_image_id: page
 	};
 }

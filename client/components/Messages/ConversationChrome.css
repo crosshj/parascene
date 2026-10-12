@@ -296,7 +296,7 @@
 	position: relative;
 	z-index: 1;
 }
-body.beta-layout .chat-page-canvas-panel-body {
+body.app-layout .chat-page-canvas-panel-body {
 	position: relative;
 	flex: 1 1 auto;
 	min-height: 0;
@@ -307,7 +307,7 @@ body.beta-layout .chat-page-canvas-panel-body {
 }
 
 @media (min-width: 769px) {
-	body.beta-layout .chat-page-canvas-panel .chat-page-canvas-panel-head {
+	body.app-layout .chat-page-canvas-panel .chat-page-canvas-panel-head {
 		position: absolute;
 		top: 0;
 		left: 0;
@@ -502,7 +502,7 @@ body.beta-layout .chat-page-canvas-panel-body {
 }
 
 @media (min-width: 769px) {
-	body.beta-layout .chat-page-canvas-panel .chat-page-canvas-panel-scroll {
+	body.app-layout .chat-page-canvas-panel .chat-page-canvas-panel-scroll {
 		padding-top: calc(var(--chat-chrome-header-height, 48px) + 14px);
 	}
 }
@@ -1081,10 +1081,10 @@ body.beta-layout .chat-page-canvas-panel-body {
 	color: var(--color-amber-fg);
 	background: var(--color-amber-bg-subtle);
 }/* The containing rail belongs to layout rather than WWW's split-pane shell. */
-.beta-right-sidebar__content:has(.chat-page-canvas-default-shell) { display: flex; flex-direction: column; overflow: hidden; }
-.beta-right-sidebar__panel:has(.chat-page-canvas-default-shell) > .beta-right-sidebar__header { display: none; }
-.beta-right-sidebar__content .chat-page-canvas-panel-scroll { padding-top: 14px; }
-.beta-right-sidebar__content .chat-page-canvas-default-shell { height: 100%; }
+.app-right-sidebar__content:has(.chat-page-canvas-default-shell) { display: flex; flex-direction: column; overflow: hidden; }
+.app-right-sidebar__panel:has(.chat-page-canvas-default-shell) > .app-right-sidebar__header { display: none; }
+.app-right-sidebar__content .chat-page-canvas-panel-scroll { padding-top: 14px; }
+.app-right-sidebar__content .chat-page-canvas-default-shell { height: 100%; }
 .chat-page-canvas-panel-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .chat-page-canvas-default-shell [role=alert] { color: var(--danger, #d33); padding: 0 12px; }
 dialog.chat-canvas-create-dialog::backdrop, dialog.chat-private-members-dialog::backdrop { background: #0008; }
@@ -1295,12 +1295,12 @@ dialog.share-audio-modal { color: var(--text); }
 dialog.share-audio-modal::backdrop { background: #0008; }
 
 /* Match the outlet's chrome transparency and avoid inherited WWW glass. */
-.beta-right-sidebar__content .chat-page-canvas-panel-head {
- background: color-mix(in srgb, var(--beta-panel-background) 94%, transparent);
+.app-right-sidebar__content .chat-page-canvas-panel-head {
+ background: color-mix(in srgb, var(--app-panel-background) 94%, transparent);
  backdrop-filter: none; -webkit-backdrop-filter: none; border-bottom: 0;
 }
-.beta-right-sidebar__content .chat-page-canvas-panel-head::before { display: none; }
-.beta-right-sidebar__content .chat-page-canvas-panel-head {
+.app-right-sidebar__content .chat-page-canvas-panel-head::before { display: none; }
+.app-right-sidebar__content .chat-page-canvas-panel-head {
  position: absolute; inset: 0 0 auto; width: 100%; z-index: 3;
 }
-.beta-right-sidebar__content .chat-page-canvas-panel-scroll { padding-top: calc(var(--beta-chrome-row-height) + 14px); }
+.app-right-sidebar__content .chat-page-canvas-panel-scroll { padding-top: calc(var(--app-chrome-row-height) + 14px); }

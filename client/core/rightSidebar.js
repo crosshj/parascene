@@ -7,16 +7,16 @@ const clone = createTemplateFactory(markup);
 // at teardown; a stale lease can never close another feature's content.
 export function createRightSidebar({ root }) {
  const host = clone('right-sidebar');
- host.querySelector('.beta-right-sidebar__back').innerHTML = CHAT_PAGE_BACK_ICON_HTML;
+ host.querySelector('.app-right-sidebar__back').innerHTML = CHAT_PAGE_BACK_ICON_HTML;
  root.append(host);
- const content = host.querySelector('.beta-right-sidebar__content');
+ const content = host.querySelector('.app-right-sidebar__content');
  const title = host.querySelector('h2');
  const handle = host.querySelector('[role=separator]');
- const closeButton = host.querySelector('.beta-right-sidebar__close');
- const backButton = host.querySelector('.beta-right-sidebar__back');
+ const closeButton = host.querySelector('.app-right-sidebar__close');
+ const backButton = host.querySelector('.app-right-sidebar__back');
  const listeners = new AbortController();
  let active = null, dragging = false, origin = 0, startWidth = 0, frame = 0, pending = 360;
- const maximum = () => Math.max(220, innerWidth - (matchMedia('(min-width: 1024px)').matches ? Number.parseFloat(getComputedStyle(document.body).getPropertyValue('--beta-sidebar-width')) || 272 : 0) - 180);
+ const maximum = () => Math.max(220, innerWidth - (matchMedia('(min-width: 1024px)').matches ? Number.parseFloat(getComputedStyle(document.body).getPropertyValue('--app-sidebar-width')) || 272 : 0) - 180);
  const clamp = value => Math.min(maximum(), Math.max(220, Number(value) || 360));
  const routeStorage = 'prsn-right-sidebar-open-by-route-v1';
  let restoration = null, restoreDismissed = false, routePath = location.pathname;
@@ -27,7 +27,7 @@ export function createRightSidebar({ root }) {
  let width = 360;
  try { width = clamp(localStorage.getItem('prsn-right-sidebar-width-px')); } catch {}
  function setWidth(value, persist = false) {
-  width = clamp(value); document.body.style.setProperty('--beta-right-sidebar-width', `${width}px`);
+  width = clamp(value); document.body.style.setProperty('--app-right-sidebar-width', `${width}px`);
   handle.setAttribute('aria-valuemax', String(Math.round(maximum())));
   handle.setAttribute('aria-valuenow', String(Math.round(width)));
   if (persist) try { localStorage.setItem('prsn-right-sidebar-width-px', String(width)); } catch {}
@@ -48,16 +48,16 @@ export function createRightSidebar({ root }) {
   stop();
   if (forget && !active && restoration) restoreDismissed = true;
   retire({ forget }); restoration = null;
-  document.documentElement.classList.remove('beta-right-sidebar-restoring');
-  host.hidden = true; document.body.classList.remove('beta-right-sidebar-open');
+  document.documentElement.classList.remove('app-right-sidebar-restoring');
+  host.hidden = true; document.body.classList.remove('app-right-sidebar-open');
  }
  function open({ key, title: label = '', mount, onClose } = {}) {
   retire(); restoration = null;
-  document.documentElement.classList.remove('beta-right-sidebar-restoring');
+  document.documentElement.classList.remove('app-right-sidebar-restoring');
   const record = { key, onClose, handle: null, path: routePath }; active = record;
   saveRoute(record.path, { key, title: label });
   title.textContent = label; closeButton.hidden = false; host.setAttribute('aria-label', label || 'Sidebar');
-  host.hidden = false; document.body.classList.add('beta-right-sidebar-open');
+  host.hidden = false; document.body.classList.add('app-right-sidebar-open');
   try { record.handle = mount?.({ outlet: content, close: () => { if (active === record) close(); } }); }
   catch (error) { close(); throw error; }
   return { close(options) { if (active === record) close(options); }, get isOpen() { return active === record; } };
@@ -86,7 +86,7 @@ export function createRightSidebar({ root }) {
  }, { signal: listeners.signal });
  setWidth(width);
  function fillSkeleton() {
-  const loading = content.querySelector('.beta-right-sidebar__loading');
+  const loading = content.querySelector('.app-right-sidebar__loading');
   if (!loading || host.hidden || !content.clientHeight) return;
   const paragraph = loading.firstElementChild;
   const step = paragraph.getBoundingClientRect().height + 24;
@@ -113,13 +113,13 @@ export function createRightSidebar({ root }) {
   if (restoration) {
    host.hidden = false; closeButton.hidden = true; title.replaceChildren();
    const titleSkeleton = document.createElement('span');
-   titleSkeleton.className = 'skeleton skeleton-line beta-right-sidebar__skeleton-title';
+   titleSkeleton.className = 'skeleton skeleton-line app-right-sidebar__skeleton-title';
    title.append(titleSkeleton); content.replaceChildren(clone('right-sidebar-loading'));
-   document.body.classList.add('beta-right-sidebar-open');
+   document.body.classList.add('app-right-sidebar-open');
    fillSkeleton();
   }
  }
  prepare(routePath);
  window.addEventListener('resize', () => setWidth(width), { signal: listeners.signal });
- return { open, close, prepare, header: host.querySelector('.beta-right-sidebar__header'), get restoreDismissed() { return restoreDismissed; }, get restoration() { return restoration; }, get key() { return active?.key; }, destroy() { close({ forget: false }); loadingResize.disconnect(); listeners.abort(); host.remove(); document.body.style.removeProperty('--beta-right-sidebar-width'); } };
+ return { open, close, prepare, header: host.querySelector('.app-right-sidebar__header'), get restoreDismissed() { return restoreDismissed; }, get restoration() { return restoration; }, get key() { return active?.key; }, destroy() { close({ forget: false }); loadingResize.disconnect(); listeners.abort(); host.remove(); document.body.style.removeProperty('--app-right-sidebar-width'); } };
 }

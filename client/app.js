@@ -25,10 +25,10 @@ function hydrateNsfwFromBootstrap(user) {
 	initNsfwViewPreference();
 }
 
-// Keep the beta install and offline caches independent from the production WWW app.
+// Register the app worker. It stays on the network and does not reuse the WWW app's caches.
 if ('serviceWorker' in navigator) {
 	window.addEventListener('load', () => {
-		const version = document.querySelector('meta[name="asset-version"]')?.content?.trim() || 'beta';
+		const version = document.querySelector('meta[name="asset-version"]')?.content?.trim() || 'app';
 		navigator.serviceWorker.register(`/sw.js?v=${encodeURIComponent(version)}`, { scope: '/' }).catch(() => {});
 	}, { once: true });
 }

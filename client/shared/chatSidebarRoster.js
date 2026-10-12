@@ -8,7 +8,7 @@ import { getAvatarColor } from './avatar.js';
 import './threadAvatars.css';
 import { serverChannelTagFromServerName } from './serverChatTag.js';
 import { readDmPinKeysOrdered } from './chatDmPins.js';
-import { feedNavLabel } from './feedBetaNav.js';
+import { feedNavLabel } from './feedNav.js';
 import * as Icons from '../icons/svg-strings.js';
 
 function escapeHtmlPseudoStrip(str) {

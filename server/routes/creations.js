@@ -611,7 +611,7 @@ export function createCreationsRoutes({ creations, users, appendChallengeEligibi
 
 	router.get("/api/creations/media/*", requireAuth, sendMedia);
 	// During migration, accept the established media path too. This serves the
-	// media resource from VPS; it does not delegate to WWW.
+	// media resource from this server; it does not delegate to WWW.
 	router.get("/api/images/created/*", requireAuth, sendMedia);
 	router.get("/api/videos/created/*", requireAuth, sendMedia);
 	router.head("/api/creations/media/*", requireAuth, sendMedia);

@@ -1,5 +1,5 @@
 /**
- * VPS textarea autogrow behavior.
+ * Textarea autogrow behavior.
  * Diff: static `viewport` import so the bundle has no extra dynamic fetch.
  */
 import { getPromptEditorMaxHeightPx } from './viewport.js';

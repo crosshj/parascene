@@ -20,7 +20,7 @@ export const LibraryView = Object.freeze({
   const lifetime = new AbortController(), ingest = createAudioClipIngestModal(), edit = createAudioClipEditModal();
   const states = Object.fromEntries(['personas', 'styles', 'audio-clips'].map(id => [id, { rows: [], shown: PAGE_SIZE, ready: false, busy: false, hasMore: false, error: '', epoch: 0, request: null }]));
   let active = 'personas', destroyed = false, canAdd = false, catalogPromise = null, currentHash = hash;
-  services.providers.document.setTitle('Library · Parascene beta');
+  services.providers.document.setTitle('Library · Parascene');
   const directStyle = /^\/styles\/([^/]+)$/.exec(new URL(url, location.origin).pathname);
   const directAddStyle = directStyle?.[1] === 'new';
   const directAudioClip = /^\/audio-clips\/(\d+)$/.exec(new URL(url, location.origin).pathname);
@@ -92,7 +92,7 @@ export const LibraryView = Object.freeze({
   function applyTab(hash) { const id = hash.replace(/^#/, '').toLowerCase(); active = Object.hasOwn(states, id) ? id : 'personas'; if (tabs.getAttribute('active') !== active) tabs.setActiveTab(active, { focus: false }); syncHeader(); updateMore(); if (!states[active].ready && !states[active].busy) void load(active); }
   tabs.addEventListener('tab-change', event => { const id = event.detail?.id; if (!Object.hasOwn(states, id)) return; active = id; syncHeader(); updateMore(); if (!states[id].ready && !states[id].busy) void load(id); if (currentHash !== `#${id}`) void actions.navigate(`/library#${id}`); });
   more.addEventListener('click', () => { const state = states[active]; void load(active, !!state.error); });
-  const observer = typeof IntersectionObserver === 'function' ? new IntersectionObserver(entries => { if (entries.some(entry => entry.isIntersecting) && states[active].hasMore && !states[active].busy && !states[active].error) void load(active); }, { root: root.closest('.beta-outlet__scroll'), rootMargin: '1000px' }) : null;
+  const observer = typeof IntersectionObserver === 'function' ? new IntersectionObserver(entries => { if (entries.some(entry => entry.isIntersecting) && states[active].hasMore && !states[active].busy && !states[active].error) void load(active); }, { root: root.closest('.app-outlet__scroll'), rootMargin: '1000px' }) : null;
   observer?.observe(more); applyTab(directStyle ? '#styles' : directAudioClip ? '#audio-clips' : hash); if (directStyle) styleModal.open(directAddStyle ? null : decodeURIComponent(directStyle[1])); if (directAudioClip) audioModal.open({ id: Number(directAudioClip[1]) });
   return { update({ hash = '' }) { if (hash !== currentHash) { currentHash = hash; applyTab(hash); } }, destroy() { destroyed = true; setHeaderAccessories?.(); lifetime.abort(); Object.values(states).forEach(state => state.request?.abort()); observer?.disconnect(); styleModal.destroy(); audioModal.destroy(); ingest.destroy(); edit.destroy(); root.remove(); } };
  },

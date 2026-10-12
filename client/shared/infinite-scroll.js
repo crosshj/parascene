@@ -78,7 +78,7 @@ export function createInfiniteScroll(options) {
 					isLoading = false;
 				});
 		},
-		{ root: listContainer.closest('.beta-app-overlay__content,.beta-outlet__scroll'), rootMargin, threshold }
+		{ root: listContainer.closest('.app-overlay__content,.app-outlet__scroll'), rootMargin, threshold }
 	);
 
 	observer.observe(sentinel);

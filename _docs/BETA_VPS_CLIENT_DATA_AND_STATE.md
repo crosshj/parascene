@@ -492,7 +492,7 @@ Organizer forms and open voting media stay mounted during reconciliation.
 
 `threads.votes` owns delivery beyond any route/modal lifetime. Each selected score
 is synchronously stored as a viewer-scoped, versioned intent under
-`prsn-vps-challenge-vote-v1:<viewer>:<message>:<intent>`. Network writes are
+`prsn-challenge-vote-v1:<viewer>:<message>:<intent>`. Network writes are
 coalesced per message and serialized; timeouts and transient failures retry with
 bounded backoff. Pending intents have no expiry and survive reload/logout;
 logout stops delivery and clears read caches, but preserves unsent user input.

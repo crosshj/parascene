@@ -158,7 +158,7 @@ Roughly **60** identical filenames in both `public/shared/` and `src/shared/`. N
 
 **public-only** (unbundled pages, no bundle copy yet): `pageInit.js`, `createPageRuntime.js`, `creationEditRuntime.js`, `createSubmit.js`, `connectServersCache.js`, and ~35 others.
 
-**src-only** (bundle-only): `runBundledCommonInit.js`, `waitForComponents.js`, `chatFeedMobilePartition.js`, `feedHiddenItems.js`, `feedBetaContinuation.js`, `challengeHistoryThumb.js`, `chatUploadMaxBytes.js`.
+**src-only** (bundle-only): `runBundledCommonInit.js`, `waitForComponents.js`, `chatFeedMobilePartition.js`, `feedHiddenItems.js`, `feedContinuation.js`, `challengeHistoryThumb.js`, `chatUploadMaxBytes.js`.
 
 Files with explicit sync comments (edit both or consolidate):
 

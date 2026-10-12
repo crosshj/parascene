@@ -1,29 +1,29 @@
 import { randomUUID } from "node:crypto";
-import { getFeedBetaRedis } from "../feedBetaRedis.js";
+import { getFeedRedis } from "../feedRedis.js";
 
 /**
  * Per-scroll feed session: creation ids already served on this visit plus the
  * "from the past" keyset cursor once ranked pools stop filling pages.
  * Page 1 (open / refresh) starts a new session; page 2+ continues it.
  */
-export const FEED_BETA_SESSION_KEY_PREFIX = 'feed-beta:session:';
+export const FEED_SESSION_KEY_PREFIX = 'feed-beta:session:';
 
 /** Long enough for one browsing visit; a new visit starts fresh on page 1. */
-export const FEED_BETA_SESSION_TTL_SEC = 2 * 60 * 60;
+export const FEED_SESSION_TTL_SEC = 2 * 60 * 60;
 
 const SESSION_ID_RE = /^[0-9a-f-]{36}$/;
 
 /** @param {number|string} userId @param {string} sessionId */
-export function feedBetaSessionKey(userId, sessionId) {
-	return `${FEED_BETA_SESSION_KEY_PREFIX}${String(userId)}:${sessionId}`;
+export function feedSessionKey(userId, sessionId) {
+	return `${FEED_SESSION_KEY_PREFIX}${String(userId)}:${sessionId}`;
 }
 
-export function isFeedBetaSessionStoreAvailable() {
-	return Boolean(getFeedBetaRedis());
+export function isFeedSessionStoreAvailable() {
+	return Boolean(getFeedRedis());
 }
 
 /** @param {string|null} [id] */
-export function createFeedBetaSession(id = null) {
+export function createFeedSession(id = null) {
 	return {
 		id: id && SESSION_ID_RE.test(id) ? id : randomUUID(),
 		served: new Set(),
@@ -36,7 +36,7 @@ export function createFeedBetaSession(id = null) {
  * @param {unknown} raw
  * @param {string} id
  */
-export function parseFeedBetaSession(raw, id) {
+export function parseFeedSession(raw, id) {
 	let data = raw;
 	if (typeof data === 'string') {
 		try {
@@ -46,7 +46,7 @@ export function parseFeedBetaSession(raw, id) {
 		}
 	}
 	if (!data || typeof data !== 'object') return null;
-	const session = createFeedBetaSession(id);
+	const session = createFeedSession(id);
 	for (const key of Array.isArray(data.served) ? data.served : []) {
 		const s = String(key ?? '').trim();
 		if (s) session.served.add(s);
@@ -64,25 +64,25 @@ export function parseFeedBetaSession(raw, id) {
  * @param {number|string} userId
  * @param {string|null|undefined} sessionId
  */
-export async function loadFeedBetaSession(userId, sessionId) {
+export async function loadFeedSession(userId, sessionId) {
 	const id = String(sessionId ?? '').trim();
-	const r = getFeedBetaRedis();
-	if (!r || userId == null || !SESSION_ID_RE.test(id)) return createFeedBetaSession();
+	const r = getFeedRedis();
+	if (!r || userId == null || !SESSION_ID_RE.test(id)) return createFeedSession();
 	try {
-		const raw = await r.get(feedBetaSessionKey(userId, id));
-		return parseFeedBetaSession(raw, id) ?? createFeedBetaSession(id);
+		const raw = await r.get(feedSessionKey(userId, id));
+		return parseFeedSession(raw, id) ?? createFeedSession(id);
 	} catch (err) {
-		console.warn('[feedBeta session] load', err?.message || err);
-		return createFeedBetaSession(id);
+		console.warn('[feed session] load', err?.message || err);
+		return createFeedSession(id);
 	}
 }
 
 /**
  * @param {number|string} userId
- * @param {ReturnType<typeof createFeedBetaSession>} session
+ * @param {ReturnType<typeof createFeedSession>} session
  */
-export async function saveFeedBetaSession(userId, session) {
-	const r = getFeedBetaRedis();
+export async function saveFeedSession(userId, session) {
+	const r = getFeedRedis();
 	if (!r || userId == null || !session?.id) return;
 	const payload = JSON.stringify({
 		served: [...session.served],
@@ -90,8 +90,8 @@ export async function saveFeedBetaSession(userId, session) {
 		tail_exhausted: session.tailExhausted === true
 	});
 	try {
-		await r.set(feedBetaSessionKey(userId, session.id), payload, { ex: FEED_BETA_SESSION_TTL_SEC });
+		await r.set(feedSessionKey(userId, session.id), payload, { ex: FEED_SESSION_TTL_SEC });
 	} catch (err) {
-		console.warn('[feedBeta session] save', err?.message || err);
+		console.warn('[feed session] save', err?.message || err);
 	}
 }

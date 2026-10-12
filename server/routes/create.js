@@ -78,7 +78,7 @@ import { healChallengeOrganizerRefsForCreationList } from "../services/create/ch
 import { applySourceShareUrlToMutateArgsWhenMatching } from "../services/create/mutateLineageImageUrl.js";
 import { buildMutateLineageMetaFields } from "../services/create/mutateLineageMeta.js";
 import { bumpFeedVersionCounter } from "../services/feed/feedVersion.js";
-import { invalidateFeedBetaCatalogSnapshot } from "../services/feed/ranking/catalogSnapshot.js";
+import { invalidateFeedCatalogSnapshot } from "../services/feed/ranking/catalogSnapshot.js";
 function buildGenericUrl(key) {
 	const segments = String(key || "")
 		.split("/")
@@ -2300,7 +2300,7 @@ router.put("/api/create/images/:id", asyncRoute(async (req, res) => {
 			if (feedItem) {
 				await queries.updateFeedItem?.run(id, title || "Untitled", description || "");
 				await bumpFeedVersionCounter(queries);
-				void invalidateFeedBetaCatalogSnapshot().catch(() => {});
+				void invalidateFeedCatalogSnapshot().catch(() => {});
 			}
 			const updated = image.user_id === user.id
 				? await queries.selectCreatedImageById.get(id, user.id)
@@ -2356,7 +2356,7 @@ router.post("/api/create/images/:id/publish", asyncRoute(async (req, res) => {
 				await queries.insertFeedItem.run(title || "Untitled", description, author, null, id);
 			}
 			await bumpFeedVersionCounter(queries);
-			void invalidateFeedBetaCatalogSnapshot().catch(() => {});
+			void invalidateFeedCatalogSnapshot().catch(() => {});
 			return res.json({ success: true, id, published: true });
 		} catch (err) {
 			console.error("[POST /api/create/images/:id/publish]", err);
@@ -2380,7 +2380,7 @@ router.post("/api/create/images/:id/unpublish", asyncRoute(async (req, res) => {
 			await queries.deleteAllLikesForCreatedImage?.run(id);
 			await queries.deleteAllCommentsForCreatedImage?.run(id);
 			await bumpFeedVersionCounter(queries);
-			void invalidateFeedBetaCatalogSnapshot().catch(() => {});
+			void invalidateFeedCatalogSnapshot().catch(() => {});
 			return res.json({ success: true, id, published: false });
 		} catch (err) {
 			console.error("[POST /api/create/images/:id/unpublish]", err);
@@ -2461,7 +2461,7 @@ async function loadOwnedCompletedAudio(req, res) {
 					coverSource: "upload",
 				});
 				await bumpFeedVersionCounter(queries);
-				void invalidateFeedBetaCatalogSnapshot().catch(() => {});
+				void invalidateFeedCatalogSnapshot().catch(() => {});
 				return res.json({
 					ok: true,
 					url: applied.file_path,
@@ -2491,7 +2491,7 @@ async function loadOwnedCompletedAudio(req, res) {
 					coverSource: "upload",
 				});
 				await bumpFeedVersionCounter(queries);
-				void invalidateFeedBetaCatalogSnapshot().catch(() => {});
+				void invalidateFeedCatalogSnapshot().catch(() => {});
 				return res.json({
 					ok: true,
 					url: applied.file_path,
@@ -2507,7 +2507,7 @@ async function loadOwnedCompletedAudio(req, res) {
 			try {
 				const applied = await resetAudioCoverToOriginal({ queries, storage, image });
 				await bumpFeedVersionCounter(queries);
-				void invalidateFeedBetaCatalogSnapshot().catch(() => {});
+				void invalidateFeedCatalogSnapshot().catch(() => {});
 				return res.json({
 					ok: true,
 					url: applied.file_path,
@@ -2638,7 +2638,7 @@ async function loadOwnedCompletedAudio(req, res) {
 				targetHeight,
 			});
 			await bumpFeedVersionCounter(queries);
-			void invalidateFeedBetaCatalogSnapshot().catch(() => {});
+			void invalidateFeedCatalogSnapshot().catch(() => {});
 			return res.json({
 				ok: true,
 				url: applied.file_path,

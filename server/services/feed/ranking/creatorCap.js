@@ -5,7 +5,7 @@ import { feedRowCreationIdKey } from "./rowMedia.js";
  * @returns {number}
  */
 export function rowEngagementScore(row) {
-	const dev = row?.feed_beta_why?.developer;
+	const dev = row?.feed_why?.developer;
 	if (dev && typeof dev.engagement === 'number' && Number.isFinite(dev.engagement)) {
 		return dev.engagement;
 	}

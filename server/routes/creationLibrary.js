@@ -1,4 +1,4 @@
-// Library mutations ported from WWW api_routes/create.js. Authentication and storage are VPS-owned.
+// Library mutations ported from WWW api_routes/create.js. Authentication and storage live here.
 import { isCreationFinishTimedOut, isCreationGpuInFlight } from '../services/create/creationGpuWait.js';
 import { getCreationFeedPinStatus } from '../services/feed/editorialPin.js';
 import { challengeArchiveBlockMessage, challengeArchiveBlockMessageForKind, stripChallengeStampsFromCreationMeta } from '../../client/shared/challengeSubmitMeta.js';

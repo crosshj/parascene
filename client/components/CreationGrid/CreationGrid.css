@@ -34,14 +34,14 @@ body.view-nsfw .creation-browse-grid .feed-card-image.nsfw::after { display: non
 .feed-card-image.feed-card-image--challenge-pending .route-media-challenge-blur-overlay { position: absolute; inset: 0; z-index: 4; background: rgb(0 0 0 / 14%); pointer-events: none; }
 .feed-card-image.feed-card-image--challenge-pending .creation-challenge-entered-badge { position: absolute; top: 50%; left: 50%; z-index: 6; display: inline-flex; width: 44px; height: 44px; align-items: center; justify-content: center; border: 0; border-radius: 15px; corner-shape: squircle; color: rgb(255 255 255 / 70%); background: rgb(18 18 24 / 26%); box-shadow: none; transform: translate(-50%, -50%); pointer-events: none; }
 .feed-card-image.feed-card-image--challenge-pending .creation-challenge-entered-badge svg { display: block; width: 22px; height: 22px; }
-.feed-card-image-error { background: var(--beta-panel-background, #eef1f6); }
+.feed-card-image-error { background: var(--app-panel-background, #eef1f6); }
 .route-details { position: absolute; right: 0; bottom: 0; left: 0; z-index: 2; width: 100%; color: #fff; background: rgb(15 13 26 / 92%); opacity: 0; transform: translateY(6px); transition: opacity .2s ease, transform .2s ease; }
 .route-details-content { padding: 12px; }
 .route-card:hover .route-details, .route-card:focus-within .route-details { opacity: 1; transform: translateY(0); }
 .route-title { overflow: hidden; font-weight: 600; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
 .route-meta { margin-top: 4px; font-size: .68rem; opacity: .7; }
-.creation-grid__pending { position: absolute; inset: 0; display: grid; place-items: center; color: var(--beta-text-muted); font-size: .7rem; font-weight: 700; letter-spacing: .08em; }
-.creation-grid__waveform { position: absolute; inset: 24%; width: 52%; height: 52%; color: var(--beta-text-muted); fill: currentColor; opacity: .7; }
+.creation-grid__pending { position: absolute; inset: 0; display: grid; place-items: center; color: var(--app-text-muted); font-size: .7rem; font-weight: 700; letter-spacing: .08em; }
+.creation-grid__waveform { position: absolute; inset: 24%; width: 52%; height: 52%; color: var(--app-text-muted); fill: currentColor; opacity: .7; }
 .creation-grid__group-stack { position: absolute; inset: 0; overflow: hidden; }
 .creation-grid__group-slide { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity 160ms ease; }
 .creation-grid__group-slide.is-active { opacity: 1; }

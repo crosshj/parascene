@@ -19,7 +19,7 @@ import {
 const RECENT_CAP = 10;
 const RESULT_CAP = 50;
 
-/** Pseudo-strip slugs open VPS pages, not `/ch/:slug` channel threads. */
+/** Pseudo-strip slugs open app pages, not `/ch/:slug` channel threads. */
 const PLACE_PATHS = {
 	feed: '/feed',
 	challenges: '/challenges',

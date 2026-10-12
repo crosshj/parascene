@@ -2,7 +2,7 @@
 
 :root {
 	--font-family: "Geist", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-	--beta-font-family: var(--font-family);
+	--app-font-family: var(--font-family);
 }
 
 body,

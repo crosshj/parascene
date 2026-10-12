@@ -1,4 +1,4 @@
-/* VPS-native compatibility surface for legacy modules that still name the WWW overlay API. */
+/* Compatibility surface for legacy modules that still name the WWW overlay API. */
 
 function routeHref(href, event) {
 	if (event?.preventDefault) event.preventDefault();
@@ -40,7 +40,7 @@ export const isCreationDetailOverlayHistoryActive = isSpaPageOverlayHistoryActiv
 export const isPromptLibraryOverlayHistoryActive = isSpaPageOverlayHistoryActive;
 
 export function isSpaPageOverlayOpen() {
-	return Boolean(document.querySelector('[data-app-overlay]:not([hidden]), .beta-app-overlay:not([hidden])'));
+	return Boolean(document.querySelector('[data-app-overlay]:not([hidden]), .app-overlay:not([hidden])'));
 }
 export const isCreationDetailOverlayOpen = isSpaPageOverlayOpen;
 export const isPromptLibraryOverlayOpen = isSpaPageOverlayOpen;

@@ -33,7 +33,7 @@ export function createCreationsProvider({ viewerId, registry } = {}) {
  let destroyed = false;
 	const thumbnails = createCreationThumbnails({ viewerId });
  const pending = createPendingCreationsStore(viewerId);
-	const cache = viewerId ? createStorageCache(`prsn-vps-creations-v1:${viewerId}`, {
+	const cache = viewerId ? createStorageCache(`prsn-creations-v1:${viewerId}`, {
 		validate: (data) => Array.isArray(data?.creations) && typeof data?.has_more === 'boolean'
 	}) : null;
 	const lease = viewerId ? registry.acquire(['creations', viewerId], () => createQuery({
@@ -158,7 +158,7 @@ export function createCreationsProvider({ viewerId, registry } = {}) {
 		syncPendingRows,
 		preload() { if (query) void query.loadIfNeeded().catch(() => undefined); },
 		syncExternalCache(event) {
-			if (!query || event.key !== `prsn-vps-creations-v1:${viewerId}`) return;
+			if (!query || event.key !== `prsn-creations-v1:${viewerId}`) return;
 			const entry = cache?.read?.();
 			if (entry) query.setData(entry.data, { persist: false, updated: entry.updatedAt });
 			else void query.refresh({ force: true }).catch(() => undefined);

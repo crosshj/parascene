@@ -887,7 +887,7 @@ button.chat-inline-image-lightbox-footer-btn.btn-secondary {
 	flex-shrink: 0;
 }
 
-body.beta-layout .chat-inline-image-lightbox-audio-slot {
+body.app-layout .chat-inline-image-lightbox-audio-slot {
 	position: relative;
 	width: min(92vw, 80vh, 1100px);
 	max-width: 90%;
@@ -902,11 +902,11 @@ body.beta-layout .chat-inline-image-lightbox-audio-slot {
 	color: var(--color-purple);
 }
 
-body.beta-layout .chat-inline-image-lightbox-audio-slot .chat-inline-image-lightbox-video {
+body.app-layout .chat-inline-image-lightbox-audio-slot .chat-inline-image-lightbox-video {
 	display: none !important;
 }
 
-body.beta-layout .chat-inline-image-lightbox-audio-cover {
+body.app-layout .chat-inline-image-lightbox-audio-cover {
 	position: absolute;
 	inset: 0;
 	z-index: 2;
@@ -916,7 +916,7 @@ body.beta-layout .chat-inline-image-lightbox-audio-cover {
 	pointer-events: none;
 }
 
-body.beta-layout .chat-inline-image-lightbox-audio-slot .creation-audio-wave {
+body.app-layout .chat-inline-image-lightbox-audio-slot .creation-audio-wave {
 	position: relative;
 	left: auto;
 	top: auto;
@@ -926,11 +926,11 @@ body.beta-layout .chat-inline-image-lightbox-audio-slot .creation-audio-wave {
 	color: var(--color-purple);
 }
 
-body.beta-layout .chat-inline-image-lightbox-audio-slot .creation-audio-wave rect {
+body.app-layout .chat-inline-image-lightbox-audio-slot .creation-audio-wave rect {
 	fill: var(--color-purple);
 }
 
-body.beta-layout .chat-inline-image-lightbox-audio-slot .creation-detail-hosted-audio {
+body.app-layout .chat-inline-image-lightbox-audio-slot .creation-detail-hosted-audio {
 	position: absolute !important;
 	z-index: 3 !important;
 	left: 50% !important;
@@ -953,11 +953,11 @@ body.beta-layout .chat-inline-image-lightbox-audio-slot .creation-detail-hosted-
 	pointer-events: auto !important;
 }
 
-body.beta-layout .chat-inline-image-lightbox-audio-slot .creation-detail-hosted-audio audio {
+body.app-layout .chat-inline-image-lightbox-audio-slot .creation-detail-hosted-audio audio {
 	display: none !important;
 }
 
-body.beta-layout .chat-inline-image-lightbox-audio-slot .hosted-audio-play {
+body.app-layout .chat-inline-image-lightbox-audio-slot .hosted-audio-play {
 	grid-column: 1;
 	grid-row: 2;
 	align-self: center;
@@ -983,14 +983,14 @@ body.beta-layout .chat-inline-image-lightbox-audio-slot .hosted-audio-play {
 	-webkit-appearance: none;
 }
 
-body.beta-layout .chat-inline-image-lightbox-audio-slot .hosted-audio-play-icon {
+body.app-layout .chat-inline-image-lightbox-audio-slot .hosted-audio-play-icon {
 	display: grid;
 	place-items: center;
 	width: 14px;
 	height: 16px;
 }
 
-body.beta-layout .chat-inline-image-lightbox-audio-slot .hosted-audio-play-tri {
+body.app-layout .chat-inline-image-lightbox-audio-slot .hosted-audio-play-tri {
 	display: block;
 	width: 12px;
 	height: 14px;
@@ -1002,7 +1002,7 @@ body.beta-layout .chat-inline-image-lightbox-audio-slot .hosted-audio-play-tri {
 	stroke-linejoin: round;
 }
 
-body.beta-layout .chat-inline-image-lightbox-audio-slot .hosted-audio-bars {
+body.app-layout .chat-inline-image-lightbox-audio-slot .hosted-audio-bars {
 	display: none;
 	align-items: flex-end;
 	justify-content: center;
@@ -1011,7 +1011,7 @@ body.beta-layout .chat-inline-image-lightbox-audio-slot .hosted-audio-bars {
 	height: 14px;
 }
 
-body.beta-layout .chat-inline-image-lightbox-audio-slot .hosted-audio-bars span {
+body.app-layout .chat-inline-image-lightbox-audio-slot .hosted-audio-bars span {
 	display: block;
 	width: 3.5px;
 	border-radius: 999px;
@@ -1020,30 +1020,30 @@ body.beta-layout .chat-inline-image-lightbox-audio-slot .hosted-audio-bars span 
 	animation: hosted-audio-eq 0.9s ease-in-out infinite;
 }
 
-body.beta-layout .chat-inline-image-lightbox-audio-slot .hosted-audio-bars span:nth-child(1) {
+body.app-layout .chat-inline-image-lightbox-audio-slot .hosted-audio-bars span:nth-child(1) {
 	height: 55%;
 	animation-delay: -0.45s;
 }
 
-body.beta-layout .chat-inline-image-lightbox-audio-slot .hosted-audio-bars span:nth-child(2) {
+body.app-layout .chat-inline-image-lightbox-audio-slot .hosted-audio-bars span:nth-child(2) {
 	height: 100%;
 	animation-delay: -0.15s;
 }
 
-body.beta-layout .chat-inline-image-lightbox-audio-slot .hosted-audio-bars span:nth-child(3) {
+body.app-layout .chat-inline-image-lightbox-audio-slot .hosted-audio-bars span:nth-child(3) {
 	height: 72%;
 	animation-delay: -0.7s;
 }
 
-body.beta-layout .chat-inline-image-lightbox-audio-slot .creation-detail-hosted-audio.is-playing .hosted-audio-play-tri {
+body.app-layout .chat-inline-image-lightbox-audio-slot .creation-detail-hosted-audio.is-playing .hosted-audio-play-tri {
 	display: none;
 }
 
-body.beta-layout .chat-inline-image-lightbox-audio-slot .creation-detail-hosted-audio.is-playing .hosted-audio-bars {
+body.app-layout .chat-inline-image-lightbox-audio-slot .creation-detail-hosted-audio.is-playing .hosted-audio-bars {
 	display: inline-flex;
 }
 
-body.beta-layout .chat-inline-image-lightbox-audio-slot .hosted-audio-timeline {
+body.app-layout .chat-inline-image-lightbox-audio-slot .hosted-audio-timeline {
 	grid-column: 2;
 	grid-row: 2;
 	min-width: 0;
@@ -1053,7 +1053,7 @@ body.beta-layout .chat-inline-image-lightbox-audio-slot .hosted-audio-timeline {
 	align-self: center;
 }
 
-body.beta-layout .chat-inline-image-lightbox-audio-slot .hosted-audio-time {
+body.app-layout .chat-inline-image-lightbox-audio-slot .hosted-audio-time {
 	flex-shrink: 0;
 	font-size: 11px;
 	font-variant-numeric: tabular-nums;
@@ -1062,7 +1062,7 @@ body.beta-layout .chat-inline-image-lightbox-audio-slot .hosted-audio-time {
 	user-select: none;
 }
 
-body.beta-layout .chat-inline-image-lightbox-audio-slot .hosted-audio-seek {
+body.app-layout .chat-inline-image-lightbox-audio-slot .hosted-audio-seek {
 	flex: 1 1 auto;
 	min-width: 0;
 	height: 16px;
@@ -1072,7 +1072,7 @@ body.beta-layout .chat-inline-image-lightbox-audio-slot .hosted-audio-seek {
 	touch-action: none;
 }
 
-body.beta-layout .chat-inline-image-lightbox-audio-slot .hosted-audio-seek-track {
+body.app-layout .chat-inline-image-lightbox-audio-slot .hosted-audio-seek-track {
 	position: relative;
 	width: 100%;
 	height: 2px;
@@ -1080,7 +1080,7 @@ body.beta-layout .chat-inline-image-lightbox-audio-slot .hosted-audio-seek-track
 	background: rgba(255, 255, 255, 0.28);
 }
 
-body.beta-layout .chat-inline-image-lightbox-audio-slot .hosted-audio-seek-fill {
+body.app-layout .chat-inline-image-lightbox-audio-slot .hosted-audio-seek-fill {
 	position: absolute;
 	left: 0;
 	top: 0;
@@ -1090,7 +1090,7 @@ body.beta-layout .chat-inline-image-lightbox-audio-slot .hosted-audio-seek-fill 
 	background: #fff;
 }
 
-body.beta-layout .chat-inline-image-lightbox-audio-slot .hosted-audio-seek-thumb {
+body.app-layout .chat-inline-image-lightbox-audio-slot .hosted-audio-seek-thumb {
 	position: absolute;
 	top: 50%;
 	left: 0;
@@ -1104,7 +1104,7 @@ body.beta-layout .chat-inline-image-lightbox-audio-slot .hosted-audio-seek-thumb
 	pointer-events: none;
 }
 
-body.beta-layout .chat-inline-image-lightbox-audio-slot .chat-inline-image-lightbox-video {
+body.app-layout .chat-inline-image-lightbox-audio-slot .chat-inline-image-lightbox-video {
 	display: none !important;
 }
 

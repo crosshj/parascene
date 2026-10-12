@@ -234,7 +234,7 @@ surface while the background route stays retained.
 The VPS layout now gives Feed, Explore, Creations, Comments, Challenges
 (including their subpages) and \`/chat#channels\` document scroll at the 768px
 mobile breakpoint.
-This is mobile scoped; desktop still uses \`.beta-outlet__scroll\`. Feed/creation
+This is mobile scoped; desktop still uses \`.app-outlet__scroll\`. Feed/creation
 pagination, feed media visibility, thumbnail lookahead, Explore pagination and
 Creations' scroll-to-top follow the active scroll owner. Crossing the breakpoint
 rebinds their observers without replacing the feature/controller.

@@ -15,9 +15,9 @@ import * as acorn from "acorn";
 import postcss from "postcss";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const VPS_ROOT = path.resolve(__dirname, "../..");
-const CLIENT_ROOT = path.join(VPS_ROOT, "client");
-const PAGES_ROOT = path.join(VPS_ROOT, "pages");
+const REPO_ROOT = path.resolve(__dirname, "../..");
+const CLIENT_ROOT = path.join(REPO_ROOT, "client");
+const PAGES_ROOT = path.join(REPO_ROOT, "pages");
 
 const CREATE_TRIO = [
 	"views/Create/CreateView.css",
@@ -101,7 +101,7 @@ function walkFiles(root, exts, out = []) {
 }
 
 function rel(filePath) {
-	return path.relative(VPS_ROOT, filePath).split(path.sep).join("/");
+	return path.relative(REPO_ROOT, filePath).split(path.sep).join("/");
 }
 
 function camelToKebab(name) {
@@ -530,7 +530,7 @@ function rankProps(hits) {
 
 function printHuman(report) {
 	const lines = [];
-	lines.push("VPS CSS / presentation audit");
+	lines.push("CSS / presentation audit");
 	lines.push(`generated: ${report.generatedAt}`);
 	lines.push("");
 	lines.push("Counts");

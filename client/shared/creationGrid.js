@@ -145,7 +145,7 @@ function groupCoverSourceUrl(source, item) {
 	if (!source) return '';
 	const meta = parseCreationMeta(source);
 	const type = groupCoverMediaType(source);
-	// Group video rows often retain a transparent PNG as file_path. Ask the VPS
+	// Group video rows often retain a transparent PNG as file_path. Ask the
 	// media route for a poster extracted from the real video instead.
 	if (type === 'video') {
 		const video = source?.video_url || source?.videoUrl || meta?.video_url || meta?.video?.file_path || meta?.video?.filePath || meta?.video?.url;
@@ -156,7 +156,7 @@ function groupCoverSourceUrl(source, item) {
 }
 
 function groupSlides(item) {
-	// Group cards have one stable cover in the VPS grid. Carousel behavior is
+	// Group cards have one stable cover in the grid. Carousel behavior is
 	// intentionally not part of this migration surface.
 	return [];
 }

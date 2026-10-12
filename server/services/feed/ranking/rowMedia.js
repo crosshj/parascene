@@ -20,7 +20,7 @@ function parseRowMeta(row) {
  * @param {object|null|undefined} row
  * @returns {object|null|undefined}
  */
-export function normalizeFeedBetaMediaFields(row) {
+export function normalizeFeedMediaFields(row) {
 	if (!row || typeof row !== 'object') return row;
 	const meta = parseRowMeta(row);
 	const mediaType =
@@ -49,7 +49,7 @@ export function normalizeFeedBetaMediaFields(row) {
  * @returns {boolean}
  */
 export function feedRowIsVideoThread(row) {
-	const norm = normalizeFeedBetaMediaFields(row);
+	const norm = normalizeFeedMediaFields(row);
 	if (!norm) return false;
 	return norm.media_type === 'video' && Boolean(norm.video_url);
 }

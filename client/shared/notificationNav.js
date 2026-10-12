@@ -1,4 +1,4 @@
-/** Shared notification target rules adapted to the VPS SPA router. */
+/** Shared notification target rules adapted to the SPA router. */
 
 /** @param {{ link?: string | null, creation_id?: number | null }} notification */
 export function notificationCreationHref(notification) {

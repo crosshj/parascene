@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * Rebuild shared feed beta catalog snapshot in Redis (same job as QStash schedule).
+ * Rebuild shared feed catalog snapshot in Redis (same job as QStash schedule).
  *
- *   node scripts/analytics/feed-beta-catalog-rebuild.js
+ *   node scripts/analytics/feed-catalog-rebuild.js
  */
 import 'dotenv/config';
 import { openDb } from '../../_legacy/db/index.js';
@@ -15,6 +15,6 @@ async function main() {
 }
 
 main().catch((err) => {
-	console.error('[feed-beta-catalog-rebuild]', err?.message || err);
+	console.error('[feed-catalog-rebuild]', err?.message || err);
 	process.exit(1);
 });

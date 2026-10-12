@@ -2,7 +2,7 @@
  * Feed impression daily rollup (US East partition) — Redis hot path, flushed into
  * prsn_visit_pulse_days.details.feed_impressions with visit pulse.
  *
- * Logged-in feed-beta impressions only (dwell + click). Separate from feed-beta:seen dedup SET.
+ * Logged-in feed impressions only (dwell + click). Separate from feed-beta:seen dedup SET.
  * Persisted shape is aggregate counts + concentration math (no per-user or per-creation lists).
  */
 

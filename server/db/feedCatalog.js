@@ -5,7 +5,7 @@
  */
 import { createSeededRng, shuffleInPlace } from "../services/feed/ranking/rng.js";
 
-export function createSelectFeedBetaSitewideCatalog(serviceClient, deps) {
+export function createSelectFeedSitewideCatalog(serviceClient, deps) {
 	const { prefixedTable, resolveFeedRowTitle, getThumbnailUrl } = deps;
 	const BETA_COLS =
 		'id, title, summary, author, tags, created_at, created_image_id, prsn_created_images!inner(filename, file_path, user_id, unavailable_at, meta, title, width, height)';

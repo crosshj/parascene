@@ -23,7 +23,7 @@ import sharp from "sharp";
 import { openDb } from "../../_legacy/db/index.js";
 import { loadEnv } from "../repo-root.cjs";
 import { bumpFeedVersionCounter } from "../../server/services/feed/feedVersion.js";
-import { invalidateFeedBetaCatalogSnapshot } from "../../server/services/feed/ranking/catalogSnapshot.js";
+import { invalidateFeedCatalogSnapshot } from "../../server/services/feed/ranking/catalogSnapshot.js";
 import {
 	isReferenceToVideoCreation,
 	shouldAutoSetVideoPosterFromFirstFrame,
@@ -255,7 +255,7 @@ async function main() {
 		}
 		if (updated > 0 && !dryRun) {
 			await bumpFeedVersionCounter(queries);
-			void invalidateFeedBetaCatalogSnapshot().catch(() => {});
+			void invalidateFeedCatalogSnapshot().catch(() => {});
 		}
 		console.log(JSON.stringify({ dryRun, force, r2vOnly, scanned, needed: needed + updated, updated, skipped, failed }, null, 2));
 		return;
@@ -301,7 +301,7 @@ async function main() {
 
 	if (updated > 0 && !dryRun) {
 		await bumpFeedVersionCounter(queries);
-		void invalidateFeedBetaCatalogSnapshot().catch(() => {});
+		void invalidateFeedCatalogSnapshot().catch(() => {});
 	}
 
 	console.log(

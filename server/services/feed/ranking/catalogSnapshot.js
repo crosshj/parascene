@@ -1,23 +1,24 @@
 import { mergeCatalogRowsById } from "./catalogMerge.js";
-import { FEED_BETA_DEFAULT_PARAMS } from "./params.js";
+import { FEED_DEFAULT_PARAMS } from "./params.js";
 import { createSeededRng } from "./rng.js";
-import { getFeedBetaRedis, isFeedBetaRedisConfigured } from "../feedBetaRedis.js";
-import { normalizeFeedBetaMediaFields } from "./rowMedia.js";
+import { getFeedRedis, isFeedRedisConfigured } from "../feedRedis.js";
+import { normalizeFeedMediaFields } from "./rowMedia.js";
 import { loadNewcomerAuthorContext } from "./context.js";
 
-export const FEED_BETA_CATALOG_REDIS_KEY = 'feed-beta:catalog:v1';
+// Shared with the www rebuild job. The key string stays until that job moves.
+export const FEED_CATALOG_REDIS_KEY = 'feed-beta:catalog:v1';
 
 /** Shared snapshot TTL — rebuild job refreshes before expiry. */
-export const FEED_BETA_CATALOG_TTL_SEC = 20 * 60;
+export const FEED_CATALOG_TTL_SEC = 20 * 60;
 
-export const FEED_BETA_SNAPSHOT_RECENT_LIMIT = 400;
-export const FEED_BETA_SNAPSHOT_HOT_LIMIT = 250;
-export const FEED_BETA_SNAPSHOT_BACK_POOL_LIMIT = 600;
+export const FEED_SNAPSHOT_RECENT_LIMIT = 400;
+export const FEED_SNAPSHOT_HOT_LIMIT = 250;
+export const FEED_SNAPSHOT_BACK_POOL_LIMIT = 600;
 
 /** Live DB fallback when Redis snapshot is missing (smaller than old per-request pulls). */
-export const FEED_BETA_FALLBACK_RECENT_LIMIT = 280;
-export const FEED_BETA_FALLBACK_HOT_LIMIT = 180;
-export const FEED_BETA_FALLBACK_BACK_LIMIT = 240;
+export const FEED_FALLBACK_RECENT_LIMIT = 280;
+export const FEED_FALLBACK_HOT_LIMIT = 180;
+export const FEED_FALLBACK_BACK_LIMIT = 240;
 
 /**
  * @param {object[]} backPool
@@ -41,27 +42,27 @@ export function sliceBackPoolFromSeed(backPool, pageSeed, limit) {
  *
  * @param {object} queries
  */
-export async function buildFeedBetaCatalogSnapshot(queries) {
-	const cat = queries?.selectFeedBetaSitewideCatalog;
+export async function buildFeedCatalogSnapshot(queries) {
+	const cat = queries?.selectFeedSitewideCatalog;
 	if (!cat || typeof cat.getRecent !== 'function') {
 		return null;
 	}
 
-	const params = FEED_BETA_DEFAULT_PARAMS;
+	const params = FEED_DEFAULT_PARAMS;
 	const olderThan = new Date(
 		Date.now() - params.backCatalogMinAgeDays * 24 * 60 * 60 * 1000
 	).toISOString();
 
 	const fetches = [
-		cat.getRecent(null, { limit: FEED_BETA_SNAPSHOT_RECENT_LIMIT }),
+		cat.getRecent(null, { limit: FEED_SNAPSHOT_RECENT_LIMIT }),
 		typeof cat.getTopEngaged === 'function'
-			? cat.getTopEngaged(null, { limit: FEED_BETA_SNAPSHOT_HOT_LIMIT })
+			? cat.getTopEngaged(null, { limit: FEED_SNAPSHOT_HOT_LIMIT })
 			: Promise.resolve([]),
 		typeof cat.getBackCatalogSlice === 'function'
 			? cat.getBackCatalogSlice(null, {
 					olderThanIso: olderThan,
 					offset: 0,
-					limit: FEED_BETA_SNAPSHOT_BACK_POOL_LIMIT
+					limit: FEED_SNAPSHOT_BACK_POOL_LIMIT
 				})
 			: Promise.resolve([])
 	];
@@ -117,16 +118,16 @@ export async function buildFeedBetaCatalogSnapshot(queries) {
 /**
  * @returns {Promise<object|null>}
  */
-export async function loadFeedBetaCatalogSnapshotFromRedis() {
-	const r = getFeedBetaRedis();
+export async function loadFeedCatalogSnapshotFromRedis() {
+	const r = getFeedRedis();
 	if (!r) return null;
 	try {
-		const raw = await r.get(FEED_BETA_CATALOG_REDIS_KEY);
+		const raw = await r.get(FEED_CATALOG_REDIS_KEY);
 		if (!raw || typeof raw !== 'object') return null;
 		if (raw.version !== 1) return null;
 		return raw;
 	} catch (err) {
-		console.warn('[feedBeta catalogRedis] load', err?.message || err);
+		console.warn('[feed catalogRedis] load', err?.message || err);
 		return null;
 	}
 }
@@ -134,16 +135,16 @@ export async function loadFeedBetaCatalogSnapshotFromRedis() {
 /**
  * Drop cached sitewide catalog so the next feed pull hydrates fresh poster URLs from DB.
  */
-export async function invalidateFeedBetaCatalogSnapshot() {
-	const { invalidateFeedBetaCatalogMemCache } = await import('./catalogSnapshotCache.js');
-	invalidateFeedBetaCatalogMemCache();
-	const r = getFeedBetaRedis();
+export async function invalidateFeedCatalogSnapshot() {
+	const { invalidateFeedCatalogMemCache } = await import('./catalogSnapshotCache.js');
+	invalidateFeedCatalogMemCache();
+	const r = getFeedRedis();
 	if (!r) return false;
 	try {
-		await r.del(FEED_BETA_CATALOG_REDIS_KEY);
+		await r.del(FEED_CATALOG_REDIS_KEY);
 		return true;
 	} catch (err) {
-		console.warn('[feedBeta catalogRedis] invalidate', err?.message || err);
+		console.warn('[feed catalogRedis] invalidate', err?.message || err);
 		return false;
 	}
 }
@@ -151,14 +152,14 @@ export async function invalidateFeedBetaCatalogSnapshot() {
 /**
  * @param {object} snapshot
  */
-export async function saveFeedBetaCatalogSnapshotToRedis(snapshot) {
-	const r = getFeedBetaRedis();
+export async function saveFeedCatalogSnapshotToRedis(snapshot) {
+	const r = getFeedRedis();
 	if (!r || !snapshot) return false;
 	try {
-		await r.set(FEED_BETA_CATALOG_REDIS_KEY, snapshot, { ex: FEED_BETA_CATALOG_TTL_SEC });
+		await r.set(FEED_CATALOG_REDIS_KEY, snapshot, { ex: FEED_CATALOG_TTL_SEC });
 		return true;
 	} catch (err) {
-		console.warn('[feedBeta catalogRedis] save', err?.message || err);
+		console.warn('[feed catalogRedis] save', err?.message || err);
 		return false;
 	}
 }
@@ -171,7 +172,7 @@ export async function saveFeedBetaCatalogSnapshotToRedis(snapshot) {
  */
 export function catalogFromSnapshot(snapshot, pageSeed) {
 	if (!snapshot) return [];
-	const params = FEED_BETA_DEFAULT_PARAMS;
+	const params = FEED_DEFAULT_PARAMS;
 	const backSlice = sliceBackPoolFromSeed(
 		snapshot.back_pool,
 		pageSeed,
@@ -182,9 +183,9 @@ export function catalogFromSnapshot(snapshot, pageSeed) {
 		snapshot.hot,
 		backSlice,
 		snapshot.video_head
-	).map(normalizeFeedBetaMediaFields);
+	).map(normalizeFeedMediaFields);
 }
 
-export function feedBetaCatalogUsesRedisSnapshot() {
-	return isFeedBetaRedisConfigured();
+export function feedCatalogUsesRedisSnapshot() {
+	return isFeedRedisConfigured();
 }

@@ -1,5 +1,5 @@
 /**
- * VPS feed-card HTML helpers. Spotlight partition helpers live in
+ * Feed-card HTML helpers. Spotlight partition helpers live in
  * `chatFeedMobilePartition.js` and are re-exported here.
  */
 import * as blogCampaignPathMod from './blogCampaignPath.js';
@@ -51,7 +51,7 @@ import {
 } from '../icons/svg-strings.js';
 import { attachFeedCardCreationDragSource } from './creationComposerDrag.js';
 import { attachFeedImpressionBeacon, recordFeedImpressionOnClick } from './feedImpressionBeacon.js';
-import { openFeedBetaWhyModal } from './feedBetaWhyModal.js';
+import { openFeedWhyModal } from './feedWhyModal.js';
 import { mountSequentialVideoPlayer } from './sequentialVideoPlayer.js';
 import {
 	groupCreationBadgeHtml,
@@ -1816,7 +1816,7 @@ function buildFeedCreationCard(
             </svg>
           </button>
           <div class="feed-card-menu" data-feed-menu hidden>
-            ${item.feed_beta_why ? `<button class="feed-card-menu-item" type="button" data-feed-beta-why>Why am I seeing this?</button>` : ''}
+            ${item.feed_why ? `<button class="feed-card-menu-item" type="button" data-feed-why>Why am I seeing this?</button>` : ''}
             <button class="feed-card-menu-item" type="button" data-hide-item>Hide from my feed</button>
           </div>
         </div>
@@ -1878,15 +1878,15 @@ function buildFeedCreationCard(
 	const moreButton = card.querySelector('button[data-more-button]');
 	const menu = card.querySelector('[data-feed-menu]');
 	const hideButton = card.querySelector('button[data-hide-item]');
-	const whyButton = card.querySelector('button[data-feed-beta-why]');
+	const whyButton = card.querySelector('button[data-feed-why]');
 	const itemId = item.created_image_id || item.id;
 
-	if (whyButton && item.feed_beta_why) {
+	if (whyButton && item.feed_why) {
 		whyButton.addEventListener('click', (e) => {
 			e.preventDefault();
 			e.stopPropagation();
 			menu.hidden = true;
-			openFeedBetaWhyModal(item.feed_beta_why, { signal: tooltipLifetime.signal });
+			openFeedWhyModal(item.feed_why, { signal: tooltipLifetime.signal });
 		});
 	}
 

@@ -33,8 +33,8 @@ export function transformFeedCreationRow(item) {
 	const videoUrl = media.video_url;
 	const mediaType = media.media_type;
 
-	const feedBetaWhy =
-		item.feed_beta_why && typeof item.feed_beta_why === 'object' ? item.feed_beta_why : null;
+	const feedWhy =
+		item.feed_why && typeof item.feed_why === 'object' ? item.feed_why : null;
 
 	return {
 		id: item.id,
@@ -66,6 +66,6 @@ export function transformFeedCreationRow(item) {
 		height: item.height ?? null,
 		doom_scroll_full_height:
 			meta && typeof meta === "object" && meta.doom_scroll_full_height === true,
-		feed_beta_why: feedBetaWhy
+		feed_why: feedWhy
 	};
 }

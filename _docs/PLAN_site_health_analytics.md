@@ -71,7 +71,7 @@ Each tier = penetration + volume + concentration (where it matters), at every ho
 4. Publish — users who ship something.
    Today: engagement monthly. Target: daily block.
 
-5. Feed scroll — feed-beta dwell + click; impressors; creation concentration.
+5. Feed scroll — feed dwell + click; impressors; creation concentration.
    Daily: `details.feed_impressions`. Period: daily series in visit-pulse-period-report.
 
 6. Interact — likes, comments, reactions, tips, detail views.

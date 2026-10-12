@@ -41,8 +41,8 @@ function page() {
 }
 
 test('the document title and favicon follow messages plus notifications', () => {
-	assert.equal(composeDocumentTitle('Feed · Parascene beta', 0), 'Feed · Parascene beta');
-	assert.equal(composeDocumentTitle('(4) Feed · Parascene beta', 2), '(2) Feed · Parascene beta');
+	assert.equal(composeDocumentTitle('Feed · Parascene', 0), 'Feed · Parascene');
+	assert.equal(composeDocumentTitle('(4) Feed · Parascene', 2), '(2) Feed · Parascene');
 	assert.equal(composeDocumentTitle('Chat', 120), '(99+) Chat');
 	assert.equal(attentionCount(3, 2), 5);
 	assert.equal(shouldPing({ initialized: false, previous: 0, next: 4, hidden: true, audible: true }), false);
@@ -127,27 +127,27 @@ test('a background increase plays once and a claim clears the badge without anot
 	assert.equal(played, 0);
 	assert.equal(tab.title, '(2) parascene');
 	assert.equal(tab.link.href, '/favicon-unread.svg');
-	documentProvider.setTitle('Feed · Parascene beta');
-	assert.equal(tab.title, '(2) Feed · Parascene beta');
+	documentProvider.setTitle('Feed · Parascene');
+	assert.equal(tab.title, '(2) Feed · Parascene');
 	tab.visibilityState = 'hidden';
 	messages.state.value = { unreadSummary: { total_unread: 3 } };
 	messages.query.emit();
 	assert.equal(played, 1);
-	assert.equal(tab.title, '(4) Feed · Parascene beta');
+	assert.equal(tab.title, '(4) Feed · Parascene');
 	messages.query.emit();
 	assert.equal(played, 1);
 	tab.visibilityState = 'visible';
 	notes.state.value = { count: 0 };
 	notes.query.emit();
 	assert.equal(played, 1);
-	assert.equal(tab.title, '(3) Feed · Parascene beta');
+	assert.equal(tab.title, '(3) Feed · Parascene');
 	messages.state.value = { unreadSummary: { total_unread: 0, challenges_unread: 0 } };
 	messages.query.emit();
-	assert.equal(tab.title, 'Feed · Parascene beta');
+	assert.equal(tab.title, 'Feed · Parascene');
 	assert.equal(tab.link.href, '/favicon.svg');
 	messages.challengeAttention = 1;
 	messages.emitAttention();
-	assert.equal(tab.title, '(1) Feed · Parascene beta');
+	assert.equal(tab.title, '(1) Feed · Parascene');
 	assert.equal(tab.link.href, '/favicon-unread.svg');
 	assert.equal(documentProvider.explain().total, 1);
 	documentProvider.destroy();

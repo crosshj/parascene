@@ -366,7 +366,7 @@ body:not(.view-nsfw) .creation-detail-image-wrapper.nsfw:not(.nsfw-revealed) .cr
 @media (max-width: 768px) {
 	/* The overlay content already clears its fixed 58px header. Do not add the
 	   standalone page's second mobile header offset to its nested <main>. */
-	body.beta-layout.creation-detail-page .beta-app-overlay__content > main { padding: 0; }
+	body.app-layout.creation-detail-page .app-overlay__content > main { padding: 0; }
 
 	/* Match hero to the image; min-height was leaving bands above/below the image. */
 	/* contain: paint keeps filter/backdrop blur from painting above the hero (frosted header samples it otherwise). */
@@ -377,15 +377,15 @@ body:not(.view-nsfw) .creation-detail-image-wrapper.nsfw:not(.nsfw-revealed) .cr
 
 	/* Portrait: full width on mobile; loading aspect box matches loaded img footprint */
 
-	/* VPS overlays have no legacy embed gutters, so keep every hero ratio on the
+	/* Overlays have no legacy embed gutters, so keep every hero ratio on the
 	   same full-width mobile track. Height remains controlled by its aspect. */
-	body.beta-layout.creation-detail-page .creation-detail-hero,
-	body.beta-layout.creation-detail-page .creation-detail-image-wrapper {
+	body.app-layout.creation-detail-page .creation-detail-hero,
+	body.app-layout.creation-detail-page .creation-detail-image-wrapper {
 		width: 100%;
 		max-width: 100%;
 		margin-inline: 0;
 	}
-	body.beta-layout.creation-detail-page .creation-detail-image-wrapper .creation-detail-image {
+	body.app-layout.creation-detail-page .creation-detail-image-wrapper .creation-detail-image {
 		max-width: 100%;
 	}
 }

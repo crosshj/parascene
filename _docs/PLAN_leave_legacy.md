@@ -37,12 +37,12 @@ Open question: move those pages to the repo root instead of leaving them under `
 - `scripts/monitoring/debug-first-creation-nudge.js`
 - `scripts/monitoring/debug-signup-onboarding.cjs` (`_legacy/db/supabase.js`)
 - `scripts/analytics/overview-refresh.js` (also `getNotificationDisplayName`)
-- `scripts/analytics/feed-beta-catalog-rebuild.js` (also the rebuild job below)
+- `scripts/analytics/feed-catalog-rebuild.js` (also the rebuild job below)
 
 Jobs that were never ported:
 
 - `runVisitPulseFlush` (`_legacy/api_routes/utils/visitPulseFlush.js`), called by `scripts/analytics/visit-pulse-flush.js`. Day-key math already lives in `server/services/feed/visitPulse.js`. The Redis-to-database flush does not. This is the same job the QStash schedule posts to `/api/worker/jobs`.
-- `runFeedBetaCatalogRebuild` (`_legacy/api_routes/feedBeta/catalogRebuild.js`), called by `scripts/analytics/feed-beta-catalog-rebuild.js`. The new server can drop a catalog snapshot. It does not rebuild one. This is the other `/api/worker/jobs` schedule.
+- `runFeedBetaCatalogRebuild` (`_legacy/api_routes/feedBeta/catalogRebuild.js`), called by `scripts/analytics/feed-catalog-rebuild.js`. The new server can drop a catalog snapshot. It does not rebuild one. This is the other `/api/worker/jobs` schedule. The legacy module still uses the feed-beta name.
 - `getNotificationDisplayName` (`_legacy/api_routes/utils/displayName.js`), called by the overview refresh. The new app formats names with `formatWhoLabel` in `server/services/feed/whoMeta.js`, which is a different helper.
 
 ## Test

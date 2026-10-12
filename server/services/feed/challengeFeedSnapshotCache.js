@@ -1,4 +1,4 @@
-import { getFeedBetaRedis } from "./feedBetaRedis.js";
+import { getFeedRedis } from "./feedRedis.js";
 import {
 	buildChallengeFeedSnapshotShared,
 	applyChallengeViewerOverlay
@@ -46,7 +46,7 @@ export function invalidateChallengeFeedSnapshotMemCache() {
  */
 export async function invalidateChallengeFeedSnapshotCache() {
 	mem = { at: 0, snapshot: mem.snapshot, dirty: true };
-	const r = getFeedBetaRedis();
+	const r = getFeedRedis();
 	if (!r) return false;
 	try {
 		await r.del(CHALLENGE_FEED_SNAPSHOT_REDIS_KEY);
@@ -87,7 +87,7 @@ export async function loadChallengeFeedSnapshotSharedCached() {
 	if (mem.snapshot && !mem.dirty && now - mem.at < MEM_TTL_MS) {
 		return mem.snapshot;
 	}
-	const r = getFeedBetaRedis();
+	const r = getFeedRedis();
 	if (r) {
 		try {
 			const raw = await r.get(CHALLENGE_FEED_SNAPSHOT_REDIS_KEY);
@@ -108,7 +108,7 @@ export async function loadChallengeFeedSnapshotSharedCached() {
  * @param {object} snapshot
  */
 export async function saveChallengeFeedSnapshotToRedis(snapshot) {
-	const r = getFeedBetaRedis();
+	const r = getFeedRedis();
 	if (!r || !snapshot) {
 		if (snapshot) mem = { at: Date.now(), snapshot, dirty: false };
 		return false;
@@ -130,7 +130,7 @@ export async function saveChallengeFeedSnapshotToRedis(snapshot) {
  * @returns {Promise<boolean>}
  */
 async function tryAcquireRebuildLock() {
-	const r = getFeedBetaRedis();
+	const r = getFeedRedis();
 	if (!r) return true;
 	try {
 		const ok = await r.set(CHALLENGE_FEED_SNAPSHOT_REBUILD_LOCK_KEY, '1', {
@@ -145,7 +145,7 @@ async function tryAcquireRebuildLock() {
 }
 
 async function releaseRebuildLock() {
-	const r = getFeedBetaRedis();
+	const r = getFeedRedis();
 	if (!r) return;
 	try {
 		await r.del(CHALLENGE_FEED_SNAPSHOT_REBUILD_LOCK_KEY);

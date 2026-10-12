@@ -1,5 +1,5 @@
 /**
- * VPS port of WWW creationsBulkLongPress.js; owned by the mounted bulk controller.
+ * Port of WWW creationsBulkLongPress.js; owned by the mounted bulk controller.
  * Activates when the hold threshold is met (no finger movement or release required).
  */
 

@@ -38,7 +38,7 @@ export async function normalizeUploadedImage(input) {
 		}
 		return { buffer: await pipeline.webp({ quality: 85 }).toBuffer(), contentType: "image/webp" };
 	} catch {
-		// Some sharp builds can inspect HEIC but lack the HEVC decoder. The VPS
+		// Some sharp builds can inspect HEIC but lack the HEVC decoder. The
 		// ffmpeg build has that decoder, so use it as the browser-safe fallback.
 		const directory = await mkdtemp(path.join(os.tmpdir(), "parascene-image-"));
 		const sourcePath = path.join(directory, "source.bin");

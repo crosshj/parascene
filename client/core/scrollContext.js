@@ -1,6 +1,6 @@
 /** Resolve the active route's scroller for paging, media visibility and restore. */
 export function createScrollContext(element) {
-	const region = element?.closest?.('.beta-outlet__scroll');
+	const region = element?.closest?.('.app-outlet__scroll');
 	return {
 		region,
 		get documentOwned() { return region?.dataset.scrollOwner === 'document'; },

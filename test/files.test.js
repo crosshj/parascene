@@ -289,12 +289,12 @@ test("allows credentialed beta CORS and rejects other origins", async () => {
 	});
 });
 
-test("cdn host exposes CDN routes but never falls through to the beta app", async () => {
+test("cdn host exposes CDN routes but never falls through to the site app", async () => {
 	const profileFiles = { async list() { return []; } };
 	const app = express();
 	app.use((req, _res, next) => { req.auth = { userId: 42 }; next(); });
 	app.use(createCdnHostBoundary(createCdnRoutes(profileFiles)));
-	app.get("*", (_req, res) => res.type("text").send("beta app"));
+	app.get("*", (_req, res) => res.type("text").send("site app"));
 
 	await withServer(app, async (base) => {
 		const health = await requestWithHost(base, "/healthz", "cdn.parascene.com");
@@ -314,7 +314,7 @@ test("cdn host exposes CDN routes but never falls through to the beta app", asyn
 
 		const beta = await requestWithHost(base, "/files", "beta.parascene.com");
 		assert.equal(beta.status, 200);
-		assert.equal(beta.text, "beta app");
+		assert.equal(beta.text, "site app");
 	});
 });
 

@@ -66,7 +66,7 @@ export function embedWaitTags(tags) {
 }
 
 export function importStandaloneAppChrome() {
-	// The VPS composition root registers app chrome statically through elements/index.js.
+	// The composition root registers app chrome statically through elements/index.js.
 	return Promise.resolve();
 }
 

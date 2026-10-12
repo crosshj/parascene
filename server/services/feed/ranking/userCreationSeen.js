@@ -37,8 +37,8 @@ export function parseFeedImpressionBody(body) {
 	const dev =
 		body?.attribution && typeof body.attribution === 'object'
 			? body.attribution
-			: body?.feed_beta_why?.developer && typeof body.feed_beta_why.developer === 'object'
-				? body.feed_beta_why.developer
+			: body?.feed_why?.developer && typeof body.feed_why.developer === 'object'
+				? body.feed_why.developer
 				: {};
 	const meta = sanitizeFeedImpressionMeta({
 		...dev,

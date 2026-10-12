@@ -1,4 +1,4 @@
-// WWW CLIP search contract, adapted to the VPS-owned Supabase and HTTP clients.
+// WWW CLIP search contract, adapted to this app's Supabase and HTTP clients.
 const MODEL = '1c0371070cb827ec3c7f2f28adcdde54b50dcd239aa6faea0bc98b174ef03fb4';
 function fail(status, message) { throw Object.assign(new Error(message), { status }); }
 async function embed(text) {

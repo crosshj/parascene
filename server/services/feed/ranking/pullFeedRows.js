@@ -1,48 +1,48 @@
 import {
-	buildBetaPageFeedCursor,
-	isFeedBetaPageCursor,
-	pageIndexAfterBetaCursor
+	buildFeedPageCursor,
+	isFeedPageCursor,
+	pageIndexAfterFeedCursor
 } from "./cursor.js";
-import { buildFeedBetaContinuation } from "./continuation.js";
+import { buildFeedContinuation } from "./continuation.js";
 import {
-	pullFeedBetaCandidateCatalogBundle,
-	resolveFeedBetaSitewideCatalogSize,
+	pullFeedCandidateCatalogBundle,
+	resolveFeedSitewideCatalogSize,
 	applyViewerLikedFromSet,
 	applyViewerLikedToCatalog,
 	applyViewerLikedToRows,
 	loadViewerLikedCreationIdSetForUser,
-	pullFeedBetaSlotPackVideoHead
+	pullFeedSlotPackVideoHead
 } from "./catalog.js";
 import { loadFollowingIdSet } from "./context.js";
-import { FEED_BETA_DEFAULT_PARAMS } from "./params.js";
-import { mergeBetaPage, sortFeedBetaRowsNewestFirst } from "./mergeBetaPage.js";
+import { FEED_DEFAULT_PARAMS } from "./params.js";
+import { mergeFeedPage, sortFeedRowsNewestFirst } from "./mergeFeedPage.js";
 import { drawMobileEditorialSlotPackPage } from "./mobileSlotPack.js";
-import { buildFeedBetaScoreContext, sampleThreadRows } from "./pools.js";
-import { computeBetaHasMore } from "./hasMore.js";
-import { ensureBetaPageFilledToLimit, fillBetaPageFromPast } from "./fillPageToLimit.js";
+import { buildFeedScoreContext, sampleThreadRows } from "./pools.js";
+import { computeFeedHasMore } from "./hasMore.js";
+import { ensureFeedPageFilledToLimit, fillFeedPageFromPast } from "./fillPageToLimit.js";
 import {
-	createFeedBetaSession,
-	isFeedBetaSessionStoreAvailable,
-	loadFeedBetaSession,
-	saveFeedBetaSession
+	createFeedSession,
+	isFeedSessionStoreAvailable,
+	loadFeedSession,
+	saveFeedSession
 } from "./feedSession.js";
-import { loadFeedBetaSeenSetForUser } from "./seen.js";
-import { feedRowCreationIdKey, normalizeFeedBetaMediaFields } from "./rowMedia.js";
-import { appendFeedBetaMergeReason } from "./reason.js";
+import { loadFeedSeenSetForUser } from "./seen.js";
+import { feedRowCreationIdKey, normalizeFeedMediaFields } from "./rowMedia.js";
+import { appendFeedMergeReason } from "./reason.js";
 import { wrapTimedPromise } from "../feedTiming.js";
 
 /**
  * @param {object} opts
  * @returns {number}
  */
-function resolveBetaPageIndex({ slotPack, offset, afterAt, afterIdNum, limit, feedBetaAck }) {
-	if (slotPack && offset === 0 && !isFeedBetaPageCursor(afterAt, afterIdNum)) {
+function resolveFeedPageIndex({ slotPack, offset, afterAt, afterIdNum, limit, feedAck }) {
+	if (slotPack && offset === 0 && !isFeedPageCursor(afterAt, afterIdNum)) {
 		return 1;
 	}
-	if (isFeedBetaPageCursor(afterAt, afterIdNum)) {
-		return pageIndexAfterBetaCursor(afterIdNum);
+	if (isFeedPageCursor(afterAt, afterIdNum)) {
+		return pageIndexAfterFeedCursor(afterIdNum);
 	}
-	const ackPage = Number(feedBetaAck?.completed_page);
+	const ackPage = Number(feedAck?.completed_page);
 	if (Number.isFinite(ackPage) && ackPage >= 1) {
 		return ackPage + 1;
 	}
@@ -66,7 +66,7 @@ function buildPageShuffleSeed(userId, pageIndex, refresh) {
 /**
  * @param {object} args
  */
-export async function pullFeedBetaRows({
+export async function pullFeedRows({
 	queries,
 	user,
 	limit,
@@ -77,24 +77,24 @@ export async function pullFeedBetaRows({
 	enableNsfw,
 	showOwnPosts,
 	refresh = false,
-	feedBetaAck = null,
+	feedAck = null,
 	seenSet = null,
 	timing = null
 }) {
 	const userId = user.id;
 	const safeLimit = Math.min(Math.max(1, Number(limit) || 20), 100);
-	const pageIndex = resolveBetaPageIndex({
+	const pageIndex = resolveFeedPageIndex({
 		slotPack,
 		offset,
 		afterAt,
 		afterIdNum,
 		limit: safeLimit,
-		feedBetaAck
+		feedAck
 	});
-	const previousPageUnfilled = feedBetaAck?.page_filled === false;
+	const previousPageUnfilled = feedAck?.page_filled === false;
 	const isSlotPackPageOne = Boolean(slotPack) && pageIndex === 1;
 	const isContinuation = pageIndex > 1 || (!slotPack && offset > 0);
-	const params = FEED_BETA_DEFAULT_PARAMS;
+	const params = FEED_DEFAULT_PARAMS;
 
 	const pageSeed = buildPageShuffleSeed(userId, pageIndex, refresh);
 	const shuffleSeed = pageSeed;
@@ -108,7 +108,7 @@ export async function pullFeedBetaRows({
 		'pull.seen',
 		seenSet instanceof Set
 			? Promise.resolve(seenSet)
-			: loadFeedBetaSeenSetForUser(queries, user)
+			: loadFeedSeenSetForUser(queries, user)
 	);
 	const canLoadLikes = typeof queries?.selectViewerLikedCreationIdsByUser?.all === 'function';
 	const likedPromise = wrapTimedPromise(
@@ -116,15 +116,15 @@ export async function pullFeedBetaRows({
 		'pull.likes',
 		canLoadLikes ? loadViewerLikedCreationIdSetForUser(queries, userId) : Promise.resolve(null)
 	);
-	const sessionPromise = !isFeedBetaSessionStoreAvailable()
+	const sessionPromise = !isFeedSessionStoreAvailable()
 		? Promise.resolve(null)
 		: pageIndex === 1
-			? Promise.resolve(createFeedBetaSession())
-			: wrapTimedPromise(timing, 'pull.session', loadFeedBetaSession(userId, feedBetaAck?.session_id));
+			? Promise.resolve(createFeedSession())
+			: wrapTimedPromise(timing, 'pull.session', loadFeedSession(userId, feedAck?.session_id));
 	const catalogPromise = wrapTimedPromise(
 		timing,
 		'pull.catalog',
-		pullFeedBetaCandidateCatalogBundle(queries, userId, pageSeed, {
+		pullFeedCandidateCatalogBundle(queries, userId, pageSeed, {
 			deferLikes: true
 		})
 	);
@@ -146,13 +146,13 @@ export async function pullFeedBetaRows({
 	const followingIds = await followingPromise;
 	const scoreContext = timing
 		? await timing.timeAsync('pull.score_context', () =>
-				buildFeedBetaScoreContext(queries, userId, catalog, {
+				buildFeedScoreContext(queries, userId, catalog, {
 					followingIds,
 					pageIndex,
 					snapshotNewcomer
 				})
 			)
-		: await buildFeedBetaScoreContext(queries, userId, catalog, {
+		: await buildFeedScoreContext(queries, userId, catalog, {
 				followingIds,
 				pageIndex,
 				snapshotNewcomer
@@ -176,13 +176,13 @@ export async function pullFeedBetaRows({
 		if (spotlightVideoHead.length === 0) {
 			spotlightVideoHead = await (timing
 				? timing.timeAsync('pull.slot_pack_video_head', () =>
-						pullFeedBetaSlotPackVideoHead(queries, userId, {
+						pullFeedSlotPackVideoHead(queries, userId, {
 							limit: params.slotPackVideoCap + 24,
 							enableNsfw,
 							showOwnPosts: showOwnPosts === true
 						})
 					)
-				: pullFeedBetaSlotPackVideoHead(queries, userId, {
+				: pullFeedSlotPackVideoHead(queries, userId, {
 						limit: params.slotPackVideoCap + 24,
 						enableNsfw,
 						showOwnPosts: showOwnPosts === true
@@ -208,7 +208,7 @@ export async function pullFeedBetaRows({
 					videoHead: spotlightVideoHead
 				});
 		mergedRows = slotRows.map((row, index) =>
-			appendFeedBetaMergeReason(row, {
+			appendFeedMergeReason(row, {
 				merge_layout: 'mobile_editorial_slot',
 				position_in_page: index + 1
 			})
@@ -224,7 +224,7 @@ export async function pullFeedBetaRows({
 		]);
 		timing?.add('pull.thread_draw', performance.now() - drawStart);
 
-		({ rows: mergedRows } = mergeBetaPage({
+		({ rows: mergedRows } = mergeFeedPage({
 			videoRows,
 			otherRows,
 			limit: safeLimit,
@@ -234,9 +234,9 @@ export async function pullFeedBetaRows({
 	}
 
 	let rows = mergedRows.map((row) => {
-		const norm = normalizeFeedBetaMediaFields(row);
-		if (row?.feed_beta_why) {
-			norm.feed_beta_why = row.feed_beta_why;
+		const norm = normalizeFeedMediaFields(row);
+		if (row?.feed_why) {
+			norm.feed_why = row.feed_why;
 		}
 		return norm;
 	});
@@ -245,17 +245,17 @@ export async function pullFeedBetaRows({
 	if (session && pageIndex > 1 && rows.length < safeLimit) {
 		const pastOpts = { rows, safeLimit, session, pageIndex, pageSeed, enableNsfw, showOwnPosts: showOwnPosts === true };
 		rows = await (timing
-			? timing.timeAsync('pull.past_fill', () => fillBetaPageFromPast(queries, userId, pastOpts))
-			: fillBetaPageFromPast(queries, userId, pastOpts));
+			? timing.timeAsync('pull.past_fill', () => fillFeedPageFromPast(queries, userId, pastOpts))
+			: fillFeedPageFromPast(queries, userId, pastOpts));
 		rows = rows.map((row) => {
-			const norm = normalizeFeedBetaMediaFields(row);
-			if (row?.feed_beta_why) norm.feed_beta_why = row.feed_beta_why;
+			const norm = normalizeFeedMediaFields(row);
+			if (row?.feed_why) norm.feed_why = row.feed_why;
 			return norm;
 		});
 	} else if (rows.length < safeLimit) {
 		rows = await (timing
 			? timing.timeAsync('pull.page_fill', () =>
-					ensureBetaPageFilledToLimit(queries, userId, {
+					ensureFeedPageFilledToLimit(queries, userId, {
 						rows,
 						safeLimit,
 						pageSeed,
@@ -268,7 +268,7 @@ export async function pullFeedBetaRows({
 						forceRelaxFill: previousPageUnfilled
 					})
 				)
-			: ensureBetaPageFilledToLimit(queries, userId, {
+			: ensureFeedPageFilledToLimit(queries, userId, {
 					rows,
 					safeLimit,
 					pageSeed,
@@ -281,16 +281,16 @@ export async function pullFeedBetaRows({
 					forceRelaxFill: previousPageUnfilled
 				}));
 		rows = rows.map((row) => {
-			const norm = normalizeFeedBetaMediaFields(row);
-			if (row?.feed_beta_why) {
-				norm.feed_beta_why = row.feed_beta_why;
+			const norm = normalizeFeedMediaFields(row);
+			if (row?.feed_why) {
+				norm.feed_why = row.feed_why;
 			}
 			return norm;
 		});
 	}
 
 	if (pageIndex === 1 && rows.length > 1) {
-		rows = sortFeedBetaRowsNewestFirst(rows);
+		rows = sortFeedRowsNewestFirst(rows);
 	}
 
 	rows = await (timing
@@ -303,18 +303,18 @@ export async function pullFeedBetaRows({
 	try {
 		sitewideCatalogSize = await (timing
 			? timing.timeAsync('pull.published_count', () =>
-					resolveFeedBetaSitewideCatalogSize(queries, catalogPublishedCount)
+					resolveFeedSitewideCatalogSize(queries, catalogPublishedCount)
 				)
-			: resolveFeedBetaSitewideCatalogSize(queries, catalogPublishedCount));
+			: resolveFeedSitewideCatalogSize(queries, catalogPublishedCount));
 	} catch {
 		sitewideCatalogSize = null;
 	}
 
 	if (session) {
-		for (const key of creationIdsFromBetaRows(rows)) session.served.add(key);
+		for (const key of creationIdsFromFeedRows(rows)) session.served.add(key);
 		await (timing
-			? timing.timeAsync('pull.session_save', () => saveFeedBetaSession(userId, session))
-			: saveFeedBetaSession(userId, session));
+			? timing.timeAsync('pull.session_save', () => saveFeedSession(userId, session))
+			: saveFeedSession(userId, session));
 	}
 
 	// With a session, the feed ends only when this visit has walked back past the oldest creation;
@@ -323,7 +323,7 @@ export async function pullFeedBetaRows({
 		? rows.length > 0 && !session.tailExhausted
 		: timing
 		? timing.time('pull.has_more', () =>
-				computeBetaHasMore({
+				computeFeedHasMore({
 					pageIndex,
 					rows,
 					safeLimit,
@@ -334,7 +334,7 @@ export async function pullFeedBetaRows({
 					sitewideCatalogSize
 				})
 			)
-		: computeBetaHasMore({
+		: computeFeedHasMore({
 				pageIndex,
 				rows,
 				safeLimit,
@@ -351,10 +351,10 @@ export async function pullFeedBetaRows({
 		isNewbieFeed: false,
 		mobileChatSlotPackPageOne: isSlotPackPageOne,
 		mobileChatSlotPackContinuation: isContinuation && !isSlotPackPageOne,
-		feedBetaServedIds: creationIdsFromBetaRows(rows),
-		feedBetaPageCursor: buildBetaPageFeedCursor(pageIndex),
-		feedBetaContinuation: {
-			...buildFeedBetaContinuation({
+		feedServedIds: creationIdsFromFeedRows(rows),
+		feedPageCursor: buildFeedPageCursor(pageIndex),
+		feedContinuation: {
+			...buildFeedContinuation({
 				pageIndex,
 				rows,
 				safeLimit,
@@ -367,7 +367,7 @@ export async function pullFeedBetaRows({
 			}),
 			...(session ? { session_id: session.id, past_active: session.tail != null } : {})
 		},
-		feedBetaTimingMeta: {
+		feedTimingMeta: {
 			pageIndex,
 			fromSnapshot,
 			catalogSize: catalog.length,
@@ -376,8 +376,8 @@ export async function pullFeedBetaRows({
 		}
 	};
 
-	/** @deprecated use feedBetaPageCursor */
-	result.slotPackFeedCursor = result.feedBetaPageCursor;
+	/** @deprecated use feedPageCursor */
+	result.slotPackFeedCursor = result.feedPageCursor;
 
 	return result;
 }
@@ -386,7 +386,7 @@ export async function pullFeedBetaRows({
  * @param {object[]} rows
  * @returns {string[]}
  */
-export function creationIdsFromBetaRows(rows) {
+export function creationIdsFromFeedRows(rows) {
 	const out = [];
 	for (const row of Array.isArray(rows) ? rows : []) {
 		const key = feedRowCreationIdKey(row);

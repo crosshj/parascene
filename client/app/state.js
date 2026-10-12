@@ -1,6 +1,6 @@
 import { createAppState } from '../core/appState.js';
 
-const SIDEBAR_PREFERENCE_KEY = 'prsn-vps-sidebar-mock';
+const SIDEBAR_PREFERENCE_KEY = 'prsn-sidebar';
 const DEFAULT_SIDEBAR_PREFERENCE = {
 	mode: 'full',
 	directMessages: 'minimal',

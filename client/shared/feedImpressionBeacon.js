@@ -2,7 +2,7 @@
  * Ranked-feed batched viewport impressions → sessionStorage queue → POST /api/feed/impressions.
  */
 
-import { readFeedBetaEnabledSync } from './feedBetaNav.js';
+import { readFeedEnabledSync } from './feedNav.js';
 import {
 	FLUSH_INTERVAL_MS,
 	FLUSH_MAX_ITEMS,
@@ -71,8 +71,8 @@ function addSentToStorage(ids) {
 
 function attributionFromItem(item) {
 	const dev =
-		item?.feed_beta_why?.developer && typeof item.feed_beta_why.developer === 'object'
-			? item.feed_beta_why.developer
+		item?.feed_why?.developer && typeof item.feed_why.developer === 'object'
+			? item.feed_why.developer
 			: {};
 	return {
 		pool: dev.pool ?? null,
@@ -119,7 +119,7 @@ function scheduleImpressionFlush() {
 
 export async function flushImpressionQueue(opts = {}) {
 	if (typeof window === 'undefined' || flushInFlight) return;
-	if (!readFeedBetaEnabledSync()) return;
+	if (!readFeedEnabledSync()) return;
 
 	const queue = coalesceImpressionQueue(readQueueFromStorage());
 	if (queue.length === 0) return;
@@ -146,13 +146,13 @@ export async function flushImpressionQueue(opts = {}) {
 
 export function recordFeedImpressionOnClick(item, opts = {}) {
 	if (typeof window === 'undefined') return;
-	if (!readFeedBetaEnabledSync()) return;
+	if (!readFeedEnabledSync()) return;
 	enqueueFeedImpression(item, 'click', opts.surface);
 }
 
 export function attachFeedImpressionBeacon(card, item, opts = {}) {
 	if (typeof window === 'undefined' || typeof IntersectionObserver === 'undefined') return;
-	if (!readFeedBetaEnabledSync()) return;
+	if (!readFeedEnabledSync()) return;
 
 	const rawId = item?.created_image_id ?? item?.id;
 	const creationId = Number(rawId);

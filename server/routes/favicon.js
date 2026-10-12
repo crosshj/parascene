@@ -8,14 +8,14 @@ function isLocalHost(req) {
 		hostname === '127.0.0.1' || hostname === '::1' || hostname === '[::1]';
 }
 
-/** The VPS serves beta; local development uses a green tile instead of blue. */
+/** Local development uses a green tile. Every other host uses the app icon. */
 export function createFaviconRoutes({ publicDir }) {
 	const router = express.Router();
 	function send(req, res, name) {
 		res.set('Cache-Control', 'no-store');
 		res.sendFile(path.join(publicDir, name));
 	}
-	router.get('/favicon.svg', (req, res) => send(req, res, `favicon-${isLocalHost(req) ? 'local' : 'beta'}.svg`));
-	router.get('/favicon-unread.svg', (req, res) => send(req, res, `favicon-${isLocalHost(req) ? 'local' : 'beta'}-unread.svg`));
+	router.get('/favicon.svg', (req, res) => send(req, res, `favicon-${isLocalHost(req) ? 'local' : 'app'}.svg`));
+	router.get('/favicon-unread.svg', (req, res) => send(req, res, `favicon-${isLocalHost(req) ? 'local' : 'app'}-unread.svg`));
 	return router;
 }

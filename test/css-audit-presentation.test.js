@@ -315,7 +315,7 @@ test('phase-3f buttons use btn-* and Modal.css is global; ps-button is gone', ()
 test('scoped [hidden] display:none duplicates are collapsed to primitives util', () => {
 	const primitives = readClient('styles/primitives.css');
 	assert.match(primitives, /^\[hidden\]\s*\{[^}]*display:\s*none\s*!important/m);
-	assert.doesNotMatch(primitives, /\.beta-app-overlay__content\s+\[hidden\]/);
+	assert.doesNotMatch(primitives, /\.app-overlay__content\s+\[hidden\]/);
 
 	const scopedWrappers = [
 		'views/Feed/FeedView.css',

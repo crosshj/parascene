@@ -7,9 +7,9 @@
 			content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
 		/>
 		<script>
-			document.documentElement.classList.add('beta-sidebar-layout-pending');
+			document.documentElement.classList.add('app-sidebar-layout-pending');
 			if (/^\/creations\/\d+\/?$/.test(location.pathname)) {
-				document.documentElement.classList.add('beta-overlay-route-pending');
+				document.documentElement.classList.add('app-overlay-route-pending');
 			}
 		</script>
 		<meta name="theme-color" content="#f6f7fb" media="(prefers-color-scheme: light)" />
@@ -26,13 +26,13 @@
 			:root {
 				color-scheme: light dark;
 				font-family: var(--font-family);
-				--beta-sidebar-width: 272px;
-				--beta-mobile-nav-height: 68px;
-				--beta-shell-inset: 6px;
-				--beta-panel-gap: 8px;
-				--beta-panel-radius: 20px;
-				--beta-canvas-background: #ffffff;
-				--beta-panel-background: #eef1f6;
+				--app-sidebar-width: 272px;
+				--app-mobile-nav-height: 68px;
+				--app-shell-inset: 6px;
+				--app-panel-gap: 8px;
+				--app-panel-radius: 20px;
+				--app-canvas-background: #ffffff;
+				--app-panel-background: #eef1f6;
 			}
 			body {
 				margin: 0;
@@ -134,52 +134,52 @@
 				margin-top: 28px;
 				font-size: 0.8rem;
 			}
-			body.beta-layout > header {
+			body.app-layout > header {
 				display: none;
 			}
-			body.beta-layout {
+			body.app-layout {
 				height: 100vh;
 				overflow: hidden;
 				overscroll-behavior: none;
-				background: var(--beta-canvas-background);
+				background: var(--app-canvas-background);
 			}
-			body.beta-layout #app-shell {
+			body.app-layout #app-shell {
 				height: 100vh;
 				min-height: 100vh;
 				overflow: hidden;
 			}
-			html.beta-overlay-route-pending [data-layout-region] {
+			html.app-overlay-route-pending [data-layout-region] {
 				visibility: hidden !important;
 			}
-			html.beta-sidebar-layout-pending [data-layout-region="sidebar"],
-			html.beta-sidebar-layout-pending [data-layout-region="page"],
-			html.beta-sidebar-layout-pending [data-layout-region="mobile-navigation"] {
+			html.app-sidebar-layout-pending [data-layout-region="sidebar"],
+			html.app-sidebar-layout-pending [data-layout-region="page"],
+			html.app-sidebar-layout-pending [data-layout-region="mobile-navigation"] {
 				visibility: hidden;
 			}
-			body.beta-layout main#app-outlet {
+			body.app-layout main#app-outlet {
 				box-sizing: border-box;
 				width: auto;
 				max-width: none;
 				min-width: 0;
-				height: calc(100vh - var(--beta-shell-inset) - var(--beta-shell-inset));
-				min-height: calc(100vh - var(--beta-shell-inset) - var(--beta-shell-inset));
-				margin: var(--beta-shell-inset) var(--beta-shell-inset) var(--beta-shell-inset) calc(var(--beta-sidebar-width) + var(--beta-shell-inset) + var(--beta-panel-gap));
+				height: calc(100vh - var(--app-shell-inset) - var(--app-shell-inset));
+				min-height: calc(100vh - var(--app-shell-inset) - var(--app-shell-inset));
+				margin: var(--app-shell-inset) var(--app-shell-inset) var(--app-shell-inset) calc(var(--app-sidebar-width) + var(--app-shell-inset) + var(--app-panel-gap));
 				padding: 0;
 				overflow: hidden;
 				overscroll-behavior: none;
-				border-radius: var(--beta-panel-radius);
+				border-radius: var(--app-panel-radius);
 				corner-shape: squircle;
-				background: var(--beta-panel-background);
+				background: var(--app-panel-background);
 			}
 			.app-layout-placeholder-sidebar {
 				position: fixed;
-				inset: var(--beta-shell-inset) auto var(--beta-shell-inset) var(--beta-shell-inset);
+				inset: var(--app-shell-inset) auto var(--app-shell-inset) var(--app-shell-inset);
 				box-sizing: border-box;
-				width: var(--beta-sidebar-width);
+				width: var(--app-sidebar-width);
 				overflow: hidden;
-				border-radius: var(--beta-panel-radius);
+				border-radius: var(--app-panel-radius);
 				corner-shape: squircle;
-				background: var(--beta-panel-background);
+				background: var(--app-panel-background);
 				z-index: 10;
 			}
 			.app-layout-placeholder-head {
@@ -216,8 +216,8 @@
 			}
 			@media (prefers-color-scheme: dark) {
 				:root {
-					--beta-canvas-background: #0e0d19;
-					--beta-panel-background: color-mix(in srgb, #191627 88%, #0e0d19);
+					--app-canvas-background: #0e0d19;
+					--app-panel-background: color-mix(in srgb, #191627 88%, #0e0d19);
 				}
 				body {
 					background: #0e0d19;
@@ -225,10 +225,10 @@
 				}
 			}
 			@media (max-width: 760px) {
-				body.beta-layout main#app-outlet {
-					height: calc(100vh - var(--beta-mobile-nav-height) - var(--beta-shell-inset) - var(--beta-shell-inset));
-					min-height: calc(100vh - var(--beta-mobile-nav-height) - var(--beta-shell-inset) - var(--beta-shell-inset));
-					margin: var(--beta-shell-inset);
+				body.app-layout main#app-outlet {
+					height: calc(100vh - var(--app-mobile-nav-height) - var(--app-shell-inset) - var(--app-shell-inset));
+					min-height: calc(100vh - var(--app-mobile-nav-height) - var(--app-shell-inset) - var(--app-shell-inset));
+					margin: var(--app-shell-inset);
 				}
 				.app-layout-placeholder-sidebar {
 					display: none;
@@ -238,7 +238,7 @@
 					inset: auto 0 0;
 					display: block;
 					box-sizing: border-box;
-					min-height: var(--beta-mobile-nav-height);
+					min-height: var(--app-mobile-nav-height);
 					border-top: 1px solid color-mix(in srgb, currentColor 12%, transparent);
 					background: color-mix(in srgb, Canvas 96%, currentColor 4%);
 					z-index: 10;
@@ -249,17 +249,17 @@
 			try {
 				const storedSidebarWidth = Number(localStorage.getItem('prsn-chat-sidebar-width-px'));
 				if (Number.isFinite(storedSidebarWidth)) {
-					document.documentElement.style.setProperty('--beta-sidebar-width', `${Math.min(460, Math.max(220, storedSidebarWidth))}px`);
+					document.documentElement.style.setProperty('--app-sidebar-width', `${Math.min(460, Math.max(220, storedSidebarWidth))}px`);
 				}
 			} catch {}
             try {
                 const width = Number(localStorage.getItem('prsn-right-sidebar-width-px'));
                 if (width >= 220) {
-                    const left = innerWidth >= 1024 ? Number.parseFloat(document.documentElement.style.getPropertyValue('--beta-sidebar-width')) || 272 : 0;
-                    document.documentElement.style.setProperty('--beta-right-sidebar-width', `${Math.max(220, Math.min(width, innerWidth - left - 180))}px`);
+                    const left = innerWidth >= 1024 ? Number.parseFloat(document.documentElement.style.getPropertyValue('--app-sidebar-width')) || 272 : 0;
+                    document.documentElement.style.setProperty('--app-right-sidebar-width', `${Math.max(220, Math.min(width, innerWidth - left - 180))}px`);
                 }
                 const saved = JSON.parse(localStorage.getItem('prsn-right-sidebar-open-by-route-v1') || '{}')[location.pathname];
-                if (saved?.key) document.documentElement.classList.add('beta-right-sidebar-restoring');
+                if (saved?.key) document.documentElement.classList.add('app-right-sidebar-restoring');
             } catch {}
 		</script>
 		<link
@@ -269,7 +269,7 @@
 		{{APP_BOOTSTRAP}}
 		<title>parascene</title>
 	</head>
-	<body class="beta-layout" data-entry="app">
+	<body class="app-layout" data-entry="app">
 		<header>
 			<a
 				class="brand"
@@ -299,7 +299,7 @@
 				</svg>
 			</a>
 			<div class="app-header-actions">
-				<nav class="app-nav" aria-label="Beta navigation">
+				<nav class="app-nav" aria-label="Main">
 					<a href="/" data-spa-link>Home</a>
 					<a href="/files" data-spa-link>Files</a>
 				</nav>

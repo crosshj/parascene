@@ -1,15 +1,15 @@
-import { FEED_BETA_DEFAULT_PARAMS } from "./params.js";
-import { pullFeedBetaCandidateCatalog } from "./catalog.js";
+import { FEED_DEFAULT_PARAMS } from "./params.js";
+import { pullFeedCandidateCatalog } from "./catalog.js";
 import { loadFollowingIdSet, loadNewcomerAuthorContext } from "./context.js";
-import { isFeedBetaRowExcludedFromPools, isFeedBetaRelaxedPage } from "./seen.js";
-import { stampFeedBetaRowReason } from "./reason.js";
+import { isFeedRowExcludedFromPools, isFeedRelaxedPage } from "./seen.js";
+import { stampFeedRowReason } from "./reason.js";
 import { createSeededRng, shuffleInPlace } from "./rng.js";
-import { scoreFeedBetaRow } from "./score.js";
+import { scoreFeedRow } from "./score.js";
 import {
 	feedRowCreationIdKey,
 	feedRowIsOtherThread,
 	feedRowIsVideoThread,
-	normalizeFeedBetaMediaFields
+	normalizeFeedMediaFields
 } from "./rowMedia.js";
 
 /**
@@ -36,7 +36,7 @@ function rowVisible(row, enableNsfw, viewerUserId, showOwnPosts) {
  */
 function filterThreadCatalog(catalog, thread, enableNsfw, viewerUserId, showOwnPosts) {
 	return (Array.isArray(catalog) ? catalog : [])
-		.map(normalizeFeedBetaMediaFields)
+		.map(normalizeFeedMediaFields)
 		.filter(
 			(row) =>
 				rowVisible(row, enableNsfw, viewerUserId, showOwnPosts) &&
@@ -51,7 +51,7 @@ function filterThreadCatalog(catalog, thread, enableNsfw, viewerUserId, showOwnP
  * @returns {object}
  */
 function rowWithPoolReason(stampBase, entry, pool) {
-	return stampFeedBetaRowReason(entry.row, { ...stampBase, pool, source: 'pool_draw' }, entry);
+	return stampFeedRowReason(entry.row, { ...stampBase, pool, source: 'pool_draw' }, entry);
 }
 
 /**
@@ -70,7 +70,7 @@ function takeRowsFromScored(scored, seen, take, used, pool, stampBase, skipSeenF
 		const key = feedRowCreationIdKey(entry.row);
 		if (
 			!key ||
-			(!skipSeenFilter && isFeedBetaRowExcludedFromPools(entry.row, seen)) ||
+			(!skipSeenFilter && isFeedRowExcludedFromPools(entry.row, seen)) ||
 			used.has(key)
 		) {
 			continue;
@@ -108,7 +108,7 @@ function weightedSampleWithReason(entries, take, rng, pool, stampBase, seen, use
 		const key = feedRowCreationIdKey(chosen.row);
 		if (
 			!key ||
-			(!skipSeenFilter && isFeedBetaRowExcludedFromPools(chosen.row, seen)) ||
+			(!skipSeenFilter && isFeedRowExcludedFromPools(chosen.row, seen)) ||
 			used.has(key)
 		) {
 			continue;
@@ -121,7 +121,7 @@ function weightedSampleWithReason(entries, take, rng, pool, stampBase, seen, use
 
 /**
  * Per-page pool draws (same model every page): hot 24h, hot 7d, new, newcomer, unseen catalog, follow sprinkle.
- * Each returned row carries `feed_beta_why` stamped at draw time.
+ * Each returned row carries `feed_why` stamped at draw time.
  * @param {object[]} catalog
  * @param {object} opts
  * @returns {object[]}
@@ -130,9 +130,9 @@ function weightedSampleWithReason(entries, take, rng, pool, stampBase, seen, use
  * Pool slot counts per page. Page 1 can lean hot; page 2+ reserves more `new` slots so
  * scrollers still see site-fresh posts alongside unseen engaged back-catalog.
  * @param {number} pageIndex
- * @param {typeof FEED_BETA_DEFAULT_PARAMS} params
+ * @param {typeof FEED_DEFAULT_PARAMS} params
  */
-export function feedBetaPoolTakesForPage(pageIndex, params = FEED_BETA_DEFAULT_PARAMS) {
+export function feedPoolTakesForPage(pageIndex, params = FEED_DEFAULT_PARAMS) {
 	const page = Math.max(1, Number(pageIndex) || 1);
 	if (page <= 1) {
 		return {
@@ -159,12 +159,12 @@ export function feedBetaPoolTakesForPage(pageIndex, params = FEED_BETA_DEFAULT_P
 }
 
 export function drawThreadPageFromCatalog(catalog, opts) {
-	const params = FEED_BETA_DEFAULT_PARAMS;
+	const params = FEED_DEFAULT_PARAMS;
 	const thread = opts.thread;
 	const take = Math.max(1, Number(opts.take) || 20);
 	const pageIndex = Math.max(1, Number(opts.pageIndex) || 1);
-	const poolTakes = feedBetaPoolTakesForPage(pageIndex, params);
-	const relaxed = isFeedBetaRelaxedPage(pageIndex, params);
+	const poolTakes = feedPoolTakesForPage(pageIndex, params);
+	const relaxed = isFeedRelaxedPage(pageIndex, params);
 	const seen =
 		opts.ignoreSeen === true ? new Set() : opts.seen instanceof Set ? opts.seen : new Set();
 	const shuffleSeed = opts.shuffleSeed != null ? String(opts.shuffleSeed) : null;
@@ -186,12 +186,12 @@ export function drawThreadPageFromCatalog(catalog, opts) {
 	const threadRows = filterThreadCatalog(catalog, thread, enableNsfw, viewerUserId, showOwnPosts).filter(
 		(row) => {
 			const key = feedRowCreationIdKey(row);
-			return key && !sessionServed?.has(key) && !isFeedBetaRowExcludedFromPools(row, seen, { relaxed });
+			return key && !sessionServed?.has(key) && !isFeedRowExcludedFromPools(row, seen, { relaxed });
 		}
 	);
 
 	const scored = threadRows.map((row) => {
-		const parts = scoreFeedBetaRow(row, ctx);
+		const parts = scoreFeedRow(row, ctx);
 		return { row, ...parts };
 	});
 
@@ -232,7 +232,7 @@ export function drawThreadPageFromCatalog(catalog, opts) {
 		);
 		ownActivityPool = ownRows
 			.map((row) => {
-				const parts = scoreFeedBetaRow(row, ctx);
+				const parts = scoreFeedRow(row, ctx);
 				return { row, ...parts };
 			})
 			.sort((a, b) => b.score - a.score);
@@ -358,7 +358,7 @@ export async function sampleThreadRows(queries, userId, opts) {
 	const catalog =
 		Array.isArray(opts.catalog) && opts.catalog.length > 0
 			? opts.catalog
-			: await pullFeedBetaCandidateCatalog(queries, userId, opts.pageSeed);
+			: await pullFeedCandidateCatalog(queries, userId, opts.pageSeed);
 
 	return drawThreadPageFromCatalog(catalog, {
 		thread: opts.thread,
@@ -381,7 +381,7 @@ export async function sampleThreadRows(queries, userId, opts) {
  * @param {number} userId
  * @param {object[]} catalog
  */
-export async function buildFeedBetaScoreContext(queries, userId, catalog, opts = {}) {
+export async function buildFeedScoreContext(queries, userId, catalog, opts = {}) {
 	const followingPromise =
 		opts.followingIds instanceof Set
 			? Promise.resolve(opts.followingIds)
@@ -401,6 +401,6 @@ export async function buildFeedBetaScoreContext(queries, userId, catalog, opts =
 		followingIds,
 		newcomerAuthorIds: newcomer.newcomerAuthorIds,
 		newcomerHandles: newcomer.newcomerHandles,
-		params: FEED_BETA_DEFAULT_PARAMS
+		params: FEED_DEFAULT_PARAMS
 	};
 }

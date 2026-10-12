@@ -1,5 +1,5 @@
-/** Default pool slot counts per thread (v0 — later `feed_beta.*` policy knobs). */
-export const FEED_BETA_DEFAULT_PARAMS = {
+/** Default pool slot counts per thread (v0 — later `feed_continuation.*` policy knobs). */
+export const FEED_DEFAULT_PARAMS = {
 	/** Candidate sources (merged per request). */
 	recentFetchLimit: 800,
 	hotEngagedFetchLimit: 350,
@@ -43,7 +43,7 @@ export const FEED_BETA_DEFAULT_PARAMS = {
 	/** Pages 1…N always return hasMore when this page returned items (site catalog is large). */
 	hasMoreThroughPage: 5,
 
-	/** From this page index onward, pool draws ignore feedBetaSeen + liked filters. */
+	/** From this page index onward, pool draws ignore feedSeen + liked filters. */
 	relaxFiltersFromPage: 5,
 
 	/** Max creations from the same author on one feed page. */
@@ -55,6 +55,6 @@ export const FEED_BETA_DEFAULT_PARAMS = {
 	/** Extra random DB attempts when page is still short after merge + cap. */
 	pageFillMaxRandomAttempts: 4,
 
-	/** Page 1 fill may ignore feedBetaSeen + liked so the first screen hits client `limit`. */
+	/** Page 1 fill may ignore feedSeen + liked so the first screen hits client `limit`. */
 	pageFillRelaxSeenFromPage: 1
 };

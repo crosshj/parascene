@@ -2,7 +2,7 @@
 .mobile-header-view { --mobile-header-fill: var(--bg); display: none; }
 @media (prefers-color-scheme: dark) { .mobile-header-view { --mobile-header-fill: var(--surface); } }
 @media (max-width: 768px) {
- .mobile-header-view { box-sizing: border-box; display: block; position: fixed; top: env(safe-area-inset-top); left: env(safe-area-inset-left); right: env(safe-area-inset-right); z-index: 30; height: var(--beta-mobile-header-row-height); padding: 8px 0; font-family: var(--font-family); background: linear-gradient(to bottom, var(--mobile-header-fill) 0%, color-mix(in srgb, var(--mobile-header-fill) 95%, transparent) 20%, color-mix(in srgb, var(--mobile-header-fill) 80%, transparent) 50%, color-mix(in srgb, var(--mobile-header-fill) 40%, transparent) 100%); backdrop-filter: blur(20px) saturate(180%); -webkit-backdrop-filter: blur(20px) saturate(180%); border-bottom: 1px solid color-mix(in srgb, var(--border) 30%, transparent); }
+ .mobile-header-view { box-sizing: border-box; display: block; position: fixed; top: env(safe-area-inset-top); left: env(safe-area-inset-left); right: env(safe-area-inset-right); z-index: 30; height: var(--app-mobile-header-row-height); padding: 8px 0; font-family: var(--font-family); background: linear-gradient(to bottom, var(--mobile-header-fill) 0%, color-mix(in srgb, var(--mobile-header-fill) 95%, transparent) 20%, color-mix(in srgb, var(--mobile-header-fill) 80%, transparent) 50%, color-mix(in srgb, var(--mobile-header-fill) 40%, transparent) 100%); backdrop-filter: blur(20px) saturate(180%); -webkit-backdrop-filter: blur(20px) saturate(180%); border-bottom: 1px solid color-mix(in srgb, var(--border) 30%, transparent); }
  .mobile-header-view .header-content { position: relative; display: flex; align-items: center; min-height: 48px; padding: 0 16px; margin: 0 auto; }
  .mobile-header-view .header-logo { display: flex; align-items: center; height: 36px; }
  .mobile-header-view .header-logo a { color: inherit; display: block; line-height: 0; }
@@ -50,8 +50,8 @@
 	box-sizing: border-box;
 	border: 2px solid var(--surface);
 	border-radius: 999px;
-	background: var(--beta-accent);
-	color: var(--beta-accent-text);
+	background: var(--app-accent);
+	color: var(--app-accent-text);
 	font-size: .6rem;
 	font-weight: 700;
 	line-height: 1;

@@ -2542,7 +2542,7 @@ if(!lifetime.active)return;
 		const current = tabData.creations.items || [];
 		const alreadyListed = current.some(item => Number(item?.id ?? item?.created_image_id) === id);
 		if (!isSelf && !alreadyListed) return;
-		const scroll = mountRoot.closest('.beta-outlet__scroll');
+		const scroll = mountRoot.closest('.app-outlet__scroll');
 		const scrollTop = scroll?.scrollTop ?? 0;
 		try {
 			const result = await loadUserImages(target, { includeAll: includeAllForAdmin, limit: Math.max(PROFILE_PAGE_SIZE.creations, current.length), offset: 0 });

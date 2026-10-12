@@ -145,13 +145,13 @@
 	.ps-overlay-popover--notifications.is-sheet {
 		right: env(safe-area-inset-right);
 		left: env(safe-area-inset-left);
-		top: calc(var(--beta-mobile-header-row-height) + env(safe-area-inset-top));
+		top: calc(var(--app-mobile-header-row-height) + env(safe-area-inset-top));
 		width: auto;
 		max-width: none;
 		border-right: 0;
 		border-left: 0;
 		border-radius: 0 0 12px 12px;
-		max-height: min(70dvh, calc(100dvh - var(--beta-mobile-header-row-height) - env(safe-area-inset-top) - 12px));
+		max-height: min(70dvh, calc(100dvh - var(--app-mobile-header-row-height) - env(safe-area-inset-top) - 12px));
 	}
 	.ps-overlay-popover--notifications.is-sheet .ps-notification { padding: 14px 16px; }
 	.ps-overlay-popover--notifications.is-sheet .ps-notification span,

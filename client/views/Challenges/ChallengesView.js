@@ -47,9 +47,9 @@ function paintChallengeNav(host, nav) {
 	if (!(host instanceof HTMLElement)) return;
 	host.replaceChildren();
 	const shell = document.createElement('div');
-	shell.className = 'beta-outlet__composer-shell';
+	shell.className = 'app-outlet__composer-shell';
 	const row = document.createElement('div');
-	row.className = 'beta-outlet__composer-input-row challenge-detail-nav-row';
+	row.className = 'app-outlet__composer-input-row challenge-detail-nav-row';
 	row.append(
 		challengeNavControl('previous', nav?.previous || null),
 		challengeNavControl('next', nav?.next || null)
@@ -69,7 +69,7 @@ export const ChallengesView = Object.freeze({
   const root = document.createElement('div'); root.className = organizing ? 'challenges-organize-root challenges-organize-root--spa' : 'challenge-pane-root';
   wrapper.append(status, retry, root); outlet.replaceChildren(wrapper);
   root.innerHTML = organizing ? renderChallengesOrganizeBoardSkeleton() : renderChallengePaneSkeleton();
-  services.providers.document.setTitle(`${title} · Parascene beta`);
+  services.providers.document.setTitle(`${title} · Parascene`);
   let destroyed = false, mounted = null, historyPainted = false, organizerTools = null, detailChrome = null, lease = null, threadId = null, fingerprint = '', latest = null, readId = 0, participantPainted = false;
   const withdrawnCreationIds = new Set();
   function delivery() {
@@ -216,7 +216,7 @@ export const ChallengesView = Object.freeze({
      } else {
       setHeaderTitle?.(title);
      }
-     services.providers.document.setTitle(info?.title ? `${headerTitle} · Challenges · Parascene beta` : `${title} · Parascene beta`);
+     services.providers.document.setTitle(info?.title ? `${headerTitle} · Challenges · Parascene` : `${title} · Parascene`);
     },
    });
    participantPainted = true; fingerprint = next;

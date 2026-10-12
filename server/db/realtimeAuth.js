@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 
 function fail(status, message) { throw Object.assign(new Error(message), { status }); }
 
-// WWW cookie-auth bridge. Derive the same password so WWW and beta sessions
+// WWW cookie-auth bridge. Derive the same password so WWW and this app's sessions
 // address the same Supabase identity and private room/user broadcast policies.
 export function createRealtimeAuthStore({ client: admin, supabaseUrl }, users, { anonFactory = createClient } = {}) {
 	return {

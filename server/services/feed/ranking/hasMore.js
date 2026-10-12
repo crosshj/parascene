@@ -1,21 +1,21 @@
 import { MOBILE_CHAT_SLOT_PACK_STRUCTURED_LEN } from "../../../../client/shared/chatFeedMobilePartition.js";
 import { feedRowCreationIdKey } from "./rowMedia.js";
-import { isFeedBetaRelaxedPage, countFeedBetaRemainingEligible } from "./seen.js";
+import { isFeedRelaxedPage, countFeedRemainingEligible } from "./seen.js";
 
 /**
  * @param {number} pageIndex
  * @param {{ hasMoreThroughPage?: number }} params
  * @returns {boolean}
  */
-export function isFeedBetaAssumedHasMorePage(pageIndex, params) {
+export function isFeedAssumedHasMorePage(pageIndex, params) {
 	const through = Math.max(1, Number(params?.hasMoreThroughPage) || 5);
 	return Math.max(1, Number(pageIndex) || 1) <= through;
 }
 
 /**
- * Whether beta feed pagination should continue after this page.
+ * Whether feed pagination should continue after this page.
  *
- * When `sitewideCatalogSize` is set, scroll continues until `feedBetaSeen` covers
+ * When `sitewideCatalogSize` is set, scroll continues until `feedSeen` covers
  * the published sitewide catalog (not when a candidate batch or page cap runs out).
  *
  * @param {object} opts
@@ -29,7 +29,7 @@ export function isFeedBetaAssumedHasMorePage(pageIndex, params) {
  * @param {number|null|undefined} [opts.sitewideCatalogSize]
  * @returns {boolean}
  */
-export function computeBetaHasMore({
+export function computeFeedHasMore({
 	pageIndex,
 	rows,
 	safeLimit,
@@ -56,9 +56,9 @@ export function computeBetaHasMore({
 	if (pageIndex >= params.maxPageIndex) return false;
 	if (rowCount === 0) return false;
 
-	if (isFeedBetaAssumedHasMorePage(pageIndex, params)) return true;
+	if (isFeedAssumedHasMorePage(pageIndex, params)) return true;
 
-	if (isFeedBetaRelaxedPage(pageIndex, params)) return true;
+	if (isFeedRelaxedPage(pageIndex, params)) return true;
 
 	const catalogSize = Array.isArray(catalog) ? catalog.length : 0;
 	const servedThisPage = new Set();
@@ -66,8 +66,8 @@ export function computeBetaHasMore({
 		const key = feedRowCreationIdKey(row);
 		if (key) servedThisPage.add(key);
 	}
-	const remainingEligible = countFeedBetaRemainingEligible(catalog, servedSeen, servedThisPage, {
-		relaxed: isFeedBetaRelaxedPage(pageIndex, params)
+	const remainingEligible = countFeedRemainingEligible(catalog, servedSeen, servedThisPage, {
+		relaxed: isFeedRelaxedPage(pageIndex, params)
 	});
 
 	const filledEnough =

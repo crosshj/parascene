@@ -1,8 +1,8 @@
 import { authorCountsFromRows } from "./creatorCap.js";
-import { FEED_BETA_DEFAULT_PARAMS } from "./params.js";
-import { stampFeedBetaRowReason } from "./reason.js";
-import { feedRowCreationIdKey, normalizeFeedBetaMediaFields } from "./rowMedia.js";
-import { isFeedBetaRelaxedPage, isFeedBetaRowExcludedFromPools } from "./seen.js";
+import { FEED_DEFAULT_PARAMS } from "./params.js";
+import { stampFeedRowReason } from "./reason.js";
+import { feedRowCreationIdKey, normalizeFeedMediaFields } from "./rowMedia.js";
+import { isFeedRelaxedPage, isFeedRowExcludedFromPools } from "./seen.js";
 
 /**
  * @param {object|null|undefined} row
@@ -22,7 +22,7 @@ function rowEligibleForPageFill(row, opts) {
 	}
 	const key = feedRowCreationIdKey(row);
 	if (key && opts.excludeKeys.has(key)) return false;
-	if (isFeedBetaRowExcludedFromPools(row, opts.servedSeen, { relaxed: opts.relaxed })) {
+	if (isFeedRowExcludedFromPools(row, opts.servedSeen, { relaxed: opts.relaxed })) {
 		return false;
 	}
 	return true;
@@ -57,8 +57,8 @@ function sortCandidatesForPageFill(rows, authorCounts, maxPerCreator) {
  * @param {object} opts
  * @returns {object[]}
  */
-export function appendBetaPageFillCandidates(existing, candidates, opts) {
-	const params = FEED_BETA_DEFAULT_PARAMS;
+export function appendFeedPageFillCandidates(existing, candidates, opts) {
+	const params = FEED_DEFAULT_PARAMS;
 	const safeLimit = Math.min(Math.max(1, Number(opts.safeLimit) || 20), 100);
 	const out = Array.isArray(existing) ? [...existing] : [];
 	if (out.length >= safeLimit) return out;
@@ -83,7 +83,7 @@ export function appendBetaPageFillCandidates(existing, candidates, opts) {
 
 	const eligible = [];
 	for (const raw of Array.isArray(candidates) ? candidates : []) {
-		const row = normalizeFeedBetaMediaFields(raw);
+		const row = normalizeFeedMediaFields(raw);
 		if (!rowEligibleForPageFill(row, filterOpts)) continue;
 		eligible.push(row);
 	}
@@ -109,7 +109,7 @@ export function appendBetaPageFillCandidates(existing, candidates, opts) {
 		}
 		if (key) excludeKeys.add(key);
 
-		out.push(stampFeedBetaRowReason(row, stampBase, null));
+		out.push(stampFeedRowReason(row, stampBase, null));
 	}
 
 	return out;
@@ -122,13 +122,13 @@ export function appendBetaPageFillCandidates(existing, candidates, opts) {
  * @param {object} opts
  * @returns {object[]}
  */
-export function fillBetaPageFromCatalog(rows, catalog, opts) {
+export function fillFeedPageFromCatalog(rows, catalog, opts) {
 	const pageIndex = Math.max(1, Number(opts.pageIndex) || 1);
 	const relaxed =
 		opts.forceRelaxFill === true ||
 		opts.relaxFilters === true ||
-		pageIndex <= (FEED_BETA_DEFAULT_PARAMS.pageFillRelaxSeenFromPage ?? 1);
-	return appendBetaPageFillCandidates(rows, catalog, {
+		pageIndex <= (FEED_DEFAULT_PARAMS.pageFillRelaxSeenFromPage ?? 1);
+	return appendFeedPageFillCandidates(rows, catalog, {
 		...opts,
 		relaxFilters: relaxed,
 		stampBase: {
@@ -160,11 +160,11 @@ export function fillBetaPageFromCatalog(rows, catalog, opts) {
  * @param {boolean} opts.showOwnPosts
  * @returns {Promise<object[]>}
  */
-export async function fillBetaPageFromPast(queries, userId, opts) {
+export async function fillFeedPageFromPast(queries, userId, opts) {
 	let rows = Array.isArray(opts.rows) ? opts.rows : [];
 	const safeLimit = Math.min(Math.max(1, Number(opts.safeLimit) || 20), 100);
 	const session = opts.session;
-	const getOlderThan = queries?.selectFeedBetaSitewideCatalog?.getOlderThan;
+	const getOlderThan = queries?.selectFeedSitewideCatalog?.getOlderThan;
 	if (!session || typeof getOlderThan !== 'function') return rows;
 
 	const exclude = new Set(session.served);
@@ -193,7 +193,7 @@ export async function fillBetaPageFromPast(queries, userId, opts) {
 			const key = feedRowCreationIdKey(row);
 			if (key) exclude.add(key);
 		}
-		rows = appendBetaPageFillCandidates(rows, page.rows, {
+		rows = appendFeedPageFillCandidates(rows, page.rows, {
 			safeLimit,
 			servedSeen: new Set(),
 			relaxFilters: true,
@@ -225,12 +225,12 @@ export async function fillBetaPageFromPast(queries, userId, opts) {
  * @param {object[]} [opts.catalog]
  * @returns {Promise<object[]>}
  */
-export async function ensureBetaPageFilledToLimit(queries, userId, opts) {
+export async function ensureFeedPageFilledToLimit(queries, userId, opts) {
 	let rows = Array.isArray(opts.rows) ? opts.rows : [];
 	const safeLimit = Math.min(Math.max(1, Number(opts.safeLimit) || 20), 100);
 	if (rows.length >= safeLimit) return rows;
 
-	const params = FEED_BETA_DEFAULT_PARAMS;
+	const params = FEED_DEFAULT_PARAMS;
 	const pageIndex = Math.max(1, Number(opts.pageIndex) || 1);
 	const pageSeed = opts.pageSeed != null ? String(opts.pageSeed) : String(userId);
 	const servedSeen = opts.servedSeen instanceof Set ? opts.servedSeen : new Set();
@@ -247,7 +247,7 @@ export async function ensureBetaPageFilledToLimit(queries, userId, opts) {
 	const catalog = Array.isArray(opts.catalog) ? opts.catalog : [];
 	const catalogFromSnapshot = opts.catalogFromSnapshot === true;
 	if (catalog.length > 0) {
-		rows = fillBetaPageFromCatalog(rows, catalog, {
+		rows = fillFeedPageFromCatalog(rows, catalog, {
 			...fillOpts,
 			forceRelaxFill:
 				opts.forceRelaxFill === true || (catalogFromSnapshot && pageIndex >= 2)
@@ -255,13 +255,13 @@ export async function ensureBetaPageFilledToLimit(queries, userId, opts) {
 	}
 	if (rows.length >= safeLimit) return rows;
 
-	const getRandom = queries.selectFeedBetaSitewideCatalog?.getRandomSlice;
+	const getRandom = queries.selectFeedSitewideCatalog?.getRandomSlice;
 	if (typeof getRandom !== 'function') return rows;
 
 	const maxAttempts = catalogFromSnapshot
 		? 1
 		: Math.max(1, Number(params.pageFillMaxRandomAttempts) || 4);
-	const strictRelaxed = isFeedBetaRelaxedPage(pageIndex, params);
+	const strictRelaxed = isFeedRelaxedPage(pageIndex, params);
 	const relaxFill =
 		opts.forceRelaxFill === true ||
 		pageIndex <= (params.pageFillRelaxSeenFromPage ?? 1) ||
@@ -284,7 +284,7 @@ export async function ensureBetaPageFilledToLimit(queries, userId, opts) {
 		} catch {
 			continue;
 		}
-		rows = appendBetaPageFillCandidates(rows, candidates, {
+		rows = appendFeedPageFillCandidates(rows, candidates, {
 			...fillOpts,
 			relaxFilters: relaxFill || attempt > 0,
 			stampBase: {

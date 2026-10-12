@@ -54,7 +54,7 @@ const composer = {
  },
 };
 let generation = 0;
-const cacheKey = `${CREATE_SERVERS_CACHE_KEY}:vps:${viewerId || "anonymous"}`;
+const cacheKey = `${CREATE_SERVERS_CACHE_KEY}:${viewerId || "anonymous"}`;
 const CREATE_SERVERS_CACHE_TTL_MS = 15 * 60 * 1000;
 
 /** @param {unknown} rawServers */

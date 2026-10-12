@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
- * Export sitewide published feed_items to a minimal CSV for feed-beta tests.
+ * Export sitewide published feed_items to a minimal CSV for feed tests.
  *
  * Requires: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
  *
  * Usage:
- *   node scripts/debug/export-feed-beta-catalog-fixture.js
- *   node scripts/debug/export-feed-beta-catalog-fixture.js --out test/fixtures/feedBeta/prod-published-catalog.csv
+ *   node scripts/debug/export-feed-catalog-fixture.js
+ *   node scripts/debug/export-feed-catalog-fixture.js --out test/fixtures/feed/prod-published-catalog.csv
  */
 import fs from 'fs/promises';
 import path from 'path';
@@ -17,9 +17,9 @@ import { REPO_ROOT, loadEnv } from '../repo-root.cjs';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 loadEnv();
 
-const DEFAULT_OUT = path.join(REPO_ROOT, 'test/fixtures/feedBeta/prod-published-catalog.csv');
+const DEFAULT_OUT = path.join(REPO_ROOT, 'test/fixtures/feed/prod-published-catalog.csv');
 const PAGE_SIZE = 500;
-const BETA_COLS =
+const CATALOG_COLS =
 	'id, created_at, created_image_id, title, summary, prsn_created_images!inner(user_id, unavailable_at, meta)';
 
 function requireEnv(name) {
@@ -78,7 +78,7 @@ async function fetchAllFeedRows(client) {
 	while (true) {
 		const { data, error } = await client
 			.from(table)
-			.select(BETA_COLS)
+			.select(CATALOG_COLS)
 			.not('prsn_created_images.user_id', 'is', null)
 			.is('prsn_created_images.unavailable_at', null)
 			.order('created_at', { ascending: false })

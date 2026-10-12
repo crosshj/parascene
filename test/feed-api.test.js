@@ -24,9 +24,9 @@ test('every feed surface requires authentication, including impression writes', 
 test('ranked feed drops NSFW rows even when a stored legacy-feed flag is present',async()=>{
  invalidateChallengeFeedSnapshotMemCache();
  const catalog=[{id:7,created_image_id:70,url:'/safe.jpg',created_at:'2026-10-01',user_id:2,meta:{}},{id:8,created_image_id:80,url:'/hidden.jpg',nsfw:true,created_at:'2026-09-30',user_id:2,meta:{}}];
- const router=createFeedRoutes({queries:queries({selectUserById:{get:async()=>({id:1,meta:{forceLegacyFeed:true}})},selectFeedBetaSitewideCatalog:{getRecent:async()=>catalog,getPublishedCount:async()=>catalog.length},selectUserFollowing:{all:async()=>[]}})});
+ const router=createFeedRoutes({queries:queries({selectUserById:{get:async()=>({id:1,meta:{forceLegacyFeed:true}})},selectFeedSitewideCatalog:{getRecent:async()=>catalog,getPublishedCount:async()=>catalog.length},selectUserFollowing:{all:async()=>[]}})});
  const out=await call(router,'/api/feed',{query:{limit:12,feed_surface:'chat'}});
- assert.equal(out.status,200);assert.deepEqual(out.data.items.map(row=>row.created_image_id),[70]);assert.equal(out.data.feed_beta.completed_page,1);
+ assert.equal(out.status,200);assert.deepEqual(out.data.items.map(row=>row.created_image_id),[70]);assert.equal(out.data.feed_continuation.completed_page,1);
 });
 test('doom deep links fall back to the site video timeline with an explicit anchor and cursor',async()=>{
  let options;const router=createFeedRoutes({queries:queries({selectFeedItems:{getPage:async()=>({rows:[],hasMore:false}),getSitePublishedVideoFeedPage:async(_viewer,opts)=>{options=opts;return {rows:[{created_image_id:42,url:'/cover.jpg',meta:{media_type:'video',video:{file_path:'/clip.mp4'}}}],hasMore:true,cursor:{after_created_image_id:'42'}};}}})});
@@ -44,7 +44,7 @@ test('doom pager filters hidden and non-video rows while advancing using the API
 
 test('ranked feed uses the sitewide catalog and returns a continuation cursor and acknowledgement',async()=>{
  const catalog=Array.from({length:45},(_,i)=>({id:i+1,created_image_id:i+1,title:'Ranked '+i,url:'/image.jpg',created_at:new Date(Date.now()-i*3600000).toISOString(),user_id:i+2,meta:{},like_count:i%5,comment_count:0}));
- const router=createFeedRoutes({queries:queries({selectUserById:{get:async()=>({id:1,meta:{}})},selectFeedBetaSitewideCatalog:{getRecent:async()=>catalog,getPublishedCount:async()=>catalog.length},selectUserFollowing:{all:async()=>[]}})});
+ const router=createFeedRoutes({queries:queries({selectUserById:{get:async()=>({id:1,meta:{}})},selectFeedSitewideCatalog:{getRecent:async()=>catalog,getPublishedCount:async()=>catalog.length},selectUserFollowing:{all:async()=>[]}})});
  const out=await call(router,'/api/feed',{query:{limit:12,feed_surface:'chat'}});
- assert.equal(out.status,200);assert.ok(out.data.items.length>0);assert.equal(out.data.feed_beta.completed_page,1);assert.ok(out.data.feed_cursor.after_image_id);assert.ok(out.data.feed_timing);
+ assert.equal(out.status,200);assert.ok(out.data.items.length>0);assert.equal(out.data.feed_continuation.completed_page,1);assert.ok(out.data.feed_cursor.after_image_id);assert.ok(out.data.feed_timing);
 });

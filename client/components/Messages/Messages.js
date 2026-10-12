@@ -48,7 +48,7 @@ export function mountMessages({ outlet, viewerId, onLoadOlder, onRetry, onRetryS
 	outlet.append(banner, root, errorLine);
 	const viewport = root;
 	const lifetime = new AbortController();
-	const shellScroll = outlet.closest('.beta-outlet__scroll'); shellScroll?.classList.add('chat-page-thread-body');
+	const shellScroll = outlet.closest('.app-outlet__scroll'); shellScroll?.classList.add('chat-page-thread-body');
 	let hasMore = false;
 	let loadingOlder = false;
 	let historyObserver = null;
@@ -107,7 +107,7 @@ export function mountMessages({ outlet, viewerId, onLoadOlder, onRetry, onRetryS
 		}
 	}
 	function acknowledgeVisibleLatest() {
-		if (document.visibilityState !== 'visible' || document.body.classList.contains('beta-creation-overlay-open')) return;
+		if (document.visibilityState !== 'visible' || document.body.classList.contains('app-creation-overlay-open')) return;
 		const last = [...root.querySelectorAll('.connect-chat-msg[data-chat-message-id]')].filter((row) => Number.isSafeInteger(Number(row.dataset.chatMessageId)) && Number(row.dataset.chatMessageId) > 0).at(-1);
 		if (!last) return;
 		const bounds = viewport.getBoundingClientRect();

@@ -54,7 +54,7 @@ function hasSourceImage(item, meta) {
 	return false;
 }
 
-/** Keep this classification aligned with the VPS `aspectRatio.js` helper. */
+/** Keep this classification aligned with the `aspectRatio.js` helper. */
 function isReferenceToVideoMeta(meta) {
 	if (!meta || typeof meta !== 'object') return false;
 	const method = String(meta.method || meta.provider_method || '').trim().toLowerCase().replace(/[_-]+/g, '');

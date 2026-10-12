@@ -2083,7 +2083,7 @@ app-route-create .create-route .image-field-error {
 }
 
 /* Overlay link color is more specific than this class; keep the clear control muted. */
-.beta-app-overlay__content a.create-prompt-clear,
+.app-overlay__content a.create-prompt-clear,
 app-route-create .create-prompt-clear {
 	color: var(--text-muted);
 	text-decoration: underline;
@@ -2095,7 +2095,7 @@ app-route-create .create-prompt-clear {
 }
 
 .create-prompt-clear:hover,
-.beta-app-overlay__content a.create-prompt-clear:hover,
+.app-overlay__content a.create-prompt-clear:hover,
 app-route-create .create-prompt-clear:hover {
 	color: var(--text);
 }
@@ -3792,7 +3792,7 @@ body.view-nsfw .creation-detail-image-wrapper.nsfw::after {
 	text-decoration: none;
 }
 
-.beta-app-overlay__content a.creation-detail-action-strip-creator-name.founder-name,
+.app-overlay__content a.creation-detail-action-strip-creator-name.founder-name,
 a.creation-detail-action-strip-creator-name.founder-name,
 .creation-detail-action-strip-creator-name.founder-name {
 	color: var(--founder-flair-name, #9657c2);

@@ -1,5 +1,5 @@
 /**
- * VPS mention and suggestion UI.
+ * Mention and suggestion UI.
  * Owned by mounted fields; styles live in components/TriggeredSuggest.
  *
  * Public API preserved:

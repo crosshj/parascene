@@ -1,5 +1,5 @@
 /* Doom scroll comments bottom sheet.
-   Mounted on document.body, outside .beta-app-overlay__content.
+   Mounted on document.body, outside .app-overlay__content.
    Box-sizing is local; [hidden] comes from primitives.css. */
 
 .chat-doom-comments-overlay,

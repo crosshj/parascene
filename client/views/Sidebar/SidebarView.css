@@ -1,16 +1,16 @@
 .sidebar-view { display: contents; }
 .sidebar-view__panel {
 	position: fixed;
-	inset: var(--beta-shell-inset) auto var(--beta-shell-inset) var(--beta-shell-inset-inline);
+	inset: var(--app-shell-inset) auto var(--app-shell-inset) var(--app-shell-inset-inline);
 	display: flex;
 	flex-direction: column;
 	box-sizing: border-box;
-	width: var(--beta-sidebar-width);
+	width: var(--app-sidebar-width);
 	padding: 0;
 	overflow: hidden;
-	border-radius: var(--beta-panel-radius);
+	border-radius: var(--app-panel-radius);
 	corner-shape: squircle;
-	background: var(--beta-panel-background);
+	background: var(--app-panel-background);
 	z-index: 10;
 }
 
@@ -34,13 +34,13 @@
 .sidebar-view__panel::before {
 	top: 0;
 	height: 48px;
-	background: linear-gradient(to bottom, var(--beta-panel-background) 24%, color-mix(in srgb, var(--beta-panel-background) 82%, transparent) 65%, transparent);
+	background: linear-gradient(to bottom, var(--app-panel-background) 24%, color-mix(in srgb, var(--app-panel-background) 82%, transparent) 65%, transparent);
 	z-index: 2;
 }
 .sidebar-view__panel::after {
 	bottom: var(--sidebar-footer-height, 60px);
 	height: 38px;
-	background: linear-gradient(to bottom, transparent 0%, color-mix(in srgb, var(--beta-panel-background) 80%, transparent) 48%, var(--beta-panel-background) 100%);
+	background: linear-gradient(to bottom, transparent 0%, color-mix(in srgb, var(--app-panel-background) 80%, transparent) 48%, var(--app-panel-background) 100%);
 	z-index: 2;
 }
 .sidebar-view__panel.has-scroll-above::before,
@@ -53,11 +53,11 @@
 	z-index: 4;
 	display: flex;
 	align-items: center;
-	flex: 0 0 var(--beta-chrome-row-height, 48px);
-	height: var(--beta-chrome-row-height, 48px);
+	flex: 0 0 var(--app-chrome-row-height, 48px);
+	height: var(--app-chrome-row-height, 48px);
 	padding: 0 10px;
 	box-sizing: border-box;
-	background: var(--beta-panel-background);
+	background: var(--app-panel-background);
 }
 .sidebar-view__head::after,
 .sidebar-view__footer::before {
@@ -122,7 +122,7 @@
 	gap: 8px;
 	box-sizing: border-box;
 	min-height: 34px;
-	padding: 4px calc(28px + var(--beta-sidebar-control-inset)) 2px 10px;
+	padding: 4px calc(28px + var(--app-sidebar-control-inset)) 2px 10px;
 }
 .sidebar-view__section + .sidebar-view__section .sidebar-view__section-head { min-height: 32px; padding-top: 2px; }
 .sidebar-view__section-head h2 {
@@ -130,7 +130,7 @@
 	min-width: 0;
 	margin: 0;
 	padding: 0;
-	color: var(--beta-text-muted);
+	color: var(--app-text-muted);
 	font-size: .6875rem;
 	font-weight: 700;
 	letter-spacing: .08em;
@@ -140,7 +140,7 @@
 .sidebar-view__section-head button {
 	position: absolute;
 	top: 50%;
-	right: var(--beta-sidebar-control-inset);
+	right: var(--app-sidebar-control-inset);
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -151,7 +151,7 @@
 	padding: 0;
 	border: 0;
 	border-radius: 4px;
-	color: var(--beta-text-muted);
+	color: var(--app-text-muted);
 	background: transparent;
 	transform: translateY(-50%);
 	opacity: .62;
@@ -170,7 +170,7 @@
 	width: 100%;
 	min-height: 28px;
 	position: relative;
-	padding: 2px calc(56px + var(--beta-sidebar-control-inset) + 6px) 2px 6px;
+	padding: 2px calc(56px + var(--app-sidebar-control-inset) + 6px) 2px 6px;
 	border: 1px solid transparent;
 	border-radius: 6px;
 	color: inherit;
@@ -289,8 +289,8 @@
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
-.sidebar-view__unread { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; box-sizing: border-box; min-width: 16px; height: 16px; padding: 0 5px; border-radius: 999px; color: var(--beta-accent-text); background: var(--beta-accent); font-size: .6rem; font-weight: 700; line-height: normal; }
-.sidebar-view__row-controls { position: absolute; top: 50%; right: var(--beta-sidebar-control-inset); width: 56px; height: 28px; transform: translateY(-50%); }
+.sidebar-view__unread { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; box-sizing: border-box; min-width: 16px; height: 16px; padding: 0 5px; border-radius: 999px; color: var(--app-accent-text); background: var(--app-accent); font-size: .6rem; font-weight: 700; line-height: normal; }
+.sidebar-view__row-controls { position: absolute; top: 50%; right: var(--app-sidebar-control-inset); width: 56px; height: 28px; transform: translateY(-50%); }
 /* The unread badge shares the gear's box. It must not take the click, including when the slot is empty. */
 .sidebar-view__badge-slot { position: absolute; top: 50%; right: 0; display: inline-flex; width: 28px; height: 28px; align-items: center; justify-content: center; transform: translateY(-50%); pointer-events: none; }
 .sidebar-view__row-menu {
@@ -305,7 +305,7 @@
 	padding: 0;
 	border: 0;
 	border-radius: 4px;
-	color: var(--beta-text-muted);
+	color: var(--app-text-muted);
 	background: transparent;
 	cursor: pointer;
 	opacity: 0;
@@ -442,8 +442,8 @@
 	box-sizing: border-box;
 	border: 2px solid var(--surface);
 	border-radius: 999px;
-	background: var(--beta-accent);
-	color: var(--beta-accent-text);
+	background: var(--app-accent);
+	color: var(--app-accent-text);
 	font-size: .6rem;
 	font-weight: 700;
 	line-height: 1;
@@ -454,10 +454,10 @@
 .sidebar-view__notifications-badge:not(:empty) { display: inline-flex; }
 .sidebar-view__resize-handle {
 	position: fixed;
-	top: var(--beta-shell-inset);
-	bottom: var(--beta-shell-inset);
-	left: calc(var(--beta-shell-inset-inline) + var(--beta-sidebar-width));
-	width: var(--beta-panel-gap);
+	top: var(--app-shell-inset);
+	bottom: var(--app-shell-inset);
+	left: calc(var(--app-shell-inset-inline) + var(--app-sidebar-width));
+	width: var(--app-panel-gap);
 	cursor: col-resize;
 	touch-action: none;
 	z-index: 11;

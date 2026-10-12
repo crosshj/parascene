@@ -18,7 +18,7 @@ All authenticated users receive the ranked feed by default. `meta.forceLegacyFee
 **Seen (per user)**
 
 - Impression batch → Redis SET `feed-beta:seen:{userId}` + 30d TTL (no Postgres)
-- Feed read merges Redis seen + legacy `meta.feedBetaSeen` (cap 400)
+- Feed read merges Redis seen + legacy `meta.feedSeen` (cap 400)
 - Liked exclusion uses existing likes table, not rollup columns
 
 **Not on hot path**
@@ -28,13 +28,13 @@ All authenticated users receive the ranked feed by default. `meta.forceLegacyFee
 ## Ops
 
 - Redis: same Upstash env as visit pulse (`UPSTASH_REDIS_REST_*`)
-- First deploy / after cold start: `node scripts/analytics/feed-beta-catalog-rebuild.js`
+- First deploy / after cold start: `node scripts/analytics/feed-catalog-rebuild.js`
 - Schedules: `node infra/qstash/sync.cjs --only parascene-feed-beta-catalog-rebuild`
 
 ## Key files
 
-- Catalog: `api_routes/feedBeta/catalogSnapshot.js`, `catalogRebuild.js`, `catalog.js`
-- Seen: `api_routes/feedBeta/seenRedis.js`, `seen.js`
+- Catalog: `api_routes/feed/catalogSnapshot.js`, `catalogRebuild.js`, `catalog.js`
+- Seen: `api_routes/feed/seenRedis.js`, `seen.js`
 - Impressions: `public/shared/feedImpressionBeacon.js`
 - Worker: `api/worker/jobs.js`
 
@@ -46,4 +46,4 @@ All authenticated users receive the ranked feed by default. `meta.forceLegacyFee
 
 ## Reference
 
-`_docs/PLAN_feed_beta_chatgpt.md`
+`_docs/PLAN_feed_chatgpt.md`

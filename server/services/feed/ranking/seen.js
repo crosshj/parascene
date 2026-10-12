@@ -1,5 +1,5 @@
 import { feedRowCreationIdKey } from "./rowMedia.js";
-import { loadFeedBetaSeenSetFromRedis } from "./seenRedis.js";
+import { loadFeedSeenSetFromRedis } from "./seenRedis.js";
 
 /** Max legacy meta ids merged with Redis seen. */
 const SEEN_CAP = 400;
@@ -8,7 +8,7 @@ const SEEN_CAP = 400;
  * @param {object|null|undefined} user
  * @returns {Set<string>}
  */
-export function getFeedBetaSeenSet(user) {
+export function getFeedSeenSet(user) {
 	const raw = user?.meta?.feedBetaSeen;
 	if (!Array.isArray(raw)) return new Set();
 	const out = new Set();
@@ -25,7 +25,7 @@ export function getFeedBetaSeenSet(user) {
  * @param {Set<string>} servedSeen
  * @returns {boolean}
  */
-export function isFeedBetaServedSeen(row, servedSeen) {
+export function isFeedServedSeen(row, servedSeen) {
 	const key = feedRowCreationIdKey(row);
 	return Boolean(key && servedSeen instanceof Set && servedSeen.has(key));
 }
@@ -35,7 +35,7 @@ export function isFeedBetaServedSeen(row, servedSeen) {
  * @param {object|null|undefined} row
  * @returns {boolean}
  */
-export function isFeedBetaViewerLiked(row) {
+export function isFeedViewerLiked(row) {
 	return row?.viewer_liked === true;
 }
 
@@ -44,7 +44,7 @@ export function isFeedBetaViewerLiked(row) {
  * @param {{ relaxFiltersFromPage?: number }} params
  * @returns {boolean}
  */
-export function isFeedBetaRelaxedPage(pageIndex, params) {
+export function isFeedRelaxedPage(pageIndex, params) {
 	const from = Math.max(1, Number(params?.relaxFiltersFromPage) || 5);
 	return Math.max(1, Number(pageIndex) || 1) >= from;
 }
@@ -56,27 +56,27 @@ export function isFeedBetaRelaxedPage(pageIndex, params) {
  * @param {{ ignoreSeen?: boolean, relaxed?: boolean }} [opts]
  * @returns {boolean}
  */
-export function isFeedBetaRowExcludedFromPools(row, servedSeen, opts = {}) {
+export function isFeedRowExcludedFromPools(row, servedSeen, opts = {}) {
 	if (opts.ignoreSeen === true || opts.relaxed === true) return false;
-	return isFeedBetaServedSeen(row, servedSeen) || isFeedBetaViewerLiked(row);
+	return isFeedServedSeen(row, servedSeen) || isFeedViewerLiked(row);
 }
 
 /**
- * Eligible rows left in this catalog batch after excluding served / liked / feedBetaSeen.
+ * Eligible rows left in this catalog batch after excluding served / liked / feedSeen.
  * @param {object[]} catalog
  * @param {Set<string>} servedSeen
  * @param {Set<string>} [alsoExclude]
  * @param {{ relaxed?: boolean }} [opts]
  * @returns {number}
  */
-export function countFeedBetaRemainingEligible(catalog, servedSeen, alsoExclude = null, opts = {}) {
+export function countFeedRemainingEligible(catalog, servedSeen, alsoExclude = null, opts = {}) {
 	const extra = alsoExclude instanceof Set ? alsoExclude : new Set();
 	const relaxed = opts.relaxed === true;
 	let n = 0;
 	for (const row of Array.isArray(catalog) ? catalog : []) {
 		const key = feedRowCreationIdKey(row);
 		if (!key || extra.has(key)) continue;
-		if (relaxed || !isFeedBetaRowExcludedFromPools(row, servedSeen)) n += 1;
+		if (relaxed || !isFeedRowExcludedFromPools(row, servedSeen)) n += 1;
 	}
 	return n;
 }
@@ -86,8 +86,8 @@ export function countFeedBetaRemainingEligible(catalog, servedSeen, alsoExclude 
  * @param {Set<string>} servedSeen
  * @returns {number}
  */
-export function countFeedBetaUnseenInCatalog(catalog, servedSeen) {
-	return countFeedBetaRemainingEligible(catalog, servedSeen);
+export function countFeedUnseenInCatalog(catalog, servedSeen) {
+	return countFeedRemainingEligible(catalog, servedSeen);
 }
 
 /**
@@ -95,8 +95,8 @@ export function countFeedBetaUnseenInCatalog(catalog, servedSeen) {
  * @param {Iterable<string|number>} ids
  * @returns {string[]}
  */
-export function mergeFeedBetaSeenIds(user, ids) {
-	const prev = getFeedBetaSeenSet(user);
+export function mergeFeedSeenIds(user, ids) {
+	const prev = getFeedSeenSet(user);
 	for (const id of ids) {
 		const s = String(id ?? '').trim();
 		if (s) prev.add(s);
@@ -110,11 +110,11 @@ export function mergeFeedBetaSeenIds(user, ids) {
  * @param {object|null|undefined} user
  * @returns {Promise<Set<string>>}
  */
-export async function loadFeedBetaSeenSetForUser(queries, user) {
+export async function loadFeedSeenSetForUser(queries, user) {
 	void queries;
-	const out = getFeedBetaSeenSet(user);
+	const out = getFeedSeenSet(user);
 	if (user?.id == null) return out;
-	const redisSeen = await loadFeedBetaSeenSetFromRedis(user.id);
+	const redisSeen = await loadFeedSeenSetFromRedis(user.id);
 	for (const id of redisSeen) out.add(id);
 	return out;
 }

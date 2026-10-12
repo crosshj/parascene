@@ -1148,30 +1148,30 @@
 		min-width: 24px;
 		font-size: 0.7rem;
 	}
-	body.beta-layout .chat-page-messages {
+	body.app-layout .chat-page-messages {
 		padding-left: max(12px, calc((100% - 720px) / 2 + 12px));
 		padding-right: max(12px, calc((100% - 720px) / 2 + 12px));
 	}
 }
 @media (min-width: 769px) {
-	body.beta-layout .chat-page-messages {
+	body.app-layout .chat-page-messages {
 		padding: calc(var(--chat-chrome-header-height, 48px) + 12px) 12px 8px 12px;
 	}
-	body.beta-layout .chat-page-messages .feed-card-group-nav,
-body.beta-layout .chat-page-messages .connect-chat-creation-embed-group-nav {
+	body.app-layout .chat-page-messages .feed-card-group-nav,
+body.app-layout .chat-page-messages .connect-chat-creation-embed-group-nav {
 		top: 54%;
 	}
-	body.beta-layout .chat-page-messages .feed-card-image--group-carousel > .feed-card-group-nav {
+	body.app-layout .chat-page-messages .feed-card-image--group-carousel > .feed-card-group-nav {
 		top: 50%;
 	}
 
-	body.beta-layout .chat-page-messages .feed-card-image--group-carousel.nsfw:not(.nsfw-revealed)::before {
+	body.app-layout .chat-page-messages .feed-card-image--group-carousel.nsfw:not(.nsfw-revealed)::before {
 		top: 50%;
 	}
 }
 @media (min-width: 769px) {
 
-	body.beta-layout .chat-page-thread-body > .chat-page-messages {
+	body.app-layout .chat-page-thread-body > .chat-page-messages {
 		position: relative;
 		z-index: 0;
 	}
@@ -1201,35 +1201,35 @@ body.beta-layout .chat-page-messages .connect-chat-creation-embed-group-nav {
 		scrollbar-gutter: auto;
 	}
 }
-body.beta-layout .chat-page-messages img:not(.create-composer-attachment-preview):not(.chat-page-composer-attachment-preview):not(.chat-doom-poster):not(.chat-doom-avatar):not(.feed-card-img):not(.feed-card-group-img):not(.connect-chat-creation-embed-img):not(.connect-chat-creation-embed-group-img):not(.comment-avatar-img):not(.feed-card-avatar-img):not([class*="avatar"]):not(.challenge-pane-hero-image):not(.connect-chat-suno-preview-img),
-body.beta-layout .chat-page-messages video:not(.chat-doom-video):not(.feed-card-video) {
+body.app-layout .chat-page-messages img:not(.create-composer-attachment-preview):not(.chat-page-composer-attachment-preview):not(.chat-doom-poster):not(.chat-doom-avatar):not(.feed-card-img):not(.feed-card-group-img):not(.connect-chat-creation-embed-img):not(.connect-chat-creation-embed-group-img):not(.comment-avatar-img):not(.feed-card-avatar-img):not([class*="avatar"]):not(.challenge-pane-hero-image):not(.connect-chat-suno-preview-img),
+body.app-layout .chat-page-messages video:not(.chat-doom-video):not(.feed-card-video) {
 	max-width: 100%;
 	height: auto;
 }
-body.beta-layout .chat-page-messages .founder-flair-avatar-inner > img,
-body.beta-layout .chat-page-messages .feed-card-avatar > img,
-body.beta-layout .chat-page-messages .comment-avatar > img {
+body.app-layout .chat-page-messages .founder-flair-avatar-inner > img,
+body.app-layout .chat-page-messages .feed-card-avatar > img,
+body.app-layout .chat-page-messages .comment-avatar > img {
 	max-width: none;
 	width: 100%;
 	height: 100%;
 	object-fit: cover;
 	object-position: center;
 }
-body.beta-layout .chat-page-messages .connect-chat-msg-bubble .user-text-inline-image {
+body.app-layout .chat-page-messages .connect-chat-msg-bubble .user-text-inline-image {
 	max-height: 100%;
 }
 
-body.beta-layout .chat-page-messages iframe {
+body.app-layout .chat-page-messages iframe {
 	max-width: 100%;
 }
 
-body.beta-layout .chat-page-messages pre {
+body.app-layout .chat-page-messages pre {
 	max-width: 100%;
 	overflow-x: auto;
 	overflow-wrap: break-word;
 }
-body.beta-layout .chat-page-messages .route-loading.chat-page-thread-loading,
-body.beta-layout .chat-page-messages .route-loading-skeleton.chat-page-thread-loading {
+body.app-layout .chat-page-messages .route-loading.chat-page-thread-loading,
+body.app-layout .chat-page-messages .route-loading-skeleton.chat-page-thread-loading {
 	flex: 1 1 auto;
 	align-self: stretch;
 	min-height: 120px;
@@ -1262,15 +1262,15 @@ body.beta-layout .chat-page-messages .route-loading-skeleton.chat-page-thread-lo
 }
 
 @media (min-width: 1024px) {
-	body.beta-layout .chat-page-messages {
+	body.app-layout .chat-page-messages {
 		padding-left: 0;
 		padding-right: 0;
 	}
-	body.beta-layout .chat-page-messages .connect-chat-msg,
-body.beta-layout .chat-page-messages .chat-comments-channel-loading,
-body.beta-layout .chat-page-messages .chat-thread-channel-loading,
-body.beta-layout .chat-page-messages .route-loading.chat-page-thread-loading,
-body.beta-layout .chat-page-messages .route-loading-skeleton.chat-page-thread-loading {
+	body.app-layout .chat-page-messages .connect-chat-msg,
+body.app-layout .chat-page-messages .chat-comments-channel-loading,
+body.app-layout .chat-page-messages .chat-thread-channel-loading,
+body.app-layout .chat-page-messages .route-loading.chat-page-thread-loading,
+body.app-layout .chat-page-messages .route-loading-skeleton.chat-page-thread-loading {
 		padding-left: max(12px, calc((100% - 720px) / 2 + 12px));
 		padding-right: max(12px, calc((100% - 720px) / 2 + 12px));
 		box-sizing: border-box;
@@ -3494,7 +3494,7 @@ button.msg-reply-indicator-inner:hover {
 	background: color-mix(in srgb, var(--surface-strong) 58%, var(--bg));
 }
 
-body.beta-layout .chat-page-messages .connect-chat-msg-bubble .connect-chat-creation-embed--square .connect-chat-creation-embed-img {
+body.app-layout .chat-page-messages .connect-chat-msg-bubble .connect-chat-creation-embed--square .connect-chat-creation-embed-img {
 	max-height: 260px;
 	max-width: 100%;
 }
@@ -3840,7 +3840,7 @@ body.beta-layout .chat-page-messages .connect-chat-msg-bubble .connect-chat-crea
 	overflow-wrap: break-word;
 }
 
-body.beta-layout.chat-page--mobile-sidebar-open .chat-page-sidebar-row .comment-avatar {
+body.app-layout.chat-page--mobile-sidebar-open .chat-page-sidebar-row .comment-avatar {
 	width: clamp(28px, 7.5vw, 36px);
 	height: clamp(28px, 7.5vw, 36px);
 	min-width: clamp(28px, 7.5vw, 36px);
@@ -3849,13 +3849,13 @@ body.beta-layout.chat-page--mobile-sidebar-open .chat-page-sidebar-row .comment-
 
 @media (max-width: 768px) {
 
-	html:not(.chat-page--use-app-mobile-header) body.beta-layout .chat-page-messages {
+	html:not(.chat-page--use-app-mobile-header) body.app-layout .chat-page-messages {
 		padding-top: calc(58px + 10px);
 	}
 }
 
 @media (min-width: 1024px) {
-	body.beta-layout .chat-page-messages {
+	body.app-layout .chat-page-messages {
 		padding-left: max(12px, calc((100% - 720px) / 2 + 12px));
 		padding-right: max(12px, calc((100% - 720px) / 2 + 12px));
 	}
@@ -3898,7 +3898,7 @@ body.beta-layout.chat-page--mobile-sidebar-open .chat-page-sidebar-row .comment-
 	scrollbar-width: none;
 	-ms-overflow-style: none;
 }
-body.beta-layout.modal-open .chat-page-messages {
+body.app-layout.modal-open .chat-page-messages {
 	overflow: hidden;
 	overscroll-behavior: none;
 	touch-action: none;
@@ -3909,17 +3909,17 @@ body.beta-layout.modal-open .chat-page-messages {
 	height: 0;
 	display: none;
 }
-body.beta-layout .chat-page-messages img:not(.create-composer-attachment-preview):not(.chat-page-composer-attachment-preview):not(.chat-doom-poster):not(.chat-doom-avatar):not(.feed-card-img):not(.feed-card-group-img):not(.connect-chat-creation-embed-img):not(.connect-chat-creation-embed-group-img):not(.comment-avatar-img):not(.feed-card-avatar-img):not([class*="avatar"]):not(.challenge-pane-hero-image):not(.connect-chat-suno-preview-img),
-body.beta-layout .chat-page-messages video:not(.chat-doom-video):not(.feed-card-video) {
+body.app-layout .chat-page-messages img:not(.create-composer-attachment-preview):not(.chat-page-composer-attachment-preview):not(.chat-doom-poster):not(.chat-doom-avatar):not(.feed-card-img):not(.feed-card-group-img):not(.connect-chat-creation-embed-img):not(.connect-chat-creation-embed-group-img):not(.comment-avatar-img):not(.feed-card-avatar-img):not([class*="avatar"]):not(.challenge-pane-hero-image):not(.connect-chat-suno-preview-img),
+body.app-layout .chat-page-messages video:not(.chat-doom-video):not(.feed-card-video) {
 	max-width: 100%;
 	height: auto;
 }
 
-body.beta-layout .chat-page-messages iframe {
+body.app-layout .chat-page-messages iframe {
 	max-width: 100%;
 }
 
-body.beta-layout .chat-page-messages pre {
+body.app-layout .chat-page-messages pre {
 	max-width: 100%;
 	overflow-x: auto;
 	overflow-wrap: break-word;
@@ -3927,20 +3927,20 @@ body.beta-layout .chat-page-messages pre {
 
 @media (max-width: 768px) {
 
-	body.beta-layout .chat-page-messages .chat-page-pane-load-error.route-empty.route-empty-state {
+	body.app-layout .chat-page-messages .chat-page-pane-load-error.route-empty.route-empty-state {
 		align-items: flex-start;
 		padding-top: max(96px, calc(56px + env(safe-area-inset-top, 0px) + 40px));
 		box-sizing: border-box;
 	}
 
-	body.beta-layout .chat-page-messages .chat-thread-channel-loading {
+	body.app-layout .chat-page-messages .chat-thread-channel-loading {
 		padding-top: 0;
 		margin-top: 0;
 	}
 }
 
 @media (min-width: 1024px) {
-	body.beta-layout .chat-page-messages {
+	body.app-layout .chat-page-messages {
 		padding-left: 0;
 		padding-right: 0;
 	}
@@ -4050,7 +4050,7 @@ body.beta-layout .chat-page-messages pre {
 	z-index: 0;
 }
 
-body.beta-layout .chat-page-messages .connect-chat-msg-bubble .user-text-inline-image {
+body.app-layout .chat-page-messages .connect-chat-msg-bubble .user-text-inline-image {
 	max-height: 100%;
 }
 .user-text-inline-media-group {
@@ -4288,36 +4288,36 @@ body.beta-layout .chat-page-messages .connect-chat-msg-bubble .user-text-inline-
 .connect-chat-msg-bubble .connect-chat-creation-embed-group-nav {
 	cursor: pointer;
 }
-body.beta-layout .chat-page-messages .connect-chat-msg-inner {
+body.app-layout .chat-page-messages .connect-chat-msg-inner {
 	align-items: stretch;
 }
-body.beta-layout .chat-page-messages .connect-chat-msg.connect-chat-msg--reply-target {
+body.app-layout .chat-page-messages .connect-chat-msg.connect-chat-msg--reply-target {
 	background: color-mix(in srgb, var(--focus) 12%, transparent);
 	box-shadow: inset 3px 0 0 var(--focus);
 	transition: background-color 0.12s ease;
 }
 
-body.beta-layout .chat-page-messages .connect-chat-msg.connect-chat-msg--reply-target > .connect-chat-msg-inner {
+body.app-layout .chat-page-messages .connect-chat-msg.connect-chat-msg--reply-target > .connect-chat-msg-inner {
 	background: transparent !important;
 	border-radius: 0 !important;
 	box-shadow: none !important;
 }
 
-body.beta-layout .chat-page-messages .connect-chat-msg.connect-chat-msg--reply-target > .connect-chat-msg-inner::before {
+body.app-layout .chat-page-messages .connect-chat-msg.connect-chat-msg--reply-target > .connect-chat-msg-inner::before {
 	content: none !important;
 	display: none !important;
 }
 
 @media (min-width: 1024px) and (hover: hover) and (pointer: fine) {
-	body.beta-layout .chat-page-messages .connect-chat-msg.connect-chat-msg--reply-target:hover {
+	body.app-layout .chat-page-messages .connect-chat-msg.connect-chat-msg--reply-target:hover {
 		background: color-mix(in srgb, var(--focus) 18%, transparent);
 	}
 
-	body.beta-layout .chat-page-messages .connect-chat-msg.connect-chat-msg--reply-target:hover > .connect-chat-msg-inner {
+	body.app-layout .chat-page-messages .connect-chat-msg.connect-chat-msg--reply-target:hover > .connect-chat-msg-inner {
 		background: transparent !important;
 	}
 }
-body.beta-layout .chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact {
+body.app-layout .chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact {
 	margin: 0 0 -2px;
 	width: 100%;
 	max-width: 100%;
@@ -4334,7 +4334,7 @@ body.beta-layout .chat-page-messages .connect-chat-msg-inner > .msg-reply-indica
 	box-sizing: border-box;
 }
 
-body.beta-layout .chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-inner,
+body.app-layout .chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-inner,
 [data-comment-list] .comment-body > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-inner {
 	padding: 0;
 	border: none;
@@ -4349,7 +4349,7 @@ body.beta-layout .chat-page-messages .connect-chat-msg-inner > .msg-reply-indica
 	box-sizing: border-box;
 }
 
-body.beta-layout .chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-target-mark,
+body.app-layout .chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-target-mark,
 [data-comment-list] .comment-body > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-target-mark {
 	flex-shrink: 0;
 	align-self: center;
@@ -4364,7 +4364,7 @@ body.beta-layout .chat-page-messages .connect-chat-msg-inner > .msg-reply-indica
 	border-top-left-radius: 15px;
 }
 
-body.beta-layout .chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact.msg-reply-indicator--unreachable .msg-reply-indicator-target-mark,
+body.app-layout .chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact.msg-reply-indicator--unreachable .msg-reply-indicator-target-mark,
 [data-comment-list]
 	.comment-body
 	> .msg-reply-indicator.msg-reply-indicator--compact.msg-reply-indicator--unreachable
@@ -4373,26 +4373,26 @@ body.beta-layout .chat-page-messages .connect-chat-msg-inner > .msg-reply-indica
 	border-top-color: color-mix(in srgb, var(--text-muted) 38%, var(--border));
 }
 
-body.beta-layout .chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact button.msg-reply-indicator-inner:hover,
-body.beta-layout .chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact button.msg-reply-indicator-inner:active,
+body.app-layout .chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact button.msg-reply-indicator-inner:hover,
+body.app-layout .chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact button.msg-reply-indicator-inner:active,
 [data-comment-list] .comment-body > .msg-reply-indicator.msg-reply-indicator--compact button.msg-reply-indicator-inner:hover,
 [data-comment-list] .comment-body > .msg-reply-indicator.msg-reply-indicator--compact button.msg-reply-indicator-inner:active {
 	background: transparent;
 }
 
-body.beta-layout .chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact button.msg-reply-indicator-inner:focus-visible,
+body.app-layout .chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact button.msg-reply-indicator-inner:focus-visible,
 [data-comment-list] .comment-body > .msg-reply-indicator.msg-reply-indicator--compact button.msg-reply-indicator-inner:focus-visible {
 	outline: 2px solid var(--focus);
 	outline-offset: 2px;
 	border-radius: 6px;
 }
 
-body.beta-layout .chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-badge,
+body.app-layout .chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-badge,
 [data-comment-list] .comment-body > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-badge {
 	display: none;
 }
 
-body.beta-layout .chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-text,
+body.app-layout .chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-text,
 [data-comment-list] .comment-body > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-text {
 	flex-direction: row;
 	flex-wrap: nowrap;
@@ -4401,12 +4401,12 @@ body.beta-layout .chat-page-messages .connect-chat-msg-inner > .msg-reply-indica
 	min-width: 0;
 }
 
-body.beta-layout .chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-top,
+body.app-layout .chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-top,
 [data-comment-list] .comment-body > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-top {
 	display: contents;
 }
 
-body.beta-layout .chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-name,
+body.app-layout .chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-name,
 [data-comment-list] .comment-body > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-name {
 	font-size: 0.78rem;
 	font-weight: 600;
@@ -4419,7 +4419,7 @@ body.beta-layout .chat-page-messages .connect-chat-msg-inner > .msg-reply-indica
 	white-space: nowrap;
 }
 
-body.beta-layout .chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-preview,
+body.app-layout .chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-preview,
 [data-comment-list] .comment-body > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-preview {
 	flex: 1 1 auto;
 	min-width: 0;
@@ -4441,13 +4441,13 @@ body.beta-layout .chat-page-messages .connect-chat-msg-inner > .msg-reply-indica
 	align-self: start;
 }
 
-body.beta-layout .chat-page-messages .connect-chat-msg-bubble {
+body.app-layout .chat-page-messages .connect-chat-msg-bubble {
 	width: 100%;
 	max-width: 100%;
 	box-sizing: border-box;
 }
 
-body.beta-layout .chat-page-messages .connect-chat-msg-bubble .user-text-msg-hr {
+body.app-layout .chat-page-messages .connect-chat-msg-bubble .user-text-msg-hr {
 	display: block;
 	width: 100%;
 	max-width: 100%;
@@ -4457,7 +4457,7 @@ body.beta-layout .chat-page-messages .connect-chat-msg-bubble .user-text-msg-hr 
 	border-radius: 999px;
 }
 
-body.beta-layout .chat-page-messages .connect-chat-msg-bubble .user-text-msg-code-block {
+body.app-layout .chat-page-messages .connect-chat-msg-bubble .user-text-msg-code-block {
 	display: block;
 	width: 100%;
 	max-width: 100%;
@@ -4471,11 +4471,11 @@ body.beta-layout .chat-page-messages .connect-chat-msg-bubble .user-text-msg-cod
 	word-break: break-word;
 }
 
-body.beta-layout .chat-page-messages .connect-chat-msg-bubble .user-text-msg-inline-code {
+body.app-layout .chat-page-messages .connect-chat-msg-bubble .user-text-msg-inline-code {
 	background: color-mix(in srgb, var(--surface) 68%, var(--accent));
 }
 
-body.beta-layout .chat-page-messages .connect-chat-msg-bubble .user-text-msg-h3 {
+body.app-layout .chat-page-messages .connect-chat-msg-bubble .user-text-msg-h3 {
 	font-size: 0.8125rem;
 	font-weight: 700;
 	letter-spacing: 0.1em;
@@ -4484,29 +4484,29 @@ body.beta-layout .chat-page-messages .connect-chat-msg-bubble .user-text-msg-h3 
 	line-height: 1.25;
 }
 
-body.beta-layout .chat-page-messages .connect-chat-msg-bubble .user-text-msg-h1 {
+body.app-layout .chat-page-messages .connect-chat-msg-bubble .user-text-msg-h1 {
 	font-size: 0.8125rem;
 	color: var(--text-muted);
 	text-decoration: none;
 }
 
-body.beta-layout .chat-page-messages .connect-chat-msg-bubble .user-text-msg-h2 {
+body.app-layout .chat-page-messages .connect-chat-msg-bubble .user-text-msg-h2 {
 	font-size: 0.8125rem;
 	letter-spacing: 0.1em;
 	color: var(--text-muted);
 }
 
-body.beta-layout .chat-page-messages .connect-chat-msg-bubble .user-text-msg-h1,
-body.beta-layout .chat-page-messages .connect-chat-msg-bubble .user-text-msg-h2,
-body.beta-layout .chat-page-messages .connect-chat-msg-bubble .user-text-msg-h3 {
+body.app-layout .chat-page-messages .connect-chat-msg-bubble .user-text-msg-h1,
+body.app-layout .chat-page-messages .connect-chat-msg-bubble .user-text-msg-h2,
+body.app-layout .chat-page-messages .connect-chat-msg-bubble .user-text-msg-h3 {
 	margin: 2em 0 0.25em;
 }
 
-body.beta-layout .chat-page-messages .connect-chat-msg-bubble > .user-text-msg-heading--first-item {
+body.app-layout .chat-page-messages .connect-chat-msg-bubble > .user-text-msg-heading--first-item {
 	margin-top: 1em;
 }
 
-body.beta-layout .chat-page-messages .connect-chat-msg-bubble .user-text-msg-quote {
+body.app-layout .chat-page-messages .connect-chat-msg-bubble .user-text-msg-quote {
 	display: block;
 	margin: 1em 0;
 	padding: 0.08em 0 0.08em 11px;
@@ -4515,7 +4515,7 @@ body.beta-layout .chat-page-messages .connect-chat-msg-bubble .user-text-msg-quo
 	font-style: italic;
 }
 
-body.beta-layout .chat-page-messages .connect-chat-msg-bubble .user-text-msg-checkbox-input {
+body.app-layout .chat-page-messages .connect-chat-msg-bubble .user-text-msg-checkbox-input {
 	float: left;
 	appearance: none;
 	-webkit-appearance: none;
@@ -4531,7 +4531,7 @@ body.beta-layout .chat-page-messages .connect-chat-msg-bubble .user-text-msg-che
 	vertical-align: top;
 }
 
-body.beta-layout .chat-page-messages .connect-chat-msg-bubble .user-text-msg-checkbox-input:checked {
+body.app-layout .chat-page-messages .connect-chat-msg-bubble .user-text-msg-checkbox-input:checked {
 	background-color: transparent;
 	background-image:
 		linear-gradient(
@@ -4551,7 +4551,7 @@ body.beta-layout .chat-page-messages .connect-chat-msg-bubble .user-text-msg-che
 	border-color: color-mix(in srgb, var(--text) 42%, var(--border));
 }
 
-body.beta-layout .chat-page-messages .connect-chat-msg-bubble .user-text-msg-list.user-text-msg-list--task .user-text-msg-list-item {
+body.app-layout .chat-page-messages .connect-chat-msg-bubble .user-text-msg-list.user-text-msg-list--task .user-text-msg-list-item {
 	list-style: none;
 	margin-left: 0;
 	padding-left: 0;
@@ -4559,11 +4559,11 @@ body.beta-layout .chat-page-messages .connect-chat-msg-bubble .user-text-msg-lis
 	text-indent: 0;
 }
 
-body.beta-layout .chat-page-messages .connect-chat-msg-bubble .user-text-msg-list.user-text-msg-list--task .user-text-msg-list-item::marker {
+body.app-layout .chat-page-messages .connect-chat-msg-bubble .user-text-msg-list.user-text-msg-list--task .user-text-msg-list-item::marker {
 	content: '';
 }
 
-body.beta-layout .chat-page-messages .connect-chat-msg-bubble .user-text-msg-list.user-text-msg-list--task {
+body.app-layout .chat-page-messages .connect-chat-msg-bubble .user-text-msg-list.user-text-msg-list--task {
 	padding-left: 0;
 	padding-inline-start: 0;
 	margin-left: 0;
@@ -4651,12 +4651,12 @@ body.beta-layout .chat-page-messages .connect-chat-msg-bubble .user-text-msg-lis
 	background: color-mix(in srgb, var(--surface-strong) 58%, var(--bg));
 }
 
-body.beta-layout .chat-page-messages .connect-chat-msg-bubble .connect-chat-creation-embed--square .connect-chat-creation-embed-img {
+body.app-layout .chat-page-messages .connect-chat-msg-bubble .connect-chat-creation-embed--square .connect-chat-creation-embed-img {
 	max-height: 260px;
 	max-width: 100%;
 }
-body.beta-layout .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text a.creation-link:has(+ .connect-chat-creation-embed),
-body.beta-layout .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text a.creation-link.connect-chat-creation-embed-paired-link {
+body.app-layout .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text a.creation-link:has(+ .connect-chat-creation-embed),
+body.app-layout .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text a.creation-link.connect-chat-creation-embed-paired-link {
 	display: block;
 	height: 0;
 	margin: 0;
@@ -4669,7 +4669,7 @@ body.beta-layout .chat-page-messages .comments-channel-plain-msg.connect-comment
 	pointer-events: none;
 }
 
-body.beta-layout .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text .connect-chat-creation-embed {
+body.app-layout .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text .connect-chat-creation-embed {
 	margin-top: 6px;
 	width: fit-content;
 	max-width: 100%;
@@ -4678,20 +4678,20 @@ body.beta-layout .chat-page-messages .comments-channel-plain-msg.connect-comment
 	container-type: normal;
 }
 
-body.beta-layout .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text .connect-chat-creation-embed.connect-chat-creation-embed--square {
+body.app-layout .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text .connect-chat-creation-embed.connect-chat-creation-embed--square {
 	min-width: min(250px, 100%);
 }
 
-body.beta-layout .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text .connect-chat-creation-embed-media {
+body.app-layout .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text .connect-chat-creation-embed-media {
 	width: auto;
 	max-width: 100%;
 }
 
-body.beta-layout .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text .connect-chat-creation-embed--square > .connect-chat-creation-embed-media {
+body.app-layout .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text .connect-chat-creation-embed--square > .connect-chat-creation-embed-media {
 	min-width: min(250px, 100%);
 }
 
-body.beta-layout .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text .connect-chat-creation-embed-inner--loading-shell {
+body.app-layout .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text .connect-chat-creation-embed-inner--loading-shell {
 	width: fit-content;
 	max-width: 100%;
 	min-width: min(250px, 100%);
@@ -4701,7 +4701,7 @@ body.beta-layout .chat-page-messages .comments-channel-plain-msg.connect-comment
 	aspect-ratio: unset;
 }
 
-body.beta-layout .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text .connect-chat-creation-embed-inner--pending {
+body.app-layout .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text .connect-chat-creation-embed-inner--pending {
 	width: min(250px, 100%);
 	max-width: 100%;
 	min-width: min(250px, 100%);
@@ -4710,7 +4710,7 @@ body.beta-layout .chat-page-messages .comments-channel-plain-msg.connect-comment
 	aspect-ratio: unset;
 }
 
-body.beta-layout .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text .connect-chat-creation-embed--square .connect-chat-creation-embed-inner.connect-chat-creation-embed-inner--video {
+body.app-layout .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text .connect-chat-creation-embed--square .connect-chat-creation-embed-inner.connect-chat-creation-embed-inner--video {
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -4726,7 +4726,7 @@ body.beta-layout .chat-page-messages .comments-channel-plain-msg.connect-comment
 	cursor: zoom-in;
 }
 
-body.beta-layout .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text .connect-chat-creation-embed--square .connect-chat-creation-embed-video {
+body.app-layout .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text .connect-chat-creation-embed--square .connect-chat-creation-embed-video {
 	position: relative;
 	inset: auto;
 	display: block;
@@ -4741,7 +4741,7 @@ body.beta-layout .chat-page-messages .comments-channel-plain-msg.connect-comment
 	z-index: 0;
 }
 
-body.beta-layout .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text .connect-chat-creation-embed--square .connect-chat-creation-embed-inner:not(.connect-chat-creation-embed-inner--video):not(.connect-chat-creation-embed-inner--audio):not(.connect-chat-creation-embed-inner--group-carousel):not(.connect-chat-creation-embed-inner--html):not(.connect-chat-creation-embed-inner--pending):not(.connect-chat-creation-embed-inner--error-layout):not(.connect-chat-creation-embed-inner--loading-shell) {
+body.app-layout .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text .connect-chat-creation-embed--square .connect-chat-creation-embed-inner:not(.connect-chat-creation-embed-inner--video):not(.connect-chat-creation-embed-inner--audio):not(.connect-chat-creation-embed-inner--group-carousel):not(.connect-chat-creation-embed-inner--html):not(.connect-chat-creation-embed-inner--pending):not(.connect-chat-creation-embed-inner--error-layout):not(.connect-chat-creation-embed-inner--loading-shell) {
 	position: relative;
 	display: flex;
 	align-items: center;
@@ -4759,7 +4759,7 @@ body.beta-layout .chat-page-messages .comments-channel-plain-msg.connect-comment
 	background: color-mix(in srgb, var(--surface-strong) 58%, var(--bg));
 }
 
-body.beta-layout .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text .connect-chat-creation-embed--square .connect-chat-creation-embed-inner.connect-chat-creation-embed-inner--group-carousel {
+body.app-layout .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text .connect-chat-creation-embed--square .connect-chat-creation-embed-inner.connect-chat-creation-embed-inner--group-carousel {
 	display: block;
 	position: relative;
 	overflow: hidden;
@@ -4776,7 +4776,7 @@ body.beta-layout .chat-page-messages .comments-channel-plain-msg.connect-comment
 	cursor: zoom-in;
 }
 
-body.beta-layout .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text .connect-chat-creation-embed--square .connect-chat-creation-embed-inner > .user-text-inline-image-link {
+body.app-layout .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text .connect-chat-creation-embed--square .connect-chat-creation-embed-inner > .user-text-inline-image-link {
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -4793,7 +4793,7 @@ body.beta-layout .chat-page-messages .comments-channel-plain-msg.connect-comment
 	vertical-align: top;
 }
 
-body.beta-layout .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text .connect-chat-creation-embed--square .connect-chat-creation-embed-img {
+body.app-layout .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text .connect-chat-creation-embed--square .connect-chat-creation-embed-img {
 	position: static;
 	inset: auto;
 	display: block;
@@ -4807,7 +4807,7 @@ body.beta-layout .chat-page-messages .comments-channel-plain-msg.connect-comment
 	flex-shrink: 0;
 }
 
-body.beta-layout .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text .connect-chat-creation-embed--square .connect-chat-creation-embed-inner--error-layout {
+body.app-layout .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text .connect-chat-creation-embed--square .connect-chat-creation-embed-inner--error-layout {
 	aspect-ratio: unset;
 	height: 250px;
 	min-height: 250px;
@@ -4819,8 +4819,8 @@ body.beta-layout .chat-page-messages .comments-channel-plain-msg.connect-comment
 	background: color-mix(in srgb, var(--surface-strong) 58%, var(--bg));
 }
 
-body.beta-layout .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text a.creation-link[data-youtube-video-id]:has(+ .connect-chat-youtube-embed),
-body.beta-layout .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text a.creation-link[data-suno-url]:has(+ .connect-chat-suno-embed) {
+body.app-layout .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text a.creation-link[data-youtube-video-id]:has(+ .connect-chat-youtube-embed),
+body.app-layout .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text a.creation-link[data-suno-url]:has(+ .connect-chat-suno-embed) {
 	display: block;
 	height: 0;
 	margin: 0;
@@ -4832,10 +4832,10 @@ body.beta-layout .chat-page-messages .comments-channel-plain-msg.connect-comment
 	opacity: 0;
 	pointer-events: none;
 }
-body.beta-layout .chat-page-messages .connect-chat-youtube-embed,
-body.beta-layout .chat-page-messages .connect-chat-suno-embed,
-body.beta-layout .chat-page-messages .connect-chat-audio-embed,
-body.beta-layout .chat-page-messages .connect-chat-creation-embed--audio-card {
+body.app-layout .chat-page-messages .connect-chat-youtube-embed,
+body.app-layout .chat-page-messages .connect-chat-suno-embed,
+body.app-layout .chat-page-messages .connect-chat-audio-embed,
+body.app-layout .chat-page-messages .connect-chat-creation-embed--audio-card {
 	margin-top: 0;
 	padding-block: 0;
 	width: 100%;
@@ -4847,7 +4847,7 @@ body.beta-layout .chat-page-messages .connect-chat-creation-embed--audio-card {
 	background-color: var(--image-placeholder);
 }
 
-body.beta-layout .chat-page-messages .connect-chat-youtube-embed-iframe {
+body.app-layout .chat-page-messages .connect-chat-youtube-embed-iframe {
 	display: block;
 	width: 100%;
 	max-width: 100%;
@@ -4857,8 +4857,8 @@ body.beta-layout .chat-page-messages .connect-chat-youtube-embed-iframe {
 	background-color: var(--image-placeholder);
 }
 
-body.beta-layout .chat-page-messages .connect-chat-suno-embed-iframe,
-body.beta-layout .chat-page-messages .connect-chat-audio-embed-iframe {
+body.app-layout .chat-page-messages .connect-chat-suno-embed-iframe,
+body.app-layout .chat-page-messages .connect-chat-audio-embed-iframe {
 	display: block;
 	width: 100%;
 	max-width: 100%;
@@ -4867,7 +4867,7 @@ body.beta-layout .chat-page-messages .connect-chat-audio-embed-iframe {
 	border-radius: 12px;
 	background-color: var(--image-placeholder);
 }
-body.beta-layout .chat-page-messages a.creation-link[data-suno-url][data-suno-embed-pending="true"] {
+body.app-layout .chat-page-messages a.creation-link[data-suno-url][data-suno-embed-pending="true"] {
 	display: block;
 	width: 100%;
 	min-width: 0;
@@ -4918,37 +4918,37 @@ body.beta-layout .chat-page-messages a.creation-link[data-suno-url][data-suno-em
 
 @media (max-width: 768px) {
 
-	html:not(.chat-page--use-app-mobile-header) body.beta-layout .chat-page-messages {
+	html:not(.chat-page--use-app-mobile-header) body.app-layout .chat-page-messages {
 		padding-top: calc(58px + 10px) !important;
 	}
 }
 
 @media (min-width: 769px) {
 
-	body.beta-layout .chat-page-thread-body > .chat-page-messages {
+	body.app-layout .chat-page-thread-body > .chat-page-messages {
 		position: relative !important;
 		z-index: 0 !important;
 	}
 
-	body.beta-layout .chat-page-messages .feed-card-group-nav,
-body.beta-layout .chat-page-messages .connect-chat-creation-embed-group-nav {
+	body.app-layout .chat-page-messages .feed-card-group-nav,
+body.app-layout .chat-page-messages .connect-chat-creation-embed-group-nav {
 		top: 54%;
 	}
-	body.beta-layout .chat-page-messages .feed-card-image--group-carousel > .feed-card-group-nav,
-body.beta-layout .chat-page-messages .feed-card-image--group-carousel.nsfw:not(.nsfw-revealed)::before {
+	body.app-layout .chat-page-messages .feed-card-image--group-carousel > .feed-card-group-nav,
+body.app-layout .chat-page-messages .feed-card-image--group-carousel.nsfw:not(.nsfw-revealed)::before {
 		top: 50% !important;
 	}
-	body.beta-layout .chat-page-messages .feed-card-image--group-carousel > .feed-card-group-nav {
+	body.app-layout .chat-page-messages .feed-card-image--group-carousel > .feed-card-group-nav {
 		position: absolute !important;
 		z-index: 7;
 	}
 
-	body.beta-layout .chat-page-messages .feed-card-image--group-carousel > .feed-card-group-nav--prev {
+	body.app-layout .chat-page-messages .feed-card-image--group-carousel > .feed-card-group-nav--prev {
 		left: 8px;
 		right: auto;
 	}
 
-	body.beta-layout .chat-page-messages .feed-card-image--group-carousel > .feed-card-group-nav--next {
+	body.app-layout .chat-page-messages .feed-card-image--group-carousel > .feed-card-group-nav--next {
 		right: 8px;
 		left: auto;
 	}
@@ -5019,25 +5019,25 @@ body.beta-layout .chat-page-messages .feed-card-image--group-carousel.nsfw:not(.
 	opacity: 0;
 	transition: opacity 0.18s ease;
 }
-body.beta-layout .chat-page-messages .feed-card-avatar,
-body.beta-layout .chat-page-messages .comment-avatar:not(:has(.avatar-with-founder-flair)),
-body.beta-layout .chat-page-messages .founder-flair-avatar-inner {
+body.app-layout .chat-page-messages .feed-card-avatar,
+body.app-layout .chat-page-messages .comment-avatar:not(:has(.avatar-with-founder-flair)),
+body.app-layout .chat-page-messages .founder-flair-avatar-inner {
 	overflow: hidden !important;
 	position: relative !important;
 	aspect-ratio: 1 / 1;
 }
 
-body.beta-layout .chat-page-messages img.feed-card-img,
-body.beta-layout .chat-page-messages img.feed-card-group-img,
-body.beta-layout .chat-page-messages video.feed-card-video,
-body.beta-layout .chat-page-messages img.connect-chat-creation-embed-img,
-body.beta-layout .chat-page-messages img.connect-chat-creation-embed-group-img,
-body.beta-layout .chat-page-messages img.comment-avatar-img,
-body.beta-layout .chat-page-messages img.feed-card-avatar-img,
-body.beta-layout .chat-page-messages img[class*="avatar"],
-body.beta-layout .chat-page-messages .founder-flair-avatar-inner > img,
-body.beta-layout .chat-page-messages .feed-card-avatar > img,
-body.beta-layout .chat-page-messages .comment-avatar > img {
+body.app-layout .chat-page-messages img.feed-card-img,
+body.app-layout .chat-page-messages img.feed-card-group-img,
+body.app-layout .chat-page-messages video.feed-card-video,
+body.app-layout .chat-page-messages img.connect-chat-creation-embed-img,
+body.app-layout .chat-page-messages img.connect-chat-creation-embed-group-img,
+body.app-layout .chat-page-messages img.comment-avatar-img,
+body.app-layout .chat-page-messages img.feed-card-avatar-img,
+body.app-layout .chat-page-messages img[class*="avatar"],
+body.app-layout .chat-page-messages .founder-flair-avatar-inner > img,
+body.app-layout .chat-page-messages .feed-card-avatar > img,
+body.app-layout .chat-page-messages .comment-avatar > img {
 	display: block !important;
 	max-width: none !important;
 	width: 100% !important;
@@ -5047,27 +5047,27 @@ body.beta-layout .chat-page-messages .comment-avatar > img {
 	object-position: center !important;
 }
 
-body.beta-layout .chat-page-messages .feed-card-avatar-img,
-body.beta-layout .chat-page-messages .comment-avatar-img,
-body.beta-layout .chat-page-messages .founder-flair-avatar-inner > img,
-body.beta-layout .chat-page-messages .feed-card-avatar > img,
-body.beta-layout .chat-page-messages .comment-avatar > img {
+body.app-layout .chat-page-messages .feed-card-avatar-img,
+body.app-layout .chat-page-messages .comment-avatar-img,
+body.app-layout .chat-page-messages .founder-flair-avatar-inner > img,
+body.app-layout .chat-page-messages .feed-card-avatar > img,
+body.app-layout .chat-page-messages .comment-avatar > img {
 	position: absolute !important;
 	inset: 0 !important;
 }
-body.beta-layout .chat-page-messages .feed-card-image {
+body.app-layout .chat-page-messages .feed-card-image {
 	flex-shrink: 0;
 	width: 100%;
 	max-width: none;
 	aspect-ratio: 1 / 1;
 }
 
-body.beta-layout .chat-page-messages .feed-card-image .feed-card-img {
+body.app-layout .chat-page-messages .feed-card-image .feed-card-img {
 	position: absolute !important;
 	inset: 0 !important;
 }
 
-body.beta-layout .chat-page-messages .chat-doom-bottom-row .chat-doom-avatar-slot .comment-avatar {
+body.app-layout .chat-page-messages .chat-doom-bottom-row .chat-doom-avatar-slot .comment-avatar {
 	width: 32px !important;
 	height: 32px !important;
 	margin: 0 !important;
@@ -5076,18 +5076,18 @@ body.beta-layout .chat-page-messages .chat-doom-bottom-row .chat-doom-avatar-slo
 	padding-top: max(96px, calc(56px + env(safe-area-inset-top, 0px) + 40px)) !important;
 }
 
-body.beta-layout .chat-page-messages .feed-card-image.creation-audio-cover:has(.creation-audio-wave):not(.feed-card-audio-real-cover) img.feed-card-img {
+body.app-layout .chat-page-messages .feed-card-image.creation-audio-cover:has(.creation-audio-wave):not(.feed-card-audio-real-cover) img.feed-card-img {
 	opacity: 0 !important;
 	visibility: hidden !important;
 }
 
-body.beta-layout .chat-page-messages .feed-card-image.feed-card-audio-real-cover img.feed-card-img {
+body.app-layout .chat-page-messages .feed-card-image.feed-card-audio-real-cover img.feed-card-img {
 	opacity: 1 !important;
 	visibility: visible !important;
 }
 
-body.beta-layout .connect-chat-msg-bubble .connect-chat-creation-embed:has(.connect-chat-creation-embed-inner--audio):not(.connect-chat-creation-embed--audio-card):not([data-prsn-audio-embed="card"]),
-body.beta-layout .connect-chat-msg-bubble .connect-chat-creation-embed[data-prsn-audio-embed="1"] {
+body.app-layout .connect-chat-msg-bubble .connect-chat-creation-embed:has(.connect-chat-creation-embed-inner--audio):not(.connect-chat-creation-embed--audio-card):not([data-prsn-audio-embed="card"]),
+body.app-layout .connect-chat-msg-bubble .connect-chat-creation-embed[data-prsn-audio-embed="1"] {
 	width: 260px !important;
 	max-width: 100% !important;
 	min-width: 0 !important;
@@ -5095,9 +5095,9 @@ body.beta-layout .connect-chat-msg-bubble .connect-chat-creation-embed[data-prsn
 	border-radius: 12px;
 }
 
-body.beta-layout .connect-chat-msg-bubble .connect-chat-creation-embed--audio-card,
-body.beta-layout .connect-chat-msg-bubble .connect-chat-creation-embed[data-prsn-audio-embed="card"],
-body.beta-layout .connect-chat-msg-bubble .connect-chat-creation-embed.connect-chat-audio-embed {
+body.app-layout .connect-chat-msg-bubble .connect-chat-creation-embed--audio-card,
+body.app-layout .connect-chat-msg-bubble .connect-chat-creation-embed[data-prsn-audio-embed="card"],
+body.app-layout .connect-chat-msg-bubble .connect-chat-creation-embed.connect-chat-audio-embed {
 	width: 100% !important;
 	max-width: 100% !important;
 	height: auto !important;
@@ -5105,8 +5105,8 @@ body.beta-layout .connect-chat-msg-bubble .connect-chat-creation-embed.connect-c
 	max-height: none !important;
 }
 
-body.beta-layout .connect-chat-msg-bubble .connect-chat-creation-embed:has(.connect-chat-creation-embed-inner--audio):not(.connect-chat-creation-embed--audio-card) > .connect-chat-creation-embed-media,
-body.beta-layout .connect-chat-msg-bubble .connect-chat-creation-embed[data-prsn-audio-embed="1"] > .connect-chat-creation-embed-media {
+body.app-layout .connect-chat-msg-bubble .connect-chat-creation-embed:has(.connect-chat-creation-embed-inner--audio):not(.connect-chat-creation-embed--audio-card) > .connect-chat-creation-embed-media,
+body.app-layout .connect-chat-msg-bubble .connect-chat-creation-embed[data-prsn-audio-embed="1"] > .connect-chat-creation-embed-media {
 	width: 100% !important;
 	max-width: 260px !important;
 	min-width: 0 !important;
@@ -5114,8 +5114,8 @@ body.beta-layout .connect-chat-msg-bubble .connect-chat-creation-embed[data-prsn
 	border-radius: 12px;
 }
 
-body.beta-layout .connect-chat-msg-bubble .connect-chat-creation-embed-inner--audio,
-body.beta-layout .connect-chat-creation-embed-inner--audio {
+body.app-layout .connect-chat-msg-bubble .connect-chat-creation-embed-inner--audio,
+body.app-layout .connect-chat-creation-embed-inner--audio {
 	position: relative;
 	cursor: pointer;
 	display: block !important;
@@ -5136,8 +5136,8 @@ body.beta-layout .connect-chat-creation-embed-inner--audio {
 	box-sizing: border-box;
 }
 
-body.beta-layout .connect-chat-creation-embed-inner--audio img.connect-chat-creation-embed-img,
-body.beta-layout .connect-chat-creation-embed-inner--audio img {
+body.app-layout .connect-chat-creation-embed-inner--audio img.connect-chat-creation-embed-img,
+body.app-layout .connect-chat-creation-embed-inner--audio img {
 	position: relative;
 	z-index: 0;
 	display: block;
@@ -5149,8 +5149,8 @@ body.beta-layout .connect-chat-creation-embed-inner--audio img {
 	pointer-events: none;
 }
 
-body.beta-layout .connect-chat-creation-embed-inner--audio .creation-audio-wave,
-body.beta-layout .connect-chat-msg-bubble .connect-chat-creation-embed-inner--audio .creation-audio-wave {
+body.app-layout .connect-chat-creation-embed-inner--audio .creation-audio-wave,
+body.app-layout .connect-chat-msg-bubble .connect-chat-creation-embed-inner--audio .creation-audio-wave {
 	display: block !important;
 	position: absolute !important;
 	left: 50% !important;
@@ -5164,11 +5164,11 @@ body.beta-layout .connect-chat-msg-bubble .connect-chat-creation-embed-inner--au
 	z-index: 2 !important;
 }
 
-body.beta-layout .connect-chat-creation-embed-inner--audio .creation-audio-wave rect {
+body.app-layout .connect-chat-creation-embed-inner--audio .creation-audio-wave rect {
 	fill: var(--color-purple) !important;
 }
 
-body.beta-layout .connect-chat-msg-bubble .connect-chat-creation-embed-inner--audio .chat-doom-play-overlay {
+body.app-layout .connect-chat-msg-bubble .connect-chat-creation-embed-inner--audio .chat-doom-play-overlay {
 	position: absolute !important;
 	inset: 0 !important;
 	z-index: 3 !important;
@@ -5178,7 +5178,7 @@ body.beta-layout .connect-chat-msg-bubble .connect-chat-creation-embed-inner--au
 	pointer-events: none !important;
 }
 
-body.beta-layout .connect-chat-msg-bubble .connect-chat-creation-embed-inner--audio .chat-doom-play-overlay-inner {
+body.app-layout .connect-chat-msg-bubble .connect-chat-creation-embed-inner--audio .chat-doom-play-overlay-inner {
 	width: 72px !important;
 	height: 72px !important;
 	border-radius: 50% !important;
@@ -5189,7 +5189,7 @@ body.beta-layout .connect-chat-msg-bubble .connect-chat-creation-embed-inner--au
 	justify-content: center !important;
 }
 
-body.beta-layout .connect-chat-msg-bubble .connect-chat-creation-embed-inner--audio .chat-doom-play-glyph {
+body.app-layout .connect-chat-msg-bubble .connect-chat-creation-embed-inner--audio .chat-doom-play-glyph {
 	width: 36px !important;
 	height: 36px !important;
 	margin-left: 5px !important;

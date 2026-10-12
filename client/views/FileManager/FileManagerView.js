@@ -82,7 +82,7 @@ export function renderFileManagerView({ outlet, filesApi, filesQuery, onUnauthor
 	const controller = new AbortController();
 	const root = mountTemplate(outlet, template);
 	const refs = bindRefs(root);
-	setTitle('My Files · parascene beta');
+	setTitle('My Files · parascene');
 	const { grid, loadMore, status } = refs;
 	const lightbox = createMediaLightbox();
 	const cardOptions = { filesApi, onViewFile: viewFile };
@@ -485,7 +485,7 @@ export function renderFileManagerView({ outlet, filesApi, filesQuery, onUnauthor
 	root.addEventListener('dragover', event => { if (event.dataTransfer?.types.includes('Files')) event.preventDefault(); });
 	root.addEventListener('dragleave', () => { if (--dragDepth <= 0) root.classList.remove('is-dragging'); });
 	root.addEventListener('drop', event => { if (!event.dataTransfer?.files.length) return; event.preventDefault(); dragDepth = 0; root.classList.remove('is-dragging'); void uploadFiles([...event.dataTransfer.files]); });
-	const loadObserver = typeof IntersectionObserver === 'function' ? new IntersectionObserver(entries => { if (entries.some(entry => entry.isIntersecting) && nextOffset !== null && !loadingMore && !status.classList.contains('is-error')) void load({ append: true }); }, { root: root.closest('.beta-outlet__scroll'), rootMargin: '1000px' }) : null;
+	const loadObserver = typeof IntersectionObserver === 'function' ? new IntersectionObserver(entries => { if (entries.some(entry => entry.isIntersecting) && nextOffset !== null && !loadingMore && !status.classList.contains('is-error')) void load({ append: true }); }, { root: root.closest('.app-outlet__scroll'), rootMargin: '1000px' }) : null;
 	loadObserver?.observe(loadMore);
 	const unsubscribeQuery = filesQuery?.subscribe(onQueryState);
 	if (filesQuery) void filesQuery.loadIfNeeded().catch(() => undefined);

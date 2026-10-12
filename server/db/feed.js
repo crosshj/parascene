@@ -2,7 +2,7 @@ import { getThumbnailUrl } from '../services/create/url.js';
 import { isRecommendableCreationRow } from '../services/create/recommendableCreations.js';
 import { putAnchorCreationFirst } from '../services/feed/doomSiteVideoTimeline.js';
 import { isFeedRowVideoCreation } from '../../client/shared/chatFeedMobilePartition.js';
-import { createSelectFeedBetaSitewideCatalog } from './feedCatalog.js';
+import { createSelectFeedSitewideCatalog } from './feedCatalog.js';
 const prefixedTable = name => 'prsn_' + name;
 export function resolveFeedRowTitle(creationTitle, feedItemTitle) {
 	// The creation owns its title, including an intentionally empty title.
@@ -1354,7 +1354,7 @@ selectExploreFeedItems: (() => {
 				paginated: explorePaginated
 			};
 		})(),
-selectFeedBetaSitewideCatalog: createSelectFeedBetaSitewideCatalog(serviceClient, {
+selectFeedSitewideCatalog: createSelectFeedSitewideCatalog(serviceClient, {
 			prefixedTable,
 			resolveFeedRowTitle,
 			getThumbnailUrl

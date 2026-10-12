@@ -11,7 +11,7 @@
 	margin-bottom: 12px;
 	box-shadow: var(--shadow);
 }
-@media(max-width:768px){[data-scroll-owner="document"] .creations-bulk-bar{top:calc(var(--beta-mobile-header-row-height,65px) + env(safe-area-inset-top,0px));}}
+@media(max-width:768px){[data-scroll-owner="document"] .creations-bulk-bar{top:calc(var(--app-mobile-header-row-height,65px) + env(safe-area-inset-top,0px));}}
 .bulk-actions-host.is-bulk-mode .creations-bulk-bar{display:block;}
 .creations-bulk-bar-inner {
 	display: flex;
@@ -58,7 +58,7 @@
 .creations-bulk-delete-modal-footer .btn-secondary{min-width:80px;}
 .creations-bulk-delete-modal-footer .creations-bulk-delete-confirm-btn{position:relative;min-width:100px;}
 
-/* WWW global.css danger-button treatment is absent from VPS shared primitives. */
+/* WWW global.css danger-button treatment is absent from the shared primitives. */
 .creations-bulk-delete-modal button.btn-danger{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:9px 16px;border:1px solid var(--error-text);border-radius:6px;color:var(--accent-text);background:var(--error-text);font:inherit;font-weight:600;line-height:1.1;cursor:pointer;transition:background .2s ease,transform .1s ease;}
 .creations-bulk-delete-modal button.btn-danger:hover:not(:disabled){border-color:color-mix(in srgb,var(--error-text) 90%,black);background:color-mix(in srgb,var(--error-text) 90%,black);transform:translateY(-1px);}
 .creations-bulk-delete-modal button.btn-danger:active:not(:disabled){transform:translateY(0);}

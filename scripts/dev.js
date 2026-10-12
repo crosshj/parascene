@@ -8,7 +8,7 @@ const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 const nodemonScript = path.join(appRoot, "node_modules", "nodemon", "bin", "nodemon.js");
 const children = [];
 
-console.log(`[dev] starting beta at http://localhost:${process.env.PORT || 3000}/`);
+console.log(`[dev] starting at http://localhost:${process.env.PORT || 3000}/`);
 console.log("[dev] Rollup and Express output will follow; refresh the browser after client changes.");
 
 function start(command, args, label) {

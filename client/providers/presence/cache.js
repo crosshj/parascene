@@ -1,6 +1,6 @@
 import { createStorageCache } from '../../core/storageCache.js';
 
-// WWW presence snapshot serialization; storage is owned by the VPS provider.
+// WWW presence snapshot serialization; storage is owned by this provider.
 export function serializePresenceSnapshot(snap) {
 	if (!snap || typeof snap !== 'object') return null;
 	const onlineIds = snap.onlineIds instanceof Set ? [...snap.onlineIds] : [];
@@ -50,7 +50,7 @@ export function deserializePresenceSnapshot(raw) {
 
 export function createPresenceCache(viewerId) {
 	if (!viewerId) return null;
-	const storage = createStorageCache(`prsn-vps-presence-v1:${viewerId}`);
+	const storage = createStorageCache(`prsn-presence-v1:${viewerId}`);
 	return {
 		read() {
 			const entry = storage.read();

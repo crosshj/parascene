@@ -20,7 +20,7 @@ export function createNotificationsProvider({ viewerId, registry, api = createNo
 		load: async ({ signal }) => api.unreadCount({ signal }),
 	})) : null;
 	const query = lease?.query || null;
-	const listCache = viewerId ? createStorageCache(`prsn-vps-notifications-v1:${viewerId}`, {
+	const listCache = viewerId ? createStorageCache(`prsn-notifications-v1:${viewerId}`, {
 		validate: (data) => Number(data?.viewerId) === viewerId && Array.isArray(data?.notifications),
 	}) : null;
 	const listLease = viewerId ? registry.acquire(['notifications', viewerId], () => createQuery({
@@ -65,7 +65,7 @@ export function createNotificationsProvider({ viewerId, registry, api = createNo
 			if (listQuery) void listQuery.loadIfNeeded().catch(() => undefined);
 		},
 		syncExternalCache(event) {
-			if (!listQuery || event?.key !== `prsn-vps-notifications-v1:${viewerId}`) return;
+			if (!listQuery || event?.key !== `prsn-notifications-v1:${viewerId}`) return;
 			const entry = listCache?.read?.();
 			if (entry) listQuery.setData(entry.data, { persist: false, updated: entry.updatedAt });
 			else void listQuery.refresh({ force: true }).catch(() => undefined);

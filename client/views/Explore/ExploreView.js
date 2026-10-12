@@ -13,7 +13,7 @@ export const ExploreView = Object.freeze({
  mount({ outlet, actions, services, search = '', searchComposer, setHeaderMenu }) {
   const root = document.createElement('section'); root.className = 'explore-view creation-browse chat-feed-channel-route--browse-view';
   root.innerHTML = `<div class="explore-view__status" role="status"></div><div class="route-cards content-cards-image-grid creation-browse-grid" aria-label="Community creations"></div><button class="explore-view__more" type="button" hidden>Load more</button>`;
-  outlet.replaceChildren(root); services.providers.document.setTitle('Explore · Parascene beta');
+  outlet.replaceChildren(root); services.providers.document.setTitle('Explore · Parascene');
   const grid = root.querySelector('.route-cards'), status = root.querySelector('[role="status"]'), more = root.querySelector('.explore-view__more');
   const media = createCreationMediaLoader(grid); const scroll = createScrollContext(root);
   let q = new URLSearchParams(search).get('q')?.trim() || '', offset = 0, hasMore = false, busy = false, destroyed = false, epoch = 0, request, rows = [], large = false;
@@ -85,8 +85,8 @@ export const ExploreView = Object.freeze({
   more.addEventListener('click', () => void load(!rows.length));
   let observer;
   function bindScrollOwner() { observer?.disconnect(); observer = new IntersectionObserver(entries => { if (entries.some(entry => entry.isIntersecting) && hasMore && !busy && !status.classList.contains('is-error')) void load(); }, { root: scroll.intersectionRoot, rootMargin: '1000px' }); observer.observe(more); media.setRoot(scroll.intersectionRoot); }
-  document.addEventListener('beta-mobile-scroll-owner-changed', bindScrollOwner);
+  document.addEventListener('app-mobile-scroll-owner-changed', bindScrollOwner);
   bindScrollOwner(); menu(); void load(true);
-  return { update({ search = '' }) { const next = new URLSearchParams(search).get('q')?.trim() || ''; if (next !== q) { q = next; void load(true); } }, destroy() { document.removeEventListener('beta-mobile-scroll-owner-changed', bindScrollOwner); document.removeEventListener('creation-detail:mutation', onCreationMutation); document.removeEventListener('nsfw-preference-changed', onNsfwPreference); searchBinding.destroy(); disposeCards(); destroyed = true; ++epoch; request?.abort(); observer?.disconnect(); media.disconnect(); root.querySelectorAll('audio,video').forEach(player => { player.pause(); player.removeAttribute('src'); player.load(); }); root.remove(); } };
+  return { update({ search = '' }) { const next = new URLSearchParams(search).get('q')?.trim() || ''; if (next !== q) { q = next; void load(true); } }, destroy() { document.removeEventListener('app-mobile-scroll-owner-changed', bindScrollOwner); document.removeEventListener('creation-detail:mutation', onCreationMutation); document.removeEventListener('nsfw-preference-changed', onNsfwPreference); searchBinding.destroy(); disposeCards(); destroyed = true; ++epoch; request?.abort(); observer?.disconnect(); media.disconnect(); root.querySelectorAll('audio,video').forEach(player => { player.pause(); player.removeAttribute('src'); player.load(); }); root.remove(); } };
  }
 });

@@ -3,8 +3,8 @@ import { createStorageCache } from '../../core/storageCache.js';
 import { mergeThreadsInbox } from './model.js';
 
 // Real inbox data must not reuse the earlier mock roster snapshot.
-const CACHE_PREFIX = 'prsn-vps-threads-inbox-v3';
-const MESSAGE_CACHE_PREFIX = 'prsn-vps-thread-messages-v2';
+const CACHE_PREFIX = 'prsn-threads-inbox-v3';
+const MESSAGE_CACHE_PREFIX = 'prsn-thread-messages-v2';
 const MESSAGE_CACHE_LIMIT = 8;
 const MESSAGE_PAGE_LIMIT = 40;
 

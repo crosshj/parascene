@@ -82,7 +82,7 @@ export function bindConversationVisualViewport({ frame, root }) {
 	}
 
 	function onComposerFocus(event) {
-		const input = frame.querySelector('.beta-outlet__composer textarea');
+		const input = frame.querySelector('.app-outlet__composer textarea');
 		if (!(input instanceof view.HTMLElement) || event.target !== input) return;
 		scheduleRetries();
 	}

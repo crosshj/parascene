@@ -6,7 +6,7 @@ import { buildChallengesChannelModel } from '../../shared/challenges/model/build
 import { ACTIVE_PARTICIPANT_PHASES } from '../../shared/challenges/model/participantSlice.js';
 import { deriveChallengePhase } from '../../shared/challenges/model/phases.js';
 
-const CACHE_PREFIX = 'prsn-vps-challenge-history-v1';
+const CACHE_PREFIX = 'prsn-challenge-history-v1';
 const ACTIVE_MAX_AGE_MS = 15_000;
 
 function boundaryTimes(cfg) {

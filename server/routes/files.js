@@ -200,7 +200,7 @@ export function createPublicFileRoutes(profileFiles, { publicLinkSecret = proces
 	router.use(createFilesCors());
 	// The signed token is the authorization for this route. It must work without
 	// a session cookie because cross-origin <img>/<video>/<audio> requests do not
-	// send the beta session cookie by default.
+	// send the session cookie by default.
 
 	async function sendPublicContent(req, res, next) {
 		const grant = verifyPublicFileToken(req.params.token, req.params.filename, publicLinkSecret);

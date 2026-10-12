@@ -24,7 +24,7 @@ than cloning the entire stream.
 `public/pages/chat.css`, and `public/pages/chat-hotfix.css`, in that cascade order,
 including media queries, markdown lists, rich embeds, replies, reactions, unread
 bands, and animation keyframes. `MessagesLayout.css` adapts the viewport to the
-beta header and composer; route chrome remains owned by the beta layout.
+app header and composer; route chrome remains owned by the app layout.
 Row resize observation preserves the scroll anchor as media loads. History uses
 the WWW sentinel and preload distance. Reply selection and unread clearing use
 the WWW classes, and floating reaction tooltips release their listeners on teardown.
@@ -76,7 +76,7 @@ controls remain part of the larger threads port. Missing conversations are
 shown explicitly until thread creation is ported. The existing mock server roster
 is excluded from the real inbox until the server directory is ported.
 
-Realtime requires `SUPABASE_ANON_KEY` in the VPS environment, alongside the
+Realtime requires `SUPABASE_ANON_KEY` in the server environment, alongside the
 existing Supabase URL, service key, and session secret. The deployment workflow
 accepts the anon key as a repository secret or variable. No credentials are
 included in the browser build; the authenticated session endpoint supplies the
@@ -99,12 +99,12 @@ under the repo root. The check establishes source and DOM parity, not screenshot
 The shared WWW `hydrateRichUserTextEmbeds` pass runs on mounted message rows,
 including replacements after inline edit cancellation. It retains image loading
 states, consecutive media groups, YouTube and Suno players, creation previews,
-inline video controls, and asynchronous link metadata. VPS owns the matching
+inline video controls, and asynchronous link metadata. This app owns the matching
 YouTube, Suno, and X metadata routes and the Suno/audio iframe card documents.
 Reaction updates retain hydrated bodies. Verification covers asynchronous rich
 DOM against the WWW builder, image grouping/loading, and edit restoration.
 
-Unpublished creation share-token access is still missing from the VPS creation
+Unpublished creation share-token access is still missing from the creation
 API; ordinary viewer-accessible creation previews work, but token-only shares
 cannot yet be considered WWW parity. Browser appearance still requires visual
 verification.

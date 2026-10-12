@@ -1,5 +1,5 @@
 /**
- * VPS NSFW preferences and click handling.
+ * NSFW preferences and click handling.
  */
 
 /**

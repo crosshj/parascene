@@ -1,15 +1,15 @@
-import { FEED_BETA_DEFAULT_PARAMS } from "./params.js";
+import { FEED_DEFAULT_PARAMS } from "./params.js";
 import { createSeededRng } from "./rng.js";
 import { mergeCatalogRowsById } from "./catalogMerge.js";
 import {
 	catalogFromSnapshot,
-	FEED_BETA_FALLBACK_BACK_LIMIT,
-	FEED_BETA_FALLBACK_HOT_LIMIT,
-	FEED_BETA_FALLBACK_RECENT_LIMIT
+	FEED_FALLBACK_BACK_LIMIT,
+	FEED_FALLBACK_HOT_LIMIT,
+	FEED_FALLBACK_RECENT_LIMIT
 } from "./catalogSnapshot.js";
-import { loadFeedBetaCatalogSnapshotCached } from "./catalogSnapshotCache.js";
-import { normalizeFeedBetaMediaFields, feedRowCreationIdKey, feedRowIsVideoThread } from "./rowMedia.js";
-import { isFeedBetaRowExcludedFromPools } from "./seen.js";
+import { loadFeedCatalogSnapshotCached } from "./catalogSnapshotCache.js";
+import { normalizeFeedMediaFields, feedRowCreationIdKey, feedRowIsVideoThread } from "./rowMedia.js";
+import { isFeedRowExcludedFromPools } from "./seen.js";
 
 export { mergeCatalogRowsById } from "./catalogMerge.js";
 
@@ -119,9 +119,9 @@ export async function applyViewerLikedToCatalog(queries, userId, catalog) {
 	return applyViewerLikedFromSet(catalog, liked);
 }
 
-async function pullFeedBetaCandidateCatalogFromDb(queries, userId, pageSeed) {
-	const params = FEED_BETA_DEFAULT_PARAMS;
-	const cat = queries.selectFeedBetaSitewideCatalog;
+async function pullFeedCandidateCatalogFromDb(queries, userId, pageSeed) {
+	const params = FEED_DEFAULT_PARAMS;
+	const cat = queries.selectFeedSitewideCatalog;
 	if (!cat || typeof cat.getRecent !== 'function') {
 		return [];
 	}
@@ -133,15 +133,15 @@ async function pullFeedBetaCandidateCatalogFromDb(queries, userId, pageSeed) {
 	).toISOString();
 
 	const fetches = [
-		cat.getRecent(userId, { limit: FEED_BETA_FALLBACK_RECENT_LIMIT }),
+		cat.getRecent(userId, { limit: FEED_FALLBACK_RECENT_LIMIT }),
 		typeof cat.getTopEngaged === 'function'
-			? cat.getTopEngaged(userId, { limit: FEED_BETA_FALLBACK_HOT_LIMIT })
+			? cat.getTopEngaged(userId, { limit: FEED_FALLBACK_HOT_LIMIT })
 			: Promise.resolve([]),
 		typeof cat.getBackCatalogSlice === 'function'
 			? cat.getBackCatalogSlice(userId, {
 					olderThanIso: olderThan,
 					offset: backOffset,
-					limit: FEED_BETA_FALLBACK_BACK_LIMIT
+					limit: FEED_FALLBACK_BACK_LIMIT
 				})
 			: Promise.resolve([])
 	];
@@ -160,7 +160,7 @@ async function pullFeedBetaCandidateCatalogFromDb(queries, userId, pageSeed) {
 	}
 
 	const [recent, engaged, backSlice] = await Promise.all(fetches);
-	return mergeCatalogRowsById(recent, engaged, backSlice, videoRows).map(normalizeFeedBetaMediaFields);
+	return mergeCatalogRowsById(recent, engaged, backSlice, videoRows).map(normalizeFeedMediaFields);
 }
 
 /**
@@ -186,8 +186,8 @@ export function newcomerContextFromSnapshot(snapshot) {
  * @param {{ deferLikes?: boolean }} [opts]
  * @returns {Promise<{ catalog: object[], publishedCount: number|null, fromSnapshot: boolean, snapshotNewcomer: object|null, videoHead: object[] }>}
  */
-export async function pullFeedBetaCandidateCatalogBundle(queries, userId, pageSeed, opts = {}) {
-	const snapshot = await loadFeedBetaCatalogSnapshotCached();
+export async function pullFeedCandidateCatalogBundle(queries, userId, pageSeed, opts = {}) {
+	const snapshot = await loadFeedCatalogSnapshotCached();
 	let catalog = [];
 	let publishedCount = null;
 	let fromSnapshot = false;
@@ -202,7 +202,7 @@ export async function pullFeedBetaCandidateCatalogBundle(queries, userId, pageSe
 		fromSnapshot = true;
 		snapshotNewcomer = newcomerContextFromSnapshot(snapshot);
 	} else {
-		catalog = await pullFeedBetaCandidateCatalogFromDb(queries, userId, pageSeed);
+		catalog = await pullFeedCandidateCatalogFromDb(queries, userId, pageSeed);
 	}
 
 	if (opts.deferLikes === true) {
@@ -220,8 +220,8 @@ export async function pullFeedBetaCandidateCatalogBundle(queries, userId, pageSe
  * @param {number} userId
  * @param {string} pageSeed — varies per page / refresh for back-catalog offset
  */
-export async function pullFeedBetaCandidateCatalog(queries, userId, pageSeed) {
-	const bundle = await pullFeedBetaCandidateCatalogBundle(queries, userId, pageSeed);
+export async function pullFeedCandidateCatalog(queries, userId, pageSeed) {
+	const bundle = await pullFeedCandidateCatalogBundle(queries, userId, pageSeed);
 	return bundle.catalog;
 }
 
@@ -231,17 +231,17 @@ export async function pullFeedBetaCandidateCatalog(queries, userId, pageSeed) {
  * @param {object} queries
  * @param {number|null} [cachedPublishedCount]
  */
-export async function resolveFeedBetaSitewideCatalogSize(queries, cachedPublishedCount = null) {
+export async function resolveFeedSitewideCatalogSize(queries, cachedPublishedCount = null) {
 	if (cachedPublishedCount != null) {
 		const cached = Number(cachedPublishedCount);
 		if (Number.isFinite(cached) && cached >= 0) return cached;
 	}
 
-	const snapshot = await loadFeedBetaCatalogSnapshotCached();
+	const snapshot = await loadFeedCatalogSnapshotCached();
 	const fromSnap = Number(snapshot?.published_count);
 	if (Number.isFinite(fromSnap) && fromSnap >= 0) return fromSnap;
 
-	const cat = queries?.selectFeedBetaSitewideCatalog;
+	const cat = queries?.selectFeedSitewideCatalog;
 	if (cat && typeof cat.getPublishedCount === 'function') {
 		try {
 			return await cat.getPublishedCount();
@@ -260,8 +260,8 @@ export async function resolveFeedBetaSitewideCatalogSize(queries, cachedPublishe
  * @param {{ limit?: number, enableNsfw?: boolean, showOwnPosts?: boolean }} [opts]
  * @returns {Promise<object[]>}
  */
-export async function pullFeedBetaSlotPackVideoHead(queries, userId, opts = {}) {
-	const limit = Math.max(1, Number(opts.limit) || FEED_BETA_DEFAULT_PARAMS.slotPackVideoCap);
+export async function pullFeedSlotPackVideoHead(queries, userId, opts = {}) {
+	const limit = Math.max(1, Number(opts.limit) || FEED_DEFAULT_PARAMS.slotPackVideoCap);
 	if (typeof queries.selectFeedItems?.getLatestFeedSlotPackHead === 'function') {
 		try {
 			const head = await queries.selectFeedItems.getLatestFeedSlotPackHead(userId, {
@@ -269,7 +269,7 @@ export async function pullFeedBetaSlotPackVideoHead(queries, userId, opts = {}) 
 				imageLimit: 1,
 				includeOwnPosts: opts.showOwnPosts === true
 			});
-			let rows = (Array.isArray(head?.videos) ? head.videos : []).map(normalizeFeedBetaMediaFields);
+			let rows = (Array.isArray(head?.videos) ? head.videos : []).map(normalizeFeedMediaFields);
 			if (opts.enableNsfw !== true) {
 				rows = rows.filter((row) => !row.nsfw);
 			}
@@ -278,7 +278,7 @@ export async function pullFeedBetaSlotPackVideoHead(queries, userId, opts = {}) 
 			// fall through to site video page
 		}
 	}
-	return pullFeedBetaSiteVideoHead(queries, userId, { ...opts, seen: null });
+	return pullFeedSiteVideoHead(queries, userId, { ...opts, seen: null });
 }
 
 /**
@@ -288,8 +288,8 @@ export async function pullFeedBetaSlotPackVideoHead(queries, userId, opts = {}) 
  * @param {number} userId
  * @param {{ limit?: number, enableNsfw?: boolean, seen?: Set<string> }} [opts]
  */
-export async function pullFeedBetaSiteVideoHead(queries, userId, opts = {}) {
-	const limit = Math.max(1, Number(opts.limit) || FEED_BETA_DEFAULT_PARAMS.slotPackVideoCap);
+export async function pullFeedSiteVideoHead(queries, userId, opts = {}) {
+	const limit = Math.max(1, Number(opts.limit) || FEED_DEFAULT_PARAMS.slotPackVideoCap);
 	if (typeof queries.selectFeedItems?.getSitePublishedVideoFeedPage !== 'function') {
 		return [];
 	}
@@ -298,7 +298,7 @@ export async function pullFeedBetaSiteVideoHead(queries, userId, opts = {}) {
 			mode: 'head',
 			limit
 		});
-		let rows = (Array.isArray(page?.rows) ? page.rows : []).map(normalizeFeedBetaMediaFields);
+		let rows = (Array.isArray(page?.rows) ? page.rows : []).map(normalizeFeedMediaFields);
 		if (opts.enableNsfw !== true) {
 			rows = rows.filter((row) => !row.nsfw);
 		}
@@ -306,7 +306,7 @@ export async function pullFeedBetaSiteVideoHead(queries, userId, opts = {}) {
 		if (seen) {
 			rows = rows.filter((row) => {
 				const key = feedRowCreationIdKey(row);
-				return key && !isFeedBetaRowExcludedFromPools(row, seen);
+				return key && !isFeedRowExcludedFromPools(row, seen);
 			});
 		}
 		return rows.filter(feedRowIsVideoThread);

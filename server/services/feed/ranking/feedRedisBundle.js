@@ -1,11 +1,11 @@
-import { getFeedBetaRedis, isFeedBetaRedisConfigured } from "../feedBetaRedis.js";
+import { getFeedRedis, isFeedRedisConfigured } from "../feedRedis.js";
 import {
-	FEED_BETA_CATALOG_REDIS_KEY,
-	loadFeedBetaCatalogSnapshotFromRedis
+	FEED_CATALOG_REDIS_KEY,
+	loadFeedCatalogSnapshotFromRedis
 } from "./catalogSnapshot.js";
 import {
-	isFeedBetaCatalogMemCacheFresh,
-	primeFeedBetaCatalogMemCache
+	isFeedCatalogMemCacheFresh,
+	primeFeedCatalogMemCache
 } from "./catalogSnapshotCache.js";
 import {
 	CHALLENGE_FEED_SNAPSHOT_REDIS_KEY,
@@ -14,9 +14,9 @@ import {
 	primeChallengeFeedSnapshotMemCache
 } from "../challengeFeedSnapshotCache.js";
 import {
-	feedBetaSeenKey,
-	parseFeedBetaSeenMembers,
-	primeFeedBetaSeenCache
+	feedSeenKey,
+	parseFeedSeenMembers,
+	primeFeedSeenCache
 } from "./seenRedis.js";
 
 /**
@@ -25,28 +25,28 @@ import {
  * @param {ReturnType<import('../feed/feedTiming.js').createFeedTiming>|null|undefined} [timing]
  * @param {{ includeChallenge?: boolean }} [opts]
  */
-export async function primeFeedBetaRedisFromPipeline(userId, timing = null, opts = {}) {
-	if (!isFeedBetaRedisConfigured() || userId == null) return;
+export async function primeFeedRedisFromPipeline(userId, timing = null, opts = {}) {
+	if (!isFeedRedisConfigured() || userId == null) return;
 
 	const includeChallenge = opts.includeChallenge !== false;
-	const needCatalog = !isFeedBetaCatalogMemCacheFresh();
+	const needCatalog = !isFeedCatalogMemCacheFresh();
 	const needChallenge = includeChallenge && !isChallengeFeedSnapshotMemCacheFresh();
 	if (!needCatalog && !needChallenge) {
-		const r = getFeedBetaRedis();
+		const r = getFeedRedis();
 		if (!r) return;
 		const t0 = performance.now();
 		try {
-			const members = await r.smembers(feedBetaSeenKey(userId));
-			primeFeedBetaSeenCache(userId, parseFeedBetaSeenMembers(members));
+			const members = await r.smembers(feedSeenKey(userId));
+			primeFeedSeenCache(userId, parseFeedSeenMembers(members));
 		} catch (err) {
-			console.warn('[feedBeta redisBundle] seen', err?.message || err);
+			console.warn('[feed redisBundle] seen', err?.message || err);
 		} finally {
 			timing?.add('redis.seen', performance.now() - t0);
 		}
 		return;
 	}
 
-	const r = getFeedBetaRedis();
+	const r = getFeedRedis();
 	if (!r) return;
 
 	const t0 = performance.now();
@@ -54,14 +54,14 @@ export async function primeFeedBetaRedisFromPipeline(userId, timing = null, opts
 		const pipe = r.pipeline();
 		const order = [];
 		if (needCatalog) {
-			pipe.get(FEED_BETA_CATALOG_REDIS_KEY);
+			pipe.get(FEED_CATALOG_REDIS_KEY);
 			order.push('catalog');
 		}
 		if (needChallenge) {
 			pipe.get(CHALLENGE_FEED_SNAPSHOT_REDIS_KEY);
 			order.push('challenge');
 		}
-		pipe.smembers(feedBetaSeenKey(userId));
+		pipe.smembers(feedSeenKey(userId));
 		order.push('seen');
 
 		const results = await pipe.exec();
@@ -70,7 +70,7 @@ export async function primeFeedBetaRedisFromPipeline(userId, timing = null, opts
 			const raw = results[idx];
 			idx += 1;
 			if (raw && typeof raw === 'object' && raw.version === 1) {
-				primeFeedBetaCatalogMemCache(raw);
+				primeFeedCatalogMemCache(raw);
 			}
 		}
 		if (needChallenge) {
@@ -81,17 +81,17 @@ export async function primeFeedBetaRedisFromPipeline(userId, timing = null, opts
 			}
 		}
 		const seenRaw = results[idx];
-		primeFeedBetaSeenCache(userId, parseFeedBetaSeenMembers(seenRaw));
+		primeFeedSeenCache(userId, parseFeedSeenMembers(seenRaw));
 
 		timing?.add('redis.pipeline', performance.now() - t0, {
 			keys: order.join(',')
 		});
 	} catch (err) {
-		console.warn('[feedBeta redisBundle] pipeline', err?.message || err);
+		console.warn('[feed redisBundle] pipeline', err?.message || err);
 		if (needCatalog) {
 			try {
-				const snapshot = await loadFeedBetaCatalogSnapshotFromRedis();
-				if (snapshot) primeFeedBetaCatalogMemCache(snapshot);
+				const snapshot = await loadFeedCatalogSnapshotFromRedis();
+				if (snapshot) primeFeedCatalogMemCache(snapshot);
 			} catch {
 				// fall through to per-key loaders in pull path
 			}

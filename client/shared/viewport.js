@@ -1,5 +1,5 @@
 /**
- * VPS viewport and device helpers.
+ * Viewport and device helpers.
  */
 
 export function isIOS() {

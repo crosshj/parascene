@@ -1,4 +1,4 @@
-/* WWW library query contracts, owned by the VPS Library domain. */
+/* WWW library query contracts, owned by the Library domain. */
 function prefixedTable(name) { return `prsn_${name}`; }
 export function createLibraryQueries(client) {
 const serviceClient = client; const supabase = client;

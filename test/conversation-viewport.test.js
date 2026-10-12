@@ -6,9 +6,9 @@ import { bindConversationVisualViewport } from '../client/core/conversationViewp
 function mount({ mode = 'conversation', mobile = true, scale = 1 } = {}) {
 	const dom = new JSDOM(`<!doctype html><html><body>
 		<div id="app-shell" data-mobile-mode="${mode}">
-			<div class="beta-outlet__frame">
+			<div class="app-outlet__frame">
 				<div class="chat-page-messages" data-chat-messages></div>
-				<form class="beta-outlet__composer"><textarea></textarea></form>
+				<form class="app-outlet__composer"><textarea></textarea></form>
 			</div>
 		</div>
 	</body></html>`, { url: 'http://localhost/dm/1', pretendToBeVisual: true });
@@ -31,7 +31,7 @@ function mount({ mode = 'conversation', mobile = true, scale = 1 } = {}) {
 	visualViewport.scale = scale;
 	view.visualViewport = visualViewport;
 	const root = view.document.getElementById('app-shell');
-	const frame = root.querySelector('.beta-outlet__frame');
+	const frame = root.querySelector('.app-outlet__frame');
 	const messages = frame.querySelector('[data-chat-messages]');
 	let scrollTop = 0;
 	Object.defineProperty(messages, 'scrollHeight', { configurable: true, value: 1000 });

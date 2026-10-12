@@ -27,7 +27,7 @@ const QSTASH_SCHEDULES = [
 	},
 	{
 		id: "parascene-feed-beta-catalog-rebuild",
-		label: "Rebuild shared feed beta catalog snapshot in Redis (every 15 min)",
+		label: "Rebuild shared feed catalog snapshot in Redis (every 15 min)",
 		destinationPath: "/api/worker/jobs",
 		cron: "*/15 * * * *",
 		body: { job_type: "feed_beta_catalog_rebuild", args: {} },

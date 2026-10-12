@@ -1,6 +1,6 @@
 /* WWW comment-avatar base and sidebar avatar dimensions. */
 .sidebar-view__row .comment-avatar,
-.beta-outlet__icon .comment-avatar {
+.app-outlet__icon .comment-avatar {
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -19,7 +19,7 @@
 	overflow: hidden;
 }
 .sidebar-view__row .comment-avatar-img,
-.beta-outlet__icon .comment-avatar-img {
+.app-outlet__icon .comment-avatar-img {
 	position: absolute;
 	inset: 0;
 	width: 100%;

@@ -1,5 +1,5 @@
 /* Founder avatar treatment copied from public/global.css. Keep this shared so
-   the VPS account avatar uses the same size variants and visual rules as www. */
+   the account avatar uses the same size variants and visual rules as www. */
 .avatar-with-founder-flair {
 	--founder-flair-dark: #6300ff;
 	--founder-flair-mid: #ff00fb;

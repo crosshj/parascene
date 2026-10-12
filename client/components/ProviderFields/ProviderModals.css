@@ -93,7 +93,7 @@ body:has(.image-picker-modal-overlay.open) {
 	z-index: 1;
 }
 
-/* WWW global.css applies border-box to the whole document. The VPS picker is
+/* WWW global.css applies border-box to the whole document. The picker is
    portaled outside the app overlay, so apply that same sizing model locally. */
 :where(.create-workflow-root) .image-picker-modal,
 :where(.create-workflow-root) .image-picker-modal *,

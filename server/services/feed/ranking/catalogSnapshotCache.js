@@ -1,4 +1,4 @@
-import { loadFeedBetaCatalogSnapshotFromRedis } from "./catalogSnapshot.js";
+import { loadFeedCatalogSnapshotFromRedis } from "./catalogSnapshot.js";
 
 /** Avoid repeated Upstash round-trips within a warm process. */
 const MEM_TTL_MS = 45_000;
@@ -6,32 +6,32 @@ const MEM_TTL_MS = 45_000;
 /** @type {{ at: number, snapshot: object|null }} */
 let mem = { at: 0, snapshot: null };
 
-export function invalidateFeedBetaCatalogMemCache() {
+export function invalidateFeedCatalogMemCache() {
 	mem = { at: 0, snapshot: null };
 }
 
-export function isFeedBetaCatalogMemCacheFresh() {
+export function isFeedCatalogMemCacheFresh() {
 	return Boolean(mem.snapshot && Date.now() - mem.at < MEM_TTL_MS);
 }
 
 /** @param {object|null|undefined} snapshot */
-export function primeFeedBetaCatalogMemCache(snapshot) {
+export function primeFeedCatalogMemCache(snapshot) {
 	if (!snapshot || typeof snapshot !== 'object') return;
 	mem = { at: Date.now(), snapshot };
 }
 
 /** @deprecated test alias */
-export const resetFeedBetaCatalogMemCacheForTests = invalidateFeedBetaCatalogMemCache;
+export const resetFeedCatalogMemCacheForTests = invalidateFeedCatalogMemCache;
 
 /**
  * @returns {Promise<object|null>}
  */
-export async function loadFeedBetaCatalogSnapshotCached() {
+export async function loadFeedCatalogSnapshotCached() {
 	const now = Date.now();
 	if (mem.snapshot && now - mem.at < MEM_TTL_MS) {
 		return mem.snapshot;
 	}
-	const snapshot = await loadFeedBetaCatalogSnapshotFromRedis();
+	const snapshot = await loadFeedCatalogSnapshotFromRedis();
 	if (snapshot) {
 		mem = { at: now, snapshot };
 	}

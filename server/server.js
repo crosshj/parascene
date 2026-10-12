@@ -70,8 +70,8 @@ app.use(shareHostBoundary);
 app.use(createFaviconRoutes({ publicDir: path.join(__dirname, "../public") }));
 app.use(createAuthMiddleware(db.sessions, db.users));
 app.use(apiKeyBearerMiddleware(db.account.queries));app.use(integrationBearerMiddleware());
-// The beta application also serves the public profile/edited-image compatibility
-// path. The CDN host serves the same VPS-owned route through createCdnRoutes.
+// The app also serves the public profile/edited-image compatibility
+// path. The CDN host serves the same route through createCdnRoutes.
 app.use("/api/images/generic", createFilesCors(), createGenericRoutes(db.genericFiles, db.users));
 app.use(createCdnHostBoundary(createCdnRoutes({ profileFiles: db.profileFiles, genericFiles: db.genericFiles, users: db.users })));
 const challengeDependencies = { ...db.account, queries: { ...db.account.queries, ...createChallengeQueries(db.account.client) } };
@@ -110,13 +110,13 @@ if (reportsRoutes) app.use(reportsRoutes);
 app.use(createPageRoutes({ pagesDir, users: db.users }));
 app.use(express.static(path.join(__dirname, "../public")));
 app.use((error, req, res, next) => {
-	console.error("[beta] request failed", error);
+	console.error("[parascene] request failed", error);
 	if (res.headersSent) return next(error);
 	res.status(500).json({ error: "Internal server error" });
 });
 
 app.listen(port, bindHost, () => {
-	console.log(`Parascene beta dev server: http://localhost:${port}/`);
-	console.log(`[beta] bound to ${bindHost}:${port}`);
- void resumeLocalProviderPolls(db.create).catch(error => console.error("[beta] Create poll recovery failed", error));
+	console.log(`Parascene: http://localhost:${port}/`);
+	console.log(`[parascene] bound to ${bindHost}:${port}`);
+ void resumeLocalProviderPolls(db.create).catch(error => console.error("[parascene] Create poll recovery failed", error));
 });

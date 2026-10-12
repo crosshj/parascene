@@ -904,7 +904,7 @@ export async function mountCreationCommentsThread(container, options) {
 	const REACTION_PICKER_ANCHOR = '--comment-reaction-add';
 
 	function reactionPickerParent(anchor) {
-		return anchor.closest('.beta-app-overlay, .chat-doom-comments-sheet, .modal-overlay, .beta-outlet__thread-body') || document.body;
+		return anchor.closest('.app-overlay, .chat-doom-comments-sheet, .modal-overlay, .app-outlet__thread-body') || document.body;
 	}
 
 	function closeReactionPicker() {

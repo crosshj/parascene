@@ -1,5 +1,5 @@
 import { collectCreationMentionSourceTexts, extractUserMentionHandles } from "../mentions.js";
-import { FEED_BETA_DEFAULT_PARAMS } from "./params.js";
+import { FEED_DEFAULT_PARAMS } from "./params.js";
 
 /**
  * @param {object} queries
@@ -31,7 +31,7 @@ const NEWCOMER_AUTHOR_LOOKUP_CAP = 80;
 export async function loadNewcomerAuthorContext(
 	queries,
 	catalogRows,
-	newcomerDays = FEED_BETA_DEFAULT_PARAMS.newcomerAccountDays
+	newcomerDays = FEED_DEFAULT_PARAMS.newcomerAccountDays
 ) {
 	const authorIds = [
 		...new Set(

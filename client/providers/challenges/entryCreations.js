@@ -6,7 +6,7 @@ import {
 	pickChallengeTopicVoteCreationUrl
 } from '../../shared/challenges/challengeAdmin.js';
 
-const CACHE_PREFIX = 'prsn-vps-challenge-entries-v1';
+const CACHE_PREFIX = 'prsn-challenge-entries-v1';
 
 function parsePayload(message) {
 	const text = typeof message?.body === 'string' ? message.body.trim() : '';

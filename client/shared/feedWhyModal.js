@@ -1,24 +1,24 @@
-import './feedBetaWhyModal.css';
+import './feedWhyModal.css';
 import { createModalDismissButton } from './modalDismiss.js';
 
 /**
- * Ranked-feed "Why am I seeing this?" modal — displays server-stamped `feed_beta_why` only.
+ * Ranked-feed "Why am I seeing this?" modal — displays server-stamped `feed_why` only.
  */
 
 let activeOverlay = null;
 
 /**
- * @param {object|null|undefined} why — `feed_beta_why` from API
+ * @param {object|null|undefined} why — `feed_why` from API
  */
-export function openFeedBetaWhyModal(why, { signal } = {}) {
+export function openFeedWhyModal(why, { signal } = {}) {
 	if (!why || typeof why !== 'object' || signal?.aborted) return;
-	closeFeedBetaWhyModal();
+	closeFeedWhyModal();
 
 	const overlay = document.createElement('dialog');
-	overlay.className = 'app-dialog feed-beta-why-modal';
+	overlay.className = 'app-dialog feed-why-modal';
 	overlay.setAttribute('role', 'dialog');
 	overlay.setAttribute('aria-modal', 'true');
-	overlay.setAttribute('aria-labelledby', 'feed-beta-why-title');
+	overlay.setAttribute('aria-labelledby', 'feed-why-title');
 
 	const developer =
 		why.developer && typeof why.developer === 'object' ? why.developer : null;
@@ -31,25 +31,25 @@ export function openFeedBetaWhyModal(why, { signal } = {}) {
 		: [];
 
 	const labelHtml = label
-		? `<p class="feed-beta-why-label">${escapeHtml(label)}</p>`
+		? `<p class="feed-why-label">${escapeHtml(label)}</p>`
 		: '';
 
 	const detailsHtml =
 		details.length > 0
-			? `<ul class="feed-beta-why-details">${details.map((d) => `<li>${escapeHtml(d)}</li>`).join('')}</ul>`
+			? `<ul class="feed-why-details">${details.map((d) => `<li>${escapeHtml(d)}</li>`).join('')}</ul>`
 			: '';
 
 	const devHtml = developer
-		? `<details class="feed-beta-why-dev"><summary>Developer details</summary><pre class="feed-beta-why-dev-pre">${escapeHtml(JSON.stringify(developer, null, 2))}</pre></details>`
+		? `<details class="feed-why-dev"><summary>Developer details</summary><pre class="feed-why-dev-pre">${escapeHtml(JSON.stringify(developer, null, 2))}</pre></details>`
 		: '';
 
 	overlay.innerHTML = `
 		<header class="app-dialog__header">
-				<h2 id="feed-beta-why-title" class="app-dialog__title">Why am I seeing this?</h2>
+				<h2 id="feed-why-title" class="app-dialog__title">Why am I seeing this?</h2>
 			</header>
 			<div class="app-dialog__body">
 				${labelHtml}
-				<p class="feed-beta-why-summary">${escapeHtml(summary)}</p>
+				<p class="feed-why-summary">${escapeHtml(summary)}</p>
 				${detailsHtml}
 				${devHtml}
 			</div>
@@ -76,7 +76,7 @@ export function openFeedBetaWhyModal(why, { signal } = {}) {
 	overlay.showModal();
 }
 
-export function closeFeedBetaWhyModal() {
+export function closeFeedWhyModal() {
 	activeOverlay?._dispose();
 }
 

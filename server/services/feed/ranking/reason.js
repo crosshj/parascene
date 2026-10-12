@@ -6,10 +6,10 @@
  * outside that batch are not considered for the newcomer pool on this page.
  */
 
-/** @typedef {'hot_24h'|'hot_7d'|'new'|'newcomer'|'recent_comment'|'own_activity'|'catalog_unseen'|'catalog_relaxed'|'follow_sprinkle'|'fill_remainder'|'site_video_head'|'db_random_fallback'|'page_fill'|'from_the_past'} FeedBetaPoolId */
+/** @typedef {'hot_24h'|'hot_7d'|'new'|'newcomer'|'recent_comment'|'own_activity'|'catalog_unseen'|'catalog_relaxed'|'follow_sprinkle'|'fill_remainder'|'site_video_head'|'db_random_fallback'|'page_fill'|'from_the_past'} FeedPoolId */
 
 /** Short user-facing label per pool (why modal + cards). */
-export const FEED_BETA_POOL_LABELS = {
+export const FEED_POOL_LABELS = {
 	hot_24h: 'Rising today',
 	hot_7d: 'Recently active',
 	new: 'New creation',
@@ -62,19 +62,19 @@ const MERGE_USER = {
 };
 
 /**
- * @param {FeedBetaPoolId|string|null|undefined} pool
+ * @param {FeedPoolId|string|null|undefined} pool
  * @returns {string|null}
  */
-export function feedBetaPoolLabel(pool) {
+export function feedPoolLabel(pool) {
 	if (!pool || typeof pool !== 'string') return null;
-	return FEED_BETA_POOL_LABELS[pool] ?? null;
+	return FEED_POOL_LABELS[pool] ?? null;
 }
 
 /**
- * @param {FeedBetaPoolId} pool
+ * @param {FeedPoolId} pool
  * @returns {string}
  */
-export function feedBetaPoolUserLine(pool) {
+export function feedPoolUserLine(pool) {
 	return POOL_USER[pool] ?? 'It matched the Feed ranking mix for this page.';
 }
 
@@ -82,7 +82,7 @@ export function feedBetaPoolUserLine(pool) {
  * @param {string} layout
  * @returns {string|null}
  */
-export function feedBetaMergeUserLine(layout) {
+export function feedMergeUserLine(layout) {
 	return MERGE_USER[layout] ?? null;
 }
 
@@ -92,10 +92,10 @@ export function feedBetaMergeUserLine(layout) {
  * @param {object} [entry]
  * @returns {object}
  */
-export function stampFeedBetaRowReason(row, stamp, entry = null) {
+export function stampFeedRowReason(row, stamp, entry = null) {
 	if (!row || typeof row !== 'object') return row;
-	const why = buildFeedBetaWhy(stamp, entry);
-	return { ...row, feed_beta_why: why };
+	const why = buildFeedWhy(stamp, entry);
+	return { ...row, feed_why: why };
 }
 
 /**
@@ -103,13 +103,13 @@ export function stampFeedBetaRowReason(row, stamp, entry = null) {
  * @param {{ merge_layout?: string, position_in_page?: number }} layout
  * @returns {object}
  */
-export function appendFeedBetaMergeReason(row, layout) {
+export function appendFeedMergeReason(row, layout) {
 	if (!row || typeof row !== 'object') return row;
 	const baseWhy =
-		row.feed_beta_why && typeof row.feed_beta_why === 'object'
-			? row.feed_beta_why
+		row.feed_why && typeof row.feed_why === 'object'
+			? row.feed_why
 			: { details: [], developer: {} };
-	const mergeLine = layout.merge_layout ? feedBetaMergeUserLine(layout.merge_layout) : null;
+	const mergeLine = layout.merge_layout ? feedMergeUserLine(layout.merge_layout) : null;
 	const details = Array.isArray(baseWhy.details) ? baseWhy.details.slice() : [];
 	if (mergeLine && !details.includes(mergeLine)) {
 		details.push(mergeLine);
@@ -121,7 +121,7 @@ export function appendFeedBetaMergeReason(row, layout) {
 	};
 	return {
 		...row,
-		feed_beta_why: {
+		feed_why: {
 			...baseWhy,
 			details,
 			developer
@@ -134,11 +134,11 @@ export function appendFeedBetaMergeReason(row, layout) {
  * @param {object|null|undefined} entry — scored pool entry
  * @returns {{ label: string|null, summary: string, details: string[], developer: object }}
  */
-export function buildFeedBetaWhy(stamp, entry = null) {
+export function buildFeedWhy(stamp, entry = null) {
 	const pool = stamp.pool ?? null;
 	const thread = stamp.thread ?? null;
-	const label = feedBetaPoolLabel(pool);
-	const summary = pool ? feedBetaPoolUserLine(pool) : 'Shown in Feed.';
+	const label = feedPoolLabel(pool);
+	const summary = pool ? feedPoolUserLine(pool) : 'Shown in Feed.';
 	const details = [];
 
 	if (thread === 'video') {

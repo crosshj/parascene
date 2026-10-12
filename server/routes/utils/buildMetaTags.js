@@ -34,13 +34,13 @@ function escapeHtml(value) {
 export function buildMetaTags(appBuild = "development") {
 	const commit = process.env.BUILD_COMMIT || process.env.GIT_COMMIT || defaultCommit;
 	const values = {
-		"app-version": process.env.APP_VERSION || (isProduction ? "beta" : "development"),
+		"app-version": process.env.APP_VERSION || (isProduction ? "production" : "development"),
 		"build-commit": commit,
 		"build-commit-url": process.env.BUILD_COMMIT_URL || (commit ? `https://github.com/crosshj/parascene/commit/${commit}` : ""),
 		"build-suffix": process.env.BUILD_SUFFIX || (isProduction ? "" : "-next"),
 		"build-deployed-at": process.env.BUILD_DEPLOYED_AT || defaultStartedAt,
 		"app-build": appBuild,
-		"asset-version": process.env.ASSET_VERSION || commit || "beta",
+		"asset-version": process.env.ASSET_VERSION || commit || (isProduction ? "production" : "development"),
 		"site-origin": getBaseAppUrl(),
 		"api-origin": `https://${getApiHostname()}`,
 		"share-host": getShareHostname(),

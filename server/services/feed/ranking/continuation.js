@@ -1,13 +1,13 @@
 import { MOBILE_CHAT_SLOT_PACK_STRUCTURED_LEN } from "../../../../client/shared/chatFeedMobilePartition.js";
-import { isFeedBetaRelaxedPage, countFeedBetaRemainingEligible } from "./seen.js";
-import { isFeedBetaAssumedHasMorePage } from "./hasMore.js";
+import { isFeedRelaxedPage, countFeedRemainingEligible } from "./seen.js";
+import { isFeedAssumedHasMorePage } from "./hasMore.js";
 import { feedRowCreationIdKey } from "./rowMedia.js";
 
 /**
  * @param {object} opts
  * @returns {string}
  */
-export function resolveFeedBetaHasMoreReason(opts) {
+export function resolveFeedHasMoreReason(opts) {
 	const {
 		pageIndex,
 		rows,
@@ -31,8 +31,8 @@ export function resolveFeedBetaHasMoreReason(opts) {
 		return 'underfilled_batch';
 	}
 
-	if (isFeedBetaAssumedHasMorePage(pageIndex, params)) return 'assumed_early_pages';
-	if (isFeedBetaRelaxedPage(pageIndex, params)) return 'relaxed_deep_scroll';
+	if (isFeedAssumedHasMorePage(pageIndex, params)) return 'assumed_early_pages';
+	if (isFeedRelaxedPage(pageIndex, params)) return 'relaxed_deep_scroll';
 
 	const siteTotal = Number(sitewideCatalogSize);
 	const servedCount = servedSeen instanceof Set ? servedSeen.size : 0;
@@ -45,8 +45,8 @@ export function resolveFeedBetaHasMoreReason(opts) {
 		const key = feedRowCreationIdKey(row);
 		if (key) servedThisPage.add(key);
 	}
-	const remainingEligible = countFeedBetaRemainingEligible(catalog, servedSeen, servedThisPage, {
-		relaxed: isFeedBetaRelaxedPage(pageIndex, params)
+	const remainingEligible = countFeedRemainingEligible(catalog, servedSeen, servedThisPage, {
+		relaxed: isFeedRelaxedPage(pageIndex, params)
 	});
 	if (remainingEligible > 0) return 'batch_eligible_remaining';
 
@@ -54,14 +54,14 @@ export function resolveFeedBetaHasMoreReason(opts) {
 }
 
 /**
- * Client echoes `feed_beta_ack` on the next request so page index and under-fill are known
+ * Client echoes `feed_ack` on the next request so page index and under-fill are known
  * even when `offset` ≠ completed_page × limit (short pages).
  *
  * @param {Record<string, unknown>} query
  * @returns {{ completed_page: number, page_filled: boolean, served_count: number } | null}
  */
-export function parseFeedBetaAckFromQuery(query) {
-	const raw = query?.feed_beta_ack;
+export function parseFeedAckFromQuery(query) {
+	const raw = query?.feed_ack;
 	if (raw == null || String(raw).trim() === '') return null;
 	const s = String(raw).trim();
 	try {
@@ -85,7 +85,7 @@ export function parseFeedBetaAckFromQuery(query) {
  * @param {object} opts
  * @returns {object}
  */
-export function buildFeedBetaContinuation(opts) {
+export function buildFeedContinuation(opts) {
 	const pageIndex = Math.max(1, Number(opts.pageIndex) || 1);
 	const safeLimit = Math.min(Math.max(1, Number(opts.safeLimit) || 20), 100);
 	const rowCount = Array.isArray(opts.rows) ? opts.rows.length : 0;
@@ -104,9 +104,9 @@ export function buildFeedBetaContinuation(opts) {
 		const key = feedRowCreationIdKey(row);
 		if (key) servedThisPage.add(key);
 	}
-	const relaxNext = isFeedBetaRelaxedPage(pageIndex + 1, params);
-	const catalogRemaining = countFeedBetaRemainingEligible(catalog, servedSeen, servedThisPage, {
-		relaxed: isFeedBetaRelaxedPage(pageIndex, params)
+	const relaxNext = isFeedRelaxedPage(pageIndex + 1, params);
+	const catalogRemaining = countFeedRemainingEligible(catalog, servedSeen, servedThisPage, {
+		relaxed: isFeedRelaxedPage(pageIndex, params)
 	});
 
 	const sitewideTotal = Number(opts.sitewideCatalogSize);
@@ -124,7 +124,7 @@ export function buildFeedBetaContinuation(opts) {
 		catalog_remaining: catalogRemaining,
 		sitewide_total: sitewide,
 		has_more: hasMore,
-		has_more_reason: resolveFeedBetaHasMoreReason({
+		has_more_reason: resolveFeedHasMoreReason({
 			pageIndex,
 			rows: opts.rows,
 			safeLimit,

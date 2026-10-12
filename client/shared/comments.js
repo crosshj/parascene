@@ -1,5 +1,5 @@
 /**
- * VPS creation comments and reactions API helpers.
+ * Creation comments and reactions API helpers.
  * Static `import` from sibling `api.js` so helpers inline in the chat bundle (no runtime chunk).
  */
 import { fetchJsonWithStatusDeduped, invalidateAppCaches } from './api.js';

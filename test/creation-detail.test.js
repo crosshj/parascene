@@ -65,7 +65,7 @@ async function withApp(run, { mediaResponse, canAccessMedia = async () => true, 
 	finally { await new Promise((resolve) => server.close(resolve)); }
 }
 
-test('creation detail uses the canonical VPS creation endpoint', async () => {
+test('creation detail uses the canonical creation endpoint', async () => {
 	await withApp(async (origin) => {
 		const response = await fetch(`${origin}/api/creations/31885`, { headers: { Authorization: 'Bearer test' } });
 		assert.equal(response.status, 200);

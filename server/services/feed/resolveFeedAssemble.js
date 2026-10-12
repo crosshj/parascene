@@ -1,22 +1,22 @@
-import { isFeedBetaPageCursor } from "./ranking/cursor.js";
+import { isFeedPageCursor } from "./ranking/cursor.js";
 
 /**
  * Ranked feed page 1 for assembly (challenge card + blog merge on app Home).
  * @param {object} opts
  * @returns {boolean}
  */
-export function isFeedBetaAssemblePageOne(opts) {
-	const { creationPull, offset, hasImageCursor, feedBetaAck, afterAt, afterIdNum } = opts;
+export function isFeedAssemblePageOne(opts) {
+	const { creationPull, offset, hasImageCursor, feedAck, afterAt, afterIdNum } = opts;
 	if (!creationPull) return false;
 	if (creationPull.mobileChatSlotPackContinuation) return false;
 	if (creationPull.mobileChatSlotPackPageOne) return true;
-	const completed = Number(creationPull.feedBetaContinuation?.completed_page);
+	const completed = Number(creationPull.feedContinuation?.completed_page);
 	if (completed === 1) return true;
 	return (
 		Number(offset) === 0 &&
 		!hasImageCursor &&
-		!feedBetaAck &&
-		!isFeedBetaPageCursor(afterAt, afterIdNum)
+		!feedAck &&
+		!isFeedPageCursor(afterAt, afterIdNum)
 	);
 }
 
@@ -29,7 +29,7 @@ export function resolveFeedAssembleOptions(opts) {
 	const feedSurface =
 		typeof opts.feedSurface === 'string' ? opts.feedSurface.trim().toLowerCase() : '';
 	const isChatSurface = feedSurface === 'chat';
-	const betaPageOne = isFeedBetaAssemblePageOne(opts);
+	const betaPageOne = isFeedAssemblePageOne(opts);
 	const pageOneForBlog = betaPageOne;
 
 	const pageOneAssembly =

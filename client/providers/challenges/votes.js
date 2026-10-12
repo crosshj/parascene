@@ -6,7 +6,7 @@ const valid = entry => Number.isSafeInteger(entry?.messageId) && entry.messageId
 // Owned by the authenticated threads provider, never by a modal or route.
 // Each intent is written synchronously before it is scheduled for delivery.
 export function createChallengeVotes({ viewerId, send, onChange = () => {}, onSaved = () => {}, storage = () => localStorage, now = Date.now, retryMs = 1000, debounceMs = 180, timeoutMs = 15000 } = {}) {
- const prefix = `prsn-vps-challenge-vote-v1:${viewerId}:`;
+ const prefix = `prsn-challenge-vote-v1:${viewerId}:`;
  const observed = new Map();
  const entries = new Map(), running = new Map(), timers = new Map(), subscribers = new Set();
  let destroyed = false, durable = true;

@@ -10,7 +10,7 @@ import { renderFeedCardsSkeleton, renderMobileFeedCardsSkeleton } from '../../sh
 import { enableLikeButtons } from '../../shared/likes.js';
 import { safeMediaPlay } from '../../shared/safeMediaPlay.js';
 import { openChallengeVoteModalFromMessages } from '../Challenges/mountPane.js';
-import { setFeedBetaEnabledClient } from '../../shared/feedBetaNav.js';
+import { setFeedEnabledClient } from '../../shared/feedNav.js';
 import { createScrollContext } from '../../core/scrollContext.js';
 
 export function createFeedController({ root, actions, services, setHeaderMenu }) {
@@ -78,7 +78,7 @@ export function createFeedController({ root, actions, services, setHeaderMenu })
   observer.unobserve(more);
   observer.observe(more);
  }
- document.addEventListener('beta-mobile-scroll-owner-changed', bindScrollObservers);
+ document.addEventListener('app-mobile-scroll-owner-changed', bindScrollObservers);
  bindScrollObservers();
  function setupFeedVideo(target) {
   videoTargets.add(target);
@@ -233,7 +233,7 @@ export function createFeedController({ root, actions, services, setHeaderMenu })
  document.addEventListener('creation-detail:mutation',onCreationMutation,{signal:lifetime.signal});
  const timer = setInterval(checkVersion,60000);
  setHeaderMenu?.({label:'Feed',items:[{label:'Refresh',action:'refresh'}],onSelect:()=>void load(true)});
- setFeedBetaEnabledClient(true);
+ setFeedEnabledClient(true);
  void load(true); void checkVersion();
- return { destroy() { destroyed=true; ++epoch; lifetime.abort(); unsubscribeState?.(); request?.abort(); clearInterval(timer); document.removeEventListener('beta-mobile-scroll-owner-changed', bindScrollObservers); scrollTarget?.removeEventListener('scroll', scheduleNearEndCheck); if (nearEndFrame) cancelAnimationFrame(nearEndFrame); observer?.disconnect(); videoObserver?.disconnect(); voteModal?.destroy(); challengeLease?.release(); disposeCards(); } };
+ return { destroy() { destroyed=true; ++epoch; lifetime.abort(); unsubscribeState?.(); request?.abort(); clearInterval(timer); document.removeEventListener('app-mobile-scroll-owner-changed', bindScrollObservers); scrollTarget?.removeEventListener('scroll', scheduleNearEndCheck); if (nearEndFrame) cancelAnimationFrame(nearEndFrame); observer?.disconnect(); videoObserver?.disconnect(); voteModal?.destroy(); challengeLease?.release(); disposeCards(); } };
 }

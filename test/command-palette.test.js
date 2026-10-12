@@ -68,7 +68,7 @@ function harness() {
 	return { view, load, close: () => dom.window.close() };
 }
 
-test('command palette lists VPS places, channels, and direct messages', { skip: !vm.SourceTextModule }, async () => {
+test('command palette lists places, channels, and direct messages', { skip: !vm.SourceTextModule }, async () => {
 	const h = harness();
 	try {
 		const { buildCommandPaletteItems, filterCommandPaletteItems } = await h.load('shared/commandPalette/commandPaletteProvider.js');

@@ -1,17 +1,17 @@
-.beta-app-overlay__content,
-.beta-app-overlay__content button,
-.beta-app-overlay__content input,
-.beta-app-overlay__content textarea,
-.beta-app-overlay__content select { font-family: var(--font-family); }
+.app-overlay__content,
+.app-overlay__content button,
+.app-overlay__content input,
+.app-overlay__content textarea,
+.app-overlay__content select { font-family: var(--font-family); }
 
-.beta-app-overlay__content *,
-.beta-app-overlay__content *::before,
-.beta-app-overlay__content *::after { box-sizing: border-box; }
+.app-overlay__content *,
+.app-overlay__content *::before,
+.app-overlay__content *::after { box-sizing: border-box; }
 
-.beta-app-overlay__content a { color: var(--accent); }
-.beta-app-overlay__content button { color: inherit; }
-.beta-app-overlay__content :is(.btn-primary, a.btn-primary) { color: var(--accent-text); }
-.beta-app-overlay__content :is(.btn-secondary, .btn-outlined, .route-empty-button, a.btn-secondary, a.btn-outlined) { color: var(--text); }
+.app-overlay__content a { color: var(--accent); }
+.app-overlay__content button { color: inherit; }
+.app-overlay__content :is(.btn-primary, a.btn-primary) { color: var(--accent-text); }
+.app-overlay__content :is(.btn-secondary, .btn-outlined, .route-empty-button, a.btn-secondary, a.btn-outlined) { color: var(--text); }
 
 .btn-primary,
 .btn-secondary,

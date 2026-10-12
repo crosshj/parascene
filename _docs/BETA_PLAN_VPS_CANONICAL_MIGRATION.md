@@ -155,7 +155,7 @@ The new site and old site can share the same Supabase database and selected foun
 
 The goal is to build and validate a complete replacement candidate. The beta can still be built in vertical slices internally, but those slices remain behind the beta boundary until the new site is ready.
 
-Supabase should remain the durable system of record where it is already serving that role. Avoid ambiguous writes from both runtimes to the same data. For beta-only capabilities, prefer separate tables/schema or clearly namespaced records and storage paths. For shared data, document which runtime may write, how the other runtime sees it, and how rollback behaves.
+Supabase should remain the durable system of record where it is already serving that role. Avoid ambiguous writes from both runtimes to the same data. For app-only capabilities, prefer separate tables/schema or clearly namespaced records and storage paths. For shared data, document which runtime may write, how the other runtime sees it, and how rollback behaves.
 
 ### Where the line is drawn
 

@@ -1,13 +1,13 @@
-import { FEED_BETA_DEFAULT_PARAMS } from "./params.js";
-import { isFeedBetaRowExcludedFromPools } from "./seen.js";
-import { stampFeedBetaRowReason } from "./reason.js";
-import { feedBetaRowCreatedAtMs } from "./mergeBetaPage.js";
-import { scoreFeedBetaRow } from "./score.js";
+import { FEED_DEFAULT_PARAMS } from "./params.js";
+import { isFeedRowExcludedFromPools } from "./seen.js";
+import { stampFeedRowReason } from "./reason.js";
+import { feedRowCreatedAtMs } from "./mergeFeedPage.js";
+import { scoreFeedRow } from "./score.js";
 import {
 	feedRowCreationIdKey,
 	feedRowIsOtherThread,
 	feedRowIsVideoThread,
-	normalizeFeedBetaMediaFields
+	normalizeFeedMediaFields
 } from "./rowMedia.js";
 import { MOBILE_CHAT_SLOT_PACK_STRUCTURED_LEN } from "../../../../client/shared/chatFeedMobilePartition.js";
 
@@ -131,7 +131,7 @@ function buildSpotlightVideoQueue(videoHead, catalog, ctx, opts) {
 	const out = [];
 
 	const pushVideo = (raw, pool) => {
-		const row = normalizeFeedBetaMediaFields(raw);
+		const row = normalizeFeedMediaFields(raw);
 		if (!rowVisible(row, enableNsfw, viewerUserId, showOwnPosts)) return;
 		if (!feedRowIsVideoThread(row)) return;
 		const key = feedRowCreationIdKey(row);
@@ -143,14 +143,14 @@ function buildSpotlightVideoQueue(videoHead, catalog, ctx, opts) {
 			isOther: false,
 			isOwn: viewerUserId != null && String(row.user_id) === String(viewerUserId),
 			pool,
-			...scoreFeedBetaRow(row, ctx)
+			...scoreFeedRow(row, ctx)
 		});
 	};
 
 	const headList = Array.isArray(videoHead) ? videoHead : [];
 	const sortedHead = headList
 		.slice()
-		.sort((a, b) => feedBetaRowCreatedAtMs(b) - feedBetaRowCreatedAtMs(a));
+		.sort((a, b) => feedRowCreatedAtMs(b) - feedRowCreatedAtMs(a));
 	for (const raw of sortedHead) {
 		pushVideo(raw, 'site_video_head');
 	}
@@ -158,9 +158,9 @@ function buildSpotlightVideoQueue(videoHead, catalog, ctx, opts) {
 	const catalogList = Array.isArray(catalog) ? catalog : [];
 	const sortedCatalog = catalogList
 		.slice()
-		.sort((a, b) => feedBetaRowCreatedAtMs(b) - feedBetaRowCreatedAtMs(a));
+		.sort((a, b) => feedRowCreatedAtMs(b) - feedRowCreatedAtMs(a));
 	for (const raw of sortedCatalog) {
-		if (out.length >= FEED_BETA_DEFAULT_PARAMS.slotPackVideoCap + 12) break;
+		if (out.length >= FEED_DEFAULT_PARAMS.slotPackVideoCap + 12) break;
 		pushVideo(raw, 'new');
 	}
 
@@ -174,7 +174,7 @@ function buildSpotlightVideoQueue(videoHead, catalog, ctx, opts) {
  * @returns {object[]}
  */
 export function drawMobileEditorialSlotPackPage(catalog, opts) {
-	const params = FEED_BETA_DEFAULT_PARAMS;
+	const params = FEED_DEFAULT_PARAMS;
 	const pageIndex = Math.max(1, Number(opts.pageIndex) || 1);
 	const seen = opts.ignoreSeen === true ? new Set() : opts.seen instanceof Set ? opts.seen : new Set();
 	const enableNsfw = opts.enableNsfw === true;
@@ -192,17 +192,17 @@ export function drawMobileEditorialSlotPackPage(catalog, opts) {
 
 	const scoredEntries = [];
 	for (const raw of Array.isArray(catalog) ? catalog : []) {
-		const row = normalizeFeedBetaMediaFields(raw);
+		const row = normalizeFeedMediaFields(raw);
 		if (!rowVisible(row, enableNsfw, viewerUserId, showOwnPosts)) continue;
 		const key = feedRowCreationIdKey(row);
-		if (!key || isFeedBetaRowExcludedFromPools(row, seen, { relaxed: false })) continue;
+		if (!key || isFeedRowExcludedFromPools(row, seen, { relaxed: false })) continue;
 		if (!feedRowIsOtherThread(row)) continue;
 		scoredEntries.push({
 			row,
 			isVideo: false,
 			isOther: true,
 			isOwn: viewerUserId != null && String(row.user_id) === String(viewerUserId),
-			...scoreFeedBetaRow(row, ctx)
+			...scoreFeedRow(row, ctx)
 		});
 	}
 
@@ -285,7 +285,7 @@ export function drawMobileEditorialSlotPackPage(catalog, opts) {
 
 		const thread = spec.media === 'video' ? 'video' : 'other';
 		out.push(
-			stampFeedBetaRowReason(
+			stampFeedRowReason(
 				picked.row,
 				{
 					...stampBase,

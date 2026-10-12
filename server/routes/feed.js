@@ -1,7 +1,7 @@
 /**
  * Feed API routes (`GET /api/feed`, `GET /api/feed/challenge-engagement`, `POST /api/feed/impressions`, `POST /api/feed/impression`, `GET /api/feed/doom`, `GET /api/feed/version`).
  *
- * `/api/feed` — ranked chat feed (followed, slot-pack, cursor tail). `./feed/ranking/pullFeedBetaRows.js`
+ * `/api/feed` — ranked chat feed (followed, slot-pack, cursor tail). `./feed/ranking/pullFeedRows.js`
  * `/api/feed/doom` — site-wide video timeline for doom scroll. `./feed/pullDoomFeedRows.js`
  * `/api/feed/doom` items are transformed in `pullDoomFeedRows` / `assembleFeedItems` (not re-mapped here).
  */
@@ -12,15 +12,15 @@ import { assembleFeedItems } from "../services/feed/assembleFeedItems.js";
 import { resolveFeedAssembleOptions } from "../services/feed/resolveFeedAssemble.js";
 import { getSupabaseServiceClient } from "../services/create/supabaseService.js";
 import { removeJoinedPrivateChannelInviteDmMessages } from "../services/challenges/chatInviteCleanup.js";
-import { pullFeedBetaRows } from "../services/feed/ranking/pullFeedBetaRows.js";
-import { parseFeedBetaAckFromQuery } from "../services/feed/ranking/continuation.js";
-import { loadFeedBetaSeenSetForUser } from "../services/feed/ranking/seen.js";
-import { addFeedBetaSeenIdsToRedis } from "../services/feed/ranking/seenRedis.js";
+import { pullFeedRows } from "../services/feed/ranking/pullFeedRows.js";
+import { parseFeedAckFromQuery } from "../services/feed/ranking/continuation.js";
+import { loadFeedSeenSetForUser } from "../services/feed/ranking/seen.js";
+import { addFeedSeenIdsToRedis } from "../services/feed/ranking/seenRedis.js";
 import { parseFeedImpressionBody, parseFeedImpressionsBatchBody } from "../services/feed/ranking/userCreationSeen.js";
 import { recordFeedImpressionsToRedis } from "../services/feed/impressions.js";
 import { createFeedTiming, wrapTimedPromise } from "../services/feed/feedTiming.js";
 import { buildChallengeEngagementFeedItemForViewer } from "../services/feed/challengeEngagementItem.js";
-import { primeFeedBetaRedisFromPipeline } from "../services/feed/ranking/feedBetaRedisBundle.js";
+import { primeFeedRedisFromPipeline } from "../services/feed/ranking/feedRedisBundle.js";
 
 export default function createFeedRoutes({ queries }) {
 	const router = express.Router();
@@ -93,20 +93,20 @@ export default function createFeedRoutes({ queries }) {
 			afterIdNum > 0;
 
 		const enableNsfw = Boolean(user.meta && user.meta.enableNsfw === true);
-		const feedBetaAck = parseFeedBetaAckFromQuery(req.query);
+		const feedAck = parseFeedAckFromQuery(req.query);
 		const feedSurface = String(req.query?.feed_surface || '').trim();
 		const isChatSurface = feedSurface.toLowerCase() === 'chat';
 
 		let creationPull;
 		let challengeSnapshot = { ok: false };
-		await primeFeedBetaRedisFromPipeline(user.id, timing, {
+		await primeFeedRedisFromPipeline(user.id, timing, {
 			includeChallenge: !isChatSurface
 		});
-		const refreshBeta =
+		const refreshPage =
 			String(req.query?.refresh ?? '').trim() === '1' ||
-			(offset === 0 && !hasImageCursor && (!slotPack || offset === 0) && !feedBetaAck);
+			(offset === 0 && !hasImageCursor && (!slotPack || offset === 0) && !feedAck);
 		const likelyAssemblyPageOne =
-			offset === 0 && !hasImageCursor && !feedBetaAck;
+			offset === 0 && !hasImageCursor && !feedAck;
 		const pullChallengePromise =
 			likelyAssemblyPageOne && !isChatSurface
 				? wrapTimedPromise(
@@ -120,7 +120,7 @@ export default function createFeedRoutes({ queries }) {
 		const pullRowsPromise = wrapTimedPromise(
 			timing,
 			'pull.rows_total',
-			pullFeedBetaRows({
+			pullFeedRows({
 				queries,
 				user,
 				limit,
@@ -130,8 +130,8 @@ export default function createFeedRoutes({ queries }) {
 				afterIdNum,
 				enableNsfw,
 				showOwnPosts: showOwnPostsInFeed,
-				refresh: refreshBeta,
-				feedBetaAck,
+				refresh: refreshPage,
+				feedAck,
 				timing
 			})
 		);
@@ -148,7 +148,7 @@ export default function createFeedRoutes({ queries }) {
 		const assembleOpts = resolveFeedAssembleOptions({
 			offset,
 			hasImageCursor,
-			feedBetaAck,
+			feedAck,
 			afterAt: afterAt != null ? String(afterAt) : undefined,
 			afterIdNum,
 			creationPull,
@@ -193,35 +193,35 @@ export default function createFeedRoutes({ queries }) {
 		const body = timing
 			? timing.time("handler.finalize", () => {
 					const out = { items, hasMore };
-					const betaCursor = creationPull?.feedBetaPageCursor ?? creationPull?.slotPackFeedCursor;
-					if (betaCursor) {
+					const pageCursor = creationPull?.feedPageCursor ?? creationPull?.slotPackFeedCursor;
+					if (pageCursor) {
 						out.feed_cursor = {
-							after_image_created_at: betaCursor.created_at,
-							after_image_id: String(betaCursor.created_image_id)
+							after_image_created_at: pageCursor.created_at,
+							after_image_id: String(pageCursor.created_image_id)
 						};
 					}
-					if (creationPull?.feedBetaContinuation) {
-						out.feed_beta = creationPull.feedBetaContinuation;
+					if (creationPull?.feedContinuation) {
+						out.feed_continuation = creationPull.feedContinuation;
 					}
 					return out;
 				})
 			: (() => {
 					const out = { items, hasMore };
-					const betaCursor = creationPull?.feedBetaPageCursor ?? creationPull?.slotPackFeedCursor;
-					if (betaCursor) {
+					const pageCursor = creationPull?.feedPageCursor ?? creationPull?.slotPackFeedCursor;
+					if (pageCursor) {
 						out.feed_cursor = {
-							after_image_created_at: betaCursor.created_at,
-							after_image_id: String(betaCursor.created_image_id)
+							after_image_created_at: pageCursor.created_at,
+							after_image_id: String(pageCursor.created_image_id)
 						};
 					}
-					if (creationPull?.feedBetaContinuation) {
-						out.feed_beta = creationPull.feedBetaContinuation;
+					if (creationPull?.feedContinuation) {
+						out.feed_continuation = creationPull.feedContinuation;
 					}
 					return out;
 				})();
 
 		if (timing) {
-			const meta = creationPull?.feedBetaTimingMeta ?? {};
+			const meta = creationPull?.feedTimingMeta ?? {};
 			timing.time("handler.json_stringify", () =>
 				JSON.stringify({
 					...body,
@@ -259,7 +259,7 @@ export default function createFeedRoutes({ queries }) {
 			return res.status(404).json({ error: "User not found" });
 		}
 		try {
-			await primeFeedBetaRedisFromPipeline(user.id, null, { includeChallenge: true });
+			await primeFeedRedisFromPipeline(user.id, null, { includeChallenge: true });
 			const item = await buildChallengeEngagementFeedItemForViewer(queries, user.id);
 			return res.json({ item: item ?? null });
 		} catch (err) {
@@ -281,7 +281,7 @@ export default function createFeedRoutes({ queries }) {
 			return res.status(400).json({ error: "Invalid or empty items" });
 		}
 		try {
-			const added = await addFeedBetaSeenIdsToRedis(
+			const added = await addFeedSeenIdsToRedis(
 				user.id,
 				items.map((item) => item.creationId)
 			);
@@ -310,7 +310,7 @@ export default function createFeedRoutes({ queries }) {
 			return res.status(400).json({ error: "Invalid creation_id" });
 		}
 		try {
-			const added = await addFeedBetaSeenIdsToRedis(user.id, [parsed.creationId]);
+			const added = await addFeedSeenIdsToRedis(user.id, [parsed.creationId]);
 			try {
 				await recordFeedImpressionsToRedis(user.id, [parsed]);
 			} catch (pulseErr) {

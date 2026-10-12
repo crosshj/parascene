@@ -53,7 +53,7 @@ export const DirectMessageView = Object.freeze({
 		controller = createDirectMessageController({ view, services, slug: slug || "self" });
 		chrome.connect(controller);
 		view.refreshChrome = () => chrome.refresh();
-		services.providers.document.setTitle(`${title} - parascene beta`);
+		services.providers.document.setTitle(`${title} - parascene`);
 		return { destroy() { chrome.destroy(); controller.destroy(); binding.destroy(); view.destroy(); } };
 	},
 });

@@ -102,7 +102,7 @@ export function renderCreationsView({ outlet, creationsProvider, creationsApi, c
 	let pollInProgress = false;
  let destroyed = false;
  const removedIds = new Set();
-	const scrollRegion = root.closest('.beta-outlet__scroll');
+	const scrollRegion = root.closest('.app-outlet__scroll');
 	const scroll = createScrollContext(root);
 	const mediaLoader = createCreationMediaLoader(refs.grid, {
 		thumbnails: creationsProvider?.thumbnails,
@@ -128,7 +128,7 @@ export function renderCreationsView({ outlet, creationsProvider, creationsApi, c
 		if (Number.isFinite(id) && id > 0) onOpenCreation?.(id, card.__creationRecord || null);
 	});
 
-	setTitle('Creations · parascene beta');
+	setTitle('Creations · parascene');
 	setHeaderMenu?.({
 		label: 'Creations',
 		items: [{ label: 'Bulk actions', action: 'bulk' }, { label: 'Refresh', action: 'refresh' }],
@@ -441,7 +441,7 @@ export function renderCreationsView({ outlet, creationsProvider, creationsApi, c
 	refs.scrollTop.addEventListener('click', onScrollTopClick);
 	scrollRegion?.addEventListener('scroll', updateScrollTopVisibility, { passive: true });
 	window.addEventListener('scroll', updateScrollTopVisibility, { passive: true });
-	document.addEventListener('beta-mobile-scroll-owner-changed', bindScrollOwner);
+	document.addEventListener('app-mobile-scroll-owner-changed', bindScrollOwner);
 	updateScrollTopVisibility();
 	bindScrollOwner();
 	unsubscribe = creationsQuery?.subscribe(onQueryState);
@@ -451,5 +451,5 @@ export function renderCreationsView({ outlet, creationsProvider, creationsApi, c
 	}
 	else void refresh(true);
 
-	return () => { destroyed = true; bulk.destroy(); unsubscribe?.(); mediaLoader?.disconnect(); sentinelObserver.disconnect(); window.clearTimeout(pollTimer); pollTimer = 0; document.removeEventListener('visibilitychange', onVisibilityChange); document.removeEventListener('creation-detail:mutation', onCreationDetailMutation); document.removeEventListener('nsfw-preference-changed', onNsfwPreference); document.removeEventListener('beta-mobile-scroll-owner-changed', bindScrollOwner); refs.grid.removeEventListener('click', onGridClick); refs.scrollTop.removeEventListener('click', onScrollTopClick); scrollRegion?.removeEventListener('scroll', updateScrollTopVisibility); window.removeEventListener('scroll', updateScrollTopVisibility); setHeaderMenu?.(); };
+	return () => { destroyed = true; bulk.destroy(); unsubscribe?.(); mediaLoader?.disconnect(); sentinelObserver.disconnect(); window.clearTimeout(pollTimer); pollTimer = 0; document.removeEventListener('visibilitychange', onVisibilityChange); document.removeEventListener('creation-detail:mutation', onCreationDetailMutation); document.removeEventListener('nsfw-preference-changed', onNsfwPreference); document.removeEventListener('app-mobile-scroll-owner-changed', bindScrollOwner); refs.grid.removeEventListener('click', onGridClick); refs.scrollTop.removeEventListener('click', onScrollTopClick); scrollRegion?.removeEventListener('scroll', updateScrollTopVisibility); window.removeEventListener('scroll', updateScrollTopVisibility); setHeaderMenu?.(); };
 }

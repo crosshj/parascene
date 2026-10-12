@@ -1,4 +1,4 @@
-/** VPS copy of the style thumbnail URL helper used by chat suggestion cards. */
+/** Style thumbnail URL helper used by chat suggestion cards. */
 export const STYLE_THUMB_BASE = '/assets/style-thumbs';
 
 export function getStyleThumbUrl(key) {

@@ -18,7 +18,7 @@ test('message body formatter matches active WWW implementation', { skip: !fs.exi
  assert.equal(implementation('client/shared/userText.js'), implementation('_legacy/src/shared/userText.js'));
 });
 test('shared messages preserve active WWW DOM', { skip: !vm.SourceTextModule || !fs.existsSync(sourcePath) }, async () => {
-const dom=new JSDOM('<!doctype html><html><body class="beta-layout"><div class="beta-outlet__scroll"><div class="beta-outlet__content"></div></div></body></html>',{url:'https://example.com',pretendToBeVisual:true});
+const dom=new JSDOM('<!doctype html><html><body class="app-layout"><div class="app-outlet__scroll"><div class="app-outlet__content"></div></div></body></html>',{url:'https://example.com',pretendToBeVisual:true});
 const w=dom.window;class Observer{observe(){}disconnect(){}};
 w.matchMedia=()=>({matches:false,addEventListener(){},removeEventListener(){}});w.ResizeObserver=Observer;w.IntersectionObserver=Observer;
 w.HTMLElement.prototype.scrollTo=function({top}){this.scrollTop=top;};w.HTMLElement.prototype.scrollIntoView=function(){};
@@ -47,7 +47,7 @@ try {
  };
  for(const [name,delta] of fixtures){const m={...basic,...delta};const flags={effectiveUnread:false,vStart:-1,vEnd:-1,showHoverBar:true,showAdminDelete:false};assert.deepEqual(normalize(port.namespace.createChatMessageRowElement(m,0,[m],1,flags)),normalize(reference.namespace.createChatMessageRowElement(m,0,[m],1,flags)),name);}
  for(const name of ['grouped','unread-first','unread-middle','unread-last','unread-solo']){const messages=[0,1,2].map(i=>({...basic,id:i+1,sender_id:2,created_at:`2026-10-02T12:0${i}:00Z`}));const index=name==='unread-last'?2:name==='unread-middle'?1:0;const flags={effectiveUnread:name!=='grouped',vStart:0,vEnd:name==='unread-solo'?0:2,showHoverBar:true};assert.deepEqual(normalize(port.namespace.createChatMessageRowElement(messages[index],index,messages,1,flags)),normalize(reference.namespace.createChatMessageRowElement(messages[index],index,messages,1,flags)),name);}
- const mounted=await load(base+'/Messages.js');await mounted.link((specifier,ref)=>load(path.resolve(path.dirname(ref.identifier),specifier)));await mounted.evaluate();const outlet=w.document.querySelector('.beta-outlet__content');
+ const mounted=await load(base+'/Messages.js');await mounted.link((specifier,ref)=>load(path.resolve(path.dirname(ref.identifier),specifier)));await mounted.evaluate();const outlet=w.document.querySelector('.app-outlet__content');
  const templates = load(path.join(repoRoot, 'client/utils/dom.js'));
  const clone = templates.namespace.createTemplateFactory('<template id="sample"><div><span>initial</span></div></template>');
  const first = clone('sample'); first.firstElementChild.textContent = 'changed';
@@ -137,7 +137,7 @@ function keep(selector) {
  if (/\.chat-page-messages(?:\s|:|$)/.test(selector)) return !/\.(?:feed-route|chat-feed|comments-channel|chat-doom|doom-|challenge-pane|chat-page--pseudo|chat-page--viewport-scroll|chat-page--doom-scroll|chat-page--challenges|chat-page--mobile-composer-overlay|chat-page--create-composer-overlay|chat-page-pinned-banner)/.test(selector.replace(/:not\([^)]*\)/g, ''));
  return false;
 }
-function adapt(selector) { return selector.replace(/html\.chat-page\s+/g, '').replace(/body\.chat-page/g, 'body.beta-layout'); }
+function adapt(selector) { return selector.replace(/html\.chat-page\s+/g, '').replace(/body\.chat-page/g, 'body.app-layout'); }
 function rules(root, reference = false) {
  const collected = [];
  root.walkRules(node => {

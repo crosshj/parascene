@@ -227,9 +227,9 @@ fi
 : "${SESSION_SECRET:?SESSION_SECRET is required}"
 deploy_target
 
-SSH_DIR="$RUNNER_TEMP/vps-ssh"
-PACKAGE_PATH="$RUNNER_TEMP/vps.tar.gz"
-BUILD_DIR="$RUNNER_TEMP/vps-deploy-build"
+SSH_DIR="$RUNNER_TEMP/parascene-ssh"
+PACKAGE_PATH="$RUNNER_TEMP/parascene.tar.gz"
+BUILD_DIR="$RUNNER_TEMP/parascene-deploy-build"
 REMOTE="$VPS_USER@$VPS_HOST"
 SSH_OPTS=(-i "$SSH_DIR/id_ed25519" -o UserKnownHostsFile="$SSH_DIR/known_hosts" -o StrictHostKeyChecking=yes)
 REMOTE_PACKAGE="/tmp/parascene-${DEPLOY_ENV}.tar.gz"
@@ -250,7 +250,7 @@ tar --exclude='.env' \
 	--exclude='./build' \
 	-czf "$PACKAGE_PATH" .
 tar -xzf "$PACKAGE_PATH" -C "$BUILD_DIR"
-docker build --tag parascene:vps-ci "$BUILD_DIR"
+docker build --tag parascene:ci "$BUILD_DIR"
 
 # Keep the private key and known-hosts file inside the runner's temporary area.
 install -m 700 -d "$SSH_DIR"

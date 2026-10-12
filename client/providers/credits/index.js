@@ -6,7 +6,7 @@ import { claimedOnUtcDay, creditsControlLabel, dailyClaimAvailable, msUntilNextU
 
 export function createCreditsProvider({ viewerId, registry } = {}) {
 	const api = createCreditsApi();
-	const cache = viewerId ? createStorageCache(`prsn-vps-credits-v1:${viewerId}`, {
+	const cache = viewerId ? createStorageCache(`prsn-credits-v1:${viewerId}`, {
 		validate: (data) => Number(data?.viewerId) === viewerId && Number.isFinite(Number(data.balance))
 	}) : null;
 	const lease = viewerId ? registry.acquire(['credits', viewerId], () => createQuery({
@@ -71,7 +71,7 @@ export function createCreditsProvider({ viewerId, registry } = {}) {
 		viewState,
 		preload() { if (query) void query.loadIfNeeded().catch(() => undefined); },
 		syncExternalCache(event) {
-			if (!query || event.key !== `prsn-vps-credits-v1:${viewerId}`) return;
+			if (!query || event.key !== `prsn-credits-v1:${viewerId}`) return;
 			const entry = cache?.read?.();
 			if (entry) query.setData(settleCredits(entry.data, query.data), { persist: false, updated: entry.updatedAt });
 			else void query.refresh({ force: true }).catch(() => undefined);

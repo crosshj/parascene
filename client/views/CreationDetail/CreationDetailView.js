@@ -543,7 +543,7 @@ const CREATION_DETAIL_COMMENTS_SKELETON_HTML = `<div class="creation-detail-skel
 </div>`;
 
 function notifyCreationDetailEmbedReady() {
-	// Creation detail is mounted natively by the VPS layout; no iframe handshake is needed.
+	// Creation detail is mounted natively by the layout; no iframe handshake is needed.
 }
 
 function creationDetailStripChildKey(el) {
@@ -2223,7 +2223,7 @@ function bindCreationDetailScrollEngagementListener() {
 		if (y > 0) creationDetailScrollEngagement.userScrolled = true;
 	};
 	window.addEventListener('scroll', markScrolled, { passive: true });
-	document.querySelector('.beta-app-overlay__content')?.addEventListener('scroll', markScrolled, { passive: true });
+	document.querySelector('.app-overlay__content')?.addEventListener('scroll', markScrolled, { passive: true });
 }
 
 /**
@@ -2248,7 +2248,7 @@ function creationDetailUserHasScrolled() {
 function resetCreationDetailScroll(options = {}) {
 	const { force = false } = options;
 	if (!force && creationDetailUserHasScrolled()) return;
-	const overlayScroll = document.querySelector('.beta-app-overlay__content');
+	const overlayScroll = document.querySelector('.app-overlay__content');
 	if (overlayScroll instanceof HTMLElement) {
 		overlayScroll.scrollTo({ top: 0, behavior: 'auto' });
 		return;
@@ -8493,8 +8493,7 @@ export function renderCreationDetailView({ outlet, creationId, initialSeed = nul
 		}) : null;
 	activeCreationDetailNavigate = onNavigate || null;
 	registerCreationDetailRefreshHandler(() => loadCreation());
- activeCreateProvider = createProvider || null;
-	window.__VPS_CREATION_DETAIL_SEED__ = initialSeed;
+	activeCreateProvider = createProvider || null;
 	document.body.classList.add('creation-detail-page');
 	outlet.innerHTML = template;
 	bindAudioCoverModal();
@@ -8504,7 +8503,7 @@ export function renderCreationDetailView({ outlet, creationId, initialSeed = nul
 		`<span class="creation-detail-nsfw-badge" role="img" aria-label="NSFW">${iconMarkup('eyeHidden')}</span>`);
 	const stopGroupNavigation = watchGroupNavigation(outlet.querySelector('.creation-detail-image-wrapper'));
 	nsfwBundledMod.bindNsfwClicks(outlet, { signal: listenerController.signal });
-	setTitle('Creation · parascene beta');
+	setTitle('Creation · parascene');
 	for (const [type, listener, options] of creationDetailDocumentListeners) {
 		document.addEventListener(type, listener, { ...(typeof options === 'object' ? options : {}), signal: listenerController.signal });
 	}
@@ -8541,7 +8540,6 @@ export function renderCreationDetailView({ outlet, creationId, initialSeed = nul
 		detailNsfwRevealed = false;
 		applyCreationDetailNsfwMedia = null;
 		currentCreationId = null;
-		if (window.__VPS_CREATION_DETAIL_SEED__) delete window.__VPS_CREATION_DETAIL_SEED__;
 		document.body.classList.remove('creation-detail-page');
 		outlet.replaceChildren();
 		},
