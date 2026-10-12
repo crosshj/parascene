@@ -3651,6 +3651,11 @@ body.view-nsfw .creation-detail-image-wrapper.nsfw::after {
 	line-height: 1.25;
 }
 
+a.creation-detail-action-strip-creator-name.founder-name,
+.creation-detail-action-strip-creator-name.founder-name {
+	color: var(--founder-flair-name, #9657c2);
+}
+
 .creation-detail-action-strip-creator-followers {
 	font-size: 0.8125rem;
 	color: var(--text-muted);

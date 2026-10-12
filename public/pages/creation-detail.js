@@ -1210,7 +1210,7 @@ const STRIP_SEGMENT_DEFS = [
 		show: () => true,
 		render: (d, escapeFn) => html`
 					<div class="creation-detail-action-strip-creator-info">
-						<div class="creation-detail-action-strip-creator-name">${escapeFn(d.creatorName)}</div>
+						<div class="creation-detail-action-strip-creator-name${d.creatorPlan ? ' founder-name' : ''}">${escapeFn(d.creatorName)}</div>
 						<div class="creation-detail-action-strip-creator-followers">${d.creatorFollowerCount} Followers</div>
 					</div>`
 	},
@@ -5610,6 +5610,7 @@ async function loadCreation() {
 
 		const stripData = {
 			creatorProfileHref,
+			creatorPlan,
 			creatorName,
 			authorAvatar,
 			creatorFollowerCount,

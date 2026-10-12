@@ -2915,6 +2915,7 @@ body.chat-page .chat-route {
 }
 
 .chat-page-pinned-banner-preview .mention-link,
+.chat-page-pinned-banner-preview .mention-broadcast,
 .chat-page-pinned-banner-preview .user-link {
 	color: var(--color-purple-fg, var(--color-purple));
 	text-decoration: none;

@@ -1292,7 +1292,7 @@ export function creationDetailChromeHtmlFromSeed(seed) {
 	const followerKnown = followerCount != null;
 	const creatorInfo = display
 		? `<div class="creation-detail-action-strip-creator-info">
-						<div class="creation-detail-action-strip-creator-name">${esc(display)}</div>
+						<div class="creation-detail-action-strip-creator-name${founder ? ' founder-name' : ''}">${esc(display)}</div>
 						<div class="creation-detail-action-strip-creator-followers">${
 							followerKnown
 								? `${followerCount} Followers`

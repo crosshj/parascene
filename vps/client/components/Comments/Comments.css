@@ -297,6 +297,10 @@
 	color: color-mix(in srgb, var(--accent) 65%, var(--text));
 }
 
+.creation-detail-description .mention-broadcast {
+	color: color-mix(in srgb, var(--accent) 55%, var(--text-muted));
+}
+
 .comments-sort {
 	display: inline-flex;
 	align-items: center;
@@ -2066,6 +2070,16 @@
 	text-decoration-color: color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
+.mention-broadcast {
+	display: inline;
+	font-weight: 500;
+	color: color-mix(in srgb, var(--accent) 55%, var(--text-muted));
+	text-decoration: none;
+	cursor: text;
+	pointer-events: none;
+	user-select: text;
+}
+
 .founder-name {
 	color: var(--founder-flair-name, #9657c2);
 }
@@ -2297,6 +2311,10 @@ button.msg-reply-indicator-inner:hover {
 
 .comment-text .mention-link:hover {
 	color: color-mix(in srgb, var(--accent) 65%, var(--text));
+}
+
+.comment-text .mention-broadcast {
+	color: color-mix(in srgb, var(--accent) 55%, var(--text-muted));
 }
 
 .connect-chat-msg-bubble .connect-chat-creation-embed--square .connect-chat-creation-embed-inner > .user-text-inline-image-link::before,

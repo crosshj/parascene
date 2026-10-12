@@ -3792,6 +3792,12 @@ body.view-nsfw .creation-detail-image-wrapper.nsfw::after {
 	text-decoration: none;
 }
 
+.beta-app-overlay__content a.creation-detail-action-strip-creator-name.founder-name,
+a.creation-detail-action-strip-creator-name.founder-name,
+.creation-detail-action-strip-creator-name.founder-name {
+	color: var(--founder-flair-name, #9657c2);
+}
+
 a.creation-detail-action-strip-creator-name:hover {
 	text-decoration: underline;
 	text-underline-offset: 2px;

@@ -3090,16 +3090,14 @@ img[class*="avatar"],
 	text-decoration-color: color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
-/* Chat reserved @-tokens (@here, @channel, …): highlighted, not links */
+/* Reserved @-tokens (@here, @channel, …): same color as mention links, not clickable. */
 .mention-broadcast {
 	display: inline;
-	font-weight: 600;
-	color: color-mix(in srgb, var(--accent) 58%, var(--text-muted));
-	background: color-mix(in srgb, var(--accent) 14%, transparent);
-	border-radius: 4px;
-	padding: 0 3px;
-	cursor: default;
+	font-weight: 500;
+	color: color-mix(in srgb, var(--accent) 55%, var(--text-muted));
 	text-decoration: none;
+	cursor: text;
+	pointer-events: none;
 	user-select: text;
 }
 
@@ -3405,7 +3403,7 @@ img[class*="avatar"],
 }
 
 .creation-detail-description .mention-broadcast {
-	color: color-mix(in srgb, var(--accent) 58%, var(--text-muted));
+	color: color-mix(in srgb, var(--accent) 55%, var(--text-muted));
 }
 
 /* Full-width markdown block rows in chat: only widen bubbles that actually contain

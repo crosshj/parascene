@@ -124,9 +124,18 @@ test('overlay action buttons stay skeletons until the parent row can decide them
 test('early creation detail chrome shows the username rather than the display name', () => {
 	for (const creator of [{ author_user_name: 'artist', author_display_name: 'Display Name' }, { creator: { user_name: 'artist', display_name: 'Display Name' } }]) {
 		const markup = creationDetailChromeHtmlFromSeed({ id: 42, ...creator });
-		assert.match(markup, /creation-detail-action-strip-creator-name">@artist<\/div>/);
-		assert.doesNotMatch(markup, /creator-name">Display Name/);
+		assert.match(markup, /creation-detail-action-strip-creator-name" href="\/p\/artist"/);
+		assert.match(markup, />@artist<\/a>/);
+		assert.doesNotMatch(markup, /founder-name/);
+		assert.doesNotMatch(markup, /creator-name[^>]*>Display Name/);
 	}
+	const founderMarkup = creationDetailChromeHtmlFromSeed({
+		id: 42,
+		author_user_name: 'oceanman',
+		author_plan: 'founder',
+	});
+	assert.match(founderMarkup, /creation-detail-action-strip-creator-name founder-name"/);
+	assert.match(founderMarkup, />@oceanman<\/a>/);
 });
 
 test('shared creation card builder emits the media shell used by related creations', () => {
