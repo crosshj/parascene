@@ -1,4 +1,4 @@
-import { notifyCreationDetailEmbedShellSync } from './creationDetailEmbedShell.js';
+import { announceCreationChange } from './creationDetailRuntime.js';
 import { applyWhoTooltipAttr } from './whoLabels.js';
 import { setupWhoTooltips } from './reactionTooltipTap.js';
 
@@ -256,7 +256,7 @@ export function enableLikeButtons(root = document) {
 				applyLikeButtonState(button, viewerLiked, false);
 				applyLikedByTooltip(button, likedBy);
 				invalidateRelatedCachesAfterLikeMutation();
-				notifyCreationDetailEmbedShellSync({
+				announceCreationChange({
 					creationId: imageId,
 					reason: 'like-changed',
 					like_count: likeCount,

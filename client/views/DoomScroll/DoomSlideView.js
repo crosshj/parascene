@@ -733,6 +733,7 @@ export function createDoomSlideElement(item, viewerUserId, slideOpts = {}) {
 
 	const slide = document.createElement('section');
 	slide.className = youtube ? 'chat-doom-slide chat-doom-slide--youtube' : 'chat-doom-slide';
+	slide.__creationRecord = item;
 	slide.dataset.creationId = String(cid);
 	if (Number.isFinite(uid) && uid > 0) slide.dataset.userId = String(uid);
 	if (youtube) {

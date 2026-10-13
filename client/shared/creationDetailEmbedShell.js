@@ -444,6 +444,61 @@ export function creationDetailShellSyncHasScope(detail, ...scopeNames) {
  * Parent overlay: normalize payload, patch DOM, dispatch document event for lanes.
  * @param {unknown} payload
  */
+function creationNodes(creationId, root = document) {
+	const id = String(creationId || '');
+	if (!id || !root || typeof root.querySelectorAll !== 'function') return [];
+	return [...root.querySelectorAll(`[data-creation-id="${id}"], [data-image-id="${id}"]`)];
+}
+
+/** Keep the object the parent rendered from aligned with the overlay change. */
+export function applyCreationChangeToRecord(record, detail) {
+	if (!record || typeof record !== 'object' || !detail) return;
+	const reason = String(detail.reason || '');
+	if (reason === 'like-changed') {
+		if (typeof detail.viewer_liked === 'boolean') record.viewer_liked = detail.viewer_liked;
+		if (detail.like_count != null && Number.isFinite(Number(detail.like_count))) {
+			record.like_count = Math.max(0, Number(detail.like_count));
+		}
+		if (Array.isArray(detail.liked_by)) record.liked_by = detail.liked_by;
+	}
+	if (reason === 'comment-changed' && detail.comment_count != null && Number.isFinite(Number(detail.comment_count))) {
+		record.comment_count = Math.max(0, Number(detail.comment_count));
+	}
+	if ((reason === 'edited' || reason === 'published') && detail.title !== undefined) {
+		record.title = typeof detail.title === 'string' ? detail.title : '';
+	}
+	if (reason === 'published') record.published = true;
+	if (reason === 'unpublished') record.published = false;
+}
+
+function applyCreationChangeToShowingItems(detail) {
+	for (const node of creationNodes(detail.creationId)) {
+		if (node.__creationRecord) applyCreationChangeToRecord(node.__creationRecord, detail);
+		if (
+			detail.reason === 'comment-changed' &&
+			detail.comment_count != null &&
+			node instanceof HTMLElement &&
+			node.dataset.commentCount != null
+		) {
+			node.dataset.commentCount = String(Math.max(0, Number(detail.comment_count) || 0));
+		}
+	}
+}
+
+let creationChangeParentBound = false;
+
+/** Parent door: one listener updates every visible card for that creation. */
+export function bindCreationChangeParent() {
+	if (creationChangeParentBound || typeof document === 'undefined') return;
+	creationChangeParentBound = true;
+	document.addEventListener('creation-detail:mutation', (event) => {
+		const detail = normalizeCreationDetailShellSyncDetail(event?.detail);
+		if (!detail) return;
+		applyCreationDetailShellSyncDomPatches(detail);
+		applyCreationChangeToShowingItems({ ...event.detail, ...detail });
+	});
+}
+
 export function applyCreationDetailEmbedShellSync(payload) {
 	const detail = normalizeCreationDetailShellSyncDetail(payload);
 	if (!detail) return;

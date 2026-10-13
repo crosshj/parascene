@@ -7,7 +7,7 @@ import './CreationDetailView.css';
 import * as hostedAudioPlayerMod from '../../shared/hostedAudioPlayer.js';
 import * as creationGpuWaitMod from '../../shared/creationGpuWait.js';
 import { applyGpuBid, confirmGpuOccupancyIfNeeded } from '../../shared/gpuOccupancy.js';
-import { registerCreationDetailRefreshHandler } from '../../shared/creationDetailRuntime.js';
+import { announceCreationChange, registerCreationDetailRefreshHandler } from '../../shared/creationDetailRuntime.js';
 import * as datetimeBundledMod from '../../shared/datetime.js';
 import * as apiBundledMod from '../../shared/api.js';
 import * as iconsBundledMod from '../../icons/svg-strings.js';
@@ -21,7 +21,6 @@ import * as avatarBundledMod from '../../shared/avatar.js';
 import * as commentsBundledMod from '../../shared/comments.js';
 import { creationDetailDependencies } from './dependencies.js';
 import * as creationCommentsThreadBundledMod from '../../shared/creationCommentsThread.js';
-import * as creationDetailEmbedShellBundledMod from '../../shared/creationDetailEmbedShell.js';
 import * as queueFromFrameBundledMod from '../../shared/queueFromFrameModal.js';
 import * as shareAudioBundledMod from '../../shared/shareAudioModal.js';
 import * as adjustImageBundledMod from '../../shared/adjustImageModal.js';
@@ -8205,9 +8204,6 @@ async function loadCreation() {
 			const threadMod = await perf.timeAsync('comments', 'importModule', () =>
 				Promise.resolve(creationCommentsThreadBundledMod)
 			);
-			// Mirror likes: when the comment count changes here, tell the overlay
-			// shell so the underlying feed/explore card count updates on return.
-			const embedShellMod = creationDetailEmbedShellBundledMod;
 			let lastSyncedCommentCount = null;
 			await perf.timeAsync('comments', 'mount', () =>
 				threadMod.mountCreationCommentsThread(commentsHost, {
@@ -8244,7 +8240,7 @@ async function loadCreation() {
 						}
 						if (n === lastSyncedCommentCount) return;
 						lastSyncedCommentCount = n;
-						embedShellMod.notifyCreationDetailEmbedShellSync({
+						announceCreationChange({
 							creationId,
 							reason: 'comment-changed',
 							comment_count: n,

@@ -1554,6 +1554,7 @@ function buildFeedCreationCard(
 	hidePublishedBadge = false
 ) {
 	const card = document.createElement("div");
+	card.__creationRecord = item;
 	card.dataset.published = item.published === true || item.published === 1 ? "1" : "0";
 	if (hidePublishedBadge) card.dataset.hidePublishedBadge = "1";
 	const mediaType = typeof item.media_type === "string" ? item.media_type : "image";

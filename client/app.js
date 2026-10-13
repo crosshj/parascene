@@ -13,6 +13,7 @@ import { initNsfwViewPreference, setNsfwContentEnabled } from './shared/nsfwView
 import { setAfterCreateSubmitHandoff } from './shared/createPageRuntime.js';
 import { installConsoleGen } from './shared/consoleGen.js';
 import { bindCreationDetailHashtagClicks } from './shared/creationDetailRuntime.js';
+import { bindCreationChangeParent } from './shared/creationDetailEmbedShell.js';
 
 function hydrateNsfwFromBootstrap(user) {
 	const meta = user?.meta && typeof user.meta === 'object' ? user.meta : null;
@@ -280,6 +281,7 @@ window.state = {
 const lifecycle = connectLifecycle({ state, session, providers, router });
 
 await lifecycle.start();
+bindCreationChangeParent();
 bindCreationDetailHashtagClicks();
 window.addEventListener('pagehide', () => {
 	stopCommandPaletteRoster?.();

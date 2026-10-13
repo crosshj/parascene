@@ -1,4 +1,5 @@
 import { invalidateAppCaches } from './api.js';
+import { notifyCreationDetailEmbedShellSync } from './creationDetailEmbedShell.js';
 import {
 	openHashtagDestination,
 	parseHashtagSlugFromTagPath,
@@ -14,15 +15,25 @@ export function registerCreationDetailRefreshHandler(handler) {
 	refreshHandler = typeof handler === 'function' ? handler : null;
 }
 
+/** Child door: tell the page under the creation overlay that this creation changed. */
+export function announceCreationChange(change = {}) {
+	const detail = change && typeof change === 'object' ? { ...change } : {};
+	if (detail.creationId != null) {
+		const creationId = Number(detail.creationId);
+		if (!Number.isFinite(creationId) || creationId <= 0) return;
+		detail.creationId = creationId;
+	}
+	document.dispatchEvent(new CustomEvent('creation-detail:mutation', { detail }));
+	notifyCreationDetailEmbedShellSync(detail);
+}
+
 export async function refreshAfterMutation(reason, options = {}) {
 	invalidateAppCaches({
 		tags: ['creations', 'feed', 'explore'],
 		urls: ['/api/create/images'],
 	});
 	if (options.skipContentRefresh !== true && refreshHandler) await refreshHandler();
-	document.dispatchEvent(new CustomEvent('creation-detail:mutation', {
-		detail: { reason, ...options },
-	}));
+	announceCreationChange({ reason, ...options });
 }
 
 function internalHref(href) {
