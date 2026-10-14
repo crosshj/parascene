@@ -26,9 +26,14 @@ import {
 	feedItemCardImageUrl,
 	isFeedCreationImageProcessing,
 } from './feedCardBuild.js';
+import { serverVideoFramePosterUrl } from './videoFirstFramePoster.js';
 
 function resolveRouteCardThumbUrl(item, preferThumbnail, isVideo) {
 	const feedItem = normalizeRouteCardFeedItem(item);
+	if (isVideo && !nsfwShouldBlur(feedItem)) {
+		const frame = serverVideoFramePosterUrl(feedItem);
+		if (frame) return frame;
+	}
 	const groupCover = resolveGroupCoverDisplayUrl(feedItem, preferThumbnail && !isVideo);
 	if (groupCover) return nsfwMediaUrl(groupCover, feedItem);
 	if (isVideo) {

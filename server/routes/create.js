@@ -24,6 +24,7 @@ import {
 	resetAudioCoverToOriginal,
 } from "../services/create/audioCoverApply.js";
 import { applyVideoPosterBuffer, creationRowCanSetVideoPoster } from "../services/create/videoPoster.js";
+import { saveShareAudioFromVideo } from "../services/create/shareAudio.js";
 
 
 import { materializeBlueProviderAudioArgs, resolveAudioProviderArgs } from "../services/create/audioClips.js";
@@ -2591,6 +2592,26 @@ async function loadOwnedCompletedAudio(req, res) {
 			credits: target.credits,
 			method: target.method,
 		});
+	}));
+
+	router.post("/api/create/images/:id/share-audio", asyncRoute(async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+		try {
+			const result = await saveShareAudioFromVideo({
+				queries,
+				storage,
+				user,
+				creationId: Number(req.params.id),
+			});
+			return res.json(result);
+		} catch (err) {
+			const status = Number(err?.status) || 500;
+			return res.status(status).json({
+				error: err?.publicError || "Failed to extract audio",
+				message: err?.message || "Failed to extract audio",
+			});
+		}
 	}));
 
 	router.post("/api/create/images/:id/video-placeholder", asyncRoute(async (req, res) => {

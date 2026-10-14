@@ -21,7 +21,8 @@ import { addHiddenFeedItem, getHiddenFeedItems } from './feedHiddenItems.js';
 import {
 	applyVideoFirstFramePoster,
 	feedItemNeedsVideoFramePoster,
-	feedItemPlayableVideoUrl
+	feedItemPlayableVideoUrl,
+	serverVideoFramePosterUrl
 } from './videoFirstFramePoster.js';
 import { rememberFeedDoomVideo } from './doomFeedVideoCache.js';
 import { itemIsNsfw, nsfwMediaUrl, nsfwShouldBlur } from './nsfwPolicy.js';
@@ -361,7 +362,10 @@ export function setupFeedCardGroupVideoPlaylist(imageContainer, item, options = 
 	const posterUrl =
 		typeof options.posterUrl === 'string' && options.posterUrl.trim()
 			? options.posterUrl.trim()
-			: feedItemCardImageUrl(item, false) || slides[0]?.url || '';
+			: (!nsfwShouldBlur(item) && serverVideoFramePosterUrl(item))
+				|| feedItemCardImageUrl(item, false)
+				|| slides[0]?.url
+				|| '';
 
 	const imgEl = imageContainer.querySelector('.feed-card-img');
 	if (imgEl instanceof HTMLImageElement) {
@@ -674,7 +678,7 @@ export function attachFeedCardImage(imageEl, imageContainer, item, itemIndex, pr
 		}
 	};
 
-	if (useVideoFramePoster) {
+	if (useVideoFramePoster && !nsfwShouldBlur(item)) {
 		const videoUrl = feedItemPlayableVideoUrl(item);
 		teardownFeedCardCreationProcessingUi(imageContainer);
 		imageContainer.classList.add('loading');
@@ -683,6 +687,7 @@ export function attachFeedCardImage(imageEl, imageContainer, item, itemIndex, pr
 		imageContainer.removeAttribute('data-feed-img-state');
 		applyVideoFirstFramePoster(imageEl, {
 			videoUrl,
+			creationId: Number(item?.created_image_id ?? item?.id),
 			onPainted: () => {
 				imageContainer.classList.remove('loading');
 				teardownFeedCardCreationProcessingUi(imageContainer);

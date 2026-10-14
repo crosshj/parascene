@@ -4,6 +4,7 @@ import { loadBlueCdnContext, mintCdnFetchLink, parseCdnWindowQuery } from "./blu
 import { mapCreatedImageRowMediaFields } from "./resolveCreationDisplayMedia.js";
 import { ACTIVE_SHARE_VERSION, mintShareToken, verifyShareToken } from "../../routes/utils/shareLink.js";
 import { getShareBaseUrl } from "./url.js";
+import { getSupabaseServiceClient } from "./supabaseService.js";
 
 export const AUDIO_CLIP_MAX_BYTES = 20 * 1024 * 1024;
 
@@ -646,4 +647,69 @@ export async function resolveClipIdFromOutputMeta(queries, meta) {
 		if (id) return id;
 	}
 	return null;
+}
+
+/**
+ * Library row for audio extracted from a creation video. No-ops when the clip table is unavailable.
+ */
+export async function ensureAudioClipLibraryRowFromShareAudio({
+	queries,
+	storageKey,
+	mimeType,
+	byteSize,
+	extractorUserId,
+	sourceCreation,
+	durationSec = null,
+}) {
+	const key = typeof storageKey === "string" ? storageKey.trim() : "";
+	if (!key) return null;
+	const getByKey = queries?.selectAudioClipByStorageKey?.get;
+	if (typeof getByKey !== "function") return null;
+	const existing = await getByKey(key);
+	if (existing) return existing;
+	const creatorId = Number(extractorUserId);
+	if (!Number.isFinite(creatorId) || creatorId <= 0) return null;
+	const videoOwnerId = Number(sourceCreation?.user_id);
+	const meta = buildClipOwnersMeta({
+		creatorUserId: creatorId,
+		sourceUserId: Number.isFinite(videoOwnerId) && videoOwnerId > 0 ? videoOwnerId : null,
+	});
+	const titleBase =
+		typeof sourceCreation?.title === "string" && sourceCreation.title.trim()
+			? sourceCreation.title.trim()
+			: `Creation #${sourceCreation?.id ?? ""}`;
+	const durationNum = durationSec != null ? Number(durationSec) : null;
+	const duration_sec = Number.isFinite(durationNum) && durationNum > 0 ? durationNum : null;
+	const row = {
+		title: titleBase,
+		description: null,
+		storage_key: key,
+		content_type: mimeType || "audio/mp4",
+		byte_size: Number(byteSize) > 0 ? Number(byteSize) : 0,
+		duration_sec,
+		source_type: "video_extract",
+		source_created_image_id: sourceCreation?.id ?? null,
+		meta,
+	};
+	try {
+		if (typeof queries.insertAudioClip?.run === "function") {
+			return await queries.insertAudioClip.run(row);
+		}
+		const sb = getSupabaseServiceClient();
+		if (!sb) return null;
+		const { data, error } = await sb
+			.from("prsn_audio_clips")
+			.insert({ ...row, updated_at: new Date().toISOString() })
+			.select("*")
+			.single();
+		if (error) throw error;
+		return data;
+	} catch (err) {
+		const msg = String(err?.message || "");
+		if (err?.code === "23505" || msg.includes("duplicate key") || msg.includes("UNIQUE constraint")) {
+			return getByKey(key);
+		}
+		console.error("[share-audio audio-clip dual-write]", err);
+		return null;
+	}
 }

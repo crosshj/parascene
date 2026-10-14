@@ -31,6 +31,7 @@ import * as sequentialVideoPlayerBundledMod from '../../shared/sequentialVideoPl
 import * as postedCreationAccessBundledMod from '../../shared/postedCreationAccess.js';
 import * as challengeSubmitContextBundledMod from '../../shared/challengeSubmitContext.js';
 import * as saveVideoFirstFramePosterBundledMod from '../../shared/saveVideoFirstFramePoster.js';
+import { serverVideoFramePosterUrl } from '../../shared/videoFirstFramePoster.js';
 import * as challengeSubmitPickerBundledMod from '../../shared/challengeSubmitPicker.js';
 
 let formatDateTime;
@@ -4591,8 +4592,12 @@ async function loadCreation() {
 			imageWrapper?.classList.remove('image-error-moderated', 'hero-video-revealed', 'hero-video-pending');
 			imageWrapper?.classList.add('image-loading', 'hero-video-pending');
 
-			const bgUrl = creation.url || creation.thumbnail_url || null;
-			const heroStillUrl = nsfwMediaUrl(bgUrl, creation, { revealed: detailNsfwAllowsClear(), sourceVariant: 'original' });
+			const revealHero = detailNsfwAllowsClear();
+			const framePoster = nsfwShouldBlur(creation, { revealed: revealHero })
+				? ''
+				: serverVideoFramePosterUrl(creation);
+			const bgUrl = framePoster || creation.url || creation.thumbnail_url || null;
+			const heroStillUrl = nsfwMediaUrl(bgUrl, creation, { revealed: revealHero, sourceVariant: 'original' });
 			if (heroStillUrl) {
 				showHeroImage(heroStillUrl);
 				setHeroBackgroundUrl(heroStillUrl);
@@ -7948,13 +7953,20 @@ async function loadCreation() {
 					} else if (!isGroupVideo && source.videoUrl) {
 						clearGroupMemberAudio();
 						teardownGroupHeroVideoPlayer();
-						if (source.filePath) {
-							showHeroImage(source.filePath);
-							setHeroBackgroundUrl(source.filePath);
+						const memberFrame = serverVideoFramePosterUrl({
+							id: creation.id,
+							video_url: source.videoUrl,
+							media_type: source.mediaType,
+							meta: source.meta,
+						});
+						const memberPoster = memberFrame || source.filePath;
+						if (memberPoster) {
+							showHeroImage(memberPoster);
+							setHeroBackgroundUrl(memberPoster);
 						}
 						imageWrapper?.classList.add('image-loading', 'hero-video-pending');
 						void mountHeroVideoPlaybackEarly([source], source.id, {
-							posterUrl: typeof source.filePath === 'string' ? source.filePath : '',
+							posterUrl: typeof memberPoster === 'string' ? memberPoster : '',
 							onFirstReveal: () => markHeroReady({ state: 'group-member-video' }),
 						});
 					} else if (source.mediaType === 'audio') {
@@ -8056,9 +8068,17 @@ async function loadCreation() {
 				void (async () => {
 					if (!isCurrentLoad()) return;
 					const cover = groupSources[0];
-					const posterUrl = typeof cover?.filePath === 'string'
-						? cover.filePath.trim()
-						: (creation.url || creation.thumbnail_url || '');
+					const coverFrame = serverVideoFramePosterUrl({
+						id: creation.id,
+						video_url: cover?.videoUrl,
+						media_type: cover?.mediaType,
+						meta: cover?.meta,
+					});
+					const posterUrl = coverFrame
+						|| (typeof cover?.filePath === 'string' ? cover.filePath.trim() : '')
+						|| creation.url
+						|| creation.thumbnail_url
+						|| '';
 					if (posterUrl) {
 						showHeroImage(posterUrl);
 						setHeroBackgroundUrl(posterUrl);

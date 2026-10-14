@@ -201,6 +201,56 @@ export async function extractVideoFrame(input, timeSec = 0) {
 	}
 }
 
+const SHARE_AUDIO_MAX_BYTES = 20 * 1024 * 1024;
+
+/**
+ * Extract the first audio track as AAC in an M4A container.
+ * Returns null when the file has no decodable audio.
+ * @param {Buffer} input
+ * @returns {Promise<{ buffer: Buffer, contentType: string, durationSec: number | null } | null>}
+ */
+export async function extractVideoAudio(input) {
+	if (!Buffer.isBuffer(input) || input.length === 0) return null;
+	const directory = await mkdtemp(path.join(os.tmpdir(), "parascene-video-audio-"));
+	const sourcePath = path.join(directory, "source.bin");
+	const outputPath = path.join(directory, "audio.m4a");
+	try {
+		await writeFile(sourcePath, input);
+		await execFileAsync(FFMPEG_BIN, [
+			"-y", "-v", "error", "-i", sourcePath,
+			"-vn", "-map", "0:a:0",
+			"-c:a", "aac", "-b:a", "160k",
+			"-movflags", "+faststart",
+			outputPath
+		], { timeout: 180_000 });
+		const audio = await readFile(outputPath);
+		if (!audio.length) return null;
+		if (audio.length > SHARE_AUDIO_MAX_BYTES) {
+			const error = new Error("Extracted audio is too large (max 20 MB). Try a shorter video.");
+			error.status = 413;
+			error.publicError = "Audio file too large";
+			throw error;
+		}
+		let durationSec = null;
+		try {
+			const probe = await execFileAsync(FFPROBE_BIN, [
+				"-v", "error", "-show_entries", "format=duration",
+				"-of", "default=noprint_wrappers=1:nokey=1", outputPath
+			], { timeout: 30_000 });
+			const seconds = Number(String(probe.stdout || "").trim());
+			if (Number.isFinite(seconds) && seconds > 0) durationSec = seconds;
+		} catch {
+			durationSec = null;
+		}
+		return { buffer: audio, contentType: "audio/mp4", durationSec };
+	} catch (error) {
+		if (error?.status) throw error;
+		return null;
+	} finally {
+		await rm(directory, { recursive: true, force: true }).catch(() => undefined);
+	}
+}
+
 async function readVideoFrame(sourcePath, seek) {
 	const fast = Math.max(0, seek - 1);
 	const fine = Math.max(0, seek - fast);

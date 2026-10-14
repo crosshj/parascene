@@ -1,8 +1,7 @@
 /**
- * Share Audio modal — extract audio from a creation video or show an existing extracted file.
+ * Share Audio modal — ask the server to extract audio from a creation video,
+ * or show an existing extracted file.
  */
-
-import { extractAudioFromVideoUrl } from './extractVideoAudio.js';
 
 /** @type {HTMLDialogElement | null} */
 let modalEl = null;
@@ -58,12 +57,7 @@ function toAbsoluteUrl(path) {
 	return `${origin}${value.startsWith('/') ? value : `/${value}`}`;
 }
 
-function formatProgressLabel(ratio) {
-	const pct = Math.round(Math.max(0, Math.min(1, ratio)) * 100);
-	return `Extracting audio… ${pct}%`;
-}
-
-function setExtractingUi(els, isExtracting, progress = 0) {
+function setExtractingUi(els, isExtracting) {
 	if (isExtracting) {
 		setActivePanel(els, 'progress');
 	} else if (!els.readyPanel?.classList.contains('is-active')) {
@@ -73,10 +67,11 @@ function setExtractingUi(els, isExtracting, progress = 0) {
 		els.extractBtn.disabled = isExtracting;
 	}
 	if (els.progressBar instanceof HTMLElement) {
-		els.progressBar.style.width = `${Math.round(Math.max(0, Math.min(1, progress)) * 100)}%`;
+		els.progressBar.style.width = '';
+		els.progressBar.classList.toggle('is-busy', isExtracting);
 	}
 	if (els.progressLabel) {
-		els.progressLabel.textContent = isExtracting ? formatProgressLabel(progress) : 'Extracting audio… 0%';
+		els.progressLabel.textContent = 'Extracting audio…';
 	}
 }
 
@@ -116,7 +111,7 @@ function showPromptState(els) {
 	}
 	if (els.linkInput instanceof HTMLInputElement) els.linkInput.value = '';
 	showError(els, '');
-	setExtractingUi(els, false, 0);
+	setExtractingUi(els, false);
 }
 
 function resolveShareAudioUrl(meta) {
@@ -156,40 +151,28 @@ async function copyLink(els, showToast) {
 	}
 }
 
-async function uploadExtractedAudio(creationId, blob, mimeType, durationSec = null) {
-	const normalizedMime = String(mimeType || 'audio/webm').split(';')[0].trim() || 'audio/webm';
-	const maxBytes = 20 * 1024 * 1024;
-	if (blob.size > maxBytes) {
-		throw new Error('Extracted audio is too large (max 20 MB). Try a shorter video.');
-	}
-
-	const durationNum = durationSec != null ? Number(durationSec) : null;
-	const headers = {
-		'Content-Type': normalizedMime,
-	};
-	if (Number.isFinite(durationNum) && durationNum > 0) {
-		headers['x-share-audio-duration-sec'] = String(durationNum);
-	}
-
+async function requestServerShareAudio(creationId, signal) {
 	let res;
 	try {
 		res = await fetch(`/api/create/images/${creationId}/share-audio`, {
 			method: 'POST',
 			credentials: 'include',
-			headers,
-			body: blob,
+			headers: { 'Content-Type': 'application/json' },
+			body: '{}',
+			signal,
 		});
 	} catch (err) {
+		if (err?.name === 'AbortError') throw err;
 		const msg = err?.message && typeof err.message === 'string' ? err.message : '';
 		if (msg === 'Failed to fetch' || err?.name === 'TypeError') {
-			throw new Error('Could not reach the server to save audio. If extraction took a long time, try again.');
+			throw new Error('Could not reach the server to extract audio.');
 		}
 		throw err;
 	}
 
 	const data = await res.json().catch(() => ({}));
 	if (!res.ok) {
-		throw new Error(data?.message || data?.error || 'Could not save audio');
+		throw new Error(data?.message || data?.error || 'Could not extract audio');
 	}
 	const audioUrl = typeof data?.audio_url === 'string'
 		? data.audio_url
@@ -265,22 +248,18 @@ export function openShareAudioModal(options = {}) {
 			if (activeAbort) return;
 			activeAbort = new AbortController();
 			showError(els, '');
-			setExtractingUi(els, true, 0);
+			setExtractingUi(els, true);
 			if (els.extractBtnText) els.extractBtnText.textContent = 'Extracting…';
 
 			try {
-				const { blob, mimeType, durationSec } = await extractAudioFromVideoUrl(videoUrl, {
-					signal: activeAbort.signal,
-					onProgress: (ratio) => setExtractingUi(els, true, ratio),
-				});
-				const audioUrl = await uploadExtractedAudio(creationId, blob, mimeType, durationSec);
+				const audioUrl = await requestServerShareAudio(creationId, activeAbort.signal);
 				showReadyState(els, audioUrl);
 				if (showToast) showToast('Audio ready to share');
 				if (onSaved) onSaved(audioUrl);
 			} catch (err) {
 				if (err?.name === 'AbortError') return;
 				showError(els, err?.message || 'Could not extract audio');
-				setExtractingUi(els, false, 0);
+				setExtractingUi(els, false);
 				if (els.extractBtnText) els.extractBtnText.textContent = 'Extract audio';
 			} finally {
 				activeAbort = null;

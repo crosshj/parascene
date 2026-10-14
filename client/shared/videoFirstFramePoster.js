@@ -1,7 +1,8 @@
 /**
  * Text-to-video (and Blue t2v) rows keep a transparent PNG until a first-frame poster is saved.
  * Reference-to-video has a source image, but it is a character sheet — not a start frame.
- * Feed / doom should show the video's first frame instead of that empty or sheet poster.
+ * Feed / doom should show a server-extracted frame instead of that empty or sheet poster.
+ * Signed playback redirects taint a canvas, so the browser must not export the frame itself.
  */
 
 /**
@@ -89,42 +90,59 @@ export function feedItemNeedsVideoFramePoster(item) {
 	return true;
 }
 
-/** @type {WeakMap<HTMLImageElement, () => void>} */
-const cleanupByImg = new WeakMap();
-
-function paintVideoFrameToBlobUrl(video) {
-	if (!(video instanceof HTMLVideoElement)) return Promise.resolve('');
-	const w = video.videoWidth;
-	const h = video.videoHeight;
-	if (!w || !h || video.readyState < 2) return Promise.resolve('');
-	const canvas = document.createElement('canvas');
-	canvas.width = w;
-	canvas.height = h;
-	const ctx = canvas.getContext('2d');
-	if (!ctx) return Promise.resolve('');
-	try {
-		ctx.drawImage(video, 0, 0, w, h);
-	} catch {
-		return Promise.resolve('');
-	}
-	return new Promise((resolve) => {
-		canvas.toBlob((blob) => {
-			if (!blob) {
-				resolve('');
-				return;
+/**
+ * Same-origin media URL whose `video_thumbnail` variant is a server-extracted frame.
+ * Falls back to the creation frame route when the playable URL is a signed redirect.
+ * @param {string} videoUrl
+ * @param {number} creationId
+ * @returns {string}
+ */
+export function videoFramePosterUrl(videoUrl, creationId) {
+	const id = Number(creationId);
+	const hasId = Number.isFinite(id) && id > 0;
+	const raw = typeof videoUrl === 'string' ? videoUrl.trim() : '';
+	if (raw) {
+		try {
+			const parsed = new URL(raw, 'http://localhost');
+			const path = parsed.pathname;
+			if (
+				path.includes('/api/videos/created/') ||
+				path.includes('/api/creations/media/') ||
+				path.includes('/api/images/created/')
+			) {
+				if (hasId) parsed.searchParams.set('creation_id', String(id));
+				parsed.searchParams.set('variant', 'video_thumbnail');
+				return `${parsed.pathname}${parsed.search}${parsed.hash}`;
 			}
-			resolve(URL.createObjectURL(blob));
-		}, 'image/jpeg', 0.86);
-	});
+		} catch {
+			// Fall through to the creation frame route.
+		}
+	}
+	if (hasId) return `/api/creations/${id}/video-frame?t=0.000`;
+	return '';
 }
 
 /**
- * Paint the video's first frame onto `img`. Replaces any previous apply on the same img.
+ * Server frame URL when this row still needs a poster, otherwise empty.
+ * @param {object|null|undefined} item
+ * @returns {string}
+ */
+export function serverVideoFramePosterUrl(item) {
+	if (!feedItemNeedsVideoFramePoster(item)) return '';
+	const id = Number(item?.created_image_id ?? item?.id);
+	return videoFramePosterUrl(feedItemPlayableVideoUrl(item), id);
+}
+
+/** @type {WeakMap<HTMLImageElement, () => void>} */
+const cleanupByImg = new WeakMap();
+
+/**
+ * Show a server-extracted frame on `img`. Replaces any previous apply on the same img.
  *
  * @param {HTMLImageElement} img
  * @param {{
- *   videoUrl: string,
- *   existingVideo?: HTMLVideoElement | null,
+ *   videoUrl?: string,
+ *   creationId?: number|string,
  *   onPainted?: () => void,
  *   onFail?: () => void
  * }} opts
@@ -135,111 +153,45 @@ export function applyVideoFirstFramePoster(img, opts) {
 	if (typeof prev === 'function') prev();
 	cleanupByImg.delete(img);
 
-	if (!(img instanceof HTMLImageElement)) {
+	const fail = () => {
 		if (typeof opts?.onFail === 'function') opts.onFail();
+	};
+
+	if (!(img instanceof HTMLImageElement)) {
+		fail();
 		return () => {};
 	}
-	const videoUrl = typeof opts?.videoUrl === 'string' ? opts.videoUrl.trim() : '';
-	if (!videoUrl || typeof document === 'undefined') {
-		if (typeof opts?.onFail === 'function') opts.onFail();
+	const frameUrl = videoFramePosterUrl(opts?.videoUrl, Number(opts?.creationId));
+	if (!frameUrl) {
+		fail();
 		return () => {};
 	}
 
 	let cancelled = false;
 	let settled = false;
-	let blobUrl = '';
-	const existing = opts?.existingVideo instanceof HTMLVideoElement ? opts.existingVideo : null;
-	const video = existing || document.createElement('video');
-	const owned = !existing;
-	let failTimer = 0;
 
 	const finishFail = () => {
 		if (cancelled || settled) return;
 		settled = true;
-		if (failTimer) window.clearTimeout(failTimer);
 		if (typeof opts?.onFail === 'function') opts.onFail();
 	};
 
 	const finishPainted = () => {
 		if (cancelled || settled) return;
 		settled = true;
-		if (failTimer) window.clearTimeout(failTimer);
 		if (typeof opts?.onPainted === 'function') opts.onPainted();
 	};
 
-	const tryPaint = async () => {
-		if (cancelled || settled) return false;
-		const nextUrl = await paintVideoFrameToBlobUrl(video);
-		if (cancelled || settled) {
-			if (nextUrl) URL.revokeObjectURL(nextUrl);
-			return false;
-		}
-		if (!nextUrl) return false;
-		if (blobUrl) URL.revokeObjectURL(blobUrl);
-		blobUrl = nextUrl;
-		img.onload = () => finishPainted();
-		img.onerror = () => finishFail();
-		img.src = blobUrl;
-		img.dataset.feedImageUrl = blobUrl;
-		if (img.complete && img.naturalHeight !== 0) finishPainted();
-		return true;
-	};
-
-	const onReady = async () => {
-		if (cancelled || settled) return;
-		const painted = await tryPaint();
-		if (painted || cancelled || settled) return;
-		try {
-			video.currentTime = 0;
-		} catch {
-			await tryPaint();
-		}
-	};
-
-	video.addEventListener('loadeddata', onReady);
-	video.addEventListener('seeked', () => {
-		void tryPaint();
-	});
-	video.addEventListener('error', finishFail, { once: true });
-
-	if (owned) {
-		video.muted = true;
-		video.playsInline = true;
-		video.setAttribute('playsinline', '');
-		video.preload = 'auto';
-		video.src = videoUrl;
-		try {
-			video.load();
-		} catch {
-			// ignore
-		}
-	} else if (video.readyState >= 2) {
-		void onReady();
-	}
-
-	failTimer = window.setTimeout(finishFail, 10000);
+	img.onload = () => finishPainted();
+	img.onerror = () => finishFail();
+	img.src = frameUrl;
+	img.dataset.feedImageUrl = frameUrl;
+	if (img.complete && img.naturalHeight !== 0) finishPainted();
 
 	const cleanup = () => {
 		cancelled = true;
-		if (failTimer) window.clearTimeout(failTimer);
-		video.removeEventListener('loadeddata', onReady);
-		if (blobUrl) {
-			URL.revokeObjectURL(blobUrl);
-			blobUrl = '';
-		}
-		if (owned) {
-			try {
-				video.pause();
-			} catch {
-				// ignore
-			}
-			video.removeAttribute('src');
-			try {
-				video.load();
-			} catch {
-				// ignore
-			}
-		}
+		if (img.onload) img.onload = null;
+		if (img.onerror) img.onerror = null;
 		if (cleanupByImg.get(img) === cleanup) cleanupByImg.delete(img);
 	};
 	cleanupByImg.set(img, cleanup);

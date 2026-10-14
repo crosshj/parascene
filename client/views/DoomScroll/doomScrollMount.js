@@ -39,7 +39,7 @@ import {
 	feedItemCardImageUrlCandidates,
 	getFeedItemGroupVideoSlides
 } from '../../shared/feedCardBuild.js';
-import { feedItemPlayableVideoUrl } from '../../shared/videoFirstFramePoster.js';
+import { feedItemPlayableVideoUrl, serverVideoFramePosterUrl } from '../../shared/videoFirstFramePoster.js';
 import { itemIsNsfw, nsfwShouldBlur, readNsfwPolicy } from '../../shared/nsfwPolicy.js';
 import { mountSequentialVideoPlayer } from '../../shared/sequentialVideoPlayer.js';
 
@@ -178,7 +178,7 @@ function mountDoomGroupVideoPlaylist(slide, item, hooks = {}) {
 	}
 
 	const posterCandidates = feedItemCardImageUrlCandidates(item, false);
-	const posterUrl = posterCandidates[0] || '';
+	const posterUrl = serverVideoFramePosterUrl(item) || posterCandidates[0] || '';
 
 	const existing = getDoomGroupVideoPlayer(slide);
 	if (existing && typeof existing.teardown === 'function') {

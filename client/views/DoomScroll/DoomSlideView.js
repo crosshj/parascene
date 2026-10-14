@@ -749,7 +749,7 @@ export function createDoomSlideElement(item, viewerUserId, slideOpts = {}) {
 	mediaFrame.className = `chat-doom-slide-media-frame${isNsfw ? ' nsfw' : ''}${youtube ? ' chat-doom-slide-media-frame--youtube' : ''}`;
 	if (isNsfw) mediaFrame.setAttribute('data-creation-id', String(cid));
 
-	const needsFramePoster = !youtube && Boolean(videoUrl) && feedItemNeedsVideoFramePoster(item);
+	const needsFramePoster = !youtube && Boolean(videoUrl) && feedItemNeedsVideoFramePoster(item) && !nsfwShouldBlur(item);
 	/** Layered poster img matches video `object-fit` / aspect logic; avoid native `video.poster`. */
 	let posterImg = null;
 	if (posterCandidates.length > 0 || needsFramePoster) {
@@ -824,14 +824,13 @@ export function createDoomSlideElement(item, viewerUserId, slideOpts = {}) {
 		}
 		video.preload = warmed ? 'auto' : (bgLoad ? 'none' : 'metadata');
 		primeMediaElementForAudioLeveling(video);
-		if (needsFramePoster) video.preload = bgLoad ? 'metadata' : 'auto';
 		if (videoUrl && !nsfwShouldBlur(item) && video.getAttribute('src') !== videoUrl && !String(video.src || '').endsWith(videoUrl)) video.src = videoUrl;
 		if (videoUrl && nsfwShouldBlur(item)) {
 			video.removeAttribute('src');
 			try { video.load(); } catch { /* ignore */ }
 		}
 		if (needsFramePoster && posterImg) {
-			applyVideoFirstFramePoster(posterImg, { videoUrl, existingVideo: video });
+			applyVideoFirstFramePoster(posterImg, { videoUrl, creationId: cid });
 		}
 		mediaFrame.appendChild(video);
 	}

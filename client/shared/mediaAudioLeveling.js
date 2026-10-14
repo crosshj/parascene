@@ -1,15 +1,10 @@
 /**
  * Browser-side loudness leveling via Web Audio (DynamicsCompressor).
  * Routes HTMLMediaElement audio through a shared compressor graph.
+ *
+ * Bypassed. Entry points return immediately. The previous implementation is
+ * commented out below so it can be restored without rewriting it.
  */
-
-/** @type {WeakMap<HTMLMediaElement, true>} */
-const attached = new WeakMap();
-
-/** @type {AudioContext | null} */
-let sharedContext = null;
-
-let gestureResumeBound = false;
 
 /**
  * @param {string} mediaUrl
@@ -30,8 +25,40 @@ export function isSameOriginMediaUrl(mediaUrl, pageHref = typeof location !== 'u
  * Set crossOrigin before cross-origin media loads so Web Audio can read samples.
  * No-op when same-origin or crossOrigin already set.
  *
- * @param {HTMLMediaElement} media
+ * @param {HTMLMediaElement} _media
  */
+export function primeMediaElementForAudioLeveling(_media) {
+	return;
+}
+
+/**
+ * Route media element audio through a dynamics compressor (idempotent).
+ *
+ * @param {HTMLMediaElement | null | undefined} _media
+ * @returns {boolean}
+ */
+export function attachMediaAudioLeveling(_media) {
+	return false;
+}
+
+/** Resume shared leveling graph after a user gesture (e.g. doom unmute tap). */
+export function resumeMediaAudioLevelingContext() {
+	return;
+}
+
+/**
+ * Create/resume the shared graph while a click is still on the stack.
+ * A context created later, during doom mount, starts suspended and stays silent.
+ */
+export function resumeMediaAudioLevelingFromGesture() {
+	return;
+}
+
+/*
+const attached = new WeakMap();
+let sharedContext = null;
+let gestureResumeBound = false;
+
 export function primeMediaElementForAudioLeveling(media) {
 	if (!(media instanceof HTMLMediaElement)) return;
 	if (media.dataset.audioLevelingPrimed === '1') return;
@@ -44,7 +71,7 @@ export function primeMediaElementForAudioLeveling(media) {
 		media.dataset.audioLevelingPrimed = '1';
 		return;
 	}
-	/* Already tainted without CORS — attaching would mute audio entirely. */
+	// Already tainted without CORS — attaching would mute audio entirely.
 	if (url && media.readyState > 0) {
 		media.dataset.audioLevelingSkip = '1';
 		return;
@@ -55,7 +82,7 @@ export function primeMediaElementForAudioLeveling(media) {
 
 function getSharedAudioContext() {
 	if (typeof window === 'undefined') return null;
-	const Ctx = window.AudioContext || /** @type {typeof window & { webkitAudioContext?: typeof AudioContext }} */ (window).webkitAudioContext;
+	const Ctx = window.AudioContext || window.webkitAudioContext;
 	if (!Ctx) return null;
 	if (!sharedContext || sharedContext.state === 'closed') {
 		sharedContext = new Ctx();
@@ -78,9 +105,6 @@ function bindGestureResumeOnce() {
 	document.addEventListener('keydown', resume, { capture: true, passive: true, once: true });
 }
 
-/**
- * @param {AudioContext} ctx
- */
 function wireLevelingCompressor(ctx) {
 	const compressor = ctx.createDynamicsCompressor();
 	compressor.threshold.value = -24;
@@ -97,12 +121,6 @@ function wireLevelingCompressor(ctx) {
 	return { compressor, gain };
 }
 
-/**
- * Route media element audio through a dynamics compressor (idempotent).
- *
- * @param {HTMLMediaElement | null | undefined} media
- * @returns {boolean}
- */
 export function attachMediaAudioLeveling(media) {
 	if (!(media instanceof HTMLMediaElement)) return false;
 	if (media.dataset.audioLevelingSkip === '1') return false;
@@ -113,8 +131,8 @@ export function attachMediaAudioLeveling(media) {
 
 	const ctx = getSharedAudioContext();
 	if (!ctx) return false;
-	/* A suspended graph swallows element audio and makes play() throw NotAllowedError.
-	   Leave the element on its own output until a gesture has started the context. */
+	// A suspended graph swallows element audio and makes play() throw NotAllowedError.
+	// Leave the element on its own output until a gesture has started the context.
 	if (ctx.state !== 'running') {
 		try {
 			void ctx.resume();
@@ -126,18 +144,17 @@ export function attachMediaAudioLeveling(media) {
 
 	try {
 		const source = ctx.createMediaElementSource(media);
-		const { compressor, gain } = wireLevelingCompressor(ctx);
+		const { compressor } = wireLevelingCompressor(ctx);
 		source.connect(compressor);
 		attached.set(media, true);
 		void ctx.resume();
 		return true;
 	} catch {
-		/* Element may already be wired, or browser blocked Web Audio for this media. */
+		// Element may already be wired, or browser blocked Web Audio for this media.
 		return false;
 	}
 }
 
-/** Resume shared leveling graph after a user gesture (e.g. doom unmute tap). */
 export function resumeMediaAudioLevelingContext() {
 	try {
 		const p = sharedContext?.resume?.();
@@ -147,10 +164,6 @@ export function resumeMediaAudioLevelingContext() {
 	}
 }
 
-/**
- * Create/resume the shared graph while a click is still on the stack.
- * A context created later, during doom mount, starts suspended and stays silent.
- */
 export function resumeMediaAudioLevelingFromGesture() {
 	const ctx = getSharedAudioContext();
 	if (!ctx) return;
@@ -161,3 +174,4 @@ export function resumeMediaAudioLevelingFromGesture() {
 		// ignore
 	}
 }
+*/
