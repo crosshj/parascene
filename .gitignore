@@ -159,3 +159,4 @@ _preview/
 
 # VPS client build output
 build/
+/db/maintenance/backups
