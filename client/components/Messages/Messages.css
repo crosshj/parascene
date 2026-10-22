@@ -764,6 +764,19 @@
 	height: 24px;
 }
 
+/* Chat places this in JS. The shared comment rule uses CSS anchors, which
+   paint the first frame at the static position on Windows and mobile Chrome. */
+.comment-reaction-picker.connect-chat-reaction-picker {
+	position: fixed;
+	position-anchor: auto;
+	position-try-fallbacks: none;
+	position-try-order: normal;
+	position-visibility: always;
+	inset: auto;
+	margin: 0;
+	z-index: 40;
+}
+
 .comment-reactions-readonly {
 	pointer-events: none;
 }
@@ -1347,11 +1360,13 @@ body.app-layout .chat-page-messages .route-loading-skeleton.chat-page-thread-loa
 }
 
 @media (min-width: 1024px) and (hover: hover) and (pointer: fine) {
-	.chat-page-messages .connect-chat-msg:hover:not(.connect-chat-msg--reply-target) {
+	.chat-page-messages .connect-chat-msg:hover:not(.connect-chat-msg--reply-target),
+	.chat-page-messages .connect-chat-msg.connect-chat-msg--picker-open:not(.connect-chat-msg--reply-target) {
 		background: color-mix(in srgb, var(--text) 5%, transparent);
 	}
 
-	.chat-page-messages .connect-chat-msg.connect-chat-msg--reply-target:hover {
+	.chat-page-messages .connect-chat-msg.connect-chat-msg--reply-target:hover,
+	.chat-page-messages .connect-chat-msg.connect-chat-msg--reply-target.connect-chat-msg--picker-open {
 		background: color-mix(in srgb, var(--focus) 18%, transparent);
 	}
 }
@@ -1382,15 +1397,17 @@ body.app-layout .chat-page-messages .route-loading-skeleton.chat-page-thread-loa
 
 @media (hover: hover) and (pointer: fine) {
 	.chat-page-messages .connect-chat-msg:hover .connect-chat-msg-hover-bar,
-.chat-page-messages .connect-chat-msg:focus-within .connect-chat-msg-hover-bar,
-.chat-page-messages .connect-chat-msg.connect-chat-msg--toolbar-open .connect-chat-msg-hover-bar {
+	.chat-page-messages .connect-chat-msg:focus-within .connect-chat-msg-hover-bar,
+	.chat-page-messages .connect-chat-msg.connect-chat-msg--toolbar-open .connect-chat-msg-hover-bar,
+	.chat-page-messages .connect-chat-msg.connect-chat-msg--picker-open .connect-chat-msg-hover-bar {
 		opacity: 1;
 		pointer-events: auto;
 	}
 }
 
 @media (hover: none), (pointer: coarse) {
-	.chat-page-messages .connect-chat-msg.connect-chat-msg--toolbar-open .connect-chat-msg-hover-bar {
+	.chat-page-messages .connect-chat-msg.connect-chat-msg--toolbar-open .connect-chat-msg-hover-bar,
+	.chat-page-messages .connect-chat-msg.connect-chat-msg--picker-open .connect-chat-msg-hover-bar {
 		opacity: 1;
 		pointer-events: auto;
 	}
@@ -2001,6 +2018,7 @@ button.msg-reply-indicator-inner:hover {
 	box-sizing: border-box;
 	width: fit-content;
 	max-width: 100%;
+	min-width: min(260px, 100%);
 	min-height: 260px;
 	height: 260px;
 	max-height: 260px;
@@ -2163,6 +2181,16 @@ button.msg-reply-indicator-inner:hover {
 
 .connect-chat-msg-bubble .user-text-inline-image[data-inline-image-loading='1'] {
 	opacity: 0;
+}
+
+.connect-chat-msg-bubble .user-text-inline-image-wrap.is-broken .user-text-inline-image,
+.connect-chat-msg-bubble .user-text-inline-image-wrap.is-broken .user-text-inline-image-link::before,
+.connect-chat-msg-bubble .user-text-inline-image-wrap.is-broken .user-text-inline-image-link::after {
+	display: none;
+}
+
+.connect-chat-msg-bubble .user-text-inline-image-wrap.is-broken {
+	background: var(--image-placeholder);
 }
 
 .user-text-inline-media-group {
@@ -3956,6 +3984,7 @@ body.app-layout .chat-page-messages pre {
 	box-sizing: border-box;
 	width: fit-content;
 	max-width: 100%;
+	min-width: min(260px, 100%);
 	min-height: 260px;
 	height: 260px;
 	max-height: 260px;
@@ -5285,7 +5314,18 @@ a.creation-link[data-suno-url][data-suno-preview-pending="true"] {
 .connect-chat-suno-preview-broken svg { width: 40px; height: 40px; }
 
 /* One failure presentation for creation shares and external hook previews. */
+.connect-chat-msg-bubble .user-text-inline-image-wrap.is-broken .user-text-inline-image-link,
+.connect-chat-msg-bubble .connect-chat-creation-embed.is-broken,
+.connect-chat-msg-bubble .connect-chat-creation-embed.is-broken .connect-chat-creation-embed-inner,
+.connect-chat-msg-bubble .connect-chat-creation-embed.is-broken .user-text-inline-image-link,
+.connect-chat-msg-bubble .connect-chat-creation-embed--error,
+.connect-chat-msg-bubble .connect-chat-creation-embed--error .connect-chat-creation-embed-inner,
+.connect-chat-msg-bubble .connect-chat-creation-embed--error .user-text-inline-image-link {
+	cursor: default;
+}
+
 .connect-chat-msg-bubble .connect-chat-creation-embed--error:has(.connect-chat-media-broken),
+.connect-chat-creation-embed.is-broken,
 .connect-chat-suno-preview.is-broken {
  position: relative; box-sizing: border-box; width: 260px; max-width: 100%; min-width: 0;
  height: auto; aspect-ratio: 1 / 1; overflow: hidden; border-radius: 20px; corner-shape: squircle;

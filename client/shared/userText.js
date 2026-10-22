@@ -202,11 +202,16 @@ export function defaultAppOrigin() {
 }
 
 const HISTORICAL_CDN_HOST = 'cdn.parascene.com';
+const BETA_CDN_HOST = 'beta-cdn.parascene.com';
 const HISTORICAL_SHARE_HOST = 'sh.parascene.com';
+
+function knownCdnHosts() {
+	return [deploymentCdnHost(), HISTORICAL_CDN_HOST, BETA_CDN_HOST];
+}
 
 function isCdnHostname(hostname) {
 	const host = String(hostname || '').toLowerCase();
-	return host === deploymentCdnHost() || host === HISTORICAL_CDN_HOST;
+	return knownCdnHosts().includes(host);
 }
 
 function parasceneHosts() {
@@ -223,6 +228,7 @@ function parasceneHosts() {
 		'parascene.com',
 		deploymentCdnHost(),
 		HISTORICAL_CDN_HOST,
+		BETA_CDN_HOST,
 		deploymentShareHost(),
 		HISTORICAL_SHARE_HOST,
 		'api.parascene.com',
@@ -491,7 +497,7 @@ function expandBareInlineGenericImageApiPaths(text) {
 }
 
 function expandBareCdnShareUrls(text) {
-	const hosts = [...new Set([deploymentCdnHost(), HISTORICAL_CDN_HOST])]
+	const hosts = [...new Set(knownCdnHosts())]
 		.map((host) => host.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
 		.join('|');
 	return String(text ?? '').replace(
@@ -1851,7 +1857,7 @@ function bindChatCreationEmbedMediaLoadError(wrap, mediaEl) {
 		if (wrap.getAttribute('data-prsn-audio-embed') === '1') return;
 		if (wrap.getAttribute('data-prsn-audio-embed') === 'card') return;
 		wrap.classList.remove('connect-chat-creation-embed--loading', 'connect-chat-creation-embed--pending');
-		wrap.classList.add('connect-chat-creation-embed--error');
+		wrap.classList.add('connect-chat-creation-embed--error', 'is-broken');
 		const titleEl =
 			wrap.querySelector('.connect-chat-creation-embed-hover-bar-title') ||
 			wrap.querySelector('.connect-chat-creation-embed-status-message');
@@ -1867,6 +1873,12 @@ function bindChatCreationEmbedMediaLoadError(wrap, mediaEl) {
 		wrap.setAttribute('role', 'status');
 	};
 	mediaEl.addEventListener('error', onFail, { once: true });
+	// A cached failure can fire before this listener exists.
+	if (mediaEl instanceof HTMLImageElement && mediaEl.complete && mediaEl.naturalWidth === 0 && mediaEl.getAttribute('src')) {
+		onFail();
+	} else if (mediaEl instanceof HTMLVideoElement && mediaEl.error) {
+		onFail();
+	}
 }
 
 /**
@@ -2540,19 +2552,28 @@ export function hydrateUserTextLinks(rootEl) {
 		const wrap = img.closest('.user-text-inline-image-wrap');
 		const done = () => {
 			delete img.dataset.inlineImageLoading;
-			if (wrap instanceof HTMLElement) {
-				wrap.classList.remove('is-loading');
-			}
+			if (wrap instanceof HTMLElement) wrap.classList.remove('is-loading');
 		};
-		if (wrap instanceof HTMLElement) {
-			wrap.classList.add('is-loading');
-		}
-		if (img.complete) {
+		const fail = () => {
 			done();
+			if (!(wrap instanceof HTMLElement)) return;
+			wrap.classList.add('is-broken');
+			if (wrap.querySelector('.connect-chat-media-broken')) return;
+			const icon = document.createElement('span');
+			icon.className = 'connect-chat-media-broken';
+			icon.setAttribute('role', 'img');
+			icon.setAttribute('aria-label', 'Image unavailable');
+			icon.innerHTML = brokenChatMediaIconHtml();
+			wrap.append(icon);
+		};
+		if (wrap instanceof HTMLElement) wrap.classList.add('is-loading');
+		if (img.complete) {
+			if (img.naturalWidth > 0 || !img.getAttribute('src')) done();
+			else fail();
 			return;
 		}
 		img.addEventListener('load', done, { once: true });
-		img.addEventListener('error', done, { once: true });
+		img.addEventListener('error', fail, { once: true });
 	});
 }
 

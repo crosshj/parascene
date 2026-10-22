@@ -149,7 +149,8 @@
 .chat-page-messages .connect-chat-msg.is-deleting .connect-chat-msg-hover-bar,
 .chat-page-messages .connect-chat-msg.is-deleting:hover .connect-chat-msg-hover-bar,
 .chat-page-messages .connect-chat-msg.is-deleting:focus-within .connect-chat-msg-hover-bar,
-.chat-page-messages .connect-chat-msg.is-deleting.connect-chat-msg--toolbar-open .connect-chat-msg-hover-bar {
+.chat-page-messages .connect-chat-msg.is-deleting.connect-chat-msg--toolbar-open .connect-chat-msg-hover-bar,
+.chat-page-messages .connect-chat-msg.is-deleting.connect-chat-msg--picker-open .connect-chat-msg-hover-bar {
 	opacity: 0;
 	pointer-events: none;
 }

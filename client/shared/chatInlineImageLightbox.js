@@ -2025,10 +2025,18 @@ export function bindChatInlineImageLightboxClickDelegation(rootEl, options = {})
 	const openHooks =
 		options.openHooks && typeof options.openHooks === 'object' ? options.openHooks : {};
 
+	const brokenCreationSelector = '.connect-chat-creation-embed.is-broken, .connect-chat-creation-embed.connect-chat-creation-embed--error, .user-text-inline-image-wrap.is-broken';
 	const handler = (e) => {
 		if (!(rootEl instanceof HTMLElement)) return;
 		if (!(e.target instanceof Element)) return;
 		if (!rootEl.contains(e.target)) return;
+		if (e.target.closest(brokenCreationSelector)) {
+			if (e.target.closest('a.user-text-inline-image-link')) {
+				e.preventDefault();
+				e.stopPropagation();
+			}
+			return;
+		}
 
 		const scope =
 			bubbleSelector === null ? rootEl : e.target.closest(bubbleSelector);
@@ -2278,6 +2286,7 @@ export function bindChatInlineImageLightboxClickDelegation(rootEl, options = {})
 		const t = e.target;
 		if (!(t instanceof Element)) return;
 		if (!rootEl.contains(t)) return;
+		if (t.closest(brokenCreationSelector)) return;
 		const groupVideoCarousel = t.closest?.('.connect-chat-creation-embed-inner--group-video-carousel');
 		if (groupVideoCarousel instanceof HTMLElement) {
 			const scope =

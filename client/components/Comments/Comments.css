@@ -1678,6 +1678,24 @@
 	background: transparent;
 }
 
+.comment-text .user-text-inline-image-wrap.is-broken .user-text-inline-image,
+.comment-text .user-text-inline-image-wrap.is-broken .user-text-inline-image-link::before,
+.comment-text .user-text-inline-image-wrap.is-broken .user-text-inline-image-link::after {
+	display: none;
+}
+
+.comment-text .user-text-inline-image-wrap.is-broken {
+	background: var(--image-placeholder);
+}
+
+.comment-text .user-text-inline-image-wrap.is-broken .user-text-inline-image-link,
+.comment-text .connect-chat-creation-embed.is-broken,
+.comment-text .connect-chat-creation-embed.is-broken .user-text-inline-image-link,
+.comment-text .connect-chat-creation-embed--error,
+.comment-text .connect-chat-creation-embed--error .user-text-inline-image-link {
+	cursor: default;
+}
+
 .comment-body .comment-text .user-text-inline-image-wrap,
 .connect-comment .comment-text .user-text-inline-image-wrap {
 	position: relative;
@@ -1908,6 +1926,21 @@
 	line-height: 0;
 	cursor: zoom-in;
 	vertical-align: top;
+}
+
+.comment-body .comment-text .connect-chat-creation-embed.is-broken,
+.connect-comment .comment-text .connect-chat-creation-embed.is-broken,
+.comment-body .comment-text .connect-chat-creation-embed--error,
+.connect-comment .comment-text .connect-chat-creation-embed--error,
+.comment-body .comment-text .connect-chat-creation-embed.is-broken .connect-chat-creation-embed-inner,
+.connect-comment .comment-text .connect-chat-creation-embed.is-broken .connect-chat-creation-embed-inner,
+.comment-body .comment-text .connect-chat-creation-embed--error .connect-chat-creation-embed-inner,
+.connect-comment .comment-text .connect-chat-creation-embed--error .connect-chat-creation-embed-inner,
+.comment-body .comment-text .connect-chat-creation-embed.is-broken .user-text-inline-image-link,
+.connect-comment .comment-text .connect-chat-creation-embed.is-broken .user-text-inline-image-link,
+.comment-body .comment-text .connect-chat-creation-embed--error .user-text-inline-image-link,
+.connect-comment .comment-text .connect-chat-creation-embed--error .user-text-inline-image-link {
+	cursor: default;
 }
 
 .comment-body .comment-text .connect-chat-creation-embed--square .connect-chat-creation-embed-img,

@@ -118,7 +118,11 @@ try {
  const images = {...basic,body:['a','b','c','d'].map(name => '/api/images/generic/profile/1/generic_'+name+'.png').join('\n')};
  view.render({messages:[images],hasMore:false,editable:true});
  assert.ok(stream.querySelector('.user-text-inline-media-group'), 'consecutive image hydration groups media');
- for (const img of stream.querySelectorAll('.user-text-inline-image')) {
+ const inlineImages = [...stream.querySelectorAll('.user-text-inline-image')];
+ inlineImages[0].dispatchEvent(new w.Event('error'));
+ assert.ok(inlineImages[0].closest('.user-text-inline-image-wrap').classList.contains('is-broken'));
+ assert.ok(inlineImages[0].closest('.user-text-inline-image-wrap').querySelector('.connect-chat-media-broken'));
+ for (const img of inlineImages.slice(1)) {
   assert.equal(img.dataset.inlineImageHydrateBound,'1');
   img.dispatchEvent(new w.Event('load'));
   assert.ok(!img.closest('.user-text-inline-image-wrap').classList.contains('is-loading'));

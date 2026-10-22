@@ -5,6 +5,7 @@ const clone = createTemplateFactory(markup);
 
 import { REACTION_ORDER, REACTION_ICONS } from '../../icons/svg-strings.js';
 import { buildChatReactionMetaRowHtml, messageHasAnyReactions } from './MessageRow.js';
+import { reactionPickerPosition } from './placeReactionPicker.js';
 
 function label(key) { return key.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase(); }
 
@@ -18,6 +19,7 @@ export function bindMessageReactions({ root, getRecord, onReact }) {
 	let opener = null;
 	let destroyed = false;
 	function close(restoreFocus = false) {
+		opener?.closest('.connect-chat-msg')?.classList.remove('connect-chat-msg--picker-open');
 		picker?.remove(); picker = null;
 		if (restoreFocus && opener?.isConnected) opener.focus({ preventScroll: true });
 		opener = null;
@@ -48,8 +50,37 @@ export function bindMessageReactions({ root, getRecord, onReact }) {
 		catch (error) { if (!destroyed) errors.set(id, error.message || 'Could not save reaction.'); }
 		finally { pending.delete(id); if (!destroyed) refresh(id); }
 	}
+	function viewportBox() {
+		const viewport = window.visualViewport;
+		return {
+			offsetLeft: viewport?.offsetLeft || 0,
+			offsetTop: viewport?.offsetTop || 0,
+			width: viewport?.width || window.innerWidth,
+			height: viewport?.height || window.innerHeight,
+		};
+	}
+	function visibleComposerTop() {
+		for (const composer of document.querySelectorAll('.app-outlet__composer')) {
+			if (composer.hidden) continue;
+			const rect = composer.getBoundingClientRect();
+			if (rect.height > 0) return rect.top;
+		}
+		return null;
+	}
+	function place() {
+		if (!picker || !opener?.isConnected) return;
+		const { left, top } = reactionPickerPosition({
+			anchor: opener.getBoundingClientRect(),
+			popup: picker.getBoundingClientRect(),
+			viewport: viewportBox(),
+			composerTop: visibleComposerTop(),
+		});
+		picker.style.left = `${left}px`;
+		picker.style.top = `${top}px`;
+	}
 	function open(button) {
 		close(); opener = button;
+		button.closest('.connect-chat-msg')?.classList.add('connect-chat-msg--picker-open');
 		picker = clone('picker');
 		const grid = picker.firstElementChild;
 		for (const key of REACTION_ORDER) {
@@ -57,7 +88,18 @@ export function bindMessageReactions({ root, getRecord, onReact }) {
 			choice.setAttribute('aria-label', label(key)); choice.title = label(key); choice.firstElementChild.innerHTML = REACTION_ICONS[key]('comment-reaction-icon');
 			choice.addEventListener('click', () => { const id = button.dataset.chatMessageId; close(true); void react(id, key); }); grid.append(choice);
 		}
-		picker.append(grid); document.body.append(picker);
+		picker.append(grid);
+		// Shared comment CSS anchors this class. With no anchor name, Chrome
+		// (Windows and mobile) paints the first frame at the static position,
+		// which is the bottom of the page. Hold it until the measured place lands.
+		picker.style.positionAnchor = 'auto';
+		picker.style.positionTryFallbacks = 'none';
+		picker.style.positionVisibility = 'always';
+		picker.style.margin = '0';
+		picker.style.visibility = 'hidden';
+		picker.style.left = '0px';
+		picker.style.top = '0px';
+		document.body.append(picker);
 		grid.addEventListener('keydown', (event) => {
 			const steps = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: 5, ArrowUp: -5 };
 			if (!(event.key in steps)) return;
@@ -65,19 +107,32 @@ export function bindMessageReactions({ root, getRecord, onReact }) {
 			const choices = [...grid.children]; const index = choices.indexOf(document.activeElement);
 			choices[(index + steps[event.key] + choices.length) % choices.length]?.focus({ preventScroll: true });
 		});
-		const rect = button.getBoundingClientRect(); const bounds = picker.getBoundingClientRect();
-		picker.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - bounds.width - 8))}px`;
-		picker.style.top = `${Math.max(8, Math.min(rect.bottom + 4, window.innerHeight - bounds.height - 8))}px`;
-		grid.firstChild.focus({ preventScroll: true });
+		place();
+		// Stay hidden through the first frame. Chrome can still resolve the
+		// shared anchor rule once before the inline coordinates stick.
+		requestAnimationFrame(() => {
+			if (!picker) return;
+			place();
+			picker.style.visibility = '';
+			grid.firstChild?.focus({ preventScroll: true });
+		});
 	}
 	root.addEventListener('click', (event) => {
 		const pill = event.target.closest('.comment-reaction-pill, .connect-chat-msg-hover-react'); if (pill && !pill.disabled) void react(pill.dataset.chatMessageId, pill.dataset.emojiKey);
 		const add = event.target.closest('.comment-reaction-add, .connect-chat-msg-hover-add-react'); if (add && !add.disabled) open(add);
 	}, { signal: abort.signal });
+	root.addEventListener('pointerover', (event) => {
+		if (!picker || !opener) return;
+		const row = event.target instanceof Element ? event.target.closest('.connect-chat-msg') : null;
+		if (!row || row.contains(opener)) return;
+		close();
+	}, { signal: abort.signal });
 	document.addEventListener('pointerdown', (event) => { if (picker && !picker.contains(event.target) && !opener?.contains(event.target)) close(); }, { signal: abort.signal });
 	document.addEventListener('keydown', (event) => { if (picker && event.key === 'Escape') { event.preventDefault(); close(true); } }, { signal: abort.signal });
 	document.addEventListener('focusin', (event) => { if (picker && !picker.contains(event.target) && event.target !== opener) close(); }, { signal: abort.signal });
 	window.addEventListener('resize', () => close(), { signal: abort.signal });
+	window.visualViewport?.addEventListener('resize', () => place(), { signal: abort.signal });
+	window.visualViewport?.addEventListener('scroll', () => place(), { signal: abort.signal });
 	document.addEventListener('scroll', () => close(), { capture: true, passive: true, signal: abort.signal });
 	return { update, close, destroy() { destroyed = true; abort.abort(); close(); pending.clear(); errors.clear(); } };
 }
