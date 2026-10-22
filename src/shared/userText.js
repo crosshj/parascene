@@ -199,6 +199,13 @@ export const DEFAULT_APP_ORIGIN = 'https://www.parascene.com';
 
 /** Share links host (must match `SHARE_HOSTNAME` in api_routes/utils/url.js). */
 const PARASCENE_SHARE_HOST = 'sh.parascene.com';
+const PRODUCTION_CDN_HOST = 'cdn.parascene.com';
+const BETA_CDN_HOST = 'beta-cdn.parascene.com';
+
+function isKnownCdnHost(hostname) {
+	const host = String(hostname || '').toLowerCase();
+	return host === PRODUCTION_CDN_HOST || host === BETA_CDN_HOST;
+}
 
 /**
  * Expands bare paths like `/creations/123` (not already `https://...`) into absolute URLs
@@ -229,7 +236,7 @@ function genericPathForValidation(value) {
 	const raw = String(value || '');
 	try {
 		const parsed = new URL(raw, DEFAULT_APP_ORIGIN);
-		if (parsed.hostname.toLowerCase() === 'cdn.parascene.com') return parsed.pathname + parsed.search + parsed.hash;
+		if (isKnownCdnHost(parsed.hostname)) return parsed.pathname + parsed.search + parsed.hash;
 	} catch {}
 	return raw;
 }
@@ -462,7 +469,7 @@ function expandBareInlineGenericImageApiPaths(text) {
 
 function expandBareCdnShareUrls(text) {
 	return String(text ?? '').replace(
-		/(^|[\s(])((?:\/\/)?cdn\.parascene\.com\/s\/[^\s"'<>]+)/gi,
+		/(^|[\s(])((?:\/\/)?(?:beta-cdn|cdn)\.parascene\.com\/s\/[^\s"'<>]+)/gi,
 		(_match, prefix, value) => `${prefix}https://${value.replace(/^\/\//, '')}`
 	);
 }
@@ -470,7 +477,8 @@ function expandBareCdnShareUrls(text) {
 const PARASCENE_HOSTS = [
 	new URL(DEFAULT_APP_ORIGIN).hostname,
 	'parascene.com',
-	'cdn.parascene.com'
+	PRODUCTION_CDN_HOST,
+	BETA_CDN_HOST
 ];
 
 /**
@@ -492,7 +500,7 @@ function getParasceneRelativePath(url) {
 			parsed.origin === window.location.origin;
 		const isParasceneHost = PARASCENE_HOSTS.includes(host);
 		if (!isSameOrigin && !isParasceneHost) return null;
-		if (host === 'cdn.parascene.com') return parsed.href;
+		if (isKnownCdnHost(host)) return parsed.href;
 		const path = parsed.pathname || '/';
 		const search = parsed.search || '';
 		const hash = parsed.hash || '';
