@@ -207,6 +207,14 @@ function isKnownCdnHost(hostname) {
 	return host === PRODUCTION_CDN_HOST || host === BETA_CDN_HOST;
 }
 
+/** beta-cdn no longer serves /s/ files. Those objects are on the production CDN host. */
+function cdnUrlForRender(parsed) {
+	const path = parsed.pathname || '/';
+	const asset = path.startsWith('/s/') || path.startsWith('/api/files') || path.startsWith('/api/images/generic');
+	if (asset && parsed.hostname.toLowerCase() === BETA_CDN_HOST) parsed.hostname = PRODUCTION_CDN_HOST;
+	return parsed.href;
+}
+
 /**
  * Expands bare paths like `/creations/123` (not already `https://...`) into absolute URLs
  * so the main URL pass can turn them into same-origin links. Does not match `/creations/123/edit`.
@@ -500,7 +508,7 @@ function getParasceneRelativePath(url) {
 			parsed.origin === window.location.origin;
 		const isParasceneHost = PARASCENE_HOSTS.includes(host);
 		if (!isSameOrigin && !isParasceneHost) return null;
-		if (isKnownCdnHost(host)) return parsed.href;
+		if (isKnownCdnHost(host)) return cdnUrlForRender(parsed);
 		const path = parsed.pathname || '/';
 		const search = parsed.search || '';
 		const hash = parsed.hash || '';
