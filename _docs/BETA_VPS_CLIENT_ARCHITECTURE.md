@@ -244,9 +244,12 @@ owned document listeners/observers, and releases media and recording tracks on
 teardown.
 
 The Sidebar owns the account menu, Settings and About modal hosts. The menu calls
-explicit native navigation/session callbacks. Reports retains the existing
-localhost-only link to the separate development analytics server on port 2367;
-it is not a production report-service migration.
+explicit native navigation/session callbacks. Reports opens the localhost-only
+HTML dashboard at `/reports/` on the same development server. Its static app,
+shared CSS and refreshed JSON snapshot are served by `server/routes/reports.js`;
+the route requires a loopback connection. Production mode leaves it unmounted
+unless `LOCAL_REPORTS_ENABLED=1`; the local dev launcher sets that flag while
+preserving the inherited `NODE_ENV`. Deployed servers do not set the flag.
 
 ### Browse grids, search composer and shared lightbox (2026-10-04)
 

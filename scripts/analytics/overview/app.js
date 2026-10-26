@@ -1,7 +1,7 @@
 /**
  * Overview report — static app (ES module).
  *
- * Served over http://localhost:2367/reports/ (dev only). Imports the shared
+ * Served at /reports/ on the local app server (dev only). Imports the shared
  * metric/chart math from ./metrics.js and fetches the local store (./store.json,
  * refreshed by overview-refresh.js). The HTML never changes; only the store does.
  */

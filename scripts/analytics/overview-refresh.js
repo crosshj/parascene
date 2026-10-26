@@ -181,10 +181,10 @@ function buildVisitDay(row) {
 	};
 }
 
-async function loadUsers() {
-	const { openDb } = await import("../../_legacy/db/index.js");
-	const dbInstance = await openDb({ quiet: true });
-	const usersRaw = await dbInstance?.queries?.selectUsers?.all?.();
+async function loadUsers(client) {
+	const usersRaw = await fetchSupabaseRows(client, "prsn_users", "id,email,role,created_at,meta", {
+		applyFilter: (q) => q.order("id", { ascending: true })
+	});
 	const allowed = (Array.isArray(usersRaw) ? usersRaw : [])
 		.map((row) => {
 			const meta = parseMeta(row.meta);
@@ -197,7 +197,7 @@ async function loadUsers() {
 			};
 		})
 		.filter((u) => u.role === "consumer" && !u.suspended && Number.isFinite(u.id));
-	const labels = await resolveUserLabels(allowed.map((u) => u.id));
+	const labels = await resolveUserLabels(client, allowed.map((u) => u.id));
 	const users = allowed.map((u) => {
 		const info = labels.get(u.id);
 		return {
@@ -211,33 +211,39 @@ async function loadUsers() {
 	return { users, allowedIds: new Set(allowed.map((u) => u.id)) };
 }
 
-async function resolveUserLabels(userIds) {
+async function resolveUserLabels(client, userIds) {
 	const ids = [...new Set(userIds.filter((id) => Number.isFinite(Number(id))).map(Number))];
 	if (!ids.length) return new Map();
-	const { openDb } = await import("../../_legacy/db/index.js");
-	const { getNotificationDisplayName } = await import("../../_legacy/api_routes/utils/displayName.js");
-	const { queries } = await openDb({ quiet: true });
-	const profiles =
-		typeof queries.selectUserProfilesByUserIds === "function" ? await queries.selectUserProfilesByUserIds(ids) : new Map();
-	const users = typeof queries.selectUsersByIds === "function" ? await queries.selectUsersByIds(ids) : new Map();
 	const out = new Map();
-	for (const id of ids) {
-		const profile = profiles.get(id);
-		const user = users.get(id);
-		out.set(id, {
-			user_id: id,
-			user_name: profile?.user_name ?? null,
-			label: getNotificationDisplayName(
-				{ email: user?.email, display_name: profile?.display_name, user_name: profile?.user_name },
-				profile
-			)
-		});
+	for (let i = 0; i < ids.length; i += 200) {
+		const chunk = ids.slice(i, i + 200);
+		const [profileRows, userRows] = await Promise.all([
+			fetchSupabaseRows(client, "prsn_user_profiles", "user_id,user_name,display_name", {
+				applyFilter: (q) => q.in("user_id", chunk).order("user_id", { ascending: true })
+			}),
+			fetchSupabaseRows(client, "prsn_users", "id,email", {
+				applyFilter: (q) => q.in("id", chunk).order("id", { ascending: true })
+			})
+		]);
+		const profiles = new Map(profileRows.map((row) => [Number(row.user_id), row]));
+		const users = new Map(userRows.map((row) => [Number(row.id), row]));
+		for (const id of chunk) {
+			const profile = profiles.get(id);
+			const email = String(users.get(id)?.email || "").trim();
+			const userName = profile?.user_name?.trim();
+			const localPart = email.split("@")[0];
+			out.set(id, {
+				user_id: id,
+				user_name: profile?.user_name ?? null,
+				label: profile?.display_name?.trim() || (userName ? `@${userName}` : localPart ? `@${localPart}` : "Someone")
+			});
+		}
 	}
 	return out;
 }
 
 /** Handles for authed visit-pulse users not in the consumer `users` list (admin, etc.). */
-async function loadVisitUserHandles(visitDaily, users) {
+async function loadVisitUserHandles(client, visitDaily, users) {
 	const known = new Set((users || []).map((u) => u.id));
 	const extra = new Set();
 	for (const row of visitDaily || []) {
@@ -247,7 +253,7 @@ async function loadVisitUserHandles(visitDaily, users) {
 		}
 	}
 	if (!extra.size) return [];
-	const labels = await resolveUserLabels([...extra]);
+	const labels = await resolveUserLabels(client, [...extra]);
 	return [...extra]
 		.sort((a, b) => a - b)
 		.map((id) => ({ id, userName: labels.get(id)?.user_name ?? null }));
@@ -569,7 +575,7 @@ async function main() {
 			: `[overview-refresh] mode: incremental (since ${sinceDay})`
 	);
 
-	const { users, allowedIds } = await loadUsers();
+	const { users, allowedIds } = await loadUsers(client);
 	const [freshUserDay, freshVisitDaily, freshFunnelDaily, transitions, challengeData] = await Promise.all([
 		loadUserDay(client, allowedIds, { sinceDay }),
 		loadVisitDaily(client, { sinceDay }),
@@ -586,8 +592,6 @@ async function main() {
 		visitDaily = mergeByDayKey(existing.visitDaily, freshVisitDaily, "day", sinceDay);
 		funnelDaily = mergeByDayKey(existing.funnelDaily, freshFunnelDaily, "day", sinceDay);
 	}
-	const userHandles = await loadVisitUserHandles(visitDaily, users);
-
 	if (!hasFlag("no-live")) {
 		const today = await loadTodayLive();
 		if (today) {
@@ -597,6 +601,7 @@ async function main() {
 			visitDaily.sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0));
 		}
 	}
+	const userHandles = await loadVisitUserHandles(client, visitDaily, users);
 
 	const launchDay = computeLaunchDay({ users, userDay, visitDaily });
 	const store = {

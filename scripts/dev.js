@@ -14,7 +14,7 @@ console.log("[dev] Rollup and Express output will follow; refresh the browser af
 function start(command, args, label) {
 	const child = spawn(command, args, {
 		cwd: appRoot,
-		env: { ...process.env, NODE_ENV: process.env.NODE_ENV || "development" },
+		env: { ...process.env, NODE_ENV: process.env.NODE_ENV || "development", LOCAL_REPORTS_ENABLED: "1" },
 		stdio: "inherit"
 	});
 	child.on("exit", (code, signal) => {

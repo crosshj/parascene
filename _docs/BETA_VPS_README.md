@@ -46,10 +46,23 @@ npm run dev
 This starts the Express beta server and Rollup in watch mode together. Changes
 to `client/` rebuild the hashed JS/CSS assets; changes to server modules restart
 the server; changes to page HTML/CSS are served on the next browser refresh.
+The launcher preserves the calling shell's `NODE_ENV` (defaulting to
+`development` when unset) and sets `LOCAL_REPORTS_ENABLED=1` so local reports
+also work when the shell uses production mode.
 Open the local beta origin printed by the server (normally
 `http://localhost:3000/`). The first dev loop intentionally uses a normal
 browser refresh rather than runtime style injection or hot-module replacement,
 so the behavior remains close to the production asset path.
+
+The Reports account-menu item opens the HTML analytics dashboard at
+`http://localhost:3000/reports/` (or `/reports/` on the configured local port).
+Refresh its data from the repo root with
+`node scripts/analytics/overview-refresh.js`, then reload the report. Add
+`--full` to rebuild the snapshot or `--no-live` to skip Redis. The server serves
+the app's JavaScript, shared CSS and `.output/overview/store.json` beneath
+`/reports/`; these routes are available only in local development.
+Report requests must come directly from a loopback connection. Production
+deployments leave the route disabled unless `LOCAL_REPORTS_ENABLED=1` is set.
 
 The Files page also provides a temporary shared URL at
 `https://cdn.parascene.com/s/{signed-key}/{original-filename}`. The signed key
