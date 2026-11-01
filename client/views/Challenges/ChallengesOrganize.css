@@ -1373,6 +1373,75 @@
 	font-size: 12px;
 }
 
+/* Payout progress modal (confirm → loading → success/error) */
+.challenge-payout-dialog {
+	--app-modal-max-width: 420px;
+}
+
+.challenge-payout-dialog .app-dialog__body {
+	min-height: 96px;
+}
+
+.challenge-payout-modal-message {
+	margin: 0;
+	font-size: 0.95rem;
+	line-height: 1.5;
+	color: var(--text);
+}
+
+.challenge-payout-modal-loading {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 14px;
+	padding: 12px 0 4px;
+}
+
+.challenge-payout-modal-loading[hidden] {
+	display: none;
+}
+
+.challenge-payout-modal-spinner {
+	width: 36px;
+	height: 36px;
+	border: 3px solid var(--border);
+	border-top-color: var(--accent);
+	border-radius: 50%;
+	animation: challenge-payout-spin 0.8s linear infinite;
+}
+
+.challenge-payout-modal-loading-label {
+	margin: 0;
+	font-size: 0.95rem;
+	color: var(--text-muted);
+}
+
+.challenge-payout-modal-status {
+	margin: 0;
+	font-size: 0.95rem;
+	line-height: 1.5;
+}
+
+.challenge-payout-modal-status.is-success {
+	color: var(--color-green-fg, var(--color-green));
+}
+
+.challenge-payout-modal-status.is-error {
+	color: var(--error-text, var(--error));
+}
+
+.challenge-payout-dialog[data-phase='loading'] .modal-dismiss {
+	visibility: hidden;
+	pointer-events: none;
+}
+
+@keyframes challenge-payout-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
 @media (max-width: 768px) {
 	.challenges-organize-root--spa {
 		padding: 12px 12px 96px;

@@ -19,6 +19,7 @@ import {
 	renderResultsPanelErrorHtml,
 	renderResultsPayoutLedgerHtml
 } from './views/reviewResultsView.js';
+import { openPayoutProgressModal } from './payoutProgressModal.js';
 
 const PLACE_LABELS = { 1: '1st place', 2: '2nd place', 3: '3rd place' };
 const PLACE_AMOUNTS = (prizes) => ({
@@ -538,16 +539,19 @@ export function mountOrganizeResultsPanel(mountEl, ctx) {
 			setError('Set a recipient for every unpaid prize before paying.');
 			return;
 		}
-		const ok = window.confirm(
-			`Pay ${count} unpaid prize${count === 1 ? '' : 's'} (${total.toLocaleString()} credits) from the admin account?\n\nEach recipient gets a congratulatory tip notification.`
-		);
+
+		const modal = openPayoutProgressModal({ count, total });
+		const ok = await modal.waitForConfirm();
 		if (!ok) return;
 
 		state.busyKey = 'pay-all';
 		render();
+		modal.setLoading('Paying prizes…');
 		try {
 			if (!hasDraft() || isOrderDirty()) {
+				modal.setLoading('Saving payout order…');
 				await persistOrder();
+				modal.setLoading('Paying prizes…');
 			}
 			const res = await fetch(retryEndpoint, {
 				method: 'POST',
@@ -560,19 +564,30 @@ export function mountOrganizeResultsPanel(mountEl, ctx) {
 				throw new Error(data?.message || data?.error || 'Could not pay prizes.');
 			}
 			const failed = Array.isArray(data.failed) ? data.failed : [];
+			const paid = Number(data.paid) || 0;
 			if (data.results) applyServerResults(data.results);
 			else captureSavedOrder();
 			state.busyKey = null;
 			render();
 			if (failed.length) {
-				setError(
-					`Paid ${Number(data.paid) || 0}; ${failed.length} failed${failed[0]?.error ? ` (${failed[0].error})` : ''}.`
+				const detail = failed[0]?.error ? ` (${failed[0].error})` : '';
+				const msg = `Paid ${paid}; ${failed.length} failed${detail}.`;
+				setError(msg);
+				modal.setError(msg);
+			} else {
+				const prizeWord = paid === 1 ? 'prize' : 'prizes';
+				modal.setSuccess(
+					paid > 0
+						? `Successfully paid ${paid} ${prizeWord}. Recipients were tipped and notified.`
+						: 'No unpaid prizes were left to pay.'
 				);
 			}
 		} catch (err) {
 			state.busyKey = null;
 			render();
-			setError(err instanceof Error && err.message ? err.message : 'Could not pay prizes.');
+			const msg = err instanceof Error && err.message ? err.message : 'Could not pay prizes.';
+			setError(msg);
+			modal.setError(msg);
 		}
 	};
 
