@@ -1128,15 +1128,22 @@ router.get("/api/chat/challenges/organize/assignable", async (req, res) => {
 				const normalizedTrack = track === "weekly" || track === "suno" ? track : "monthly";
 				if (!ctx.tracks.includes(normalizedTrack)) continue;
 				const phase = deriveChallengePhase(merged, now);
-				// Completed challenges (voting closed) can't take new organizer media assignments.
-				if (CHALLENGE_ENDED_PHASES.has(phase)) continue;
+				// After voting closes, only the results/highlights post stays assignable.
+				const ended = CHALLENGE_ENDED_PHASES.has(phase);
 				const slots = {};
 				for (const role of ["hero", "results", "topic_vote"]) {
 					const url = ORGANIZER_ASSIGN_ROLE_PICKERS[role](merged);
 					const assignedId = parseCreationIdFromChallengeHeroRef(url);
 					slots[role] = {
-						url: url || null,
-						creation_id: Number.isFinite(assignedId) && assignedId > 0 ? assignedId : null
+						url: role === "topic_vote" ? null : url || null,
+						creation_id:
+							role === "topic_vote"
+								? null
+								: Number.isFinite(assignedId) && assignedId > 0
+									? assignedId
+									: null,
+						// Theme vote retired for now — keep row for CSS hide / easy revive.
+						locked: role === "topic_vote" || (ended && role !== "results")
 					};
 				}
 				challenges.push({
@@ -1146,7 +1153,8 @@ router.get("/api/chat/challenges/organize/assignable", async (req, res) => {
 					phase,
 					accepts_submissions: phase === "submitting" || phase === "submit_and_vote",
 					newest_message_id: row.newestMessageId,
-					slots
+					slots,
+					assignable_roles: ended ? ["results"] : ["hero", "results"]
 				});
 			}
 			challenges.sort((a, b) => b.newest_message_id - a.newest_message_id);
@@ -1181,6 +1189,13 @@ router.post("/api/chat/challenges/organize/assign-creation", async (req, res) =>
 			if (!ORGANIZER_ASSIGN_ROLE_FIELDS[role]) {
 				return res.status(400).json({ error: "Bad request", message: "role must be hero, results, or topic_vote" });
 			}
+			// Theme vote retired for now — keep role wiring, reject assigns.
+			if (role === "topic_vote") {
+				return res.status(400).json({
+					error: "Bad request",
+					message: "Theme vote media is disabled for now."
+				});
+			}
 			if (!remove && (!Number.isFinite(createdImageId) || createdImageId <= 0)) {
 				return res.status(400).json({ error: "Bad request", message: "created_image_id required" });
 			}
@@ -1203,10 +1218,12 @@ router.post("/api/chat/challenges/organize/assign-creation", async (req, res) =>
 				return res.status(403).json({ error: "Forbidden", message: "Not an organizer for this challenge type" });
 			}
 			const phase = deriveChallengePhase(merged, Date.now());
-			if (CHALLENGE_ENDED_PHASES.has(phase)) {
+			// Results/highlights stay editable after voting closes (and after finalize).
+			if (CHALLENGE_ENDED_PHASES.has(phase) && role !== "results") {
 				return res.status(400).json({
 					error: "Bad request",
-					message: "This challenge is complete — organizer media can no longer be changed."
+					message:
+						"This challenge is complete — only the results post can still be changed."
 				});
 			}
 

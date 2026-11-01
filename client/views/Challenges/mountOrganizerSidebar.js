@@ -913,7 +913,7 @@ export function mountChallengesOrganizerTools(host, opts) {
 						applyPinSlotsToPayload(payload, fd, {
 							heroRef,
 							resultsRef,
-							topicVoteRef
+							topicVoteRef: ''
 						});
 						shouldSyncPins = true;
 					}
@@ -921,10 +921,6 @@ export function mountChallengesOrganizerTools(host, opts) {
 				} else if (isEditForm && editSection === 'results-late') {
 					if (!resultsRef) {
 						setFormError('Paste a creation URL for the results post.');
-						return;
-					}
-					if (pickChallengeResultsCreationUrl(base)) {
-						setFormError('A results post is already attached.');
 						return;
 					}
 					payload = {
@@ -951,12 +947,13 @@ export function mountChallengesOrganizerTools(host, opts) {
 							applyPinSlotsToPayload(payload, fd, {
 								heroRef,
 								resultsRef,
-								topicVoteRef
+								topicVoteRef: ''
 							});
 							shouldSyncPins = true;
 						} else {
-							if (topicVoteRef) payload.topic_vote_creation_url = topicVoteRef;
-							else delete payload.topic_vote_creation_url;
+							delete payload.topic_vote_creation_url;
+							delete payload.theme_vote_creation_url;
+							delete payload.topic_vote_url;
 							if (heroRef) payload.hero_image_url = heroRef;
 							else delete payload.hero_image_url;
 							if (resultsRef) payload.results_creation_url = resultsRef;
@@ -1039,14 +1036,15 @@ export function mountChallengesOrganizerTools(host, opts) {
 							applyPinSlotsToPayload(payload, fd, {
 								heroRef,
 								resultsRef,
-								topicVoteRef
+								topicVoteRef: ''
 							});
 							shouldSyncPins =
 								createActiveTab === 'pins' ||
-								Boolean(heroRef || resultsRef || topicVoteRef);
+								Boolean(heroRef || resultsRef);
 						} else {
-							if (topicVoteRef) payload.topic_vote_creation_url = topicVoteRef;
-							else delete payload.topic_vote_creation_url;
+							delete payload.topic_vote_creation_url;
+							delete payload.theme_vote_creation_url;
+							delete payload.topic_vote_url;
 							if (heroRef) payload.hero_image_url = heroRef;
 							else delete payload.hero_image_url;
 							const publishCheckbox = adminForm.querySelector('[name="results_publish_now"]');
@@ -1197,16 +1195,16 @@ export function mountChallengesOrganizerTools(host, opts) {
 				const ops = buildPinSyncOps(challengeId, {
 					heroRef,
 					resultsRef,
-					topicVoteRef,
+					topicVoteRef: '',
 					openStart: String(fd.get('pin_open_start_ymd') || '').trim(),
 					openUntil: String(fd.get('pin_open_until_ymd') || '').trim(),
 					winnersStart: String(fd.get('pin_winners_start_ymd') || '').trim(),
 					winnersUntil: String(fd.get('pin_winners_until_ymd') || '').trim(),
-					topicStart: String(fd.get('pin_topic_vote_start_ymd') || '').trim(),
-					topicUntil: String(fd.get('pin_topic_vote_until_ymd') || '').trim(),
+					topicStart: '',
+					topicUntil: '',
 					openEnabled: pinEnabled('pin_open_enabled'),
 					winnersEnabled: pinEnabled('pin_winners_enabled'),
-					topicEnabled: pinEnabled('pin_topic_vote_enabled'),
+					topicEnabled: false,
 					localStartOfDayToIso,
 					localEndOfDayToIso
 				});

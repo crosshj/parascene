@@ -392,11 +392,11 @@ export function renderOrganizeSoftDeleteConfirmHtml(opts = {}) {
 /**
  * Announce tab: promo / winners / theme-vote creations + date windows.
  * Saving upserts editorial pins via the existing pins route.
+ * Theme vote is CSS-hidden and forced empty for now (easy to revive later).
  * @param {object} latest
  */
 function renderOrganizerPinsSectionHtml(latest) {
 	const cfg = latest && typeof latest === 'object' ? latest : {};
-	const topicVote = pickChallengeTopicVoteCreationUrl(cfg);
 	const heroUrl = pickChallengeHeroImageUrl(cfg);
 	const resultsUrl = pickChallengeResultsCreationUrl(cfg);
 	const windows = resolvePinSlotWindows(cfg);
@@ -415,14 +415,16 @@ function renderOrganizerPinsSectionHtml(latest) {
 			startValue,
 			untilValue,
 			enabledName,
-			enabled
+			enabled,
+			kind = ''
 		} = opts;
 		const pinOn = enabled !== false;
+		const kindAttr = kind ? ` data-organize-pin-kind="${esc(kind)}"` : '';
 		const thumb = renderChallengeHistoryThumbWrapHtml(urlValue, challengeId, esc).replace(
 			'class="challenge-pane-history-card-thumb-wrap"',
 			'class="challenge-pane-history-card-thumb-wrap challenges-organize-pin-thumb-wrap"'
 		);
-		return `<div class="challenges-organize-media-slot challenges-organize-pin-slot${pinOn ? '' : ' is-pin-disabled'}">
+		return `<div class="challenges-organize-media-slot challenges-organize-pin-slot${pinOn ? '' : ' is-pin-disabled'}"${kindAttr}>
 			<div class="challenges-organize-pin-slot-heading">
 				<label class="challenge-pane-label challenges-organize-pin-slot-label">${esc(label)}</label>
 				<label class="challenges-organize-pin-enable">
@@ -464,20 +466,22 @@ function renderOrganizerPinsSectionHtml(latest) {
 				startValue: windows.open.start,
 				untilValue: windows.open.until,
 				enabledName: 'pin_open_enabled',
-				enabled: windows.open.enabled
+				enabled: windows.open.enabled,
+				kind: 'open'
 			})}
 			${slot({
 				label: 'Next challenge — theme vote',
 				urlName: 'topic_vote_creation_url',
-				urlValue: topicVote,
+				urlValue: '',
 				urlPlaceholder: '/creations/123, share link, or image URL',
 				hint: 'Creation used to collect votes on what the <strong>next</strong> challenge should be about — not this one.',
 				startName: 'pin_topic_vote_start_ymd',
 				untilName: 'pin_topic_vote_until_ymd',
-				startValue: windows.topic_vote.start,
-				untilValue: windows.topic_vote.until,
+				startValue: '',
+				untilValue: '',
 				enabledName: 'pin_topic_vote_enabled',
-				enabled: windows.topic_vote.enabled
+				enabled: false,
+				kind: 'topic_vote'
 			})}
 			${slot({
 				label: 'Results / highlights',
@@ -490,7 +494,8 @@ function renderOrganizerPinsSectionHtml(latest) {
 				startValue: windows.winners.start,
 				untilValue: windows.winners.until,
 				enabledName: 'pin_winners_enabled',
-				enabled: windows.winners.enabled
+				enabled: windows.winners.enabled,
+				kind: 'winners'
 			})}
 		</div>`;
 }
@@ -529,18 +534,20 @@ function renderOrganizeViewField(label, value, opts = {}) {
 }
 
 /**
- * After finalize, completed challenges are view-only — except attaching a
- * missing results/highlights creation.
+ * After voting closes / finalize, completed challenges are view-only — except the
+ * results/highlights post, which organizers often need to revise.
  * @param {object} cfg
  * @param {number | null | undefined} configMessageId
  */
 function renderOrganizeLateResultsFormHtml(cfg, configMessageId) {
+	const resultsUrl = pickChallengeResultsCreationUrl(cfg);
+	const hasResults = Boolean(resultsUrl);
 	return `<form class="challenges-organize-view-add-results" data-challenge-admin-config-form data-challenge-admin-form="edit" data-challenge-admin-edit-section="results-late">
 		${editFormHiddenIds(cfg, configMessageId)}
 		<div class="challenges-organize-view-add-results-row">
 			<input type="text" name="results_creation_url" class="challenge-pane-input" maxlength="2000"
-				placeholder="/creations/123" autocomplete="off" aria-label="Results / highlights creation URL" />
-			<button type="submit" class="btn-primary challenge-pane-admin-submit">Add</button>
+				placeholder="/creations/123" autocomplete="off" aria-label="Results / highlights creation URL" value="${esc(resultsUrl)}" />
+			<button type="submit" class="btn-primary challenge-pane-admin-submit">${hasResults ? 'Update' : 'Add'}</button>
 		</div>
 		<div class="challenge-pane-form-error challenge-pane-admin-error" data-challenge-admin-error hidden role="alert"></div>
 		<div class="challenge-pane-admin-success" data-challenge-admin-success hidden role="status" aria-live="polite"></div>
@@ -549,7 +556,7 @@ function renderOrganizeLateResultsFormHtml(cfg, configMessageId) {
 
 /**
  * Completed challenge: same tabs as edit, values only (no inputs).
- * Missing results/highlights can still be attached after finalize.
+ * Results/highlights stay editable after finalize so organizers can revise the post.
  * @param {object} latest
  * @param {{ activeTab?: string, configMessageId?: number | null }} [opts]
  */
@@ -576,7 +583,6 @@ export function renderChallengeOrganizerViewHtml(latest, opts = {}) {
 	const endYmd = dt.submission_end_ymd || startYmd;
 	const topicVote = pickChallengeTopicVoteCreationUrl(cfg);
 	const heroUrl = pickChallengeHeroImageUrl(cfg);
-	const resultsUrl = pickChallengeResultsCreationUrl(cfg);
 	const pinWindows = resolvePinSlotWindows(cfg);
 
 	const tabBtn = (id, label, iconSvg) => {
@@ -621,6 +627,18 @@ export function renderChallengeOrganizerViewHtml(latest, opts = {}) {
 		return start || until;
 	};
 
+	const resultsFieldHtml = renderOrganizeViewField('Results / highlights', '', {
+		bodyHtml: renderOrganizeLateResultsFormHtml(cfg, opts.configMessageId)
+	});
+	const pinsPanelHtml = [
+		renderOrganizeViewField('Announce / hero', heroUrl, { href: Boolean(heroUrl) }),
+		renderOrganizeViewField('Open pin', pinWindowLabel(pinWindows.open)),
+		`<div data-organize-theme-vote-field>${renderOrganizeViewField('Next challenge — theme vote', topicVote, { href: Boolean(topicVote) })}</div>`,
+		`<div data-organize-theme-vote-field>${renderOrganizeViewField('Theme-vote pin', pinWindowLabel(pinWindows.topic_vote))}</div>`,
+		resultsFieldHtml,
+		renderOrganizeViewField('Winners pin', pinWindowLabel(pinWindows.winners))
+	].join('\n\t\t\t');
+
 	return `<div class="challenges-organize-view" data-challenges-organize-view>
 		<div class="challenges-organize-edit-tabs" role="tablist" aria-label="View challenge">
 			${tabBtn('details', 'Details', pencilIcon('challenges-organize-edit-tab-svg'))}
@@ -633,21 +651,7 @@ export function renderChallengeOrganizerViewHtml(latest, opts = {}) {
 			`${renderOrganizeViewField('Title', title)}
 			${renderOrganizeViewField('Description', details)}`
 		)}
-		${panel(
-			'pins',
-			`${renderOrganizeViewField('Announce / hero', heroUrl, { href: Boolean(heroUrl) })}
-			${renderOrganizeViewField('Open pin', pinWindowLabel(pinWindows.open))}
-			${renderOrganizeViewField('Next challenge — theme vote', topicVote, { href: Boolean(topicVote) })}
-			${renderOrganizeViewField('Theme-vote pin', pinWindowLabel(pinWindows.topic_vote))}
-			${
-				resultsUrl
-					? renderOrganizeViewField('Results / highlights', resultsUrl, { href: true })
-					: renderOrganizeViewField('Results / highlights', '', {
-							bodyHtml: renderOrganizeLateResultsFormHtml(cfg, opts.configMessageId)
-						})
-			}
-			${renderOrganizeViewField('Winners pin', pinWindowLabel(pinWindows.winners))}`
-		)}
+		${panel('pins', pinsPanelHtml)}
 		${panel(
 			'schedule',
 			`${renderOrganizeViewField('Track', trackLabel)}

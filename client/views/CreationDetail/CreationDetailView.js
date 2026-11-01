@@ -3047,6 +3047,7 @@ async function fillOrganizerAssignModalContent(bodyEl, creationId, { isChallenge
 			const assignedId = Number(slot.creation_id);
 			const hasAssigned = Number.isFinite(assignedId) && assignedId > 0;
 			const isThis = hasAssigned && assignedId === cid;
+			const roleLocked = slot.locked === true;
 			let currentHtml;
 			if (isThis) {
 				currentHtml = `<span class="creation-detail-organizer-assign-current creation-detail-organizer-assign-current-this">This creation</span>`;
@@ -3057,9 +3058,16 @@ async function fillOrganizerAssignModalContent(bodyEl, creationId, { isChallenge
 			} else {
 				currentHtml = `<span class="creation-detail-organizer-assign-current creation-detail-organizer-assign-current-empty">Not set</span>`;
 			}
-			const btnLabel = isThis ? 'Remove' : hasAssigned || slot.url ? 'Replace with this creation' : 'Use this creation';
+			const btnLabel = roleLocked
+				? 'Locked'
+				: isThis
+					? 'Remove'
+					: hasAssigned || slot.url
+						? 'Replace with this creation'
+						: 'Use this creation';
 			const btnAction = isThis ? 'remove' : 'assign';
-			const disabledAttr = isChallengeEntry && !isThis ? ' disabled' : '';
+			const disabledAttr =
+				roleLocked || (isChallengeEntry && !isThis) ? ' disabled' : '';
 			return `
 			<div class="creation-detail-organizer-assign-row">
 				<div class="creation-detail-organizer-assign-row-main">

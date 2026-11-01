@@ -399,7 +399,7 @@ test('detail header actions follow active and past challenge phases', () => {
 	assert.deepEqual(detailOrganizerHeaderActions('voting').map((action) => action.label), ['Manage', 'Results']);
 	assert.deepEqual(detailOrganizerHeaderActions('submit_and_vote').map((action) => action.label), ['Manage', 'Results']);
 	assert.deepEqual(detailOrganizerHeaderActions('results').map((action) => action.label), ['View', 'Results']);
-	assert.deepEqual(detailOrganizerHeaderActions('finalizing').map((action) => action.label), ['View', 'Results']);
+	assert.deepEqual(detailOrganizerHeaderActions('finalizing').map((action) => action.label), ['Manage', 'Results']);
 	assert.deepEqual(detailOrganizerHeaderActions('deleted'), []);
 });
 

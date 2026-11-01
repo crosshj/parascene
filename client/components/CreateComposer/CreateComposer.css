@@ -4248,6 +4248,11 @@ a.creation-detail-action-strip-creator-name:focus-visible {
 	padding: 8px 0;
 }
 
+/* Theme vote retired for now — remove to revive assign UI. */
+.creation-detail-organizer-assign-row:has([data-organizer-assign-role='topic_vote']) {
+	display: none !important;
+}
+
 .creation-detail-organizer-assign-row+.creation-detail-organizer-assign-row {
 	border-top: 1px solid var(--border);
 }

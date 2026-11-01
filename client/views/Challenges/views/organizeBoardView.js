@@ -76,16 +76,18 @@ function organizeActionsForPhase(phase, opts = {}) {
 }
 
 /**
- * Header actions for one challenge detail. Active challenges can be managed.
- * Past challenges open the read-only view. Both include results.
+ * Header actions for one challenge detail. Live + pending (finalizing) can be managed
+ * so organizers can still update the results post after voting closes. Fully complete
+ * challenges open the read-only view (results URL remains editable there).
  * @param {string} phase
  * @returns {{ id: 'manage' | 'view' | 'results', label: string, ariaLabel: string }[]}
  */
 export function detailOrganizerHeaderActions(phase) {
 	if (!phase || phase === 'deleted' || phase === 'purged' || phase === 'empty') return [];
-	const primary = ACTIVE_PARTICIPANT_PHASES.has(phase)
-		? { id: 'manage', label: 'Manage', ariaLabel: 'Manage challenge' }
-		: { id: 'view', label: 'View', ariaLabel: 'View challenge' };
+	const primary =
+		ACTIVE_PARTICIPANT_PHASES.has(phase) || phase === 'finalizing'
+			? { id: 'manage', label: 'Manage', ariaLabel: 'Manage challenge' }
+			: { id: 'view', label: 'View', ariaLabel: 'View challenge' };
 	return [primary, { id: 'results', label: 'Results', ariaLabel: 'Challenge results' }];
 }
 
@@ -353,7 +355,8 @@ export function renderOrganizeCalendarHtml(opts) {
 		? `Scheduled range for this ${esc(CHALLENGE_TRACK_LABELS[track] || track)} challenge.`
 		: `Click a start day, then an end day. Occupied ${esc(CHALLENGE_TRACK_LABELS[track] || track)} days are blocked.`;
 	const hasOpenPin = pinWindows.some((w) => w?.kind === 'open');
-	const hasTopicVotePin = pinWindows.some((w) => w?.kind === 'topic_vote');
+	// Theme vote retired for now — hide legend entry (CSS also covers assign/edit UI).
+	// const hasTopicVotePin = pinWindows.some((w) => w?.kind === 'topic_vote');
 	const hasWinnersPin = pinWindows.some((w) => w?.kind === 'winners');
 	const pinLegendParts = [];
 	if (hasOpenPin) {
@@ -361,11 +364,11 @@ export function renderOrganizeCalendarHtml(opts) {
 			`<span class="challenges-organize-cal-pin-dot challenges-organize-cal-pin-dot--open" aria-hidden="true"></span> open (${CHALLENGE_OPEN_PIN_DAYS}d)`
 		);
 	}
-	if (hasTopicVotePin) {
-		pinLegendParts.push(
-			`<span class="challenges-organize-cal-pin-dot challenges-organize-cal-pin-dot--topic_vote" aria-hidden="true"></span> theme vote (${CHALLENGE_OPEN_PIN_DAYS}d)`
-		);
-	}
+	// if (hasTopicVotePin) {
+	// 	pinLegendParts.push(
+	// 		`<span class="challenges-organize-cal-pin-dot challenges-organize-cal-pin-dot--topic_vote" aria-hidden="true"></span> theme vote (${CHALLENGE_OPEN_PIN_DAYS}d)`
+	// 	);
+	// }
 	if (hasWinnersPin) {
 		pinLegendParts.push(
 			`<span class="challenges-organize-cal-pin-dot challenges-organize-cal-pin-dot--winners" aria-hidden="true"></span> winners (${CHALLENGE_WINNERS_PIN_DAYS}d)`

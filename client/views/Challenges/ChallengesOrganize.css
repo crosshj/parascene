@@ -1080,6 +1080,12 @@
 	background: var(--color-green);
 }
 
+/* Theme vote retired for now — remove these rules to revive the UI. */
+[data-organize-pin-kind='topic_vote'],
+[data-organize-theme-vote-field] {
+	display: none !important;
+}
+
 .challenges-organize-cal-pin-dot--topic_vote {
 	background: var(--color-purple);
 }

@@ -152,13 +152,14 @@ export function pinWindowsForCalendar(merged) {
 	if (windows.open.enabled && windows.open.start && windows.open.until) {
 		out.push({ kind: 'open', start: windows.open.start, end: windows.open.until });
 	}
-	if (windows.topic_vote.enabled && windows.topic_vote.start && windows.topic_vote.until) {
-		out.push({
-			kind: 'topic_vote',
-			start: windows.topic_vote.start,
-			end: windows.topic_vote.until
-		});
-	}
+	// Theme vote retired for now — omit calendar pin window.
+	// if (windows.topic_vote.enabled && windows.topic_vote.start && windows.topic_vote.until) {
+	// 	out.push({
+	// 		kind: 'topic_vote',
+	// 		start: windows.topic_vote.start,
+	// 		end: windows.topic_vote.until
+	// 	});
+	// }
 	if (windows.winners.enabled && windows.winners.start && windows.winners.until) {
 		out.push({ kind: 'winners', start: windows.winners.start, end: windows.winners.until });
 	}
@@ -196,22 +197,22 @@ export function applyPinSlotsToPayload(payload, fd, refs) {
 	else delete payload.hero_image_url;
 	if (resultsRef) payload.results_creation_url = resultsRef;
 	else delete payload.results_creation_url;
-	if (topicVoteRef) payload.topic_vote_creation_url = topicVoteRef;
-	else delete payload.topic_vote_creation_url;
+	// Theme vote retired for now — always clear so hidden UI cannot reintroduce it.
+	void topicVoteRef;
+	delete payload.topic_vote_creation_url;
+	delete payload.theme_vote_creation_url;
+	delete payload.topic_vote_url;
 
 	const openEnabled = formCheckboxEnabled(fd, 'pin_open_enabled');
 	const winnersEnabled = formCheckboxEnabled(fd, 'pin_winners_enabled');
-	const topicEnabled = formCheckboxEnabled(fd, 'pin_topic_vote_enabled');
 	payload.pin_open_enabled = openEnabled;
 	payload.pin_winners_enabled = winnersEnabled;
-	payload.pin_topic_vote_enabled = topicEnabled;
+	payload.pin_topic_vote_enabled = false;
 
 	const openStart = ymdOrEmpty(fd.get('pin_open_start_ymd'));
 	const openUntil = ymdOrEmpty(fd.get('pin_open_until_ymd'));
 	const winnersStart = ymdOrEmpty(fd.get('pin_winners_start_ymd'));
 	const winnersUntil = ymdOrEmpty(fd.get('pin_winners_until_ymd'));
-	const topicStart = ymdOrEmpty(fd.get('pin_topic_vote_start_ymd'));
-	const topicUntil = ymdOrEmpty(fd.get('pin_topic_vote_until_ymd'));
 
 	if (openStart) payload.pin_open_start_ymd = openStart;
 	else delete payload.pin_open_start_ymd;
@@ -221,10 +222,8 @@ export function applyPinSlotsToPayload(payload, fd, refs) {
 	else delete payload.pin_winners_start_ymd;
 	if (winnersUntil) payload.pin_winners_until_ymd = winnersUntil;
 	else delete payload.pin_winners_until_ymd;
-	if (topicStart) payload.pin_topic_vote_start_ymd = topicStart;
-	else delete payload.pin_topic_vote_start_ymd;
-	if (topicUntil) payload.pin_topic_vote_until_ymd = topicUntil;
-	else delete payload.pin_topic_vote_until_ymd;
+	delete payload.pin_topic_vote_start_ymd;
+	delete payload.pin_topic_vote_until_ymd;
 }
 
 /**
@@ -282,11 +281,12 @@ export function buildPinSyncOps(_challengeId, opts) {
 			enabled: opts.winnersEnabled !== false
 		},
 		{
+			// Theme vote retired for now — always clear the feed pin.
 			kind: 'topic_vote',
-			ref: opts.topicVoteRef,
-			start: opts.topicStart,
-			until: opts.topicUntil,
-			enabled: opts.topicEnabled !== false
+			ref: '',
+			start: '',
+			until: '',
+			enabled: false
 		}
 	];
 
