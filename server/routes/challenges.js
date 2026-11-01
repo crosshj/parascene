@@ -252,7 +252,7 @@ export default function createChallengesRoutes({ queries }) {
 		if (!viewerCanManageChallengePayouts(viewerUserName)) {
 			res.status(403).json({
 				error: "Forbidden",
-				message: "Only oceanman or admin can manage challenge payouts."
+				message: "Not allowed to manage challenge payouts."
 			});
 			return null;
 		}
