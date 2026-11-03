@@ -1483,7 +1483,11 @@ export default function createAdminRoutes({ queries, storage }) {
 		"reengagement",
 		"creationHighlight",
 		"supportReport",
-		"adminBroadcast"
+		"adminBroadcast",
+		"founderRenewalAdmin",
+		"creditTopup",
+		"founderWelcome",
+		"founderRenewal"
 	];
 
 	function getEmailTemplateSampleData() {
@@ -1601,6 +1605,32 @@ export default function createAdminRoutes({ queries, storage }) {
 					"The challenge closes soon. If you have not submitted yet, there is still time — and we would love to see what you make.",
 				ctaText: "View challenges",
 				ctaUrl: `${baseUrl}/connect#challenges`
+			},
+			founderRenewalAdmin: {
+				status: "success",
+				reason: "",
+				userId: 218,
+				userEmail: "batch08@gmail.com",
+				userName: "seafoodboba19",
+				displayName: "Alley One",
+				subscriptionId: "sub_1UIHI2DHBvxoc5wCWt6KmF49",
+				invoiceId: "in_1UT9aZDHBvxoc5wCTCmRS75l",
+				credits: 700,
+				amountPaidCents: 1200,
+				eventId: "evt_1UTAXHDHBvxoc5wCM3XgdtHN",
+				occurredAt: new Date().toISOString()
+			},
+			creditTopup: {
+				recipientName: "Alex",
+				credits: 700
+			},
+			founderWelcome: {
+				recipientName: "Alex",
+				credits: 700
+			},
+			founderRenewal: {
+				recipientName: "Alex",
+				credits: 700
 			},
 			supportReport: {
 				requesterName: "Sam",

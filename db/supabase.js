@@ -1308,6 +1308,61 @@ export function openDb() {
 				return { changes: 1 };
 			}
 		},
+		/**
+		 * Idempotency for Founder renewal grants (invoice.paid subscription_cycle).
+		 * Stores Stripe invoice ids on user meta.grantedStripeInvoiceIds — no new table.
+		 */
+		claimGrantedStripeInvoice: {
+			run: async (userId, invoiceId) => {
+				const iid = typeof invoiceId === "string" ? invoiceId.trim() : "";
+				if (!iid) return { granted: false };
+				const { data: current, error: selectError } = await serviceClient
+					.from(prefixedTable("users"))
+					.select("meta")
+					.eq("id", userId)
+					.maybeSingle();
+				if (selectError) throw selectError;
+				const existing = current?.meta ?? null;
+				const meta = typeof existing === "object" && existing !== null ? { ...existing } : {};
+				const list = Array.isArray(meta.grantedStripeInvoiceIds)
+					? meta.grantedStripeInvoiceIds.map(String)
+					: [];
+				if (list.includes(iid)) return { granted: false };
+				const MAX = 48; // ~4 years of monthly renewals
+				meta.grantedStripeInvoiceIds = [...list, iid].slice(-MAX);
+				const { error } = await serviceClient
+					.from(prefixedTable("users"))
+					.update({ meta })
+					.eq("id", userId);
+				if (error) throw error;
+				return { granted: true };
+			}
+		},
+		releaseGrantedStripeInvoice: {
+			run: async (userId, invoiceId) => {
+				const iid = typeof invoiceId === "string" ? invoiceId.trim() : "";
+				if (!iid) return { changes: 0 };
+				const { data: current, error: selectError } = await serviceClient
+					.from(prefixedTable("users"))
+					.select("meta")
+					.eq("id", userId)
+					.maybeSingle();
+				if (selectError) throw selectError;
+				const existing = current?.meta ?? null;
+				const meta = typeof existing === "object" && existing !== null ? { ...existing } : {};
+				const list = Array.isArray(meta.grantedStripeInvoiceIds)
+					? meta.grantedStripeInvoiceIds.map(String).filter((id) => id !== iid)
+					: [];
+				if (list.length) meta.grantedStripeInvoiceIds = list;
+				else delete meta.grantedStripeInvoiceIds;
+				const { error } = await serviceClient
+					.from(prefixedTable("users"))
+					.update({ meta })
+					.eq("id", userId);
+				if (error) throw error;
+				return { changes: 1 };
+			}
+		},
 		updateUserStripeSubscriptionId: {
 			run: async (userId, subscriptionId) => {
 				const { data: current, error: selectError } = await serviceClient

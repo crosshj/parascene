@@ -3,6 +3,8 @@ import Stripe from "stripe";
 import { openDb } from "../../db/index.js";
 import { getCreditTopupPack } from "../../api_routes/utils/creditPacks.js";
 import { notifyCreditPurchase } from "../../api_routes/utils/purchaseNotify.js";
+import { resolveInvoiceSubscriptionId } from "../../api_routes/utils/stripeInvoice.js";
+import { notifyAdminFounderRenewalPayout } from "../../api_routes/utils/founderRenewalAdminNotify.js";
 
 const FOUNDER_CREDITS_GRANT = 700;
 
@@ -211,22 +213,120 @@ export default async function handler(req, res) {
 			if (billingReason !== "subscription_cycle") {
 				return res.status(200).json({ received: true });
 			}
-			const subscriptionId = typeof invoice?.subscription === "string" ? invoice.subscription : invoice?.subscription?.id;
+
+			const invoiceId = typeof invoice?.id === "string" ? invoice.id : null;
+			const amountPaidCents = Number.isFinite(Number(invoice?.amount_paid))
+				? Number(invoice.amount_paid)
+				: null;
+			const subscriptionId = resolveInvoiceSubscriptionId(invoice);
+			const adminBase = {
+				invoiceId,
+				subscriptionId: subscriptionId || "",
+				credits: FOUNDER_CREDITS_GRANT,
+				amountPaidCents,
+				eventId: event.id
+			};
+
+			async function profileFields(userId) {
+				const profile = await queries.selectUserProfileByUserId?.get?.(userId).catch(() => null);
+				return {
+					userName: typeof profile?.user_name === "string" ? profile.user_name : "",
+					displayName: typeof profile?.display_name === "string" ? profile.display_name : ""
+				};
+			}
+
 			if (!subscriptionId || !queries.selectUserByStripeSubscriptionId?.get) {
+				const reason = !subscriptionId
+					? "subscription_cycle invoice missing subscription id (could not resolve from Stripe invoice shape)"
+					: "selectUserByStripeSubscriptionId query unavailable";
+				console.error("[Stripe Webhook] invoice.paid renewal payout failed", {
+					invoiceId,
+					subscriptionId,
+					reason
+				});
+				await notifyAdminFounderRenewalPayout({ ...adminBase, status: "failed", reason });
 				return res.status(200).json({ received: true });
 			}
+
 			const user = await queries.selectUserByStripeSubscriptionId.get(subscriptionId);
 			if (!user) {
+				const reason = `No user found for subscription ${subscriptionId}`;
+				console.error("[Stripe Webhook] invoice.paid renewal payout failed", {
+					invoiceId,
+					subscriptionId,
+					reason
+				});
+				await notifyAdminFounderRenewalPayout({ ...adminBase, status: "failed", reason });
 				return res.status(200).json({ received: true });
 			}
+
 			const userId = String(user.id);
-			await grantFounderCredits(queries, userId);
-			await notifyCreditPurchase(queries, {
-				userId,
-				kind: "founder_renewal",
-				credits: FOUNDER_CREDITS_GRANT
-			});
-			processedEventIds.add(event.id);
+			const profile = await profileFields(user.id);
+			const userEmail = typeof user.email === "string" ? user.email : "";
+
+			let claimedInvoice = false;
+			if (invoiceId && queries.claimGrantedStripeInvoice?.run) {
+				const claim = await queries.claimGrantedStripeInvoice.run(userId, invoiceId);
+				if (!claim?.granted) {
+					// Already recorded for this invoice — treat as success idempotency, not a new payout.
+					console.log("[Stripe Webhook] invoice.paid renewal already granted", {
+						invoiceId,
+						subscriptionId,
+						userId
+					});
+					processedEventIds.add(event.id);
+					return res.status(200).json({ received: true });
+				}
+				claimedInvoice = true;
+			} else if (!invoiceId) {
+				console.error("[Stripe Webhook] invoice.paid renewal missing invoice id; granting without claim", {
+					subscriptionId,
+					userId
+				});
+			}
+
+			try {
+				await grantFounderCredits(queries, userId);
+				await notifyCreditPurchase(queries, {
+					userId,
+					kind: "founder_renewal",
+					credits: FOUNDER_CREDITS_GRANT,
+					meta: {
+						stripe_invoice_id: invoiceId || null,
+						stripe_subscription_id: subscriptionId || null
+					}
+				});
+				await notifyAdminFounderRenewalPayout({
+					...adminBase,
+					status: "success",
+					userId: user.id,
+					userEmail,
+					...profile
+				});
+				processedEventIds.add(event.id);
+			} catch (grantErr) {
+				if (claimedInvoice && queries.releaseGrantedStripeInvoice?.run) {
+					try {
+						await queries.releaseGrantedStripeInvoice.run(userId, invoiceId);
+					} catch (releaseErr) {
+						console.error(
+							"[Stripe Webhook] failed to release granted invoice claim:",
+							releaseErr?.message || releaseErr
+						);
+					}
+				}
+				const reason = grantErr?.message || "Founder renewal credit grant failed";
+				console.error("[Stripe Webhook] invoice.paid renewal grant error:", grantErr);
+				await notifyAdminFounderRenewalPayout({
+					...adminBase,
+					status: "failed",
+					reason,
+					userId: user.id,
+					userEmail,
+					...profile
+				});
+				throw grantErr;
+			}
 		}
 
 		return res.status(200).json({ received: true });

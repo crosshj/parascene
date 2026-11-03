@@ -25,8 +25,8 @@ function copyForKind(kind, credits) {
 		return {
 			title: "Credits added",
 			message: `Your ${amount} monthly Founder credits have been added.`,
-			template: null,
-			emailData: null
+			template: "founderRenewal",
+			emailData: { credits: amount }
 		};
 	}
 	return {
@@ -40,11 +40,27 @@ function copyForKind(kind, credits) {
 /**
  * Best-effort in-app notification and email after a paid credit grant.
  * @param {object} queries
- * @param {{ userId: string, kind: "topup" | "founder" | "founder_renewal", credits: number }} opts
+ * @param {{
+ *   userId: string,
+ *   kind: "topup" | "founder" | "founder_renewal",
+ *   credits: number,
+ *   meta?: Record<string, unknown>
+ * }} opts
  */
-export async function notifyCreditPurchase(queries, { userId, kind, credits }) {
+export async function notifyCreditPurchase(queries, { userId, kind, credits, meta: extraMeta } = {}) {
 	if (!userId) return;
 	const copy = copyForKind(kind, credits);
+	const notificationMeta = {
+		kind,
+		credits: Math.round(Number(credits) || 0)
+	};
+	if (extraMeta && typeof extraMeta === "object") {
+		for (const [key, value] of Object.entries(extraMeta)) {
+			if (key === "kind" || key === "credits") continue;
+			if (value == null) continue;
+			notificationMeta[key] = value;
+		}
+	}
 	try {
 		if (queries.insertNotification?.run) {
 			await queries.insertNotification.run(
@@ -56,7 +72,7 @@ export async function notifyCreditPurchase(queries, { userId, kind, credits }) {
 				null,
 				"credits",
 				null,
-				{ kind, credits: Math.round(Number(credits) || 0) }
+				notificationMeta
 			);
 		}
 	} catch (err) {

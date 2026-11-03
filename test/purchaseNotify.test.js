@@ -36,24 +36,57 @@ describe("notifyCreditPurchase", () => {
 		expect(calls[0][8]).toEqual({ kind: "founder", credits: 700 });
 	});
 
-	it("notifies monthly Founder renewals without sending email copy", async () => {
-		const calls = [];
-		const queries = {
-			insertNotification: {
-				run: async (...args) => {
-					calls.push(args);
-					return { insertId: 1, changes: 1 };
+	it("notifies monthly Founder renewals with email template wiring", async () => {
+		const originalKey = process.env.RESEND_API_KEY;
+		const originalFrom = process.env.RESEND_SYSTEM_EMAIL;
+		delete process.env.RESEND_API_KEY;
+		delete process.env.RESEND_SYSTEM_EMAIL;
+		try {
+			const calls = [];
+			const queries = {
+				insertNotification: {
+					run: async (...args) => {
+						calls.push(args);
+						return { insertId: 1, changes: 1 };
+					}
 				}
-			},
-			selectUserById: {
-				get: async () => {
-					throw new Error("renewal should not load the user for email");
+			};
+			await notifyCreditPurchase(queries, {
+				userId: "42",
+				kind: "founder_renewal",
+				credits: 700,
+				meta: {
+					stripe_invoice_id: "in_abc",
+					stripe_subscription_id: "sub_abc"
 				}
-			}
-		};
-		await notifyCreditPurchase(queries, { userId: "42", kind: "founder_renewal", credits: 700 });
-		expect(calls[0][2]).toBe("Credits added");
-		expect(calls[0][3]).toBe("Your 700 monthly Founder credits have been added.");
+			});
+			expect(calls[0][2]).toBe("Credits added");
+			expect(calls[0][3]).toBe("Your 700 monthly Founder credits have been added.");
+			expect(calls[0][8]).toEqual({
+				kind: "founder_renewal",
+				credits: 700,
+				stripe_invoice_id: "in_abc",
+				stripe_subscription_id: "sub_abc"
+			});
+		} finally {
+			if (originalKey == null) delete process.env.RESEND_API_KEY;
+			else process.env.RESEND_API_KEY = originalKey;
+			if (originalFrom == null) delete process.env.RESEND_SYSTEM_EMAIL;
+			else process.env.RESEND_SYSTEM_EMAIL = originalFrom;
+		}
+	});
+});
+
+describe("founderRenewal email template", () => {
+	it("thanks the Founder and states the credit grant", async () => {
+		const { renderEmailTemplate } = await import("../email/index.js");
+		const { subject, text } = renderEmailTemplate("founderRenewal", {
+			recipientName: "Alex",
+			credits: 700
+		});
+		expect(subject).toBe("Your Founder credits are here");
+		expect(text).toContain("Thank you for continuing as a Founder");
+		expect(text).toContain("700 credits have been added to your account for this month.");
 	});
 });
 

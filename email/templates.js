@@ -1045,6 +1045,110 @@ export function renderSupportReport({
 	return { subject, html: emailHtml, text };
 }
 
+export function renderFounderRenewalAdmin({
+	status = "success",
+	reason = "",
+	userId = null,
+	userEmail = "",
+	userName = "",
+	displayName = "",
+	subscriptionId = "",
+	invoiceId = "",
+	credits = 700,
+	amountPaidCents = null,
+	eventId = "",
+	occurredAt = null
+} = {}) {
+	const ok = String(status) === "success";
+	const amount = Math.round(Number(credits) || 0);
+	const paid =
+		amountPaidCents == null || !Number.isFinite(Number(amountPaidCents))
+			? null
+			: `$${(Number(amountPaidCents) / 100).toFixed(2)}`;
+	const timestamp = occurredAt ? new Date(occurredAt) : new Date();
+	const when = Number.isNaN(timestamp.getTime()) ? new Date() : timestamp;
+
+	const safeUserId = escapeHtml(
+		Number.isFinite(Number(userId)) ? Number(userId) : userId || "unknown"
+	);
+	const safeEmail = escapeHtml(userEmail || "unknown");
+	const safeUserName = escapeHtml(userName || "");
+	const safeDisplayName = escapeHtml(displayName || "");
+	const safeSub = escapeHtml(subscriptionId || "unknown");
+	const safeInvoice = escapeHtml(invoiceId || "unknown");
+	const safeEvent = escapeHtml(eventId || "");
+	const safeReason = escapeHtml(String(reason || "").trim()).replace(/\n/g, "<br />");
+	const safeWhen = escapeHtml(when.toISOString());
+
+	const subject = ok
+		? `Founder renewal paid out: ${amount} credits`
+		: "Founder renewal payout failed";
+	const preheader = ok
+		? `Granted ${amount} credits after a Stripe subscription_cycle invoice.`
+		: "Stripe asked for a Founder renewal payout and it did not complete.";
+
+	const bodyHtml = html`
+		<div style="margin:0 0 14px; padding:14px 16px; border:1px solid ${ok ? "#bbf7d0" : "#fecaca"}; border-radius:12px; background:${ok ? "#f0fdf4" : "#fef2f2"}; font-family:Arial, Helvetica, sans-serif;">
+			<div style="color:${ok ? "#166534" : "#991b1b"}; font-size:15px; font-weight:600; margin:0 0 4px;">
+				${ok ? "Payout succeeded" : "Payout failed"}
+			</div>
+			<div style="color:${ok ? "#14532d" : "#7f1d1d"}; font-size:14px; line-height:1.5;">
+				${ok
+					? html`Granted <strong>${amount}</strong> Founder renewal credits.`
+					: html`${safeReason || "The renewal credit grant did not complete."}`}
+			</div>
+		</div>
+		<div style="margin:0 0 14px; font-family:Arial, Helvetica, sans-serif;">
+			<div style="color:#475569; font-size:13px; margin:0 0 6px;">User</div>
+			<div style="font-size:15px; line-height:1.6;">
+				${(safeDisplayName || safeUserName) ? html`
+				<strong>${safeDisplayName || safeUserName}</strong>
+				${safeUserName ? html`${safeDisplayName ? " · " : ""}@${safeUserName}` : ""}<br />
+				` : ""}
+				<span style="color:#64748b;">Email:</span> ${safeEmail}<br />
+				<span style="color:#64748b;">User ID:</span> ${safeUserId}
+			</div>
+		</div>
+		<div style="margin:0; font-family:Arial, Helvetica, sans-serif;">
+			<div style="color:#475569; font-size:13px; margin:0 0 6px;">Stripe</div>
+			<div style="font-size:15px; line-height:1.6;">
+				<span style="color:#64748b;">Invoice:</span> ${safeInvoice}<br />
+				<span style="color:#64748b;">Subscription:</span> ${safeSub}<br />
+				${paid ? html`<span style="color:#64748b;">Amount paid:</span> ${escapeHtml(paid)}<br />` : ""}
+				${safeEvent ? html`<span style="color:#64748b;">Event:</span> ${safeEvent}<br />` : ""}
+				<span style="color:#64748b;">When:</span> ${safeWhen}
+			</div>
+		</div>
+	`;
+
+	const emailHtml = baseEmailLayout({
+		preheader,
+		title: ok ? "Founder renewal payout" : "Founder renewal payout failed",
+		bodyHtml,
+		suppressCta: true,
+		footerText: "You're receiving this because you're the parascene admin."
+	});
+
+	const text = [
+		ok ? "Founder renewal payout succeeded" : "Founder renewal payout failed",
+		"",
+		ok ? `Granted ${amount} Founder renewal credits.` : String(reason || "The renewal credit grant did not complete.").trim(),
+		"",
+		`Email: ${userEmail || "unknown"}`,
+		`User ID: ${Number.isFinite(Number(userId)) ? Number(userId) : userId || "unknown"}`,
+		userName ? `Username: @${userName}` : "",
+		displayName ? `Display name: ${displayName}` : "",
+		"",
+		`Invoice: ${invoiceId || "unknown"}`,
+		`Subscription: ${subscriptionId || "unknown"}`,
+		paid ? `Amount paid: ${paid}` : "",
+		eventId ? `Event: ${eventId}` : "",
+		`When: ${when.toISOString()}`
+	].filter(Boolean).join("\n");
+
+	return { subject, html: emailHtml, text };
+}
+
 export function renderCreditTopup({ recipientName = "there", credits = 0 } = {}) {
 	const safeName = escapeHtml(recipientName);
 	const amount = Math.round(Number(credits) || 0);
@@ -1114,6 +1218,43 @@ export function renderFounderWelcome({ recipientName = "there", credits = 700 } 
 	return { subject, html: emailHtml, text };
 }
 
+export function renderFounderRenewal({ recipientName = "there", credits = 700 } = {}) {
+	const safeName = escapeHtml(recipientName);
+	const amount = Math.round(Number(credits) || 700);
+	const subject = "Your Founder credits are here";
+	const preheader = `Thank you for being a Founder. ${amount} credits are in your account.`;
+	const bodyHtml = html`
+		<p style="margin:0 0 12px; font-family:Arial, Helvetica, sans-serif;">Hi ${safeName},</p>
+		<p style="margin:0 0 12px; font-family:Arial, Helvetica, sans-serif;">
+			Thank you for continuing as a Founder. Your support helps keep parascene growing.
+		</p>
+		<p style="margin:0 0 12px; font-family:Arial, Helvetica, sans-serif;">
+			<strong>${amount} credits</strong> have been added to your account for this month.
+		</p>
+		<p style="margin:0; font-family:Arial, Helvetica, sans-serif;">— The parascene team</p>
+	`;
+	const emailHtml = baseEmailLayout({
+		preheader,
+		title: subject,
+		bodyHtml,
+		ctaText: "View your credits",
+		ctaUrl: `${getBaseAppUrlForEmail()}/pricing`,
+		footerText: "You're receiving this because you subscribe to Founder."
+	});
+	const text = [
+		`Hi ${recipientName},`,
+		"",
+		"Thank you for continuing as a Founder. Your support helps keep parascene growing.",
+		"",
+		`${amount} credits have been added to your account for this month.`,
+		"",
+		"— The parascene team",
+		"",
+		`View your credits: ${getBaseAppUrlForEmail()}/pricing`
+	].join("\n");
+	return { subject, html: emailHtml, text };
+}
+
 export const templates = {
 	helloFromParascene: renderHelloFromParascene,
 	commentReceived: renderCommentReceived,
@@ -1127,6 +1268,8 @@ export const templates = {
 	creationHighlight: renderCreationHighlight,
 	supportReport: renderSupportReport,
 	adminBroadcast: renderAdminBroadcast,
+	founderRenewalAdmin: renderFounderRenewalAdmin,
 	creditTopup: renderCreditTopup,
-	founderWelcome: renderFounderWelcome
+	founderWelcome: renderFounderWelcome,
+	founderRenewal: renderFounderRenewal
 };
