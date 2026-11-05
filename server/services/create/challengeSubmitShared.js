@@ -226,55 +226,263 @@ export async function findChallengesChannelThreadId(sb) {
 	return Number.isFinite(id) && id > 0 ? id : null;
 }
 
+const MESSAGE_COLUMNS = "id, body, created_at, sender_id, reactions";
+const GLOBAL_CONFIG_KIND = "challenges_global_config";
+const CHALLENGE_ROW_KINDS = new Set(["challenge_config", "challenge_submission"]);
+
 /**
- * Latest challenges_global_config row, independent of the recent-message window.
- * An id walk from the oldest created_at in that window misses the row when a
- * newer-dated message has a smaller id than the config.
+ * @param {object[] | null | undefined} messages
+ * @param {string} kind
+ * @returns {number}
+ */
+function highestMessageIdOfKind(messages, kind) {
+	let best = -1;
+	for (const row of messages || []) {
+		const payload = tryParseChallengeJsonBody(row?.body);
+		if (!payload || String(payload.kind || "").trim() !== kind) continue;
+		const id = Number(row?.id);
+		if (Number.isFinite(id) && id > best) best = id;
+	}
+	return best;
+}
+
+/**
+ * Drop every challenges_global_config row and insert `globalRow` in id order.
+ * A lower-id copy is ignored so a stale config with a newer created_at cannot
+ * outrank the real organizer list. A fetched row older than one already in
+ * the list is ignored.
+ *
+ * @param {object[] | null | undefined} messages
+ * @param {object | null | undefined} globalRow
+ */
+export function replaceWithLatestGlobalConfig(messages, globalRow) {
+	const rows = Array.isArray(messages) ? messages.slice() : [];
+	const incomingId = Number(globalRow?.id);
+	if (!globalRow || !Number.isFinite(incomingId) || incomingId <= 0) return rows;
+	if (highestMessageIdOfKind(rows, GLOBAL_CONFIG_KIND) > incomingId) return rows;
+
+	const kept = [];
+	let inserted = false;
+	for (const row of rows) {
+		const payload = tryParseChallengeJsonBody(row?.body);
+		if (payload && String(payload.kind || "").trim() === GLOBAL_CONFIG_KIND) continue;
+		const id = Number(row?.id);
+		if (!inserted && Number.isFinite(id) && id > incomingId) {
+			kept.push(globalRow);
+			inserted = true;
+		}
+		kept.push(row);
+	}
+	if (!inserted) kept.push(globalRow);
+	return kept;
+}
+
+/**
+ * @param {object[] | null | undefined} base
+ * @param {object[] | null | undefined} extra
+ */
+export function mergeMessagesById(base, extra) {
+	const byId = new Map();
+	for (const row of [...(base || []), ...(extra || [])]) {
+		const id = Number(row?.id);
+		if (!Number.isFinite(id) || id <= 0) continue;
+		byId.set(id, row);
+	}
+	return [...byId.values()].sort((a, b) => Number(a.id) - Number(b.id));
+}
+
+/**
+ * challenge_config and challenge_submission rows for one challenge.
+ * @param {object[] | null | undefined} rows
+ * @param {string} challengeId
+ */
+export function challengeMessagesForId(rows, challengeId) {
+	const cid = String(challengeId || "").trim();
+	if (!cid) return [];
+	const out = [];
+	for (const row of rows || []) {
+		const payload = tryParseChallengeJsonBody(row?.body);
+		if (!payload || !CHALLENGE_ROW_KINDS.has(String(payload.kind || "").trim())) continue;
+		if (String(payload.challenge_id || "").trim() !== cid) continue;
+		out.push(row);
+	}
+	return out;
+}
+
+/**
+ * @param {import("@supabase/supabase-js").SupabaseClient} sb
+ * @param {number} threadId
+ * @param {(q: any) => any} build
+ */
+async function selectThreadMessages(sb, threadId, build) {
+	let q = sb.from("prsn_chat_messages").select(MESSAGE_COLUMNS).eq("thread_id", threadId);
+	q = build(q);
+	const { data, error } = await q;
+	if (error) throw error;
+	return Array.isArray(data) ? data : [];
+}
+
+/**
+ * Highest-id row whose body parses as `kind`.
+ * Walks ids, not created_at: a newer-dated message can have a smaller id than the config.
  *
  * @param {import("@supabase/supabase-js").SupabaseClient} sb
  * @param {number} threadId
- * @returns {Promise<object | null>}
+ * @param {string} kind
  */
-async function fetchLatestChallengesGlobalConfigRow(sb, threadId) {
-	const { data, error } = await sb
-		.from("prsn_chat_messages")
-		.select("id, body, created_at, sender_id, reactions")
-		.eq("thread_id", threadId)
-		.ilike("body", "%challenges_global_config%")
-		.order("id", { ascending: false })
-		.limit(20);
-	if (error) throw error;
-	const rows = Array.isArray(data) ? data : [];
-	for (const row of rows) {
-		const payload = tryParseChallengeJsonBody(row?.body);
-		if (payload && String(payload.kind || "").trim() === "challenges_global_config") {
-			return row;
+async function fetchLatestKindByScanningIds(sb, threadId, kind) {
+	const pageSize = 400;
+	let beforeId = null;
+	for (let page = 0; page < 100; page++) {
+		const rows = await selectThreadMessages(sb, threadId, (q) => {
+			let next = q.order("id", { ascending: false }).limit(pageSize);
+			if (beforeId != null) next = next.lt("id", beforeId);
+			return next;
+		});
+		for (const row of rows) {
+			const payload = tryParseChallengeJsonBody(row?.body);
+			if (payload && String(payload.kind || "").trim() === kind) return row;
 		}
+		if (rows.length < pageSize) return null;
+		const lastId = Number(rows[rows.length - 1]?.id);
+		if (!Number.isFinite(lastId) || lastId <= 0 || lastId === beforeId) return null;
+		beforeId = lastId;
 	}
 	return null;
 }
 
 /**
- * Newest `limit` messages, returned in chronological order (oldest → newest within the slice).
- * Fetching newest-first avoids the oldest-slice cliff once the thread exceeds MESSAGE_FETCH_LIMIT.
- * If `challenges_global_config` fell outside the window, looks it up directly and
- * splices that row in (organizer allowlist would otherwise collapse to oceanman only).
+ * Latest challenges_global_config row, independent of the recent-message window.
+ * Text search is the fast path. When `walk` is set and that search misses, scan
+ * by id so a config outside the newest created_at slice is still found.
+ *
+ * @param {import("@supabase/supabase-js").SupabaseClient} sb
+ * @param {number} threadId
+ * @param {{ walk?: boolean }} [opts]
+ * @returns {Promise<object | null>}
+ */
+async function fetchLatestChallengesGlobalConfigRow(sb, threadId, opts = {}) {
+	let parsed = null;
+	let searchError = null;
+	try {
+		const rows = await selectThreadMessages(sb, threadId, (q) =>
+			q.ilike("body", "%challenges_global_config%").order("id", { ascending: false }).limit(50)
+		);
+		for (const row of rows) {
+			const payload = tryParseChallengeJsonBody(row?.body);
+			if (payload && String(payload.kind || "").trim() === GLOBAL_CONFIG_KIND) {
+				parsed = row;
+				break;
+			}
+		}
+	} catch (err) {
+		searchError = err;
+	}
+	if (parsed) return parsed;
+	if (!opts.walk) {
+		if (searchError) throw searchError;
+		return null;
+	}
+	return fetchLatestKindByScanningIds(sb, threadId, GLOBAL_CONFIG_KIND);
+}
+
+/**
+ * Every message whose body contains `needle`, paged so a long challenge is not
+ * cut off by the API row cap.
+ *
+ * @param {import("@supabase/supabase-js").SupabaseClient} sb
+ * @param {number} threadId
+ * @param {string} needle
+ */
+async function fetchMessagesContainingText(sb, threadId, needle) {
+	const pattern = `%${String(needle)}%`;
+	const pageSize = 200;
+	const out = [];
+	for (let from = 0; from < 5000; from += pageSize) {
+		const rows = await selectThreadMessages(sb, threadId, (q) =>
+			q
+				.ilike("body", pattern)
+				.order("id", { ascending: true })
+				.range(from, from + pageSize - 1)
+		);
+		out.push(...rows);
+		if (rows.length < pageSize) break;
+	}
+	return out;
+}
+
+/**
+ * Full thread in id order. Used when the targeted lookup cannot see the
+ * challenge config the client already has.
+ *
+ * @param {import("@supabase/supabase-js").SupabaseClient} sb
+ * @param {number} threadId
+ */
+async function fetchAllThreadMessagesById(sb, threadId) {
+	const pageSize = 500;
+	const newestFirst = [];
+	let beforeId = null;
+	for (let page = 0; page < 80; page++) {
+		const rows = await selectThreadMessages(sb, threadId, (q) => {
+			let next = q.order("id", { ascending: false }).limit(pageSize);
+			if (beforeId != null) next = next.lt("id", beforeId);
+			return next;
+		});
+		newestFirst.push(...rows);
+		if (rows.length < pageSize) break;
+		const lastId = Number(rows[rows.length - 1]?.id);
+		if (!Number.isFinite(lastId) || lastId <= 0 || lastId === beforeId) break;
+		beforeId = lastId;
+	}
+	return newestFirst.reverse();
+}
+
+/**
+ * Newest `limit` messages, returned oldest → newest within that slice.
+ * The organizer list is always taken from the highest-id challenges_global_config,
+ * even when a lower-id copy has a newer created_at and sits in this slice.
+ * Pass `opts.challengeId` on payout and other single-challenge reads so that
+ * challenge's config and submissions are included when they are older than the slice.
  *
  * @param {import("@supabase/supabase-js").SupabaseClient} sb
  * @param {number} threadId
  * @param {number} [limit]
+ * @param {{ challengeId?: string }} [opts]
  */
-export async function fetchThreadMessagesChronological(sb, threadId, limit = MESSAGE_FETCH_LIMIT) {
+export async function fetchThreadMessagesChronological(sb, threadId, limit = MESSAGE_FETCH_LIMIT, opts = {}) {
+	const challengeId = String(opts?.challengeId || "").trim();
 	const newestFirst = await fetchThreadMessagesNewestFirst(sb, threadId, limit);
-	const chronological = newestFirst.slice().reverse();
-	if (pickLatestChallengesGlobalConfig(chronological)) return chronological;
+	let chronological = newestFirst.slice().reverse();
 
-	const globalRow = await fetchLatestChallengesGlobalConfigRow(sb, threadId);
-	if (!globalRow) return chronological;
+	const globalRow = await fetchLatestChallengesGlobalConfigRow(sb, threadId, {
+		walk: Boolean(challengeId)
+	});
+	chronological = replaceWithLatestGlobalConfig(chronological, globalRow);
 
-	const globalId = Number(globalRow.id);
-	if (chronological.some((m) => Number(m?.id) === globalId)) return chronological;
-	return [...chronological, globalRow].sort((a, b) => Number(a?.id) - Number(b?.id));
+	if (!challengeId) return chronological;
+
+	let challengeRows = [];
+	try {
+		const hits = await fetchMessagesContainingText(sb, threadId, challengeId);
+		challengeRows = challengeMessagesForId(hits, challengeId);
+	} catch {
+		challengeRows = [];
+	}
+	if (challengeRows.length) chronological = mergeMessagesById(chronological, challengeRows);
+
+	const hasConfig = chronological.some((row) => {
+		const payload = tryParseChallengeJsonBody(row?.body);
+		return (
+			payload &&
+			String(payload.kind || "").trim() === "challenge_config" &&
+			String(payload.challenge_id || "").trim() === challengeId
+		);
+	});
+	if (!hasConfig) {
+		const all = await fetchAllThreadMessagesById(sb, threadId);
+		return replaceWithLatestGlobalConfig(all, globalRow);
+	}
+	return chronological;
 }
 
 /**
@@ -667,10 +875,15 @@ export async function validateChallengeSubmission({
 			return { ok: false, status: 403, message: "Submissions must go to the Challenges channel thread." };
 		}
 
-		const messages = await fetchThreadMessagesChronological(sb, tid);
-		const messagesNewest = [...messages].reverse();
 		const wantId =
 			requestedChallengeId != null ? String(requestedChallengeId).trim() : "";
+		const messages = await fetchThreadMessagesChronological(
+			sb,
+			tid,
+			undefined,
+			wantId ? { challengeId: wantId } : {}
+		);
+		const messagesNewest = [...messages].reverse();
 		const acceptingAll = listChallengeConfigsAcceptingSubmissions(messagesNewest, now);
 		const accepting = filterAcceptingChallengesByMedia(acceptingAll, mediaType);
 		let cfg = null;

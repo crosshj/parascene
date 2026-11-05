@@ -114,7 +114,9 @@ export default function createChallengesRoutes({ queries }) {
 			const keepId = Number(ctx.configMessage.id);
 			const cid = String(ctx.challengeId || "").trim();
 			if (Number.isFinite(tid) && tid > 0 && Number.isFinite(keepId) && keepId > 0 && cid) {
-				const messages = await fetchThreadMessagesChronological(sb, tid);
+				const messages = await fetchThreadMessagesChronological(sb, tid, undefined, {
+					challengeId: cid
+				});
 				const drop = [];
 				for (const m of messages) {
 					const p = tryParseChallengeJsonBody(m?.body);
@@ -215,7 +217,9 @@ export default function createChallengesRoutes({ queries }) {
 			return null;
 		}
 
-		const messages = await fetchThreadMessagesChronological(sb, threadId);
+		const messages = await fetchThreadMessagesChronological(sb, threadId, undefined, {
+			challengeId
+		});
 		const allow = resolveChallengeOrganizerAllowlistFromMessages(messages);
 		const payoutManager = viewerCanManageChallengePayouts(viewerUserName);
 		if (!new Set(allow).has(viewerUserName) && !payoutManager) {
