@@ -6,6 +6,19 @@ const BRAND_NAME = "parascene";
 const BRAND_COLOR = "#0f172a";
 const ACCENT_COLOR = "#7c3aed";
 
+/** Escape, then turn **emphasis** into bold. Newlines become breaks. */
+function formatAdminBroadcastMessageHtml(message) {
+	return escapeHtml(String(message || "").trim())
+		.replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>")
+		.replace(/\n/g, "<br />");
+}
+
+function stripAdminBroadcastMarkers(message) {
+	return String(message || "")
+		.trim()
+		.replace(/\*\*([^*\n]+)\*\*/g, "$1");
+}
+
 function escapeHtml(value) {
 	return String(value ?? "")
 		.replace(/&/g, "&amp;")
@@ -716,14 +729,11 @@ export function renderAdminBroadcast({
 	const safeName = escapeHtml(recipientName);
 	const subject = String(emailSubject || "").trim() || "News from parascene";
 	const safeHeadline = escapeHtml((headline || subject).trim());
-	const safeMessage = escapeHtml(String(message || "").trim()).replace(/\n/g, "<br />");
+	const plainMessage = stripAdminBroadcastMarkers(message);
+	const safeMessage = formatAdminBroadcastMessageHtml(message);
 	const safeCta = escapeHtml(String(ctaText || "").trim() || "Learn more");
 	const ctaHref = String(ctaUrl || "").trim() || getBaseAppUrlForEmail();
-	const preheader =
-		String(message || "")
-			.trim()
-			.split(/\n/)[0]
-			.slice(0, 120) || subject;
+	const preheader = plainMessage.split(/\n/)[0].slice(0, 120) || subject;
 
 	const bodyHtml = html`
 	<p style="margin:0 0 12px; font-family:Arial, Helvetica, sans-serif;">Hi ${safeName},</p>
@@ -745,7 +755,7 @@ export function renderAdminBroadcast({
 	const text = [
 		`Hi ${recipientName},`,
 		"",
-		String(message || "").trim(),
+		plainMessage,
 		"",
 		"— The parascene team",
 		"",

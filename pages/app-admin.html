@@ -101,7 +101,7 @@
 											<option value="reengagement">Re-engagement</option>
 											<option value="creationHighlight">Creation highlight</option>
 											<option value="supportReport">Support report</option>
-											<option value="adminBroadcast">Admin broadcast</option>
+											<option value="adminBroadcast" selected>Admin broadcast</option>
 										</select>
 									</div>
 									<div id="email-send-recipient-section">
@@ -133,15 +133,30 @@
 									</div>
 									<div id="email-send-broadcast-field" class="admin-settings-field admin-email-send-broadcast-fields" hidden>
 										<label class="admin-settings-label" for="email-send-broadcast-subject">Email subject</label>
-										<input type="text" id="email-send-broadcast-subject" name="emailSubject" class="admin-settings-input" placeholder="e.g. Two weeks left in the current challenge" />
+										<input type="text" id="email-send-broadcast-subject" name="emailSubject" class="admin-settings-input" value="Want your work featured on the Parascene homepage?" />
 										<label class="admin-settings-label" for="email-send-broadcast-headline">Headline in email (optional)</label>
 										<input type="text" id="email-send-broadcast-headline" name="headline" class="admin-settings-input" placeholder="Defaults to email subject" />
 										<label class="admin-settings-label" for="email-send-broadcast-message">Message</label>
-										<textarea id="email-send-broadcast-message" name="message" class="admin-settings-input admin-email-send-textarea" data-autogrow rows="6" placeholder="Short note for the community…"></textarea>
+										<textarea id="email-send-broadcast-message" name="message" class="admin-settings-input admin-email-send-textarea" data-autogrow rows="14">We're working on something exciting at Parascene, and we'd love for you to be part of it!
+
+We've recently teamed up with a trusted production company to produce a new homepage video showcasing the creativity of our community.
+
+**And we'd love to feature some of YOUR work!**
+
+We're especially looking for creations that are **visually appealing, suitable for a broad audience, and capture the spirit of Parascene: bringing weird and wonderful characters, worlds, and stories to life.** Don't be afraid to show us something strange or unexpected!
+
+If you're interested, DM oceanman the creations you'd like us to consider.
+
+This is an unpaid promotional opportunity. Not every submission will necessarily be featured, and we'll contact selected creators to confirm permission and any necessary release before using their work. Please only submit creations you have the rights to share.
+
+We're excited to see what you send in and can't wait to show the world what this community can do!
+
+**Let's bring something extraordinary to life!**</textarea>
+										<p class="admin-detail">Each person gets their own email, starting with their name. Wrap a phrase in **double asterisks** to make it bold. The sign-off is added for you.</p>
 										<label class="admin-settings-label" for="email-send-broadcast-cta-text">Button label</label>
-										<input type="text" id="email-send-broadcast-cta-text" name="ctaText" class="admin-settings-input" placeholder="e.g. View challenges" />
+										<input type="text" id="email-send-broadcast-cta-text" name="ctaText" class="admin-settings-input" value="Message oceanman" />
 										<label class="admin-settings-label" for="email-send-broadcast-cta-url">Button URL</label>
-										<input type="url" id="email-send-broadcast-cta-url" name="ctaUrl" class="admin-settings-input" placeholder="https://www.parascene.com/connect#challenges" />
+										<input type="url" id="email-send-broadcast-cta-url" name="ctaUrl" class="admin-settings-input" value="https://www.parascene.com/chat/dm/oceanman" />
 									</div>
 									<div class="admin-settings-actions admin-email-send-actions">
 										<button type="button" id="email-send-preview" class="btn-secondary admin-email-send-preview" hidden>
