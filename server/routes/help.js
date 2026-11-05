@@ -1,4 +1,4 @@
-const SECTION_DISPLAY_NAMES={about:'About',create:'Create',connect:'Connect',discover:'Discover',credits:'Credits',privacy:'Privacy',terms:'Terms',ungrouped:''};
+const SECTION_DISPLAY_NAMES={about:'About',create:'Create',connect:'Connect',discover:'Discover',credits:'Credits',brand:'Brand',privacy:'Privacy',terms:'Terms',ungrouped:''};
 import express from 'express';import path from 'node:path';import fs from 'node:fs/promises';import {marked} from 'marked';
 import { getApiHostname } from '../services/create/url.js';
 function withDeploymentApiOrigin(html) {

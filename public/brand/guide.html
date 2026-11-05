@@ -1,0 +1,737 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>parascene brand guide</title>
+	<link rel="icon" href="logo-mark.svg">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap">
+	<style>
+		:root {
+			--night: #0f0d1a;
+			--paper: #f6f7fb;
+			--ink: #0f172a;
+			--mist: #ede9fe;
+			--muted: #525a6b;
+			--muted-night: #b3b7c3;
+			--violet: #7c3aed;
+			--signal: #05c76f;
+			--line: #e2e8f0;
+			--surface: #ffffff;
+		}
+
+		@page {
+			size: letter;
+			margin: 0;
+		}
+
+		* {
+			box-sizing: border-box;
+		}
+
+		html,
+		body {
+			margin: 0;
+			padding: 0;
+			background: #2a2638;
+			color: var(--ink);
+			font-family: "Geist", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+			font-weight: 400;
+			-webkit-font-smoothing: antialiased;
+		}
+
+		.sheet {
+			position: relative;
+			width: 8.5in;
+			height: 11in;
+			margin: 0 auto;
+			overflow: hidden;
+			break-after: page;
+			page-break-after: always;
+		}
+
+		.sheet:last-child {
+			break-after: auto;
+			page-break-after: auto;
+		}
+
+		.pad {
+			padding: 0.58in 0.62in 0.5in;
+		}
+
+		.night {
+			background: var(--night);
+			color: var(--mist);
+		}
+
+		.paper {
+			background: var(--paper);
+			color: var(--ink);
+		}
+
+		.kicker {
+			margin: 0;
+			font-size: 10px;
+			font-weight: 600;
+			letter-spacing: 0.16em;
+			text-transform: uppercase;
+			color: var(--signal);
+		}
+
+		.paper .kicker {
+			color: var(--violet);
+		}
+
+		h1 {
+			margin: 0;
+			font-size: 28px;
+			font-weight: 600;
+			letter-spacing: -0.035em;
+			line-height: 1.15;
+		}
+
+		h2 {
+			margin: 0 0 8px;
+			font-size: 13px;
+			font-weight: 600;
+			letter-spacing: -0.01em;
+		}
+
+		p {
+			margin: 0;
+		}
+
+		.lead {
+			max-width: 6.4in;
+			font-size: 15px;
+			line-height: 1.45;
+			letter-spacing: -0.015em;
+		}
+
+		.body {
+			font-size: 12.5px;
+			line-height: 1.5;
+			color: var(--muted);
+		}
+
+		.night .body {
+			color: var(--muted-night);
+		}
+
+		.foot {
+			position: absolute;
+			right: 0.62in;
+			bottom: 0.38in;
+			left: 0.62in;
+			display: flex;
+			justify-content: space-between;
+			font-size: 10px;
+			letter-spacing: 0.04em;
+			color: var(--muted);
+		}
+
+		.night .foot {
+			color: rgba(237, 233, 254, 0.55);
+		}
+
+		a {
+			color: inherit;
+		}
+
+		.cover {
+			display: flex;
+			flex-direction: column;
+			height: 11in;
+			padding: 0.62in;
+		}
+
+		.cover-top {
+			display: flex;
+			justify-content: space-between;
+			align-items: baseline;
+		}
+
+		.cover-mark {
+			width: 4.35in;
+			margin-top: 1.35in;
+		}
+
+		.cover-mark img {
+			display: block;
+			width: 100%;
+			height: auto;
+		}
+
+		.cover-line {
+			max-width: 5.4in;
+			margin-top: 22px;
+			font-size: 18px;
+			font-weight: 400;
+			line-height: 1.35;
+			letter-spacing: -0.02em;
+			color: var(--mist);
+		}
+
+		.cover-still {
+			position: absolute;
+			right: 0;
+			bottom: 0;
+			left: 0;
+			height: 4.35in;
+		}
+
+		.cover-still img {
+			display: block;
+			width: 100%;
+			height: 100%;
+			object-fit: cover;
+			object-position: center 42%;
+		}
+
+		.cover-still::after {
+			content: "";
+			position: absolute;
+			inset: 0;
+			background:
+				linear-gradient(to bottom, var(--night) 0%, rgba(15, 13, 26, 0.18) 22%, rgba(15, 13, 26, 0.05) 48%, rgba(15, 13, 26, 0.45) 100%);
+		}
+
+		.cover .foot {
+			z-index: 1;
+			color: rgba(237, 233, 254, 0.82);
+		}
+
+		.stack {
+			display: flex;
+			flex-direction: column;
+			gap: 18px;
+			margin-top: 22px;
+		}
+
+		.rule {
+			height: 1px;
+			background: var(--line);
+		}
+
+		.quote {
+			margin: 0;
+			padding: 14px 16px;
+			border-radius: 10px;
+			background: var(--surface);
+			font-size: 15px;
+			font-weight: 500;
+			line-height: 1.4;
+			letter-spacing: -0.02em;
+		}
+
+		.cols {
+			display: grid;
+			grid-template-columns: 1fr 1fr 1fr;
+			gap: 14px;
+		}
+
+		.col strong {
+			display: block;
+			margin-bottom: 4px;
+			font-size: 12.5px;
+			font-weight: 600;
+		}
+
+		ul.plain {
+			margin: 6px 0 0;
+			padding: 0;
+			list-style: none;
+		}
+
+		ul.plain li {
+			position: relative;
+			margin: 0 0 6px;
+			padding-left: 12px;
+			font-size: 12.5px;
+			line-height: 1.45;
+			color: var(--muted);
+		}
+
+		ul.plain li::before {
+			content: "";
+			position: absolute;
+			top: 0.55em;
+			left: 0;
+			width: 5px;
+			height: 5px;
+			border-radius: 50%;
+			background: var(--violet);
+		}
+
+		.name-row {
+			display: flex;
+			align-items: baseline;
+			justify-content: space-between;
+			gap: 24px;
+		}
+
+		.name-row em {
+			font-style: normal;
+			font-size: 22px;
+			font-weight: 600;
+			letter-spacing: -0.04em;
+		}
+
+		.split {
+			display: grid;
+			grid-template-rows: 4.55in 1fr;
+			height: 11in;
+		}
+
+		.logo-stage {
+			display: flex;
+			flex-direction: column;
+			justify-content: flex-end;
+			padding: 0.58in 0.62in 0.42in;
+		}
+
+		.logo-stage img {
+			display: block;
+			width: 5.5in;
+			height: auto;
+		}
+
+		.logo-caption {
+			margin-top: 16px;
+			font-size: 12px;
+			color: var(--muted-night);
+		}
+
+		.logo-lower {
+			padding: 0.36in 0.62in 0.5in;
+		}
+
+		.pair {
+			display: grid;
+			grid-template-columns: 1.4fr 1fr;
+			gap: 22px;
+			align-items: center;
+		}
+
+		.paper-stage {
+			padding: 22px 22px 18px;
+			border-radius: 12px;
+			background: var(--surface);
+		}
+
+		.paper-stage img {
+			display: block;
+			width: 100%;
+			height: auto;
+		}
+
+		.marks {
+			display: flex;
+			align-items: flex-end;
+			gap: 14px;
+		}
+
+		.marks img {
+			display: block;
+			width: 72px;
+			height: 72px;
+		}
+
+		.marks img.small {
+			width: 32px;
+			height: 32px;
+		}
+
+		.swatches {
+			display: grid;
+			grid-template-columns: repeat(4, 1fr);
+			gap: 10px;
+			margin-top: 14px;
+		}
+
+		.swatch {
+			overflow: hidden;
+			border-radius: 10px;
+			background: var(--surface);
+		}
+
+		.swatch i {
+			display: block;
+			height: 72px;
+		}
+
+		.swatch span,
+		.swatch b {
+			display: block;
+			padding: 0 10px;
+		}
+
+		.swatch b {
+			padding-top: 8px;
+			font-size: 12px;
+			font-weight: 600;
+		}
+
+		.swatch span {
+			padding-bottom: 10px;
+			font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+			font-size: 10px;
+			letter-spacing: 0.02em;
+			color: var(--muted);
+		}
+
+		.type-row {
+			display: flex;
+			align-items: baseline;
+			justify-content: space-between;
+			gap: 16px;
+			padding: 8px 0;
+			border-bottom: 1px solid var(--line);
+			font-size: 18px;
+			letter-spacing: -0.03em;
+		}
+
+		.type-row small {
+			font-size: 11px;
+			font-weight: 500;
+			letter-spacing: 0.04em;
+			color: var(--muted);
+		}
+
+		.w400 { font-weight: 400; }
+		.w500 { font-weight: 500; }
+		.w600 { font-weight: 600; }
+		.w700 { font-weight: 700; }
+
+		.work-hero {
+			margin-top: 16px;
+			overflow: hidden;
+			border-radius: 10px;
+		}
+
+		.work-hero img,
+		.work-grid img {
+			display: block;
+			width: 100%;
+			height: 100%;
+			object-fit: cover;
+		}
+
+		.work-hero img {
+			height: 3.35in;
+			object-position: center 40%;
+		}
+
+		.work-grid {
+			display: grid;
+			grid-template-columns: repeat(4, 1fr);
+			gap: 8px;
+			margin-top: 8px;
+		}
+
+		.work-grid figure {
+			margin: 0;
+		}
+
+		.work-grid img {
+			height: 1.62in;
+			border-radius: 8px;
+		}
+
+		.work-grid figcaption,
+		.hero-cap {
+			margin-top: 5px;
+			font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+			font-size: 9px;
+			letter-spacing: 0.01em;
+			color: var(--muted-night);
+		}
+
+		.files {
+			margin-top: 8px;
+		}
+
+		.file {
+			display: grid;
+			grid-template-columns: 1.7in 1fr;
+			gap: 12px;
+			padding: 11px 0;
+			border-bottom: 1px solid var(--line);
+		}
+
+		.file b {
+			font-size: 12.5px;
+			font-weight: 600;
+		}
+
+		.file a {
+			font-size: 11px;
+			line-height: 1.4;
+			color: var(--violet);
+			text-decoration: none;
+		}
+
+		.note {
+			margin-top: 16px;
+			padding: 14px 16px;
+			border-radius: 10px;
+			background: var(--surface);
+			font-size: 12.5px;
+			line-height: 1.5;
+			color: var(--muted);
+		}
+
+		@media screen {
+			body {
+				padding: 28px 0 48px;
+			}
+
+			.sheet {
+				margin-bottom: 28px;
+				box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+			}
+		}
+	</style>
+</head>
+<body>
+	<section class="sheet night cover">
+		<div class="cover-top">
+			<p class="kicker">Brand guide</p>
+			<p class="kicker">2026</p>
+		</div>
+		<img class="cover-mark" src="logo-wordmark-on-night.svg" alt="parascene">
+		<p class="cover-line">A community for creating and sharing with generative tools.</p>
+		<div class="cover-still" aria-hidden="true">
+			<img src="../assets/splash-poster-cliff.jpg" alt="">
+		</div>
+		<div class="foot">
+			<span>parascene.com</span>
+			<span>01</span>
+		</div>
+	</section>
+
+	<section class="sheet paper pad">
+		<p class="kicker">What to say</p>
+		<div class="name-row" style="margin-top: 18px;">
+			<h1>The name is parascene.</h1>
+		</div>
+		<p class="body" style="margin-top: 8px; max-width: 6.5in;">One word, always lowercase. In a sentence and in the logo. Not ParaScene, not Para Scene, not PARASCENE.</p>
+
+		<div class="stack">
+			<div>
+				<h2>Use this line</h2>
+				<p class="quote">parascene is a community for creating and sharing with generative tools.</p>
+			</div>
+			<div>
+				<h2>If you need a little more</h2>
+				<p class="body">parascene is a peer-to-peer network for people who care about machine learning, generative art, and algorithms, the old ways and the new ones. Creativity, community, and technology live in one place, so people can create, share, and discover without gatekeepers.</p>
+			</div>
+			<div class="cols">
+				<div class="col">
+					<strong>Creativity</strong>
+					<p class="body">Tools that support your ideas, not replace them.</p>
+				</div>
+				<div class="col">
+					<strong>Community</strong>
+					<p class="body">A shared space for making, feedback, and collaboration.</p>
+				</div>
+				<div class="col">
+					<strong>Technology</strong>
+					<p class="body">AI, machine learning, and algorithms that make creation accessible.</p>
+				</div>
+			</div>
+			<div class="rule"></div>
+			<div>
+				<h2>How we talk about AI</h2>
+				<ul class="plain">
+					<li>Models are tools. They do not decide what is art, and neither do we.</li>
+					<li>parascene is not an AI-first platform. Work here can use models a lot, a little, or not at all.</li>
+					<li>People can run models on their own machines. We are not a single-vendor shop.</li>
+				</ul>
+			</div>
+			<div>
+				<h2>Leave this out</h2>
+				<ul class="plain">
+					<li>Do not call parascene an AI art site, an AI-only app, or a judge of what counts as real art.</li>
+					<li>Do not say the product replaces artists, or that the work on it is only generated.</li>
+					<li>Do not use member creations from the site. The only pictures cleared in this pack are on page 05.</li>
+				</ul>
+			</div>
+		</div>
+		<div class="foot">
+			<span>Words</span>
+			<span>02</span>
+		</div>
+	</section>
+
+	<section class="sheet">
+		<div class="split">
+			<div class="night logo-stage">
+				<p class="kicker">Logo</p>
+				<img src="logo-wordmark-on-night.svg" alt="parascene on night" style="margin-top: 28px;">
+				<p class="logo-caption">On night, #0f0d1a. Wordmark in mist, #ede9fe. The middle of the word sits at 70% opacity. Keep that.</p>
+			</div>
+			<div class="paper logo-lower">
+				<div class="pair">
+					<div>
+						<p class="kicker">On paper</p>
+						<div class="paper-stage" style="margin-top: 12px;">
+							<img src="logo-wordmark.svg" alt="parascene on paper">
+						</div>
+						<p class="body" style="margin-top: 10px;">Ink, #0f172a, on paper or white. Same file, same opacity. Do not redraw it in a font, and do not set “parascene” in italic Geist and call it the logo.</p>
+					</div>
+					<div>
+						<p class="kicker">App mark</p>
+						<div class="marks" style="margin-top: 14px;">
+							<img src="logo-mark.svg" alt="parascene app mark">
+							<img class="small" src="logo-mark.svg" alt="">
+						</div>
+						<p class="body" style="margin-top: 12px;">Violet tile, white italic p. For favicons, avatars, and square crops. Smallest useful size is 24px. Do not set the wordmark inside the tile, and do not change the gradient.</p>
+					</div>
+				</div>
+				<div class="rule" style="margin: 18px 0 12px;"></div>
+				<div class="cols">
+					<div class="col">
+						<strong>Clear space</strong>
+						<p class="body">Leave half the wordmark’s height empty on every side. Do not lock it against another logo.</p>
+					</div>
+					<div class="col">
+						<strong>Smallest</strong>
+						<p class="body">Wordmark no smaller than 1.25 inches wide in print, or 120px on screen.</p>
+					</div>
+					<div class="col">
+						<strong>Colour</strong>
+						<p class="body">Ink on light grounds, mist on night. Violet and signal green are for interface, not for recoloring the letters.</p>
+					</div>
+				</div>
+			</div>
+		</div>
+		<div class="foot">
+			<span>Logo</span>
+			<span>03</span>
+		</div>
+	</section>
+
+	<section class="sheet paper pad">
+		<p class="kicker">Colour and type</p>
+		<h1 style="margin-top: 14px;">Night by default.<br>Violet by day, green by night.</h1>
+		<p class="body" style="margin-top: 10px; max-width: 6.6in;">The public page is night, with signal green for the action. Inside the app, paper uses violet for the accent and night uses signal green. Keep that pairing. Green buttons belong on night. Violet buttons belong on paper.</p>
+
+		<div class="swatches">
+			<div class="swatch"><i style="background: #0f0d1a;"></i><b>Night</b><span>#0F0D1A</span></div>
+			<div class="swatch"><i style="background: #f6f7fb; box-shadow: inset 0 0 0 1px #e2e8f0;"></i><b>Paper</b><span>#F6F7FB</span></div>
+			<div class="swatch"><i style="background: #0f172a;"></i><b>Ink</b><span>#0F172A</span></div>
+			<div class="swatch"><i style="background: #ede9fe;"></i><b>Mist</b><span>#EDE9FE</span></div>
+			<div class="swatch"><i style="background: #7c3aed;"></i><b>Violet</b><span>#7C3AED</span></div>
+			<div class="swatch"><i style="background: #05c76f;"></i><b>Signal</b><span>#05C76F</span></div>
+			<div class="swatch"><i style="background: #525a6b;"></i><b>Muted</b><span>#525A6B</span></div>
+			<div class="swatch"><i style="background: #b3b7c3;"></i><b>Muted night</b><span>#B3B7C3</span></div>
+		</div>
+		<p class="body" style="margin-top: 10px;">Violet is the daytime accent. Signal is the nighttime accent, including the public Enter button. Muted is secondary text on paper. Muted night is secondary text on night.</p>
+
+		<h2 style="margin-top: 26px;">Geist</h2>
+		<p class="body">The product face for everything that is not the logo. Weights in use are 400, 500, 600, and 700. Fallback: Segoe UI, Roboto, Helvetica, Arial, sans-serif.</p>
+		<div style="margin-top: 8px;">
+			<div class="type-row w400"><span>parascene keeps the making with the maker.</span><small>400</small></div>
+			<div class="type-row w500"><span>Create, share, and discover.</span><small>500</small></div>
+			<div class="type-row w600"><span>Tools that support your ideas.</span><small>600</small></div>
+			<div class="type-row w700"><span>One word. Lowercase.</span><small>700</small></div>
+		</div>
+		<p class="body" style="margin-top: 12px;">Geist is an open font, at fonts.google.com/specimen/Geist. The wordmark is custom lettering. Do not approximate it with italic Geist.</p>
+		<div class="foot">
+			<span>Colour · Type</span>
+			<span>04</span>
+		</div>
+	</section>
+
+	<section class="sheet night pad">
+		<p class="kicker">Pictures you can use</p>
+		<h1 style="margin-top: 12px;">Homepage stills, and the film they come from.</h1>
+		<p class="body" style="margin-top: 8px; max-width: 6.7in;">These five frames are on the public homepage. You may use them, and the film, to show parascene. Credit parascene. Do not place another logo on the picture, and do not present the pictures as your own work.</p>
+		<div class="work-hero">
+			<img src="../assets/splash-poster-cliff.jpg" alt="Three figures at a violet cliff, the ground falling into a blue wireframe.">
+		</div>
+		<p class="hero-cap">splash-poster-cliff.jpg</p>
+		<div class="work-grid">
+			<figure>
+				<img src="../assets/splash-poster-alley.jpg" alt="A figure walking a violet alley in a lit visor.">
+				<figcaption>splash-poster-alley.jpg</figcaption>
+			</figure>
+			<figure>
+				<img src="../assets/splash-poster-crystal.jpg" alt="A burst of violet crystal through a waveform.">
+				<figcaption>splash-poster-crystal.jpg</figcaption>
+			</figure>
+			<figure>
+				<img src="../assets/splash-poster-tv.jpg" alt="A television-headed figure over a night fairground.">
+				<figcaption>splash-poster-tv.jpg</figcaption>
+			</figure>
+			<figure>
+				<img src="../assets/splash-poster-city.jpg" alt="A hooded figure facing a city held inside a helmet.">
+				<figcaption>splash-poster-city.jpg</figcaption>
+			</figure>
+		</div>
+		<p class="body" style="margin-top: 16px;">Film: parascene.com/assets/splash.mp4. Other creations on the site belong to members and are not cleared here. Ask before using anything that is not in this pack.</p>
+		<div class="foot">
+			<span>Work</span>
+			<span>05</span>
+		</div>
+	</section>
+
+	<section class="sheet paper pad">
+		<p class="kicker">Files</p>
+		<h1 style="margin-top: 14px;">Send these.</h1>
+		<p class="body" style="margin-top: 8px; max-width: 6.6in;">Logo files, the typeface, the colours on the previous page, and the five stills. Paths below are on parascene.com once this folder is deployed.</p>
+		<div class="files">
+			<div class="file">
+				<b>This guide</b>
+				<a href="https://www.parascene.com/brand/parascene-brand-guide.pdf">parascene.com/brand/parascene-brand-guide.pdf</a>
+			</div>
+			<div class="file">
+				<b>Wordmark, ink</b>
+				<a href="https://www.parascene.com/brand/logo-wordmark.svg">parascene.com/brand/logo-wordmark.svg</a>
+			</div>
+			<div class="file">
+				<b>Wordmark, mist</b>
+				<a href="https://www.parascene.com/brand/logo-wordmark-on-night.svg">parascene.com/brand/logo-wordmark-on-night.svg</a>
+			</div>
+			<div class="file">
+				<b>App mark</b>
+				<a href="https://www.parascene.com/brand/logo-mark.svg">parascene.com/brand/logo-mark.svg</a>
+			</div>
+			<div class="file">
+				<b>Type</b>
+				<a href="https://fonts.google.com/specimen/Geist">Geist, on Google Fonts</a>
+			</div>
+			<div class="file">
+				<b>Homepage film</b>
+				<a href="https://www.parascene.com/assets/splash.mp4">parascene.com/assets/splash.mp4</a>
+			</div>
+			<div class="file">
+				<b>Still, cliff</b>
+				<a href="https://www.parascene.com/assets/splash-poster-cliff.jpg">parascene.com/assets/splash-poster-cliff.jpg</a>
+			</div>
+			<div class="file">
+				<b>Still, alley</b>
+				<a href="https://www.parascene.com/assets/splash-poster-alley.jpg">parascene.com/assets/splash-poster-alley.jpg</a>
+			</div>
+			<div class="file">
+				<b>Still, crystal</b>
+				<a href="https://www.parascene.com/assets/splash-poster-crystal.jpg">parascene.com/assets/splash-poster-crystal.jpg</a>
+			</div>
+			<div class="file">
+				<b>Still, tv</b>
+				<a href="https://www.parascene.com/assets/splash-poster-tv.jpg">parascene.com/assets/splash-poster-tv.jpg</a>
+			</div>
+			<div class="file">
+				<b>Still, city</b>
+				<a href="https://www.parascene.com/assets/splash-poster-city.jpg">parascene.com/assets/splash-poster-city.jpg</a>
+			</div>
+		</div>
+		<div class="note">You may use these files to represent parascene in the work we are doing together. Ask before using them on merchandise, in a paid ad, or as part of another product. Questions about anything outside this pack: ask before you publish it.</div>
+		<div class="foot">
+			<span>parascene.com/brand</span>
+			<span>06</span>
+		</div>
+	</section>
+</body>
+</html>

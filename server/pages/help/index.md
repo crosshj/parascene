@@ -44,6 +44,10 @@ Browse by topic or use the search above.
 - [Log in with Parascene (developer)](/help/developer/login-with-parascene) — Register an app (PKCE, tokens); API key, revoke, and app setup on **Connections** (`/integrations`).
 - [parascene-client (example on GitHub)](https://github.com/crosshj/parascene-client) — Small runnable sample: sign-in, API OAuth return URL, server-side tokens, session, log out.
 
+**Brand**
+
+- [Brand guide](/help/brand/brand-guide) — Logo, colours, type, and pictures cleared for use.
+
 <br />
 
 [Content safety](/help/content-safety) — How NSFW content works and how to control what you see.
