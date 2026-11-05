@@ -46,7 +46,8 @@ import {
 	pickChallengeHeroImageUrl,
 	pickChallengeResultsCreationUrl,
 	pickChallengeTopicVoteCreationUrl,
-	tracksViewerCanOrganize
+	tracksViewerCanOrganize,
+	viewerCanManageChallengePayouts
 } from "../../client/shared/challenges/challengeAdmin.js";
 import { deriveChallengePhase } from "../../client/shared/challenges/model/phases.js";
 import { MAX_MACHINE_CHANNEL_MESSAGE_CHARS, maxChatMessageBodyChars } from "../services/challenges/chatMessageLimits.js";
@@ -820,6 +821,9 @@ async function validateChallengeConfigOrganizerTrack(
 			Number.isFinite(tid) && tid > 0
 				? await fetchThreadMessagesChronological(sb, tid)
 				: [];
+		if (viewerCanManageChallengePayouts(viewerUserName)) {
+			return { ok: true, body: bodyRaw };
+		}
 		const globalCfg = pickLatestChallengesGlobalConfigPayload(messages);
 		const byTrack = resolveOrganizersByTrackFromGlobalPayload(globalCfg?.payload);
 		if (!viewerOrganizesTrack(viewerUserName, byTrack, nextTrack)) {

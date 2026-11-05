@@ -227,44 +227,37 @@ export async function findChallengesChannelThreadId(sb) {
 }
 
 /**
- * Page older than `beforeId` (newest-first) until a challenges_global_config row is found.
- * The organizer allowlist lives on that sparse message and can fall outside the recent window.
+ * Latest challenges_global_config row, independent of the recent-message window.
+ * An id walk from the oldest created_at in that window misses the row when a
+ * newer-dated message has a smaller id than the config.
  *
  * @param {import("@supabase/supabase-js").SupabaseClient} sb
  * @param {number} threadId
- * @param {number | null} beforeId exclusive upper bound on message id
  * @returns {Promise<object | null>}
  */
-async function fetchChallengesGlobalConfigOlderThan(sb, threadId, beforeId) {
-	let cursor = Number.isFinite(Number(beforeId)) ? Number(beforeId) : null;
-	for (;;) {
-		let q = sb
-			.from("prsn_chat_messages")
-			.select("id, body, created_at, sender_id, reactions")
-			.eq("thread_id", threadId)
-			.order("id", { ascending: false })
-			.limit(MESSAGE_FETCH_LIMIT);
-		if (cursor != null) q = q.lt("id", cursor);
-		const { data, error } = await q;
-		if (error) throw error;
-		const rows = Array.isArray(data) ? data : [];
-		for (const row of rows) {
-			const payload = tryParseChallengeJsonBody(row?.body);
-			if (payload && String(payload.kind || "").trim() === "challenges_global_config") {
-				return row;
-			}
+async function fetchLatestChallengesGlobalConfigRow(sb, threadId) {
+	const { data, error } = await sb
+		.from("prsn_chat_messages")
+		.select("id, body, created_at, sender_id, reactions")
+		.eq("thread_id", threadId)
+		.ilike("body", "%challenges_global_config%")
+		.order("id", { ascending: false })
+		.limit(20);
+	if (error) throw error;
+	const rows = Array.isArray(data) ? data : [];
+	for (const row of rows) {
+		const payload = tryParseChallengeJsonBody(row?.body);
+		if (payload && String(payload.kind || "").trim() === "challenges_global_config") {
+			return row;
 		}
-		if (rows.length < MESSAGE_FETCH_LIMIT) return null;
-		const lastId = Number(rows[rows.length - 1]?.id);
-		if (!Number.isFinite(lastId) || lastId <= 0) return null;
-		cursor = lastId;
 	}
+	return null;
 }
 
 /**
  * Newest `limit` messages, returned in chronological order (oldest → newest within the slice).
  * Fetching newest-first avoids the oldest-slice cliff once the thread exceeds MESSAGE_FETCH_LIMIT.
- * If `challenges_global_config` fell outside the window, pages older until it is found and
+ * If `challenges_global_config` fell outside the window, looks it up directly and
  * splices that row in (organizer allowlist would otherwise collapse to oceanman only).
  *
  * @param {import("@supabase/supabase-js").SupabaseClient} sb
@@ -276,13 +269,7 @@ export async function fetchThreadMessagesChronological(sb, threadId, limit = MES
 	const chronological = newestFirst.slice().reverse();
 	if (pickLatestChallengesGlobalConfig(chronological)) return chronological;
 
-	const oldestInWindow = newestFirst.length ? newestFirst[newestFirst.length - 1] : null;
-	const beforeId = Number(oldestInWindow?.id);
-	const globalRow = await fetchChallengesGlobalConfigOlderThan(
-		sb,
-		threadId,
-		Number.isFinite(beforeId) && beforeId > 0 ? beforeId : null
-	);
+	const globalRow = await fetchLatestChallengesGlobalConfigRow(sb, threadId);
 	if (!globalRow) return chronological;
 
 	const globalId = Number(globalRow.id);

@@ -618,11 +618,12 @@ function renderOrganizeCardHtml(c, vm) {
 }
 
 /**
- * Template picker chips for create modal (or locked display on edit).
+ * Track shown as selected. When the requested track is not one this organizer
+ * runs, the chip moves to a track they do organize — the saved value must follow.
  * @param {string} [activeTrack]
  * @param {{ locked?: boolean, allowedTracks?: string[] | null, coerceActive?: boolean }} [opts]
  */
-export function renderOrganizeTemplatePickerHtml(activeTrack = 'monthly', opts = {}) {
+export function resolveDisplayedOrganizeTrack(activeTrack = 'monthly', opts = {}) {
 	const locked = Boolean(opts?.locked);
 	const allowedRaw = opts?.allowedTracks;
 	const allowedSet = Array.isArray(allowedRaw)
@@ -638,6 +639,21 @@ export function renderOrganizeTemplatePickerHtml(activeTrack = 'monthly', opts =
 	) {
 		active = normalizeChallengeTrack([...allowedSet][0]);
 	}
+	return active;
+}
+
+/**
+ * Template picker chips for create modal (or locked display on edit).
+ * @param {string} [activeTrack]
+ * @param {{ locked?: boolean, allowedTracks?: string[] | null, coerceActive?: boolean }} [opts]
+ */
+export function renderOrganizeTemplatePickerHtml(activeTrack = 'monthly', opts = {}) {
+	const locked = Boolean(opts?.locked);
+	const allowedRaw = opts?.allowedTracks;
+	const allowedSet = Array.isArray(allowedRaw)
+		? new Set(allowedRaw.map((t) => normalizeChallengeTrack(t)))
+		: null;
+	const active = resolveDisplayedOrganizeTrack(activeTrack, opts);
 	return `<div class="challenges-organize-templates${locked ? ' is-locked' : ''}" role="group" aria-label="${locked ? 'Challenge type (locked)' : 'Challenge template'}"${locked ? ' aria-disabled="true"' : ''}>
 		${CHALLENGE_TRACK_TEMPLATES.map((t) => {
 			const on = t.track === active ? ' is-active' : '';

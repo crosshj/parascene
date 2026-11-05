@@ -203,12 +203,25 @@ export function isImpliedChallengeOrganizer(viewerUserName) {
 }
 
 /**
- * Payout / finalize actions — oceanman, admin, and paperman.
+ * Payout / finalize actions for any track — oceanman, admin, and paperman.
+ * Track organizers can pay challenges on a track they organize; see
+ * {@link viewerCanOperateChallengePayout}.
  * @param {string | null | undefined} viewerUserName
  */
 export function viewerCanManageChallengePayouts(viewerUserName) {
 	const u = typeof viewerUserName === 'string' ? viewerUserName.trim().toLowerCase() : '';
 	return u === IMPLIED_CHALLENGE_ORGANIZER || u === 'admin' || u === 'paperman';
+}
+
+/**
+ * Pay or finalize this challenge: global payout accounts, or an organizer of its track.
+ * @param {string | null | undefined} viewerUserName
+ * @param {{ monthly?: string[], weekly?: string[], suno?: string[] } | null | undefined} organizersByTrack
+ * @param {unknown} track
+ */
+export function viewerCanOperateChallengePayout(viewerUserName, organizersByTrack, track) {
+	if (viewerCanManageChallengePayouts(viewerUserName)) return true;
+	return viewerOrganizesTrack(viewerUserName, organizersByTrack, track);
 }
 
 /**

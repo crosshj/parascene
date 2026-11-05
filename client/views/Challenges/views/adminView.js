@@ -19,7 +19,7 @@ import {
 	rankTopSubmitters,
 	rankTopVoters
 } from '../../../shared/challenges/model/ranking.js';
-import { renderOrganizeTemplatePickerHtml, renderOrganizeBoardHtml } from './organizeBoardView.js';
+import { renderOrganizeTemplatePickerHtml, renderOrganizeBoardHtml, resolveDisplayedOrganizeTrack } from './organizeBoardView.js';
 import { resolvePinSlotWindows } from '../../../shared/challenges/model/pinSlots.js';
 import { clock3Icon, megaphoneIcon, pencilIcon, trophyIcon, pictureIcon, peopleOutlined, thumbsUpStrokeIcon } from '../../../icons/svg-strings.js';
 import { renderChallengeHistoryThumbWrapHtml } from '../../../shared/challengeHistoryThumb.js';
@@ -185,7 +185,6 @@ function renderDatetimeFieldsHtml(values) {
 	const start = String(v.submission_start_ymd || v.submission_start_at || '').slice(0, 10);
 	const end = String(v.submission_end_ymd || v.submission_end_at || '').slice(0, 10);
 	return `<div class="challenge-pane-admin-datetimes challenges-organize-day-fields">
-				<input type="hidden" name="track" value="${esc(String(v.track || 'monthly'))}" data-organize-track-field />
 				<div data-organize-calendar-mount></div>
 				<div class="challenges-organize-day-fields-row challenges-organize-day-fields-row--under-cal">
 					<label class="challenge-pane-label">Starts
@@ -781,6 +780,7 @@ function renderChallengeOrganizerTabbedFormHtml(opts = {}) {
 	return `<form class="challenge-pane-admin-config-form" data-challenge-admin-config-form ${formAttrs}>
 		${ids}
 		${challengeIdField}
+		<input type="hidden" name="track" value="${esc(normalizeChallengeTrack(dt.track))}" data-organize-track-field />
 		<div class="challenge-pane-admin-form-main">
 			${toolbar}
 			<div class="challenges-organize-edit-tabs" role="tablist" aria-label="${esc(tablistLabel)}">
@@ -825,13 +825,17 @@ export function renderChallengeOrganizerEditSectionHtml(section, latest, configM
 	const sectionKey = String(section || 'all').trim() || 'all';
 
 	if (sectionKey === 'all') {
-		const track = pickChallengeTrack(cfg);
 		const phase = deriveChallengePhase(cfg, Date.now());
 		const trackLocked = phase !== 'pre_submit';
 		const allowedTracks = Array.isArray(opts.allowedTracks) ? opts.allowedTracks : null;
+		const track = resolveDisplayedOrganizeTrack(pickChallengeTrack(cfg), {
+			locked: trackLocked,
+			allowedTracks,
+			coerceActive: false
+		});
 		return `${renderChallengeOrganizerTabbedFormHtml({
 			formRole: 'edit',
-			cfg,
+			cfg: { ...cfg, track },
 			configMessageId,
 			activeTab: opts.activeTab,
 			submitLabel: 'Save',
@@ -883,6 +887,7 @@ export function renderChallengeOrganizerEditSectionHtml(section, latest, configM
 
 	const dt = challengeConfigDatetimeLocals(cfg);
 	return `${formOpen}
+		<input type="hidden" name="track" value="${esc(pickChallengeTrack(cfg))}" data-organize-track-field />
 		${renderDatetimeFieldsHtml(dt)}
 		${editFormFooter('Save schedule')}
 	</form>`;
@@ -905,7 +910,8 @@ export function renderChallengeOrganizerCreateFormHtml(
 	submitLabel = 'Save challenge',
 	opts = {}
 ) {
-	const track = String(opts.track || 'monthly');
+	const allowedTracks = Array.isArray(opts.allowedTracks) ? opts.allowedTracks : null;
+	const track = resolveDisplayedOrganizeTrack(String(opts.track || 'monthly'), { allowedTracks });
 	const titlePrefill = typeof opts.title === 'string' ? opts.title : '';
 	const idPrefill = typeof opts.challenge_id === 'string' ? opts.challenge_id : '';
 	const startYmd = typeof opts.startYmd === 'string' ? opts.startYmd : '';
@@ -916,7 +922,6 @@ export function renderChallengeOrganizerCreateFormHtml(
 			? opts.prizeStructure
 			: null;
 	const activeTab = typeof opts.activeTab === 'string' ? opts.activeTab : 'details';
-	const allowedTracks = Array.isArray(opts.allowedTracks) ? opts.allowedTracks : null;
 	const cfg = {
 		title: titlePrefill,
 		challenge_id: idPrefill,

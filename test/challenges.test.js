@@ -4,7 +4,8 @@ import { challengeCreationForViewer, appendChallengeMediaProof, listChallengeEnt
 import { buildChallengesChannelModel } from '../client/shared/challenges/model/buildChannelModel.js';
 import { renderChallengesPaneHtml } from '../client/views/Challenges/mountPane.js';
 import { createChallengeQueries } from '../server/db/challenges.js';
-import { viewerCanManageChallengePayouts } from '../client/shared/challenges/challengeAdmin.js';
+import { viewerCanManageChallengePayouts, viewerCanOperateChallengePayout } from '../client/shared/challenges/challengeAdmin.js';
+import { resolveDisplayedOrganizeTrack } from '../client/views/Challenges/views/organizeBoardView.js';
 import { challengeDetailNeighbors, renderPastChallengesSection } from '../client/views/Challenges/views/emptyParticipantView.js';
 import { creationCardMarkup } from '../client/shared/creationGrid.js';
 import { challengeEntryLightboxMedia, challengeEntryPreviewPlan, omitWithdrawnChallengeSubmissions, rememberChallengeDetailUi } from '../client/views/Challenges/views/entryBoardView.js';
@@ -104,6 +105,15 @@ test('paperman can pay out and finalize a challenge', () => {
 	assert.equal(viewerCanManageChallengePayouts('oceanman'), true);
 	assert.equal(viewerCanManageChallengePayouts('admin'), true);
 	assert.equal(viewerCanManageChallengePayouts('someone'), false);
+});
+
+test('a music organizer can pay a music challenge and the saved type follows that chip', () => {
+	const byTrack = { monthly: ['paperman'], weekly: ['paperman'], suno: ['paperman', 'galbatorix47'] };
+	assert.equal(viewerCanOperateChallengePayout('galbatorix47', byTrack, 'suno'), true);
+	assert.equal(viewerCanOperateChallengePayout('galbatorix47', byTrack, 'monthly'), false);
+	assert.equal(viewerCanOperateChallengePayout('paperman', byTrack, 'weekly'), true);
+	assert.equal(resolveDisplayedOrganizeTrack('monthly', { allowedTracks: ['suno'] }), 'suno');
+	assert.equal(resolveDisplayedOrganizeTrack('suno', { allowedTracks: ['suno'] }), 'suno');
 });
 
 test('prior challenges open detail, and a finalized challenge separates winners', () => {

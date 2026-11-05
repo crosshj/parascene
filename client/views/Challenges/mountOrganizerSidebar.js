@@ -10,7 +10,7 @@ import {
 	tracksViewerCanOrganize,
 	viewerOrganizesTrack,
 	isImpliedChallengeOrganizer,
-	viewerCanManageChallengePayouts,
+	viewerCanOperateChallengePayout,
 	applyChallengeListed,
 	applyChallengeUnlisted
 } from '../../shared/challenges/challengeAdmin.js';
@@ -586,7 +586,11 @@ export function mountChallengesOrganizerTools(host, opts) {
 		const phase = deriveChallengePhase(merged, Date.now());
 		const showPayoutTab =
 			(phase === 'finalizing' || phase === 'results') &&
-			viewerCanManageChallengePayouts(opts.viewerUserName);
+			viewerCanOperateChallengePayout(
+				opts.viewerUserName,
+				organizersByTrackNow(),
+				pickChallengeTrack(merged)
+			);
 		const activeTab =
 			openOpts.activeTab === 'payout' && showPayoutTab ? 'payout' : 'stats';
 
@@ -724,6 +728,13 @@ export function mountChallengesOrganizerTools(host, opts) {
 		const submitBtn = adminForm.querySelector('.challenge-pane-admin-submit');
 
 		const fd = new FormData(adminForm);
+		const trackFromForm = (fallback = '') => {
+			const chip = adminForm.querySelector('[data-organize-template].is-active');
+			const chipTrack = chip instanceof HTMLElement ? chip.getAttribute('data-organize-template') : '';
+			return normalizeChallengeTrack(
+				String(chipTrack || fd.get('track') || fallback || createTrack || 'monthly')
+			);
+		};
 		const organizersMonthlyCsv = String(fd.get('organizers_monthly_csv') || '').trim();
 		const organizersWeeklyCsv = String(fd.get('organizers_weekly_csv') || '').trim();
 		const organizersSunoCsv = String(fd.get('organizers_suno_csv') || '').trim();
@@ -831,9 +842,7 @@ export function mountChallengesOrganizerTools(host, opts) {
 			} else {
 				// Create: `{startDate}-{track}-{token}` from final schedule/track.
 				if (!isEditForm) {
-					const trackForId = normalizeChallengeTrack(
-						String(fd.get('track') || createTrack || 'monthly')
-					);
+					const trackForId = trackFromForm();
 					const startForId =
 						String(fd.get('schedule_start_ymd') || '').trim() || dateToLocalYmd();
 					challengeId = getChallengeTrackTemplate(trackForId).suggestId(startForId);
@@ -857,9 +866,7 @@ export function mountChallengesOrganizerTools(host, opts) {
 						if (detailsTab instanceof HTMLButtonElement) detailsTab.click();
 						return;
 					}
-					const track = normalizeChallengeTrack(
-						String(fd.get('track') || base.track || 'monthly')
-					);
+					const track = trackFromForm(base.track);
 					const startYmd = String(fd.get('schedule_start_ymd') || '').trim();
 					const endYmd = String(fd.get('schedule_end_ymd') || '').trim() || startYmd;
 					if (!startYmd) {
@@ -963,7 +970,7 @@ export function mountChallengesOrganizerTools(host, opts) {
 						applyRewardsAndPrizesFromForm(payload, fd, adminForm);
 					}
 				} else {
-					const track = normalizeChallengeTrack(String(fd.get('track') || base.track || 'monthly'));
+					const track = trackFromForm(base.track);
 					const startYmd = String(fd.get('schedule_start_ymd') || '').trim();
 					const endYmd = String(fd.get('schedule_end_ymd') || '').trim() || startYmd;
 					if (!startYmd) {

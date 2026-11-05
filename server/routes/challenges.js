@@ -24,14 +24,14 @@ import {
 	resolveChallengeOrganizerAllowlistFromMessages,
 	pickLatestChallengesGlobalConfigPayload,
 	resolveOrganizersByTrackFromGlobalPayload,
-	viewerOrganizesTrack,
 	tryParseChallengeJsonBody
 } from "../services/create/challengeSubmitShared.js";
 import {
 	mergeFullChallengeConfigForChallenge,
 	isChallengeConfigSoftDeleted,
 	isChallengeConfigPurged,
-	viewerCanManageChallengePayouts
+	viewerCanManageChallengePayouts,
+	viewerCanOperateChallengePayout
 } from "../../client/shared/challenges/challengeAdmin.js";
 import { deriveChallengePhase } from "../../client/shared/challenges/model/phases.js";
 import { collectChallengeVoteStats } from "../../client/shared/challenges/model/ranking.js";
@@ -217,7 +217,8 @@ export default function createChallengesRoutes({ queries }) {
 
 		const messages = await fetchThreadMessagesChronological(sb, threadId);
 		const allow = resolveChallengeOrganizerAllowlistFromMessages(messages);
-		if (!new Set(allow).has(viewerUserName)) {
+		const payoutManager = viewerCanManageChallengePayouts(viewerUserName);
+		if (!new Set(allow).has(viewerUserName) && !payoutManager) {
 			res.status(403).json({ error: "Forbidden", message: "Not a challenge organizer" });
 			return null;
 		}
@@ -244,16 +245,8 @@ export default function createChallengesRoutes({ queries }) {
 
 		const globalPayload = pickLatestChallengesGlobalConfigPayload(messages)?.payload;
 		const organizersByTrack = resolveOrganizersByTrackFromGlobalPayload(globalPayload);
-		if (!viewerOrganizesTrack(viewerUserName, organizersByTrack, merged.track || "monthly")) {
+		if (!viewerCanOperateChallengePayout(viewerUserName, organizersByTrack, merged.track || "monthly")) {
 			res.status(403).json({ error: "Forbidden", message: "Not an organizer for this track" });
-			return null;
-		}
-
-		if (!viewerCanManageChallengePayouts(viewerUserName)) {
-			res.status(403).json({
-				error: "Forbidden",
-				message: "Not allowed to manage challenge payouts."
-			});
 			return null;
 		}
 
