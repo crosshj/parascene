@@ -81,9 +81,21 @@ install_nginx_config() {
 	local available_path="/etc/nginx/sites-available/${site_name}"
 	local enabled_path="/etc/nginx/sites-enabled/${site_name}"
 	local legacy_path="/etc/nginx/sites-enabled/parascene"
+	local other_site
 	local backup_path
 	local previous_backup=""
 	local legacy_backup=""
+
+	# Each deploy owns exactly one site file. Never install/remove the other slot.
+	if [[ "$DEPLOY_ENV" == "beta" ]]; then
+		other_site="parascene-prod"
+	else
+		other_site="parascene-beta"
+	fi
+	if [[ "$site_name" == "$other_site" ]]; then
+		echo "refusing to install nginx site ${site_name} during ${DEPLOY_ENV} deploy" >&2
+		return 1
+	fi
 
 	if [[ "$DEPLOY_ENV" == "prod" && ! -e /etc/nginx/sites-enabled/parascene-beta && -e "$legacy_path" ]]; then
 		echo "Deploy beta before the first prod deploy so the combined Nginx site can be replaced without dropping beta.parascene.com" >&2
@@ -203,6 +215,16 @@ if [[ "${1:-}" == "remote" ]]; then
 	# Replace the on-disk deployment only after the new image builds successfully.
 	find "$APP_DIR" -mindepth 1 -maxdepth 1 ! -name '.env' -exec rm -rf -- {} +
 	cp -a "$STAGING_DIR"/. "$APP_DIR"/
+	echo "Deploying DEPLOY_ENV=${DEPLOY_ENV} container=${CONTAINER_NAME} port=${HOST_PORT} origin=${APP_ORIGIN} nginx=parascene-${DEPLOY_ENV}"
+	# Refuse to touch the other slot's container name.
+	if [[ "$DEPLOY_ENV" == "beta" && "$CONTAINER_NAME" != "parascene" ]]; then
+		echo "beta deploy must use container parascene (got ${CONTAINER_NAME})" >&2
+		exit 1
+	fi
+	if [[ "$DEPLOY_ENV" == "prod" && "$CONTAINER_NAME" != "parascene-prod" ]]; then
+		echo "prod deploy must use container parascene-prod (got ${CONTAINER_NAME})" >&2
+		exit 1
+	fi
 	docker rm --force "$CONTAINER_NAME" 2>/dev/null || true
 	docker run --detach \
 		--name "$CONTAINER_NAME" \
