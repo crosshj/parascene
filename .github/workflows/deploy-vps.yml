@@ -25,9 +25,13 @@ jobs:
     runs-on: ubuntu-latest
     # Push to beta → beta slot. Push to main → prod slot (prod.parascene.com).
     # Manual runs pick the slot explicitly.
+    # Secrets currently live on the `beta` GitHub environment (repo also has
+    # VPS_HOST / VPS_USER / VPS_SSH_KEY). The empty `prod` environment is
+    # ready to take its own copy; until then both slots read `beta` secrets.
+    # For www cookie parity, SESSION_SECRET on that env must match Vercel prod.
     env:
       DEPLOY_ENV: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_env || (github.ref_name == 'main' && 'prod' || 'beta') }}
-    environment: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_env || (github.ref_name == 'main' && 'prod' || 'beta') }}
+    environment: beta
     if: >
       github.event_name == 'workflow_dispatch' ||
       github.ref_name == 'beta' ||
