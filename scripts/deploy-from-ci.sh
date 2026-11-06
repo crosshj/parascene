@@ -20,16 +20,21 @@ deploy_target() {
 			API_HOSTNAME="beta-api.parascene.com"
 			SHARE_HOSTNAME="beta-sh.parascene.com"
 			CDN_HOSTNAME="beta-cdn.parascene.com"
+			# Beta still terminates its own api/cdn/share names on this host.
+			NGINX_SERVER_NAMES="__SITE_API_CDN_SHARE__"
 			;;
 		prod)
+			# Frontend-only rehearsal on the same VPS. Visitors hit Cloudflare →
+			# this origin; API/CDN/share stay on the live prod hosts (Vercel/etc).
 			APP_HOME_NAME="parascene-prod"
 			CONTAINER_NAME="parascene-prod"
 			HOST_PORT="3001"
 			IMAGE_TAG="parascene:prod"
-			APP_ORIGIN="https://www.parascene.com"
+			APP_ORIGIN="https://prod.parascene.com"
 			API_HOSTNAME="api.parascene.com"
 			SHARE_HOSTNAME="sh.parascene.com"
 			CDN_HOSTNAME="cdn.parascene.com"
+			NGINX_SERVER_NAMES="__SITE_ONLY__"
 			;;
 		*)
 			echo "DEPLOY_ENV must be beta or prod (got: ${DEPLOY_ENV:-})" >&2
@@ -45,7 +50,19 @@ render_nginx_config() {
 	local app_dir="$1"
 	local source_path="$app_dir/infra/nginx/parascene.conf"
 	local rendered_path="$app_dir/infra/nginx/parascene-${DEPLOY_ENV}.conf"
-	local server_names="${SITE_HOST} ${API_HOSTNAME} ${SHARE_HOSTNAME} ${CDN_HOSTNAME}"
+	local server_names
+
+	case "${NGINX_SERVER_NAMES:-}" in
+		__SITE_ONLY__)
+			server_names="$SITE_HOST"
+			;;
+		__SITE_API_CDN_SHARE__|"")
+			server_names="${SITE_HOST} ${API_HOSTNAME} ${SHARE_HOSTNAME} ${CDN_HOSTNAME}"
+			;;
+		*)
+			server_names="$NGINX_SERVER_NAMES"
+			;;
+	esac
 
 	if [[ ! -f "$source_path" ]]; then
 		echo "Nginx configuration is missing from the deployment package: $source_path" >&2
@@ -200,13 +217,20 @@ if [[ "${1:-}" == "remote" ]]; then
 	install_nginx_config "$rendered_nginx"
 
 	# Verify the public nginx-to-Docker path. Keep retrying while the container starts.
+	# Prod is frontend-only: api/cdn/share are not on this nginx site.
 	for attempt in {1..30}; do
-		api_status="$(https_status "$API_HOSTNAME" /)"
-		share_status="$(https_status "$SHARE_HOSTNAME" /)"
-		if https_ok "$SITE_HOST" / && \
-			https_ok "$CDN_HOSTNAME" /healthz && \
-			[[ "$api_status" == "302" && "$share_status" == "302" ]]; then
-			exit 0
+		if [[ "$DEPLOY_ENV" == "prod" ]]; then
+			if https_ok "$SITE_HOST" /; then
+				exit 0
+			fi
+		else
+			api_status="$(https_status "$API_HOSTNAME" /)"
+			share_status="$(https_status "$SHARE_HOSTNAME" /)"
+			if https_ok "$SITE_HOST" / && \
+				https_ok "$CDN_HOSTNAME" /healthz && \
+				[[ "$api_status" == "302" && "$share_status" == "302" ]]; then
+				exit 0
+			fi
 		fi
 		sleep 2
 	done
