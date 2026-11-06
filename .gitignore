@@ -151,7 +151,8 @@ _legacy/public/.asset-version-dev
 _legacy/public/.build-info.json
 _legacy/scripts/.local/
 public/build/
-# Local: `touch .no-minify-chat-bundle` to skip terser on `npm run build` (see src/rollup.config.mjs)
+_legacy/public/build/
+# Local: `touch .no-minify-chat-bundle` to skip terser on `npm run build` (see _legacy/src/rollup.config.mjs)
 .no-minify-chat-bundle
 scripts/.local/
 /ollama-client/settings.json
@@ -160,4 +161,5 @@ _preview/
 # VPS client build output
 build/
 /db/maintenance/backups
+_legacy/db/maintenance/backups
 _legacy/ollama-client/settings.json
