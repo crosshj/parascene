@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="260" height="260">
+	<defs>
+		<radialGradient id="g" cx="50%" cy="50%" r="55%">
+			<stop offset="0%" stop-color="#7c3aed" stop-opacity="0.22"/>
+			<stop offset="100%" stop-color="#14141a" stop-opacity="0"/>
+		</radialGradient>
+	</defs>
+	<rect width="100" height="100" rx="8" fill="#14141a"/>
+	<rect width="100" height="100" rx="8" fill="url(#g)"/>
+	<g fill="#7c3aed">
+		<rect x="10.75" y="45.77" width="3.5" height="8.46" rx="1.25"/>
+		<rect x="15.75" y="42.38" width="3.5" height="15.23" rx="1.25"/>
+		<rect x="20.75" y="38.15" width="3.5" height="23.69" rx="1.25"/>
+		<rect x="25.75" y="33.08" width="3.5" height="33.85" rx="1.25"/>
+		<rect x="30.75" y="28" width="3.5" height="44" rx="1.25"/>
+		<rect x="35.75" y="33.08" width="3.5" height="33.85" rx="1.25"/>
+		<rect x="40.75" y="38.15" width="3.5" height="23.69" rx="1.25"/>
+		<rect x="45.75" y="42.38" width="3.5" height="15.23" rx="1.25"/>
+		<rect x="50.75" y="45.77" width="3.5" height="8.46" rx="1.25"/>
+		<rect x="55.75" y="43.23" width="3.5" height="13.54" rx="1.25"/>
+		<rect x="60.75" y="39" width="3.5" height="22" rx="1.25"/>
+		<rect x="65.75" y="33.92" width="3.5" height="32.15" rx="1.25"/>
+		<rect x="70.75" y="28.85" width="3.5" height="42.31" rx="1.25"/>
+		<rect x="75.75" y="33.92" width="3.5" height="32.15" rx="1.25"/>
+		<rect x="80.75" y="39" width="3.5" height="22" rx="1.25"/>
+		<rect x="85.75" y="43.23" width="3.5" height="13.54" rx="1.25"/>
+		<rect x="90.75" y="45.77" width="3.5" height="8.46" rx="1.25"/>
+	</g>
+</svg>

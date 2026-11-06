@@ -1,0 +1,337 @@
+import "dotenv/config";
+import Stripe from "stripe";
+import { openDb } from "../../db/index.js";
+import { getCreditTopupPack } from "../../api_routes/utils/creditPacks.js";
+import { notifyCreditPurchase } from "../../api_routes/utils/purchaseNotify.js";
+import { resolveInvoiceSubscriptionId } from "../../api_routes/utils/stripeInvoice.js";
+import { notifyAdminFounderRenewalPayout } from "../../api_routes/utils/founderRenewalAdminNotify.js";
+
+const FOUNDER_CREDITS_GRANT = 700;
+
+/** In-memory set of processed Stripe event ids (avoids double-apply in same instance; lost on cold start). */
+const processedEventIds = new Set();
+
+/**
+ * Get raw request body for signature verification.
+ * Supports Node IncomingMessage (stream) or Fetch-like request.
+ */
+async function getRawBody(req) {
+	if (typeof req.text === "function") {
+		return await req.text();
+	}
+	if (typeof req.arrayBuffer === "function") {
+		const buf = await req.arrayBuffer();
+		return Buffer.from(buf).toString("utf8");
+	}
+	if (req.on && typeof req.on === "function") {
+		return await new Promise((resolve, reject) => {
+			const chunks = [];
+			req.on("data", (chunk) => chunks.push(chunk));
+			req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+			req.on("error", reject);
+		});
+	}
+	return "";
+}
+
+/**
+ * Grant Founder credits: ensure user has a credits row, then add FOUNDER_CREDITS_GRANT.
+ */
+async function ensureCreditsRow(queries, userId) {
+	const credits = await queries.selectUserCredits?.get(userId);
+	if (!credits) {
+		try {
+			await queries.insertUserCredits?.run(userId, 0, null);
+		} catch (e) {
+			// Row may already exist from race
+		}
+	}
+}
+
+async function grantFounderCredits(queries, userId) {
+	await ensureCreditsRow(queries, userId);
+	if (queries.updateUserCreditsBalance?.run) {
+		await queries.updateUserCreditsBalance.run(userId, FOUNDER_CREDITS_GRANT);
+	}
+}
+
+async function grantTopupCredits(queries, userId, amount) {
+	await ensureCreditsRow(queries, userId);
+	if (queries.updateUserCreditsBalance?.run) {
+		await queries.updateUserCreditsBalance.run(userId, amount);
+	}
+}
+
+async function handleCreditTopup(queries, session) {
+	const sessionId = typeof session?.id === "string" ? session.id.trim() : "";
+	const paymentStatus = session?.payment_status;
+	if (paymentStatus && paymentStatus !== "paid" && paymentStatus !== "no_payment_required") {
+		return;
+	}
+	const userId = session?.client_reference_id ? String(session.client_reference_id).trim() : "";
+	const pack = getCreditTopupPack(session?.metadata?.pack);
+	if (!sessionId || !userId || !pack) {
+		console.error("[Stripe Webhook] credit_topup session missing session, user, or pack");
+		return;
+	}
+	if (!queries.claimGrantedCheckoutSession?.run) {
+		await grantTopupCredits(queries, userId, pack.credits);
+		await notifyCreditPurchase(queries, { userId, kind: "topup", credits: pack.credits });
+		return;
+	}
+	const claim = await queries.claimGrantedCheckoutSession.run(userId, sessionId);
+	if (!claim?.granted) {
+		return;
+	}
+	try {
+		await grantTopupCredits(queries, userId, pack.credits);
+	} catch (err) {
+		if (queries.releaseGrantedCheckoutSession?.run) {
+			await queries.releaseGrantedCheckoutSession.run(userId, sessionId);
+		}
+		throw err;
+	}
+	await notifyCreditPurchase(queries, { userId, kind: "topup", credits: pack.credits });
+}
+
+export default async function handler(req, res) {
+	res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
+	res.setHeader("Pragma", "no-cache");
+	res.setHeader("Expires", "0");
+
+	if (req.method !== "POST") {
+		return res.status(405).json({ error: "Method not allowed" });
+	}
+
+	const secret = process.env.STRIPE_WEBHOOK_SECRET;
+	const stripeSecret = process.env.STRIPE_SECRET_KEY;
+	if (!secret || !stripeSecret) {
+		console.error("[Stripe Webhook] STRIPE_WEBHOOK_SECRET or STRIPE_SECRET_KEY not set");
+		return res.status(503).json({ error: "Webhook not configured" });
+	}
+
+	let rawBody;
+	try {
+		rawBody = await getRawBody(req);
+	} catch (e) {
+		console.error("[Stripe Webhook] Failed to read raw body:", e);
+		return res.status(400).json({ error: "Invalid body" });
+	}
+
+	const sig = req.headers["stripe-signature"];
+	if (!sig) {
+		return res.status(400).json({ error: "Missing stripe-signature" });
+	}
+
+	let event;
+	try {
+		const stripe = new Stripe(stripeSecret);
+		event = stripe.webhooks.constructEvent(rawBody, sig, secret);
+	} catch (err) {
+		console.error("[Stripe Webhook] Signature verification failed:", err.message);
+		return res.status(400).json({ error: "Invalid signature" });
+	}
+
+	// Idempotency: skip if we already handled this event in this instance
+	if (processedEventIds.has(event.id)) {
+		return res.status(200).json({ received: true });
+	}
+
+	try {
+		const { queries } = await openDb();
+
+		if (event.type === "checkout.session.completed") {
+			const session = event.data?.object;
+			if (session?.mode === "payment" || session?.metadata?.type === "credit_topup") {
+				await handleCreditTopup(queries, session);
+				processedEventIds.add(event.id);
+			} else {
+				const userId = session?.client_reference_id ? String(session.client_reference_id).trim() : null;
+				if (!userId) {
+					console.error("[Stripe Webhook] checkout.session.completed missing client_reference_id");
+					return res.status(200).json({ received: true });
+				}
+
+				if (queries.updateUserPlan?.run) {
+					await queries.updateUserPlan.run(userId, "founder");
+				}
+				const subId = session?.subscription
+					? (typeof session.subscription === "string" ? session.subscription : session.subscription?.id)
+					: null;
+				if (subId && queries.updateUserStripeSubscriptionId?.run) {
+					await queries.updateUserStripeSubscriptionId.run(userId, subId);
+				}
+				const sessionId = typeof session?.id === "string" ? session.id.trim() : "";
+				let shouldGrant = true;
+				if (sessionId && queries.claimGrantedCheckoutSession?.run) {
+					const claim = await queries.claimGrantedCheckoutSession.run(userId, sessionId);
+					shouldGrant = !!claim?.granted;
+				}
+				if (shouldGrant) {
+					try {
+						await grantFounderCredits(queries, userId);
+						await notifyCreditPurchase(queries, {
+							userId,
+							kind: "founder",
+							credits: FOUNDER_CREDITS_GRANT
+						});
+					} catch (err) {
+						if (sessionId && queries.releaseGrantedCheckoutSession?.run) {
+							await queries.releaseGrantedCheckoutSession.run(userId, sessionId);
+						}
+						throw err;
+					}
+				}
+				processedEventIds.add(event.id);
+			}
+		}
+
+		if (event.type === "customer.subscription.deleted") {
+			const subscription = event.data?.object;
+			const subscriptionId = subscription?.id;
+			if (!subscriptionId || !queries.selectUserByStripeSubscriptionId?.get) {
+				return res.status(200).json({ received: true });
+			}
+			const user = await queries.selectUserByStripeSubscriptionId.get(subscriptionId);
+			if (!user) {
+				return res.status(200).json({ received: true });
+			}
+			const userId = String(user.id);
+			if (queries.updateUserPlan?.run) {
+				await queries.updateUserPlan.run(userId, "free");
+			}
+			if (queries.updateUserStripeSubscriptionId?.run) {
+				await queries.updateUserStripeSubscriptionId.run(userId, null);
+			}
+			processedEventIds.add(event.id);
+		}
+
+		if (event.type === "invoice.paid") {
+			const invoice = event.data?.object;
+			const billingReason = invoice?.billing_reason;
+			// Only grant credits on recurring cycle, not on initial subscription (handled by checkout.session.completed)
+			if (billingReason !== "subscription_cycle") {
+				return res.status(200).json({ received: true });
+			}
+
+			const invoiceId = typeof invoice?.id === "string" ? invoice.id : null;
+			const amountPaidCents = Number.isFinite(Number(invoice?.amount_paid))
+				? Number(invoice.amount_paid)
+				: null;
+			const subscriptionId = resolveInvoiceSubscriptionId(invoice);
+			const adminBase = {
+				invoiceId,
+				subscriptionId: subscriptionId || "",
+				credits: FOUNDER_CREDITS_GRANT,
+				amountPaidCents,
+				eventId: event.id
+			};
+
+			async function profileFields(userId) {
+				const profile = await queries.selectUserProfileByUserId?.get?.(userId).catch(() => null);
+				return {
+					userName: typeof profile?.user_name === "string" ? profile.user_name : "",
+					displayName: typeof profile?.display_name === "string" ? profile.display_name : ""
+				};
+			}
+
+			if (!subscriptionId || !queries.selectUserByStripeSubscriptionId?.get) {
+				const reason = !subscriptionId
+					? "subscription_cycle invoice missing subscription id (could not resolve from Stripe invoice shape)"
+					: "selectUserByStripeSubscriptionId query unavailable";
+				console.error("[Stripe Webhook] invoice.paid renewal payout failed", {
+					invoiceId,
+					subscriptionId,
+					reason
+				});
+				await notifyAdminFounderRenewalPayout({ ...adminBase, status: "failed", reason });
+				return res.status(200).json({ received: true });
+			}
+
+			const user = await queries.selectUserByStripeSubscriptionId.get(subscriptionId);
+			if (!user) {
+				const reason = `No user found for subscription ${subscriptionId}`;
+				console.error("[Stripe Webhook] invoice.paid renewal payout failed", {
+					invoiceId,
+					subscriptionId,
+					reason
+				});
+				await notifyAdminFounderRenewalPayout({ ...adminBase, status: "failed", reason });
+				return res.status(200).json({ received: true });
+			}
+
+			const userId = String(user.id);
+			const profile = await profileFields(user.id);
+			const userEmail = typeof user.email === "string" ? user.email : "";
+
+			let claimedInvoice = false;
+			if (invoiceId && queries.claimGrantedStripeInvoice?.run) {
+				const claim = await queries.claimGrantedStripeInvoice.run(userId, invoiceId);
+				if (!claim?.granted) {
+					// Already recorded for this invoice — treat as success idempotency, not a new payout.
+					console.log("[Stripe Webhook] invoice.paid renewal already granted", {
+						invoiceId,
+						subscriptionId,
+						userId
+					});
+					processedEventIds.add(event.id);
+					return res.status(200).json({ received: true });
+				}
+				claimedInvoice = true;
+			} else if (!invoiceId) {
+				console.error("[Stripe Webhook] invoice.paid renewal missing invoice id; granting without claim", {
+					subscriptionId,
+					userId
+				});
+			}
+
+			try {
+				await grantFounderCredits(queries, userId);
+				await notifyCreditPurchase(queries, {
+					userId,
+					kind: "founder_renewal",
+					credits: FOUNDER_CREDITS_GRANT,
+					meta: {
+						stripe_invoice_id: invoiceId || null,
+						stripe_subscription_id: subscriptionId || null
+					}
+				});
+				await notifyAdminFounderRenewalPayout({
+					...adminBase,
+					status: "success",
+					userId: user.id,
+					userEmail,
+					...profile
+				});
+				processedEventIds.add(event.id);
+			} catch (grantErr) {
+				if (claimedInvoice && queries.releaseGrantedStripeInvoice?.run) {
+					try {
+						await queries.releaseGrantedStripeInvoice.run(userId, invoiceId);
+					} catch (releaseErr) {
+						console.error(
+							"[Stripe Webhook] failed to release granted invoice claim:",
+							releaseErr?.message || releaseErr
+						);
+					}
+				}
+				const reason = grantErr?.message || "Founder renewal credit grant failed";
+				console.error("[Stripe Webhook] invoice.paid renewal grant error:", grantErr);
+				await notifyAdminFounderRenewalPayout({
+					...adminBase,
+					status: "failed",
+					reason,
+					userId: user.id,
+					userEmail,
+					...profile
+				});
+				throw grantErr;
+			}
+		}
+
+		return res.status(200).json({ received: true });
+	} catch (err) {
+		console.error("[Stripe Webhook] Handler error:", err);
+		return res.status(500).json({ error: "Webhook handler failed" });
+	}
+}

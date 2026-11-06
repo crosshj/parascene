@@ -1,0 +1,3 @@
+# Account backup snapshots contain email + password hashes. Never commit them.
+*
+!.gitignore

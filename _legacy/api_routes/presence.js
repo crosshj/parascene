@@ -1,0 +1,130 @@
+import express from "express";
+
+/** How long after the last heartbeat someone still counts as online (tune vs heartbeat interval in presenceHeartbeat.js). */
+const PRESENCE_ONLINE_WINDOW_MS = 2 * 60 * 1000;
+
+export default function createPresenceRoutes({ queries }) {
+	const router = express.Router();
+
+	router.get("/api/presence/online", async (req, res) => {
+		if (!queries.listPresenceOnlineUsers?.all) {
+			return res.status(501).json({ error: "Not available" });
+		}
+		const raw = req.query?.limit;
+		const limit = Math.min(500, Math.max(1, Number(raw) || 200));
+		const since = new Date(Date.now() - PRESENCE_ONLINE_WINDOW_MS).toISOString();
+		try {
+			const users = await queries.listPresenceOnlineUsers.all(since, limit);
+			return res.json({ users: users ?? [], windowMs: PRESENCE_ONLINE_WINDOW_MS });
+		} catch (err) {
+			console.warn("[presence] list online", err?.message || err);
+			return res.status(500).json({ error: "Internal server error" });
+		}
+	});
+
+	router.post("/api/presence/last-active", async (req, res) => {
+		const userId = req.auth?.userId;
+		if (!userId) {
+			return res.status(401).json({ error: "Unauthorized" });
+		}
+		if (typeof queries.selectUsersByIds !== "function") {
+			return res.status(501).json({ error: "Not available" });
+		}
+		const raw = Array.isArray(req.body?.user_ids) ? req.body.user_ids : [];
+		const ids = [...new Set(raw.map((v) => Number(v)).filter((n) => Number.isFinite(n) && n > 0))].slice(0, 500);
+		if (ids.length === 0) {
+			return res.json({ users: [] });
+		}
+		try {
+			const byId = await queries.selectUsersByIds(ids);
+			const users = [];
+			for (const id of ids) {
+				const row = byId?.get?.(Number(id));
+				if (!row) continue;
+				const meta = row?.meta && typeof row.meta === "object" ? row.meta : {};
+				if (meta.appear_offline === true) continue;
+				if (meta.suspended === true) continue;
+				const presenceLastSeenAt =
+					typeof meta.presence_last_seen_at === "string" && meta.presence_last_seen_at.trim()
+						? meta.presence_last_seen_at.trim()
+						: null;
+				const lastActiveAt =
+					typeof row?.last_active_at === "string" && row.last_active_at.trim()
+						? row.last_active_at.trim()
+						: null;
+				users.push({
+					user_id: Number(id),
+					last_active_at: lastActiveAt,
+					presence_last_seen_at: presenceLastSeenAt
+				});
+			}
+			return res.json({ users });
+		} catch (err) {
+			console.warn("[presence] list last-active", err?.message || err);
+			return res.status(500).json({ error: "Internal server error" });
+		}
+	});
+
+	router.post("/api/presence/heartbeat", async (req, res) => {
+		const userId = req.auth?.userId;
+		if (!userId) {
+			return res.status(401).json({ error: "Unauthorized" });
+		}
+		if (!queries.presenceHeartbeat?.run) {
+			return res.status(501).json({ error: "Not available" });
+		}
+		const rawVersion = req.body?.v;
+		const clientVersion = typeof rawVersion === "string" ? rawVersion.trim() : "";
+		if (!clientVersion) {
+			return res.status(400).json({ error: "Missing client version" });
+		}
+		try {
+			await queries.presenceHeartbeat.run(userId, clientVersion);
+			return res.json({ ok: true });
+		} catch (err) {
+			console.warn("[presence] heartbeat", err?.message || err);
+			return res.status(500).json({ error: "Internal server error" });
+		}
+	});
+
+	/** Best-effort: clear presence when the client tab is going away (paired with pagehide + fetch keepalive). */
+	router.post("/api/presence/away", async (req, res) => {
+		const userId = req.auth?.userId;
+		if (!userId) {
+			return res.status(401).json({ error: "Unauthorized" });
+		}
+		if (!queries.presenceClear?.run) {
+			return res.status(501).json({ error: "Not available" });
+		}
+		try {
+			await queries.presenceClear.run(userId);
+			return res.json({ ok: true });
+		} catch (err) {
+			console.warn("[presence] away", err?.message || err);
+			return res.status(500).json({ error: "Internal server error" });
+		}
+	});
+
+	router.patch("/api/presence/settings", async (req, res) => {
+		const userId = req.auth?.userId;
+		if (!userId) {
+			return res.status(401).json({ error: "Unauthorized" });
+		}
+		if (!queries.setUserAppearOffline?.run) {
+			return res.status(501).json({ error: "Not available" });
+		}
+		const raw = req.body?.appear_offline;
+		if (typeof raw !== "boolean") {
+			return res.status(400).json({ error: "appear_offline must be a boolean" });
+		}
+		try {
+			await queries.setUserAppearOffline.run(userId, raw);
+			return res.json({ ok: true, appear_offline: raw });
+		} catch (err) {
+			console.warn("[presence] settings", err?.message || err);
+			return res.status(500).json({ error: "Internal server error" });
+		}
+	});
+
+	return router;
+}

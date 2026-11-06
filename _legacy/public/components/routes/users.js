@@ -1,0 +1,622 @@
+let getAvatarColor;
+let formatRelativeTime;
+let formatDateTime;
+let buildProfilePath;
+let loadAdminDataTable;
+
+function getAssetVersionParam() {
+	const meta = document.querySelector('meta[name="asset-version"]');
+	return meta?.getAttribute('content')?.trim() || '';
+}
+
+function getImportQuery(version) {
+	return version && typeof version === 'string' ? `?v=${encodeURIComponent(version)}` : '';
+}
+
+let _depsPromise;
+async function loadDeps() {
+	if (_depsPromise) return _depsPromise;
+	const v = getAssetVersionParam();
+	const qs = getImportQuery(v);
+	_depsPromise = (async () => {
+		const avatarMod = await import(`../../shared/avatar.js${qs}`);
+		getAvatarColor = avatarMod.getAvatarColor;
+
+		const datetimeMod = await import(`../../shared/datetime.js${qs}`);
+		formatRelativeTime = datetimeMod.formatRelativeTime;
+		formatDateTime = datetimeMod.formatDateTime;
+
+		const profileLinksMod = await import(`../../shared/profileLinks.js${qs}`);
+		buildProfilePath = profileLinksMod.buildProfilePath;
+
+		const adminDataTableMod = await import(`../../shared/adminDataTable.js${qs}`);
+		loadAdminDataTable = adminDataTableMod.loadAdminDataTable;
+	})();
+	return _depsPromise;
+}
+
+const html = String.raw;
+
+function escapeHtml(text) {
+	const s = String(text ?? '');
+	return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+async function copyTextToClipboard(text) {
+	const str = String(text ?? '');
+	if (navigator?.clipboard?.writeText) {
+		try {
+			await navigator.clipboard.writeText(str);
+			return;
+		} catch {
+			// Fall back below.
+		}
+	}
+
+	// Fallback for environments without async Clipboard API.
+	const textarea = document.createElement('textarea');
+	textarea.value = str;
+	textarea.setAttribute('readonly', 'true');
+	textarea.style.position = 'fixed';
+	textarea.style.top = '-1000px';
+	textarea.style.left = '-1000px';
+	document.body.appendChild(textarea);
+	textarea.select();
+	textarea.setSelectionRange(0, textarea.value.length);
+	const ok = document.execCommand('copy');
+	document.body.removeChild(textarea);
+	if (!ok) throw new Error('Copy to clipboard failed.');
+}
+
+function getUserDisplayName(user) {
+	const displayName = String(user?.display_name || '').trim();
+	if (displayName) return displayName;
+	const userName = String(user?.user_name || '').trim();
+	if (userName) return userName;
+	const email = String(user?.email || '').trim();
+	if (email) return email.split('@')[0] || email;
+	if (user?.id) return `User ${user.id}`;
+	return 'User';
+}
+
+function getUserInitial(displayName) {
+	return String(displayName || '').trim().charAt(0).toUpperCase() || '?';
+}
+
+function createUserAvatar(user, getAvatarColorFn) {
+	const displayName = getUserDisplayName(user);
+	const avatarUrl = typeof user?.avatar_url === 'string' ? user.avatar_url.trim() : '';
+	const avatar = document.createElement('div');
+	avatar.className = 'user-avatar';
+	if (avatarUrl) {
+		const img = document.createElement('img');
+		img.src = avatarUrl;
+		img.alt = displayName ? `Avatar for ${displayName}` : 'User avatar';
+		img.loading = 'lazy';
+		img.decoding = 'async';
+		avatar.appendChild(img);
+	} else {
+		const fallback = document.createElement('div');
+		fallback.className = 'user-avatar-fallback';
+		fallback.textContent = getUserInitial(displayName);
+		fallback.style.background = getAvatarColorFn(user?.user_name || user?.email || user?.id);
+		fallback.setAttribute('aria-hidden', 'true');
+		avatar.appendChild(fallback);
+	}
+	return { avatar, displayName };
+}
+
+function truncateCid(cid, maxLen = 20) {
+	const s = String(cid || '').trim();
+	if (s.length <= maxLen) return s;
+	return s.slice(0, 8) + '…' + s.slice(-8);
+}
+
+/** Format date in local timezone as YYYY-MM-DD HH:mm (no seconds or ms). */
+function formatLocalDateTime(value) {
+	if (!value) return '—';
+	const d = typeof value === 'string' ? new Date(value) : value;
+	if (!(d instanceof Date) || Number.isNaN(d.getTime())) return '—';
+	const pad = (n) => (n < 10 ? '0' + n : String(n));
+	const y = d.getFullYear();
+	const m = d.getMonth() + 1;
+	const day = d.getDate();
+	const h = d.getHours();
+	const min = d.getMinutes();
+	return `${y}-${pad(m)}-${pad(day)} ${pad(h)}:${pad(min)}`;
+}
+
+function truncateStr(s, maxLen = 40) {
+	const str = typeof s === 'string' ? s.trim() : '';
+	if (!str) return '—';
+	return str.length <= maxLen ? str : str.slice(0, maxLen) + '…';
+}
+
+function renderUserCard(user, onOpenModal) {
+	const card = document.createElement('div');
+	card.className = 'card user-card';
+	card.dataset.userId = String(user.id);
+	card.tabIndex = 0;
+	card.setAttribute('role', 'button');
+	const { avatar, displayName } = createUserAvatar(user, getAvatarColor);
+	card.setAttribute('aria-label', `Open user ${displayName}`);
+	card.addEventListener('click', () => onOpenModal(user));
+	card.addEventListener('keydown', (e) => {
+		if (e.key === 'Enter' || e.key === ' ') {
+			e.preventDefault();
+			onOpenModal(user);
+		}
+	});
+
+	const header = document.createElement('div');
+	header.className = 'user-card-header';
+	const info = document.createElement('div');
+	info.className = 'user-card-info';
+	const title = document.createElement('div');
+	title.className = 'user-title';
+	const nameRow = document.createElement('div');
+	nameRow.className = 'user-name-row';
+	const nameEl = document.createElement('div');
+	nameEl.className = 'user-name';
+	nameEl.textContent = displayName;
+	nameRow.appendChild(nameEl);
+	const isSubscribed = user?.meta?.plan === 'founder' || Boolean(user?.meta?.stripeSubscriptionId);
+	if (isSubscribed) {
+		const subBadge = document.createElement('span');
+		subBadge.className = 'user-card-badge user-card-badge-founder';
+		subBadge.textContent = 'Founder';
+		nameRow.appendChild(subBadge);
+	}
+	if (user.suspended) {
+		const suspendedBadge = document.createElement('span');
+		suspendedBadge.className = 'server-badge server-badge-suspended';
+		suspendedBadge.textContent = 'Suspended';
+		nameRow.appendChild(suspendedBadge);
+	}
+	title.appendChild(nameRow);
+	if (user.email && user.email !== displayName) {
+		const emailEl = document.createElement('div');
+		emailEl.className = 'user-email';
+		emailEl.textContent = user.email;
+		title.appendChild(emailEl);
+	}
+	const details = document.createElement('div');
+	details.className = 'user-meta';
+	const userId = document.createElement('span');
+	userId.className = 'user-id';
+	userId.textContent = `#${user.id}`;
+	const role = document.createElement('span');
+	role.className = 'user-role';
+	role.textContent = user.role;
+	const credits = document.createElement('span');
+	credits.className = 'user-credits';
+	const creditsValue = typeof user.credits === 'number' ? user.credits : 0;
+	credits.textContent = `${creditsValue.toFixed(1)} credits`;
+	details.appendChild(userId);
+	details.appendChild(role);
+	details.appendChild(credits);
+	info.appendChild(title);
+	info.appendChild(details);
+	header.appendChild(avatar);
+	header.appendChild(info);
+
+	const createdLabel = formatRelativeTime(user.created_at, { style: 'long' });
+	const created = document.createElement('div');
+	created.className = 'user-created';
+	created.textContent = createdLabel ? `Joined ${createdLabel}` : (user.created_at || '—');
+
+	const lastActiveLabel = user.last_active_at
+		? formatRelativeTime(user.last_active_at, { style: 'long' })
+		: null;
+	const lastActive = document.createElement('div');
+	lastActive.className = 'user-last-active';
+	lastActive.textContent = lastActiveLabel ? `Last active ${lastActiveLabel}` : 'Last active —';
+
+	card.appendChild(header);
+	card.appendChild(created);
+	card.appendChild(lastActive);
+	return card;
+}
+
+const USERS_TAB_IDS = ['active', 'other', 'tips', 'settings'];
+
+
+class AppRouteUsers extends HTMLElement {
+	async connectedCallback() {
+		await loadDeps();
+		this._activeExportInFlight = false;
+		this._activeUsersSnapshot = [];
+		this.innerHTML = html`
+			<h3>Users</h3>
+			<app-tabs>
+				<tab data-id="active" label="Active" default>
+					<div class="users-active-wrap">
+						<div class="users-export-bar" data-active-export-bar>
+							<button type="button" class="btn-secondary" data-active-export-copy>
+								Copy active users
+							</button>
+							<div class="users-export-status" data-active-export-status aria-live="polite"></div>
+						</div>
+						<div class="users-cards" data-users-active-container>
+							<div class="route-empty route-loading">
+								<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
+							</div>
+						</div>
+						<div class="text-muted users-list-count" data-users-active-count aria-live="polite"></div>
+					</div>
+				</tab>
+				<tab data-id="other" label="Other">
+					<div class="users-cards" data-users-other-container>
+						<div class="route-empty route-loading">
+							<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
+						</div>
+					</div>
+				</tab>
+				<tab data-id="tips" label="Tips">
+					<div class="tips-tab-content" data-tips-tab-content>
+						<div class="tips-table-container" data-tips-table-container>
+							<div class="route-empty route-loading">
+								<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
+							</div>
+						</div>
+					</div>
+				</tab>
+				<tab data-id="settings" label="Settings">
+					<div class="admin-users-settings-panel" data-users-settings-panel>
+						<section class="admin-settings-section">
+							<span class="admin-settings-section-title">Tipping</span>
+							<div class="admin-settings-field">
+								<label class="admin-settings-label" for="users-settings-min-days-before-tip">Minimum days before tipping</label>
+								<input type="number" id="users-settings-min-days-before-tip" class="admin-settings-input"
+									data-users-settings-min-days min="0" step="1" />
+								<p class="admin-detail">Free accounts must have been present for this many days before they can tip. Users with an upgraded plan are exempt. Use 0 to allow tipping immediately.</p>
+							</div>
+						</section>
+						<div class="admin-settings-actions">
+							<button type="button" data-users-settings-save class="btn-primary admin-settings-save">
+								<span class="admin-settings-save-label">Save settings</span>
+								<span class="admin-settings-save-spinner" aria-hidden="true"></span>
+							</button>
+						</div>
+					</div>
+				</tab>
+			</app-tabs>
+		`;
+		this._tabsEl = this.querySelector('app-tabs');
+		this._tabsEl?.addEventListener('tab-change', (e) => {
+			if (e.detail?.id) this._activeTabId = e.detail.id;
+			if (e.detail?.id === 'tips' && !this._tipsDataLoaded) {
+				this.loadTips();
+			}
+			if (e.detail?.id === 'settings') {
+				this.loadUserSettings();
+			}
+		});
+		this.setupUsersTabHash();
+		this.loadUsers();
+		this._boundRefresh = () => this.loadUsers({ force: true });
+		document.addEventListener('user-updated', this._boundRefresh);
+
+		const activeExportBtn = this.querySelector('[data-active-export-copy]');
+		const activeExportStatus = this.querySelector('[data-active-export-status]');
+		if (activeExportBtn && !this._activeExportBound) {
+			this._activeExportBound = true;
+			activeExportBtn.addEventListener('click', async () => {
+				await this.exportActiveUsersForChatGPT({ statusEl: activeExportStatus });
+			});
+		}
+
+	}
+
+	disconnectedCallback() {
+		document.removeEventListener('user-updated', this._boundRefresh);
+		if (this._usersTabHashCleanup) this._usersTabHashCleanup();
+	}
+
+	/** Sync Users tab from URL hash (#active, #other, #tips, #settings) and update hash when tab changes (same pattern as Connect). */
+	setupUsersTabHash() {
+		const isOnUsersRoute = () => {
+			const path = window.location.pathname || '';
+			return path === '/users' || path.startsWith('/users/') || path === '' || path === '/';
+		};
+
+		const syncTabFromHash = () => {
+			if (!isOnUsersRoute()) return;
+			const hash = (window.location.hash || '').replace(/^#/, '').toLowerCase();
+			const id = hash && USERS_TAB_IDS.includes(hash) ? hash : 'active';
+			this._activeTabId = id;
+			const tabs = this._tabsEl || this.querySelector('app-tabs');
+			if (tabs && typeof tabs.setActiveTab === 'function') {
+				tabs.setActiveTab(id, { focus: false });
+			}
+			if (id === 'tips' && !this._tipsDataLoaded) {
+				this.loadTips();
+			}
+			if (id === 'settings') {
+				this.loadUserSettings();
+			}
+		};
+
+		const onRouteChange = (e) => {
+			if (e.detail?.route === 'users') syncTabFromHash();
+		};
+
+		const onHashChange = () => syncTabFromHash();
+
+		setTimeout(() => {
+			if (isOnUsersRoute()) syncTabFromHash();
+			else this._activeTabId = 'active';
+		}, 0);
+
+		document.addEventListener('route-change', onRouteChange);
+		window.addEventListener('hashchange', onHashChange);
+
+		if (this._tabsEl) {
+			this._tabsEl.addEventListener('tab-change', (e) => {
+				const id = e.detail?.id;
+				if (!id) return;
+				if (!isOnUsersRoute()) return;
+				const newHash = `#${id}`;
+				if (window.location.hash !== newHash) {
+					const path = window.location.pathname || '';
+					const base = (path === '/' || path === '') ? '/users' : path;
+					const search = window.location.search || '';
+					window.history.replaceState(null, '', `${base}${search}${newHash}`);
+				}
+			});
+		}
+
+		this._usersTabHashCleanup = () => {
+			document.removeEventListener('route-change', onRouteChange);
+			window.removeEventListener('hashchange', onHashChange);
+		};
+	}
+
+	openUserModal(user) {
+		const modal = document.querySelector('app-modal-user');
+		if (modal) modal.open(user);
+	}
+
+	async exportActiveUsersForChatGPT({ statusEl } = {}) {
+		if (this._activeExportInFlight) return;
+		this._activeExportInFlight = true;
+
+		const setStatus = (msg) => {
+			if (statusEl) statusEl.textContent = msg || '';
+		};
+
+		try {
+			setStatus('Preparing active users export…');
+			let activeUsers = Array.isArray(this._activeUsersSnapshot) ? this._activeUsersSnapshot : [];
+
+			// Use cached users when available to avoid unnecessary refetches.
+			if (activeUsers.length === 0) {
+				const response = await fetch('/admin/users', { credentials: 'include' });
+				if (!response.ok) throw new Error('Failed to load users.');
+				const data = await response.json();
+				activeUsers = Array.isArray(data?.activeUsers) ? data.activeUsers : [];
+			}
+
+			const payload = {
+				export_version: 1,
+				exported_at: new Date().toISOString(),
+				scope: '/users#active',
+				item_count: activeUsers.length,
+				data: {
+					activeUsers
+				}
+			};
+
+			const text = `PARASCENE_ADMIN_EXPORT\n\`\`\`json\n${JSON.stringify(payload, null, 2)}\n\`\`\`\n`;
+			await copyTextToClipboard(text);
+			window.__parasceneAdminChatGPTExport = text;
+			setStatus('Copied active users to clipboard.');
+		} catch (err) {
+			setStatus(`Export failed: ${err?.message || String(err)}`);
+		} finally {
+			this._activeExportInFlight = false;
+		}
+	}
+
+	async loadTips() {
+		const container = this.querySelector('[data-tips-table-container]');
+		if (!container) return;
+		try {
+			this._tipsDataLoaded = true;
+			await loadAdminDataTable(container, {
+				fetchUrl: '/admin/tips',
+				responseItemsKey: 'items',
+				columns: [
+					{
+						key: 'created_at',
+						label: 'Date',
+						sortKey: 'created_at',
+						className: 'tips-table-col-date',
+						render: (row) => escapeHtml(row.created_at ? formatLocalDateTime(row.created_at) : '—')
+					},
+					{
+						key: 'from_label',
+						label: 'From',
+						sortKey: 'from_user_id',
+						className: 'tips-table-col-from',
+						render: (row) => {
+							const label = escapeHtml(row.from_label ?? '—');
+							const uid = row.from_user_id;
+							if (uid != null) {
+								const href = buildProfilePath({ userId: uid }) || `/user/${uid}`;
+								return `<a href="${escapeHtml(href)}" class="tips-table-user-link" onclick="event.stopPropagation()">${label}</a>`;
+							}
+							return label;
+						}
+					},
+					{
+						key: 'to_label',
+						label: 'To',
+						sortKey: 'to_user_id',
+						className: 'tips-table-col-to',
+						render: (row) => {
+							const label = escapeHtml(row.to_label ?? '—');
+							const uid = row.to_user_id;
+							if (uid != null) {
+								const href = buildProfilePath({ userId: uid }) || `/user/${uid}`;
+								return `<a href="${escapeHtml(href)}" class="tips-table-user-link" onclick="event.stopPropagation()">${label}</a>`;
+							}
+							return label;
+						}
+					},
+					{
+						key: 'amount',
+						label: 'Amount',
+						sortKey: 'amount',
+						className: 'tips-table-col-amount',
+						render: (row) => (row.amount != null && Number.isFinite(Number(row.amount)) ? `${Number(row.amount).toFixed(1)} credits` : '—')
+					},
+					{
+						key: 'created_image_id',
+						label: 'Creation',
+						sortKey: 'created_image_id',
+						className: 'tips-table-col-creation',
+						render: (row) => {
+							const raw = row.created_image_id;
+							if (raw != null && Number.isFinite(Number(raw))) {
+								return `<a href="/creations/${escapeHtml(String(raw))}" onclick="event.stopPropagation()">${escapeHtml(String(raw))}</a>`;
+							}
+							return '—';
+						}
+					},
+					{
+						key: 'message',
+						label: 'Message',
+						className: 'tips-table-col-message',
+						render: (row) => {
+							const msg = typeof row.message === 'string' ? row.message.trim() : '';
+							return msg ? escapeHtml(truncateStr(msg, 80)) : '—';
+						}
+					}
+				],
+				defaultSortBy: 'created_at',
+				defaultSortDir: 'desc',
+				emptyMessage: 'No tips yet.',
+				ariaLabelPagination: 'Tips pagination',
+				tableClassName: 'admin-table tips-table'
+			});
+		} catch (err) {
+			container.innerHTML = '';
+			const error = document.createElement('div');
+			error.className = 'admin-error';
+			error.textContent = 'Error loading tips.';
+			container.appendChild(error);
+		}
+	}
+
+	async loadUserSettings() {
+		const panel = this.querySelector('[data-users-settings-panel]');
+		const input = this.querySelector('[data-users-settings-min-days]');
+		const saveBtn = this.querySelector('[data-users-settings-save]');
+		if (!panel || !input) return;
+		try {
+			const response = await fetch('/admin/users/settings', { credentials: 'include' });
+			if (!response.ok) throw new Error('Failed to load settings.');
+			const data = await response.json();
+			const minDays = typeof data.min_days_before_tip === 'number' ? data.min_days_before_tip : 60;
+			input.value = String(Math.max(0, minDays));
+		} catch (err) {
+			input.value = '60';
+		}
+		if (saveBtn && !this._userSettingsSaveBound) {
+			this._userSettingsSaveBound = true;
+			saveBtn.addEventListener('click', async () => {
+				saveBtn.disabled = true;
+				saveBtn.classList.add('is-loading');
+				const saveLabel = saveBtn.querySelector('.admin-settings-save-label');
+				try {
+					const value = Math.max(0, parseInt(input.value, 10) || 60);
+					const res = await fetch('/admin/users/settings', {
+						method: 'PATCH',
+						credentials: 'include',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ min_days_before_tip: value })
+					});
+					if (res.ok) {
+						saveBtn.classList.remove('is-loading');
+						if (saveLabel) saveLabel.textContent = 'Saved';
+						setTimeout(() => {
+							saveBtn.disabled = false;
+							if (saveLabel) saveLabel.textContent = 'Save settings';
+						}, 2000);
+					} else {
+						saveBtn.classList.remove('is-loading');
+						saveBtn.disabled = false;
+					}
+				} catch {
+					saveBtn.classList.remove('is-loading');
+					saveBtn.disabled = false;
+				}
+			});
+		}
+	}
+
+	async loadUsers({ force = false } = {}) {
+		const activeContainer = this.querySelector('[data-users-active-container]');
+		const otherContainer = this.querySelector('[data-users-other-container]');
+		if (!activeContainer || !otherContainer) return;
+
+		try {
+			const response = await fetch('/admin/users', { credentials: 'include' });
+			if (!response.ok) throw new Error('Failed to load users.');
+			const data = await response.json();
+
+			const activeUsers = data.activeUsers ?? [];
+			const otherUsers = data.otherUsers ?? [];
+			this._activeUsersSnapshot = Array.isArray(activeUsers) ? activeUsers : [];
+
+			activeContainer.innerHTML = '';
+			otherContainer.innerHTML = '';
+
+			if (activeUsers.length === 0) {
+				const empty = document.createElement('div');
+				empty.className = 'admin-empty';
+				empty.textContent = 'No active users.';
+				activeContainer.appendChild(empty);
+			} else {
+				for (const user of activeUsers) {
+					activeContainer.appendChild(renderUserCard(user, (u) => this.openUserModal(u)));
+				}
+			}
+			const activeCountEl = this.querySelector('[data-users-active-count]');
+			if (activeCountEl) {
+				activeCountEl.textContent = activeUsers.length === 1
+				? 'TOTAL: 1 active user'
+				: `TOTAL: ${activeUsers.length} active users`;
+			}
+
+			if (otherUsers.length === 0) {
+				const empty = document.createElement('div');
+				empty.className = 'admin-empty';
+				empty.textContent = 'No other users.';
+				otherContainer.appendChild(empty);
+			} else {
+				for (const user of otherUsers) {
+					otherContainer.appendChild(renderUserCard(user, (u) => this.openUserModal(u)));
+				}
+			}
+
+			// Restore active tab after refresh
+			if (this._tabsEl && this._activeTabId) {
+				this._tabsEl.setActiveTab(this._activeTabId, { focus: false });
+			}
+		} catch (err) {
+			activeContainer.innerHTML = '';
+			otherContainer.innerHTML = '';
+			this._activeUsersSnapshot = [];
+			const activeCountEl = this.querySelector('[data-users-active-count]');
+			if (activeCountEl) activeCountEl.textContent = '';
+			const error = document.createElement('div');
+			error.className = 'admin-error';
+			error.textContent = 'Error loading users.';
+			activeContainer.appendChild(error);
+		}
+	}
+}
+
+customElements.define('app-route-users', AppRouteUsers);

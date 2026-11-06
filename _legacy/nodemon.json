@@ -1,0 +1,22 @@
+{
+  "watch": [
+    "api",
+    "api_routes",
+    "db",
+    "email",
+    "lib",
+    "pages",
+    "public",
+    "src"
+  ],
+  "ignore": [
+    "public/build/**",
+    "public/.asset-version-dev"
+  ],
+  "ext": "js,json",
+  "exec": "bash scripts/nodemon-server-first.sh {{filename}}",
+  "events": {
+    "start": "node -e \"require('fs').writeFileSync('public/.asset-version-dev', String(Date.now()))\"",
+    "restart": "node -e \"require('fs').writeFileSync('public/.asset-version-dev', String(Date.now()))\""
+  }
+}

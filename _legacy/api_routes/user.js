@@ -1,0 +1,2497 @@
+import crypto from "crypto";
+import express from "express";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+import Busboy from "busboy";
+import path from "path";
+import {
+	shouldDeleteOldProfileAvatarKey,
+	storeProcessedProfileAvatar
+} from "./utils/profileAvatar.js";
+import { bumpFeedVersionCounter } from "./feed/feedVersion.js";
+import Stripe from "stripe";
+import { sendTemplatedEmail } from "../email/index.js";
+import { getEffectiveEmailRecipient } from "./utils/emailSettings.js";
+import {
+	COOKIE_NAME,
+	ONE_WEEK_MS,
+	clearAuthCookie,
+	getJwtSecret,
+	hashToken,
+	setAuthCookie,
+	shouldLogSession
+} from "./auth.js";
+import { getBaseAppUrl, getBaseAppUrlForEmail, getThumbnailUrl } from "./utils/url.js";
+import {
+	getCreditTopupPack,
+	getCreditTopupPriceId,
+	listConfiguredCreditTopupPacks
+} from "./utils/creditPacks.js";
+import { mapCreatedImageRowMediaFields } from "./utils/resolveCreationDisplayMedia.js";
+import { parseCreationMeta } from "./utils/resolveCreatedImageStorageFilename.js";
+import { computeWelcome, WELCOME_VERSION } from "./utils/welcome.js";
+import { resolveNotificationDisplay } from "./utils/notificationResolver.js";
+import {
+	collapseNotificationsByCreation,
+	getCreationIdFromRow,
+	getThreadIdFromRow
+} from "./utils/notificationCollapse.js";
+import {
+	countUnreadNotificationsForBell,
+	filterNotificationsForBell,
+	isDmChatMentionNotification
+} from "./utils/notificationBellFilter.js";
+import { getReactionsForCommentIds } from "./comments.js";
+import { getClientIdFromRequest, mergePrsnCidsIntoProfileMeta, prsnCidFromMeta } from "./utils/prsnCids.js";
+import { appendPrsnCidsForUserId, tryRequestMetaFromRow } from "./utils/userPrsnCids.js";
+import { applySocialFieldUpdates, applySocialObjectUpdates } from "../public/shared/profileSocials.js";
+import { creationMetaHasChallengeSubmission } from "../public/shared/challengeSubmitMeta.js";
+
+export default function createProfileRoutes({ queries }) {
+	const router = express.Router();
+
+	function sanitizeUserMetaForClient(meta) {
+		if (!meta || typeof meta !== "object") return meta;
+		const {
+			apiKeyHash: _h,
+			vynlyBearerToken: _v,
+			presence_last_seen_at: _p,
+			appear_offline: _a,
+			chat_private_keys: _c,
+			...rest
+		} = meta;
+		return rest;
+	}
+
+	function sanitizeReturnUrl(raw) {
+		const value = typeof raw === "string" ? raw.trim() : "";
+		if (!value) return "/";
+		if (!value.startsWith("/")) return "/";
+		if (value.startsWith("//")) return "/";
+		if (value.includes("://")) return "/";
+		if (value.includes("\n") || value.includes("\r")) return "/";
+		if (value.length > 2048) return "/";
+		return value;
+	}
+
+	function getReturnUrl(req) {
+		const bodyValue = req?.body?.returnUrl;
+		const queryValue = req?.query?.returnUrl;
+		return sanitizeReturnUrl(typeof bodyValue === "string" ? bodyValue : (typeof queryValue === "string" ? queryValue : ""));
+	}
+
+	function safeJsonParse(value, fallback) {
+		if (value == null) return fallback;
+		if (typeof value === "object") return value;
+		if (typeof value !== "string") return fallback;
+		const trimmed = value.trim();
+		if (!trimmed) return fallback;
+		try {
+			return JSON.parse(trimmed);
+		} catch {
+			return fallback;
+		}
+	}
+
+	function normalizeUsername(input) {
+		const raw = typeof input === "string" ? input.trim() : "";
+		if (!raw) return null;
+		const normalized = raw.toLowerCase();
+		// Simple, stable public handle rules (expand later if needed)
+		if (!/^[a-z0-9][a-z0-9_]{2,23}$/.test(normalized)) return null;
+		return normalized;
+	}
+
+	function normalizeProfileRow(row) {
+		if (!row) {
+			return {
+				user_name: null,
+				display_name: null,
+				about: null,
+				character_description: null,
+				socials: {},
+				avatar_url: null,
+				cover_image_url: null,
+				badges: [],
+				meta: {},
+				prsn_cids: [],
+				created_at: null,
+				updated_at: null
+			};
+		}
+		const meta = safeJsonParse(row.meta, {});
+		const prsn_cids = Array.isArray(meta.prsn_cids)
+			? [...new Set(meta.prsn_cids.filter((x) => typeof x === "string" && x.trim()).map((x) => x.trim()))]
+			: [];
+		return {
+			user_name: row.user_name ?? null,
+			display_name: row.display_name ?? null,
+			about: row.about ?? null,
+			character_description: typeof meta.character_description === "string" ? meta.character_description : null,
+			socials: safeJsonParse(row.socials, {}),
+			avatar_url: row.avatar_url ?? null,
+			cover_image_url: row.cover_image_url ?? null,
+			badges: safeJsonParse(row.badges, []),
+			meta,
+			prsn_cids,
+			created_at: row.created_at ?? null,
+			updated_at: row.updated_at ?? null
+		};
+	}
+
+	async function suggestAvailableUsername({ base, userId } = {}) {
+		const normalizedBase = normalizeUsername(base);
+		if (!normalizedBase) return null;
+
+		// Fast path: available already
+		if (queries.selectUserProfileByUsername?.get) {
+			const existing = await queries.selectUserProfileByUsername.get(normalizedBase);
+			if (!existing || Number(existing.user_id) === Number(userId)) {
+				return normalizedBase;
+			}
+		} else {
+			// If we can't check availability, just return the base.
+			return normalizedBase;
+		}
+
+		// Suffix probing: john_1, john_2, ...
+		for (let i = 1; i <= 200; i++) {
+			const suffix = `_${i}`;
+			const maxBaseLen = 24 - suffix.length;
+			let candidateBase = normalizedBase.slice(0, Math.max(1, maxBaseLen));
+			candidateBase = candidateBase.replace(/_+$/g, "");
+			if (!candidateBase) candidateBase = "user";
+			const candidate = normalizeUsername(`${candidateBase}${suffix}`);
+			if (!candidate) continue;
+
+			const existing = await queries.selectUserProfileByUsername.get(candidate);
+			if (!existing || Number(existing.user_id) === Number(userId)) {
+				return candidate;
+			}
+		}
+
+		return null;
+	}
+
+	async function resolveTargetUserFromParams(req, { allowUsername = false } = {}) {
+		if (allowUsername && typeof req.params?.username === "string" && req.params.username.trim()) {
+			const normalizedUserName = normalizeUsername(req.params.username);
+			if (!normalizedUserName) {
+				return { error: { status: 400, body: { error: "Invalid username" } } };
+			}
+			if (!queries.selectUserProfileByUsername?.get) {
+				return { error: { status: 500, body: { error: "Username lookup unavailable" } } };
+			}
+			const profile = await queries.selectUserProfileByUsername.get(normalizedUserName);
+			const targetUserId = Number.parseInt(String(profile?.user_id ?? ""), 10);
+			if (!Number.isFinite(targetUserId) || targetUserId <= 0) {
+				return { error: { status: 404, body: { error: "User not found" } } };
+			}
+			const target = await queries.selectUserById.get(targetUserId);
+			if (!target) {
+				return { error: { status: 404, body: { error: "User not found" } } };
+			}
+			return { targetUserId, target };
+		}
+
+		const targetUserId = Number.parseInt(String(req.params?.id ?? ""), 10);
+		if (!Number.isFinite(targetUserId) || targetUserId <= 0) {
+			return { error: { status: 400, body: { error: "Invalid user id" } } };
+		}
+		const target = await queries.selectUserById.get(targetUserId);
+		if (!target) {
+			return { error: { status: 404, body: { error: "User not found" } } };
+		}
+		return { targetUserId, target };
+	}
+
+	function extractGenericKey(url) {
+		const raw = typeof url === "string" ? url.trim() : "";
+		if (!raw) return null;
+		if (!raw.startsWith("/api/images/generic/")) return null;
+		const tail = raw.slice("/api/images/generic/".length);
+		if (!tail) return null;
+		// Decode each path segment to rebuild the storage key safely.
+		const segments = tail.split("/").filter(Boolean).map((seg) => {
+			try {
+				return decodeURIComponent(seg);
+			} catch {
+				return seg;
+			}
+		});
+		return segments.join("/");
+	}
+
+	function buildGenericUrl(key) {
+		const segments = String(key || "")
+			.split("/")
+			.filter(Boolean)
+			.map((seg) => encodeURIComponent(seg));
+		return `/api/images/generic/${segments.join("/")}`;
+	}
+
+	async function bumpFeedAfterAvatarChange() {
+		try {
+			await bumpFeedVersionCounter(queries);
+		} catch {
+			// ignore
+		}
+	}
+
+	function parseJsonField(raw, fallback, errorMessage) {
+		if (raw == null || raw === "") return fallback;
+		if (typeof raw === "object") return raw;
+		if (typeof raw !== "string") return fallback;
+		try {
+			return JSON.parse(raw);
+		} catch {
+			const err = new Error(errorMessage || "Invalid JSON");
+			err.code = "INVALID_JSON";
+			throw err;
+		}
+	}
+
+	function parseMultipart(req, { maxFileBytes = 12 * 1024 * 1024 } = {}) {
+		return new Promise((resolve, reject) => {
+			const busboy = Busboy({
+				headers: req.headers,
+				limits: {
+					fileSize: maxFileBytes,
+					files: 2,
+					fields: 50
+				}
+			});
+
+			const fields = {};
+			const files = {};
+
+			busboy.on("field", (name, value) => {
+				fields[name] = value;
+			});
+
+			busboy.on("file", (name, file, info) => {
+				const { filename, mimeType } = info || {};
+				const chunks = [];
+				let total = 0;
+
+				file.on("data", (data) => {
+					total += data.length;
+					chunks.push(data);
+				});
+
+				file.on("limit", () => {
+					const err = new Error("File too large");
+					err.code = "FILE_TOO_LARGE";
+					reject(err);
+				});
+
+				file.on("end", () => {
+					if (total === 0) return;
+					files[name] = {
+						filename: filename || "",
+						mimeType: mimeType || "application/octet-stream",
+						buffer: Buffer.concat(chunks)
+					};
+				});
+			});
+
+			busboy.on("error", (error) => reject(error));
+			busboy.on("finish", () => resolve({ fields, files }));
+
+			req.pipe(busboy);
+		});
+	}
+
+	router.post("/signup", async (req, res) => {
+		const email = String(req.body.username || req.body.email || "")
+			.trim()
+			.toLowerCase();
+		const password = String(req.body.password || "");
+		const returnUrl = getReturnUrl(req);
+
+		if (!email || !password) {
+			return res.status(400).send("Email and password are required.");
+		}
+
+		const existingUser = await queries.selectUserByEmail.get(email);
+		if (existingUser) {
+			const qs = new URLSearchParams();
+			qs.set("error", "email_taken");
+			if (returnUrl && returnUrl !== "/") {
+				qs.set("returnUrl", returnUrl);
+			}
+			const queryString = qs.toString();
+			const url = queryString ? `/auth?${queryString}#signup` : "/auth?error=email_taken#signup";
+			return res.redirect(url);
+		}
+
+		const passwordHash = bcrypt.hashSync(password, 12);
+		const info = await queries.insertUser.run(email, passwordHash, "consumer");
+		const userId = info.insertId;
+
+		// Persist referral (sharer/source) from share page → auth form so we know who referred this user
+		const referrerUserId = req.body.referrer_user_id != null ? Number(req.body.referrer_user_id) : null;
+		if (queries.updateUserReferral?.run && Number.isFinite(referrerUserId) && referrerUserId > 0) {
+			const referral = {
+				referrer_user_id: referrerUserId,
+				referral_source: typeof req.body.referral_source === "string" ? req.body.referral_source.trim() || null : null,
+				referral_image_id: req.body.referral_image_id != null ? Number(req.body.referral_image_id) : null,
+				referral_created_by_user_id: req.body.referral_created_by_user_id != null ? Number(req.body.referral_created_by_user_id) : null
+			};
+			queries.updateUserReferral.run(userId, referral).catch(() => {});
+		}
+
+		// Initialize credits for new user with 100 starting credits
+		try {
+			await queries.insertUserCredits.run(userId, 100, null);
+		} catch (error) {
+			// console.error(`[Signup] Failed to initialize credits for user ${userId}:`, {
+			// 	error: error.message,
+			// 	stack: error.stack,
+			// 	name: error.name
+			// });
+			// Don't fail signup if credits initialization fails
+		}
+
+		const token = jwt.sign({ userId }, getJwtSecret(), { expiresIn: "7d" });
+		setAuthCookie(res, token, req);
+		if (queries.insertSession) {
+			const tokenHash = hashToken(token);
+			const expiresAt = new Date(Date.now() + ONE_WEEK_MS).toISOString();
+			if (shouldLogSession()) {
+				// console.log(`[Signup] Creating session for new user ${userId}, expires at: ${expiresAt}`);
+			}
+			try {
+				await queries.insertSession.run(userId, tokenHash, expiresAt);
+				if (shouldLogSession()) {
+					// console.log(`[Signup] Session created successfully for user ${userId}`);
+				}
+			} catch (error) {
+				if (shouldLogSession()) {
+					// console.error(`[Signup] Failed to create session for user ${userId}:`, {
+					// 	error: error.message,
+					// 	stack: error.stack,
+					// 	name: error.name
+					// });
+				}
+				// Don't fail signup if session creation fails - cookie is still set
+			}
+		}
+
+		await appendPrsnCidsForUserId(queries, userId, req).catch(() => {});
+
+		return res.redirect(returnUrl || "/");
+	});
+
+	router.post("/login", async (req, res) => {
+		const raw = String(req.body.username || req.body.email || "").trim();
+		const password = String(req.body.password || "");
+		const returnUrl = getReturnUrl(req);
+
+		if (!raw || !password) {
+			return res.status(400).send("Email/username and password are required.");
+		}
+
+		let user = null;
+		if (raw.includes("@")) {
+			user = await queries.selectUserByEmail.get(raw.toLowerCase());
+		} else {
+			const un = normalizeUsername(raw);
+			if (un && queries.selectUserProfileByUsername?.get && queries.selectUserByIdForLogin?.get) {
+				const profile = await queries.selectUserProfileByUsername.get(un);
+				if (profile) user = await queries.selectUserByIdForLogin.get(profile.user_id);
+			}
+			if (!user) user = await queries.selectUserByEmail.get(raw.toLowerCase());
+		}
+
+		if (!user || !bcrypt.compareSync(password, user.password_hash)) {
+			const qs = new URLSearchParams();
+			if (returnUrl && returnUrl !== "/") {
+				qs.set("returnUrl", returnUrl);
+			}
+			const queryString = qs.toString();
+			const url = queryString ? `/auth.html?${queryString}#fail` : "/auth.html#fail";
+			return res.redirect(url);
+		}
+
+		if (user.suspended) {
+			const qs = new URLSearchParams();
+			if (returnUrl && returnUrl !== "/") {
+				qs.set("returnUrl", returnUrl);
+			}
+			const queryString = qs.toString();
+			const url = queryString ? `/auth.html?${queryString}#suspended` : "/auth.html#suspended";
+			return res.redirect(url);
+		}
+
+		const token = jwt.sign({ userId: user.id }, getJwtSecret(), {
+			expiresIn: "7d"
+		});
+		setAuthCookie(res, token, req);
+		if (queries.insertSession) {
+			const tokenHash = hashToken(token);
+			const expiresAt = new Date(Date.now() + ONE_WEEK_MS).toISOString();
+			if (shouldLogSession()) {
+				// console.log(`[Login] Creating session for user ${user.id}, expires at: ${expiresAt}`);
+			}
+			try {
+				await queries.insertSession.run(user.id, tokenHash, expiresAt);
+				if (shouldLogSession()) {
+					// console.log(`[Login] Session created successfully for user ${user.id}`);
+				}
+			} catch (error) {
+				if (shouldLogSession()) {
+					// console.error(`[Login] Failed to create session for user ${user.id}:`, {
+					// 	error: error.message,
+					// 	stack: error.stack,
+					// 	name: error.name
+					// });
+				}
+				// Don't fail login if session creation fails - cookie is still set
+			}
+		}
+		await appendPrsnCidsForUserId(queries, user.id, req).catch(() => {});
+
+		return res.redirect(returnUrl || "/");
+	});
+
+	router.post("/logout", async (req, res) => {
+		if (queries.deleteSessionByTokenHash) {
+			const token = req.cookies?.[COOKIE_NAME];
+			if (token) {
+				const tokenHash = hashToken(token);
+				await queries.deleteSessionByTokenHash.run(
+					tokenHash,
+					req.auth?.userId
+				);
+			}
+		}
+		clearAuthCookie(res, req);
+		// res.redirect("/auth");
+		res.redirect("/");
+	});
+
+	router.post("/forgot-password", async (req, res) => {
+		const raw = String(req.body.username || req.body.email || "").trim();
+		if (!raw) {
+			return res.redirect("/auth#sent");
+		}
+		let user = null;
+		if (raw.includes("@")) {
+			user = await queries.selectUserByEmail.get(raw.toLowerCase());
+		} else {
+			const un = normalizeUsername(raw);
+			if (un && queries.selectUserProfileByUsername?.get && queries.selectUserById?.get) {
+				const profile = await queries.selectUserProfileByUsername.get(un);
+				if (profile) user = await queries.selectUserById.get(profile.user_id);
+			}
+			if (!user) user = await queries.selectUserByEmail.get(raw.toLowerCase());
+		}
+		if (user && queries.setPasswordResetToken) {
+			const rawToken = crypto.randomBytes(32).toString("hex");
+			const tokenHash = hashToken(rawToken);
+			const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+			try {
+				await queries.setPasswordResetToken.run(user.id, tokenHash, expiresAt);
+				const resetUrl =
+					`${getBaseAppUrlForEmail()}/auth?rt=` +
+					encodeURIComponent(rawToken) +
+					"#reset";
+				const recipientName =
+					typeof user.email === "string" && user.email.includes("@")
+						? user.email.split("@")[0]
+						: "there";
+				if (process.env.RESEND_API_KEY && process.env.RESEND_SYSTEM_EMAIL) {
+					const to = await getEffectiveEmailRecipient(queries, user.email);
+					await sendTemplatedEmail({
+						to,
+						template: "passwordReset",
+						data: { recipientName, resetUrl }
+					});
+				}
+			} catch (err) {
+				// Log but do not reveal failure; same response as success
+			}
+		}
+		return res.redirect("/auth#sent");
+	});
+
+	router.post("/reset-password", async (req, res) => {
+		const token = String(req.body.rt ?? "").trim();
+		const password = String(req.body.password ?? "");
+		if (!token || !password) {
+			return res.redirect("/auth?error=invalid#reset");
+		}
+		if (!queries.selectUserByResetTokenHash || !queries.updateUserPassword || !queries.clearPasswordResetToken) {
+			return res.redirect("/auth?error=invalid#reset");
+		}
+		const tokenHash = hashToken(token);
+		const user = await queries.selectUserByResetTokenHash.get(tokenHash);
+		if (!user || !user.meta) {
+			return res.redirect("/auth?error=invalid#reset");
+		}
+		const expiresAt = user.meta.reset_token_expires_at;
+		if (!expiresAt || new Date(expiresAt) < new Date()) {
+			return res.redirect("/auth?error=invalid#reset");
+		}
+		const userId = Number(user.id);
+		if (!Number.isFinite(userId) || userId < 1) {
+			return res.redirect("/auth?error=invalid#reset");
+		}
+		try {
+			const passwordHash = bcrypt.hashSync(password, 12);
+			const updateResult = await queries.updateUserPassword.run(userId, passwordHash);
+			if (updateResult?.changes !== undefined && updateResult.changes === 0) {
+				throw new Error("Password update affected no rows");
+			}
+			await queries.clearPasswordResetToken.run(userId);
+		} catch (err) {
+			return res.redirect("/auth?error=invalid#reset");
+		}
+		return res.redirect("/auth#login");
+	});
+
+	router.get("/me", (req, res) => {
+		res.json({ userId: req.auth?.userId || null });
+	});
+
+	router.get("/api/users/usernames", async (req, res) => {
+		try {
+			if (!queries.selectPublicUsernames?.all) {
+				return res.status(500).json({ error: "Username list unavailable" });
+			}
+
+			const rows = await queries.selectPublicUsernames.all();
+			const usernames = (Array.isArray(rows) ? rows : [])
+				.map((row) => (typeof row?.user_name === "string" ? row.user_name.trim() : ""))
+				.filter(Boolean);
+			const personaRows = queries.selectPublicPersonaUsernames?.all
+				? await queries.selectPublicPersonaUsernames.all()
+				: [];
+			const personas = (Array.isArray(personaRows) ? personaRows : [])
+				.map((row) => (typeof row?.user_name === "string" ? row.user_name.trim() : ""))
+				.filter(Boolean);
+
+			res.set("Cache-Control", "public, max-age=300");
+			return res.json({ usernames, personas });
+		} catch (error) {
+			return res.status(500).json({ error: "Internal server error" });
+		}
+	});
+
+	// Username availability helper (used by /welcome)
+	router.get("/api/username-suggest", async (req, res) => {
+		if (!req.auth?.userId) {
+			return res.status(401).json({ error: "Unauthorized" });
+		}
+
+		const raw = req.query?.user_name ?? req.query?.username ?? "";
+		const base = typeof raw === "string" ? raw.trim() : "";
+		const normalizedBase = normalizeUsername(base);
+		if (!normalizedBase) {
+			return res.status(400).json({
+				error: "Invalid username",
+				message: "Username must be 3-24 chars, lowercase letters/numbers/underscore, starting with a letter/number."
+			});
+		}
+
+		const suggested = await suggestAvailableUsername({ base: normalizedBase, userId: req.auth.userId });
+		if (!suggested) {
+			return res.status(409).json({
+				error: "No usernames available",
+				message: "Unable to suggest an available username. Please try a different one."
+			});
+		}
+
+		return res.json({
+			ok: true,
+			input: normalizedBase,
+			suggested,
+			available: suggested === normalizedBase
+		});
+	});
+
+	router.get("/api/profile", async (req, res) => {
+		if (!req.auth?.userId) {
+			return res.status(401).json({ error: "Unauthorized" });
+		}
+
+		// Client ids: merge runs in `prsnCidPersistMiddleware` (throttled + skip static assets) and on login/signup / profile saves.
+
+		const user = await queries.selectUserById.get(req.auth.userId);
+		if (!user) {
+			return res.status(404).json({ error: "User not found" });
+		}
+
+		const profileRow = await queries.selectUserProfileByUserId?.get(req.auth.userId);
+		const profile = normalizeProfileRow(profileRow);
+		const welcome = computeWelcome({ profileRow });
+
+		// Get credits balance
+		let credits = await queries.selectUserCredits.get(req.auth.userId);
+		// If no credits record exists, initialize with 100 for existing users
+		if (!credits) {
+			try {
+				await queries.insertUserCredits.run(req.auth.userId, 100, null);
+				credits = { balance: 100 };
+			} catch (error) {
+				// console.error(`[Profile] Failed to initialize credits for user ${req.auth.userId}:`, error);
+				credits = { balance: 0 };
+			}
+		}
+
+		const plan = user.meta?.plan ?? "free";
+		const pendingPlanActivation = Boolean(user.meta?.pendingCheckoutSessionId);
+		const enableNsfw = user.meta?.enableNsfw === true;
+		const showOwnPostsInFeed = user.meta?.showOwnPostsInFeed === true;
+		const audibleNotifications = user.meta?.audibleNotifications !== false;
+		const hasApiKey = Boolean(user.meta?.apiKeyHash);
+		const apiKeyPrefix = typeof user.meta?.apiKeyPrefix === "string" ? user.meta.apiKeyPrefix : null;
+		const hasVynlyToken = Boolean(
+			user.meta && typeof user.meta.vynlyBearerToken === "string" && user.meta.vynlyBearerToken.trim()
+		);
+		const vynlyTokenPrefix =
+			typeof user.meta?.vynlyTokenPrefix === "string" && user.meta.vynlyTokenPrefix.trim()
+				? user.meta.vynlyTokenPrefix.trim()
+				: null;
+		const appearOffline = user.appear_offline === true;
+		const forceLegacyFeed = user.meta?.forceLegacyFeed === true;
+		const metaPublic = sanitizeUserMetaForClient(user.meta);
+		return res.json({
+			...user,
+			meta: metaPublic,
+			credits: credits.balance,
+			plan,
+			pendingPlanActivation,
+			profile,
+			welcome,
+			enableNsfw,
+			showOwnPostsInFeed,
+			audibleNotifications,
+			forceLegacyFeed,
+			hasApiKey,
+			apiKeyPrefix,
+			hasVynlyToken,
+			vynlyTokenPrefix,
+			appear_offline: appearOffline
+		});
+	});
+
+	function normalizeCommentStickerUrl(raw) {
+		const value = typeof raw === "string" ? raw.trim() : "";
+		if (!value) return null;
+		if (value.length > 1024) return null;
+		if (value.startsWith("/api/images/generic/")) {
+			return value.includes("..") ? null : value;
+		}
+		try {
+			const parsed = new URL(value);
+			if (parsed.hostname.toLowerCase() !== "cdn.parascene.com") return null;
+			if (!parsed.pathname.startsWith("/api/images/generic/") || parsed.pathname.includes("..")) return null;
+			return `${parsed.origin}${parsed.pathname}${parsed.search}`;
+		} catch {
+			return null;
+		}
+	}
+
+	function normalizeCommentStickerList(rawList) {
+		const inList = Array.isArray(rawList) ? rawList : [];
+		const out = [];
+		const seen = new Set();
+		for (const raw of inList) {
+			const url = normalizeCommentStickerUrl(raw);
+			if (!url || seen.has(url)) continue;
+			seen.add(url);
+			out.push(url);
+			if (out.length >= 120) break;
+		}
+		return out;
+	}
+
+	router.get("/api/profile/comment-stickers", async (req, res) => {
+		if (!req.auth?.userId) {
+			return res.status(401).json({ error: "Unauthorized" });
+		}
+		const user = await queries.selectUserById.get(req.auth.userId);
+		if (!user) {
+			return res.status(404).json({ error: "User not found" });
+		}
+		const stickers = normalizeCommentStickerList(user?.meta?.comment_stickers);
+		return res.json({ stickers });
+	});
+
+	router.put("/api/profile/comment-stickers", async (req, res) => {
+		if (!req.auth?.userId) {
+			return res.status(401).json({ error: "Unauthorized" });
+		}
+		if (!queries.updateUserCommentStickers?.run) {
+			return res.status(500).json({ error: "Not available", message: "Sticker storage is not available." });
+		}
+		const body = req.body && typeof req.body === "object" ? req.body : {};
+		if (!Array.isArray(body.stickers)) {
+			return res.status(400).json({ error: "Invalid request", message: "stickers must be an array." });
+		}
+		const stickers = normalizeCommentStickerList(body.stickers);
+		try {
+			await queries.updateUserCommentStickers.run(req.auth.userId, stickers);
+			return res.json({ ok: true, stickers });
+		} catch (err) {
+			console.error("[PUT /api/profile/comment-stickers]", err);
+			return res.status(500).json({ error: "Failed to update", message: err?.message || "Could not update stickers." });
+		}
+	});
+
+	// Save or clear Vynly agent token (Bearer for vynly.co API). Stored in users.meta; never returned in full after save.
+	router.put("/api/profile/vynly-token", async (req, res) => {
+		if (!req.auth?.userId) {
+			return res.status(401).json({ error: "Unauthorized" });
+		}
+		if (req.auth?.apiKeyAuth || req.auth?.integrationAccess) {
+			return res.status(403).json({
+				error: "Forbidden",
+				message: "Manage your Vynly token while signed in on the website."
+			});
+		}
+		if (!queries.updateUserVynlyBearerToken?.run) {
+			return res.status(500).json({ error: "Not available", message: "Profile storage is not available." });
+		}
+		const body = req.body && typeof req.body === "object" ? req.body : {};
+		const raw = typeof body.token === "string" ? body.token.trim() : "";
+		if (raw === "") {
+			try {
+				await queries.updateUserVynlyBearerToken.run(req.auth.userId, { bearerToken: "", tokenPrefix: "" });
+				return res.json({ ok: true, hasVynlyToken: false, vynlyTokenPrefix: null });
+			} catch (err) {
+				console.error("[PUT /api/profile/vynly-token]", err);
+				return res.status(500).json({ error: "Failed to clear token", message: err?.message || "Could not update." });
+			}
+		}
+		if (!/^vln_[A-Za-z0-9_.-]+$/.test(raw)) {
+			return res.status(400).json({
+				error: "Invalid token",
+				message: "Use your Vynly token from Settings or https://vynly.co/agents — it should start with vln_."
+			});
+		}
+		const tokenPrefix = raw.length <= 12 ? `${raw}…` : `${raw.slice(0, 10)}…`;
+		try {
+			await queries.updateUserVynlyBearerToken.run(req.auth.userId, { bearerToken: raw, tokenPrefix });
+			return res.json({ ok: true, hasVynlyToken: true, vynlyTokenPrefix: tokenPrefix });
+		} catch (err) {
+			console.error("[PUT /api/profile/vynly-token]", err);
+			return res.status(500).json({ error: "Failed to save token", message: err?.message || "Could not update." });
+		}
+	});
+
+	// Create or rotate API key (website session only; full key returned once).
+	router.post("/api/profile/api-key", async (req, res) => {
+		if (!req.auth?.userId) {
+			return res.status(401).json({ error: "Unauthorized" });
+		}
+		if (req.auth?.apiKeyAuth || req.auth?.integrationAccess) {
+			return res.status(403).json({
+				error: "Forbidden",
+				message: "Manage API keys while signed in on the website."
+			});
+		}
+		if (!queries.updateUserApiKey?.run) {
+			return res.status(500).json({ error: "Not available", message: "API keys are not available." });
+		}
+		const raw = crypto.randomBytes(32).toString("base64url");
+		const apiKey = `psn_${raw}`;
+		const apiKeyHash = crypto.createHash("sha256").update(apiKey).digest("hex");
+		const apiKeyPrefix = `${apiKey.slice(0, 10)}…`;
+		try {
+			await queries.updateUserApiKey.run(req.auth.userId, { apiKeyHash, apiKeyPrefix });
+			return res.json({ ok: true, apiKey });
+		} catch (err) {
+			console.error("[POST /api/profile/api-key]", err);
+			return res.status(500).json({ error: "Failed to save API key", message: err?.message });
+		}
+	});
+
+	router.delete("/api/profile/api-key", async (req, res) => {
+		if (!req.auth?.userId) {
+			return res.status(401).json({ error: "Unauthorized" });
+		}
+		if (req.auth?.apiKeyAuth || req.auth?.integrationAccess) {
+			return res.status(403).json({
+				error: "Forbidden",
+				message: "Manage API keys while signed in on the website."
+			});
+		}
+		if (!queries.updateUserApiKey?.run) {
+			return res.status(500).json({ error: "Not available", message: "API keys are not available." });
+		}
+		try {
+			await queries.updateUserApiKey.run(req.auth.userId, { apiKeyHash: null, apiKeyPrefix: null });
+			return res.json({ ok: true });
+		} catch (err) {
+			console.error("[DELETE /api/profile/api-key]", err);
+			return res.status(500).json({ error: "Failed to remove API key", message: err?.message });
+		}
+	});
+
+	// Update current user profile fields stored in `users.meta` (partial PATCH).
+	router.patch("/api/profile", async (req, res) => {
+		if (!req.auth?.userId) {
+			return res.status(401).json({ error: "Unauthorized" });
+		}
+		const body = req.body && typeof req.body === "object" ? req.body : {};
+		const wantsNsfw = Object.prototype.hasOwnProperty.call(body, "enableNsfw");
+		const wantsShowOwnPosts = Object.prototype.hasOwnProperty.call(body, "showOwnPostsInFeed");
+		const wantsAudible = Object.prototype.hasOwnProperty.call(body, "audibleNotifications");
+		const wantsForceLegacy = Object.prototype.hasOwnProperty.call(body, "forceLegacyFeed");
+		if (!wantsNsfw && !wantsShowOwnPosts && !wantsAudible && !wantsForceLegacy) {
+			return res.status(400).json({
+				error: "Invalid request",
+				message: "Provide enableNsfw, showOwnPostsInFeed, audibleNotifications, and/or forceLegacyFeed."
+			});
+		}
+		if (wantsNsfw && typeof body.enableNsfw !== "boolean") {
+			return res.status(400).json({ error: "Invalid request", message: "enableNsfw must be a boolean when provided." });
+		}
+		if (wantsShowOwnPosts && typeof body.showOwnPostsInFeed !== "boolean") {
+			return res.status(400).json({
+				error: "Invalid request",
+				message: "showOwnPostsInFeed must be a boolean when provided."
+			});
+		}
+		if (wantsAudible && typeof body.audibleNotifications !== "boolean") {
+			return res.status(400).json({
+				error: "Invalid request",
+				message: "audibleNotifications must be a boolean when provided."
+			});
+		}
+		if (wantsForceLegacy && typeof body.forceLegacyFeed !== "boolean") {
+			return res.status(400).json({
+				error: "Invalid request",
+				message: "forceLegacyFeed must be a boolean when provided."
+			});
+		}
+		try {
+			if (wantsNsfw) {
+				if (!queries.updateUserEnableNsfw?.run) {
+					return res.status(500).json({ error: "Not available", message: "Profile update is not available." });
+				}
+				await queries.updateUserEnableNsfw.run(req.auth.userId, body.enableNsfw);
+			}
+			if (wantsShowOwnPosts) {
+				if (!queries.updateUserShowOwnPostsInFeed?.run) {
+					return res.status(500).json({ error: "Not available", message: "Profile update is not available." });
+				}
+				await queries.updateUserShowOwnPostsInFeed.run(req.auth.userId, body.showOwnPostsInFeed);
+			}
+			if (wantsAudible) {
+				if (!queries.updateUserAudibleNotifications?.run) {
+					return res.status(500).json({ error: "Not available", message: "Profile update is not available." });
+				}
+				await queries.updateUserAudibleNotifications.run(req.auth.userId, body.audibleNotifications);
+			}
+			if (wantsForceLegacy) {
+				const user = await queries.selectUserById.get(req.auth.userId);
+				if (!queries.updateUserForceLegacyFeed?.run) {
+					return res.status(500).json({ error: "Not available", message: "Profile update is not available." });
+				}
+				await queries.updateUserForceLegacyFeed.run(req.auth.userId, body.forceLegacyFeed);
+			}
+			const out = { ok: true };
+			if (wantsNsfw) out.enableNsfw = body.enableNsfw;
+			if (wantsShowOwnPosts) out.showOwnPostsInFeed = body.showOwnPostsInFeed;
+			if (wantsAudible) out.audibleNotifications = body.audibleNotifications;
+			if (wantsForceLegacy) out.forceLegacyFeed = body.forceLegacyFeed;
+			return res.json(out);
+		} catch (err) {
+			console.error("[PATCH /api/profile]", err);
+			return res.status(500).json({ error: "Failed to update", message: err?.message || "Could not update profile." });
+		}
+	});
+
+	// Record that user returned from Stripe Checkout (store session id and timestamp for idempotency / state)
+	router.post("/api/subscription/checkout-return", async (req, res) => {
+		if (!req.auth?.userId) {
+			return res.status(401).json({ error: "Unauthorized" });
+		}
+		const sessionId = typeof req.body?.sessionId === "string" ? req.body.sessionId.trim() : "";
+		if (!sessionId || !sessionId.startsWith("cs_")) {
+			return res.status(400).json({ error: "Invalid sessionId", message: "sessionId is required and must be a Stripe checkout session id." });
+		}
+		if (!queries.recordCheckoutReturn?.run) {
+			return res.status(500).json({ error: "Not available", message: "Checkout return recording is not available." });
+		}
+		try {
+			const returnedAt = new Date().toISOString();
+			await queries.recordCheckoutReturn.run(req.auth.userId, sessionId, returnedAt);
+			return res.json({ ok: true });
+		} catch (err) {
+			console.error("[POST /api/subscription/checkout-return]", err);
+			return res.status(500).json({ error: "Failed to record", message: err?.message || "Could not record checkout return." });
+		}
+	});
+
+	// Start Stripe Checkout for a one-time credit pack
+	router.post("/api/credits/checkout", async (req, res) => {
+		if (!req.auth?.userId) {
+			return res.status(401).json({ error: "Unauthorized" });
+		}
+		const pack = getCreditTopupPack(req.body?.pack);
+		const secretKey = process.env.STRIPE_SECRET_KEY;
+		const priceId = pack ? getCreditTopupPriceId(pack) : "";
+		if (!pack) {
+			return res.status(400).json({ error: "Invalid pack", message: "Choose a credit pack." });
+		}
+		if (!secretKey || !priceId) {
+			return res.status(503).json({
+				error: "STRIPE_NOT_CONFIGURED",
+				message: "Credit checkout is not set up yet."
+			});
+		}
+		try {
+			const stripe = new Stripe(secretKey);
+			const baseUrl = getBaseAppUrl();
+			const user = await queries.selectUserById.get(req.auth.userId);
+			const customerEmail = typeof user?.email === "string" && user.email.includes("@") ? user.email : undefined;
+			const session = await stripe.checkout.sessions.create({
+				mode: "payment",
+				line_items: [{ price: priceId, quantity: 1 }],
+				client_reference_id: String(req.auth.userId),
+				metadata: { type: "credit_topup", pack: pack.id },
+				success_url: `${baseUrl}/pricing?topup=1&session_id={CHECKOUT_SESSION_ID}`,
+				cancel_url: `${baseUrl}/pricing?canceled=1`,
+				...(customerEmail ? { customer_email: customerEmail } : {})
+			});
+			return res.json({ url: session.url });
+		} catch (err) {
+			console.error("[POST /api/credits/checkout]", err);
+			return res.status(500).json({
+				error: "Checkout failed",
+				message: err?.message || "Could not start checkout."
+			});
+		}
+	});
+
+	// Start Stripe Checkout for Founder subscription
+	router.post("/api/subscription/checkout", async (req, res) => {
+		if (!req.auth?.userId) {
+			return res.status(401).json({ error: "Unauthorized" });
+		}
+		const secretKey = process.env.STRIPE_SECRET_KEY;
+		const priceId = process.env.STRIPE_PRICE_ID_FOUNDER;
+		if (!secretKey || !priceId) {
+			return res.status(503).json({
+				error: "STRIPE_NOT_CONFIGURED",
+				message: "Subscription checkout is not set up yet."
+			});
+		}
+		try {
+			const stripe = new Stripe(secretKey);
+			const baseUrl = getBaseAppUrl();
+			const user = await queries.selectUserById.get(req.auth.userId);
+			const customerEmail = typeof user?.email === "string" && user.email.includes("@") ? user.email : undefined;
+			const session = await stripe.checkout.sessions.create({
+				mode: "subscription",
+				line_items: [{ price: priceId, quantity: 1 }],
+				client_reference_id: String(req.auth.userId),
+				success_url: `${baseUrl}/pricing?success=1&session_id={CHECKOUT_SESSION_ID}`,
+				cancel_url: `${baseUrl}/pricing?canceled=1`,
+				...(customerEmail ? { customer_email: customerEmail } : {})
+			});
+			return res.json({ url: session.url });
+		} catch (err) {
+			console.error("[POST /api/subscription/checkout]", err);
+			return res.status(500).json({
+				error: "Checkout failed",
+				message: err?.message || "Could not start checkout."
+			});
+		}
+	});
+
+	// Update current user's plan. When switching to free, cancel Stripe subscription if present.
+	router.put("/api/profile/plan", async (req, res) => {
+		try {
+			if (!req.auth?.userId) {
+				return res.status(401).json({ error: "Unauthorized", message: "You must be signed in to change your plan." });
+			}
+			const plan = req.body?.plan;
+			if (plan !== "free" && plan !== "founder") {
+				return res.status(400).json({ error: "Invalid plan", message: "plan must be 'free' or 'founder'" });
+			}
+			if (!queries.updateUserPlan?.run) {
+				return res.status(500).json({ error: "Plan update not available", message: "Plan updates are not available." });
+			}
+			const userId = req.auth.userId;
+			// Capture subscription id before we change anything (needed for Stripe cancel).
+			const userBefore = await queries.selectUserById.get(userId);
+			let subscriptionId = null;
+			if (plan === "free" && userBefore?.meta) {
+				const raw = userBefore.meta.stripeSubscriptionId;
+				if (typeof raw === "string" && raw.trim()) {
+					subscriptionId = raw.trim();
+				} else if (raw && typeof raw === "object" && typeof raw.id === "string") {
+					subscriptionId = raw.id.trim();
+				}
+			}
+			// Only cancel in Stripe if we have a valid-looking subscription id (e.g. sub_xxx)
+			if (subscriptionId && !subscriptionId.startsWith("sub_")) {
+				subscriptionId = null;
+			}
+
+			// Write target state to DB before calling Stripe (DB records that we are transitioning to this plan).
+			await queries.updateUserPlan.run(userId, plan);
+			if (plan === "free" && queries.updateUserStripeSubscriptionId?.run) {
+				let stripeCancelFailed = false;
+				if (subscriptionId) {
+					const stripeSecret = process.env.STRIPE_SECRET_KEY;
+					if (stripeSecret) {
+						try {
+							const stripe = new Stripe(stripeSecret);
+							await stripe.subscriptions.cancel(subscriptionId);
+						} catch (stripeErr) {
+							console.error("[PUT /api/profile/plan] Stripe cancel failed:", stripeErr?.message || stripeErr);
+							stripeCancelFailed = true;
+						}
+					}
+				}
+				// Always clear subscription id when switching to free so DB matches "no active subscription".
+				await queries.updateUserStripeSubscriptionId.run(userId, null);
+				if (stripeCancelFailed) {
+					return res.status(502).json({
+						error: "Cancel failed",
+						message: "Could not cancel subscription. Please try again or contact support."
+					});
+				}
+			}
+
+			const user = await queries.selectUserById.get(userId);
+			const newPlan = user?.meta?.plan === "founder" ? "founder" : "free";
+			return res.json({ ok: true, plan: newPlan });
+		} catch (err) {
+			console.error("[PUT /api/profile/plan]", err);
+			return res.status(500).json({ error: "Update failed", message: err?.message || "Could not update plan." });
+		}
+	});
+
+	// Update current user's profile (user_profiles table)
+	router.put("/api/profile", async (req, res) => {
+		try {
+			if (!req.auth?.userId) {
+				return res.status(401).json({ error: "Unauthorized" });
+			}
+
+			const user = await queries.selectUserById.get(req.auth.userId);
+			if (!user) {
+				return res.status(404).json({ error: "User not found" });
+			}
+
+			const existingRow = await queries.selectUserProfileByUserId?.get(req.auth.userId);
+			const existingProfile = normalizeProfileRow(existingRow);
+			const existingUserName = typeof existingProfile.user_name === "string"
+				? existingProfile.user_name.trim()
+				: "";
+
+			const rawUserName = req.body?.user_name ?? req.body?.username;
+			const userName = normalizeUsername(rawUserName);
+			const hasExistingUserName = Boolean(existingUserName);
+			const hasUserNameInput = rawUserName !== undefined && rawUserName !== null;
+			if (hasExistingUserName && hasUserNameInput) {
+				// Username is permanent once set (admin override is a separate endpoint).
+				if (!userName || userName !== existingUserName) {
+					return res.status(409).json({
+						error: "Username is permanent",
+						message: "Username cannot be changed after it is set."
+					});
+				}
+			} else if (typeof rawUserName === "string" && !userName) {
+				return res.status(400).json({
+					error: "Invalid username",
+					message: "Username must be 3-24 chars, lowercase letters/numbers/underscore, starting with a letter/number."
+				});
+			}
+
+			// Enforce uniqueness if username provided
+			if (!hasExistingUserName && userName && queries.selectUserProfileByUsername?.get) {
+				const existing = await queries.selectUserProfileByUsername.get(userName);
+				if (existing && Number(existing.user_id) !== Number(req.auth.userId)) {
+					return res.status(409).json({ error: "Username already taken" });
+				}
+			}
+
+			const requestedMeta = typeof req.body?.meta === "object" && req.body.meta && !Array.isArray(req.body.meta)
+				? req.body.meta
+				: null;
+			const nextMetaBase = {
+				...(typeof existingProfile.meta === "object" && existingProfile.meta ? existingProfile.meta : {})
+			};
+			if (requestedMeta) {
+				const { prsn_cids: _prsnDrop, ...restRequested } = requestedMeta;
+				Object.assign(nextMetaBase, restRequested);
+			}
+
+			const anonCidForPrsn =
+				typeof req.cookies?.ps_cid === "string" ? req.cookies.ps_cid.trim() || null : null;
+			let tryPrsnIds = [];
+			/** Reused in welcome transition block to avoid a second list fetch. */
+			let cachedTryReqsForAnon = null;
+			if (anonCidForPrsn && queries.selectTryRequestsByCid?.all) {
+				cachedTryReqsForAnon = (await queries.selectTryRequestsByCid.all(anonCidForPrsn)) || [];
+				tryPrsnIds = cachedTryReqsForAnon
+					.map((r) => prsnCidFromMeta(tryRequestMetaFromRow(r.meta)))
+					.filter(Boolean);
+			}
+			let nextMeta = mergePrsnCidsIntoProfileMeta(nextMetaBase, [
+				getClientIdFromRequest(req),
+				...tryPrsnIds
+			]);
+
+			const finalUserName = hasExistingUserName
+				? existingUserName
+				: userName;
+
+			if (finalUserName) {
+				const legacy = nextMeta?.["onb_version"];
+				const prev = Number(nextMeta.welcome_version ?? legacy);
+				const prevVersion = Number.isFinite(prev) ? prev : 0;
+				nextMeta.welcome_version = Math.max(prevVersion, WELCOME_VERSION);
+				delete nextMeta["onb_version"];
+			}
+			nextMeta.character_description = typeof req.body?.character_description === "string" ? req.body.character_description.trim() || null : (existingProfile.meta?.character_description ?? null);
+
+			let nextSocials = typeof existingProfile.socials === "object" && existingProfile.socials
+				? existingProfile.socials
+				: {};
+			if (Object.prototype.hasOwnProperty.call(req.body || {}, "socials")) {
+				const applied = applySocialObjectUpdates(nextSocials, req.body.socials);
+				if (!applied.ok) {
+					return res.status(400).json({ error: applied.error || "Invalid social link" });
+				}
+				nextSocials = applied.socials;
+			}
+
+			const payload = {
+				user_name: finalUserName,
+				display_name: typeof req.body?.display_name === "string" ? req.body.display_name.trim() : null,
+				about: typeof req.body?.about === "string" ? req.body.about.trim() : null,
+				socials: nextSocials,
+				avatar_url: typeof req.body?.avatar_url === "string" ? req.body.avatar_url.trim() : null,
+				cover_image_url: typeof req.body?.cover_image_url === "string" ? req.body.cover_image_url.trim() : null,
+				badges: Array.isArray(req.body?.badges) ? req.body.badges : [],
+				meta: nextMeta
+			};
+
+			if (!queries.upsertUserProfile?.run) {
+				return res.status(500).json({ error: "Profile storage not available" });
+			}
+
+			await queries.upsertUserProfile.run(req.auth.userId, payload);
+			let updatedRow = await queries.selectUserProfileByUserId?.get(req.auth.userId);
+			let profile = normalizeProfileRow(updatedRow);
+
+			const welcomeComplete = req.body?.welcome_complete === true;
+			const avatarUrl = payload.avatar_url || "";
+			const tryPrefix = "/api/try/images/";
+			const anonCid = typeof req.cookies?.ps_cid === "string" ? req.cookies.ps_cid.trim() : null;
+			const avatarFilename =
+				avatarUrl.includes(tryPrefix) && avatarUrl.split(tryPrefix)[1]
+					? (avatarUrl.split(tryPrefix)[1].split("/")[0].split("?")[0].trim() || null)
+					: null;
+
+			// Transition try images (N) for this anon_cid into created_images (unpublished). Copy to user, then remove from try storage and DB. Idempotent via meta.source_anon_id.
+			if (
+				welcomeComplete &&
+				anonCid &&
+				queries.selectTryRequestsByCid?.all &&
+				queries.selectCreatedImagesAnonByIds?.all &&
+				queries.selectCreatedImagesForUser?.all &&
+				queries.insertCreatedImage?.run &&
+				queries.updateTryRequestsTransitionedByCreatedImageAnonId?.run &&
+				queries.deleteCreatedImageAnon?.run
+			) {
+				try {
+					const storage = req.app?.locals?.storage;
+					if (storage?.getImageBufferAnon && storage?.uploadImage && storage?.deleteImageAnon) {
+						const existingCreations = await queries.selectCreatedImagesForUser.all(req.auth.userId, { limit: 500 });
+						const sourceAnonIds = new Set(
+							(existingCreations || [])
+								.map((c) => (c.meta && typeof c.meta === "object" && c.meta.source_anon_id != null ? Number(c.meta.source_anon_id) : null))
+								.filter((id) => Number.isFinite(id))
+						);
+						const reqs = cachedTryReqsForAnon || [];
+						const anonIds = [...new Set((reqs || []).map((r) => r.created_image_anon_id).filter(Boolean))];
+						if (anonIds.length > 0) {
+							const images = await queries.selectCreatedImagesAnonByIds.all(anonIds);
+							const byId = new Map((images || []).map((i) => [i.id, i]));
+							for (const id of anonIds) {
+								const row = byId.get(id);
+								if (
+									!row ||
+									row.status !== "completed" ||
+									!row.filename ||
+									row.filename.includes("..") ||
+									row.filename.includes("/")
+								)
+									continue;
+								if (avatarFilename && row.filename === avatarFilename) continue;
+								const alreadyHas = sourceAnonIds.has(Number(row.id));
+								try {
+									let createdImageId = null;
+									if (!alreadyHas) {
+										const buffer = await storage.getImageBufferAnon(row.filename);
+										const newFilename = `transition_${req.auth.userId}_${row.id}_${Date.now()}.png`;
+										const newUrl = await storage.uploadImage(buffer, newFilename);
+										const meta = row.meta && typeof row.meta === "object" ? { ...row.meta, source_anon_id: row.id } : { source_anon_id: row.id };
+										const insertResult = await queries.insertCreatedImage.run(
+											req.auth.userId,
+											newFilename,
+											newUrl,
+											row.width ?? 1024,
+											row.height ?? 1024,
+											null,
+											"completed",
+											meta
+										);
+										createdImageId = insertResult?.insertId;
+									} else {
+										const existing = (existingCreations || []).find((c) => c.meta?.source_anon_id === row.id || c.meta?.source_anon_id === Number(row.id));
+										createdImageId = existing?.id;
+									}
+									if (createdImageId != null) {
+										await queries.updateTryRequestsTransitionedByCreatedImageAnonId.run(row.id, {
+											userId: req.auth.userId,
+											createdImageId
+										});
+									}
+									await queries.deleteCreatedImageAnon.run(row.id);
+									await storage.deleteImageAnon(row.filename);
+								} catch (err) {
+									// skip this image, continue with others
+								}
+							}
+						}
+					}
+				} catch (transitionErr) {
+					// non-fatal; profile and avatar block still run
+				}
+			}
+
+			// Welcome complete: promote try avatar to creations, create created_image row, and publish
+			if (welcomeComplete && avatarUrl.includes(tryPrefix)) {
+				const storage = req.app?.locals?.storage;
+				const afterPrefix = avatarUrl.split(tryPrefix)[1];
+				const filename = afterPrefix ? afterPrefix.split("/")[0].split("?")[0].trim() : "";
+				if (
+					filename &&
+					!filename.includes("..") &&
+					storage?.getImageBufferAnon &&
+					storage?.uploadImage &&
+					queries.insertCreatedImage?.run &&
+					queries.publishCreatedImage?.run &&
+					queries.insertFeedItem?.run
+				) {
+					try {
+						const buffer = await storage.getImageBufferAnon(filename);
+						const newFilename = `welcome_${req.auth.userId}_${Date.now()}.png`;
+						const newUrl = await storage.uploadImage(buffer, newFilename);
+						const avatarPrompt = typeof req.body?.avatar_prompt === "string" ? req.body.avatar_prompt.trim() || null : null;
+						const avatarAnonRow = await queries.selectCreatedImageAnonByFilename?.get?.(filename);
+						const welcomeMeta = {
+							...(avatarPrompt ? { args: { prompt: avatarPrompt } } : {}),
+							...(avatarAnonRow?.id != null ? { source_anon_id: avatarAnonRow.id } : {})
+						};
+						const welcomeMetaOrNull = Object.keys(welcomeMeta).length > 0 ? welcomeMeta : null;
+						const insertResult = await queries.insertCreatedImage.run(
+							req.auth.userId,
+							newFilename,
+							newUrl,
+							1024,
+							1024,
+							null,
+							"completed",
+							welcomeMetaOrNull
+						);
+						const createdImageId = insertResult?.insertId;
+						if (createdImageId) {
+							if (storage?.uploadGenericImage) {
+								try {
+									const storedAvatar = await storeProcessedProfileAvatar(storage, req.auth.userId, buffer);
+									payload.avatar_url = storedAvatar.url;
+								} catch {
+									payload.avatar_url = newUrl;
+								}
+							} else {
+								payload.avatar_url = newUrl;
+							}
+							await queries.upsertUserProfile.run(req.auth.userId, payload);
+							await bumpFeedAfterAvatarChange();
+							const title = payload.display_name
+								? `Welcome @${String(payload.user_name).trim()}`
+								: "Profile portrait";
+							const description = avatarPrompt || (payload.meta?.character_description ?? "").trim() || "";
+							await queries.publishCreatedImage.run(
+								createdImageId,
+								req.auth.userId,
+								title,
+								description || null,
+								false
+							);
+							const feedAuthor = (payload.display_name && String(payload.display_name).trim()) || user?.email || "User";
+							await queries.insertFeedItem.run(title, description, feedAuthor, null, createdImageId);
+						}
+						// Record transition on try_requests and remove anon row + file
+						if (avatarAnonRow?.id && createdImageId && queries.updateTryRequestsTransitionedByCreatedImageAnonId?.run && queries.deleteCreatedImageAnon?.run && storage?.deleteImageAnon) {
+							try {
+								await queries.updateTryRequestsTransitionedByCreatedImageAnonId.run(avatarAnonRow.id, {
+									userId: req.auth.userId,
+									createdImageId
+								});
+								await queries.deleteCreatedImageAnon.run(avatarAnonRow.id);
+								await storage.deleteImageAnon(avatarAnonRow.filename);
+							} catch (_) {}
+						}
+						updatedRow = await queries.selectUserProfileByUserId?.get(req.auth.userId);
+						profile = normalizeProfileRow(updatedRow);
+					} catch (promoteErr) {
+						// Profile already saved with try URL; log and return success
+						// console.warn("Welcome avatar promote failed:", promoteErr?.message || promoteErr);
+					}
+				}
+			}
+
+			return res.json({ ok: true, profile });
+		} catch (error) {
+			// console.error("Error updating profile:", error);
+			return res.status(500).json({ error: "Internal server error" });
+		}
+	});
+
+	// Change current user's email (requires current password)
+	router.put("/api/account/email", async (req, res) => {
+		try {
+			if (!req.auth?.userId) {
+				return res.status(401).json({ error: "Unauthorized" });
+			}
+			const userId = req.auth.userId;
+			const newEmail = typeof req.body?.new_email === "string" ? req.body.new_email.trim().toLowerCase() : "";
+			const password = String(req.body?.password ?? "");
+
+			if (!newEmail) {
+				return res.status(400).json({ error: "New email is required" });
+			}
+			if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
+				return res.status(400).json({ error: "Invalid email format" });
+			}
+			if (!password) {
+				return res.status(400).json({ error: "Current password is required to change email" });
+			}
+
+			const authUser = await queries.selectUserByIdForLogin?.get(userId);
+			if (!authUser || !bcrypt.compareSync(password, authUser.password_hash)) {
+				return res.status(401).json({ error: "Incorrect password" });
+			}
+
+			const existingByEmail = await queries.selectUserByEmail.get(newEmail);
+			if (existingByEmail && Number(existingByEmail.id) !== Number(userId)) {
+				return res.status(409).json({ error: "Email already in use", message: "That email is already associated with another account." });
+			}
+
+			if (!queries.updateUserEmail?.run) {
+				return res.status(500).json({ error: "Email update not available" });
+			}
+			const { changes } = await queries.updateUserEmail.run(userId, newEmail);
+			if (changes === 0) {
+				return res.status(409).json({ error: "Email already in use", message: "That email is already associated with another account." });
+			}
+			return res.json({ ok: true, email: newEmail });
+		} catch (err) {
+			console.error("[PUT /api/account/email]", err);
+			return res.status(500).json({ error: "Update failed", message: err?.message || "Could not update email." });
+		}
+	});
+
+	// Update current user's profile via multipart form (server uploads images and deletes previous)
+	router.post("/api/profile", async (req, res) => {
+		try {
+			if (!req.auth?.userId) {
+				return res.status(401).json({ error: "Unauthorized" });
+			}
+
+			const user = await queries.selectUserById.get(req.auth.userId);
+			if (!user) {
+				return res.status(404).json({ error: "User not found" });
+			}
+
+			if (!queries.upsertUserProfile?.run) {
+				return res.status(500).json({ error: "Profile storage not available" });
+			}
+
+			const { fields, files } = await parseMultipart(req);
+
+			const rawUserName = fields?.user_name ?? fields?.username;
+			const userName = normalizeUsername(rawUserName);
+			if (typeof rawUserName === "string" && rawUserName.trim() && !userName) {
+				return res.status(400).json({
+					error: "Invalid username",
+					message: "Username must be 3-24 chars, lowercase letters/numbers/underscore, starting with a letter/number."
+				});
+			}
+
+			if (userName && queries.selectUserProfileByUsername?.get) {
+				const existing = await queries.selectUserProfileByUsername.get(userName);
+				if (existing && Number(existing.user_id) !== Number(req.auth.userId)) {
+					return res.status(409).json({ error: "Username already taken" });
+				}
+			}
+
+			const existingRow = await queries.selectUserProfileByUserId?.get(req.auth.userId);
+			const existingProfile = normalizeProfileRow(existingRow);
+			const existingUserName = typeof existingProfile.user_name === "string"
+				? existingProfile.user_name.trim()
+				: "";
+			const hasExistingUserName = Boolean(existingUserName);
+			const hasUserNameInput = rawUserName !== undefined && rawUserName !== null && String(rawUserName).trim() !== "";
+			if (hasExistingUserName && hasUserNameInput) {
+				if (!userName || userName !== existingUserName) {
+					return res.status(409).json({
+						error: "Username is permanent",
+						message: "Username cannot be changed after it is set."
+					});
+				}
+			}
+
+			const avatarRemove = Boolean(fields?.avatar_remove);
+			const coverRemove = Boolean(fields?.cover_remove);
+			const avatarFile = files?.avatar_file || null;
+			const coverFile = files?.cover_file || null;
+
+			const oldAvatarUrl = existingProfile.avatar_url || null;
+			const oldCoverUrl = existingProfile.cover_image_url || null;
+			const oldAvatarKey = extractGenericKey(oldAvatarUrl);
+			const oldCoverKey = extractGenericKey(oldCoverUrl);
+
+			const nextSocialsResult = applySocialFieldUpdates(existingProfile.socials, fields);
+			if (!nextSocialsResult.ok) {
+				return res.status(400).json({ error: nextSocialsResult.error || "Invalid social link" });
+			}
+			const nextSocials = nextSocialsResult.socials;
+
+			const badges = parseJsonField(fields?.badges, existingProfile.badges || [], "Badges must be valid JSON.");
+			if (!Array.isArray(badges)) {
+				return res.status(400).json({ error: "Badges must be a JSON array" });
+			}
+			let meta = parseJsonField(fields?.meta, existingProfile.meta || {}, "Meta must be valid JSON.");
+			if (meta == null || typeof meta !== "object" || Array.isArray(meta)) {
+				return res.status(400).json({ error: "Meta must be a JSON object" });
+			}
+			delete meta.prsn_cids;
+			if (hasExistingUserName) {
+				const legacy = meta?.["onb_version"];
+				const prev = Number(meta.welcome_version ?? legacy);
+				const prevVersion = Number.isFinite(prev) ? prev : 0;
+				meta.welcome_version = Math.max(prevVersion, WELCOME_VERSION);
+				delete meta["onb_version"];
+			} else if (userName) {
+				const legacy = meta?.["onb_version"];
+				const prev = Number(meta.welcome_version ?? legacy);
+				const prevVersion = Number.isFinite(prev) ? prev : 0;
+				meta.welcome_version = Math.max(prevVersion, WELCOME_VERSION);
+				delete meta["onb_version"];
+			}
+			meta.character_description = typeof fields?.character_description === "string" ? fields.character_description.trim() || null : (existingProfile.meta?.character_description ?? null);
+
+			let avatar_url = avatarRemove ? null : (oldAvatarUrl || null);
+			let cover_image_url = coverRemove ? null : (oldCoverUrl || null);
+
+			const now = Date.now();
+			const rand = Math.random().toString(36).slice(2, 9);
+
+			const pendingDeletes = [];
+
+			const storage = req.app?.locals?.storage;
+			if (!storage?.uploadGenericImage) {
+				return res.status(500).json({ error: "Generic images storage not available" });
+			}
+
+			if (!avatarRemove && avatarFile?.buffer?.length) {
+				try {
+					const storedAvatar = await storeProcessedProfileAvatar(storage, req.auth.userId, avatarFile.buffer);
+					avatar_url = storedAvatar.url;
+				} catch {
+					return res.status(400).json({ error: "Invalid avatar image" });
+				}
+				if (shouldDeleteOldProfileAvatarKey(oldAvatarKey, req.auth.userId) && storage.deleteGenericImage) {
+					pendingDeletes.push(oldAvatarKey);
+				}
+			} else if (!avatarRemove && !avatarFile?.buffer?.length) {
+				const tryUrl = typeof fields?.avatar_try_url === "string" ? fields.avatar_try_url.trim() : "";
+				const tryPrefix = "/api/try/images/";
+				if (tryUrl.startsWith(tryPrefix)) {
+					const afterPrefix = tryUrl.slice(tryPrefix.length);
+					const filename = afterPrefix ? afterPrefix.split("/")[0].split("?")[0].trim() : "";
+					if (
+						filename &&
+						!filename.includes("..") &&
+						!filename.includes("/") &&
+						storage.getImageBufferAnon &&
+						storage.uploadImage &&
+						queries.insertCreatedImage?.run
+					) {
+						try {
+							const avatarAnonRow = await queries.selectCreatedImageAnonByFilename?.get?.(filename);
+							// Idempotent: if we already promoted this anon to a creation (e.g. retry or double-submit), reuse it and avoid saving twice.
+							let createdImageId = null;
+							let newUrl = null;
+							let existingCreation = null;
+							if (avatarAnonRow?.id != null && queries.selectCreatedImagesForUser?.all) {
+								const existingCreations = await queries.selectCreatedImagesForUser.all(req.auth.userId, { limit: 500 });
+								existingCreation = (existingCreations || []).find(
+									(c) => c.meta && typeof c.meta === "object" && (Number(c.meta.source_anon_id) === Number(avatarAnonRow.id))
+								);
+								if (existingCreation && (existingCreation.file_path || existingCreation.filename)) {
+									newUrl = existingCreation.file_path || (existingCreation.filename ? `/api/images/created/${existingCreation.filename}` : null);
+									createdImageId = existingCreation.id;
+								}
+							}
+							if (newUrl && createdImageId != null) {
+								const existingFilename = existingCreation?.filename;
+								if (existingFilename && storage.getImageBuffer) {
+									const sourceBuffer = await storage.getImageBuffer(existingFilename);
+									const storedAvatar = await storeProcessedProfileAvatar(storage, req.auth.userId, sourceBuffer);
+									avatar_url = storedAvatar.url;
+								} else {
+									avatar_url = newUrl;
+								}
+								if (shouldDeleteOldProfileAvatarKey(oldAvatarKey, req.auth.userId) && storage.deleteGenericImage) {
+									pendingDeletes.push(oldAvatarKey);
+								}
+								if (queries.updateTryRequestsTransitionedByCreatedImageAnonId?.run && queries.deleteCreatedImageAnon?.run && storage.deleteImageAnon) {
+									try {
+										await queries.updateTryRequestsTransitionedByCreatedImageAnonId.run(avatarAnonRow.id, {
+											userId: req.auth.userId,
+											createdImageId
+										});
+										await queries.deleteCreatedImageAnon.run(avatarAnonRow.id);
+										await storage.deleteImageAnon(avatarAnonRow.filename);
+									} catch (_) {}
+								}
+							} else {
+								const buffer = await storage.getImageBufferAnon(filename);
+								const newFilename = `profile_avatar_${req.auth.userId}_${Date.now()}.png`;
+								newUrl = await storage.uploadImage(buffer, newFilename);
+								const promptText = (typeof meta?.character_description === "string" && meta.character_description.trim()) ? meta.character_description.trim() : null;
+								const creationMeta = {
+									...(promptText ? { args: { prompt: promptText } } : {}),
+									...(avatarAnonRow?.id != null ? { source_anon_id: avatarAnonRow.id } : {})
+								};
+								const creationMetaOrNull = Object.keys(creationMeta).length > 0 ? creationMeta : null;
+								const insertResult = await queries.insertCreatedImage.run(
+									req.auth.userId,
+									newFilename,
+									newUrl,
+									1024,
+									1024,
+									null,
+									"completed",
+									creationMetaOrNull
+								);
+								createdImageId = insertResult?.insertId;
+								if (createdImageId) {
+									const storedAvatar = await storeProcessedProfileAvatar(storage, req.auth.userId, buffer);
+									avatar_url = storedAvatar.url;
+									if (shouldDeleteOldProfileAvatarKey(oldAvatarKey, req.auth.userId) && storage.deleteGenericImage) {
+										pendingDeletes.push(oldAvatarKey);
+									}
+									if (avatarAnonRow?.id && queries.updateTryRequestsTransitionedByCreatedImageAnonId?.run && queries.deleteCreatedImageAnon?.run && storage.deleteImageAnon) {
+										try {
+											await queries.updateTryRequestsTransitionedByCreatedImageAnonId.run(avatarAnonRow.id, {
+												userId: req.auth.userId,
+												createdImageId
+											});
+											await queries.deleteCreatedImageAnon.run(avatarAnonRow.id);
+											await storage.deleteImageAnon(avatarAnonRow.filename);
+										} catch (_) {}
+									}
+								}
+							}
+						} catch (tryErr) {
+							// non-fatal: leave avatar_url as existing or null
+						}
+					} else if (filename && !filename.includes("..") && !filename.includes("/") && storage.getImageBufferAnon) {
+						// Fallback: copy to profile storage only (no creation)
+						try {
+							const buffer = await storage.getImageBufferAnon(filename);
+							const storedAvatar = await storeProcessedProfileAvatar(storage, req.auth.userId, buffer);
+							avatar_url = storedAvatar.url;
+							if (shouldDeleteOldProfileAvatarKey(oldAvatarKey, req.auth.userId) && storage.deleteGenericImage) {
+								pendingDeletes.push(oldAvatarKey);
+							}
+							if (storage.deleteImageAnon && queries.selectCreatedImageAnonByFilename?.get && queries.deleteCreatedImageAnon?.run) {
+								try {
+									const anonRow = await queries.selectCreatedImageAnonByFilename.get(filename);
+									if (anonRow?.id) {
+										await queries.deleteCreatedImageAnon.run(anonRow.id);
+										await storage.deleteImageAnon(filename);
+									}
+								} catch (_) {}
+							}
+						} catch (tryErr) {
+							// non-fatal
+						}
+					}
+				}
+			}
+			if (avatarRemove && oldAvatarKey && storage.deleteGenericImage) {
+				pendingDeletes.push(oldAvatarKey);
+			}
+
+			if (!coverRemove && coverFile?.buffer?.length) {
+				const ext = path.extname(coverFile.filename) || ".png";
+				const key = `profile/${req.auth.userId}/cover_${now}_${rand}${ext}`;
+				const stored = await storage.uploadGenericImage(coverFile.buffer, key, {
+					contentType: coverFile.mimeType
+				});
+				cover_image_url = buildGenericUrl(stored);
+				if (oldCoverKey && storage.deleteGenericImage) pendingDeletes.push(oldCoverKey);
+			} else if (coverRemove && oldCoverKey && storage.deleteGenericImage) {
+				pendingDeletes.push(oldCoverKey);
+			}
+
+			const anonCidForPrsnPost =
+				typeof req.cookies?.ps_cid === "string" ? req.cookies.ps_cid.trim() || null : null;
+			let tryPrsnIdsPost = [];
+			if (anonCidForPrsnPost && queries.selectTryRequestsByCid?.all) {
+				const tr = (await queries.selectTryRequestsByCid.all(anonCidForPrsnPost)) || [];
+				tryPrsnIdsPost = tr.map((r) => prsnCidFromMeta(tryRequestMetaFromRow(r.meta))).filter(Boolean);
+			}
+			meta = mergePrsnCidsIntoProfileMeta(meta, [getClientIdFromRequest(req), ...tryPrsnIdsPost]);
+
+			const payload = {
+				user_name: hasExistingUserName ? existingUserName : (userName || null),
+				display_name: typeof fields?.display_name === "string" ? fields.display_name.trim() : existingProfile.display_name || null,
+				about: typeof fields?.about === "string" ? fields.about.trim() : existingProfile.about || null,
+				socials: nextSocials,
+				avatar_url,
+				cover_image_url,
+				badges,
+				meta
+			};
+
+			await queries.upsertUserProfile.run(req.auth.userId, payload);
+			if (avatar_url !== oldAvatarUrl) {
+				await bumpFeedAfterAvatarChange();
+			}
+			if (storage.deleteGenericImage && pendingDeletes.length > 0) {
+				for (const key of pendingDeletes) {
+					try {
+						await storage.deleteGenericImage(key);
+					} catch (error) {
+						// console.warn("Failed to delete previous profile image:", error?.message || error);
+					}
+				}
+			}
+
+			const updatedRow = await queries.selectUserProfileByUserId?.get(req.auth.userId);
+			const profile = normalizeProfileRow(updatedRow);
+			return res.json({ ok: true, profile });
+		} catch (error) {
+			if (error?.code === "FILE_TOO_LARGE") {
+				return res.status(413).json({ error: "Image too large" });
+			}
+			if (error?.code === "INVALID_JSON") {
+				return res.status(400).json({ error: error.message || "Invalid JSON" });
+			}
+			console.error("Error updating profile (multipart):", error);
+			return res.status(500).json({ error: "Internal server error" });
+		}
+	});
+
+	// Set current user's avatar from one of their creations (owner only)
+	router.post("/api/profile/avatar-from-creation", async (req, res) => {
+		try {
+			if (!req.auth?.userId) {
+				return res.status(401).json({ error: "Unauthorized" });
+			}
+			const creationId = req.body?.creation_id != null ? Number(req.body.creation_id) : null;
+			if (!Number.isFinite(creationId) || creationId <= 0) {
+				return res.status(400).json({ error: "Invalid creation_id" });
+			}
+			if (!queries.selectCreatedImageById?.get) {
+				return res.status(500).json({ error: "Profile storage not available" });
+			}
+			const image = await queries.selectCreatedImageById.get(creationId, req.auth.userId);
+			if (!image || Number(image.user_id) !== Number(req.auth.userId)) {
+				return res.status(404).json({ error: "Creation not found or you do not own it" });
+			}
+			if (image.status !== "completed" || !image.filename || image.filename.includes("..") || image.filename.includes("/")) {
+				return res.status(400).json({ error: "Creation image is not available" });
+			}
+			const storage = req.app?.locals?.storage;
+			if (!storage?.getImageBuffer || !storage?.uploadGenericImage) {
+				return res.status(500).json({ error: "Image storage not available" });
+			}
+			const existingRow = await queries.selectUserProfileByUserId?.get(req.auth.userId);
+			const existingProfile = normalizeProfileRow(existingRow);
+			const oldAvatarUrl = existingProfile.avatar_url || null;
+			const oldAvatarKey = extractGenericKey(oldAvatarUrl);
+			const buffer = await storage.getImageBuffer(image.filename);
+			const storedAvatar = await storeProcessedProfileAvatar(storage, req.auth.userId, buffer);
+			const avatar_url = storedAvatar.url;
+			const metaMerged = mergePrsnCidsIntoProfileMeta(existingProfile.meta ?? {}, getClientIdFromRequest(req));
+			const payload = {
+				user_name: existingProfile.user_name ?? null,
+				display_name: existingProfile.display_name ?? null,
+				about: existingProfile.about ?? null,
+				socials: existingProfile.socials ?? {},
+				avatar_url,
+				cover_image_url: existingProfile.cover_image_url ?? null,
+				badges: existingProfile.badges ?? [],
+				meta: metaMerged
+			};
+			await queries.upsertUserProfile.run(req.auth.userId, payload);
+			await bumpFeedAfterAvatarChange();
+			if (shouldDeleteOldProfileAvatarKey(oldAvatarKey, req.auth.userId) && storage.deleteGenericImage) {
+				try {
+					await storage.deleteGenericImage(oldAvatarKey);
+				} catch (_) {}
+			}
+			const updatedRow = await queries.selectUserProfileByUserId?.get(req.auth.userId);
+			const profile = normalizeProfileRow(updatedRow);
+			return res.json({ ok: true, profile });
+		} catch (err) {
+			// console.error("Error setting avatar from creation:", err);
+			return res.status(500).json({ error: err?.message || "Internal server error" });
+		}
+	});
+
+	// Profile summary: logged-out viewers get the public fields; signed-in viewers keep follow/self data.
+	router.get(["/api/users/:id/profile", "/api/users/by-username/:username/profile"], async (req, res) => {
+		try {
+			const viewerId = req.auth?.userId ? Number(req.auth.userId) : null;
+			const viewer = viewerId ? await queries.selectUserById.get(viewerId) : null;
+			if (viewerId && !viewer) {
+				return res.status(404).json({ error: "User not found" });
+			}
+
+			const resolved = await resolveTargetUserFromParams(req, { allowUsername: true });
+			if (resolved?.error) {
+				return res.status(resolved.error.status).json(resolved.error.body);
+			}
+			const targetUserId = resolved.targetUserId;
+			const target = resolved.target;
+
+			const emailPrefix = (() => {
+				const email = String(target?.email || "").trim();
+				if (!email) return null;
+				const local = email.includes("@") ? email.split("@")[0] : email;
+				const trimmed = local.trim();
+				return trimmed || null;
+			})();
+
+			const isSelf = Boolean(viewer && Number(targetUserId) === Number(viewer.id));
+			const profileRow = await queries.selectUserProfileByUserId?.get(targetUserId);
+			let profile = normalizeProfileRow(profileRow);
+			if (!isSelf && profile) {
+				const m = profile.meta && typeof profile.meta === "object" ? { ...profile.meta } : {};
+				delete m.prsn_cids;
+				profile = { ...profile, meta: m, prsn_cids: [] };
+			}
+
+			const allCountRow = await queries.selectAllCreatedImageCountForUser?.get(targetUserId);
+			const publishedCountRow = await queries.selectPublishedCreatedImageCountForUser?.get(targetUserId);
+			const likesCountRow = await queries.selectLikesReceivedForUserPublished?.get(targetUserId);
+			const followerCountRow = await queries.selectFollowerCountForUser?.get(targetUserId);
+			const publishedCount = Number(publishedCountRow?.count ?? 0);
+			const allCount = Number(allCountRow?.count ?? 0);
+
+			const stats = {
+				creations_total: viewer ? allCount : publishedCount,
+				creations_published: publishedCount,
+				likes_received: Number(likesCountRow?.count ?? 0),
+				followers_count: Number(followerCountRow?.count ?? 0),
+				member_since: target.created_at ?? null
+			};
+
+			const viewerFollowsRow = (!viewer || isSelf)
+				? null
+				: queries.selectUserFollowStatus?.get
+					? await queries.selectUserFollowStatus.get(viewer.id, targetUserId)
+					: null;
+			const viewerFollows = Boolean(viewerFollowsRow?.viewer_follows);
+
+			const publicUser = isSelf
+				? { id: target.id, email: target.email, role: target.role, created_at: target.created_at }
+				: {
+					id: target.id,
+					role: target.role,
+					created_at: target.created_at,
+					...(viewer ? { email_prefix: emailPrefix } : {})
+				};
+
+			const plan = target?.meta?.plan === "founder" ? "founder" : "free";
+			return res.json({
+				user: publicUser,
+				profile,
+				plan,
+				stats,
+				is_self: isSelf,
+				viewer_follows: viewerFollows
+			});
+		} catch (error) {
+			// console.error("Error loading user profile summary:", error);
+			return res.status(500).json({ error: "Internal server error" });
+		}
+	});
+
+	// Created images for a user (published-only unless viewer is owner/admin and include=all)
+	router.get(["/api/users/:id/created-images", "/api/users/by-username/:username/created-images"], async (req, res) => {
+		try {
+			const viewerId = req.auth?.userId ? Number(req.auth.userId) : null;
+			const viewer = viewerId ? await queries.selectUserById.get(viewerId) : null;
+			if (viewerId && !viewer) {
+				return res.status(404).json({ error: "User not found" });
+			}
+
+			const resolved = await resolveTargetUserFromParams(req, { allowUsername: true });
+			if (resolved?.error) {
+				return res.status(resolved.error.status).json(resolved.error.body);
+			}
+			const targetUserId = resolved.targetUserId;
+
+			const isSelf = Boolean(viewer && Number(targetUserId) === Number(viewer.id));
+			const isAdmin = viewer?.role === 'admin';
+			const include = String(req.query?.include || "").toLowerCase();
+			const wantAll = include === "all";
+			const includeUnavailable = isAdmin && (wantAll || req.query?.includeUnavailable === "1");
+			const limit = Math.min(200, Math.max(1, Number.parseInt(String(req.query?.limit ?? "24"), 10) || 24));
+			const offset = Math.max(0, Number.parseInt(String(req.query?.offset ?? "0"), 10) || 0);
+			const pagination = { limit, offset };
+
+			const enableNsfw = viewer?.meta?.enableNsfw === true;
+
+			let images = [];
+			if ((isSelf || isAdmin) && wantAll && queries.selectCreatedImagesForUser?.all) {
+				images = await queries.selectCreatedImagesForUser.all(targetUserId, { includeUnavailable, ...pagination });
+			} else if (queries.selectPublishedCreatedImagesForUser?.all) {
+				images = await queries.selectPublishedCreatedImagesForUser.all(targetUserId, {
+					...pagination,
+					viewerEnableNsfw: enableNsfw
+				});
+			} else if (queries.selectCreatedImagesForUser?.all) {
+				// Fallback: filter in memory (no pagination)
+				const all = await queries.selectCreatedImagesForUser.all(targetUserId, { includeUnavailable });
+				images = Array.isArray(all) ? all.filter((img) => img?.published === 1 || img?.published === true).slice(offset, offset + limit) : [];
+			}
+
+			const mapped = (Array.isArray(images) ? images : []).map((img) => {
+				const userDeleted = !!(img.unavailable_at != null && img.unavailable_at !== "");
+				const status = img.status || "completed";
+				const meta = parseCreationMeta(img.meta);
+				const mediaFields = mapCreatedImageRowMediaFields(img, { includeMeta: true });
+				const url = mediaFields.url;
+				const isModeratedError = (() => {
+					if (status !== "failed" || meta == null) return false;
+					try {
+						const parts = [];
+						if (typeof meta.error === "string" && meta.error.trim()) parts.push(meta.error.trim());
+						const pe = meta.provider_error;
+						if (pe != null && typeof pe === "object" && pe.body != null) {
+							const b = pe.body;
+							if (typeof b === "string") parts.push(b.trim());
+							else if (typeof b === "object") {
+								if (typeof b.error === "string" && b.error.trim()) parts.push(b.error.trim());
+								else if (typeof b.message === "string" && b.message.trim()) parts.push(b.message.trim());
+							}
+						}
+						const errorText = parts.join(" ").toLowerCase();
+						return errorText.length > 0 && errorText.includes("moderated");
+					} catch {
+						return false;
+					}
+				})();
+				return {
+					id: img.id,
+					filename: img.filename,
+					url,
+					thumbnail_url: mediaFields.thumbnail_url,
+					width: img.width,
+					height: img.height,
+					color: img.color,
+					status,
+					created_at: img.created_at,
+					published: img.published === 1 || img.published === true,
+					published_at: img.published_at || null,
+					title: img.title || null,
+					description: img.description || null,
+					nsfw: !!(meta && meta.nsfw),
+					media_type: mediaFields.media_type,
+					video_url: mediaFields.video_url,
+					audio_url: mediaFields.audio_url,
+					meta: mediaFields.meta,
+					is_moderated_error: isModeratedError,
+					...(isAdmin && userDeleted ? { user_deleted: true } : {})
+				};
+			});
+
+			let resultMapped = mapped;
+			if (!viewer) {
+				resultMapped = mapped.filter((img) => {
+					if (img.nsfw) return false;
+					return !creationMetaHasChallengeSubmission(img.meta);
+				});
+			} else if (!enableNsfw) {
+				resultMapped = mapped.filter((img) => !img.nsfw);
+			}
+			const has_more = mapped.length === limit;
+			return res.json({ images: resultMapped, has_more, is_self: isSelf, scope: isSelf && wantAll ? "all" : "published" });
+		} catch (error) {
+			// console.error("Error loading user created images:", error);
+			return res.status(500).json({ error: "Internal server error" });
+		}
+	});
+
+	// Creations this user has liked (published only; for profile Likes tab)
+	router.get(["/api/users/:id/liked-creations", "/api/users/by-username/:username/liked-creations"], async (req, res) => {
+		try {
+			if (!req.auth?.userId) {
+				return res.status(401).json({ error: "Unauthorized" });
+			}
+			const viewer = await queries.selectUserById.get(req.auth.userId);
+			if (!viewer) {
+				return res.status(404).json({ error: "User not found" });
+			}
+			const resolved = await resolveTargetUserFromParams(req, { allowUsername: true });
+			if (resolved?.error) {
+				return res.status(resolved.error.status).json(resolved.error.body);
+			}
+			const targetUserId = resolved.targetUserId;
+			if (!queries.selectCreatedImagesLikedByUser?.all) {
+				return res.json({ images: [], has_more: false });
+			}
+			const limit = Math.min(200, Math.max(1, Number.parseInt(String(req.query?.limit ?? "24"), 10) || 24));
+			const offset = Math.max(0, Number.parseInt(String(req.query?.offset ?? "0"), 10) || 0);
+			const images = await queries.selectCreatedImagesLikedByUser.all(targetUserId, { limit, offset });
+			const mapped = (Array.isArray(images) ? images : []).map((img) => {
+				const meta = parseCreationMeta(img.meta);
+				const mediaFields = mapCreatedImageRowMediaFields(img, { includeMeta: true });
+				const nsfw = !!(meta && meta.nsfw);
+				return {
+					id: img.id,
+					filename: img.filename,
+					url: mediaFields.url,
+					thumbnail_url: mediaFields.thumbnail_url,
+					width: img.width,
+					height: img.height,
+					color: img.color,
+					created_at: img.created_at,
+					title: img.title || null,
+					description: img.description || null,
+					nsfw,
+					media_type: mediaFields.media_type,
+					video_url: mediaFields.video_url,
+					audio_url: mediaFields.audio_url,
+					meta: mediaFields.meta
+				};
+			});
+			const enableNsfw = viewer?.meta?.enableNsfw === true;
+			const resultMapped = enableNsfw ? mapped : mapped.filter((img) => !img.nsfw);
+			return res.json({ images: resultMapped, has_more: mapped.length === limit });
+		} catch (error) {
+			return res.status(500).json({ error: "Internal server error" });
+		}
+	});
+
+	// Comments by this user with creation context (for profile Comments tab)
+	router.get(["/api/users/:id/comments", "/api/users/by-username/:username/comments"], async (req, res) => {
+		try {
+			if (!req.auth?.userId) {
+				return res.status(401).json({ error: "Unauthorized" });
+			}
+			const viewer = await queries.selectUserById.get(req.auth.userId);
+			if (!viewer) {
+				return res.status(404).json({ error: "User not found" });
+			}
+			const resolved = await resolveTargetUserFromParams(req, { allowUsername: true });
+			if (resolved?.error) {
+				return res.status(resolved.error.status).json(resolved.error.body);
+			}
+			const targetUserId = resolved.targetUserId;
+			const limit = Math.min(200, Math.max(1, Number.parseInt(String(req.query?.limit ?? "20"), 10) || 20));
+			const offset = Math.max(0, Number.parseInt(String(req.query?.offset ?? "0"), 10) || 0);
+			const commentsRaw = await queries.selectCommentsByUser?.all(targetUserId, { limit, offset }) ?? [];
+			const comments = (Array.isArray(commentsRaw) ? commentsRaw : []).map((c) => {
+				const mediaFields = mapCreatedImageRowMediaFields(
+					{
+						id: c?.created_image_id,
+						file_path: c?.created_image_url,
+						meta: c?.created_image_meta
+					},
+					{ includeMeta: false }
+				);
+				return {
+					...c,
+					created_image_url: mediaFields.url ?? c?.created_image_url ?? null,
+					created_image_thumbnail_url: mediaFields.thumbnail_url ?? null
+				};
+			});
+			const commentIds = comments.map((c) => c.id).filter((id) => id != null);
+			const reactionsByComment = await getReactionsForCommentIds(queries, commentIds, viewer?.id ?? null);
+			for (const c of comments) {
+				if (c.id == null) continue;
+				const r = reactionsByComment.get(Number(c.id));
+				if (r) {
+					c.reactions = r.reactions ?? {};
+					c.viewer_reactions = r.viewer_reactions ?? [];
+				} else {
+					c.reactions = {};
+					c.viewer_reactions = [];
+				}
+			}
+			return res.json({ comments, has_more: comments.length === limit });
+		} catch (error) {
+			return res.status(500).json({ error: "Internal server error" });
+		}
+	});
+
+	router.get("/api/notifications", async (req, res) => {
+		try {
+			if (!req.auth?.userId) {
+				return res.status(401).json({ error: "Unauthorized" });
+			}
+
+			const user = await queries.selectUserById.get(req.auth.userId);
+			if (!user) {
+				return res.status(404).json({ error: "User not found" });
+			}
+
+			const limitRaw = Number.parseInt(String(req.query?.limit ?? "25"), 10);
+			const limit = Number.isFinite(limitRaw) ? Math.min(200, Math.max(1, limitRaw)) : 25;
+			const fetched = await queries.selectNotificationsForUser.all(
+				user.id,
+				user.role,
+				Math.min(200, Math.max(limit, limit * 4))
+			);
+			const rows = filterNotificationsForBell(fetched).slice(0, limit);
+
+			// Retire legacy DM chat_mention rows so they do not linger unacknowledged in DB.
+			for (const row of fetched) {
+				if (!isDmChatMentionNotification(row) || row?.acknowledged_at) continue;
+				if (!queries.acknowledgeNotificationById?.run) continue;
+				void queries.acknowledgeNotificationById.run(row.id, user.id, user.role).catch(() => {});
+			}
+
+			const resolved = await Promise.all(
+				rows.map(async (row) => {
+					const r = typeof row?.type === "string" && row.type.trim()
+						? await resolveNotificationDisplay(row, queries)
+						: null;
+					let creationTitle = r?.creation_title ?? null;
+					if (!creationTitle && row?.meta != null) {
+						try {
+							const meta = typeof row.meta === "string" ? JSON.parse(row.meta) : row.meta;
+							creationTitle = typeof meta?.creation_title === "string" ? meta.creation_title.trim() : null;
+						} catch {
+							// ignore
+						}
+					}
+					return {
+						id: row.id,
+						title: r?.title ?? row.title ?? "Notification",
+						message: r?.message ?? row.message ?? "",
+						link: r?.link ?? row.link ?? null,
+						type: row.type ?? null,
+						created_at: row.created_at,
+						acknowledged_at: row.acknowledged_at,
+						creation_id: getCreationIdFromRow(row),
+						creation_title: creationTitle || null
+					};
+				})
+			);
+			const notifications = collapseNotificationsByCreation(resolved);
+			return res.json({ notifications });
+		} catch (error) {
+			// console.error("Error loading notifications:", error);
+			return res.status(500).json({ error: "Internal server error" });
+		}
+	});
+
+	router.get("/api/notifications/unread-count", async (req, res) => {
+		try {
+			if (!req.auth?.userId) {
+				return res.json({ count: 0 });
+			}
+
+			const user = await queries.selectUserById.get(req.auth.userId);
+			if (!user) {
+				return res.json({ count: 0 });
+			}
+
+			const fetched = await queries.selectNotificationsForUser.all(user.id, user.role, 200);
+			const count = countUnreadNotificationsForBell(fetched);
+			return res.json({ count });
+		} catch (error) {
+			// console.error("Error loading unread notification count:", error);
+			return res.json({ count: 0 });
+		}
+	});
+
+	router.post("/api/notifications/acknowledge", async (req, res) => {
+		try {
+			if (!req.auth?.userId) {
+				return res.status(401).json({ error: "Unauthorized" });
+			}
+
+			const user = await queries.selectUserById.get(req.auth.userId);
+			if (!user) {
+				return res.status(404).json({ error: "User not found" });
+			}
+
+			const id = Number(req.body?.id);
+			if (!id) {
+				return res.status(400).json({ error: "Notification id required" });
+			}
+
+			// When the notification is a comment/tip for a creation, we mark all notifications for that creation
+			// as read (no per-sub-item state; the collapsed row is one unit).
+			let result;
+			try {
+				if (queries.selectNotificationById?.get) {
+					const row = await queries.selectNotificationById.get(id, user.id, user.role);
+					if (!row) {
+						return res.status(404).json({ error: "Notification not found" });
+					}
+					const creationId = getCreationIdFromRow(row);
+					const threadId = getThreadIdFromRow(row);
+					const type = typeof row.type === "string" ? row.type.trim() : null;
+					const collapseTypes = new Set([
+						"comment",
+						"comment_thread",
+						"tip",
+						"creation_mention",
+						"comment_mention"
+					]);
+					const chatTypes = new Set(["chat_mention"]);
+					const acknowledgeByCreation =
+						creationId != null && type && collapseTypes.has(type) && queries.acknowledgeNotificationsForUserAndCreation?.run;
+					const acknowledgeByThread =
+						threadId != null && type && chatTypes.has(type) && queries.acknowledgeNotificationsForUserAndThread?.run;
+					if (acknowledgeByCreation) {
+						result = await queries.acknowledgeNotificationsForUserAndCreation.run(user.id, user.role, creationId);
+					} else if (acknowledgeByThread) {
+						result = await queries.acknowledgeNotificationsForUserAndThread.run(user.id, user.role, threadId);
+					} else {
+						result = await queries.acknowledgeNotificationById.run(id, user.id, user.role);
+					}
+				} else {
+					result = await queries.acknowledgeNotificationById.run(id, user.id, user.role);
+				}
+			} catch (ackError) {
+				// Fallback when bulk ack by creation is unavailable (e.g. older schema)
+				if (process.env.NODE_ENV !== "production") {
+					console.error("Notification ack (by-creation path) failed, falling back to single ack:", ackError?.message ?? ackError);
+				}
+				result = await queries.acknowledgeNotificationById.run(id, user.id, user.role);
+			}
+
+			const updated = result?.changes ?? (typeof result?.updated === "number" ? result.updated : 0);
+			return res.json({ ok: true, updated });
+		} catch (error) {
+			if (process.env.NODE_ENV !== "production") {
+				console.error("Error acknowledging notification:", error?.message ?? error);
+			}
+			return res.status(500).json({ error: "Internal server error" });
+		}
+	});
+
+	router.post("/api/notifications/acknowledge-all", async (req, res) => {
+		try {
+			if (!req.auth?.userId) {
+				return res.status(401).json({ error: "Unauthorized" });
+			}
+
+			const user = await queries.selectUserById.get(req.auth.userId);
+			if (!user) {
+				return res.status(404).json({ error: "User not found" });
+			}
+
+			const result = await queries.acknowledgeAllNotificationsForUser.run(
+				user.id,
+				user.role
+			);
+			return res.json({ ok: true, updated: result.changes });
+		} catch (error) {
+			// console.error("Error acknowledging all notifications:", error);
+			return res.status(500).json({ error: "Internal server error" });
+		}
+	});
+
+	router.get("/api/credits", async (req, res) => {
+		try {
+			if (!req.auth?.userId) {
+				return res.status(401).json({ error: "Unauthorized" });
+			}
+
+			const user = await queries.selectUserById?.get?.(req.auth.userId);
+			const isAdmin = user?.role === "admin";
+
+			const credits = await queries.selectUserCredits.get(req.auth.userId);
+
+			// If no credits record exists, initialize with 100
+			if (!credits) {
+				try {
+					await queries.insertUserCredits.run(req.auth.userId, 100, null);
+					const newCredits = await queries.selectUserCredits.get(req.auth.userId);
+					return res.json({
+						balance: newCredits.balance,
+						canClaim: isAdmin ? false : true,
+						lastClaimDate: null,
+						topupPacks: listConfiguredCreditTopupPacks()
+					});
+				} catch (error) {
+					// console.error("Error initializing credits:", error);
+					return res.status(500).json({ error: "Internal server error" });
+				}
+			}
+
+			// Check if can claim (last claim was not today in UTC). Admins cannot claim.
+			let canClaim = (() => {
+				if (isAdmin) return false;
+				if (!credits.last_daily_claim_at) return true;
+				const now = new Date();
+				const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+				const lastClaimDate = new Date(credits.last_daily_claim_at);
+				const lastClaimUTC = new Date(Date.UTC(lastClaimDate.getUTCFullYear(), lastClaimDate.getUTCMonth(), lastClaimDate.getUTCDate()));
+				return lastClaimUTC.getTime() < todayUTC.getTime();
+			})();
+
+			return res.json({
+				balance: credits.balance,
+				canClaim,
+				lastClaimDate: credits.last_daily_claim_at,
+				topupPacks: listConfiguredCreditTopupPacks()
+			});
+		} catch (error) {
+			// console.error("Error loading credits:", error);
+			return res.status(500).json({ error: "Internal server error" });
+		}
+	});
+
+	router.post("/api/credits/claim", async (req, res) => {
+		try {
+			if (!req.auth?.userId) {
+				return res.status(401).json({ error: "Unauthorized" });
+			}
+
+			const user = await queries.selectUserById?.get?.(req.auth.userId);
+			if (user?.role === "admin") {
+				return res.status(403).json({ error: "Admins cannot claim daily credits" });
+			}
+
+			const result = await queries.claimDailyCredits.run(req.auth.userId, 10);
+
+			if (!result.success) {
+				return res.status(400).json({
+					success: false,
+					balance: result.balance,
+					message: result.message || "Daily credits already claimed today"
+				});
+			}
+
+			return res.json({
+				success: true,
+				balance: result.balance,
+				message: "Daily credits claimed successfully"
+			});
+		} catch (error) {
+			// console.error("Error claiming daily credits:", error);
+			return res.status(500).json({ error: "Internal server error" });
+		}
+	});
+
+	router.post("/api/credits/tip", async (req, res) => {
+		try {
+			if (!req.auth?.userId) {
+				return res.status(401).json({ error: "Unauthorized" });
+			}
+			const fromUserId = Number(req.auth.userId);
+			console.log("[POST /api/credits/tip] request", { fromUserId, toUserId: req.body?.toUserId, amount: req.body?.amount });
+
+			if (!queries.transferCredits?.run) {
+				return res.status(500).json({ error: "Credits transfer not available" });
+			}
+
+			const toUserId = Number(req.body?.toUserId);
+			const rawAmount = Number(req.body?.amount);
+			const amount = Math.round(rawAmount * 10) / 10;
+			const rawCreatedImageId = req.body?.createdImageId;
+			const createdImageId = rawCreatedImageId != null ? Number(rawCreatedImageId) : null;
+			const rawMessage = req.body?.message;
+			const message =
+				typeof rawMessage === "string" ? rawMessage.trim() : "";
+
+			if (!Number.isFinite(toUserId) || toUserId <= 0) {
+				return res.status(400).json({ error: "Invalid recipient user id" });
+			}
+			if (!Number.isFinite(amount) || amount <= 0) {
+				return res.status(400).json({ error: "Invalid amount" });
+			}
+			if (toUserId === fromUserId) {
+				return res.status(400).json({ error: "Cannot tip yourself" });
+			}
+
+			if (message && message.length > 500) {
+				return res.status(400).json({ error: "Message is too long" });
+			}
+
+			let creation = null;
+			if (createdImageId !== null) {
+				if (!Number.isFinite(createdImageId) || createdImageId <= 0) {
+					return res.status(400).json({ error: "Invalid creation id" });
+				}
+				if (!queries.selectCreatedImageByIdAnyUser?.get) {
+					return res.status(500).json({ error: "Creation lookup not available" });
+				}
+				creation = await queries.selectCreatedImageByIdAnyUser.get(createdImageId);
+				if (!creation) {
+					return res.status(404).json({ error: "Creation not found" });
+				}
+			}
+
+			const sender = await queries.selectUserById.get(fromUserId);
+			if (!sender) {
+				return res.status(404).json({ error: "User not found" });
+			}
+			const senderProfile = await queries.selectUserProfileByUserId?.get(sender.id) ?? null;
+
+			// Policy: minimum days before tipping (free accounts only; upgraded plans exempt)
+			const hasUpgradedPlan =
+				sender.meta?.plan === "founder" ||
+				(sender.meta?.stripeSubscriptionId != null && String(sender.meta.stripeSubscriptionId).trim() !== "");
+			const hasPolicyQuery = Boolean(queries.selectPolicyByKey?.get);
+			console.log("[POST /api/credits/tip] Min-days check:", {
+				fromUserId,
+				toUserId,
+				hasUpgradedPlan,
+				hasPolicyQuery,
+				senderCreatedAt: sender.created_at ?? null
+			});
+			if (!hasUpgradedPlan && hasPolicyQuery) {
+				const policyRow = await queries.selectPolicyByKey.get("min_days_before_tip");
+				const minDaysRaw = policyRow?.value != null ? String(policyRow.value).trim() : "";
+				const minDays = Math.max(0, parseInt(minDaysRaw, 10) || 60);
+				let daysPresent = 0;
+				if (sender.created_at) {
+					const createdMs = new Date(sender.created_at).getTime();
+					if (Number.isFinite(createdMs)) {
+						daysPresent = (Date.now() - createdMs) / (24 * 60 * 60 * 1000);
+					}
+				}
+				const blocked = minDays > 0 && daysPresent < minDays;
+				console.log("[POST /api/credits/tip] Min-days result:", {
+					fromUserId,
+					minDays,
+					daysPresent: Math.round(daysPresent * 10) / 10,
+					blocked
+				});
+				if (blocked) {
+					const daysRemaining = Math.max(0, Math.ceil(minDays - daysPresent));
+					const daysWord = daysRemaining === 1 ? "day" : "days";
+					const errorText = `You have ${daysRemaining} more ${daysWord} before you can tip. You can upgrade your account to tip now — see the pricing page.`;
+					const errorHtml = errorText.replace(
+						"pricing page",
+						'<a href="/pricing" class="tip-error-pricing-link">pricing</a> page'
+					);
+					return res.status(403).json({
+						error: errorText,
+						errorHtml
+					});
+				}
+			}
+
+			const recipient = await queries.selectUserById.get(toUserId);
+			if (!recipient) {
+				return res.status(404).json({ error: "Recipient not found" });
+			}
+
+			let transferResult;
+			try {
+				transferResult = await queries.transferCredits.run(fromUserId, toUserId, amount);
+			} catch (error) {
+				const message = String(error?.message || "");
+				const code = error?.code || "";
+				const isInsufficient =
+					code === "INSUFFICIENT_CREDITS" ||
+					message.toLowerCase().includes("insufficient");
+				if (isInsufficient) {
+					return res.status(400).json({ error: "Insufficient credits" });
+				}
+				const isSelfTip = message.toLowerCase().includes("tip yourself");
+				if (isSelfTip) {
+					return res.status(400).json({ error: "Cannot tip yourself" });
+				}
+				// console.error("Error transferring credits:", error);
+				return res.status(500).json({ error: "Internal server error" });
+			}
+
+			// Log tip activity (best-effort; do not fail transfer on error)
+			try {
+				if (queries.insertTipActivity?.run) {
+					const source = createdImageId != null ? "creation" : "admin";
+					const meta = null;
+					await queries.insertTipActivity.run(
+						fromUserId,
+						toUserId,
+						createdImageId,
+						amount,
+						message || null,
+						source,
+						meta
+					);
+				}
+			} catch {
+				// ignore tip_activity failures
+			}
+
+			// Best-effort notification
+			try {
+				if (queries.insertNotification?.run) {
+					const title = "You received a tip";
+					const notifMessage = `Someone tipped you ${amount.toFixed(1)} credits.`;
+					const link =
+						createdImageId != null
+							? `/creations/${encodeURIComponent(String(createdImageId))}`
+							: "/";
+					const target = createdImageId != null ? { creation_id: createdImageId } : {};
+					const meta = {
+						amount,
+						...(message ? { tip_note: message } : {})
+					};
+					await queries.insertNotification.run(toUserId, null, title, notifMessage, link, sender.id, "tip", target, meta);
+				}
+			} catch (error) {
+				// console.error("Failed to insert tip notification:", error);
+				// do not fail the transfer
+			}
+
+			const fromBalance =
+				transferResult && typeof transferResult.fromBalance === "number"
+					? transferResult.fromBalance
+					: transferResult && typeof transferResult.from_balance === "number"
+						? transferResult.from_balance
+						: null;
+			const toBalance =
+				transferResult && typeof transferResult.toBalance === "number"
+					? transferResult.toBalance
+					: transferResult && typeof transferResult.to_balance === "number"
+						? transferResult.to_balance
+						: null;
+
+			return res.json({
+				success: true,
+				fromBalance,
+				toBalance
+			});
+		} catch (error) {
+			// console.error("Error tipping credits:", error);
+			return res.status(500).json({ error: "Internal server error" });
+		}
+	});
+
+	return router;
+}

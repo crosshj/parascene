@@ -1,0 +1,21 @@
+{
+  "exported_at": "2026-06-04T16:08:39.204Z",
+  "source": "prsn_feed_items + prsn_created_images (available, author set)",
+  "filter": "feed_items with prsn_created_images.unavailable_at IS NULL",
+  "csv_file": "prod-published-catalog.csv",
+  "counts": {
+    "feed_items_raw": 3439,
+    "rows_in_csv": 3439,
+    "video_rows": 349
+  },
+  "columns": [
+    "created_image_id",
+    "user_id",
+    "created_at",
+    "like_count",
+    "comment_count",
+    "media_type",
+    "nsfw",
+    "author_created_at"
+  ]
+}

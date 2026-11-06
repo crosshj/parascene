@@ -1,0 +1,27 @@
+/**
+ * Prompt library: nav, nav-mobile, app-tabs, modals (profile, credits, notifications).
+ */
+
+const TAGS = [
+	'app-navigation',
+	'app-navigation-mobile',
+	'app-tabs',
+	'app-modal-profile',
+	'app-modal-credits',
+	'app-modal-notifications',
+];
+
+function getImportQuery(version) {
+	return version && typeof version === 'string' ? `?v=${encodeURIComponent(version)}` : '';
+}
+
+export async function init(version) {
+	const qs = getImportQuery(version);
+	const { embedWaitTags, importStandaloneAppChrome } = await import(`../../shared/embedPageRuntime.js${qs}`);
+	await Promise.all([
+		importStandaloneAppChrome(qs),
+		import(`../../components/elements/tabs.js${qs}`),
+	]);
+	const { waitForComponents } = await import(`../../shared/pageInit.js${qs}`);
+	await waitForComponents(embedWaitTags(TAGS));
+}
