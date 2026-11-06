@@ -240,6 +240,7 @@ REMOTE_SCRIPT="/tmp/deploy-parascene-${DEPLOY_ENV}.sh"
 mkdir -p "$BUILD_DIR"
 tar --exclude='.env' \
 	--exclude='./_legacy' \
+	--exclude='./_legacy.beta' \
 	--exclude='./.git' \
 	--exclude='./node_modules' \
 	--exclude='./_docs' \

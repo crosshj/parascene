@@ -4,6 +4,7 @@
 .output
 .vercel
 _legacy
+_legacy.beta
 _docs
 node_modules
 build
