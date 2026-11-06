@@ -16,60 +16,30 @@ on:
           - beta
           - prod
 
-# Beta and prod never share a concurrency group, so one cannot cancel the other.
+# Separate groups so a beta deploy cannot cancel a prod deploy (and vice versa).
 concurrency:
   group: deploy-vps-${{ github.event_name == 'workflow_dispatch' && inputs.deploy_env || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
-  # Push to beta (or manual "beta") → only the beta container / parascene-beta nginx site.
-  deploy-beta:
+  deploy:
     if: >
-      (github.event_name == 'push' && github.ref_name == 'beta') ||
-      (github.event_name == 'workflow_dispatch' && inputs.deploy_env == 'beta')
+      github.event_name == 'workflow_dispatch' ||
+      github.ref_name == 'beta' ||
+      github.ref_name == 'main'
     runs-on: ubuntu-latest
+    # Secrets and variables both come from the GitHub environment named `beta`
+    # for either slot. DEPLOY_ENV picks container/nginx (beta vs prod).
     environment: beta
+    env:
+      DEPLOY_ENV: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_env || (github.ref_name == 'main' && 'prod' || 'beta') }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Deploy beta VPS slot
+      - name: Deploy VPS
         env:
-          DEPLOY_ENV: beta
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
-          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY || vars.SUPABASE_ANON_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
-          REPLICATE_API_TOKEN: ${{ secrets.REPLICATE_API_TOKEN }}
-          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          RESEND_SYSTEM_EMAIL: ${{ vars.RESEND_SYSTEM_EMAIL }}
-          UPSTASH_QSTASH_CURRENT_SIGNING_KEY: ${{ secrets.UPSTASH_QSTASH_CURRENT_SIGNING_KEY }}
-          UPSTASH_QSTASH_NEXT_SIGNING_KEY: ${{ secrets.UPSTASH_QSTASH_NEXT_SIGNING_KEY }}
-          UPSTASH_QSTASH_TOKEN: ${{ secrets.UPSTASH_QSTASH_TOKEN }}
-          UPSTASH_QSTASH_URL: ${{ vars.UPSTASH_QSTASH_URL }}
-          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
-          UPSTASH_REDIS_REST_URL: ${{ vars.UPSTASH_REDIS_REST_URL }}
-          GITHUB_SHA: ${{ github.sha }}
-        run: bash scripts/deploy-from-ci.sh
-
-  # Push to main (or manual "prod") → only the prod container / parascene-prod nginx site.
-  # Secrets still come from the `beta` GitHub environment until `prod` is populated.
-  deploy-prod:
-    if: >
-      (github.event_name == 'push' && github.ref_name == 'main') ||
-      (github.event_name == 'workflow_dispatch' && inputs.deploy_env == 'prod')
-    runs-on: ubuntu-latest
-    environment: beta
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Deploy prod VPS slot
-        env:
-          DEPLOY_ENV: prod
+          DEPLOY_ENV: ${{ env.DEPLOY_ENV }}
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
