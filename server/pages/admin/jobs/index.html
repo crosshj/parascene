@@ -8,6 +8,7 @@
 </head>
 <body class="admin-page">
 	{{ADMIN_HEADER}}
-	<main class="admin-page__content"><p>Job tools will be ported here.</p></main>
+	<main class="admin-page__content"><admin-tabs class="admin-tabs" sync-hash active="jobs"><div class="admin-tabs__list" data-admin-tab-list aria-label="Job sections"><button class="admin-tabs__tab" data-admin-tab="jobs">Jobs</button><button class="admin-tabs__tab" data-admin-tab="failures">Try failures</button></div><section class="admin-tabs__panel" data-admin-panel="jobs"><div data-jobs-table data-admin-table></div></section><section class="admin-tabs__panel" data-admin-panel="failures" hidden><p class="admin-card__detail">Recent failed anonymous image generations.</p><div data-failures-table data-admin-table></div></section></admin-tabs></main>
+	<script type="module" src="/admin/jobs/page.js"></script>
 </body>
 </html>
