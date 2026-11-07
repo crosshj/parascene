@@ -42,6 +42,7 @@ test('entering Mutate replaces images immediately and retains source lineage', (
 test('advanced mutate handoff retains the selected group context for server authorization', () => {
  reset();
  syncMutateSourceToCreateStorage({ imageUrl: '/group-source.png', sourceId: 91, groupId: 72, published: false });
+ assert.equal(loadMutateQueue()[0].groupId, 72);
  syncMutatePageToAdvancedCreate({ mode: 'image-to-image', imageUrl: '/group-source.png', sourceId: 91, groupId: 72 });
  const draft = readSavedCreateForm();
  assert.equal(draft.imageSources['/group-source.png'].sourceId, 91);
@@ -69,15 +70,23 @@ test('stale compatibility settings cannot overwrite a versioned shared draft', (
 });
 test('composer attachments use the same draft and preserve supplied lineage', () => {
  reset(); advanced();
- syncMutateQueueFromComposerAttachments(['/new.png', '/second.png'], [17, 18]);
+ syncMutateQueueFromComposerAttachments(['/new.png', '/second.png'], [17, 18], [70, 71]);
  assert.deepEqual(readSavedCreateForm().inputImages, ['/new.png', '/second.png']);
  assert.deepEqual(loadMutateQueue().map(item => item.sourceId), [17, 18]);
+ assert.deepEqual(loadMutateQueue().map(item => item.groupId), [70, 71]);
 });
 test('reusing a creation recipe explicitly replaces input attachments rather than using its output', () => {
  reset(); advanced();
  syncCreationDetailToAdvancedCreate({ serverId: 1, methodKey: 'replicate', args: { model: 'xai/grok-imagine-image', prompt: 'recipe', input_images: ['/recipe.png'] } });
  assert.deepEqual(readSavedCreateForm().inputImages, ['/recipe.png']);
  assert.equal(readSavedCreateForm().fieldValues.prompt, 'recipe');
+});
+test('recreating a grouped source retains its group authorization context', () => {
+ reset();
+ syncCreationDetailToAdvancedCreate({ serverId: 1, methodKey: 'replicate', mutateGroupId: 72, mutateOfId: 91, args: { model: 'xai/grok-imagine-image', prompt: 'recipe', input_images: ['/recipe.png'] } });
+ const draft = readSavedCreateForm();
+ assert.equal(deriveCreateLineage(draft, ['/recipe.png']).mutateOfId, 91);
+ assert.equal(deriveCreateLineage(draft, ['/recipe.png']).mutateGroupId, 72);
 });
 test('clearing prompt keeps attachments and reflects the empty value in compatibility storage', () => {
  reset(); advanced(); persistSavedCreateForm({ fieldValues: { prompt: '' } });

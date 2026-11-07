@@ -106,10 +106,12 @@ export function buildAttachmentSnapshotFromQueue(queueItems = loadMutateQueue())
 			const imageUrl = typeof item?.imageUrl === 'string' ? item.imageUrl.trim() : '';
 			if (!imageUrl) return null;
 			const sourceIdNum = Number(item?.sourceId);
+			const groupIdNum = Number(item?.groupId);
 			const frameTimeSec = Number(item?.frameTimeSec);
 			return {
 				imageUrl,
 				sourceId: Number.isFinite(sourceIdNum) && sourceIdNum > 0 ? sourceIdNum : null,
+				...(Number.isFinite(groupIdNum) && groupIdNum > 0 ? { groupId: groupIdNum } : {}),
 				published: item?.published === true ? true : item?.published === false ? false : undefined,
 				fromFrame: item?.fromFrame === true ? true : undefined,
 				...(Number.isFinite(frameTimeSec) && frameTimeSec >= 0 ? { frameTimeSec } : {}),
@@ -184,6 +186,7 @@ export function getMutateLineageForImageUrls(imageUrls, queueItems = loadMutateQ
 	if (urls.length === 0 || !Array.isArray(queueItems) || queueItems.length === 0) return {};
 
 	const parentSet = new Set();
+	const groupSet = new Set();
 	for (const url of urls) {
 		for (const item of queueItems) {
 			const itemUrl = typeof item?.imageUrl === 'string' ? item.imageUrl.trim() : '';
@@ -191,6 +194,8 @@ export function getMutateLineageForImageUrls(imageUrls, queueItems = loadMutateQ
 			if (!itemUrl || !Number.isFinite(sid) || sid <= 0) continue;
 			if (!mutateQueueImageUrlsMatch(url, itemUrl)) continue;
 			parentSet.add(sid);
+			const groupId = Number(item?.groupId);
+			if (Number.isFinite(groupId) && groupId > 0) groupSet.add(groupId);
 			break;
 		}
 	}
@@ -200,6 +205,7 @@ export function getMutateLineageForImageUrls(imageUrls, queueItems = loadMutateQ
 	return {
 		mutateOfId: mutateParentIds.length === 1 ? mutateParentIds[0] : undefined,
 		mutateParentIds,
+		...(groupSet.size === 1 ? { mutateGroupId: [...groupSet][0] } : {}),
 	};
 }
 
@@ -249,9 +255,9 @@ export function syncMutateQueueOrderFromImageUrls(orderedUrls) {
  * @param {unknown[]} orderedUrls
  * @param {Array<number | null | undefined>} [sourceIds]
  */
-export function syncMutateQueueFromComposerAttachments(orderedUrls, sourceIds = []) {
-	persistSavedCreateForm({ imageChange: { type: 'replace', images: orderedUrls }, imageSources: Object.fromEntries(orderedUrls.map((url, index) => [url, { sourceId: Number(sourceIds[index]) > 0 ? Number(sourceIds[index]) : null }])) });
-	replaceMutateQueueFromImageUrls(orderedUrls, { sourceIds });
+export function syncMutateQueueFromComposerAttachments(orderedUrls, sourceIds = [], groupIds = []) {
+	persistSavedCreateForm({ imageChange: { type: 'replace', images: orderedUrls }, imageSources: Object.fromEntries(orderedUrls.map((url, index) => [url, { sourceId: Number(sourceIds[index]) > 0 ? Number(sourceIds[index]) : null, groupId: Number(groupIds[index]) > 0 ? Number(groupIds[index]) : null }])) });
+	replaceMutateQueueFromImageUrls(orderedUrls, { sourceIds, groupIds });
 }
 
 /**
@@ -421,8 +427,10 @@ export function syncCreationDetailToAdvancedCreate(snapshot = {}) {
   : typeof fieldValues.image_url === 'string' ? [fieldValues.image_url]
   : typeof fieldValues.image === 'string' ? [fieldValues.image] : [];
  const parentIds = [...new Set((Array.isArray(snapshot.parentIds) && snapshot.parentIds.length ? snapshot.parentIds : [snapshot.mutateOfId]).map(Number).filter(id => Number.isFinite(id) && id > 0))];
+ const mutateGroupId = Number(snapshot.mutateGroupId);
  persistSavedCreateForm({ serverId, methodKey, outputMode, tab: 'basic', fieldValues,
-  imageSources: {}, recipeLineage: { images: [...images], parentIds },
+  imageSources: {}, recipeLineage: { images: [...images], parentIds,
+   ...(Number.isFinite(mutateGroupId) && mutateGroupId > 0 ? { groupIds: [mutateGroupId] } : {}) },
   imageChange: { type: 'replace', images } }, { notify: false });
  syncSavedCreateImagesToQueue();
 
@@ -473,14 +481,20 @@ export function syncMutateSourceToCreateStorage({ imageUrl, sourceId, groupId, p
 	if (!url) return;
 	persistSavedCreateForm(createSourceChange({ imageUrl: url, sourceId, groupId, published }), { notify: false });
 	persistCreateAttachmentUrls([url]);
-	replaceMutateQueueSingleItem({ imageUrl: url, sourceId, published });
+	replaceMutateQueueSingleItem({ imageUrl: url, sourceId, groupId, published });
 }
 
 /** Mutate edits change the saved form immediately, even without a mode switch. */
 export function persistMutateForm(snapshot = {}) {
 	const route = resolveMutateSubmitRoute(snapshot.mode, snapshot.i2vEngine);
 	const imageUrl = typeof snapshot.imageUrl === 'string' ? snapshot.imageUrl : '';
-	persistSavedCreateForm({ ...route, tab: 'basic', fieldValues: {
+	const sourceId = Number(snapshot.sourceId);
+	const groupId = Number(snapshot.groupId);
+	persistSavedCreateForm({ ...route, tab: 'basic', ...(imageUrl ? { imageSources: { [imageUrl]: {
+		sourceId: Number.isFinite(sourceId) && sourceId > 0 ? sourceId : null,
+		groupId: Number.isFinite(groupId) && groupId > 0 ? groupId : null,
+		published: snapshot.published === true,
+	} } } : {}), fieldValues: {
 		prompt: snapshot.prompt || '', model: route.model, aspect_ratio: snapshot.aspectRatio || '1:1',
 		image_url: imageUrl, image: imageUrl, input_images: imageUrl ? [imageUrl] : [],
 	} });
@@ -505,9 +519,10 @@ export function persistMutateForm(snapshot = {}) {
 export function syncMutatePageToAdvancedCreate(snapshot = {}) {
  const route = persistMutateForm(snapshot);
  // Switching editors projects the current attachments; it does not replace them.
- const images = readSavedCreateForm().inputImages;
+ const saved = readSavedCreateForm();
+ const images = saved.inputImages;
  persistCreateAttachmentUrls(images);
- replaceMutateQueueFromImageUrls(images);
+ replaceMutateQueueFromImageUrls(images, { sourceIds: images.map(url => saved.imageSources?.[url]?.sourceId), groupIds: images.map(url => saved.imageSources?.[url]?.groupId) });
  return route;
 }
 
@@ -518,5 +533,8 @@ export function syncSavedCreateImagesToQueue() {
  const saved = readSavedCreateForm();
  const images = saved.inputImages;
  persistCreateAttachmentUrls(images);
- replaceMutateQueueFromImageUrls(images, { sourceIds: images.map(url => saved.imageSources?.[url]?.sourceId) });
+	replaceMutateQueueFromImageUrls(images, {
+		sourceIds: images.map(url => saved.imageSources?.[url]?.sourceId),
+		groupIds: images.map(url => saved.imageSources?.[url]?.groupId),
+	});
 }

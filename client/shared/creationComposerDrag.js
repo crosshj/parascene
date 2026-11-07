@@ -27,6 +27,7 @@ export function attachFeedCardCreationDragSource(card) {
 	}
 
 	const published = card.dataset.published === '1';
+	const groupId = card.dataset.groupCreation === '1' ? creationId : Number(card.dataset.groupId) || null;
 
 	card.addEventListener('dragstart', (e) => {
 		if (!e.dataTransfer) return;
@@ -34,6 +35,7 @@ export function attachFeedCardCreationDragSource(card) {
 			creationId,
 			imageUrl,
 			published,
+			...(groupId ? { groupId } : {}),
 		});
 		e.dataTransfer.setData(PRSN_FEED_CREATION_DRAG_MIME, payload);
 		e.dataTransfer.setData('text/plain', imageUrl);
@@ -73,10 +75,12 @@ export function parseCreationDragDataTransfer(dt) {
 			if (!imageUrl) return null;
 			const cid = Number(parsed?.creationId);
 			const published = parsed?.published === true || parsed?.published === 1;
+			const groupId = Number(parsed?.groupId);
 			return {
 				...(Number.isFinite(cid) && cid > 0 ? { creationId: cid } : {}),
 				imageUrl,
 				...(published ? { published: true } : {}),
+				...(Number.isFinite(groupId) && groupId > 0 ? { groupId } : {}),
 			};
 		}
 	} catch {
@@ -100,7 +104,7 @@ function dataTransferHasCreationPayload(dt) {
  * @param {HTMLElement} composerRoot `.create-composer`
  * @param {HTMLElement} dropSurface drop target (usually `.create-composer-input-shell`)
  * @param {{
- *   onAttachImageUrl: (url: string, detail: { creationId?: number, published?: boolean }) => void,
+ *   onAttachImageUrl: (url: string, detail: { creationId?: number, groupId?: number, published?: boolean }) => void,
  *   isDisabled?: () => boolean,
  * }} handlers
  * @returns {() => void} teardown
@@ -149,6 +153,7 @@ export function bindCreateComposerCreationDropTargets(composerRoot, dropSurface,
 		if (!parsed?.imageUrl) return;
 		onAttach(parsed.imageUrl, {
 			creationId: parsed.creationId,
+			groupId: parsed.groupId,
 			published: parsed.published,
 		});
 	};

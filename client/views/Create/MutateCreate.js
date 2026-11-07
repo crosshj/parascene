@@ -1081,6 +1081,7 @@ if (!lifetime.active) return;
 							aspectRatio,
 							imageUrl,
 							sourceId,
+							groupId: Number(editContent.dataset.mutateGroupId || '') || null,
 							published,
 						};
 						const route = syncMutatePageToAdvancedCreate(snapshot);

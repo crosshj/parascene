@@ -39,8 +39,10 @@ function readQueue() {
 							? false
 							: undefined;
 				const frameTimeSec = Number(item.frameTimeSec);
+				const groupIdNum = Number(item.groupId);
 				return {
 					sourceId: Number.isFinite(sourceIdNum) && sourceIdNum > 0 ? sourceIdNum : null,
+					...(Number.isFinite(groupIdNum) && groupIdNum > 0 ? { groupId: groupIdNum } : {}),
 					imageUrl,
 					queuedAt: Number.isFinite(Number(item.queuedAt)) ? Number(item.queuedAt) : Date.now(),
 					published,
@@ -74,7 +76,7 @@ export function loadMutateQueue() {
 	return readQueue();
 }
 
-export function addToMutateQueue({ sourceId, imageUrl, published, fromFrame, frameTimeSec }) {
+export function addToMutateQueue({ sourceId, groupId, imageUrl, published, fromFrame, frameTimeSec }) {
 	const url = typeof imageUrl === 'string' ? imageUrl.trim() : '';
 	const idNum = Number(sourceId);
 	if (!url) return;
@@ -83,8 +85,10 @@ export function addToMutateQueue({ sourceId, imageUrl, published, fromFrame, fra
 	const filtered = current.filter((item) => !queueImageUrlsMatch(item.imageUrl, url));
 	const isPublished = published === true || published === 1;
 	const frameSec = Number(frameTimeSec);
+	const groupIdNum = Number(groupId);
 	const nextItem = {
 		sourceId: Number.isFinite(idNum) && idNum > 0 ? idNum : null,
+		...(Number.isFinite(groupIdNum) && groupIdNum > 0 ? { groupId: groupIdNum } : {}),
 		imageUrl: url,
 		queuedAt: Date.now(),
 		published: isPublished,
@@ -167,13 +171,22 @@ export function replaceMutateQueueFromImageUrls(orderedUrls, options = {}) {
 		const url = urls[i];
 		const idx = remaining.findIndex((item) => queueImageUrlsMatch(item.imageUrl, url));
 		if (idx >= 0) {
-			next.push(remaining[idx]);
+			const prior = remaining[idx];
+			const sid = Number(sourceIds[i]);
+			const groupId = Number(options.groupIds?.[i]);
+			next.push({
+				...prior,
+				...(Number.isFinite(sid) && sid > 0 ? { sourceId: sid } : {}),
+				...(Number.isFinite(groupId) && groupId > 0 ? { groupId } : {}),
+			});
 			remaining.splice(idx, 1);
 			continue;
 		}
 		const sid = Number(sourceIds[i]);
+		const groupId = Number(options.groupIds?.[i]);
 		next.push({
 			sourceId: Number.isFinite(sid) && sid > 0 ? sid : null,
+			...(Number.isFinite(groupId) && groupId > 0 ? { groupId } : {}),
 			imageUrl: url,
 			queuedAt: Date.now(),
 			published: false,
@@ -182,7 +195,9 @@ export function replaceMutateQueueFromImageUrls(orderedUrls, options = {}) {
 
 	const same =
 		next.length === current.length &&
-		next.every((item, index) => queueImageUrlsMatch(item.imageUrl, current[index].imageUrl));
+		next.every((item, index) => queueImageUrlsMatch(item.imageUrl, current[index].imageUrl)
+			&& item.sourceId === current[index].sourceId
+			&& item.groupId === current[index].groupId);
 	if (same) return false;
 
 	writeQueue(next, { reason: 'replace-from-attachments' });
@@ -245,11 +260,13 @@ export function replaceMutateQueueSingleItem(item) {
 		return;
 	}
 	const idNum = Number(item?.sourceId);
+	const groupIdNum = Number(item?.groupId);
 	const isPublished = item?.published === true || item?.published === 1;
 	writeQueue(
 		[
 			{
 				sourceId: Number.isFinite(idNum) && idNum > 0 ? idNum : null,
+				...(Number.isFinite(groupIdNum) && groupIdNum > 0 ? { groupId: groupIdNum } : {}),
 				imageUrl: url,
 				queuedAt: Date.now(),
 				published: isPublished,

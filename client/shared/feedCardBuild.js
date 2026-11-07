@@ -1588,7 +1588,7 @@ function buildFeedCreationCard(
 	const coverSource =
 		parsedMeta && typeof parsedMeta.cover_source === 'string' ? parsedMeta.cover_source.trim().toLowerCase() : '';
 	if (coverSource) card.dataset.coverSource = coverSource;
-	const isGroupCreationCard = parsedMeta?.group?.kind === 'group_creations';
+	const isGroupCreationCard = parsedMeta?.group?.kind === 'group_creations' || parsedMeta?.group?.kind === 'group_v2';
 	card.dataset.groupCreation = isGroupCreationCard ? '1' : '0';
 	const groupSourceCount = Array.isArray(parsedMeta?.group?.source_creations)
 		? parsedMeta.group.source_creations.length

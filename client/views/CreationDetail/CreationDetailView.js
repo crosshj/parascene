@@ -1386,6 +1386,7 @@ async function handleRecreateInAdvanced() {
 		userPrompt: userPromptFromRecreateMeta(recreateMeta),
   parentIds: recreateMeta.direct_parent_ids,
   mutateOfId: recreateMeta.mutate_of_id,
+		mutateGroupId: lastDetailIsGroupCreation ? getCreationId() : undefined,
 		outputMode,
 		styleKey,
 	}); } catch (error) { alert(error.message); return; }
@@ -7656,7 +7657,7 @@ async function loadCreation() {
 							}
 						} else {
 							try {
-								addToMutateQueue({ sourceId: queueSourceId, imageUrl: queueImageUrl, published: isPublished });
+								addToMutateQueue({ sourceId: queueSourceId, groupId: isGroupCreation ? getCreationId() : undefined, imageUrl: queueImageUrl, published: isPublished });
 								if (labelEl) labelEl.textContent = 'Remove from queue';
 								showToast('Added to queue');
 							} catch {

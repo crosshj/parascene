@@ -71,7 +71,10 @@ export function deriveCreateLineage(draft, imageUrls) {
  const recipeIds = recipe?.images?.length && used.length === new Set(recipe.images).size && used.every(url => recipe.images.includes(url)) ? recipe.parentIds || [] : [];
  const sources = imageUrls.map(url => draft.imageSources?.[url]).filter(Boolean);
  const ids = [...new Set([...recipeIds, ...sources.map(source => Number(source.sourceId)).filter(id => Number.isFinite(id) && id > 0)])];
- const groupIds = [...new Set(sources.map(source => Number(source.groupId)).filter(id => Number.isFinite(id) && id > 0))];
+ const groupIds = [...new Set([
+  ...(Array.isArray(recipe?.groupIds) ? recipe.groupIds : []),
+  ...sources.map(source => source.groupId),
+ ].map(Number).filter(id => Number.isFinite(id) && id > 0))];
  return ids.length ? {
   mutateParentIds: ids,
   ...(ids.length === 1 ? { mutateOfId: ids[0] } : {}),
