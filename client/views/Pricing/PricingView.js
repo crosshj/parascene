@@ -2,6 +2,12 @@ import { requestJson } from '../../core/request.js';
 import { userAvatarIcon } from '../../icons/svg-strings.js';
 import './PricingView.css';
 
+const PAYMENT_API_ORIGIN = 'https://api.parascene.com';
+
+function paymentApi(path) {
+	return `${PAYMENT_API_ORIGIN}${path}`;
+}
+
 const SUCCESS_COPY = {
 	activation: {
 		subtitle: 'Thank you. Your Founder plan is being activated.',
@@ -127,7 +133,7 @@ export const PricingView = Object.freeze({
 			control.setAttribute('aria-busy', 'true');
 			control.textContent = 'Redirecting…';
 			try {
-				const data = await requestJson(path, { method: 'POST', body });
+				const data = await requestJson(paymentApi(path), { method: 'POST', body });
 				if (data?.url) {
 					window.location.href = data.url;
 					return;
@@ -168,7 +174,7 @@ export const PricingView = Object.freeze({
 			switchButton.disabled = true;
 			const original = switchButton.textContent;
 			switchButton.textContent = 'Updating…';
-			void requestJson('/api/profile/plan', { method: 'PUT', body: { plan: 'free' } }).then((data) => {
+			void requestJson(paymentApi('/api/profile/plan'), { method: 'PUT', body: { plan: 'free' } }).then((data) => {
 				if (closed) return;
 				paintPlan(data?.plan || 'free');
 				if (data?.plan === 'free') showSuccess('deactivation');
@@ -203,7 +209,7 @@ export const PricingView = Object.freeze({
 				else if (topup) showSuccess('topup');
 				else if (success && sessionId) {
 					showSuccess('activation');
-					void requestJson('/api/subscription/checkout-return', { method: 'POST', body: { sessionId } }).catch(() => undefined);
+					void requestJson(paymentApi('/api/subscription/checkout-return'), { method: 'POST', body: { sessionId } }).catch(() => undefined);
 				} else if (data?.pendingPlanActivation && plan === 'free') showSuccess('activation');
 				else if (success) showSuccess(plan === 'free' ? 'deactivation' : 'activation');
 				else showPlans();
