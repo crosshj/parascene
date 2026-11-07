@@ -74,7 +74,13 @@ proof behavior, not the final sharing model.
 
 The host Nginx site is rendered from `infra/nginx/parascene.conf`. A push to
 `beta` installs `parascene-beta` and proxies that site's names to port 3000.
-A push to `prod` installs `parascene-prod` and proxies its names to port 3001.
+A push to `main` installs `parascene-prod` and proxies `www.parascene.com`
+and `cdn.parascene.com` to port 3001. The prod deploy checks both hostnames
+through local Nginx without relying on public DNS.
+`api.parascene.com` and `sh.parascene.com` remain on Vercel temporarily while
+their legacy routes are migrated.
+Both VPS sites publish creation and provider-poll jobs through QStash to the
+legacy `api.parascene.com` worker. Local development runs those jobs in process.
 Each deploy validates the complete Nginx configuration, restores the prior
 file on failure, and reloads Nginx before public health checks. Unless
 deployments run as root, the SSH deploy user therefore needs non-interactive

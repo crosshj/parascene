@@ -24,13 +24,13 @@ deploy_target() {
 			NGINX_SERVER_NAMES="__SITE_API_CDN_SHARE__"
 			;;
 		prod)
-			# Same VPS, prod container. Site is the frontend rehearsal host.
-			# CDN is the live prod media host on this container. api/sh stay on Vercel.
+			# Same VPS, prod container. WWW is the canonical site host.
+			# CDN is live here; api/sh remain on Vercel temporarily until legacy routes move.
 			APP_HOME_NAME="parascene-prod"
 			CONTAINER_NAME="parascene-prod"
 			HOST_PORT="3001"
 			IMAGE_TAG="parascene:prod"
-			APP_ORIGIN="https://prod.parascene.com"
+			APP_ORIGIN="https://www.parascene.com"
 			API_HOSTNAME="api.parascene.com"
 			SHARE_HOSTNAME="sh.parascene.com"
 			CDN_HOSTNAME="cdn.parascene.com"
@@ -41,6 +41,9 @@ deploy_target() {
 			return 1
 			;;
 	esac
+	# Both VPS sites hand creation execution to the existing Vercel API worker.
+	CREATION_JOB_MODE="qstash"
+	CREATION_WORKER_ORIGIN="https://api.parascene.com"
 	SITE_HOST="${APP_ORIGIN#https://}"
 	SITE_HOST="${SITE_HOST#http://}"
 	SITE_HOST="${SITE_HOST%%/*}"
@@ -97,6 +100,10 @@ install_nginx_config() {
 	fi
 	if [[ "$site_name" == "$other_site" ]]; then
 		echo "refusing to install nginx site ${site_name} during ${DEPLOY_ENV} deploy" >&2
+		return 1
+	fi
+	if [[ "$DEPLOY_ENV" == "beta" && -e "$legacy_path" && -e /etc/nginx/sites-enabled/parascene-prod ]]; then
+		echo "refusing to remove the legacy Nginx site during beta deploy while the prod site is enabled" >&2
 		return 1
 	fi
 
@@ -242,10 +249,10 @@ if [[ "${1:-}" == "remote" ]]; then
 	install_nginx_config "$rendered_nginx"
 
 	# Verify the public nginx-to-Docker path. Keep retrying while the container starts.
-	# Prod is frontend-only: api/cdn/share are not on this nginx site.
+	# Prod serves the site and CDN; api/share remain on Vercel during migration.
 	for attempt in {1..30}; do
 		if [[ "$DEPLOY_ENV" == "prod" ]]; then
-			if https_ok "$SITE_HOST" /; then
+			if https_ok "$SITE_HOST" / && https_ok "$CDN_HOSTNAME" /healthz; then
 				exit 0
 			fi
 		else
@@ -274,6 +281,8 @@ fi
 : "${SUPABASE_ANON_KEY:?SUPABASE_ANON_KEY is required for realtime authentication}"
 : "${SUPABASE_SERVICE_ROLE_KEY:?SUPABASE_SERVICE_ROLE_KEY is required}"
 : "${SESSION_SECRET:?SESSION_SECRET is required}"
+: "${UPSTASH_QSTASH_TOKEN:?UPSTASH_QSTASH_TOKEN is required for creation jobs}"
+: "${UPSTASH_QSTASH_URL:?UPSTASH_QSTASH_URL is required for creation jobs}"
 deploy_target
 
 SSH_DIR="$RUNNER_TEMP/parascene-ssh"
@@ -334,6 +343,8 @@ printf '%s\n' \
 	"SHARE_HOSTNAME=$SHARE_HOSTNAME" \
 	"CDN_HOSTNAME=$CDN_HOSTNAME" \
 	"CDN_HOST_ALIASES=${CDN_HOST_ALIASES:-}" \
+	"CREATION_JOB_MODE=$CREATION_JOB_MODE" \
+	"CREATION_WORKER_ORIGIN=$CREATION_WORKER_ORIGIN" \
 	"APP_VERSION=$DEPLOY_ENV" \
 	"BUILD_COMMIT=$GITHUB_SHA" \
 	"BUILD_COMMIT_URL=https://github.com/crosshj/parascene/commit/$GITHUB_SHA" \
