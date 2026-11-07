@@ -13,7 +13,7 @@ The overview leaves out the work that still runs only because `api.parascene.com
 
 - Hourly notification email, at `/api/worker/notifications`
 - The jobs worker, at `/api/worker/jobs`: visit-pulse flush, feed catalog rebuild, and embeddings
-- Creation callbacks. This app publishes those to `/api/worker/create`. The route it mounts is `/api/create/worker`. On the container, new creations run in-process, so that mismatch shows up when an outside callback hits the container.
+- Creation callbacks remain temporarily on the legacy `api.parascene.com` Vercel worker. Both VPS sites publish new creation jobs to QStash for that worker; neither runs local creation recovery or read-triggered poll repair in this mode. Before `api` moves to the VPS, align its published `/api/worker/create` callback with the mounted `/api/create/worker` route and port the remaining worker responsibilities.
 
 Those have to move before `api` points at the prod container. Standing the container up while `www` and `api` stay where they are does not need them.
 

@@ -1,5 +1,5 @@
 import { buildProviderHeaders } from "./providerAuth.js";
-import { scheduleProviderPollJob } from "./scheduleCreationJob.js";
+import { scheduleProviderPollJob, useQStashCreationJobs } from "./scheduleCreationJob.js";
 import {
 	dimensionsForAspectRatioLongEdge,
 	isReferenceToVideoMethod,
@@ -125,7 +125,7 @@ function creationMethodNeedsLongFetch(method) {
 }
 
 function isRemoteAsyncEnv() {
-	return !!process.env.VERCEL && !!process.env.UPSTASH_QSTASH_TOKEN;
+	return useQStashCreationJobs();
 }
 
 function isProviderJobGoneMessage(message) {
@@ -343,7 +343,7 @@ async function continueOrTimeoutPoll({
 	});
 }
 
-/** Resume or continue provider polling. Local uses in-process timers; Vercel uses QStash. */
+/** Resume or continue provider polling. Local uses timers; deployed apps publish to QStash. */
 export async function kickStaleProviderPollIfNeeded({
 	queries,
 	storage,
@@ -389,7 +389,7 @@ export async function kickStaleProviderPollIfNeeded({
 
 /** Local nodemon/restart: DB rows still in-flight, in-process timers are gone. */
 export async function resumeLocalProviderPolls({ queries, storage }) {
-	if (isRemoteAsyncEnv() || process.env.VERCEL) return { resumed: 0 };
+	if (isRemoteAsyncEnv()) return { resumed: 0 };
 	const listFn = queries.selectCreatedImagesGpuInFlight?.all;
 	if (typeof listFn !== "function") {
 		logCreationWarn("Local provider poll resume skipped: missing selectCreatedImagesGpuInFlight");
@@ -472,6 +472,9 @@ export async function healProviderPollOnRead({
 	userId,
 	force = false,
 }) {
+	// The legacy API worker owns the QStash poll chain. Both VPS sites read the
+	// same rows, so automatic read repair here could publish duplicate polls.
+	if (isRemoteAsyncEnv()) return { kicked: false, revived: false };
 	if (!image) return { kicked: false, revived: false };
 	const meta = parseMeta(image.meta) || {};
 	if (isRecoverableTimedOutCreation(image.status, meta, Date.now(), { force })) {
@@ -1373,7 +1376,7 @@ async function runCreationJobInternal({ queries, storage, payload }) {
 				}
 
 				if (asyncEnv) {
-					// Cloud: schedule polling via QStash worker.
+					// Deployed app: schedule polling through the existing API worker.
 					await enqueueProviderPollFollowUp({
 						queries,
 						storage,

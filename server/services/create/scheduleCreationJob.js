@@ -1,7 +1,12 @@
-import { getQStashCallbackBaseUrl } from "./url.js";
+import { getCreationWorkerOrigin } from "./url.js";
 
 function hasNonEmpty(value) {
 	return typeof value === "string" && value.trim().length > 0;
+}
+
+/** VPS deployments publish to the existing API worker; local development runs jobs in process. */
+export function useQStashCreationJobs() {
+	return Boolean(process.env.VERCEL) || process.env.CREATION_JOB_MODE === "qstash";
 }
 
 function logCreation(...args) {
@@ -14,10 +19,10 @@ function logCreationError(...args) {
 
 export async function scheduleCreationJob({ payload, runCreationJob, log = console }) {
 	const qstashToken = process.env.UPSTASH_QSTASH_TOKEN;
-	const isVercel = !!process.env.VERCEL;
+	const useQStash = useQStashCreationJobs();
 
 	logCreation("scheduleCreationJob called", {
-		isVercel,
+		useQStash,
 		has_qstash_token: !!qstashToken,
 		created_image_id: payload?.created_image_id,
 		user_id: payload?.user_id,
@@ -25,14 +30,13 @@ export async function scheduleCreationJob({ payload, runCreationJob, log = conso
 		method: payload?.method
 	});
 
-	// cloud: enqueue via QStash
-	if (isVercel && !hasNonEmpty(qstashToken)) {
-		const error = new Error("QStash token is required on Vercel. Set UPSTASH_QSTASH_TOKEN environment variable.");
-		logCreationError("QStash token missing on Vercel");
+	if (useQStash && !hasNonEmpty(qstashToken)) {
+		const error = new Error("QStash token is required for creation jobs. Set UPSTASH_QSTASH_TOKEN.");
+		logCreationError("QStash token missing for creation jobs");
 		throw error;
 	}
-	if (isVercel && hasNonEmpty(qstashToken)) {
-		const callbackUrl = new URL("/api/worker/create", getQStashCallbackBaseUrl()).toString();
+	if (useQStash) {
+		const callbackUrl = new URL("/api/worker/create", getCreationWorkerOrigin()).toString();
 		const qstashBaseUrl = process.env.UPSTASH_QSTASH_URL;
 		const publishUrl = `${qstashBaseUrl}/v2/publish/${callbackUrl}`;
 
@@ -65,7 +69,7 @@ export async function scheduleCreationJob({ payload, runCreationJob, log = conso
 		return { enqueued: true };
 	}
 
-	// Local: fire-and-forget in-process.
+	// Local development: fire-and-forget in-process.
 	logCreation("Running job locally (fire-and-forget)");
 	queueMicrotask(() => {
 		Promise.resolve(runCreationJob({ payload })).catch((err) => {
@@ -80,24 +84,24 @@ export async function scheduleCreationJob({ payload, runCreationJob, log = conso
 /** Schedule landscape (outpaint) job: same callback as creation job; worker branches on job_type. */
 export async function scheduleLandscapeJob({ payload, runLandscapeJob, log = console }) {
 	const qstashToken = process.env.UPSTASH_QSTASH_TOKEN;
-	const isVercel = !!process.env.VERCEL;
+	const useQStash = useQStashCreationJobs();
 	const body = { ...payload, job_type: "landscape" };
 
 	logCreation("scheduleLandscapeJob called", {
-		isVercel,
+		useQStash,
 		has_qstash_token: !!qstashToken,
 		created_image_id: payload?.created_image_id,
 		user_id: payload?.user_id,
 		server_id: payload?.server_id,
 	});
 
-	if (isVercel && !hasNonEmpty(qstashToken)) {
-		const error = new Error("QStash token is required on Vercel. Set UPSTASH_QSTASH_TOKEN environment variable.");
-		logCreationError("QStash token missing on Vercel (landscape)");
+	if (useQStash && !hasNonEmpty(qstashToken)) {
+		const error = new Error("QStash token is required for landscape jobs. Set UPSTASH_QSTASH_TOKEN.");
+		logCreationError("QStash token missing for landscape jobs");
 		throw error;
 	}
-	if (isVercel && hasNonEmpty(qstashToken)) {
-		const callbackUrl = new URL("/api/worker/create", getQStashCallbackBaseUrl()).toString();
+	if (useQStash) {
+		const callbackUrl = new URL("/api/worker/create", getCreationWorkerOrigin()).toString();
 		const qstashBaseUrl = process.env.UPSTASH_QSTASH_URL;
 		const publishUrl = `${qstashBaseUrl}/v2/publish/${callbackUrl}`;
 		logCreation("Publishing landscape job to QStash", { callback_url: callbackUrl });
@@ -132,12 +136,12 @@ export async function scheduleLandscapeJob({ payload, runLandscapeJob, log = con
 /** Schedule audio cover generate/poll: same callback as creation job; worker branches on job_type. */
 export async function scheduleAudioCoverJob({ payload, runAudioCoverJob, delaySeconds = 0, log = console }) {
 	const qstashToken = process.env.UPSTASH_QSTASH_TOKEN;
-	const isVercel = !!process.env.VERCEL;
+	const useQStash = useQStashCreationJobs();
 	const body = { ...payload, job_type: payload?.job_type || "audio_cover" };
 	const delay = Math.max(0, Math.floor(delaySeconds || 0));
 
 	logCreation("scheduleAudioCoverJob called", {
-		isVercel,
+		useQStash,
 		has_qstash_token: !!qstashToken,
 		created_image_id: payload?.created_image_id,
 		user_id: payload?.user_id,
@@ -145,13 +149,13 @@ export async function scheduleAudioCoverJob({ payload, runAudioCoverJob, delaySe
 		delaySeconds: delay,
 	});
 
-	if (isVercel && !hasNonEmpty(qstashToken)) {
-		const error = new Error("QStash token is required on Vercel. Set UPSTASH_QSTASH_TOKEN environment variable.");
-		logCreationError("QStash token missing on Vercel (audio cover)");
+	if (useQStash && !hasNonEmpty(qstashToken)) {
+		const error = new Error("QStash token is required for audio-cover jobs. Set UPSTASH_QSTASH_TOKEN.");
+		logCreationError("QStash token missing for audio-cover jobs");
 		throw error;
 	}
-	if (isVercel && hasNonEmpty(qstashToken)) {
-		const callbackUrl = new URL("/api/worker/create", getQStashCallbackBaseUrl()).toString();
+	if (useQStash) {
+		const callbackUrl = new URL("/api/worker/create", getCreationWorkerOrigin()).toString();
 		const qstashBaseUrl = process.env.UPSTASH_QSTASH_URL;
 		const publishUrl = `${qstashBaseUrl}/v2/publish/${callbackUrl}`;
 		const headers = {
@@ -186,26 +190,26 @@ export async function scheduleAudioCoverJob({ payload, runAudioCoverJob, delaySe
 	return { enqueued: false };
 }
 
-/** Schedule anonymous (try) creation job: QStash on Vercel, in-process locally. */
+/** Schedule anonymous (try) creation job: QStash on deployed apps, in-process locally. */
 export async function scheduleAnonCreationJob({ payload, runAnonCreationJob, log = console }) {
 	const qstashToken = process.env.UPSTASH_QSTASH_TOKEN;
-	const isVercel = !!process.env.VERCEL;
+	const useQStash = useQStashCreationJobs();
 
 	logCreation("scheduleAnonCreationJob called", {
-		isVercel,
+		useQStash,
 		has_qstash_token: !!qstashToken,
 		created_image_anon_id: payload?.created_image_anon_id,
 		server_id: payload?.server_id,
 		method: payload?.method
 	});
 
-	if (isVercel && !hasNonEmpty(qstashToken)) {
-		const error = new Error("QStash token is required on Vercel. Set UPSTASH_QSTASH_TOKEN environment variable.");
-		logCreationError("QStash token missing on Vercel (anon)");
+	if (useQStash && !hasNonEmpty(qstashToken)) {
+		const error = new Error("QStash token is required for anonymous creation jobs. Set UPSTASH_QSTASH_TOKEN.");
+		logCreationError("QStash token missing for anonymous creation jobs");
 		throw error;
 	}
-	if (isVercel && hasNonEmpty(qstashToken)) {
-		const callbackUrl = new URL("/api/try/worker", getQStashCallbackBaseUrl()).toString();
+	if (useQStash) {
+		const callbackUrl = new URL("/api/try/worker", getCreationWorkerOrigin()).toString();
 		const qstashBaseUrl = process.env.UPSTASH_QSTASH_URL;
 		const publishUrl = `${qstashBaseUrl}/v2/publish/${callbackUrl}`;
 		logCreation("Publishing anon job to QStash", { callback_url: callbackUrl });
@@ -239,11 +243,11 @@ export async function scheduleAnonCreationJob({ payload, runAnonCreationJob, log
 
 export async function scheduleProviderPollJob({ payload, delaySeconds = 10, log = console }) {
 	const qstashToken = process.env.UPSTASH_QSTASH_TOKEN;
-	const isVercel = !!process.env.VERCEL;
+	const useQStash = useQStashCreationJobs();
 	const body = { ...payload, job_type: payload?.job_type || "poll_provider" };
 
 	logCreation("scheduleProviderPollJob called", {
-		isVercel,
+		useQStash,
 		has_qstash_token: !!qstashToken,
 		created_image_id: body?.created_image_id,
 		user_id: body?.user_id,
@@ -251,18 +255,18 @@ export async function scheduleProviderPollJob({ payload, delaySeconds = 10, log 
 		delaySeconds,
 	});
 
-	if (!isVercel) {
+	if (!useQStash) {
 		logCreation("scheduleProviderPollJob: running locally; async polling is disabled");
 		return { enqueued: false };
 	}
 
 	if (!hasNonEmpty(qstashToken)) {
-		const error = new Error("QStash token is required on Vercel for async provider polling. Set UPSTASH_QSTASH_TOKEN.");
-		logCreationError("QStash token missing on Vercel (provider poll)");
+		const error = new Error("QStash token is required for async provider polling. Set UPSTASH_QSTASH_TOKEN.");
+		logCreationError("QStash token missing for provider poll");
 		throw error;
 	}
 
-	const callbackUrl = new URL("/api/worker/create", getQStashCallbackBaseUrl()).toString();
+	const callbackUrl = new URL("/api/worker/create", getCreationWorkerOrigin()).toString();
 	const qstashBaseUrl = process.env.UPSTASH_QSTASH_URL;
 	const publishUrl = `${qstashBaseUrl}/v2/publish/${callbackUrl}`;
 	const delayHeaderSeconds = Math.max(0, Math.floor(delaySeconds || 0));

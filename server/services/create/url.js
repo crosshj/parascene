@@ -41,6 +41,12 @@ export function getQStashCallbackBaseUrl() {
 	return `https://${getApiHostname()}`;
 }
 
+/** Creation jobs may use the legacy API worker while the VPS serves the site. */
+export function getCreationWorkerOrigin() {
+	const configured = String(process.env.CREATION_WORKER_ORIGIN || "").trim();
+	return configured ? new URL(configured).origin : getQStashCallbackBaseUrl();
+}
+
 export function getBaseAppUrl() {
 	if (process.env.APP_ORIGIN) {
 		return process.env.APP_ORIGIN.replace(/\/$/, "");
