@@ -13,10 +13,13 @@ function esc(value) {
 	return String(value ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 }
 
-function page({ title = "Blog", description = "", content = "", status = 200, preview = false } = {}) {
+function page({ title = "Blog", description = "", content = "", canonical = "", type = "website", preview = false } = {}) {
 	const safeTitle = esc(title);
 	const safeDescription = esc(description);
-	return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="description" content="${safeDescription}"><meta name="color-scheme" content="light dark"><link rel="stylesheet" href="/blog-assets/blog.css"><title>${safeTitle} - parascene</title>${preview ? '<meta name="robots" content="noindex,nofollow">' : ""}</head><body class="blog-page"><header class="blog-header"><div class="blog-header-inner"><a class="blog-brand" href="/blog" aria-label="Parascene blog"><picture><source srcset="/brand/logo-wordmark-on-night.svg" media="(prefers-color-scheme: dark)"><img class="blog-brand-logo" src="/brand/logo-wordmark.svg" alt="parascene" width="120" height="26"></picture><span class="blog-brand-section">BLOG</span></a><nav class="blog-nav" aria-label="Blog"><a href="/blog">Posts</a><a href="/">Home</a></nav></div></header><main class="blog-main"><article class="blog-content">${content}</article></main><footer class="blog-footer">© 2026 parascene. All rights reserved.</footer></body></html>`;
+	const fullTitle = `${title} - parascene`;
+	const safeFullTitle = esc(fullTitle);
+	const canonicalTags = canonical ? `<link rel="canonical" href="${esc(canonical)}"><meta property="og:url" content="${esc(canonical)}">` : "";
+	return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="description" content="${safeDescription}"><meta property="og:title" content="${safeFullTitle}"><meta name="twitter:title" content="${safeFullTitle}"><meta property="og:description" content="${safeDescription}"><meta name="twitter:description" content="${safeDescription}"><meta property="og:type" content="${esc(type)}">${canonicalTags}<meta name="color-scheme" content="light dark"><meta name="theme-color" content="#f6f7fb" media="(prefers-color-scheme: light)"><meta name="theme-color" content="#1a1628" media="(prefers-color-scheme: dark)"><link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/icons/icon-180.png"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/blog-assets/blog.css"><title>${safeFullTitle}</title>${preview ? '<meta name="robots" content="noindex,nofollow">' : ""}</head><body class="blog-page"><header class="blog-header"><div class="blog-header-inner"><a class="blog-brand" href="/blog" aria-label="Parascene blog"><picture><source srcset="/brand/logo-wordmark-on-night.svg" media="(prefers-color-scheme: dark)"><img class="blog-brand-logo" src="/brand/logo-wordmark.svg" alt="parascene" width="120" height="26"></picture><span class="blog-brand-section">BLOG</span></a><nav class="blog-nav" aria-label="Blog"><a href="/blog">Posts</a><a href="/">Home</a></nav></div></header><main class="blog-main"><article class="blog-content">${content}</article></main><footer class="blog-footer">© 2026 parascene. All rights reserved.</footer></body></html>`;
 }
 
 function parsePath(segments) {
@@ -59,7 +62,8 @@ export default function createBlogRoutes({ client, users, pagesDir }) {
 		const list = posts.length ? posts.map(p => `- [${String(p.title || p.slug).replace(/[\[\]]/g, "\\$&")}](${postHref(p.slug, "i")})`).join("\n") : "_No posts published yet._";
 		body = body.replace(/\{\{\s*BLOG_POST_LIST\s*\}\}|<!--\s*BLOG_POST_LIST\s*-->/gi, list);
 		const html = marked.parse(body);
-		return res.status(200).send(page({ title, description, content: html }));
+		const origin = (process.env.APP_ORIGIN || "https://www.parascene.com").replace(/\/$/, "");
+		return res.status(200).send(page({ title, description, content: html, canonical: `${origin}/blog` }));
 	}
 
 	router.get("/blog", async (_req, res) => {
@@ -99,8 +103,8 @@ export default function createBlogRoutes({ client, users, pagesDir }) {
 			const date = post.published_at && new Date(post.published_at);
 			const dateHtml = date && !Number.isNaN(date.getTime()) ? `<p class="date"><time datetime="${date.toISOString().slice(0, 10)}">${date.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}</time></p>` : "";
 			const content = `${preview ? `<p class="blog-preview-banner">Previewing ${esc(post.status)} post. This is not the public version.</p>` : ""}${dateHtml}<h1>${esc(post.title)}</h1>${post.description ? `<p class="blog-description">${esc(post.description)}</p>` : ""}<div class="blog-body">${marked.parse(post.body_md || "")}</div>`;
-			const response = page({ title: post.title, description: post.description || `${post.title} — parascene blog post.`, content, preview });
-			return res.status(200).send(response.replace("<title>", `<link rel="canonical" href="${esc(`${process.env.APP_ORIGIN || "https://www.parascene.com"}${postHref(post.slug)}`)}"><title>`));
+			const origin = (process.env.APP_ORIGIN || "https://www.parascene.com").replace(/\/$/, "");
+			return res.status(200).send(page({ title: post.title, description: post.description || `${post.title} — parascene blog post.`, content, canonical: `${origin}${postHref(post.slug)}`, type: "article", preview }));
 		} catch (error) { console.error("[blog] post failed", error); return res.status(500).send(page({ title: "Blog unavailable", content: "<h1>Blog unavailable</h1>" })); }
 	});
 	return router;
