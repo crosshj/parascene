@@ -27,7 +27,7 @@ deploy_target() {
 			;;
 		prod)
 			# Same VPS, prod container. WWW is canonical; apex is a redirect alias.
-			# The share host moves here after its DNS cutover; API remains on Vercel.
+			# Share is live here; API remains on Vercel until its later cutover.
 			APP_HOME_NAME="parascene-prod"
 			CONTAINER_NAME="parascene-prod"
 			HOST_PORT="3001"
@@ -102,12 +102,38 @@ render_nginx_config() {
 	printf '%s\n' "$rendered_path"
 }
 
-validate_apex_certificate() {
-	if [[ "$DEPLOY_ENV" != "prod" ]]; then return 0; fi
-	if ! run_as_root openssl x509 -in /etc/ssl/parascene/cert.pem -noout -checkhost parascene.com >/dev/null 2>&1; then
-		echo "The production TLS certificate must include parascene.com before enabling the apex redirect" >&2
+provision_tls_certificate() {
+	local credentials=/etc/letsencrypt/cloudflare.ini
+	if ! run_as_root test -s "$credentials"; then
+		echo "Cloudflare DNS credentials are missing at $credentials" >&2
 		return 1
 	fi
+	run_as_root chmod 600 "$credentials"
+	if ! command -v certbot >/dev/null || ! run_as_root certbot plugins --text 2>/dev/null | grep -q 'dns-cloudflare'; then
+		if ! command -v apt-get >/dev/null; then
+			echo "Certbot DNS Cloudflare requires a Debian/Ubuntu VPS with apt-get" >&2
+			return 1
+		fi
+		run_as_root apt-get update
+		run_as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y certbot python3-certbot-dns-cloudflare
+	fi
+	run_as_root certbot certonly \
+		--dns-cloudflare \
+		--dns-cloudflare-credentials "$credentials" \
+		--dns-cloudflare-propagation-seconds 30 \
+		--non-interactive --agree-tos --register-unsafely-without-email \
+		--cert-name parascene.com \
+		-d parascene.com -d '*.parascene.com'
+	run_as_root install -d -o root -g root -m 755 /etc/letsencrypt/renewal-hooks/deploy
+	run_as_root sh -c 'printf "%s\n" "#!/bin/sh" "systemctl reload nginx" > /etc/letsencrypt/renewal-hooks/deploy/10-reload-nginx'
+	run_as_root chmod 755 /etc/letsencrypt/renewal-hooks/deploy/10-reload-nginx
+	run_as_root systemctl enable --now certbot.timer
+	for host in parascene.com beta.parascene.com beta-api.parascene.com beta-cdn.parascene.com beta-sh.parascene.com www.parascene.com cdn.parascene.com sh.parascene.com; do
+		if ! run_as_root openssl x509 -in /etc/letsencrypt/live/parascene.com/fullchain.pem -noout -checkhost "$host" >/dev/null 2>&1; then
+			echo "The managed TLS certificate does not cover $host" >&2
+			return 1
+		fi
+	done
 }
 
 install_nginx_config() {
@@ -215,7 +241,6 @@ https_status() {
 	local host="$1"
 	local path="$2"
 	curl --silent --output /dev/null --write-out '%{http_code}' \
-		--insecure \
 		--resolve "${host}:443:127.0.0.1" \
 		"https://${host}${path}" || true
 }
@@ -224,7 +249,6 @@ https_ok() {
 	local host="$1"
 	local path="$2"
 	curl --fail --silent --output /dev/null \
-		--insecure \
 		--resolve "${host}:443:127.0.0.1" \
 		"https://${host}${path}"
 }
@@ -237,7 +261,7 @@ if [[ "${1:-}" == "remote" ]]; then
 	APP_DIR="${3:?App directory is required}"
 	: "${DEPLOY_ENV:?DEPLOY_ENV is required}"
 	deploy_target
-	validate_apex_certificate
+	provision_tls_certificate
 	DEPLOY_ID="$(date -u +%Y%m%d%H%M%S)-$$"
 	STAGING_DIR="${APP_DIR}.staging-${DEPLOY_ID}"
 	cleanup_staging() {
@@ -279,10 +303,12 @@ if [[ "${1:-}" == "remote" ]]; then
 	install_nginx_config "$rendered_nginx"
 
 	# Verify the public nginx-to-Docker path. Keep retrying while the container starts.
-	# Prod serves the site, CDN and (after DNS cutover) canonical share host.
+	# Prod serves the site, CDN and canonical share host; API remains on Vercel.
 	for attempt in {1..30}; do
 		if [[ "$DEPLOY_ENV" == "prod" ]]; then
-			if https_ok "$SITE_HOST" / && https_ok "$CDN_HOSTNAME" /healthz; then
+			if https_ok "$SITE_HOST" / && \
+				https_ok "$CDN_HOSTNAME" /healthz && \
+				https_ok "sh.parascene.com" /; then
 				exit 0
 			fi
 		else
@@ -313,6 +339,7 @@ fi
 : "${SESSION_SECRET:?SESSION_SECRET is required}"
 : "${UPSTASH_QSTASH_TOKEN:?UPSTASH_QSTASH_TOKEN is required for creation jobs}"
 : "${UPSTASH_QSTASH_URL:?UPSTASH_QSTASH_URL is required for creation jobs}"
+: "${CLOUDFLARE_DNS_API_TOKEN:?CLOUDFLARE_DNS_API_TOKEN is required for TLS certificate automation}"
 deploy_target
 
 SSH_DIR="$RUNNER_TEMP/parascene-ssh"
@@ -351,6 +378,13 @@ ssh-keyscan -H "$VPS_HOST" > "$SSH_DIR/known_hosts"
 # the host before the package has been extracted.
 scp "${SSH_OPTS[@]}" "$PACKAGE_PATH" "$REMOTE:$REMOTE_PACKAGE"
 scp "${SSH_OPTS[@]}" scripts/deploy-from-ci.sh "$REMOTE:$REMOTE_SCRIPT"
+
+# Keep the Cloudflare token out of the app's runtime .env; Certbot reads this
+# root-only file during certificate issue and renewal. The token travels on
+# SSH stdin and is never included in the remote command or printed.
+printf 'dns_cloudflare_api_token = %s\n' "$CLOUDFLARE_DNS_API_TOKEN" | \
+	ssh "${SSH_OPTS[@]}" "$REMOTE" \
+	"set -euo pipefail; sudo -n install -d -o root -g root -m 700 /etc/letsencrypt; sudo -n tee /etc/letsencrypt/cloudflare.ini >/dev/null; sudo -n chmod 600 /etc/letsencrypt/cloudflare.ini"
 
 # Write runtime secrets directly to the VPS with restrictive permissions; they
 # are passed to Docker through --env-file and are never put in the archive.

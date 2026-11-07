@@ -16,7 +16,7 @@
 - [ ] Verify authorization, search/pagination, errors, destructive actions and auditability across admin pages.
 - [ ] **Payments:** the pricing UI now calls the Vercel API at `api.parascene.com`; Checkout can return to either `www` or `beta`. Verify Founder checkout, credit packs, return/cancel, switching to Free and webhook updates. Beta uses the existing live Stripe setup, so avoid test purchases that would charge real money.
 - [ ] Verify WWW sitemap, robots, canonical URLs, redirects and public metadata; confirm apex DNS points to the VPS and permanently redirects to `https://www.parascene.com` with the path/query preserved.
-- [ ] **Share:** VPS now serves the legacy share page, metadata, image/video/audio handlers, and authenticated link mint endpoint; beta and prod always mint `sh.parascene.com`. Focused route tests pass. Remaining: verify manually on beta, then cut over production `sh` DNS and verify its TLS certificate and crawlers.
+- [ ] **Share:** VPS now serves the legacy share page, metadata, image/video/audio handlers, and authenticated link mint endpoint; beta and prod always mint `sh.parascene.com`. Focused route tests pass. Remaining: verify manually on beta and verify production TLS/crawlers after certificate automation deploys.
 
 ### Later: when retiring Vercel owners
 

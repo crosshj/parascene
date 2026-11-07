@@ -78,10 +78,14 @@ proof behavior, not the final sharing model.
 The host Nginx site is rendered from `infra/nginx/parascene.conf`. A push to
 `beta` installs `parascene-beta` and proxies that site's names to port 3000.
 A push to `main` installs `parascene-prod` and proxies `www.parascene.com`,
-`cdn.parascene.com`, and (after its DNS cutover) `sh.parascene.com` to port
-3001. The production apex `parascene.com` permanently redirects to
-`https://www.parascene.com`, preserving path and query. The prod deploy checks
-that its origin certificate covers the apex before enabling that redirect.
+`cdn.parascene.com`, and `sh.parascene.com` to port 3001. The production apex
+`parascene.com` permanently redirects to
+`https://www.parascene.com`, preserving path and query. Deployments provision
+and validate a Cloudflare DNS-validated Let's Encrypt wildcard certificate for
+the apex and subdomains; Certbot renews it automatically and reloads Nginx.
+The Cloudflare API token is stored as a GitHub Actions secret and installed on
+the VPS in a root-only Certbot credentials file; it is not passed to the app
+container.
 Keep the Cloudflare apex A record proxied and use Full (strict) SSL/TLS; keep
 the apex redirect at the origin as a fallback and canonical signal. The API
 remains on Vercel for payments and webhooks.
