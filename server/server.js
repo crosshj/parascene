@@ -36,6 +36,9 @@ import { createAuthMiddleware } from "./routes/middleware/auth.js";
 import { createCdnHostBoundary } from "./routes/middleware/cdnHost.js";
 import { apiHostBoundary } from "./routes/middleware/apiHost.js";
 import { shareHostBoundary } from "./routes/middleware/shareHost.js";
+import createAdminPageRoutes from "./routes/adminPages.js";
+import createAdminUsersRoutes from "./routes/adminUsers.js";
+import createAdminToolsRoutes from "./routes/adminTools.js";
 import createPageRoutes from "./routes/pages.js";
 import { createReportsRoutes } from "./routes/reports.js";
 import { createDb } from "./db/index.js";
@@ -89,6 +92,8 @@ app.post('/api/policy/seen',(req,res)=>{if(!req.cookies?.ps_cid)res.cookie('ps_c
 app.use(createTryRoutes(db.account));
 app.use(createHelpRoutes({pagesDir}));
 app.use(createAdminProfileRoutes(db.account));
+app.use(createAdminUsersRoutes({ client: db.account.client, users: db.users, storage: db.account.storage }));
+app.use(createAdminToolsRoutes({ client: db.account.client, users: db.users, servers: db.servers }));
 app.use(createProfileRoutes(db.account));
 app.use(createProfileBrowseRoutes(db.account));
 app.use(createFollowsRoutes(db.account));
@@ -107,6 +112,7 @@ app.use(createCreationsRoutes({ creations: db.creations, users: db.users, append
 app.use(createAuthRoutes({ users: db.users, sessions: db.sessions }));
 const reportsRoutes = createReportsRoutes();
 if (reportsRoutes) app.use(reportsRoutes);
+app.use(createAdminPageRoutes({ pagesDir, users: db.users, sessions: db.sessions }));
 app.use(createPageRoutes({ pagesDir, users: db.users }));
 app.use(express.static(path.join(__dirname, "../public")));
 app.use((error, req, res, next) => {

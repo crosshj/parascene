@@ -1,61 +1,39 @@
-# VPS migration tracker
+# VPS migration checklist
 
-## Before prod
+## Priorities
 
-Help, the signed-in app, and the pricing screen already run here. The pricing screen calls billing routes that still live on the current site. The remaining product surface is admin, share pages, blog, and Stripe.
+1. **Restore admin** in the new WWW app; it is the largest missing operator capability.
+2. **Verify current WWW journeys:** payments, blog, OAuth welcome and public metadata; repair anything broken.
+3. **Keep `sh` and `api` on Vercel** while they remain available and reliable.
+4. **Move hostnames later**, only when retiring their Vercel owners and after beta verification.
 
-- Admin. The admin console is still the old app. This app only saves another user's profile. Creation-detail admin actions call routes that are not mounted here.
-- Share pages. The share hostname already allows `/s/...`, and share tokens are already minted for media. Nothing renders the public share page or its logged-out preview.
-- Blog. Published posts already show on the first feed page and link to `/blog` and `/blog/{slug}`. Those pages, and the editor, are not served here.
-- Stripe. Founder checkout, credit-pack checkout, the return from Checkout, and switching back to Free. The webhook at `/api/webhooks/stripe` writes the plan and grants credits after Checkout.
+## Detailed checklist
 
-The overview leaves out the work that still runs only because `api.parascene.com` points at the current site:
+### Now: features missing from the new WWW app
 
-- Hourly notification email, at `/api/worker/notifications`
-- The jobs worker, at `/api/worker/jobs`: visit-pulse flush, feed catalog rebuild, and embeddings
-- Creation callbacks remain temporarily on the legacy `api.parascene.com` Vercel worker. Both VPS sites publish new creation jobs to QStash for that worker; neither runs local creation recovery or read-triggered poll repair in this mode. Before `api` moves to the VPS, align its published `/api/worker/create` callback with the mounted `/api/create/worker` route and port the remaining worker responsibilities.
+- [ ] **Admin:** inventory the legacy UI, endpoints and permissions; use `_legacy/public/pages/admin.js` and `_legacy/api_routes/admin.js` as behavior references.
+- [ ] Add a role-gated VPS admin entry point. The current app only supports editing another user's profile; creation-detail admin actions also call routes that are not mounted.
+- [ ] Port the seven legacy admin pages: Todo, Users, Analytics, Jobs, Emails, Algo and Connect. The page routes and placeholders now exist; replace each placeholder with its legacy page body and behavior using the [admin UI component inventory](ADMIN_UI_COMPONENT_INVENTORY.md).
+- [ ] Restore user/profile/username and founder actions, credits, moderation, editorial pins, blog publishing, server/chat management, provider/job tools, and email/notification operations.
+- [ ] Verify authorization, search/pagination, errors, destructive actions and auditability.
+- [ ] **Payments:** test Founder checkout, credit packs, Checkout return, switching to Free, and Stripe webhook updates from the new app. Fix broken paths; leave healthy Vercel services in place for now.
+- [ ] **WWW pages:** restore the blog index/posts and `/welcome` for incomplete OAuth profiles.
+- [ ] Verify WWW sitemap, robots, canonical URLs, redirects and public metadata; fix what is missing or broken.
+- [ ] **Share:** verify `sh.parascene.com/s/...`, logged-out previews, media and link previews still work on Vercel. Fix current breakage; otherwise defer migration.
 
-Those have to move before `api` points at the prod container. Standing the container up while `www` and `api` stay where they are does not need them.
+### Later: when retiring Vercel owners
 
-Two smaller holes sit next to that list. OAuth consent sends an unfinished profile to `/welcome`, and that page is not in this app. Social link previews and the sitemap belong with the share and blog pages.
+- [ ] **API hostname:** choose/configure a beta hostname, DNS/TLS and environment-specific callback origins.
+- [ ] Port required billing endpoints, Stripe webhooks, integrations and API contracts when moving their current owner.
+- [ ] Move notification/jobs workers and creation callbacks, recovery and polling repair. Align published `/api/worker/create` with mounted `/api/create/worker`.
+- [ ] Ensure one owner per schedule/queue/write path; verify retries, restart recovery, logs, alerts and rate limits before switching `api`.
+- [ ] **Share hostname:** choose/configure a beta host; port `/s/...` pages, media and crawler metadata; verify stable links before switching `sh`.
+- [ ] **WWW cutover:** verify user journeys, responsive behavior, media delivery, monitoring, backups and rollback before moving `www`.
+- [ ] Confirm no runtime imports from `_legacy/`; retain a rollback path during CDN and hostname changes.
 
-## Public pages and discoverability
+### Already ported; retain as regression coverage
 
-- [ ] Public share pages and their logged-out behavior
-- [ ] Blog index, post pages, and publishing/admin workflow
-- [ ] Stable public URLs, redirects, and social link previews for shared pages
-- [ ] Crawler and indexability review: HTTP access/status, rendered content, robots directives, titles/descriptions, canonical URLs, sitemap coverage, image metadata/alt text, and applicable structured data
-- [ ] Verify Google-rendered output with Search Console URL Inspection and test link previews with representative non-Google crawlers
+- Help, signed-in app, Creation browsing, Feed, Doom Scroll and creation-detail overlay routing.
+- Creation/provider-poll jobs currently use QStash to call the legacy API worker; local development runs those jobs in process. This is temporary ownership, not API-host cutover readiness.
 
-## APIs, services, and administration
-
-- [ ] Hook up Stripe before the pricing overlay can complete a purchase. Founder checkout, credit-pack checkout, the return from Checkout, and switching back to Free still need the www billing endpoints (`/api/subscription/checkout`, `/api/credits/checkout`, `/api/subscription/checkout-return`, and `/api/profile/plan`), including plan and subscription updates on the user record.
-- [ ] Inventory WWW API contracts and verify each required endpoint, authorization rule, and data behavior on VPS
-- [ ] Inventory and port required background services: scheduled work, queues, retries/recovery, media processing, catalog/feed rebuilds, notifications, and realtime
-- [ ] Inventory external integrations and callbacks: storage/CDN, generation providers, billing, email, OAuth, and webhooks
-- [ ] Migrate the full admin surface and its permissions; refactor into VPS-owned modules where useful without dropping existing actions
-
-Likely future direction for rich links: have the client ask the server for a preview card. The server should return a translated card when it recognizes the URL, or an explicit result explaining that it could not translate the request. This keeps provider-specific URL interpretation out of individual client renderers.
-
-## Conversation follow-up
-
-- [ ] Private channel creation and invitations
-- [ ] Canvas notifications and remaining canvas controls
-- [ ] Thread creation and server directory/management
-
-## Cross-cutting and cutover
-
-- [ ] Mobile/responsive review across migrated routes and overlays
-- [ ] Verify loading, empty, error, authorization, pagination, and recovery states across routes
-- [ ] Verify deep links, Back/Forward, refresh, and stable shared URLs
-- [ ] Validate generic and edited image uploads, chat attachments, creation/comment inputs, previews and playback, owner listing/deletion, signed cross-origin media links, audio artwork/downloads, video range playback, near-limit files, and owner isolation
-- [ ] Confirm large upload bodies and media reads bypass Vercel; align Cloudflare, Nginx, VPS, and storage limits; verify CI-managed Nginx streaming configuration
-- [ ] Complete the reversible CDN rollout, retain the WWW transport as rollback until stable, then remove the temporary legacy transport switch
-- [ ] Creation videos follow the files video path. Local dev serves them on the local host. Beta and prod send playback only through `cdn.parascene.com`, with a signed link a video element can load without the session cookie. Do not leave playback on the app host or on a raw Supabase signed URL.
-- [ ] Deployment readiness: secrets/configuration, process and schedule ownership, logs/alerts, backups/restore, rate limits, rollback, and removal of old-runtime dependencies
-- [ ] Align the beta deploy names with prod. The home directory is parascene-vps and the container is parascene. Prod uses parascene-prod for both. Switch beta to home directory parascene-beta and container parascene-beta. Before the first deploy that uses those names, stop and remove the live parascene container or rename it, and rename or leave the old home directory. It still holds port 3000, so the new container will not start until it is gone. The Nginx site is already parascene-beta. The image tag stays parascene:beta.
-
-Resumable uploads, a durable upload ledger, per-file sharing/privacy controls,
-richer duration metadata, and more reliable video posters are separate follow-up
-work. They are not cutover requirements unless an existing upload flow depends
-on them.
+For migration boundaries, implementation references and regression requirements, see [VPS/Beta migration guidance](BETA_VPS_SPA_MIGRATION_SOURCE_OF_TRUTH.md).

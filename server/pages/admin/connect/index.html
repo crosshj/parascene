@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Admin · Connect</title>
+	<link rel="stylesheet" href="/admin/shared/admin.css">
+</head>
+<body class="admin-page">
+	{{ADMIN_HEADER}}
+	<main class="admin-page__content"><admin-tabs class="admin-tabs" active="servers"><div class="admin-tabs__list" data-admin-tab-list aria-label="Connect sections"><button class="admin-tabs__tab" data-admin-tab="servers">Servers</button><button class="admin-tabs__tab" data-admin-tab="activity">Conversations</button></div><section class="admin-tabs__panel" data-admin-panel="servers"><div data-servers-table data-admin-table></div></section><section class="admin-tabs__panel" data-admin-panel="activity" hidden><p>Conversation moderation and connected community activity are not ported yet.</p></section></admin-tabs></main>
+	<script type="module" src="/admin/connect/page.js"></script>
+</body>
+</html>

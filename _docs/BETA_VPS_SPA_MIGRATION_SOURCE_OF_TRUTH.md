@@ -80,6 +80,10 @@ behaviors are regression criteria for future changes.
 - Keep Rollup limited to general build responsibilities: HTML/CSS loading, output, minification and boundary validation.
 - `npm run build` from the repo root must pass before a frontend change is complete. Unresolved local runtime imports remain incomplete even if output is generated.
 
+## Admin document pages exception
+
+The admin workspace is intentionally separate from the consumer SPA. For a signed-in admin, `/` serves `server/pages/admin/index.html`; short paths such as `/users` serve their matching page under `server/pages/admin/<page>/index.html`. Each page owns its HTML and page-specific assets in its own subfolder. Non-admin requests continue through normal WWW route handling. The server checks the admin role before serving documents or admin assets, admin APIs enforce the role independently, and every served admin document includes a logout control. This is a deliberate exception to the SPA reference rule; do not import runtime code from `_legacy/`.
+
 ## Creation-detail overlay and routing
 
 Creation detail is not a normal route rendered into the page outlet. The overlay is app functionality owned by the layout/app shell, with the detail view mounted inside an app-level overlay host. It must remain independent of the underlying view that opened it.

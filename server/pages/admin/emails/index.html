@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Admin · Emails</title>
+	<link rel="stylesheet" href="/admin/shared/admin.css">
+</head>
+<body class="admin-page">
+	{{ADMIN_HEADER}}
+	<main class="admin-page__content"><admin-tabs class="admin-tabs" sync-hash active="sends"><div class="admin-tabs__list" data-admin-tab-list aria-label="Email sections"><button class="admin-tabs__tab" data-admin-tab="sends">Sends</button><button class="admin-tabs__tab" data-admin-tab="templates">Templates</button><button class="admin-tabs__tab" data-admin-tab="send">Manual send</button><button class="admin-tabs__tab" data-admin-tab="settings">Settings</button></div><section class="admin-tabs__panel" data-admin-panel="sends"><div data-email-sends data-admin-table></div></section><section class="admin-tabs__panel" data-admin-panel="templates" hidden><p>Email template preview is not available in the current server build.</p></section><section class="admin-tabs__panel" data-admin-panel="send" hidden><p>Manual email sending is not available in the current server build.</p></section><section class="admin-tabs__panel" data-admin-panel="settings" hidden><form class="admin-form" data-email-settings><div data-email-settings-fields></div><button class="admin-button admin-button--primary" type="submit">Save settings</button><p class="admin-status" data-email-settings-status role="status"></p></form></section></admin-tabs></main>
+	<script type="module" src="/admin/emails/page.js"></script>
+</body>
+</html>
