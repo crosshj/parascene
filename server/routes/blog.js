@@ -16,8 +16,7 @@ function esc(value) {
 function page({ title = "Blog", description = "", content = "", status = 200, preview = false } = {}) {
 	const safeTitle = esc(title);
 	const safeDescription = esc(description);
-	return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="description" content="${safeDescription}"><title>${safeTitle} - parascene</title>${preview ? '<meta name="robots" content="noindex,nofollow">' : ""}<style>
-		:root{color-scheme:light dark;font:16px/1.65 system-ui,sans-serif;color:CanvasText;background:Canvas}*{box-sizing:border-box}body{margin:0}.blog-head{border-bottom:1px solid color-mix(in srgb,CanvasText 14%,transparent)}.blog-head nav,main{width:min(720px,100% - 32px);margin:auto}.blog-head nav{height:56px;display:flex;align-items:center;justify-content:space-between}.blog-head a,main a{color:inherit}.blog-head a{text-decoration:none;font-weight:650;letter-spacing:.04em}.blog-head nav span{display:flex;gap:18px;font-size:.9rem}main{padding:28px 0 72px}h1{font-size:1.8rem;line-height:1.2;margin:.1em 0 .35em}h2{font-size:1.3rem;line-height:1.3;margin:1.7em 0 .4em}p,ul,ol,blockquote{margin:.85em 0}img{max-width:100%;height:auto}pre{overflow:auto;padding:14px;border-radius:8px;background:color-mix(in srgb,CanvasText 8%,Canvas)}code{font-family:ui-monospace,monospace}blockquote{border-left:3px solid color-mix(in srgb,CanvasText 25%,transparent);padding-left:1em;color:color-mix(in srgb,CanvasText 78%,Canvas)}.date,.preview{color:color-mix(in srgb,CanvasText 65%,Canvas);font-size:.9rem}.preview{padding:8px 12px;border:1px solid color-mix(in srgb,CanvasText 20%,Canvas);border-radius:6px}footer{border-top:1px solid color-mix(in srgb,CanvasText 14%,transparent);padding:20px 16px;text-align:center;font-size:.85rem;color:color-mix(in srgb,CanvasText 65%,Canvas)}		</style></head><body><header class="blog-head"><nav><a href="/blog">PARASCENE · BLOG</a><span><a href="/blog">Posts</a><a href="/">Home</a></span></nav></header><main>${content}</main><footer>© 2026 parascene</footer></body></html>`;
+	return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="description" content="${safeDescription}"><meta name="color-scheme" content="light dark"><link rel="stylesheet" href="/blog-assets/blog.css"><title>${safeTitle} - parascene</title>${preview ? '<meta name="robots" content="noindex,nofollow">' : ""}</head><body class="blog-page"><header class="blog-header"><div class="blog-header-inner"><a class="blog-brand" href="/blog" aria-label="Parascene blog"><picture><source srcset="/brand/logo-wordmark-on-night.svg" media="(prefers-color-scheme: dark)"><img class="blog-brand-logo" src="/brand/logo-wordmark.svg" alt="parascene" width="120" height="26"></picture><span class="blog-brand-section">BLOG</span></a><nav class="blog-nav" aria-label="Blog"><a href="/blog">Posts</a><a href="/">Home</a></nav></div></header><main class="blog-main"><article class="blog-content">${content}</article></main><footer class="blog-footer">© 2026 parascene. All rights reserved.</footer></body></html>`;
 }
 
 function parsePath(segments) {
@@ -28,6 +27,7 @@ function parsePath(segments) {
 export default function createBlogRoutes({ client, users, pagesDir }) {
 	const router = express.Router();
 	const blogDir = path.join(pagesDir, "blog");
+	router.get("/blog-assets/blog.css", (_req, res) => res.sendFile(path.join(blogDir, "blog.css")));
 	let cache;
 	let cacheAt = 0;
 	const ttl = process.env.NODE_ENV === "production" ? 60_000 : 0;
@@ -98,7 +98,7 @@ export default function createBlogRoutes({ client, users, pagesDir }) {
 			}
 			const date = post.published_at && new Date(post.published_at);
 			const dateHtml = date && !Number.isNaN(date.getTime()) ? `<p class="date"><time datetime="${date.toISOString().slice(0, 10)}">${date.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}</time></p>` : "";
-			const content = `${preview ? `<p class="preview">Previewing ${esc(post.status)} post. This is not the public version.</p>` : ""}${dateHtml}<h1>${esc(post.title)}</h1>${post.description ? `<p>${esc(post.description)}</p>` : ""}<article>${marked.parse(post.body_md || "")}</article>`;
+			const content = `${preview ? `<p class="blog-preview-banner">Previewing ${esc(post.status)} post. This is not the public version.</p>` : ""}${dateHtml}<h1>${esc(post.title)}</h1>${post.description ? `<p class="blog-description">${esc(post.description)}</p>` : ""}<div class="blog-body">${marked.parse(post.body_md || "")}</div>`;
 			const response = page({ title: post.title, description: post.description || `${post.title} — parascene blog post.`, content, preview });
 			return res.status(200).send(response.replace("<title>", `<link rel="canonical" href="${esc(`${process.env.APP_ORIGIN || "https://www.parascene.com"}${postHref(post.slug)}`)}"><title>`));
 		} catch (error) { console.error("[blog] post failed", error); return res.status(500).send(page({ title: "Blog unavailable", content: "<h1>Blog unavailable</h1>" })); }
