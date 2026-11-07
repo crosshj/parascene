@@ -74,7 +74,7 @@ async function normalizeEditedBuffer(buffer, aspectRatio) {
 }
 
 function publicUrl(key) {
-	const origin = String(process.env.FILES_ORIGIN || getCdnOrigin()).replace(/\/$/, "");
+	const origin = getCdnOrigin();
 	return `${origin}/api/images/generic/${key.split("/").map(encodeURIComponent).join("/")}`;
 }
 

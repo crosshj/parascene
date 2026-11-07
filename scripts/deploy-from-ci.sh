@@ -17,24 +17,28 @@ deploy_target() {
 			HOST_PORT="3000"
 			IMAGE_TAG="parascene:beta"
 			APP_ORIGIN="https://beta.parascene.com"
-			API_HOSTNAME="beta-api.parascene.com"
-			SHARE_HOSTNAME="beta-sh.parascene.com"
-			CDN_HOSTNAME="beta-cdn.parascene.com"
-			# Beta terminates its own site/api/cdn/share names on this host.
-			NGINX_SERVER_NAMES="__SITE_API_CDN_SHARE__"
+			API_HOSTNAME="api.parascene.com"
+			API_TEST_HOSTNAME="beta-api.parascene.com"
+			CDN_HOSTNAME="cdn.parascene.com"
+			CDN_TEST_HOSTNAME="beta-cdn.parascene.com"
+			SHARE_TEST_HOSTNAME="beta-sh.parascene.com"
+			# Beta-prefixed hosts are manual test aliases and are never emitted.
+			NGINX_SERVER_NAMES="__SITE_BETA_TEST_HOSTS__"
 			;;
 		prod)
-			# Same VPS, prod container. WWW is the canonical site host.
-			# CDN is live here; api/sh remain on Vercel temporarily until legacy routes move.
+			# Same VPS, prod container. WWW is canonical; apex is a redirect alias.
+			# The share host moves here after its DNS cutover; API remains on Vercel.
 			APP_HOME_NAME="parascene-prod"
 			CONTAINER_NAME="parascene-prod"
 			HOST_PORT="3001"
 			IMAGE_TAG="parascene:prod"
 			APP_ORIGIN="https://www.parascene.com"
 			API_HOSTNAME="api.parascene.com"
-			SHARE_HOSTNAME="sh.parascene.com"
+			API_TEST_HOSTNAME=""
 			CDN_HOSTNAME="cdn.parascene.com"
-			NGINX_SERVER_NAMES="__SITE_AND_CDN__"
+			CDN_TEST_HOSTNAME=""
+			SHARE_TEST_HOSTNAME=""
+			NGINX_SERVER_NAMES="__SITE_CDN_SHARE__"
 			;;
 		*)
 			echo "DEPLOY_ENV must be beta or prod (got: ${DEPLOY_ENV:-})" >&2
@@ -62,8 +66,17 @@ render_nginx_config() {
 		__SITE_AND_CDN__)
 			server_names="${SITE_HOST} ${CDN_HOSTNAME}"
 			;;
-		__SITE_API_CDN_SHARE__|"")
-			server_names="${SITE_HOST} ${API_HOSTNAME} ${SHARE_HOSTNAME} ${CDN_HOSTNAME}"
+		__SITE_CDN_SHARE__)
+			server_names="${SITE_HOST} ${CDN_HOSTNAME} sh.parascene.com"
+			;;
+		__SITE_API_CDN__|"")
+			server_names="${SITE_HOST} ${API_HOSTNAME} ${CDN_HOSTNAME}"
+			;;
+		__SITE_API__)
+			server_names="${SITE_HOST} ${API_HOSTNAME}"
+			;;
+		__SITE_BETA_TEST_HOSTS__)
+			server_names="${SITE_HOST} ${API_TEST_HOSTNAME} ${CDN_TEST_HOSTNAME} ${SHARE_TEST_HOSTNAME}"
 			;;
 		*)
 			server_names="$NGINX_SERVER_NAMES"
@@ -78,7 +91,23 @@ render_nginx_config() {
 		-e "s/__SERVER_NAMES__/${server_names}/g" \
 		-e "s/__HOST_PORT__/${HOST_PORT}/g" \
 		"$source_path" > "$rendered_path"
+	if [[ "$DEPLOY_ENV" == "prod" ]]; then
+		local apex_path="$app_dir/infra/nginx/apex-redirect.conf"
+		if [[ ! -f "$apex_path" ]]; then
+			echo "Production apex redirect configuration is missing: $apex_path" >&2
+			return 1
+		fi
+		cat "$apex_path" >> "$rendered_path"
+	fi
 	printf '%s\n' "$rendered_path"
+}
+
+validate_apex_certificate() {
+	if [[ "$DEPLOY_ENV" != "prod" ]]; then return 0; fi
+	if ! run_as_root openssl x509 -in /etc/ssl/parascene/cert.pem -noout -checkhost parascene.com >/dev/null 2>&1; then
+		echo "The production TLS certificate must include parascene.com before enabling the apex redirect" >&2
+		return 1
+	fi
 }
 
 install_nginx_config() {
@@ -208,6 +237,7 @@ if [[ "${1:-}" == "remote" ]]; then
 	APP_DIR="${3:?App directory is required}"
 	: "${DEPLOY_ENV:?DEPLOY_ENV is required}"
 	deploy_target
+	validate_apex_certificate
 	DEPLOY_ID="$(date -u +%Y%m%d%H%M%S)-$$"
 	STAGING_DIR="${APP_DIR}.staging-${DEPLOY_ID}"
 	cleanup_staging() {
@@ -249,17 +279,17 @@ if [[ "${1:-}" == "remote" ]]; then
 	install_nginx_config "$rendered_nginx"
 
 	# Verify the public nginx-to-Docker path. Keep retrying while the container starts.
-	# Prod serves the site and CDN; api/share remain on Vercel during migration.
+	# Prod serves the site, CDN and (after DNS cutover) canonical share host.
 	for attempt in {1..30}; do
 		if [[ "$DEPLOY_ENV" == "prod" ]]; then
 			if https_ok "$SITE_HOST" / && https_ok "$CDN_HOSTNAME" /healthz; then
 				exit 0
 			fi
 		else
-			api_status="$(https_status "$API_HOSTNAME" /)"
-			share_status="$(https_status "$SHARE_HOSTNAME" /)"
+			api_status="$(https_status "$API_TEST_HOSTNAME" /)"
+			share_status="$(https_status "$SHARE_TEST_HOSTNAME" /)"
 			if https_ok "$SITE_HOST" / && \
-				https_ok "$CDN_HOSTNAME" /healthz && \
+				https_ok "$CDN_TEST_HOSTNAME" /healthz && \
 				[[ "$api_status" == "302" && "$share_status" == "302" ]]; then
 				exit 0
 			fi
@@ -340,7 +370,6 @@ printf '%s\n' \
 	"UPSTASH_REDIS_REST_URL=${UPSTASH_REDIS_REST_URL:-}" \
 	"APP_ORIGIN=$APP_ORIGIN" \
 	"API_HOSTNAME=$API_HOSTNAME" \
-	"SHARE_HOSTNAME=$SHARE_HOSTNAME" \
 	"CDN_HOSTNAME=$CDN_HOSTNAME" \
 	"CDN_HOST_ALIASES=${CDN_HOST_ALIASES:-}" \
 	"CREATION_JOB_MODE=$CREATION_JOB_MODE" \

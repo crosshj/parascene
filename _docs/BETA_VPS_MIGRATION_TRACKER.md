@@ -15,8 +15,8 @@
 - [ ] Port remaining admin functionality, including email template preview/manual send and conversation moderation, then compare each page against its legacy behavior.
 - [ ] Verify authorization, search/pagination, errors, destructive actions and auditability across admin pages.
 - [ ] **Payments:** the pricing UI now calls the Vercel API at `api.parascene.com`; Checkout can return to either `www` or `beta`. Verify Founder checkout, credit packs, return/cancel, switching to Free and webhook updates. Beta uses the existing live Stripe setup, so avoid test purchases that would charge real money.
-- [ ] Verify WWW sitemap, robots, canonical URLs, redirects and public metadata; fix what is missing or broken.
-- [ ] **Share:** verify `sh.parascene.com/s/...`, logged-out previews, media and link previews still work on Vercel. Fix current breakage; otherwise defer migration.
+- [ ] Verify WWW sitemap, robots, canonical URLs, redirects and public metadata; confirm apex DNS points to the VPS and permanently redirects to `https://www.parascene.com` with the path/query preserved.
+- [ ] **Share:** VPS now serves the legacy share page, metadata, image/video/audio handlers, and authenticated link mint endpoint; beta and prod always mint `sh.parascene.com`. Focused route tests pass. Remaining: verify manually on beta, then cut over production `sh` DNS and verify its TLS certificate and crawlers.
 
 ### Later: when retiring Vercel owners
 
@@ -24,7 +24,6 @@
 - [ ] Port remaining non-payment API functionality only when retiring its current Vercel owner; preserve payment endpoints and webhook handling on Vercel.
 - [ ] Move notification/jobs workers and creation callbacks, recovery and polling repair. Align published `/api/worker/create` with mounted `/api/create/worker`.
 - [ ] Ensure one owner per schedule/queue/write path; verify retries, restart recovery, logs, alerts and rate limits before switching `api`.
-- [ ] **Share hostname:** choose/configure a beta host; port `/s/...` pages, media and crawler metadata; verify stable links before switching `sh`.
 - [ ] **WWW cutover:** verify user journeys, responsive behavior, media delivery, monitoring, backups and rollback before moving `www`.
 - [ ] Confirm no runtime imports from `_legacy/`; retain a rollback path during CDN and hostname changes.
 

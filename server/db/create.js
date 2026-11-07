@@ -137,6 +137,19 @@ selectUserById: {
 				};
 			}
 		},
+		insertSharePageView: {
+			run: async (sharerId, creationId, creatorId, referer, anonCid, meta) => {
+				const { error } = await serviceClient.from("share_page_views").insert({
+					sharer_user_id: Number(sharerId),
+					created_image_id: Number(creationId),
+					created_by_user_id: Number(creatorId),
+					referer: referer || null,
+					anon_cid: anonCid || null,
+					meta: meta || {}
+				});
+				if (error) throw error;
+			}
+		},
 selectUserProfileByUserId: {
 			get: async (userId) => {
 				const { data, error } = await serviceClient

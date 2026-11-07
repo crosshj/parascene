@@ -1,30 +1,19 @@
 /** Default production origin. Override with APP_ORIGIN env. Single place to change app domain. */
 const DEFAULT_APP_ORIGIN = "https://www.parascene.com";
 
-function configuredHostname(envName, fallback) {
-	const value = String(process.env[envName] || "").trim().toLowerCase().replace(/\/$/, "");
-	if (!value) return fallback;
-	try {
-		if (value.includes("://")) return new URL(value).hostname;
-	} catch {
-		return fallback;
-	}
-	return value.split("/")[0].split(":")[0];
-}
-
-/** Share-link hostname for this deployment. Other paths on that host redirect to the site origin. */
+/** Canonical share-link hostname, shared by beta and production. */
 export function getShareHostname() {
-	return configuredHostname("SHARE_HOSTNAME", "sh.parascene.com");
+	return "sh.parascene.com";
 }
 
-/** API hostname for this deployment. Callbacks and external API clients use it. */
+/** Canonical API hostname shared by beta and production. */
 export function getApiHostname() {
-	return configuredHostname("API_HOSTNAME", "api.parascene.com");
+	return "api.parascene.com";
 }
 
-/** Media hostname this deployment emits for uploads and playback. */
+/** Canonical media hostname shared by production and beta. */
 export function getCdnHostname() {
-	return configuredHostname("CDN_HOSTNAME", "cdn.parascene.com");
+	return "cdn.parascene.com";
 }
 
 export function getCdnOrigin() {

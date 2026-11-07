@@ -30,9 +30,12 @@ player, embedded artwork or a generated fallback, and a download action.
 The authenticated beta SPA includes a client-side `/files` page. It calls the
 owner-scoped `https://cdn.parascene.com/api/files` API to upload, enumerate,
 stream, and delete objects from the signed-in user's
-`prsn_misc/profile/{userId}` prefix. Requests to the CDN hostname are
-host-gated: only CDN service routes are exposed, while beta pages remain
-available only on the beta hostname.
+`prsn_misc/profile/{userId}` prefix. Both beta and prod mint media URLs on
+`cdn.parascene.com`. Beta also accepts manually addressed CDN paths on
+`beta-cdn.parascene.com` for testing. Beta's API and share handlers are also
+available at `beta-api.parascene.com` and `beta-sh.parascene.com`. These
+beta-prefixed hosts are manual test aliases only; the app always mints links to
+the canonical `api`, `cdn`, and `sh` hosts.
 
 ## Local development
 
@@ -64,7 +67,7 @@ the app's JavaScript, shared CSS and `.output/overview/store.json` beneath
 Report requests must come directly from a loopback connection. Production
 deployments leave the route disabled unless `LOCAL_REPORTS_ENABLED=1` is set.
 
-The Files page also provides a temporary shared URL at
+The Files page also provides a temporary signed URL at
 `https://cdn.parascene.com/s/{signed-key}/{original-filename}`. The signed key
 keeps the bucket path and storage key out of the URL, and the original filename
 is retained in the URL and download disposition. A valid Parascene sign-in and
@@ -74,11 +77,14 @@ proof behavior, not the final sharing model.
 
 The host Nginx site is rendered from `infra/nginx/parascene.conf`. A push to
 `beta` installs `parascene-beta` and proxies that site's names to port 3000.
-A push to `main` installs `parascene-prod` and proxies `www.parascene.com`
-and `cdn.parascene.com` to port 3001. The prod deploy checks both hostnames
-through local Nginx without relying on public DNS.
-`api.parascene.com` and `sh.parascene.com` remain on Vercel temporarily while
-their legacy routes are migrated.
+A push to `main` installs `parascene-prod` and proxies `www.parascene.com`,
+`cdn.parascene.com`, and (after its DNS cutover) `sh.parascene.com` to port
+3001. The production apex `parascene.com` permanently redirects to
+`https://www.parascene.com`, preserving path and query. The prod deploy checks
+that its origin certificate covers the apex before enabling that redirect.
+Keep the Cloudflare apex A record proxied and use Full (strict) SSL/TLS; keep
+the apex redirect at the origin as a fallback and canonical signal. The API
+remains on Vercel for payments and webhooks.
 Both VPS sites publish creation and provider-poll jobs through QStash to the
 legacy `api.parascene.com` worker. Local development runs those jobs in process.
 Each deploy validates the complete Nginx configuration, restores the prior

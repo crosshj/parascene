@@ -1,5 +1,7 @@
+import { getCdnHostname } from "../../services/create/url.js";
+
 export function cdnHostname() {
-	return String(process.env.CDN_HOSTNAME || "cdn.parascene.com").trim().toLowerCase().split(":")[0];
+	return getCdnHostname();
 }
 
 /** Primary media host plus aliases that must keep the CDN route boundary. */
@@ -26,11 +28,14 @@ function isLoopbackHost(req) {
 
 export function createCdnHostBoundary(cdnRouter) {
 	return function cdnHostBoundary(req, res, next) {
-		const filesPath = /^(\/api\/files(?:\/|$)|\/api\/images\/generic(?:\/|$)|\/s\/)/.test(String(req.path || ""));
+		const path = String(req.path || "");
+		const filesPath = /^(\/api\/files(?:\/|$)|\/api\/images\/generic(?:\/|$)|\/s\/)/.test(path);
+		const cdnPath = filesPath || path === "/healthz";
+		const betaManualHost = process.env.APP_VERSION === "beta" && requestHostname(req) === "beta-cdn.parascene.com";
 		// Localhost serves My Files even when NODE_ENV is production. Other hosts
-		// only get these routes on the CDN hostname.
-		const localFiles = filesPath && (process.env.NODE_ENV !== "production" || isLoopbackHost(req));
-		if (!isCdnRequest(req) && !localFiles) return next();
+		// only get these routes on the canonical CDN host (or beta for manual tests).
+		const localFiles = cdnPath && (process.env.NODE_ENV !== "production" || isLoopbackHost(req));
+		if (!isCdnRequest(req) && !localFiles && !(cdnPath && betaManualHost)) return next();
 		return cdnRouter(req, res, next);
 	};
 }
