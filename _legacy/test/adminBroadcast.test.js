@@ -3,7 +3,9 @@ import {
 	filterAdminBroadcastRecipients,
 	getAdminBroadcastRecipientName,
 	isAdminBroadcastEligible,
-	parseAdminBroadcastBody
+	isResendRateLimitError,
+	parseAdminBroadcastBody,
+	userIdsAlreadySentAdminBroadcast
 } from "../api_routes/utils/adminBroadcast.js";
 import { renderEmailTemplate } from "../email/index.js";
 
@@ -62,6 +64,23 @@ describe("adminBroadcast", () => {
 				email: "a@b.co"
 			})
 		).toBe("Alex");
+	});
+
+	test("userIdsAlreadySentAdminBroadcast matches subject only", () => {
+		const ids = userIdsAlreadySentAdminBroadcast(
+			[
+				{ user_id: 1, meta: { subject: "Want your work featured on the Parascene homepage?" } },
+				{ user_id: 2, meta: null },
+				{ user_id: 3, meta: { subject: "Something else" } }
+			],
+			"Want your work featured on the Parascene homepage?"
+		);
+		expect([...ids]).toEqual([1]);
+	});
+
+	test("isResendRateLimitError", () => {
+		expect(isResendRateLimitError(new Error("Resend error: Too many requests. You can only make 10 requests per second."))).toBe(true);
+		expect(isResendRateLimitError(new Error("Invalid email"))).toBe(false);
 	});
 
 	test("parseAdminBroadcastBody validates CTA URL", () => {
