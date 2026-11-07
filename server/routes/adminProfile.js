@@ -121,7 +121,24 @@ function extractGenericKey(url) {
 				}
 			});
 		return segments.join("/");
-	}router.post("/admin/users/:id/profile", async (req, res) => {
+}router.get("/admin/users/:id/profile", async (req, res) => {
+		const admin = await requireAdmin(req, res);
+		if (!admin) return;
+
+		const targetUserId = Number.parseInt(String(req.params?.id || ""), 10);
+		if (!Number.isFinite(targetUserId) || targetUserId <= 0) {
+			return res.status(400).json({ error: "Invalid user id" });
+		}
+
+		const target = await queries.selectUserById.get(targetUserId);
+		if (!target) return res.status(404).json({ error: "User not found" });
+		const profile = await queries.selectUserProfileByUserId?.get(targetUserId);
+		return res.json({
+			user: { id: target.id, email: target.email, role: target.role },
+			profile: normalizeProfileRow(profile)
+		});
+	});
+	router.post("/admin/users/:id/profile", async (req, res) => {
 		const admin = await requireAdmin(req, res);
 		if (!admin) return;
 

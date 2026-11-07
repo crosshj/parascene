@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Admin · Users</title>
+	<link rel="stylesheet" href="/admin/shared/admin.css">
+	<script type="module" src="/admin/users/page.js"></script>
+</head>
+<body class="admin-page admin-page--users">
+	{{ADMIN_HEADER}}
+	<main class="admin-page__content">
+		<admin-tabs class="admin-tabs" sync-hash active="active">
+			<div class="admin-tabs__list" data-admin-tab-list aria-label="User sections">
+				<button class="admin-tabs__tab" data-admin-tab="active">Active</button>
+				<button class="admin-tabs__tab" data-admin-tab="other">Other</button>
+				<button class="admin-tabs__tab" data-admin-tab="tips">Tips</button>
+				<button class="admin-tabs__tab" data-admin-tab="settings">Settings</button>
+			</div>
+			<section class="admin-tabs__panel" data-admin-panel="active">
+				<div data-active-users data-admin-table></div>
+			</section>
+			<section class="admin-tabs__panel" data-admin-panel="other" hidden>
+				<div data-other-users data-admin-table></div>
+			</section>
+			<section class="admin-tabs__panel" data-admin-panel="tips" hidden>
+				<div data-tips-table data-admin-table></div>
+			</section>
+			<section class="admin-tabs__panel" data-admin-panel="settings" hidden>
+				<form class="admin-form" data-users-settings>
+					<div class="admin-field">
+						<label class="admin-field__label" for="min-days-before-tip">Minimum days before tipping</label>
+						<input class="admin-input" id="min-days-before-tip" name="min_days_before_tip" type="number" min="0" step="1" required>
+						<p class="admin-field__help">Free accounts must have been present this many days before they can tip. Upgraded accounts are exempt.</p>
+					</div>
+					<button class="admin-button admin-button--primary" type="submit">Save settings</button>
+					<p class="admin-status" data-settings-status role="status" aria-live="polite"></p>
+				</form>
+			</section>
+		</admin-tabs>
+	</main>
+	<dialog class="admin-dialog" data-user-dialog aria-labelledby="admin-user-title">
+		<header class="admin-dialog__header">
+			<h2 id="admin-user-title">User</h2>
+			<button class="admin-button" type="button" data-user-close aria-label="Close">Close</button>
+		</header>
+		<div class="admin-dialog__body">
+			<dl class="admin-user-details" data-user-details></dl>
+			<p class="admin-status" data-user-status role="status" aria-live="polite"></p>
+		</div>
+		<footer class="admin-dialog__actions admin-user-actions">
+			<button class="admin-button" type="button" data-user-tip>Tip</button>
+			<button class="admin-button" type="button" data-user-suspend>Suspend</button>
+			<button class="admin-button" type="button" data-user-founder>Grant founder</button>
+			<button class="admin-button admin-button--danger" type="button" data-user-delete>Delete</button>
+			<a class="admin-button admin-button--primary" data-user-profile target="_blank" rel="noopener">View profile</a>
+		</footer>
+	</dialog>
+	<dialog class="admin-dialog" data-user-action-dialog aria-labelledby="admin-user-action-title">
+		<header class="admin-dialog__header">
+			<h2 id="admin-user-action-title"></h2>
+			<button class="admin-button" type="button" data-action-close aria-label="Close">Close</button>
+		</header>
+		<form class="admin-dialog__body admin-form" data-user-action-form>
+			<p data-action-description></p>
+			<div data-action-fields></div>
+			<p class="admin-status admin-status--error" data-action-error role="alert" hidden></p>
+			<footer class="admin-dialog__actions">
+				<button class="admin-button" type="button" data-action-cancel>Cancel</button>
+				<button class="admin-button admin-button--primary" type="submit" data-action-submit>Confirm</button>
+			</footer>
+		</form>
+	</dialog>
+</body>
+</html>
