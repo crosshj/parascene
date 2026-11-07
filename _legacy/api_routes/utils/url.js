@@ -35,6 +35,15 @@ export function getBaseAppUrl() {
 	return `http://localhost:${port}`;
 }
 
+/** Checkout returns to the app that started it when it is a known production origin. */
+export function getCheckoutReturnBaseUrl(req) {
+	const origin = typeof req?.get === "function" ? req.get("origin") : req?.headers?.origin;
+	if (origin === "https://www.parascene.com" || origin === "https://beta.parascene.com") {
+		return origin;
+	}
+	return getBaseAppUrl();
+}
+
 /** Base URL for share links (e.g. https://sh.parascene.com). All share URLs use this so they look like sh.parascene.com/s/... */
 export function getShareBaseUrl() {
 	return `https://${SHARE_HOSTNAME}`;

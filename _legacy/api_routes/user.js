@@ -21,7 +21,7 @@ import {
 	setAuthCookie,
 	shouldLogSession
 } from "./auth.js";
-import { getBaseAppUrl, getBaseAppUrlForEmail, getThumbnailUrl } from "./utils/url.js";
+import { getBaseAppUrlForEmail, getCheckoutReturnBaseUrl, getThumbnailUrl } from "./utils/url.js";
 import {
 	getCreditTopupPack,
 	getCreditTopupPriceId,
@@ -947,7 +947,7 @@ export default function createProfileRoutes({ queries }) {
 		}
 		try {
 			const stripe = new Stripe(secretKey);
-			const baseUrl = getBaseAppUrl();
+			const baseUrl = getCheckoutReturnBaseUrl(req);
 			const user = await queries.selectUserById.get(req.auth.userId);
 			const customerEmail = typeof user?.email === "string" && user.email.includes("@") ? user.email : undefined;
 			const session = await stripe.checkout.sessions.create({
@@ -984,7 +984,7 @@ export default function createProfileRoutes({ queries }) {
 		}
 		try {
 			const stripe = new Stripe(secretKey);
-			const baseUrl = getBaseAppUrl();
+			const baseUrl = getCheckoutReturnBaseUrl(req);
 			const user = await queries.selectUserById.get(req.auth.userId);
 			const customerEmail = typeof user?.email === "string" && user.email.includes("@") ? user.email : undefined;
 			const session = await stripe.checkout.sessions.create({

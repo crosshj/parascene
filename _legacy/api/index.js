@@ -207,14 +207,25 @@ if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
 // Ensure every browser/client gets a stable first-party ID for analytics linkage.
 app.use(clientIdMiddleware);
 
-// CORS: allow credentials so cookies are sent when frontend is on a different origin (e.g. dev port).
+// Credentialed browser requests are limited to the app origins and local development.
 app.use((req, res, next) => {
 	const origin = req.get("origin");
-	if (origin) {
+	let allowedOrigin = origin === "https://www.parascene.com" || origin === "https://beta.parascene.com";
+	if (!allowedOrigin && origin) {
+		try {
+			const parsed = new URL(origin);
+			allowedOrigin = parsed.protocol === "http:"
+				&& (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1");
+		} catch {
+			allowedOrigin = false;
+		}
+	}
+	if (allowedOrigin) {
 		res.setHeader("Access-Control-Allow-Origin", origin);
 		res.setHeader("Access-Control-Allow-Credentials", "true");
 		res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
 		res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-upload-kind, X-upload-name");
+		res.append("Vary", "Origin");
 	}
 	if (req.method === "OPTIONS") {
 		return res.sendStatus(204);
