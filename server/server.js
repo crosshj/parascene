@@ -51,6 +51,7 @@ import createSunoRoutes from './routes/suno.js';
 import createXRoutes from './routes/x.js';
 import createCreateRoutes from './routes/create.js';
 import { resumeLocalProviderPolls } from './services/create/creationJob.js';
+import createBlogRoutes from './routes/blog.js';
 
 // Supabase Realtime needs a WebSocket implementation on Node 20.
 if (!globalThis.WebSocket) globalThis.WebSocket = WebSocket;
@@ -110,6 +111,7 @@ app.use(createExploreRoutes({ explore: db.explore, users: db.users }));
 app.use(createCommentsRoutes({ comments: db.comments, users: db.users }));
 app.use(createCreationsRoutes({ creations: db.creations, users: db.users, appendChallengeEligibility: challengeCreations.appendEligibility }));
 app.use(createAuthRoutes({ users: db.users, sessions: db.sessions }));
+app.use(createBlogRoutes({ client: db.account.client, users: db.users, pagesDir }));
 const reportsRoutes = createReportsRoutes();
 if (reportsRoutes) app.use(reportsRoutes);
 app.use(createAdminPageRoutes({ pagesDir, users: db.users, sessions: db.sessions }));
