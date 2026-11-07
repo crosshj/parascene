@@ -5,6 +5,7 @@ function allowedOrigins() {
 		.filter(Boolean);
 	return new Set(configured.length ? configured : [
 		"https://beta.parascene.com",
+		"https://prod.parascene.com",
 		"https://www.parascene.com",
 		"http://localhost:3000",
 		"http://127.0.0.1:3000"
