@@ -17,9 +17,14 @@ import {
 import { isReferenceToVideoMethod } from "../public/shared/aspectRatio.js";
 import { scheduleAnonCreationJob } from "./utils/scheduleCreationJob.js";
 import {
+	ADMIN_BROADCAST_SEND_GAP_MS,
 	buildAdminBroadcastEmailData,
 	filterAdminBroadcastRecipients,
-	parseAdminBroadcastBody
+	getAdminBroadcastRecipientName,
+	isResendRateLimitError,
+	parseAdminBroadcastBody,
+	sleep,
+	userIdsAlreadySentAdminBroadcast
 } from "./utils/adminBroadcast.js";
 import { getEffectiveRecipient, getEmailSettings } from "./utils/emailSettings.js";
 import { getBaseAppUrlForEmail } from "./utils/url.js";
@@ -1751,8 +1756,16 @@ export default function createAdminRoutes({ queries, storage }) {
 			const users = await queries.selectUsers.all();
 			const eligible = filterAdminBroadcastRecipients(users);
 			const settings = await getEmailSettings(queries);
+			const subject = typeof req.query?.subject === "string" ? req.query.subject.trim() : "";
+			const prior = subject && queries.selectEmailSendsByCampaign?.all
+				? await queries.selectEmailSendsByCampaign.all("admin_broadcast")
+				: [];
+			const alreadySentIds = userIdsAlreadySentAdminBroadcast(prior, subject);
+			const alreadySentCount = eligible.filter((user) => alreadySentIds.has(Number(user.id))).length;
 			res.json({
 				eligibleCount: eligible.length,
+				alreadySentCount,
+				remainingCount: eligible.length - alreadySentCount,
 				dryRun: settings.dryRun,
 				emailUseTestRecipient: settings.emailUseTestRecipient
 			});
@@ -1775,9 +1788,14 @@ export default function createAdminRoutes({ queries, storage }) {
 		try {
 			const settings = await getEmailSettings(queries);
 			const users = await queries.selectUsers.all();
-			const recipients = filterAdminBroadcastRecipients(users);
+			const eligible = filterAdminBroadcastRecipients(users);
+			const prior = queries.selectEmailSendsByCampaign?.all
+				? await queries.selectEmailSendsByCampaign.all("admin_broadcast")
+				: [];
+			const alreadySentIds = userIdsAlreadySentAdminBroadcast(prior, shared.emailSubject);
+			const recipients = eligible.filter((user) => !alreadySentIds.has(Number(user.id)));
 
-			if (recipients.length === 0) {
+			if (eligible.length === 0) {
 				return res.status(400).json({ error: "No eligible recipients (active consumers with email)." });
 			}
 
@@ -1787,12 +1805,13 @@ export default function createAdminRoutes({ queries, storage }) {
 				});
 			}
 
-			if (settings.dryRun) {
+			if (settings.dryRun || recipients.length === 0) {
 				return res.status(200).json({
 					ok: true,
-					dryRun: true,
+					dryRun: settings.dryRun,
 					emailUseTestRecipient: settings.emailUseTestRecipient,
-					eligible: recipients.length,
+					eligible: eligible.length,
+					alreadySent: eligible.length - recipients.length,
 					sent: 0,
 					failed: 0
 				});
@@ -1804,34 +1823,54 @@ export default function createAdminRoutes({ queries, storage }) {
 			let failed = 0;
 			const errors = [];
 
-			for (const user of recipients) {
+			for (let index = 0; index < recipients.length; index++) {
+				const user = recipients[index];
 				const email = String(user.email).trim();
 				const data = buildAdminBroadcastEmailData(user, shared);
+				const label = getAdminBroadcastRecipientName(user);
+				let delivered = false;
+				let lastError = null;
 
-				try {
-					const to = getEffectiveRecipient(settings, email);
-					await sendTemplatedEmail({
-						to,
-						template: "adminBroadcast",
-						data
-					});
-					if (queries.insertEmailSend?.run) {
-						await queries.insertEmailSend.run(user.id, "admin_broadcast", null);
-					}
-					sent++;
-				} catch (err) {
-					failed++;
-					if (errors.length < 5) {
-						errors.push({ userId: user.id, message: err?.message || "Send failed" });
+				for (let attempt = 0; attempt < 6 && !delivered; attempt++) {
+					try {
+						if (attempt > 0) await sleep(1500 * attempt);
+						const to = getEffectiveRecipient(settings, email);
+						await sendTemplatedEmail({
+							to,
+							template: "adminBroadcast",
+							data
+						});
+						delivered = true;
+					} catch (err) {
+						lastError = err;
+						if (!isResendRateLimitError(err)) break;
 					}
 				}
+
+				if (delivered) {
+					if (queries.insertEmailSend?.run) {
+						await queries.insertEmailSend.run(user.id, "admin_broadcast", { subject: shared.emailSubject });
+					}
+					sent++;
+				} else {
+					failed++;
+					errors.push({
+						userId: user.id,
+						userName: label,
+						email,
+						message: lastError?.message || "Send failed"
+					});
+				}
+
+				if (index < recipients.length - 1) await sleep(ADMIN_BROADCAST_SEND_GAP_MS);
 			}
 
 			res.status(200).json({
 				ok: true,
 				dryRun: false,
 				emailUseTestRecipient: settings.emailUseTestRecipient,
-				eligible: recipients.length,
+				eligible: eligible.length,
+				alreadySent: eligible.length - recipients.length,
 				sent,
 				failed,
 				errors: errors.length > 0 ? errors : undefined

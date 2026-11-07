@@ -682,7 +682,8 @@ function initEmailSendPanel() {
 		broadcastAudienceEl.hidden = false;
 		broadcastAudienceEl.textContent = "Loading audience…";
 		try {
-			const response = await fetch("/admin/broadcast-recipients", { credentials: "include" });
+			const subject = encodeURIComponent((broadcastSubject?.value ?? "").trim());
+			const response = await fetch(`/admin/broadcast-recipients?subject=${subject}`, { credentials: "include" });
 			const data = await response.json().catch(() => ({}));
 			if (!response.ok) {
 				broadcastAudienceEl.textContent = data?.error || "Could not load recipient count.";
@@ -691,8 +692,12 @@ function initEmailSendPanel() {
 			}
 			broadcastAudienceMeta = data;
 			const count = Number(data.eligibleCount) || 0;
+			const alreadySent = Number(data.alreadySentCount) || 0;
+			const remaining = Number.isFinite(Number(data.remainingCount))
+				? Number(data.remainingCount)
+				: Math.max(0, count - alreadySent);
 			const parts = [
-				`Sends to ${count} active consumer${count === 1 ? "" : "s"} (not admins, not suspended).`
+				`Sends one email each to active consumers (not admins, not suspended). ${remaining} still need this subject${alreadySent ? ` (${alreadySent} already sent)` : ""}.`
 			];
 			if (data.dryRun) {
 				parts.push("Dry run is on — no email will be delivered.");
@@ -978,6 +983,11 @@ function initEmailSendPanel() {
 		el.addEventListener("input", scheduleBroadcastPreviewRefresh);
 		el.addEventListener("change", scheduleBroadcastPreviewRefresh);
 	}
+	if (broadcastSubject) {
+		broadcastSubject.addEventListener("change", () => {
+			void refreshBroadcastAudienceNote();
+		});
+	}
 
 	form.addEventListener("submit", async (e) => {
 		e.preventDefault();
@@ -997,10 +1007,17 @@ function initEmailSendPanel() {
 				setStatus("No eligible recipients. Refresh the page or check user accounts.", true);
 				return;
 			}
-			const count = Number(broadcastAudienceMeta.eligibleCount);
+			const remaining = Number.isFinite(Number(broadcastAudienceMeta.remainingCount))
+				? Number(broadcastAudienceMeta.remainingCount)
+				: Number(broadcastAudienceMeta.eligibleCount);
+			const alreadySent = Number(broadcastAudienceMeta.alreadySentCount) || 0;
+			if (remaining === 0) {
+				setStatus(`Everyone eligible already received this subject (${alreadySent}).`, false);
+				return;
+			}
 			const dryNote = broadcastAudienceMeta.dryRun ? " Dry run is on — no email will be delivered." : "";
 			const confirmed = window.confirm(
-				`Send this broadcast to ${count} active consumer${count === 1 ? "" : "s"} (not admins, not suspended)?${dryNote}`
+				`Send this broadcast to ${remaining} active consumer${remaining === 1 ? "" : "s"} who have not received this subject yet?${alreadySent ? ` ${alreadySent} already have it and will be skipped.` : ""}${dryNote}`
 			);
 			if (!confirmed) return;
 
@@ -1019,12 +1036,21 @@ function initEmailSendPanel() {
 					if (data.dryRun) {
 						setStatus(`Dry run: ${data.eligible} recipient${data.eligible === 1 ? "" : "s"} would receive this broadcast.`);
 					} else if (data.failed > 0) {
+						const missed = Array.isArray(data.errors)
+							? data.errors.map((item) => item.userName || item.email || `#${item.userId}`).filter(Boolean)
+							: [];
+						const missedNote = missed.length
+							? ` Not sent: ${missed.join(", ")}.`
+							: "";
 						setStatus(
-							`Broadcast finished: ${data.sent} sent, ${data.failed} failed (of ${data.eligible}).`,
+							`Broadcast finished: ${data.sent} sent, ${data.failed} failed (${data.alreadySent || 0} already had it).${missedNote}`,
 							true
 						);
+					} else if (data.sent === 0) {
+						setStatus(`No new emails sent. ${data.alreadySent || 0} already had this subject.`);
 					} else {
-						setStatus(`Broadcast sent to ${data.sent} recipient${data.sent === 1 ? "" : "s"}.`);
+						const skipped = data.alreadySent ? ` ${data.alreadySent} already had it and were skipped.` : "";
+						setStatus(`Broadcast sent to ${data.sent} recipient${data.sent === 1 ? "" : "s"}.${skipped}`);
 					}
 					void refreshBroadcastAudienceNote();
 				} else {

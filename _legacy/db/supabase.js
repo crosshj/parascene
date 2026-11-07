@@ -2284,6 +2284,24 @@ export function openDb() {
 				return { insertId: data.id, changes: 1 };
 			}
 		},
+		selectEmailSendsByCampaign: {
+			all: async (campaign) => {
+				const rows = [];
+				const pageSize = 1000;
+				for (let from = 0; ; from += pageSize) {
+					const { data, error } = await serviceClient
+						.from(prefixedTable("email_sends"))
+						.select("user_id, created_at, meta")
+						.eq("campaign", campaign)
+						.order("id", { ascending: true })
+						.range(from, from + pageSize - 1);
+					if (error) throw error;
+					rows.push(...(data ?? []));
+					if (!data || data.length < pageSize) break;
+				}
+				return rows;
+			}
+		},
 		selectUserEmailCampaignState: {
 			get: async (userId) => {
 				const { data, error } = await serviceClient

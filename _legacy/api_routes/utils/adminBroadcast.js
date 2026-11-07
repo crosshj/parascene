@@ -70,3 +70,32 @@ export function buildAdminBroadcastEmailData(user, shared) {
 		...shared
 	};
 }
+
+/** Resend's default cap is 10 requests per second. Stay under it. */
+export const ADMIN_BROADCAST_SEND_GAP_MS = 200;
+
+export function isResendRateLimitError(error) {
+	const message = String(error?.message || error || "");
+	return /too many requests/i.test(message) || /\b429\b/.test(message);
+}
+
+/**
+ * User ids that already have a recorded admin broadcast for this subject.
+ * @param {Array<{ user_id?: number, meta?: { subject?: string } | null }>} rows
+ * @param {string} subject
+ */
+export function userIdsAlreadySentAdminBroadcast(rows, subject) {
+	const wanted = String(subject || "").trim();
+	const ids = new Set();
+	if (!wanted) return ids;
+	for (const row of rows || []) {
+		const metaSubject =
+			row?.meta && typeof row.meta === "object" ? String(row.meta.subject || "").trim() : "";
+		if (metaSubject === wanted && row.user_id != null) ids.add(Number(row.user_id));
+	}
+	return ids;
+}
+
+export function sleep(ms) {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}
