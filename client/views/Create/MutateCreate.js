@@ -418,6 +418,7 @@ if (!lifetime.active) return;
 				providers.create.workflow.openSource({
 					imageUrl: toParasceneImageUrl(sourceImageUrl),
 					sourceId: mutateSourceId,
+					groupId: mutateGroupId,
 					published: creation.published === true || creation.published === 1,
 				});
 			} catch (error) {

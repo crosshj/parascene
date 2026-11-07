@@ -19,7 +19,7 @@ async function mount(fetch) {
  const host = modules.get(path.resolve('client/shared/createWorkflowHost.js')).namespace;
  host.setCreateWorkflowHost({ root: w.document.getElementById('root'), pendingCreations: { key: 'test-pending' } });
  const provider = entry.namespace.createCreateProvider({ viewerId: 91 }); provider.workflow.enterMode({ mode: 'image-edit', prompt: 'hello' });
- provider.workflow.openSource({ imageUrl: '/a.png', sourceId: 17 });
+ provider.workflow.openSource({ imageUrl: '/a.png', sourceId: 17, groupId: 44 });
  return { provider, w, close() { provider.destroy(); dom.window.close(); } };
 }
 test('real provider transport creates pending, posts snapshot and promotes accepted job', { skip: !vm.SourceTextModule }, async () => {
@@ -32,7 +32,7 @@ test('real provider transport creates pending, posts snapshot and promotes accep
   const result = app.provider.workflow.submit({ mode: 'image-edit', navigate: 'none' });
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(JSON.parse(app.w.sessionStorage.getItem('test-pending'))[0].status, 'pending');
-  assert.equal(posted.args.image_url, '/a.png'); assert.equal(posted.mutate_of_id, 17); assert.deepEqual(posted.mutate_parent_ids, [17]); assert.ok(posted.creation_token);
+  assert.equal(posted.args.image_url, '/a.png'); assert.equal(posted.mutate_of_id, 17); assert.equal(posted.group_id, 44); assert.deepEqual(posted.mutate_parent_ids, [17]); assert.ok(posted.creation_token);
   pending.resolve(json({ id: 91, status: 'queued', credits_remaining: 12 }));
   assert.equal((await result).id, 91); assert.equal(JSON.parse(app.w.sessionStorage.getItem('test-pending'))[0].id, 91);
   assert.equal(app.provider.draft.read().fieldValues.prompt, ''); assert.equal(app.provider.draft.read().inputImages[0], '/a.png');

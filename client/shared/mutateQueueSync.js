@@ -468,10 +468,10 @@ function overwriteCreateImageFieldValues(fieldValues, url) {
 }
 
 /** Replace saved input images immediately when a Mutate source is resolved. */
-export function syncMutateSourceToCreateStorage({ imageUrl, sourceId, published } = {}) {
+export function syncMutateSourceToCreateStorage({ imageUrl, sourceId, groupId, published } = {}) {
 	const url = typeof imageUrl === 'string' ? imageUrl.trim() : '';
 	if (!url) return;
-	persistSavedCreateForm(createSourceChange({ imageUrl: url, sourceId, published }), { notify: false });
+	persistSavedCreateForm(createSourceChange({ imageUrl: url, sourceId, groupId, published }), { notify: false });
 	persistCreateAttachmentUrls([url]);
 	replaceMutateQueueSingleItem({ imageUrl: url, sourceId, published });
 }

@@ -5,6 +5,7 @@ import { persistSavedCreateForm, readSavedCreateForm, getSavedCreateDraftStore, 
 import { persistMutateForm, syncMutateSourceToCreateStorage, syncMutatePageToAdvancedCreate, syncSavedCreateImagesToQueue, syncCreationDetailToAdvancedCreate, syncMutateQueueFromComposerAttachments } from '../client/shared/mutateQueueSync.js';
 import { loadMutateQueue } from '../client/shared/mutateQueue.js';
 import { projectCreateDraft } from '../client/providers/create/draft.js';
+import { deriveCreateLineage } from '../client/providers/create/model.js';
 const dom = new JSDOM('', { url: 'http://localhost/create' });
 globalThis.window = dom.window;
 globalThis.document = dom.window.document;
@@ -37,6 +38,15 @@ test('entering Mutate replaces images immediately and retains source lineage', (
  assert.equal(loadMutateQueue()[0].published, true);
  const stored = JSON.parse(window.sessionStorage.getItem('create-page-selections'));
  assert.deepEqual(stored.fieldValues.input_images, ['/source.png']);
+});
+test('advanced mutate handoff retains the selected group context for server authorization', () => {
+ reset();
+ syncMutateSourceToCreateStorage({ imageUrl: '/group-source.png', sourceId: 91, groupId: 72, published: false });
+ syncMutatePageToAdvancedCreate({ mode: 'image-to-image', imageUrl: '/group-source.png', sourceId: 91, groupId: 72 });
+ const draft = readSavedCreateForm();
+ assert.equal(draft.imageSources['/group-source.png'].sourceId, 91);
+ assert.equal(draft.imageSources['/group-source.png'].groupId, 72);
+ assert.equal(deriveCreateLineage(draft, ['/group-source.png']).mutateGroupId, 72);
 });
 test('Mutate edits and video engine changes update the route without waiting for a switch', () => {
  reset(); syncMutateSourceToCreateStorage({ imageUrl: '/source.png', sourceId: 91 });

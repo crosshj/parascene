@@ -257,7 +257,7 @@ async function buildGroupMutateSourcePayload({ groupRow, sourceId, viewerUser })
 		const groupId = Number(groupRow.id);
 		const sid = Number(sourceId);
 		if (!Number.isFinite(groupId) || groupId <= 0 || !Number.isFinite(sid) || sid <= 0) return null;
-		if (!viewerOwnsCreationRow(groupRow, viewerUser.id) && viewerUser.role !== "admin") return null;
+		if (!viewerCanMutateGroup(groupRow, viewerUser)) return null;
 		if (!isGroupSourceOfSharedCreation(groupRow, sid)) return null;
 
 		const groupMeta = parseMeta(groupRow.meta);
@@ -350,6 +350,12 @@ function viewerOwnsCreationRow(row, viewerUserId) {
 		if (!row || viewerUserId == null) return false;
 		return Number(row.user_id) === Number(viewerUserId);
 	}
+function viewerCanMutateGroup(groupRow, viewerUser) {
+		if (!groupRow || !viewerUser) return false;
+		if (viewerOwnsCreationRow(groupRow, viewerUser.id) || viewerUser.role === "admin") return true;
+		return (groupRow.published === 1 || groupRow.published === true) &&
+			(groupRow.status || "completed") === "completed" && !groupRow.unavailable_at;
+	}
 function parsePositiveIntQuery(value) {
 		const n = typeof value === "string" ? parseInt(value, 10) : Number(value);
 		return Number.isFinite(n) && n > 0 ? n : null;
@@ -362,6 +368,12 @@ async function selectOwnedGroupRow(groupId, viewerUserId) {
 		const any = await queries.selectCreatedImageByIdAnyUser?.get(gid);
 		if (any && viewerOwnsCreationRow(any, viewerUserId)) return any;
 		return null;
+	}
+async function selectMutateGroupRow(groupId, viewerUser) {
+		const owned = await selectOwnedGroupRow(groupId, viewerUser.id);
+		if (owned) return owned;
+		const any = await queries.selectCreatedImageByIdAnyUser?.get(Number(groupId));
+		return viewerCanMutateGroup(any, viewerUser) ? any : null;
 	}
 function isModeratedError(status, meta) {
 		if (status !== "failed" || meta == null) return false;
@@ -1311,9 +1323,22 @@ router.post("/api/create", asyncRoute(async (req, res) => {
 				if (!source) {
 					const groupIdForMutate = parsePositiveIntQuery(bodyGroupId ?? bodyGroupOf);
 					if (groupIdForMutate) {
-						const groupRow = await selectOwnedGroupRow(groupIdForMutate, user.id);
+						const groupRow = await selectMutateGroupRow(groupIdForMutate, user);
 						if (groupRow && isGroupSourceOfSharedCreation(groupRow, sourceId)) {
 							source = await queries.selectCreatedImageByIdAnyUser?.get(sourceId);
+							if (!source && viewerCanMutateGroup(groupRow, user)) {
+								const groupPayload = parseMeta(groupRow.meta)?.group;
+							const snapshot = findGroupSourceSnapshot(groupPayload, sourceId);
+							if (snapshot) {
+								source = {
+									...snapshot,
+									id: sourceId,
+									meta: snapshot.meta || {},
+									status: snapshot.status || "completed",
+									published: groupRow.published === 1 || groupRow.published === true,
+								};
+							}
+							}
 						}
 					}
 				}
@@ -1982,7 +2007,7 @@ router.get("/api/create/images/:id/mutate-source", asyncRoute(async (req, res) =
 				return res.status(400).json({ error: "group id and source_id are required" });
 			}
 
-			const groupRow = await selectOwnedGroupRow(groupId, user.id);
+			const groupRow = await selectMutateGroupRow(groupId, user);
 			if (!groupRow) {
 				return res.status(404).json({ error: "Image not found" });
 			}
