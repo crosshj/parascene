@@ -1,45 +1,27 @@
-name: Deploy to VPS
+name: Deploy to Prod
 
 on:
   push:
     branches:
-      - beta
       - main
   workflow_dispatch:
-    inputs:
-      deploy_env:
-        description: "beta or prod"
-        required: true
-        default: beta
-        type: choice
-        options:
-          - beta
-          - prod
 
-# Separate groups so a beta deploy cannot cancel a prod deploy (and vice versa).
 concurrency:
-  group: deploy-vps-${{ github.event_name == 'workflow_dispatch' && inputs.deploy_env || github.ref_name }}
+  group: deploy-vps-prod
   cancel-in-progress: true
 
 jobs:
   deploy:
-    if: >
-      github.event_name == 'workflow_dispatch' ||
-      github.ref_name == 'beta' ||
-      github.ref_name == 'main'
     runs-on: ubuntu-latest
-    # Secrets and variables both come from the GitHub environment named `beta`
-    # for either slot. DEPLOY_ENV picks container/nginx (beta vs prod).
+    # Same secret/variable store as beta for now (GitHub environment named `beta`).
     environment: beta
-    env:
-      DEPLOY_ENV: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_env || (github.ref_name == 'main' && 'prod' || 'beta') }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Deploy VPS
+      - name: Deploy prod VPS slot
         env:
-          DEPLOY_ENV: ${{ env.DEPLOY_ENV }}
+          DEPLOY_ENV: prod
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
