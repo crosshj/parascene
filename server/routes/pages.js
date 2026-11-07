@@ -5,6 +5,7 @@ import { createSpaFallback } from "./middleware/spa.js";
 import { getAppAssetNames } from "./utils/appAssets.js";
 import { filesOriginForRequest } from "./utils/origins.js";
 import { buildMetaTags } from "./utils/buildMetaTags.js";
+import { computeWelcome } from "../services/account/welcome.js";
 
 const PAGE_ROUTES = {
 	"/": "index/index.html",
@@ -28,6 +29,19 @@ function canonicalUrlForRequest(req) {
 	const pathOnly = (req.originalUrl || req.path || "/").split("?")[0] || "/";
 	const origin = (process.env.APP_ORIGIN || DEFAULT_CANONICAL_ORIGIN).replace(/\/$/, "");
 	return `${origin}${pathOnly.startsWith("/") ? pathOnly : `/${pathOnly}`}`;
+}
+
+function welcomeReturnUrl(raw) {
+	const value = typeof raw === "string" ? raw.trim() : "";
+	if (!value.startsWith("/") || value.startsWith("//") || value.includes("://") || /[\r\n]/.test(value) || value.length > 2048) return "/";
+	const pathOnly = value.split("?", 1)[0].replace(/\/+$/, "") || "/";
+	if (["/auth", "/auth.html", "/welcome"].includes(pathOnly)) return "/";
+	return value;
+}
+
+function loginUrlForWelcome(req) {
+	const returnUrl = req.originalUrl || req.path || "/welcome";
+	return `/auth?returnUrl=${encodeURIComponent(returnUrl)}#login`;
 }
 
 function serializeBootstrap(value) {
@@ -81,6 +95,20 @@ export default function createPageRoutes({ pagesDir, users }) {
 	const router = express.Router();
 	// pagesDir is server/pages. Rollup writes the bundle at the repo root.
 	const buildDir = path.join(pagesDir, "..", "..", "build");
+
+	router.get("/welcome", async (req, res, next) => {
+		if (!req.auth?.userId) return res.redirect(loginUrlForWelcome(req));
+		try {
+			const profile = await users?.profileByUserId?.(req.auth.userId);
+			if (!computeWelcome({ profileRow: profile }).required) {
+				return res.redirect(welcomeReturnUrl(req.query?.returnUrl));
+			}
+			return sendPage(req, res, next, path.join(pagesDir, "welcome/index.html"), users, buildDir);
+		} catch (error) {
+			return next(error);
+		}
+	});
+	router.get("/welcome/index.html", (req, res) => res.redirect(`/welcome${req.originalUrl.includes("?") ? req.originalUrl.slice(req.originalUrl.indexOf("?")) : ""}`));
 
 	for (const [route, relativePath] of Object.entries(PAGE_ROUTES)) {
 		router.get(route, (req, res, next) => {
