@@ -7,12 +7,15 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: deploy-vps
+  group: deploy-vps-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-vps-queue
+      queue: max
     # Secrets and variables come from the GitHub environment named `beta`.
     environment: beta
     steps:
