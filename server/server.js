@@ -52,6 +52,7 @@ import createXRoutes from './routes/x.js';
 import createCreateRoutes from './routes/create.js';
 import { resumeLocalProviderPolls } from './services/create/creationJob.js';
 import createBlogRoutes from './routes/blog.js';
+import createShareRoutes from './routes/share.js';
 
 // Supabase Realtime needs a WebSocket implementation on Node 20.
 if (!globalThis.WebSocket) globalThis.WebSocket = WebSocket;
@@ -104,6 +105,7 @@ app.use(createGooglePhotosRoutes(db.account));
 app.use(createVynlyRoutes(db.account));
 app.use(createAppDataRoutes({ users: db.users, credits: db.credits, notifications: db.notifications, servers: db.servers }));
 app.use(createCreateRoutes(db.create));
+app.use(createShareRoutes({ queries: db.create.queries, storage: db.create.storage, creations: db.creations }));
 app.use(createLibraryRoutes(db.library));
 app.use(createAudioClipsRoutes(db.library));
 app.use(createSuggestRoutes({ queries: db.suggestions }));

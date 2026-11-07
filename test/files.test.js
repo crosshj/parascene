@@ -63,12 +63,41 @@ test("normalizes only one safe storage basename", () => {
 
 test("signed file links use CDN host when legacy FILES_ORIGIN points at share host", () => {
 	const previous = process.env.FILES_ORIGIN;
-	process.env.FILES_ORIGIN = "https://sh.parascene.com";
+	const previousCdn = process.env.CDN_HOSTNAME;
+	process.env.FILES_ORIGIN = "https://beta-cdn.parascene.com";
+	process.env.CDN_HOSTNAME = "beta-cdn.parascene.com";
 	try {
 		assert.equal(filesOriginForRequest({ hostname: "beta.parascene.com" }), "https://cdn.parascene.com");
 	} finally {
 		if (previous === undefined) delete process.env.FILES_ORIGIN;
 		else process.env.FILES_ORIGIN = previous;
+		if (previousCdn === undefined) delete process.env.CDN_HOSTNAME;
+		else process.env.CDN_HOSTNAME = previousCdn;
+	}
+});
+
+test("beta CDN test host serves manual CDN file routes", async () => {
+	const previousVersion = process.env.APP_VERSION;
+	const previousNodeEnv = process.env.NODE_ENV;
+	process.env.APP_VERSION = "beta";
+	process.env.NODE_ENV = "production";
+	const app = express();
+	app.use(createCdnHostBoundary((req, res) => res.json({ service: "cdn", path: req.path })));
+	app.get("/s/v1/:token", (req, res) => res.json({ service: "share", token: req.params.token }));
+	try {
+		await withServer(app, async (base) => {
+			const file = await requestWithHost(base, "/s/signed-token/image.png", "beta-cdn.parascene.com");
+			assert.equal(file.status, 200);
+			assert.equal(JSON.parse(file.text).service, "cdn");
+
+			const site = await requestWithHost(base, "/s/signed-token/image.png", "beta.parascene.com");
+			assert.equal(site.status, 404);
+		});
+	} finally {
+		if (previousVersion === undefined) delete process.env.APP_VERSION;
+		else process.env.APP_VERSION = previousVersion;
+		if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+		else process.env.NODE_ENV = previousNodeEnv;
 	}
 });
 

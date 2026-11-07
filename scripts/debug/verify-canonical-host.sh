@@ -21,17 +21,19 @@ REDIRECT_URLS=(
 	"http://www.${APEX}"
 )
 OK_URL="${CANONICAL}/"
+PROBE_PATH="/__canonical-host-check?source=verify"
+EXPECTED_REDIRECT="${CANONICAL}${PROBE_PATH}"
 
 FAILED=0
 
 check_redirect() {
 	local url="$1"
 	local out
-	out="$(curl -sI -w '%{http_code}\n%{redirect_url}' -o /dev/null "$url" 2>/dev/null)" || true
+	out="$(curl -sSI -w '\n%{http_code}' "${url}${PROBE_PATH}" 2>/dev/null)" || true
 	local status
-	status="$(echo "$out" | head -1)"
 	local location
-	location="$(echo "$out" | tail -1)"
+	status="$(echo "$out" | tail -1 | tr -d '\r')"
+	location="$(echo "$out" | awk 'BEGIN { IGNORECASE = 1 } /^location:/ { sub(/^[^:]*:[[:space:]]*/, ""); gsub(/\r/, ""); value = $0 } END { print value }')"
 	if [[ "$status" != "301" && "$status" != "307" && "$status" != "308" ]]; then
 		echo "FAIL: $url → expected 301, 307, or 308, got ${status:-empty}"
 		FAILED=1
@@ -42,8 +44,8 @@ check_redirect() {
 		echo "OK:   $url → $status (redirect; target not verified)"
 		return
 	fi
-	if [[ "$location" != "${OK_URL}"* ]]; then
-		echo "FAIL: $url → redirect should go to ${OK_URL}..., got $location"
+	if [[ "$location" != "$EXPECTED_REDIRECT" ]]; then
+		echo "FAIL: $url → expected ${EXPECTED_REDIRECT}, got $location"
 		FAILED=1
 	else
 		echo "OK:   $url → $status → $location"

@@ -2671,6 +2671,27 @@ async function loadOwnedCompletedAudio(req, res) {
 		}
 	}));
 
-registerCreationLibraryRoutes({ router, requireUser, queries, storage });
-return router;
+// Mint the same canonical production share link from beta and prod.
+router.post("/api/create/images/:id/share", asyncRoute(async (req, res) => {
+	const user = await requireUser(req, res);
+	if (!user) return;
+	const id = Number(req.params.id);
+	if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Invalid creation id" });
+	let image = await queries.selectCreatedImageById?.get(id, user.id);
+	if (!image) {
+		const any = await queries.selectCreatedImageByIdAnyUser?.get(id);
+		const published = any?.published === true || any?.published === 1;
+		if (!any || (!published && user.role !== "admin")) return res.status(404).json({ error: "Image not found" });
+		image = any;
+	}
+	if ((image.status || "completed") !== "completed") {
+		return res.status(400).json({ error: "Only completed images can be shared" });
+	}
+	const token = mintShareToken({ version: ACTIVE_SHARE_VERSION, imageId: id, sharedByUserId: Number(user.id) });
+	const bust = Math.floor(Date.now() / 1000).toString(36);
+	return res.json({ url: `${getShareBaseUrl()}/s/${ACTIVE_SHARE_VERSION}/${token}/${bust}` });
+}));
+
+	registerCreationLibraryRoutes({ router, requireUser, queries, storage });
+	return router;
 }

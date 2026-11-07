@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import express from 'express';
 import createCreateRoutes from '../server/routes/create.js';
 import { saveShareAudioFromVideo } from '../server/services/create/shareAudio.js';
+import { verifyShareToken } from '../server/routes/utils/shareLink.js';
 
 function videoRow(overrides = {}) {
 	return {
@@ -111,4 +112,21 @@ test('share audio is extracted from the stored video, not an uploaded blob', asy
 	assert.equal(deps.clips.length, 1);
 	assert.equal(deps.clips[0].source_type, 'video_extract');
 	assert.equal(deps.clips[0].source_created_image_id, 9);
+});
+
+test('share-link minting is authenticated, access-checked, and always uses the production host', async () => {
+	const deps = harness();
+	await withRoute(deps, async (request) => {
+		assert.equal((await request('/api/create/images/9/share', { user: 0 })).status, 401);
+		assert.equal((await request('/api/create/images/9/share', { user: 8 })).status, 404);
+		const owned = await request('/api/create/images/9/share');
+		assert.equal(owned.status, 200);
+		const url = new URL(owned.data.url);
+		assert.equal(url.hostname, 'sh.parascene.com');
+		assert.match(url.pathname, /^\/s\/v1\//);
+		const [, , version, token] = url.pathname.split('/');
+		assert.deepEqual(verifyShareToken({ version, token }), { ok: true, imageId: 9, sharedByUserId: 7 });
+		const published = await request('/api/create/images/10/share', { user: 8 });
+		assert.equal(published.status, 200);
+	});
 });
