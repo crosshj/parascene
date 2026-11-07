@@ -20,16 +20,12 @@ deploy_target() {
 			API_HOSTNAME="beta-api.parascene.com"
 			SHARE_HOSTNAME="beta-sh.parascene.com"
 			CDN_HOSTNAME="beta-cdn.parascene.com"
-			# Also terminate the live prod CDN hostname on this container so
-			# prod.parascene.com can upload to cdn.parascene.com (same VPS CDN).
-			CDN_HOST_ALIASES="cdn.parascene.com"
-			# Beta still terminates its own api/cdn/share names on this host,
-			# plus the shared prod CDN name.
+			# Beta terminates its own site/api/cdn/share names on this host.
 			NGINX_SERVER_NAMES="__SITE_API_CDN_SHARE__"
 			;;
 		prod)
-			# Frontend-only rehearsal on the same VPS. Visitors hit Cloudflare →
-			# this origin; API/CDN/share stay on the live prod hosts (Vercel/etc).
+			# Same VPS, prod container. Site is the frontend rehearsal host.
+			# CDN is the live prod media host on this container. api/sh stay on Vercel.
 			APP_HOME_NAME="parascene-prod"
 			CONTAINER_NAME="parascene-prod"
 			HOST_PORT="3001"
@@ -38,8 +34,7 @@ deploy_target() {
 			API_HOSTNAME="api.parascene.com"
 			SHARE_HOSTNAME="sh.parascene.com"
 			CDN_HOSTNAME="cdn.parascene.com"
-			CDN_HOST_ALIASES=""
-			NGINX_SERVER_NAMES="__SITE_ONLY__"
+			NGINX_SERVER_NAMES="__SITE_AND_CDN__"
 			;;
 		*)
 			echo "DEPLOY_ENV must be beta or prod (got: ${DEPLOY_ENV:-})" >&2
@@ -61,11 +56,11 @@ render_nginx_config() {
 		__SITE_ONLY__)
 			server_names="$SITE_HOST"
 			;;
+		__SITE_AND_CDN__)
+			server_names="${SITE_HOST} ${CDN_HOSTNAME}"
+			;;
 		__SITE_API_CDN_SHARE__|"")
 			server_names="${SITE_HOST} ${API_HOSTNAME} ${SHARE_HOSTNAME} ${CDN_HOSTNAME}"
-			if [[ -n "${CDN_HOST_ALIASES:-}" ]]; then
-				server_names="${server_names} ${CDN_HOST_ALIASES}"
-			fi
 			;;
 		*)
 			server_names="$NGINX_SERVER_NAMES"
