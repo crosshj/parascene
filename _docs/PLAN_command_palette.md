@@ -1,31 +1,10 @@
-# Plan: Command palette (quick switcher)
+# Command palette — remaining work
 
-v1 shipped: navigation-only quick switcher on chat SPA (`Cmd/Ctrl+K` desktop). Modules: `src/shared/commandPalette/commandPaletteProvider.js`, `commandPalette.js`. Wired from `src/chat/chatPage.js`.
+The command palette is available across the app with `Cmd/Ctrl+K` on desktop. Mobile access is still open: `open()` in `client/shared/commandPalette/commandPalette.js` deliberately returns at mobile widths, and the chat header has no search/jump control.
 
-## Later — discovery
+## Open
 
-- `@` / `#` prefix filters (Discord-style)
-- `GET /api/suggest?source=users` then `POST /api/chat/dm` (reuse `chatSidebarModals.js`)
-- `GET /api/chat/channel-slugs` for unjoined public channels
-- Server browse/join from palette
+- [ ] Add a visible search/jump button to the mobile chat header that opens the existing command palette. Keep the control in the chat header, use the app's standard icon/button treatment, and provide an accessible name.
+- [ ] Keep the desktop shortcut behavior unchanged. Verify the mobile control opens the palette and supports search, selection, close, and focus behavior at narrow viewport sizes.
 
-## Later — actions
-
-- Mark read, pin DM, open profile/settings
-- Optional command mode (`>` prefix)
-
-## Later — mobile
-
-- Search/jump button in chat top bar
-- Consider FAB or header long-press
-
-## Later — cross-page
-
-- Mount from future `app-route-chat` / Connect when nav unification lands (`PLAN_chat_nav_unification.md`)
-- Optional `sessionStorage` visit history for recents better than activity sort
-
-## Later — polish
-
-- Highlight current destination; dim active row
-- Unread badges (data exists on threads; partial in v1)
-- Fuzzy subsequence scoring if substring match feels too strict
+The prefix filters, server discovery/join flows, command actions, recents, and other polish ideas from the earlier draft are not committed work and are intentionally omitted from this remaining-work list.

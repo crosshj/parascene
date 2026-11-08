@@ -1,4 +1,4 @@
-import { isChatBroadcastMentionSlug } from "../../../client/shared/chatBroadcastMentions.js";
+import { isChatBroadcastMentionSlug } from "../../shared.js";
 
 function escapeRegExp(value) {
 	return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

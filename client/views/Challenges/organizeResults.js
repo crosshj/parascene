@@ -11,9 +11,9 @@ import {
 	rankTopSubmitters,
 	defaultWinnersFromRanked,
 	normalizeExcludedUserNames
-} from '../../shared/challenges/model/ranking.js';
-import { resolveChallengePrizes } from '../../shared/challenges/model/prizes.js';
-import { deriveChallengePhase } from '../../shared/challenges/model/phases.js';
+} from '../../shared.js';
+import { resolveChallengePrizes } from '../../shared.js';
+import { deriveChallengePhase } from '../../shared.js';
 import {
 	renderResultsPanelLoadingHtml,
 	renderResultsPanelErrorHtml,

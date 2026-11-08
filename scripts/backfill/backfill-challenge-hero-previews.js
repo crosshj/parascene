@@ -18,7 +18,7 @@ import {
 	isChallengeConfigSoftDeleted,
 	mergeFullChallengeConfigForChallenge,
 	pickChallengeHeroImageUrl
-} from "../../client/shared/challenges/challengeAdmin.js";
+} from "../../shared/index.js";
 import {
 	findChallengesChannelThreadId,
 	fetchThreadMessagesNewestFirst,

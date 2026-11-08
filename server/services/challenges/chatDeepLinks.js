@@ -2,8 +2,8 @@ import { otherUserIdFromDmPairKey } from "./dmChatInboxTitle.js";
 
 /**
  * Path-only deep link for opening a chat thread the same way the standalone chat UI does:
- * - channel → `/chat/c/:slug`
- * - dm → `/chat/dm/:username` or `/chat/dm/:numericId`
+ * - channel → `/ch/:slug`
+ * - dm → `/dm/:username` or `/dm/:numericId`
  * - fallback → `/chat/t/:threadId`
  * @param {{
  *   threadId: number | null | undefined,
@@ -28,7 +28,7 @@ export function pathnameChatOpenForViewer({
 	if (ttype === "channel") {
 		const slug = typeof channelSlug === "string" ? channelSlug.trim() : "";
 		if (slug) {
-			return `/chat/c/${encodeURIComponent(slug)}`;
+			return `/ch/${encodeURIComponent(slug)}`;
 		}
 	}
 	if (ttype === "dm") {
@@ -37,13 +37,13 @@ export function pathnameChatOpenForViewer({
 		if (oid != null && Number.isFinite(oid) && oid > 0) {
 			const un = typeof otherUserProfile?.user_name === "string" ? otherUserProfile.user_name.trim().toLowerCase() : "";
 			if (un && /^[a-z0-9][a-z0-9_]{2,23}$/.test(un)) {
-				return `/chat/dm/${encodeURIComponent(un)}`;
+				return `/dm/${encodeURIComponent(un)}`;
 			}
-			return `/chat/dm/${encodeURIComponent(String(oid))}`;
+			return `/dm/${encodeURIComponent(String(oid))}`;
 		}
 	}
 	if (tid != null && tid > 0) {
 		return `/chat/t/${encodeURIComponent(String(tid))}`;
 	}
-	return "/connect#chat";
+	return "/chat";
 }

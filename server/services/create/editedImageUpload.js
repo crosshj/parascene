@@ -2,7 +2,7 @@ import sharp from "sharp";
 import {
 	dimensionsForAspectRatioLongEdge,
 	parseAspectRatioString,
-} from "../../../client/shared/aspectRatio.js";
+} from "../../shared.js";
 
 const EDITED_UPLOAD_LONG_EDGE = 1024;
 const LETTERBOX_BACKGROUND = { r: 24, g: 24, b: 32, alpha: 1 };

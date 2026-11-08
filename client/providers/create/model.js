@@ -1,6 +1,6 @@
 import { resolveRenderableFields, fieldMatchesShowWhen } from '../../shared/providerFormFieldVisibility.js';
 import { projectCreateDraft } from './draft.js';
-import * as defaults from '../../shared/generationDefaults.js';
+import * as defaults from '../../shared.js';
 
 // Mode is a projection of the retained draft, never a replacement draft.
 export function createModeChange({ mode, engine = 'ltx', prompt, aspectRatio, serverId, methodKey, model, styleKey } = {}) {

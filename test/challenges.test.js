@@ -4,7 +4,7 @@ import { challengeCreationForViewer, appendChallengeMediaProof, listChallengeEnt
 import { buildChallengesChannelModel } from '../client/shared/challenges/model/buildChannelModel.js';
 import { renderChallengesPaneHtml } from '../client/views/Challenges/mountPane.js';
 import { createChallengeQueries } from '../server/db/challenges.js';
-import { viewerCanManageChallengePayouts, viewerCanOperateChallengePayout } from '../client/shared/challenges/challengeAdmin.js';
+import { viewerCanManageChallengePayouts, viewerCanOperateChallengePayout } from '../shared/index.js';
 import { resolveDisplayedOrganizeTrack } from '../client/views/Challenges/views/organizeBoardView.js';
 import { challengeDetailNeighbors, renderPastChallengesSection } from '../client/views/Challenges/views/emptyParticipantView.js';
 import { creationCardMarkup } from '../client/shared/creationGrid.js';

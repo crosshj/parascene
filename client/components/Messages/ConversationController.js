@@ -1,5 +1,5 @@
 import { encryptThreadText } from '../../providers/threads/private.js';
-import { plainTextReplyPreview } from '../../shared/plainTextReplyPreview.js';
+import { plainTextReplyPreview } from '../../shared.js';
 import { syncChatComposerSuggestCaches } from '../../shared/chatComposerSuggestCaches.js';
 
 export function createConversationController({ view, provider, route, viewerId, getViewer = () => null, onUnauthorized }) {

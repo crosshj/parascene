@@ -9,7 +9,7 @@
  * feels woven into feed life instead of a single static promo shape.
  */
 
-import { CHALLENGE_TRACK_LABELS, challengeTrackListRank } from "../../../client/shared/challenges/model/tracks.js";
+import { CHALLENGE_TRACK_LABELS, challengeTrackListRank } from "../../shared.js";
 
 /** Within this window before highlight deadline, eligible viewers see the card in slot 1. */
 const CHALLENGE_FEED_URGENT_BEFORE_MS = 72 * 60 * 60 * 1000;

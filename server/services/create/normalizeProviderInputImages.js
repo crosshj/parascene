@@ -3,7 +3,7 @@ import {
 	dimensionsForAspectRatioLongEdge,
 	dimensionsMatchAspectRatio,
 	parseAspectRatioString,
-} from "../../../client/shared/aspectRatio.js";
+} from "../../shared.js";
 import { getShareBaseUrl } from "./url.js";
 import { letterboxImageBuffer } from "./editedImageUpload.js";
 

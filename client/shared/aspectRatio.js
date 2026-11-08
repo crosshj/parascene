@@ -1,22 +1,28 @@
 /** Known aspect ratio keys (provider / create UI). */
 import {
 	MUTATE_DEFAULT_SERVER_ID,
-} from './generationDefaults.js';
+} from '../shared.js';
+import {
+	ASPECT_RATIO_PRESETS,
+	MVP_ASPECT_RATIO_KEYS,
+	closestAspectRatioPreset,
+	dimensionsForAspectRatioLongEdge,
+	dimensionsMatchAspectRatio,
+	isReferenceToVideoMethod,
+	parseAspectRatioString,
+} from '../shared.js';
+export {
+	ASPECT_RATIO_PRESETS,
+	MVP_ASPECT_RATIO_KEYS,
+	closestAspectRatioPreset,
+	dimensionsForAspectRatioLongEdge,
+	dimensionsMatchAspectRatio,
+	isReferenceToVideoMethod,
+	parseAspectRatioString,
+} from '../shared.js';
 
 /** Parascene server uploadImage — local constant avoids stale generationDefaults.js cache on deploy. */
 const UPLOAD_IMAGE_METHOD_KEY = 'uploadImage';
-
-export const ASPECT_RATIO_PRESETS = {
-	'1:1': [1, 1],
-	'4:5': [4, 5],
-	'9:16': [9, 16],
-	'16:9': [16, 9],
-};
-
-/** MVP aspect keys used in create composer and Parascene Blue video. */
-export const MVP_ASPECT_RATIO_KEYS = ['1:1', '9:16', '4:5', '16:9'];
-
-const ASPECT_MATCH_TOLERANCE = 0.04;
 
 function isUploadImageMethod(context) {
 	return (
@@ -84,66 +90,6 @@ export const EXTENDED_HERO_ASPECT_RATIOS = new Set(['4:5', '9:16', '16:9']);
  * @param {unknown} raw
  * @returns {[number, number] | null}
  */
-export function parseAspectRatioString(raw) {
-	if (raw == null) return null;
-	const key = String(raw).trim();
-	if (!key) return null;
-	const preset = ASPECT_RATIO_PRESETS[key];
-	if (preset) return preset;
-	const match = key.match(/^(\d+(?:\.\d+)?)\s*:\s*(\d+(?:\.\d+)?)$/);
-	if (!match) return null;
-	const w = Number(match[1]);
-	const h = Number(match[2]);
-	if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return null;
-	return [w, h];
-}
-
-/**
- * Pick the closest MVP preset for pixel dimensions.
- * @param {number} width
- * @param {number} height
- * @param {readonly string[]} [keys]
- * @returns {string}
- */
-export function closestAspectRatioPreset(width, height, keys = MVP_ASPECT_RATIO_KEYS) {
-	const w = Number(width);
-	const h = Number(height);
-	if (!Number.isFinite(w) || w <= 0 || !Number.isFinite(h) || h <= 0) {
-		return '1:1';
-	}
-	const actual = w / h;
-	let bestKey = '1:1';
-	let bestDelta = Infinity;
-	for (const key of keys) {
-		const preset = parseAspectRatioString(key);
-		if (!preset) continue;
-		const expected = preset[0] / preset[1];
-		const delta = Math.abs(Math.log(actual / expected));
-		if (delta < bestDelta) {
-			bestDelta = delta;
-			bestKey = key;
-		}
-	}
-	return bestKey;
-}
-
-/**
- * @param {number} width
- * @param {number} height
- * @param {unknown} aspectKey
- * @param {number} [tolerance]
- * @returns {boolean | null} null when dimensions or key invalid
- */
-export function dimensionsMatchAspectRatio(width, height, aspectKey, tolerance = ASPECT_MATCH_TOLERANCE) {
-	const w = Number(width);
-	const h = Number(height);
-	const parsed = parseAspectRatioString(aspectKey);
-	if (!parsed || w <= 0 || h <= 0) return null;
-	const actual = w / h;
-	const expected = parsed[0] / parsed[1];
-	return Math.abs(actual - expected) <= tolerance * expected;
-}
-
 /**
  * Client warning copy when output/upload aspect may not match the image.
  * @param {{ targetAspect: string, detectedAspect?: string | null, uploadAspect?: string | null, context?: string }} opts
@@ -169,18 +115,6 @@ export function buildAspectRatioMismatchMessage({
 	}
 
 	return parts.join(' ');
-}
-
-export function dimensionsForAspectRatioLongEdge(raw, longEdge = 1024) {
-	const edge = Number(longEdge);
-	const fallback = Number.isFinite(edge) && edge > 0 ? Math.round(edge) : 1024;
-	const parsed = parseAspectRatioString(raw);
-	if (!parsed) return { width: fallback, height: fallback };
-	const [rw, rh] = parsed;
-	if (rw >= rh) {
-		return { width: fallback, height: Math.max(1, Math.round((fallback * rh) / rw)) };
-	}
-	return { width: Math.max(1, Math.round((fallback * rw) / rh)), height: fallback };
 }
 
 /**
@@ -488,25 +422,6 @@ export function isText2VideoCreation(creation) {
 		typeof meta?.source_image_url === 'string' ? meta.source_image_url.trim() : '';
 	if (metaSource) return false;
 	return true;
-}
-
-/**
- * Reference-to-video: submitted images are character/style sheets, not a start frame.
- * Keep in sync with videoFirstFramePoster.js.
- * @param {unknown} method
- * @param {unknown} model
- * @returns {boolean}
- */
-export function isReferenceToVideoMethod(method, model) {
-	const methodKey = String(method || '').trim().toLowerCase().replace(/[_-]+/g, '');
-	if (methodKey === 'reference2video' || methodKey === 'ref2video' || methodKey === 'r2v') {
-		return true;
-	}
-	const modelKey = String(model || '').trim().toLowerCase();
-	if (!modelKey) return false;
-	if (/(^|[^a-z0-9])r2v([^a-z0-9]|$)/i.test(modelKey)) return true;
-	const compact = modelKey.replace(/[_-]+/g, '');
-	return compact.includes('ref2video') || compact.includes('reference2video');
 }
 
 /**

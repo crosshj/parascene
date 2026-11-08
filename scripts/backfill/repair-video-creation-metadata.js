@@ -8,7 +8,7 @@
 import { openDb } from "../../_legacy/db/index.js";
 import { loadEnv } from "../repo-root.cjs";
 import { letterboxImageBuffer } from "../../server/services/create/editedImageUpload.js";
-import { dimensionsForAspectRatioLongEdge, parseAspectRatioString } from "../../client/shared/aspectRatio.js";
+import { dimensionsForAspectRatioLongEdge, parseAspectRatioString } from "../../shared/index.js";
 
 loadEnv();
 

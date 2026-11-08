@@ -1,4 +1,4 @@
-import { CHALLENGE_SCORE_REACTION_KEYS, challengeScoreToReactionKey } from '../../shared/challenges/constants.js';
+import { CHALLENGE_SCORE_REACTION_KEYS, challengeScoreToReactionKey } from '../../shared.js';
 
 export const compareIntent = (a, b) => Number(a?.at || 0) - Number(b?.at || 0) || String(a?.id || '').localeCompare(String(b?.id || ''));
 const valid = entry => Number.isSafeInteger(entry?.messageId) && entry.messageId > 0 && Number.isSafeInteger(entry?.threadId) && entry.threadId > 0 && Number.isInteger(entry.score) && entry.score >= 0 && entry.score <= 10 && Number.isSafeInteger(entry.intent?.at) && typeof entry.intent?.id === 'string';

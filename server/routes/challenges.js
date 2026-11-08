@@ -32,9 +32,9 @@ import {
 	isChallengeConfigPurged,
 	viewerCanManageChallengePayouts,
 	viewerCanOperateChallengePayout
-} from "../../client/shared/challenges/challengeAdmin.js";
-import { deriveChallengePhase } from "../../client/shared/challenges/model/phases.js";
-import { collectChallengeVoteStats } from "../../client/shared/challenges/model/ranking.js";
+} from "../shared.js";
+import { deriveChallengePhase } from "../shared.js";
+import { collectChallengeVoteStats } from "../shared.js";
 import {
 	prepareChallengeResultsPublish,
 	executeChallengePayouts,

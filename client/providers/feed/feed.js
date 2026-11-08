@@ -4,7 +4,7 @@
  */
 
 import { getHiddenFeedItems } from "../../shared/feedHiddenItems.js";
-import { encodeFeedAck } from "../../shared/feedContinuation.js";
+import { encodeFeedAck } from "../../shared.js";
 
 export const FEED_CHANNEL_PAGE_SIZE = 28;
 

@@ -1,4 +1,4 @@
-import { isChallengeChannelAdmin, isImpliedChallengeOrganizer, pickLatestChallengesGlobalConfig, resolveChallengeOrganizerAllowlistFromMessages } from '../../shared/challenges/challengeAdmin.js';
+import { isChallengeChannelAdmin, isImpliedChallengeOrganizer, pickLatestChallengesGlobalConfig, resolveChallengeOrganizerAllowlistFromMessages } from '../../shared.js';
 import { mountChallengesOrganizerTools } from './mountOrganizerSidebar.js';
 
 // The organizer and participant routes consume the same complete thread query.

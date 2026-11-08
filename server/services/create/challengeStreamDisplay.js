@@ -2,9 +2,9 @@
  * Display helpers for challenge editorial media in public streams (#comments).
  */
 
-import { CHALLENGE_TRACK_LABELS, normalizeChallengeTrack } from "../../../client/shared/challenges/model/tracks.js";
-import { creationMetaHasChallengeOrganizerRef } from "../../../client/shared/challengeOrganizerRefMeta.js";
-import { creationMetaHasActiveChallengeFeedPin } from "../../../client/shared/challengeSubmitMeta.js";
+import { CHALLENGE_TRACK_LABELS, normalizeChallengeTrack } from "../../shared.js";
+import { creationMetaHasChallengeOrganizerRef } from "../../shared.js";
+import { creationMetaHasActiveChallengeFeedPin } from "../../shared.js";
 
 /**
  * True when this creation is challenge promo/results/theme media (not a normal published post).

@@ -3,8 +3,8 @@
  * Defaults mirror calendar pin-window indicators (open 7d from start, winners 14d).
  */
 
-import { addDaysYmd, isoToLocalYmd } from './dayBounds.js';
-import { challengeConfigDayRange } from './tracks.js';
+import { addDaysYmd, isoToLocalYmd } from '../../../shared.js';
+import { challengeConfigDayRange } from '../../../shared.js';
 
 /** Same defaults the server applies when creating editorial pins. */
 export const CHALLENGE_OPEN_PIN_DAYS = 7;

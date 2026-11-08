@@ -15,7 +15,19 @@ export function notificationCreationHref(notification) {
 export function notificationChatHref(notification) {
 	if (!notification) return null;
 	const link = typeof notification.link === 'string' ? notification.link.trim() : '';
-	return /^\/chat\//.test(link) ? link : null;
+	if (!link.startsWith('/') || link.startsWith('//')) return null;
+	const match = link.match(/^([^?#]*)([?#].*)?$/);
+	const pathname = match?.[1] || '';
+	const suffix = match?.[2] || '';
+	let canonicalPath = pathname;
+	if (pathname === '/connect' && suffix === '#chat') canonicalPath = '/chat';
+	else if (pathname.startsWith('/chat/c/')) canonicalPath = `/ch/${pathname.slice('/chat/c/'.length)}`;
+	else if (pathname.startsWith('/chat/dm/')) canonicalPath = `/dm/${pathname.slice('/chat/dm/'.length)}`;
+	const isChatRoute =
+		canonicalPath === '/chat' ||
+		/^\/chat\/t\/\d+(?:\/[^/]+)?$/.test(canonicalPath) ||
+		/^\/(?:ch|dm)\/[^/]+$/.test(canonicalPath);
+	return isChatRoute ? `${canonicalPath}${suffix}` : null;
 }
 
 /** @param {{ link?: string | null, creation_id?: number | null }} notification */

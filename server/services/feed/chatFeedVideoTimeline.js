@@ -2,7 +2,7 @@
  * Doom scroll order matches chat `#feed` video order (slot-pack display + tail),
  * not a separate global re-sort by timestamp alone.
  */
-import { isFeedRowVideoCreation } from "../../../client/shared/chatFeedMobilePartition.js";
+import { isFeedRowVideoCreation } from "../../shared.js";
 import { assembleFeedItems } from "./assembleFeedItems.js";
 import { pullChallengeFeedSnapshot } from "./pullChallengeFeedSnapshot.js";
 import {

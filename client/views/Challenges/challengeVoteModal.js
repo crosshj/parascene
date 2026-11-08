@@ -3,7 +3,7 @@ import {
 	challengeReactionKeyToScore,
 	challengeScoreToReactionKey,
 	parseIso
-} from '../../shared/challenges/constants.js';
+} from '../../shared.js';
 import { MODAL_DISMISS_ICON_SVG } from '../../shared/modalDismiss.js';
 import { dropMissingVoteSlide, shouldSkipVoteSlideForCreation } from './voteSlideSkip.js';
 

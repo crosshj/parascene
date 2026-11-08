@@ -1,5 +1,5 @@
 import { notifyMutateQueueUpdated } from './mutateQueueEvents.js';
-import { inputFromLegacyImage, normalizeCreationInput } from '../../shared/creationInputs.js';
+import { inputFromLegacyImage, normalizeCreationInput } from '../shared.js';
 const QUEUE_KEY = 'mutateQueue:v1';
 
 function queueImageUrlsMatch(a, b) {

@@ -20,7 +20,7 @@
 import { getAvatarColor } from './avatar.js';
 import { getPseudoStripRouteIconHtml } from './chatSidebarRoster.js';
 import { getStyleThumbUrl } from './createStyles.js';
-import { CHAT_BROADCAST_MENTION_SLUGS } from './chatBroadcastMentions.js';
+import { CHAT_BROADCAST_MENTION_SLUGS } from '../shared.js';
 
 const DEBOUNCE_MS = 130;
 const POPUP_ID = "triggered-suggest-listbox";

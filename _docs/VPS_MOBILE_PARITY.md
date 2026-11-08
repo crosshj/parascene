@@ -39,7 +39,7 @@ inherit primary-tab chrome merely because they contain browse content.
 
 ## Reference and mapping record required before each slice
 
-Migration source of truth remains [the migration guidance](BETA_VPS_SPA_MIGRATION_SOURCE_OF_TRUTH.md).
+Parity and cutover rules remain in [the VPS migration guide](VPS_MIGRATION_GUIDE.md).
 Start with the active SPA entry/import graph, not a similarly named legacy file.
 For each slice, record:
 

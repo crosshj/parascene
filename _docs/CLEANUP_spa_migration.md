@@ -57,7 +57,7 @@ Loaded by `public/pages/entry/entry-app.js`, mounted only in `pages/app.html`. N
 | `public/components/routes/creations.js` | `app-route-creations` | Superseded by creations pseudo-channel in chat |
 | `public/components/routes/templates.js` | `app-route-templates` | Never mounted in any HTML; fully orphaned |
 
-`public/components/routes/servers.js` (`app-route-servers`) is still on `app.html` and `app-admin.html` for the Connect tab — not orphaned yet, but slated for retirement per `_docs/PLAN_chat_nav_unification.md`.
+The historical WWW `app-route-servers` Connect tab lives under `_legacy`. The current VPS admin `/connect` page is a separate admin tool and is not part of consumer chat navigation.
 
 ### Broken / unused entry bootstrap
 
@@ -93,17 +93,9 @@ Wide imports still point at these instead of `spaPageOverlay.js` directly:
 - `public/shared/creationDetailOverlay.js`
 - `public/shared/promptLibraryOverlay.js`
 
-### Stale `/connect` references
+### Chat navigation status
 
-Nav unification is incomplete. Remaining legacy `/connect` / `data-route="connect"` usage:
-
-- `public/components/routes/servers.js`
-- `public/shared/chatSidebarRoster.js` (+ `src/shared/` copy)
-- `api_routes/utils/chatDeepLinks.js`
-- `pages/app.html`, `pages/app-admin.html` (`data-route-content="connect"`)
-- Mobile nav `data-route="connect"` label "Chat"
-
-See `_docs/PLAN_chat_nav_unification.md`.
+Consumer chat links now use `/chat`, `/ch/:slug`, `/dm/:slug`, or `/chat/t/:threadId`. Historical `/chat/c/*`, `/chat/dm/*`, and `/connect#chat` notification paths are normalized on read. The separate admin `/connect` page remains.
 
 ---
 
@@ -185,11 +177,10 @@ Landing (`public/pages/index.js`) is a separate pattern — inline script in `in
 
 1. Fix or delete `entry-chat.js` (broken import, unused path).
 2. Delete `app-route-templates` (`templates.js`) or wire it up if still needed.
-3. Finish `/connect` → `/chat` sweep (`PLAN_chat_nav_unification.md`).
-4. Confirm admins can use chat shell on lane URLs; then remove `app-route-feed` / `explore` / `creations` from `app.html` and `entry-app.js`.
-5. Retire `servers.js` tabbed hub once chat hub fully replaces Connect.
-6. Redirect deprecated overlay shim imports to `spaPageOverlay.js`.
-7. Update `_ARCHITECTURE_ROUTE_LOAD.md` and `ROUTES.md`.
-8. Consolidate `public/`/`src/` shared modules (highest ongoing maintenance cost).
-9. Migrate `createPageRuntime.js` and `creationEditRuntime.js` into `src/shared/` for bundle parity.
+3. Confirm admins can use chat shell on lane URLs; then remove `app-route-feed` / `explore` / `creations` from `app.html` and `entry-app.js`.
+4. Reassess the historical `servers.js` tabbed hub only if it remains in an active deployment surface.
+5. Redirect deprecated overlay shim imports to `spaPageOverlay.js`.
+6. Update `_ARCHITECTURE_ROUTE_LOAD.md` and `ROUTES.md`.
+7. Consolidate `public/`/`src/` shared modules (highest ongoing maintenance cost).
+8. Migrate `createPageRuntime.js` and `creationEditRuntime.js` into `src/shared/` for bundle parity.
 10. Shrink `chat-hotfix.js` as bundle behavior stabilizes.

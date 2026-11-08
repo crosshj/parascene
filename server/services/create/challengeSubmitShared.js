@@ -1,4 +1,4 @@
-import { deriveChallengePhase } from "../../../client/shared/challenges/model/phases.js";
+import { deriveChallengePhase } from "../../shared.js";
 import {
 	pickChallengeHeroImageUrl,
 	pickChallengeResultsCreationUrl,
@@ -12,11 +12,11 @@ import {
 	pickLatestChallengesGlobalConfig,
 	viewerOrganizesTrack,
 	tracksViewerCanOrganize
-} from "../../../client/shared/challenges/challengeAdmin.js";
+} from "../../shared.js";
 import {
 	challengeAcceptsMediaType,
 	creationMediaTypeFromMeta
-} from "../../../client/shared/challenges/model/tracks.js";
+} from "../../shared.js";
 import { verifyShareToken } from "../../routes/utils/shareLink.js";
 
 export {

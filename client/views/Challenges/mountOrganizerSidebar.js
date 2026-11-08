@@ -13,7 +13,7 @@ import {
 	viewerCanOperateChallengePayout,
 	applyChallengeListed,
 	applyChallengeUnlisted
-} from '../../shared/challenges/challengeAdmin.js';
+} from '../../shared.js';
 import { challengeConfigBodyFingerprint } from '../../shared/challenges/challengesChannelCache.js';
 import {
 	renderChallengeOrganizerModalHtml,
@@ -26,7 +26,7 @@ import {
 	bindChallengeListingToggle,
 	bindChallengePrizeCategoryToggles
 } from './views/adminView.js';
-import { deriveChallengePhase } from '../../shared/challenges/model/phases.js';
+import { deriveChallengePhase } from '../../shared.js';
 import {
 	renderOrganizeCalendarHtml,
 	resolveCalendarClick,
@@ -39,20 +39,20 @@ import {
 	localEndOfDayToIso,
 	localStartOfDayToIso,
 	majorityMonthYmdFromRange
-} from '../../shared/challenges/model/dayBounds.js';
+} from '../../shared.js';
 import {
 	findNextFreeRange,
 	normalizeChallengeTrack,
 	pickChallengeTrack,
 	rangeConflictsWithOccupied,
 	timelineIsoFromDayRange
-} from '../../shared/challenges/model/tracks.js';
+} from '../../shared.js';
 import {
 	readPrizesFromFormData,
 	resolveCreatePrizePrefills,
 	resolveCreateAcceptedMedia
-} from '../../shared/challenges/model/prizes.js';
-import { summarizeLatestChallengeConfigs } from '../../shared/challenges/model/organizerSummaries.js';
+} from '../../shared.js';
+import { summarizeLatestChallengeConfigs } from '../../shared.js';
 import { buildChallengesChannelModel } from '../../shared/challenges/model/buildChannelModel.js';
 import { createMediaLightbox } from '../../components/MediaLightbox/MediaLightbox.js';
 import { hydrateChallengeHistoryThumbnails } from '../../shared/challengeHistoryThumb.js';

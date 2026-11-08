@@ -21,7 +21,7 @@ import * as suggestMod from './triggeredSuggest.js';
 import * as profileLinksMod from './profileLinks.js';
 import * as avatarMod from './avatar.js';
 import * as iconsMod from '../icons/svg-strings.js';
-import * as replyPreviewMod from './plainTextReplyPreview.js';
+import * as replyPreviewMod from '../shared.js';
 import * as emptyStateMod from './emptyState.js';
 import * as commentItemMod from './commentItem.js';
 import * as createSubmitMod from '../providers/create/transport.js';

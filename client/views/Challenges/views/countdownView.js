@@ -1,5 +1,5 @@
-import { pickChallengeConfigTimestamp } from '../../../shared/challenges/challengeAdmin.js';
-import { esc, parseIso } from '../../../shared/challenges/constants.js';
+import { pickChallengeConfigTimestamp } from '../../../shared.js';
+import { esc, parseIso } from '../../../shared.js';
 
 /**
  * @param {number | null} endMs

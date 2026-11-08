@@ -1,6 +1,6 @@
-import { extractChallengeEvents } from './extractEvents.js';
+import { extractChallengeEvents } from '../../../shared.js';
 import { bucketConfigsForSetup } from './setupBuckets.js';
-import { buildParticipantSliceFromExtracted } from './participantSlice.js';
+import { buildParticipantSliceFromExtracted } from '../../../shared.js';
 
 function isCanvasMessageRow(m) {
 	const meta = m?.meta;

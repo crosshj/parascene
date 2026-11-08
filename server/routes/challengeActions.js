@@ -33,11 +33,11 @@ import { loadEditorialPinPolicyDocument } from "../services/feed/editorialPinPol
 import { collectChatMiscGenericKeysFromMessageBody,
 	isChatMiscGenericKeyOwnedByUser
 } from "../services/challenges/chatMiscGenericKeys.js";
-import { CHALLENGE_SCORE_REACTION_KEYS } from "../../client/shared/challenges/constants.js";
+import { CHALLENGE_SCORE_REACTION_KEYS } from "../shared.js";
 import {
 	isChallengeScoreReactionKey,
 	stripUserFromChallengeScoreReactions
-} from "../../client/shared/challenges/model/scoreReactions.js";
+} from "../shared.js";
 import { composeChatStampedReply, sanitizeClientReplyPreview } from "../services/challenges/chatReplyStamp.js";
 import {
 	mergeFullChallengeConfigForChallenge,
@@ -48,8 +48,8 @@ import {
 	pickChallengeTopicVoteCreationUrl,
 	tracksViewerCanOrganize,
 	viewerCanManageChallengePayouts
-} from "../../client/shared/challenges/challengeAdmin.js";
-import { deriveChallengePhase } from "../../client/shared/challenges/model/phases.js";
+} from "../shared.js";
+import { deriveChallengePhase } from "../shared.js";
 import { MAX_MACHINE_CHANNEL_MESSAGE_CHARS, maxChatMessageBodyChars } from "../services/challenges/chatMessageLimits.js";
 function normalizeChatReactionsBucket(raw) {
 	const out = {};

@@ -1,5 +1,5 @@
-import { esc } from '../../../shared/challenges/constants.js';
-import { rankedSubmissionsForPeerVoting } from '../../../shared/challenges/model/participantSlice.js';
+import { esc } from '../../../shared.js';
+import { rankedSubmissionsForPeerVoting } from '../../../shared.js';
 
 /**
  * @param {{

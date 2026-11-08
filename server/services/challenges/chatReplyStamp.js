@@ -1,4 +1,4 @@
-import { plainTextReplyPreview } from "../../../client/shared/plainTextReplyPreview.js";
+import { plainTextReplyPreview } from "../../shared.js";
 
 const CLIENT_REPLY_PREVIEW_HARD_MAX = 400;
 

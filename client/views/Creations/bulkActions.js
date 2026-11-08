@@ -1,4 +1,4 @@
-import { creationMetaHasChallengeAnnotation } from '../../shared/challengeSubmitMeta.js';
+import { creationMetaHasChallengeAnnotation } from '../../shared.js';
 import { addToMutateQueue } from '../../shared/mutateQueue.js';
 import { showToast } from '../../shared/toast.js';
 import { copyBulkLinks } from '../../components/BulkActions/copyLinks.js';

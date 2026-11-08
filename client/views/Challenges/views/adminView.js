@@ -1,4 +1,4 @@
-import { esc } from '../../../shared/challenges/constants.js';
+import { esc } from '../../../shared.js';
 import { MODAL_DISMISS_ICON_SVG } from '../../../shared/modalDismiss.js';
 import {
 	pickChallengeConfigTimestamp,
@@ -6,19 +6,19 @@ import {
 	pickChallengeResultsCreationUrl,
 	pickChallengeTopicVoteCreationUrl,
 	isChallengeListedForUpcoming
-} from '../../../shared/challenges/challengeAdmin.js';
-import { deriveChallengePhase } from '../../../shared/challenges/model/phases.js';
-import { isoToLocalYmd } from '../../../shared/challenges/model/dayBounds.js';
-import { pickChallengeTrack, CHALLENGE_TRACK_LABELS, normalizeChallengeTrack } from '../../../shared/challenges/model/tracks.js';
+} from '../../../shared.js';
+import { deriveChallengePhase } from '../../../shared.js';
+import { isoToLocalYmd } from '../../../shared.js';
+import { pickChallengeTrack, CHALLENGE_TRACK_LABELS, normalizeChallengeTrack } from '../../../shared.js';
 import {
 	resolveChallengePrizes,
 	formatCreditsLabel
-} from '../../../shared/challenges/model/prizes.js';
+} from '../../../shared.js';
 import {
 	rankStatsTopCreations,
 	rankTopSubmitters,
 	rankTopVoters
-} from '../../../shared/challenges/model/ranking.js';
+} from '../../../shared.js';
 import { renderOrganizeTemplatePickerHtml, renderOrganizeBoardHtml, resolveDisplayedOrganizeTrack } from './organizeBoardView.js';
 import { resolvePinSlotWindows } from '../../../shared/challenges/model/pinSlots.js';
 import { clock3Icon, megaphoneIcon, pencilIcon, trophyIcon, pictureIcon, peopleOutlined, thumbsUpStrokeIcon } from '../../../icons/svg-strings.js';

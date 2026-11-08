@@ -1,6 +1,6 @@
-import { esc } from '../../../shared/challenges/constants.js';
-import { deriveChallengePhase } from '../../../shared/challenges/model/phases.js';
-import { ACTIVE_PARTICIPANT_PHASES } from '../../../shared/challenges/model/participantSlice.js';
+import { esc } from '../../../shared.js';
+import { deriveChallengePhase } from '../../../shared.js';
+import { ACTIVE_PARTICIPANT_PHASES } from '../../../shared.js';
 import {
 	addDaysYmd,
 	compareYmd,
@@ -8,7 +8,7 @@ import {
 	daysInclusive,
 	formatYmd,
 	parseYmd
-} from '../../../shared/challenges/model/dayBounds.js';
+} from '../../../shared.js';
 import {
 	CHALLENGE_TRACK_LABELS,
 	CHALLENGE_TRACK_TEMPLATES,
@@ -18,7 +18,7 @@ import {
 	occupiedRangesForTrack,
 	pickChallengeTrack,
 	snapRangeAwayFromOccupied
-} from '../../../shared/challenges/model/tracks.js';
+} from '../../../shared.js';
 import {
 	CHALLENGE_OPEN_PIN_DAYS,
 	CHALLENGE_WINNERS_PIN_DAYS,
@@ -28,7 +28,7 @@ import {
 	mergeFullChallengeConfigForChallenge,
 	pickChallengeHeroImageUrl,
 	isChallengeListedForUpcoming
-} from '../../../shared/challenges/challengeAdmin.js';
+} from '../../../shared.js';
 import { audioClipMusicIcon, clock3Icon } from '../../../icons/svg-strings.js';
 
 export {

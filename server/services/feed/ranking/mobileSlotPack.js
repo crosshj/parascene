@@ -9,7 +9,7 @@ import {
 	feedRowIsVideoThread,
 	normalizeFeedMediaFields
 } from "./rowMedia.js";
-import { MOBILE_CHAT_SLOT_PACK_STRUCTURED_LEN } from "../../../../client/shared/chatFeedMobilePartition.js";
+import { MOBILE_CHAT_SLOT_PACK_STRUCTURED_LEN } from "../../../shared.js";
 
 /**
  * Mobile chat `#feed` page 1 — per-slot pool priority (4v+3i × 3).

@@ -1,5 +1,5 @@
-import { challengePhaseDisplayLabel } from '../../../shared/challenges/model/phases.js';
-import { esc } from '../../../shared/challenges/constants.js';
+import { challengePhaseDisplayLabel } from '../../../shared.js';
+import { esc } from '../../../shared.js';
 
 function bucketTitle(label, count) {
 	return `<h4 class="challenge-pane-setup-bucket-title">${esc(label)} <span class="challenge-pane-setup-count">(${count})</span></h4>`;

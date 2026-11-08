@@ -1,4 +1,4 @@
-import { esc } from '../../../shared/challenges/constants.js';
+import { esc } from '../../../shared.js';
 
 /**
  * @param {{ ranked: object[] }} vm

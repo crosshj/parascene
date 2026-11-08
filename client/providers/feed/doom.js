@@ -1,5 +1,5 @@
 import { getHiddenFeedItems } from "../../shared/feedHiddenItems.js";
-import { isFeedRowVideoCreation } from "../../shared/chatFeedMobilePartition.js";
+import { isFeedRowVideoCreation } from "../../shared.js";
 
 export const DOOM_FEED_PAGE_SIZE = 28;
 

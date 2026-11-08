@@ -8,7 +8,7 @@ import * as audioClipPickerFieldModule from '../../shared/audioClipPickerField.j
 import * as createWorkflowHostModule from '../../shared/createWorkflowHost.js';
 import * as providerFormFieldVisibilityModule from '../../shared/providerFormFieldVisibility.js';
 import * as chatInlineImageLightboxModule from '../../shared/chatInlineImageLightbox.js';
-import { PARASCENE_BLUE_SERVER_ID, REPLICATE_MUSIC_METHOD_KEY } from '../../shared/generationDefaults.js';
+import { PARASCENE_BLUE_SERVER_ID, REPLICATE_MUSIC_METHOD_KEY } from '../../shared.js';
 import './ProviderModals.css';
 import { disposeAutoGrowTextareas } from '../../shared/autogrow.js';
 import { disposeTriggeredSuggestFields } from '../../shared/triggeredSuggest.js';

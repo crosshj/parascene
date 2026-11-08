@@ -2,7 +2,7 @@ import { createFeedRequest } from '../../providers/feed/api.js';
 import { createChatFeedFetchPage, getChatFeedItemKey } from '../../providers/feed/feed.js';
 import { createChatFeedChannelElementsFromSegments, getChatFeedMobileSpotlightHtml, mountChatFeedLoadMoreSkeleton, removeChatFeedLoadMoreSkeleton } from './feedChannelView.js';
 import { loadDeferredChatFeedChallenge, createChatFeedChallengePlaceholderElement, isChatFeedChallengePlaceholder } from './feedChannelChallenge.js';
-import { partitionChatFeedMobileAlternating, isFeedRowVideoCreation } from '../../shared/chatFeedMobilePartition.js';
+import { partitionChatFeedMobileAlternating, isFeedRowVideoCreation } from '../../shared.js';
 import { primeDoomAudiblePlayback, rememberFeedDoomVideo } from '../../shared/doomFeedVideoCache.js';
 import { resumeMediaAudioLevelingFromGesture } from '../../shared/mediaAudioLeveling.js';
 import { createFeedItemCard, getFeedGroupVideoPlayer, getFeedItemGroupVideoSlides } from '../../shared/feedCardBuild.js';

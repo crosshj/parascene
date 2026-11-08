@@ -1,5 +1,5 @@
 // Pure shared draft model. Editors project it; only explicit actions remove values.
-import { inputFromLegacyImage, normalizeCreationInput } from '../../../shared/creationInputs.js';
+import { inputFromLegacyImage, normalizeCreationInput } from '../../shared.js';
 export const CREATE_DRAFT_VERSION = 3;
 const clone = value => Array.isArray(value) ? value.map(clone) : value && Object.getPrototypeOf(value) === Object.prototype ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, clone(item)])) : value;
 const imageKeys = new Set(['input_images', 'image_url', 'image']);

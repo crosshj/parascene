@@ -36,7 +36,7 @@ Group cover, carousel position, display URL, access context, and output destinat
 
 Cover Mutate/image edit, image-to-video from a still, queue-for-later, Basic/Advanced switches, Advanced generation, the creation composer (including drag/drop, removal and reordering), Recreate of a mutation, and Recreate of a selected grouped output. Include deep links, reload, history, group changes and delayed requests.
 
-Implementation belongs in `client/`, `server/`, `shared/`, and `test/`. No writes to `_legacy`, no runtime imports from it, and no legacy improvements. This audit used current root code and local Git history; inspecting `_legacy` was unnecessary. Before a later UI port, map the active WWW SPA references read-only as required by the [migration guidance](BETA_VPS_SPA_MIGRATION_SOURCE_OF_TRUTH.md). Follow the [client architecture](BETA_VPS_CLIENT_ARCHITECTURE.md), [Create draft contract](BETA_VPS_CLIENT_DATA_AND_STATE.md#create-provider-draft-contract), and [mobile contract](BETA_VPS_MOBILE_PARITY.md). This plan does not authorize a shell or desktop scrolling redesign.
+Implementation belongs in `client/`, `server/`, `shared/`, and `test/`. No writes to `_legacy`, no runtime imports from it, and no legacy improvements. This audit used current root code and local Git history; inspecting `_legacy` was unnecessary. Before a later UI port, map the active WWW SPA references read-only as required by the [VPS migration guide](VPS_MIGRATION_GUIDE.md). Follow the [client architecture](VPS_CLIENT_ARCHITECTURE.md), [Create draft contract](VPS_CLIENT_DATA_AND_STATE.md#create-provider-draft-contract), and [mobile contract](VPS_MOBILE_PARITY.md). This plan does not authorize a shell or desktop scrolling redesign.
 
 ## What the current code establishes
 

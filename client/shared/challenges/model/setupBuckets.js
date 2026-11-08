@@ -1,5 +1,5 @@
-import { deriveChallengePhase } from './phases.js';
-import { isChallengeListedForUpcoming } from '../challengeAdmin.js';
+import { deriveChallengePhase } from '../../../shared.js';
+import { isChallengeListedForUpcoming } from '../../../shared.js';
 
 /**
  * View-model for challenge timeline / organizer strip: past vs active vs upcoming.

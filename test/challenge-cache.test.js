@@ -4,7 +4,7 @@ import { createThreadsProvider } from '../client/providers/threads/index.js';
 import { createThreadMessagesQuery } from '../client/providers/threads/query.js';
 import { createQueryRegistry } from '../client/core/queryRegistry.js';
 import { createChallengeVotes } from '../client/providers/challenges/votes.js';
-import { CHALLENGE_SCORE_REACTION_KEYS as keys } from '../client/shared/challenges/constants.js';
+import { CHALLENGE_SCORE_REACTION_KEYS as keys } from '../shared/index.js';
 
 function storage() { const data=new Map();return {get length(){return data.size;},key:i=>[...data.keys()][i],getItem:k=>data.get(k)||null,setItem:(k,v)=>data.set(k,v),removeItem:k=>data.delete(k)}; }
 const message=id=>({id,created_at:`2026-10-05T00:00:${String(id).padStart(2,'0')}Z`,body:'{}',viewer_reactions:[],reactions:{}});

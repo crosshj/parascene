@@ -10,7 +10,7 @@
  * source slots in without touching the publish flow.
  */
 
-import { resolveChallengePrizes } from "../../../client/shared/challenges/model/prizes.js";
+import { resolveChallengePrizes } from "../../shared.js";
 
 /** Absolute per-payout ceiling — never trust client amounts. */
 export const HARD_MAX_PER_PAYOUT = 10000;
@@ -61,7 +61,7 @@ export function challengePrizeNotificationCopy({ title, reason, amount }) {
  *     top_submitters?: { user_id?: unknown, amount?: unknown }[],
  *     top_voters?: { user_id?: unknown, amount?: unknown }[],
  *   },
- *   stats: ReturnType<import('../../../client/shared/challenges/model/ranking.js').collectChallengeVoteStats>,
+ *   stats: ReturnType<import('../../shared.js').collectChallengeVoteStats>,
  *   confirmedByUserId: number,
  *   nowIso?: string,
  * }} args

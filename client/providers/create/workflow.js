@@ -1,6 +1,6 @@
 import { quoteCreation } from './quote.js';
 import { projectCreateMode, createModeChange, createSourceChange } from './model.js';
-import { materializeInputBindings, CREATION_INPUT_CONTRACT_VERSION } from '../../../shared/creationInputs.js';
+import { materializeInputBindings, CREATION_INPUT_CONTRACT_VERSION } from '../../shared.js';
 
 function cancelled(message = 'Cancelled') {
  const error = new Error(message); error.name = 'AbortError'; return error;

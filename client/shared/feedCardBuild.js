@@ -9,14 +9,14 @@ import * as likesMod from './likes.js';
 import * as avatarMod from './avatar.js';
 import * as profileLinksMod from './profileLinks.js';
 import * as helpUrlMod from './helpUrl.js';
-import * as challengeSubmitMetaMod from './challengeSubmitMeta.js';
+import * as challengeSubmitMetaMod from '../shared.js';
 import * as creationBadgesMod from './creationBadges.js';
 import {
 	isFeedRowVideoCreation,
 	isChatFeedChallengePlaceholder,
 	partitionChatFeedMobileAlternating,
 	partitionFeedVideosForChatSpotlight
-} from './chatFeedMobilePartition.js';
+} from '../shared.js';
 import { addHiddenFeedItem, getHiddenFeedItems } from './feedHiddenItems.js';
 import {
 	applyVideoFirstFramePoster,

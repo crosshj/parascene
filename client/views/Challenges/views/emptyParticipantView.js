@@ -1,13 +1,13 @@
-import { esc } from '../../../shared/challenges/constants.js';
-import { summarizeLatestChallengeConfigs } from '../../../shared/challenges/model/organizerSummaries.js';
+import { esc } from '../../../shared.js';
+import { summarizeLatestChallengeConfigs } from '../../../shared.js';
 import {
 	mergeFullChallengeConfigForChallenge,
 	pickChallengeConfigTimestamp,
 	pickChallengeHeroImageUrl,
 	isChallengeListedForUpcoming
-} from '../../../shared/challenges/challengeAdmin.js';
-import { deriveChallengePhase } from '../../../shared/challenges/model/phases.js';
-import { ACTIVE_PARTICIPANT_PHASES } from '../../../shared/challenges/model/participantSlice.js';
+} from '../../../shared.js';
+import { deriveChallengePhase } from '../../../shared.js';
+import { ACTIVE_PARTICIPANT_PHASES } from '../../../shared.js';
 import { renderChallengeHistoryThumbWrapHtml } from '../../../shared/challengeHistoryThumb.js';
 import { challengesDetailsHref } from '../../../shared/challenges/model/detailsRoute.js';
 

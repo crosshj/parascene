@@ -40,5 +40,5 @@ Why: hard "seen" exclusion dries up the pools for heavy viewers (oceanman has se
 
 ## Related
 
-- Intent: `_docs/PLAN_feed_beta_chatgpt.md` (feed session, diversity, underseen catalog)
+- Context: the ranked feed is the current feed. This plan covers the still-open session and batch-ranking changes below.
 - Current implementation: `server/services/feed/ranking/pullFeedRows.js`

@@ -1,4 +1,4 @@
-import { validateInputBindings, creationInputParentId } from '../../../shared/creationInputs.js';
+import { validateInputBindings, creationInputParentId } from '../../shared.js';
 import { groupV2Items, groupActionSupportedForMeta, parseMeta } from './groupV2.js';
 import { extractFilenameFromCreatedImagePath } from './resolveCreatedImageStorageFilename.js';
 import { getCdnOrigin } from './url.js';

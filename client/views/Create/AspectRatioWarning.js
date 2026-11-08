@@ -1,4 +1,4 @@
-import { parseAspectRatioString } from '../../shared/aspectRatio.js';
+import { parseAspectRatioString } from '../../shared.js';
 import { readImageUrlDimensions, readRasterFileDimensions } from '../../providers/create/transport.js';
 import { isImageUrlField, isImageUrlArrayField, fieldMatchesShowWhen } from '../../components/ProviderFields/ProviderFields.js';
 

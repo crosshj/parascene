@@ -4,7 +4,7 @@ import {
 	pickChallengeHeroImageUrl,
 	pickChallengeResultsCreationUrl,
 	pickChallengeTopicVoteCreationUrl
-} from '../../shared/challenges/challengeAdmin.js';
+} from '../../shared.js';
 
 const CACHE_PREFIX = 'prsn-challenge-entries-v1';
 

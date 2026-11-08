@@ -5,7 +5,7 @@ import {
 	MVP_ASPECT_RATIO_KEYS,
 	closestAspectRatioPreset,
 	parseAspectRatioString,
-} from "../../../client/shared/aspectRatio.js";
+} from "../../shared.js";
 
 /** Long edge for native-aspect (`fit`) board thumbs. */
 export const FIT_THUMB_LONG_EDGE = 720;

@@ -29,12 +29,12 @@ import {
 } from "../../server/services/feed/visitPulse.js";
 import { SCHEMA_VERSION, CORE_ACTION_TYPES, RANKED_FEED_DEFAULT_ROLLOUT_AT } from "./overview/metrics.js";
 import { findChallengesChannelThreadId } from "../../server/services/create/challengeSubmitShared.js";
-import { extractChallengeEvents } from "../../client/shared/challenges/model/extractEvents.js";
-import { summarizeLatestChallengeConfigs } from "../../client/shared/challenges/model/organizerSummaries.js";
-import { mergeFullChallengeConfigForChallenge, pickChallengeConfigTimestamp } from "../../client/shared/challenges/challengeAdmin.js";
-import { deriveChallengePhase } from "../../client/shared/challenges/model/phases.js";
-import { buildReactionsByMessageId } from "../../client/shared/challenges/model/participantSlice.js";
-import { CHALLENGE_SCORE_REACTION_KEYS, challengeReactionKeyToScore } from "../../client/shared/challenges/constants.js";
+import { extractChallengeEvents } from "../../shared/index.js";
+import { summarizeLatestChallengeConfigs } from "../../shared/index.js";
+import { mergeFullChallengeConfigForChallenge, pickChallengeConfigTimestamp } from "../../shared/index.js";
+import { deriveChallengePhase } from "../../shared/index.js";
+import { buildReactionsByMessageId } from "../../shared/index.js";
+import { CHALLENGE_SCORE_REACTION_KEYS, challengeReactionKeyToScore } from "../../shared/index.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 loadEnv();
