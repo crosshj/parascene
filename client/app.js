@@ -96,8 +96,8 @@ const routeDefinitions = [
 	{
 		path: '/challenges/organize',
 		view: views.Challenges,
-		title: 'Organize challenges',
-		viewName: 'Challenges · Organize',
+		title: 'Organizer Tools',
+		viewName: 'Challenges · Organizer Tools',
 		icon: 'trophy',
 		composer: 'none',
 	},

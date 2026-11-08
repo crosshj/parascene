@@ -334,8 +334,14 @@ export function renderCreationsView({ outlet, creationsProvider, creationsApi, c
 		if (!Number.isInteger(id) || id <= 0 || !root.isConnected) return;
 		if (event.detail?.reason === 'deleted') { removeCreation(id); return; }
   if (event.detail?.reason === 'ungrouped') { removedIds.add(String(id)); removeCreation(id); return; }
+		if (event.detail?.reason === 'create-completed' && event.detail?.creation) {
+			const item = event.detail.creation;
+			mergeServerRows([item]);
+			render({ creations: [item], has_more: false }, true);
+			return;
+		}
 		const card = refs.grid.querySelector(`.creation-grid__card[data-creation-id="${id}"]`);
-		if (!card) return;
+		if (!card && event.detail?.reason !== 'create-completed') return;
 		const queuedLocally = event.detail?.reason === 'status-changed'
 			&& ['pending', 'queued'].includes(String(event.detail?.status || '').toLowerCase());
 		if (event.detail?.reason === 'status-changed' && event.detail?.status && card.__creationRecord) {

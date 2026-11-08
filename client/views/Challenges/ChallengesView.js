@@ -9,7 +9,7 @@ import { isChallengeChannelAdmin, pickLatestChallengesGlobalConfig, resolveChall
 import { mountChallengesOrganizerTools } from './mountOrganizerSidebar.js';
 import { detailOrganizerHeaderActions } from './views/organizeBoardView.js';
 import { challengesMessagesFingerprint } from '../../shared/challenges/challengesChannelCache.js';
-import { REACTION_ICONS } from '../../icons/svg-strings.js';
+import { REACTION_ICONS, trophyIcon } from '../../icons/svg-strings.js';
 import { renderChallengePaneSkeleton, renderChallengesOrganizeBoardSkeleton } from '../../shared/skeleton.js';
 import '../../components/ChallengeCard/ChallengeCard.css';
 import '../../components/CreationGrid/CreationGrid.css';
@@ -117,7 +117,7 @@ export const ChallengesView = Object.freeze({
   function header(eligible = false) {
    headerEligible = eligible;
    const accessories = [];
-   if (eligible && location.pathname === '/challenges') {
+   if (eligible && !mobileHeaderMedia.matches && location.pathname === '/challenges') {
     accessories.push({
      label: 'Organize',
      ariaLabel: 'Organize challenges',
@@ -152,7 +152,7 @@ export const ChallengesView = Object.freeze({
     setHeaderAccessories?.([]);
     const actionItems = accessories.map((item) => ({ label: item.label, action: item.label, onClick: item.onClick }));
     setHeaderMenu?.({
-     label: 'Challenges',
+     label: organizing ? 'Organizer Tools' : 'Challenges',
      items: actionItems.length ? [...actionItems, { separator: true }, refreshItem] : [refreshItem],
      onSelect(item) {
       if (item?.action === 'refresh') { void refresh(); return; }
@@ -168,13 +168,19 @@ export const ChallengesView = Object.freeze({
     onSelect() { void refresh(); },
    });
   }
+  function organizeActionHtml(eligible) {
+   if (!eligible || organizing || location.pathname !== '/challenges') return '';
+   return `<div class="challenge-pane-column challenges-mobile-organize-column"><section class="challenge-pane-section challenges-mobile-organize-section"><button type="button" class="challenge-pane-vote-hero-btn challenge-pane-vote-hero-btn--inactive challenges-mobile-organize" data-challenges-mobile-organize aria-label="Organizer Tools"><span class="challenge-pane-vote-open-inner">${trophyIcon('challenges-mobile-organize-icon')}<span class="challenge-pane-vote-hero-btn-label">Organizer Tools</span></span></button></section></div>`;
+  }
   function onHeaderMediaChange() { if (!destroyed) header(headerEligible); }
   mobileHeaderMedia.addEventListener('change', onHeaderMediaChange);
   const afterClose = () => queueMicrotask(() => { if (!destroyed) controller?.repaint(); });
   function showPrevious(messages) {
    if (location.pathname !== '/challenges' || mounted || historyPainted) return;
    historyPainted = true;
-   root.innerHTML = `<div class="challenge-pane"><div class="challenge-pane-column">${renderChallengePaneSkeleton()}</div>${renderCachedPreviousChallengesHtml(messages, Date.now())}</div>`;
+   const cachedEligible = isChallengeChannelAdmin(viewer.user_name, resolveChallengeOrganizerAllowlistFromMessages(messages));
+   const organizeHtml = organizeActionHtml(cachedEligible);
+   root.innerHTML = `<div class="challenge-pane"><div class="challenge-pane-column">${renderChallengePaneSkeleton()}</div>${organizeHtml}${renderCachedPreviousChallengesHtml(messages, Date.now())}</div>`;
    void hydrateChallengeHistoryThumbnails(root);
   }
   function showError(message) {
@@ -199,7 +205,7 @@ export const ChallengesView = Object.freeze({
    detailChrome = null;
    const eligible = isChallengeChannelAdmin(viewer.user_name, resolveChallengeOrganizerAllowlistFromMessages(projected));
    if (organizing) mounted = mountOrganizeSnapshot(root, { messages: projected, viewer, threadId, threads, query: lease.query, reload: refresh, onClose: afterClose });
-   else mounted = mountChallengesPane({ root, threadId, viewerId: viewer.id, messages: projected, autoOpenVote: !participantPainted,
+   else mounted = mountChallengesPane({ root, threadId, viewerId: viewer.id, messages: projected, autoOpenVote: !participantPainted, organizeActionHtml: organizeActionHtml(eligible),
     entryCreations: {
      cached: (challengeId) => services.providers.challengeHistory?.entryCreations?.(threadId, challengeId) || null,
      load: (challengeId, items) => services.providers.challengeHistory?.ensureEntryCreations?.(threadId, challengeId, items) || Promise.resolve([])
@@ -261,6 +267,7 @@ export const ChallengesView = Object.freeze({
   });
   retry.addEventListener('click', () => { threads.votes.retry(); void refresh(); });
   wrapper.addEventListener('click', event => {
+   if (event.target.closest('[data-challenges-mobile-organize]')) { void actions.navigate('/challenges/organize'); return; }
    const link = event.target.closest('a[href]');
    if (!link || event.defaultPrevented || link.target || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
    const url = new URL(link.href, location.origin);

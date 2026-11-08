@@ -2765,7 +2765,29 @@ async function loadOwnedCompletedAudio(req, res) {
 			}
 			await bumpFeedVersionCounter(queries);
 			void invalidateFeedCatalogSnapshot().catch(() => {});
-			return res.json({ ok: true, id: newId, url: uploadedFilePath, width, height });
+			const createdAt = new Date().toISOString();
+			const row = {
+				id: newId,
+				user_id: user.id,
+				filename,
+				file_path: uploadedFilePath,
+				width,
+				height,
+				color: image.color ?? null,
+				status: "completed",
+				created_at: createdAt,
+				published: false,
+				title: title || null,
+				description: description || null,
+				meta,
+			};
+			const creation = {
+				...row,
+				...mapCreatedImageRowMediaFields(row, { storage }),
+				is_moderated_error: false,
+				nsfw: false,
+			};
+			return res.json({ ok: true, id: newId, url: creation.url, width, height, creation });
 		} catch (err) {
 			console.error("[POST /api/create/images/:id/adjust]", err);
 			return res.status(Number(err?.status) || 500).json({

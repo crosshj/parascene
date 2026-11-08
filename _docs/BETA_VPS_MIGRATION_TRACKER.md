@@ -1,37 +1,30 @@
-# VPS migration checklist
+# VPS migration tracker
 
-## Priorities
+This is an open-work list only. Completed ports and confirmed behavior are intentionally omitted. The [migration guidance](BETA_VPS_SPA_MIGRATION_SOURCE_OF_TRUTH.md) owns port boundaries and regression expectations; the [VPS README](BETA_VPS_README.md) owns deployment topology.
 
-1. **Restore admin** in the new WWW app; it is the largest missing operator capability.
-2. **Verify current WWW journeys:** payments, OAuth welcome and public metadata; repair anything broken.
-3. **Keep `sh` and `api` on Vercel** while they remain available and reliable.
-4. **Move hostnames later**, only when retiring their Vercel owners and after beta verification.
+## Remaining work
 
-## Detailed checklist
+### 1. Finish admin behavior parity
 
-### Now: features missing from the new WWW app
+- [ ] Complete a page-by-page behavior inventory against the legacy admin as a read-only reference. Record which actions exist, are intentionally omitted, or are still missing; use the [admin UI component inventory](ADMIN_UI_COMPONENT_INVENTORY.md) for shared presentation patterns.
+- [ ] Port remaining admin behavior, including email template preview/manual send and conversation moderation, if those remain required after the inventory.
+- [ ] Verify role enforcement in both page and API access, plus search/pagination, error states, destructive actions, and auditability.
+- [ ] Compare each admin page with its required behavior and record explicit exceptions. Existing page shells and shared components alone do not establish parity.
 
-- [ ] **Admin:** complete the legacy admin feature inventory using `_legacy/public/pages/admin.js` and `_legacy/api_routes/admin.js` as behavior references. The role-gated VPS entry point, shared navigation, tabs, tables and six pages (Users, Analytics, Jobs, Emails, Algo and Connect) now exist; continue from the [admin UI component inventory](ADMIN_UI_COMPONENT_INVENTORY.md).
-- [ ] Port remaining admin functionality, including email template preview/manual send and conversation moderation, then compare each page against its legacy behavior.
-- [ ] Verify authorization, search/pagination, errors, destructive actions and auditability across admin pages.
-- [ ] **Payments:** the pricing UI now calls the Vercel API at `api.parascene.com`; Checkout can return to either `www` or `beta`. Verify Founder checkout, credit packs, return/cancel, switching to Free and webhook updates. Beta uses the existing live Stripe setup, so avoid test purchases that would charge real money.
-- [ ] Verify WWW sitemap, robots, canonical URLs, redirects and public metadata; confirm apex DNS points to the VPS and permanently redirects to `https://www.parascene.com` with the path/query preserved.
-- [ ] **Share:** VPS now serves the legacy share page, metadata, image/video/audio handlers, and authenticated link mint endpoint; beta and prod always mint `sh.parascene.com`. Focused route tests pass. Remaining: verify manually on beta and verify production TLS/crawlers after certificate automation deploys.
+### 2. Close public-site and share verification
 
-### Later: when retiring Vercel owners
+- [ ] Deploy and verify the VPS-owned `/sitemap.xml` and `/robots.txt` endpoints. Live `/sitemap.xml` and `/sitemap_index.xml` currently return 404; the current live `robots.txt` is Cloudflare-managed and does not reference the sitemap.
+- [ ] Configure production so `robots.txt` matches legacy behavior: `User-agent: *`, `Allow: /`, and the canonical sitemap declaration. The current Cloudflare-managed response differs and does not reference the sitemap.
 
-- [ ] Keep `api.parascene.com` on Vercel for payments and Stripe webhooks; no Stripe Dashboard or webhook URL change is part of the VPS migration.
-- [ ] Port remaining non-payment API functionality only when retiring its current Vercel owner; preserve payment endpoints and webhook handling on Vercel.
-- [ ] Move notification/jobs workers and creation callbacks, recovery and polling repair. Align published `/api/worker/create` with mounted `/api/create/worker`.
-- [ ] Ensure one owner per schedule/queue/write path; verify retries, restart recovery, logs, alerts and rate limits before switching `api`.
-- [ ] **WWW cutover:** verify user journeys, responsive behavior, media delivery, monitoring, backups and rollback before moving `www`.
-- [ ] Confirm no runtime imports from `_legacy/`; retain a rollback path during CDN and hostname changes.
+### 3. Resolve API and background-job ownership before any API retirement
 
-### Already ported; retain as regression coverage
+- [ ] Decide whether the legacy API worker remains an intentional long-term owner or will be ported. Keep the payment API and Stripe webhooks on Vercel unless a separate, deliberate payment migration is approved.
+- [ ] If retiring or moving the worker, define one owner for schedules, queues, callbacks, writes, retries, and polling; specify restart recovery, logs, alerts, and rate limits.
+- [ ] Resolve the published `/api/worker/create` versus mounted `/api/create/worker` path discrepancy and document the chosen endpoint before changing job routing.
+- [ ] Verify the transition and rollback path before changing QStash destinations or worker ownership.
 
-- Help, signed-in app, Creation browsing, Feed, Doom Scroll and creation-detail overlay routing.
-- Public `/blog` index and posts are served as a standalone server route.
-- OAuth `/welcome` onboarding is served as a contained page module and resumes the pending same-site return path.
-- Creation/provider-poll jobs currently use QStash to call the legacy API worker; local development runs those jobs in process. This is temporary ownership, not API-host cutover readiness.
+### 4. Maintain production operational readiness
 
-For migration boundaries, implementation references and regression requirements, see [VPS/Beta migration guidance](BETA_VPS_SPA_MIGRATION_SOURCE_OF_TRUTH.md).
+- [ ] Confirm the production user journeys, responsive behavior, and media delivery against the active WWW reference.
+- [ ] Confirm monitoring, backups, and a tested rollback procedure for the VPS-hosted production site.
+- [ ] Keep the app import boundary clean: no runtime imports from `_legacy/`, and pass the repo-root build before frontend changes are considered complete.

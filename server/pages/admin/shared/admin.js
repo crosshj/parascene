@@ -1,4 +1,24 @@
 const menu = document.querySelector('.admin-menu');
+const creditsOutput = document.querySelector('[data-admin-credits]');
+
+function renderCredits(value) {
+	const balance = Number(value);
+	if (!creditsOutput || !Number.isFinite(balance)) return;
+	creditsOutput.textContent = `Credits: ${new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(balance)}`;
+}
+
+if (creditsOutput) {
+	fetch('/api/credits', { credentials: 'same-origin', cache: 'no-store' })
+		.then((response) => {
+			if (!response.ok) throw new Error('Unable to load credits');
+			return response.json();
+		})
+		.then((data) => renderCredits(data?.balance))
+		.catch(() => { creditsOutput.textContent = 'Credits unavailable'; });
+	document.addEventListener('credits-updated', (event) => {
+		if (event.detail?.count != null) renderCredits(event.detail.count);
+	});
+}
 
 document.addEventListener('pointerdown', (event) => {
 	if (menu?.open && !menu.contains(event.target)) menu.open = false;
