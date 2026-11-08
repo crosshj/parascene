@@ -6,8 +6,8 @@ import { inputFromLegacyImage } from '../shared/creationInputs.js';
 
 test('typed grouped source is admitted independently of output destination', async () => {
  const rows = new Map([
-  [50, { id: 50, user_id: 8, published: 1, status: 'completed', meta: { group: { kind: 'group_creations', source_creation_ids: [92] } } }],
-  [92, { id: 92, user_id: 8, published: 0, status: 'completed', filename: 'blue.png', meta: {} }],
+  [50, { id: 50, user_id: 8, published: 1, status: 'completed', meta: { group: { kind: 'group_creations', source_creation_ids: [92], source_creations: [{ id: 92, filename: 'blue.png', file_path: '/api/images/created/blue.png', status: 'completed' }] } } }],
+  [92, { id: 92, user_id: 8, published: 0, status: 'completed', filename: 'blue.png', unavailable_at: '2026-11-08T12:00:00Z', meta: {} }],
   [70, { id: 70, user_id: 7, published: 0, status: 'completed', meta: { group: { kind: 'group_v2', items: [] } } }],
  ]);
  let balance = 10;
@@ -16,6 +16,7 @@ test('typed grouped source is admitted independently of output destination', asy
  let groupWrites = 0;
  const queries = {
   selectUserById: { get: async () => ({ id: 7, role: 'user' }) },
+  selectUserProfileByUserId: { get: async () => null },
   selectServerById: { get: async () => ({ id: 1, name: 'Test', server_url: 'https://provider.example', status: 'active', server_config: { methods: { edit: { name: 'Edit', credits: 1, fields: { image_url: { type: 'image_url' }, prompt: { type: 'textarea' } } } } } }) },
   selectUserCredits: { get: async () => ({ balance }) },
   updateUserCreditsBalance: { run: async (_id, delta) => { balance += delta; } },
@@ -27,7 +28,7 @@ test('typed grouped source is admitted independently of output destination', asy
  const app = express();
  app.use(express.json());
  app.use((req, _res, next) => { req.auth = { userId: 7 }; next(); });
- app.use(createCreateRoutes({ queries, storage: {}, canUseServer: async () => true }));
+ app.use(createCreateRoutes({ queries, storage: { getImageUrl: filename => `/api/images/created/${filename}` }, canUseServer: async () => true }));
  app.use((error, _req, res, _next) => res.status(error.status || 500).json({ error: error.message }));
  const server = await new Promise(done => { const listener = app.listen(0, '127.0.0.1', () => done(listener)); });
  const previous = { mode: process.env.CREATION_JOB_MODE, token: process.env.UPSTASH_QSTASH_TOKEN, url: process.env.UPSTASH_QSTASH_URL, fetch: globalThis.fetch };
@@ -39,6 +40,11 @@ test('typed grouped source is admitted independently of output destination', asy
  try {
   const input = inputFromLegacyImage('/wrong-cover.png', { sourceId: 92, groupId: 50 }, 'selected');
   const base = `http://127.0.0.1:${server.address().port}/api/create`;
+  const sourceResponse = await previous.fetch(`${base}/images/50/mutate-source?source_id=92`);
+  assert.equal(sourceResponse.status, 200, JSON.stringify(await sourceResponse.clone().json()));
+  const sourcePayload = await sourceResponse.json();
+  assert.equal(sourcePayload.id, 92);
+  assert.equal(sourcePayload.group_id, 50);
   const body = { server_id: 1, method: 'edit', args: { prompt: 'edit', image_url: '/wrong-cover.png' }, creation_token: 'creation-token-123',
    input_contract_version: 1, inputs: [input], input_bindings: [{ field: 'image_url', attachmentIds: ['selected'] }] };
   const post = value => previous.fetch(base, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(value) });

@@ -79,7 +79,7 @@ import { healChallengeOrganizerRefsForCreationList } from "../services/create/ch
 
 import { applySourceShareUrlToMutateArgsWhenMatching } from "../services/create/mutateLineageImageUrl.js";
 import { buildMutateLineageMetaFields } from "../services/create/mutateLineageMeta.js";
-import { resolveCreationInputs } from "../services/create/resolveCreationInputs.js";
+import { isArchivedV1GroupMember, resolveCreationInputs } from "../services/create/resolveCreationInputs.js";
 import { bumpFeedVersionCounter } from "../services/feed/feedVersion.js";
 import { invalidateFeedCatalogSnapshot } from "../services/feed/ranking/catalogSnapshot.js";
 function buildGenericUrl(key) {
@@ -277,7 +277,7 @@ async function buildGroupMutateSourcePayload({ groupRow, sourceId, viewerUser })
 		}
 		const nativeV2 = isGroupV2Meta(nativeMeta);
 		if (nativeV2 && !sourceRow) return null;
-		if (sourceRow?.unavailable_at) return null;
+		if (sourceRow?.unavailable_at && !isArchivedV1GroupMember({ groupRow, sourceRow, snapshot: snap, groupMeta: nativeMeta })) return null;
 
 		const status = sourceRow?.status || snap?.status || "completed";
 		if (status !== "completed") return { error: "not_ready" };

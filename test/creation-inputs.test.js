@@ -60,6 +60,18 @@ test('archived group snapshot is materialized from its recorded artifact', async
  assert.deepEqual(result.directParentIds, [92]);
 });
 
+test('legacy group admission accepts its intentionally archived member', async () => {
+ const data = fixture();
+ data.rows.get(92).unavailable_at = '2026-11-08T12:00:00Z';
+ data.rows.get(50).meta.group.source_creations = [{ id: 92, filename: 'blue.png', status: 'completed' }];
+ const input = group(50, 92);
+ const result = await resolve([input], [{ field: 'input_images', attachmentIds: [input.id] }], data);
+ assert.deepEqual(result.args.input_images, ['https://app.example/fetch/92']);
+ assert.deepEqual(result.directParentIds, [92]);
+ data.rows.get(50).meta.group.source_creations[0].filename = 'red.png';
+ await assert.rejects(resolve([input], [{ field: 'input_images', attachmentIds: [input.id] }], data), { code: 'source_unavailable' });
+});
+
 test('native v2 member uses an authorized live row path and rejects a missing row', async () => {
  const data = fixture();
  data.rows.get(92).filename = null;
@@ -195,6 +207,8 @@ test('relative generic upload becomes a provider-fetchable CDN URL', async () =>
 
 test('a provider without a session fetches the selected non-cover member bytes', async () => {
  const data = fixture();
+ data.rows.get(92).unavailable_at = '2026-11-08T12:00:00Z';
+ data.rows.get(50).meta.group.source_creations = [{ id: 92, filename: 'blue.png', status: 'completed' }];
  const pixels = new Map([
   ['red.png', await sharp({ create: { width: 2, height: 2, channels: 4, background: '#ff0000' } }).png().toBuffer()],
   ['blue.png', await sharp({ create: { width: 2, height: 2, channels: 4, background: '#0000ff' } }).png().toBuffer()],
