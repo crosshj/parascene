@@ -1,6 +1,7 @@
 import { registerCreationLibraryRoutes } from './creationLibrary.js';
 import express from "express";
 import path from "path";
+import sharp from "sharp";
 
 import Busboy from "busboy";
 
@@ -2688,6 +2689,90 @@ async function loadOwnedCompletedAudio(req, res) {
 			credits: target.credits,
 			method: target.method,
 		});
+	}));
+
+	// Save a client-adjusted image as a new creation. The source ID is the selected
+	// creation/member ID, which can differ from the group detail route ID.
+	router.post("/api/create/images/:id/adjust", asyncRoute(async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+		const id = Number(req.params.id);
+		if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Invalid creation id" });
+
+		const image = await queries.selectCreatedImageByIdAnyUser?.get(id);
+		if (!image) return res.status(404).json({ error: "Creation not found" });
+		const isOwner = Number(image.user_id) === Number(user.id);
+		const isAdmin = user.role === "admin";
+		const isPublished = image.published === true || image.published === 1;
+		if (!isOwner && !isAdmin && !isPublished) return res.status(403).json({ error: "Forbidden" });
+		if (image.status !== "completed") return res.status(400).json({ error: "Only completed creations can be adjusted" });
+		const sourceMeta = parseMeta(image.meta) || {};
+		if (sourceMeta.media_type === "video" || sourceMeta.media_type === "audio" || sourceMeta.video?.file_path) {
+			return res.status(400).json({ error: "Adjust is only available for image creations" });
+		}
+		if (!req.is("multipart/form-data")) {
+			return res.status(400).json({ error: "Request must be multipart/form-data with an image file" });
+		}
+
+		let uploadedFilePath = null;
+		try {
+			const { fields, files } = await parseMultipartCreate(req, { maxFileBytes: 20 * 1024 * 1024 });
+			const imageFile = files?.image;
+			if (!imageFile || !Buffer.isBuffer(imageFile.buffer) || imageFile.buffer.length === 0) {
+				return res.status(400).json({ error: "No image file provided; use form field name 'image'" });
+			}
+			if (!String(imageFile.mimeType || "").toLowerCase().startsWith("image/")) {
+				return res.status(400).json({ error: "File must be an image" });
+			}
+			const clampAdjustment = (value) => {
+				const parsed = Number(value);
+				return Number.isFinite(parsed) ? Math.max(0, Math.min(200, Math.round(parsed))) : 100;
+			};
+			const brightness = clampAdjustment(fields?.brightness);
+			const contrast = clampAdjustment(fields?.contrast);
+			const saturation = clampAdjustment(fields?.saturation);
+			if (brightness === 100 && contrast === 100 && saturation === 100) {
+				return res.status(400).json({ error: "No adjustments to save" });
+			}
+
+			const pngBuffer = await sharp(imageFile.buffer).png().toBuffer();
+			const dimensions = await sharp(pngBuffer).metadata();
+			const width = Number(dimensions.width);
+			const height = Number(dimensions.height);
+			if (!(width > 0 && height > 0)) return res.status(400).json({ error: "Could not read image dimensions" });
+			if (typeof storage?.uploadImage !== "function") return res.status(503).json({ error: "Image storage is not available" });
+
+			const filename = `${user.id}_${Date.now()}_${Math.random().toString(36).slice(2, 9)}.png`;
+			uploadedFilePath = await storage.uploadImage(pngBuffer, filename);
+			const lineage = buildMutateLineageMetaFields(sourceMeta, id);
+			if (!lineage) return res.status(400).json({ error: "Invalid source creation for adjust" });
+			const meta = {
+				media_type: "image",
+				method: "adjust",
+				method_name: "Adjust",
+				args: { brightness, contrast, saturation },
+				...lineage,
+			};
+			const inserted = await queries.insertCreatedImage.run(
+				user.id, filename, uploadedFilePath, width, height, image.color ?? null, "completed", meta
+			);
+			const newId = Number(inserted?.insertId);
+			if (!(newId > 0)) throw new Error("Failed to create adjusted image");
+			const title = typeof image.title === "string" ? image.title.trim() : "";
+			const description = typeof image.description === "string" ? image.description.trim() : "";
+			if ((title || description) && queries.updateCreatedImage?.run) {
+				await queries.updateCreatedImage.run(newId, user.id, title || null, description || null, false);
+			}
+			await bumpFeedVersionCounter(queries);
+			void invalidateFeedCatalogSnapshot().catch(() => {});
+			return res.json({ ok: true, id: newId, url: uploadedFilePath, width, height });
+		} catch (err) {
+			console.error("[POST /api/create/images/:id/adjust]", err);
+			return res.status(Number(err?.status) || 500).json({
+				error: "Failed to save adjusted image",
+				message: err?.message || "Failed to save adjusted image",
+			});
+		}
 	}));
 
 	router.post("/api/create/images/:id/share-audio", asyncRoute(async (req, res) => {
