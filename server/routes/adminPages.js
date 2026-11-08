@@ -17,7 +17,7 @@ function adminHeader(currentRoute) {
 	const links = Object.entries(ADMIN_PAGES).map(([route, page]) =>
 		`<a href="${route}"${route === currentRoute ? ' aria-current="page"' : ""}>${page.label}</a>`
 	).join("");
-	return `<header class="admin-header"><details class="admin-menu"><summary>${ADMIN_PAGES[currentRoute].label}<svg class="admin-menu-caret" viewBox="0 0 12 8" aria-hidden="true"><path d="m1 1 5 5 5-5" /></svg></summary><nav class="admin-menu-panel" aria-label="Admin pages">${links}<form method="post" action="/admin/logout"><button type="submit">Log out</button></form></nav></details></header><script src="/admin/shared/admin.js" defer></script>`;
+	return `<header class="admin-header"><details class="admin-menu"><summary>${ADMIN_PAGES[currentRoute].label}<svg class="admin-menu-caret" viewBox="0 0 12 8" aria-hidden="true"><path d="m1 1 5 5 5-5" /></svg></summary><nav class="admin-menu-panel" aria-label="Admin pages">${links}<form method="post" action="/admin/logout"><button type="submit">Log out</button></form></nav></details><output class="admin-header__credits" data-admin-credits aria-label="Credits balance" aria-live="polite">Credits: …</output></header><script src="/admin/shared/admin.js" defer></script>`;
 }
 
 async function isAdmin(req, users) {

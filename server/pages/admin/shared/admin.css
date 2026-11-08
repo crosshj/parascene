@@ -1,5 +1,6 @@
 .admin-page { color-scheme: light dark; max-width: 960px; min-height: 100vh; margin: 0 auto; padding: 1rem; background: Canvas; color: CanvasText; font: 16px/1.5 system-ui, sans-serif; --admin-border: color-mix(in srgb, CanvasText 22%, Canvas); --admin-muted: color-mix(in srgb, CanvasText 62%, Canvas); --admin-hover: color-mix(in srgb, CanvasText 9%, Canvas); --admin-danger: light-dark(#a61b1b, #ff8c83); }
-.admin-header { padding-bottom: .5rem; border-bottom: 1px solid GrayText; }
+.admin-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding-bottom: .5rem; border-bottom: 1px solid GrayText; }
+.admin-header__credits { color: var(--admin-muted); font-size: .9rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .admin-menu { position: relative; width: fit-content; }
 .admin-menu summary { display: flex; align-items: center; gap: .4rem; min-height: 2rem; cursor: pointer; list-style: none; }
 .admin-menu summary::-webkit-details-marker { display: none; }

@@ -434,9 +434,9 @@ function detailBoardMeta(item) {
  * @param {object[]} messages
  * @param {number} [nowMs]
  */
-export function renderCachedPreviousChallengesHtml(messages, nowMs = Date.now()) {
+export function renderCachedPreviousChallengesHtml(messages, nowMs = Date.now(), organizeActionHtml = '') {
 	const model = buildChallengesChannelModel(Array.isArray(messages) ? messages : [], { nowMs });
-	return renderPastChallengesSection(model.raw.configs);
+	return `${organizeActionHtml}${renderPastChallengesSection(model.raw.configs)}`;
 }
 
 export function renderChallengesPaneHtml(model, opts) {
@@ -466,6 +466,7 @@ export function renderChallengesPaneHtml(model, opts) {
 		html += challengePaneColumn(
 			renderEmptyParticipantPane(model.raw.configs)
 		);
+		html += opts.organizeActionHtml || '';
 		html += renderPastChallengesSection(model.raw.configs);
 		html += '</div>';
 		return html;
@@ -491,6 +492,7 @@ export function renderChallengesPaneHtml(model, opts) {
 		html += challengePaneColumn(
 			renderNextChallengeSection(model.raw.configs, { excludeChallengeIds: excludeIds })
 		);
+		html += opts.organizeActionHtml || '';
 		html += renderPastChallengesSection(model.raw.configs, { excludeChallengeIds: excludeIds });
 		html += '</div>';
 		return html;
@@ -503,6 +505,7 @@ export function renderChallengesPaneHtml(model, opts) {
 			nowMs: model.nowMs
 		})}${renderNextChallengeSection(model.raw.configs, { excludeChallengeIds: excludeIds })}`
 	);
+	html += opts.organizeActionHtml || '';
 	html += renderPastChallengesSection(model.raw.configs, { excludeChallengeIds: excludeIds });
 
 	html += '</div>';
@@ -700,7 +703,8 @@ export function mountChallengesPane(opts) {
 		const effectiveDetailId = detailChallengeId;
 		root.innerHTML = renderChallengesPaneHtml(model, {
 			viewerId,
-			detailChallengeId: effectiveDetailId
+			detailChallengeId: effectiveDetailId,
+			organizeActionHtml: opts.organizeActionHtml || ''
 		});
 		syncDetailsChrome();
 		void hydrateChallengeHeroImage(root);
