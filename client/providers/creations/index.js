@@ -122,6 +122,10 @@ export function createCreationsProvider({ viewerId, registry } = {}) {
  function onMutation(event) {
   const reason = event.detail?.reason;
   const id = String(event.detail?.creationId ?? '');
+  if (reason === 'create-completed' && event.detail?.creation && query) {
+   mergeRows([event.detail.creation]);
+   return;
+  }
   if (reason === 'status-changed' && event.detail?.status) {
    const status = String(event.detail.status);
    queueMicrotask(() => {

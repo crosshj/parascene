@@ -7716,6 +7716,7 @@ async function loadCreation() {
 								showToast('Adjusted image saved');
 								await refreshAfterMutation('create-completed', {
 									creationId: newId,
+									creation: data.creation,
 									skipContentRefresh: true,
 								});
 								navigateCreationDetail(`/creations/${newId}`);
