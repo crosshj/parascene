@@ -1,4 +1,5 @@
 import { createModeChange, createSourceChange } from '../providers/create/model.js';
+import { inputFromLegacyImage, normalizeCreationInput } from '../../shared/creationInputs.js';
 /**
  * Sync mutate queue ↔ create attachment storage and lineage helpers.
  */
@@ -172,44 +173,6 @@ export function syncCreateAttachmentStorageFromQueue(queueItems = loadMutateQueu
 }
 
 /**
- * @param {{ reason?: string, queueLength?: number }} [detail]
- */
-/**
- * @param {string[]} imageUrls
- * @param {ReturnType<typeof loadMutateQueue>} [queueItems]
- * @returns {{ mutateOfId?: number, mutateParentIds?: number[] }}
- */
-export function getMutateLineageForImageUrls(imageUrls, queueItems = loadMutateQueue()) {
-	const urls = Array.isArray(imageUrls)
-		? imageUrls.map((v) => (typeof v === 'string' ? v.trim() : '')).filter(Boolean)
-		: [];
-	if (urls.length === 0 || !Array.isArray(queueItems) || queueItems.length === 0) return {};
-
-	const parentSet = new Set();
-	const groupSet = new Set();
-	for (const url of urls) {
-		for (const item of queueItems) {
-			const itemUrl = typeof item?.imageUrl === 'string' ? item.imageUrl.trim() : '';
-			const sid = Number(item?.sourceId);
-			if (!itemUrl || !Number.isFinite(sid) || sid <= 0) continue;
-			if (!mutateQueueImageUrlsMatch(url, itemUrl)) continue;
-			parentSet.add(sid);
-			const groupId = Number(item?.groupId);
-			if (Number.isFinite(groupId) && groupId > 0) groupSet.add(groupId);
-			break;
-		}
-	}
-	if (parentSet.size === 0) return {};
-
-	const mutateParentIds = [...parentSet];
-	return {
-		mutateOfId: mutateParentIds.length === 1 ? mutateParentIds[0] : undefined,
-		mutateParentIds,
-		...(groupSet.size === 1 ? { mutateGroupId: [...groupSet][0] } : {}),
-	};
-}
-
-/**
  * Prefill values for provider image fields from queue (first URL / all URLs).
  * @param {Record<string, { type?: string }>} fields
  * @param {ReturnType<typeof loadMutateQueue>} [queueItems]
@@ -256,8 +219,24 @@ export function syncMutateQueueOrderFromImageUrls(orderedUrls) {
  * @param {Array<number | null | undefined>} [sourceIds]
  */
 export function syncMutateQueueFromComposerAttachments(orderedUrls, sourceIds = [], groupIds = []) {
-	persistSavedCreateForm({ imageChange: { type: 'replace', images: orderedUrls }, imageSources: Object.fromEntries(orderedUrls.map((url, index) => [url, { sourceId: Number(sourceIds[index]) > 0 ? Number(sourceIds[index]) : null, groupId: Number(groupIds[index]) > 0 ? Number(groupIds[index]) : null }])) });
-	replaceMutateQueueFromImageUrls(orderedUrls, { sourceIds, groupIds });
+	const current = readSavedCreateForm();
+	const remaining = [...(current.inputs || [])];
+	const queueRemaining = [...loadMutateQueue()];
+	const inputs = orderedUrls.map((url, index) => {
+		const sourceId = Number(sourceIds[index]) > 0 ? Number(sourceIds[index]) : null;
+		const groupId = Number(groupIds[index]) > 0 ? Number(groupIds[index]) : null;
+		const match = remaining.findIndex(input => input.preview.url === url &&
+			(!sourceId || ((input.source.member?.creationId ?? input.source.creationId ?? input.source.parentCreationId ?? null) === sourceId &&
+			(input.source.groupId ?? null) === groupId)));
+		const queuedFrameIndex = queueRemaining.findIndex(item => item.imageUrl === url && item.sourceId === sourceId && item.input?.source?.kind === 'derived-still');
+		if (queuedFrameIndex >= 0 && (match < 0 || remaining[match].source.kind !== 'derived-still')) return queueRemaining.splice(queuedFrameIndex, 1)[0].input;
+		if (match >= 0) return remaining.splice(match, 1)[0];
+		const queueIndex = queueRemaining.findIndex(item => item.imageUrl === url && item.sourceId === sourceId && (item.groupId ?? null) === groupId);
+		if (queueIndex >= 0) return queueRemaining.splice(queueIndex, 1)[0].input;
+		return inputFromLegacyImage(url, { sourceId, groupId });
+	});
+	persistSavedCreateForm({ imageChange: { type: 'setInputs', inputs }, imageSources: Object.fromEntries(orderedUrls.map((url, index) => [url, { sourceId: Number(sourceIds[index]) > 0 ? Number(sourceIds[index]) : null, groupId: Number(groupIds[index]) > 0 ? Number(groupIds[index]) : null }])) });
+	replaceMutateQueueFromImageUrls(orderedUrls, { sourceIds, groupIds, inputs });
 }
 
 /**
@@ -388,6 +367,15 @@ export function syncCreationDetailToAdvancedCreate(snapshot = {}) {
 	if (userPrompt) {
 		fieldValues.prompt = userPrompt;
 	}
+	const images = Array.isArray(fieldValues.input_images) ? fieldValues.input_images
+		: typeof fieldValues.image_url === 'string' ? [fieldValues.image_url]
+		: typeof fieldValues.image === 'string' ? [fieldValues.image] : [];
+	const parentIds = [...new Set((Array.isArray(snapshot.parentIds) && snapshot.parentIds.length ? snapshot.parentIds : [snapshot.mutateOfId]).map(Number).filter(id => Number.isFinite(id) && id > 0))];
+	const mutateGroupId = Number(snapshot.mutateGroupId);
+	const recipe = snapshot.inputRecipe?.version === 1 ? snapshot.inputRecipe : null;
+	if (!recipe && parentIds.length > 1 && images.length) {
+		throw new Error('The original inputs cannot be identified from this older recipe. Choose the source images again.');
+	}
 
 	const aspect =
 		typeof fieldValues.aspect_ratio === 'string' && fieldValues.aspect_ratio.trim()
@@ -423,15 +411,25 @@ export function syncCreationDetailToAdvancedCreate(snapshot = {}) {
 
  // Reusing a creation's recipe is an explicit replacement of its input images;
  // the creation output is never mistaken for an input attachment.
- const images = Array.isArray(fieldValues.input_images) ? fieldValues.input_images
-  : typeof fieldValues.image_url === 'string' ? [fieldValues.image_url]
-  : typeof fieldValues.image === 'string' ? [fieldValues.image] : [];
- const parentIds = [...new Set((Array.isArray(snapshot.parentIds) && snapshot.parentIds.length ? snapshot.parentIds : [snapshot.mutateOfId]).map(Number).filter(id => Number.isFinite(id) && id > 0))];
- const mutateGroupId = Number(snapshot.mutateGroupId);
+ let recipeInputs = null;
+ if (recipe && Array.isArray(recipe.inputs) && Array.isArray(recipe.bindings)) {
+  const urlsById = new Map();
+  for (const binding of recipe.bindings) {
+   const values = Array.isArray(args[binding.field]) ? args[binding.field] : [args[binding.field]];
+   binding.attachmentIds?.forEach((id, index) => urlsById.set(id, values[index]));
+  }
+  try {
+   recipeInputs = recipe.inputs.map(input => normalizeCreationInput({ ...input, media: { ...input.media, ...(input.revision ? { revision: input.revision } : {}) }, preview: { url: urlsById.get(input.id) } }));
+  } catch { throw new Error('The original input recipe is unavailable. Choose the source again.'); }
+ }
+ if (!recipe && images.length === 1 && parentIds.length === 1) {
+  recipeInputs = [inputFromLegacyImage(images[0], { sourceId: parentIds[0], groupId: Number.isFinite(mutateGroupId) && mutateGroupId > 0 ? mutateGroupId : null })];
+ }
  persistSavedCreateForm({ serverId, methodKey, outputMode, tab: 'basic', fieldValues,
-  imageSources: {}, recipeLineage: { images: [...images], parentIds,
+  imageSources: {}, recreateOf: Number(snapshot.recreateOf) > 0 ? Number(snapshot.recreateOf) : null,
+  recipeLineage: recipeInputs ? null : { images: [...images], parentIds,
    ...(Number.isFinite(mutateGroupId) && mutateGroupId > 0 ? { groupIds: [mutateGroupId] } : {}) },
-  imageChange: { type: 'replace', images } }, { notify: false });
+  imageChange: recipeInputs ? { type: 'setInputs', inputs: recipeInputs } : { type: 'replace', images } }, { notify: false });
  syncSavedCreateImagesToQueue();
 
 	notifyCreateSettingsUpdated();
@@ -534,7 +532,8 @@ export function syncSavedCreateImagesToQueue() {
  const images = saved.inputImages;
  persistCreateAttachmentUrls(images);
 	replaceMutateQueueFromImageUrls(images, {
-		sourceIds: images.map(url => saved.imageSources?.[url]?.sourceId),
-		groupIds: images.map(url => saved.imageSources?.[url]?.groupId),
+		sourceIds: images.map((url, index) => saved.inputs?.[index]?.source?.member?.creationId ?? saved.inputs?.[index]?.source?.creationId ?? saved.inputs?.[index]?.source?.parentCreationId ?? saved.imageSources?.[url]?.sourceId),
+		groupIds: images.map((url, index) => saved.inputs?.[index]?.source?.groupId ?? saved.imageSources?.[url]?.groupId),
+		inputs: saved.inputs,
 	});
 }

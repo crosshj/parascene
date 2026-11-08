@@ -298,15 +298,14 @@ test('Recreate handoff preserves restored recipe inputs while clearing old edit 
  assert.deepEqual(draft.read().inputImages, []);
 });
 
-test('restored recipe ancestry is submitted only for its unchanged input set', async () => {
+test('ambiguous old recipe requires reselection and never submits unverified parents', async () => {
  const { workflow, sent } = setup();
  workflow.edit({ imageChange: { type: 'replace', images: ['/source.png'] }, imageSources: {}, recipeLineage: { images: ['/source.png'], parentIds: [17, 18] } });
  workflow.enterMode({ mode: 'image-edit', prompt: 'recreate' });
- await workflow.submit({ mode: 'image-edit' });
- assert.deepEqual(sent[0].mutateParentIds, [17, 18]);
- assert.equal(sent[0].mutateOfId, undefined);
+ await assert.rejects(workflow.submit({ mode: 'image-edit' }), /cannot be identified/);
+ assert.equal(sent.length, 0);
  await workflow.selectImages('/different.png');
  workflow.enterMode({ mode: 'image-edit', prompt: 'different input' });
  await workflow.submit({ mode: 'image-edit' });
- assert.equal(sent[1].mutateParentIds, undefined);
+ assert.equal(sent[0].mutateParentIds, undefined);
 });

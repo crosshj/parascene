@@ -1,5 +1,6 @@
 // Pure shared draft model. Editors project it; only explicit actions remove values.
-export const CREATE_DRAFT_VERSION = 2;
+import { inputFromLegacyImage, normalizeCreationInput } from '../../../shared/creationInputs.js';
+export const CREATE_DRAFT_VERSION = 3;
 const clone = value => Array.isArray(value) ? value.map(clone) : value && Object.getPrototypeOf(value) === Object.prototype ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, clone(item)])) : value;
 const imageKeys = new Set(['input_images', 'image_url', 'image']);
 const urls = value => (Array.isArray(value) ? value : []).filter(item => typeof item === 'string' && item.trim()).map(item => item.trim());
@@ -11,8 +12,16 @@ export function normalizeCreateDraft(value) {
  for (const key of Object.keys(fields)) if (Array.isArray(fields[key])) fields[key] = [...fields[key]];
  const images = Array.isArray(source.inputImages) ? urls(source.inputImages) : Array.isArray(fields.input_images)
   ? urls(fields.input_images) : urls([fields.image_url || fields.image]);
+ const inputs = Array.isArray(source.inputs) && source.inputs.length
+  ? source.inputs.map(normalizeCreationInput)
+  : images.map((url, index) => inputFromLegacyImage(url, record(source.imageSources)[url], `legacy-${index}`));
+ if (Array.isArray(source.inputs) && source.inputs.length && (inputs.length !== images.length || inputs.some((input, index) => input.preview.url !== images[index]))) {
+  throw new TypeError('Creation input identity does not match the saved images');
+ }
+ const alignedInputs = inputs.length === images.length && inputs.every((input, index) => input.preview.url === images[index])
+  ? inputs : images.map((url, index) => inputs[index]?.preview.url === url ? inputs[index] : inputFromLegacyImage(url, record(source.imageSources)[url]));
  return { ...source, draftVersion: CREATE_DRAFT_VERSION, revision: Number(source.revision) || 0,
-  imageSources: Object.fromEntries(Object.entries(record(source.imageSources)).filter(([url]) => images.includes(url))), imagesRevision: Number(source.imagesRevision) || 0, fieldRevisions: { ...record(source.fieldRevisions) }, inputImages: images, fieldValues: { ...fields, input_images: [...images], image_url: images[0] || '', image: images[0] || '' } };
+  inputs: alignedInputs, imageSources: Object.fromEntries(Object.entries(record(source.imageSources)).filter(([url]) => images.includes(url))), imagesRevision: Number(source.imagesRevision) || 0, fieldRevisions: { ...record(source.fieldRevisions) }, inputImages: images, fieldValues: { ...fields, input_images: [...images], image_url: images[0] || '', image: images[0] || '' } };
 }
 
 export function applyCreateDraftChange(current, change = {}) {
@@ -30,16 +39,27 @@ export function applyCreateDraftChange(current, change = {}) {
   else if (['string', 'number', 'boolean'].includes(typeof value)) fields[key] = value;
  }
  let images = [...draft.inputImages];
+ let inputs = [...draft.inputs];
  if (imageChange) {
   switch (imageChange.type) {
-   case 'replace': images = urls(imageChange.images); break;
+   case 'replace': {
+    images = urls(imageChange.images);
+    const remaining = [...inputs];
+    inputs = images.map(url => {
+     const index = remaining.findIndex(input => input.preview.url === url);
+     return index >= 0 ? remaining.splice(index, 1)[0] : inputFromLegacyImage(url, record(properties.imageSources ?? draft.imageSources)[url]);
+    });
+    break;
+   }
    case 'replaceFirst': {
     const first = urls([imageChange.image])[0];
     if (!first) throw new TypeError('Replacing the first image requires a URL');
-    images = images.length ? [first, ...images.slice(1)] : [first]; break;
+    images = images.length ? [first, ...images.slice(1)] : [first];
+    inputs = [inputFromLegacyImage(first, record(properties.imageSources ?? draft.imageSources)[first]), ...inputs.slice(1)]; break;
    }
-   case 'removeFirst': images = images.slice(1); break;
-   case 'clear': images = []; break;
+   case 'removeFirst': images = images.slice(1); inputs = inputs.slice(1); break;
+   case 'clear': images = []; inputs = []; break;
+   case 'setInputs': inputs = imageChange.inputs.map(normalizeCreationInput); images = inputs.map(input => input.preview.url); break;
    default: throw new TypeError(`Unknown image draft action: ${imageChange.type}`);
   }
  }
@@ -50,7 +70,7 @@ export function applyCreateDraftChange(current, change = {}) {
  const fieldRevisions = { ...draft.fieldRevisions };
  for (const key of new Set([...Object.keys(fields), ...Object.keys(draft.fieldValues)])) if (JSON.stringify(fields[key]) !== JSON.stringify(draft.fieldValues[key])) fieldRevisions[key] = draft.revision + 1;
  return normalizeCreateDraft({ ...draft, ...properties, revision: draft.revision + 1, fieldRevisions, imagesRevision: imageChange ? draft.revision + 1 : draft.imagesRevision,
-  inputImages: images, fieldValues: fields });
+  inputs, inputImages: images, fieldValues: fields });
 }
 
 export function projectCreateDraft(draft, fields = {}) {

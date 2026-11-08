@@ -112,7 +112,7 @@ test('mounted editors render shared state, submit mode projections, and release 
   root.querySelector('[data-generate-btn]').click();
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(submissions.at(-1).args.image_url, 'http://localhost/mutate.png');
-  assert.equal(submissions.at(-1).mutateOfId, 91);
+  assert.equal(submissions.at(-1).inputs[0].source.creationId, 91);
   mutate.destroy();
   assert.equal(activeSubscriptions, 0);
  } finally { dom.window.close(); }

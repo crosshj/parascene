@@ -14,7 +14,7 @@ export function attachFeedCardCreationDragSource(card) {
 	const mediaType = (card.dataset.mediaType || 'image').trim().toLowerCase();
 	const status = (card.dataset.creationStatus || '').trim().toLowerCase();
 	const creationId = idRaw != null && idRaw !== '' ? Number(idRaw) : NaN;
-	if (!Number.isFinite(creationId) || creationId <= 0 || !imageUrl) return;
+	if (!Number.isFinite(creationId) || creationId <= 0 || (!imageUrl && card.dataset.groupCreation !== '1')) return;
 	if (mediaType === 'video') return;
 	if (status === 'creating' || status === 'pending') return;
 
@@ -31,14 +31,18 @@ export function attachFeedCardCreationDragSource(card) {
 
 	card.addEventListener('dragstart', (e) => {
 		if (!e.dataTransfer) return;
+		const selectedSourceId = Number(card.dataset.selectedGroupSourceId);
+		const selectedImageUrl = Number.isFinite(selectedSourceId) && selectedSourceId > 0
+			? (card.dataset.selectedGroupSourceUrl || '').trim() : imageUrl;
+		if (!selectedImageUrl) { e.preventDefault(); return; }
 		const payload = JSON.stringify({
-			creationId,
-			imageUrl,
+			creationId: Number.isFinite(selectedSourceId) && selectedSourceId > 0 ? selectedSourceId : creationId,
+			imageUrl: selectedImageUrl,
 			published,
 			...(groupId ? { groupId } : {}),
 		});
 		e.dataTransfer.setData(PRSN_FEED_CREATION_DRAG_MIME, payload);
-		e.dataTransfer.setData('text/plain', imageUrl);
+		e.dataTransfer.setData('text/plain', selectedImageUrl);
 		e.dataTransfer.effectAllowed = 'copy';
 		card.setAttribute('aria-grabbed', 'true');
 		document.body.classList.add('prsn-creation-composer-drag-active');

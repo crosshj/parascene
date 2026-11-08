@@ -5,6 +5,7 @@ import path from "path";
 import Busboy from "busboy";
 
 import { appendCreationIdToMediaUrl, getThumbnailUrl, getShareBaseUrl } from "../services/create/url.js";
+import { materializeArchivedGroupInput } from "../services/create/materializeArchivedGroupInput.js";
 
 import { buildProviderHeaders } from "../services/create/providerAuth.js";
 import { runCreationJob, runProviderPollJob, healProviderPollOnRead, PROVIDER_TIMEOUT_MS } from "../services/create/creationJob.js";
@@ -78,6 +79,7 @@ import { healChallengeOrganizerRefsForCreationList } from "../services/create/ch
 
 import { applySourceShareUrlToMutateArgsWhenMatching } from "../services/create/mutateLineageImageUrl.js";
 import { buildMutateLineageMetaFields } from "../services/create/mutateLineageMeta.js";
+import { resolveCreationInputs } from "../services/create/resolveCreationInputs.js";
 import { bumpFeedVersionCounter } from "../services/feed/feedVersion.js";
 import { invalidateFeedCatalogSnapshot } from "../services/feed/ranking/catalogSnapshot.js";
 function buildGenericUrl(key) {
@@ -901,6 +903,11 @@ router.post("/api/create", asyncRoute(async (req, res) => {
 					args,
 					creation_token: fields.creation_token,
 					retry_of_id: fields.retry_of_id,
+					input_contract_version: fields.input_contract_version,
+					inputs: fields.inputs ? JSON.parse(fields.inputs) : undefined,
+					input_bindings: fields.input_bindings ? JSON.parse(fields.input_bindings) : undefined,
+					destination_group_id: fields.destination_group_id,
+					recreate_of: fields.recreate_of,
 					mutate_of_id: fields.mutate_of_id,
 					mutate_parent_ids: fields.mutate_parent_ids,
 					credit_cost: fields.credit_cost,
@@ -927,13 +934,24 @@ router.post("/api/create", asyncRoute(async (req, res) => {
 			hydrate_mentions,
 			style_key,
 			group_id: bodyGroupId,
-			group_of: bodyGroupOf
+			group_of: bodyGroupOf,
+			input_contract_version,
+			inputs,
+			input_bindings,
+			destination_group_id,
+			recreate_of
 		} = req.body;
-		const requestedGroupId = parsePositiveIntQuery(bodyGroupId ?? bodyGroupOf);
+		const typedInputs = input_contract_version === 1 || input_contract_version === "1";
+		if (input_contract_version != null && !typedInputs) return res.status(400).json({ error: "Unsupported input contract" });
+		if (typedInputs && (bodyGroupId != null || bodyGroupOf != null || mutate_of_id != null || mutate_parent_ids != null)) return res.status(400).json({ error: "Conflicting input lineage" });
+		if (destination_group_id != null && !parsePositiveIntQuery(destination_group_id)) return res.status(400).json({ error: "Invalid destination group" });
+		if (destination_group_id != null && (bodyGroupId != null || bodyGroupOf != null)) return res.status(400).json({ error: "Conflicting group destination" });
+		const requestedGroupId = parsePositiveIntQuery(destination_group_id ?? (typedInputs ? null : bodyGroupId ?? bodyGroupOf));
 		const resolvedGroup = await resolveOwnedGroupV2Id(queries, user.id, requestedGroupId);
 		if (resolvedGroup.error) {
 			return res.status(resolvedGroup.status || 404).json({ error: resolvedGroup.error });
 		}
+		if (destination_group_id != null && !resolvedGroup.groupId) return res.status(404).json({ error: 'destination_forbidden' });
 		const v2GroupId = resolvedGroup.groupId;
 		const safeArgs = args && typeof args === "object" ? { ...args } : {};
 		const hydrateMentions = hydrate_mentions === true || hydrate_mentions === "true" || hydrate_mentions === 1 || hydrate_mentions === "1";
@@ -1305,7 +1323,7 @@ router.post("/api/create", asyncRoute(async (req, res) => {
 			}
 
 			// Mutate lineage: create/extend meta.history
-			if (mutate_of_id != null && Number.isFinite(Number(mutate_of_id))) {
+			if (!typedInputs && mutate_of_id != null && Number.isFinite(Number(mutate_of_id))) {
 				const sourceId = Number(mutate_of_id);
 
 				let source = await queries.selectCreatedImageById.get(sourceId, user.id);
@@ -1404,7 +1422,7 @@ router.post("/api/create", asyncRoute(async (req, res) => {
 
 			// Single parent from create flow (e.g. one queued image): track lineage like mutate so we don't lose the chain.
 			if (
-				(mutate_of_id == null || !Number.isFinite(Number(mutate_of_id))) &&
+				!typedInputs && (mutate_of_id == null || !Number.isFinite(Number(mutate_of_id))) &&
 				mutateParentIds.length === 1
 			) {
 				const sourceId = Number(mutateParentIds[0]);
@@ -1450,7 +1468,7 @@ router.post("/api/create", asyncRoute(async (req, res) => {
 			}
 
 			// Merge any additional ancestor IDs into meta.history so lineage can reference multiple parents.
-			if (mutateParentIds.length > 0) {
+			if (!typedInputs && mutateParentIds.length > 0) {
 				const base = Array.isArray(meta.history) ? meta.history : [];
 				const merged = [...base, ...mutateParentIds];
 				const seenMerge = new Set();
@@ -1558,6 +1576,53 @@ router.post("/api/create", asyncRoute(async (req, res) => {
 					);
 					safeArgs[key] = arr;
 					meta.args[key] = arr;
+				}
+			}
+
+			if (typedInputs) {
+				try {
+					const submittedInputsById = new Map((Array.isArray(inputs) ? inputs : []).map(input => [input?.id, input]));
+					for (const binding of Array.isArray(input_bindings) ? input_bindings : []) {
+						const raw = args?.[binding?.field];
+						const rawUrls = (Array.isArray(raw) ? raw : [raw]).filter(value => typeof value === 'string' && value.trim());
+						const previews = (binding?.attachmentIds || []).map(id => submittedInputsById.get(id)?.preview?.url);
+						if (rawUrls.length !== previews.length || rawUrls.some((url, index) => url.trim() !== previews[index])) {
+							throw Object.assign(new Error('Image argument differs from bound input'), { status: 400, code: 'input_binding_mismatch' });
+						}
+					}
+					const effectiveBindings = Array.isArray(input_bindings) ? input_bindings.map(binding => ({ ...binding })) : [];
+					if (methodFields.input_images?.type === 'image_url_array' && !methodFields.image_url &&
+						!effectiveBindings.some(binding => binding.field === 'input_images')) {
+						const scalar = effectiveBindings.find(binding => binding.field === 'image_url');
+						if (scalar) scalar.field = 'input_images';
+					}
+					const boundFields = new Set(effectiveBindings.map(binding => binding?.field));
+					if (!boundFields.size) throw Object.assign(new Error('Missing image bindings'), { status: 400, code: 'invalid_input_bindings' });
+					for (const [key, value] of Object.entries(safeArgs)) {
+						const imageField = ['image_url', 'image', 'input_images'].includes(key) || ['image_url', 'image_url_array'].includes(methodFields[key]?.type);
+						if (imageField && !boundFields.has(key) && value != null && value !== '' && (!Array.isArray(value) || value.length)) {
+							throw Object.assign(new Error('Unbound image argument'), { status: 400, code: 'invalid_input_bindings' });
+						}
+					}
+					const resolved = await resolveCreationInputs({ inputs, bindings: effectiveBindings, fields: methodFields, args: meta.args, queries, user, shareUrlForImage, providerBase,
+						resolveInternalUrl: url => resolveCreatedImageRowForProviderImageUrl({ queries, url, baseOrigin: providerBase }),
+						materializeArchived: ({ filename }) => materializeArchivedGroupInput({ storage, userId: user.id, filename }) });
+					meta.args = resolved.args;
+					meta.input_recipe = { ...resolved.recipe, serverId: Number(server_id), method, userPrompt: originalPromptForMeta,
+						...(parsePositiveIntQuery(recreate_of) ? { recreateOf: parsePositiveIntQuery(recreate_of) } : {}) };
+					if (resolved.directParentIds.length) {
+						meta.direct_parent_ids = resolved.directParentIds;
+						const history = [];
+						for (const parentId of resolved.directParentIds) {
+							const parent = await queries.selectCreatedImageByIdAnyUser?.get(parentId);
+							const lineage = buildMutateLineageMetaFields(parseMeta(parent?.meta), parentId);
+							for (const id of lineage?.history || []) if (!history.includes(id)) history.push(id);
+						}
+						meta.history = history;
+						if (resolved.directParentIds.length === 1) meta.mutate_of_id = resolved.directParentIds[0];
+					}
+				} catch (error) {
+					return res.status(error.status || 400).json({ error: error.code || 'invalid_creation_inputs' });
 				}
 			}
 

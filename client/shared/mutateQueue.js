@@ -1,4 +1,5 @@
 import { notifyMutateQueueUpdated } from './mutateQueueEvents.js';
+import { inputFromLegacyImage, normalizeCreationInput } from '../../shared/creationInputs.js';
 const QUEUE_KEY = 'mutateQueue:v1';
 
 function queueImageUrlsMatch(a, b) {
@@ -40,13 +41,19 @@ function readQueue() {
 							: undefined;
 				const frameTimeSec = Number(item.frameTimeSec);
 				const groupIdNum = Number(item.groupId);
+				let input;
+				try { input = item.input ? normalizeCreationInput(item.input) : inputFromLegacyImage(imageUrl, {
+					sourceId: sourceIdNum, groupId: groupIdNum, fromFrame: item.fromFrame === true, frameTimeSec: item.frameTimeSec,
+				}); } catch { return null; }
+				const source = input.source;
 				return {
-					sourceId: Number.isFinite(sourceIdNum) && sourceIdNum > 0 ? sourceIdNum : null,
-					...(Number.isFinite(groupIdNum) && groupIdNum > 0 ? { groupId: groupIdNum } : {}),
-					imageUrl,
+					input,
+					sourceId: source.member?.creationId ?? source.creationId ?? source.parentCreationId ?? null,
+					...(source.groupId ? { groupId: source.groupId } : {}),
+					imageUrl: input.preview.url,
 					queuedAt: Number.isFinite(Number(item.queuedAt)) ? Number(item.queuedAt) : Date.now(),
 					published,
-					...(item.fromFrame === true ? { fromFrame: true } : {}),
+					...(source.kind === 'derived-still' ? { fromFrame: true } : {}),
 					...(Number.isFinite(frameTimeSec) && frameTimeSec >= 0 ? { frameTimeSec } : {}),
 				};
 			})
@@ -82,13 +89,20 @@ export function addToMutateQueue({ sourceId, groupId, imageUrl, published, fromF
 	if (!url) return;
 
 	const current = readQueue();
-	const filtered = current.filter((item) => !queueImageUrlsMatch(item.imageUrl, url));
+	const groupIdNum = Number(groupId);
+	const normalizedId = Number.isFinite(idNum) && idNum > 0 ? idNum : null;
+	const normalizedGroupId = Number.isFinite(groupIdNum) && groupIdNum > 0 ? groupIdNum : null;
+	const filtered = current.filter((item) => fromFrame === true
+		? item.fromFrame !== true || item.sourceId !== normalizedId || !queueImageUrlsMatch(item.imageUrl, url)
+		: normalizedId
+		? item.fromFrame === true || item.sourceId !== normalizedId || (item.groupId ?? null) !== normalizedGroupId
+		: item.sourceId || !queueImageUrlsMatch(item.imageUrl, url));
 	const isPublished = published === true || published === 1;
 	const frameSec = Number(frameTimeSec);
-	const groupIdNum = Number(groupId);
 	const nextItem = {
-		sourceId: Number.isFinite(idNum) && idNum > 0 ? idNum : null,
-		...(Number.isFinite(groupIdNum) && groupIdNum > 0 ? { groupId: groupIdNum } : {}),
+		input: inputFromLegacyImage(url, { sourceId: normalizedId, groupId: normalizedGroupId, fromFrame, frameTimeSec }),
+		sourceId: normalizedId,
+		...(normalizedGroupId ? { groupId: normalizedGroupId } : {}),
 		imageUrl: url,
 		queuedAt: Date.now(),
 		published: isPublished,
@@ -169,24 +183,26 @@ export function replaceMutateQueueFromImageUrls(orderedUrls, options = {}) {
 	const next = [];
 	for (let i = 0; i < urls.length; i++) {
 		const url = urls[i];
-		const idx = remaining.findIndex((item) => queueImageUrlsMatch(item.imageUrl, url));
+		const sid = Number(sourceIds[i]);
+		const groupId = Number(options.groupIds?.[i]);
+		const requestedSourceId = Number.isFinite(sid) && sid > 0 ? sid : null;
+		const requestedGroupId = Number.isFinite(groupId) && groupId > 0 ? groupId : null;
+		const requestedInput = options.inputs?.[i] ? normalizeCreationInput(options.inputs[i]) : null;
+		const idx = remaining.findIndex((item) => queueImageUrlsMatch(item.imageUrl, url) &&
+			(item.sourceId ?? null) === requestedSourceId && (item.groupId ?? null) === requestedGroupId &&
+			(!requestedInput || item.input.id === requestedInput.id));
 		if (idx >= 0) {
 			const prior = remaining[idx];
-			const sid = Number(sourceIds[i]);
-			const groupId = Number(options.groupIds?.[i]);
 			next.push({
 				...prior,
-				...(Number.isFinite(sid) && sid > 0 ? { sourceId: sid } : {}),
-				...(Number.isFinite(groupId) && groupId > 0 ? { groupId } : {}),
 			});
 			remaining.splice(idx, 1);
 			continue;
 		}
-		const sid = Number(sourceIds[i]);
-		const groupId = Number(options.groupIds?.[i]);
 		next.push({
-			sourceId: Number.isFinite(sid) && sid > 0 ? sid : null,
-			...(Number.isFinite(groupId) && groupId > 0 ? { groupId } : {}),
+			input: requestedInput || inputFromLegacyImage(url, { sourceId: requestedSourceId, groupId: requestedGroupId }),
+			sourceId: requestedSourceId,
+			...(requestedGroupId ? { groupId: requestedGroupId } : {}),
 			imageUrl: url,
 			queuedAt: Date.now(),
 			published: false,
@@ -197,7 +213,9 @@ export function replaceMutateQueueFromImageUrls(orderedUrls, options = {}) {
 		next.length === current.length &&
 		next.every((item, index) => queueImageUrlsMatch(item.imageUrl, current[index].imageUrl)
 			&& item.sourceId === current[index].sourceId
-			&& item.groupId === current[index].groupId);
+			&& item.groupId === current[index].groupId
+			&& item.input.source.kind === current[index].input.source.kind
+			&& item.input.id === current[index].input.id);
 	if (same) return false;
 
 	writeQueue(next, { reason: 'replace-from-attachments' });
@@ -265,6 +283,7 @@ export function replaceMutateQueueSingleItem(item) {
 	writeQueue(
 		[
 			{
+				input: inputFromLegacyImage(url, { sourceId: idNum, groupId: groupIdNum, fromFrame: item?.fromFrame === true, frameTimeSec: item?.frameTimeSec }),
 				sourceId: Number.isFinite(idNum) && idNum > 0 ? idNum : null,
 				...(Number.isFinite(groupIdNum) && groupIdNum > 0 ? { groupId: groupIdNum } : {}),
 				imageUrl: url,

@@ -1384,9 +1384,10 @@ async function handleRecreateInAdvanced() {
 				? recreateMeta.args
 				: null,
 		userPrompt: userPromptFromRecreateMeta(recreateMeta),
+  inputRecipe: recreateMeta.input_recipe,
+  recreateOf: lastDetailIsGroupCreation ? getGroupActionTarget()?.sourceId : getCreationId(),
   parentIds: recreateMeta.direct_parent_ids,
   mutateOfId: recreateMeta.mutate_of_id,
-		mutateGroupId: lastDetailIsGroupCreation ? getCreationId() : undefined,
 		outputMode,
 		styleKey,
 	}); } catch (error) { alert(error.message); return; }
@@ -8191,8 +8192,9 @@ async function loadCreation() {
 					}
 				});
 			}
-			// Keep the cover media from the main load path as-is to avoid reloading and flicker.
-			setActiveGroupSource(groupSources[0].id, { updateMedia: false });
+			const requestedSourceId = Number(new URLSearchParams(window.location.search).get('source_id'));
+			const initialSourceId = sourceById.has(requestedSourceId) ? requestedSourceId : Number(groupSources[0].id);
+			setActiveGroupSource(initialSourceId, { updateMedia: initialSourceId !== Number(groupSources[0].id) });
 		} else {
 			perf.skipPart('groupHero', isGroupCreation ? 'no-sources' : 'not-group');
 		}

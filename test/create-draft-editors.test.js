@@ -3,9 +3,8 @@ import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { persistSavedCreateForm, readSavedCreateForm, getSavedCreateDraftStore, mergeSharedSettingsIntoSessionSelections } from '../client/shared/createSettingsSync.js';
 import { persistMutateForm, syncMutateSourceToCreateStorage, syncMutatePageToAdvancedCreate, syncSavedCreateImagesToQueue, syncCreationDetailToAdvancedCreate, syncMutateQueueFromComposerAttachments } from '../client/shared/mutateQueueSync.js';
-import { loadMutateQueue } from '../client/shared/mutateQueue.js';
+import { addToMutateQueue, loadMutateQueue } from '../client/shared/mutateQueue.js';
 import { projectCreateDraft } from '../client/providers/create/draft.js';
-import { deriveCreateLineage } from '../client/providers/create/model.js';
 const dom = new JSDOM('', { url: 'http://localhost/create' });
 globalThis.window = dom.window;
 globalThis.document = dom.window.document;
@@ -47,7 +46,7 @@ test('advanced mutate handoff retains the selected group context for server auth
  const draft = readSavedCreateForm();
  assert.equal(draft.imageSources['/group-source.png'].sourceId, 91);
  assert.equal(draft.imageSources['/group-source.png'].groupId, 72);
- assert.equal(deriveCreateLineage(draft, ['/group-source.png']).mutateGroupId, 72);
+ assert.equal(draft.inputs[0].source.groupId, 72);
 });
 test('Mutate edits and video engine changes update the route without waiting for a switch', () => {
  reset(); syncMutateSourceToCreateStorage({ imageUrl: '/source.png', sourceId: 91 });
@@ -75,6 +74,17 @@ test('composer attachments use the same draft and preserve supplied lineage', ()
  assert.deepEqual(loadMutateQueue().map(item => item.sourceId), [17, 18]);
  assert.deepEqual(loadMutateQueue().map(item => item.groupId), [70, 71]);
 });
+test('composer consumes a queued frame as its uploaded still, not the parent image', () => {
+ reset();
+ const frame = 'https://cdn.parascene.com/api/images/generic/edited/7/frame.png';
+ addToMutateQueue({ sourceId: 93, imageUrl: frame, fromFrame: true, frameTimeSec: 2.5 });
+ syncMutateQueueFromComposerAttachments([frame], [93], [null]);
+ const input = readSavedCreateForm().inputs[0];
+ assert.equal(input.source.kind, 'derived-still');
+ assert.equal(input.source.url, frame);
+ assert.equal(input.source.parentCreationId, 93);
+ assert.equal(input.source.frameTimeSec, 2.5);
+});
 test('reusing a creation recipe explicitly replaces input attachments rather than using its output', () => {
  reset(); advanced();
  syncCreationDetailToAdvancedCreate({ serverId: 1, methodKey: 'replicate', args: { model: 'xai/grok-imagine-image', prompt: 'recipe', input_images: ['/recipe.png'] } });
@@ -85,8 +95,20 @@ test('recreating a grouped source retains its group authorization context', () =
  reset();
  syncCreationDetailToAdvancedCreate({ serverId: 1, methodKey: 'replicate', mutateGroupId: 72, mutateOfId: 91, args: { model: 'xai/grok-imagine-image', prompt: 'recipe', input_images: ['/recipe.png'] } });
  const draft = readSavedCreateForm();
- assert.equal(deriveCreateLineage(draft, ['/recipe.png']).mutateOfId, 91);
- assert.equal(deriveCreateLineage(draft, ['/recipe.png']).mutateGroupId, 72);
+ assert.equal(draft.inputs[0].source.member.creationId, 91);
+ assert.equal(draft.inputs[0].source.groupId, 72);
+});
+test('Recreate keeps the recipe source group when its output belongs to another group', () => {
+ reset();
+ syncCreationDetailToAdvancedCreate({ serverId: 1, methodKey: 'replicate', recreateOf: 120,
+  args: { image_url: '/api/share/v1/source/image', prompt: 'recipe' },
+  inputRecipe: { version: 1, inputs: [{ id: 'a', source: { kind: 'group-member', groupId: 72, member: { kind: 'creation', creationId: 91 } }, media: { kind: 'image' }, revision: 'a.png:123' }],
+   bindings: [{ field: 'image_url', attachmentIds: ['a'] }] } });
+ const draft = readSavedCreateForm();
+ assert.equal(draft.inputs[0].source.groupId, 72);
+ assert.equal(draft.inputs[0].source.member.creationId, 91);
+ assert.equal(draft.inputs[0].media.revision, 'a.png:123');
+ assert.equal(draft.recreateOf, 120);
 });
 test('clearing prompt keeps attachments and reflects the empty value in compatibility storage', () => {
  reset(); advanced(); persistSavedCreateForm({ fieldValues: { prompt: '' } });
@@ -97,9 +119,8 @@ test('clearing prompt keeps attachments and reflects the empty value in compatib
 
 test('recipe restoration stores original direct parents and discards stale image sources', () => {
  reset(); advanced();
- syncCreationDetailToAdvancedCreate({ serverId: 1, methodKey: 'replicate', args: { image_url: '/recipe.png' }, parentIds: [17, 18] });
- assert.deepEqual(readSavedCreateForm().recipeLineage, { images: ['/recipe.png'], parentIds: [17, 18] });
- assert.deepEqual(readSavedCreateForm().imageSources, {});
+ assert.throws(() => syncCreationDetailToAdvancedCreate({ serverId: 1, methodKey: 'replicate', args: { image_url: '/recipe.png' }, parentIds: [17, 18] }), /cannot be identified/);
  syncCreationDetailToAdvancedCreate({ serverId: 1, methodKey: 'replicate', args: { image_url: '/single.png' }, mutateOfId: 19 });
- assert.deepEqual(readSavedCreateForm().recipeLineage.parentIds, [19]);
+ assert.equal(readSavedCreateForm().inputs[0].source.creationId, 19);
+ assert.deepEqual(readSavedCreateForm().imageSources, {});
 });

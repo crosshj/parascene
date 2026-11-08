@@ -23,7 +23,6 @@ export function createModeChange({ mode, engine = 'ltx', prompt, aspectRatio, se
  if (video) change.videoEngine = engine;
  return change;
 }
-
 export function projectCreateMode(draft, { mode = draft.mode, fields, values } = {}) {
  const form = draft.fieldValues;
  if (mode === 'basic') return { prompt: form.prompt || '', model: form.model };
@@ -58,26 +57,9 @@ export function createSourceChange({ imageUrl, sourceId, groupId, published } = 
  const url = imageUrl.trim();
  const source = Number(sourceId);
  const group = Number(groupId);
- return { imageChange: { type: 'replace', images: [url] }, recipeLineage: null, imageSources: { [url]: {
+ return { imageChange: { type: 'replace', images: [url] }, recipeLineage: null, recreateOf: null, imageSources: { [url]: {
   sourceId: Number.isFinite(source) && source > 0 ? source : null,
   groupId: Number.isFinite(group) && group > 0 ? group : null,
   published: published === true,
  } } };
-}
-
-export function deriveCreateLineage(draft, imageUrls) {
- const used = [...new Set(imageUrls)];
- const recipe = draft.recipeLineage;
- const recipeIds = recipe?.images?.length && used.length === new Set(recipe.images).size && used.every(url => recipe.images.includes(url)) ? recipe.parentIds || [] : [];
- const sources = imageUrls.map(url => draft.imageSources?.[url]).filter(Boolean);
- const ids = [...new Set([...recipeIds, ...sources.map(source => Number(source.sourceId)).filter(id => Number.isFinite(id) && id > 0)])];
- const groupIds = [...new Set([
-  ...(Array.isArray(recipe?.groupIds) ? recipe.groupIds : []),
-  ...sources.map(source => source.groupId),
- ].map(Number).filter(id => Number.isFinite(id) && id > 0))];
- return ids.length ? {
-  mutateParentIds: ids,
-  ...(ids.length === 1 ? { mutateOfId: ids[0] } : {}),
-  ...(groupIds.length === 1 ? { mutateGroupId: groupIds[0] } : {}),
- } : {};
 }
