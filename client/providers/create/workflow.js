@@ -1,5 +1,6 @@
 import { quoteCreation } from './quote.js';
-import { projectCreateMode, createModeChange, createSourceChange, deriveCreateLineage } from './model.js';
+import { projectCreateMode, createModeChange, createSourceChange } from './model.js';
+import { materializeInputBindings, CREATION_INPUT_CONTRACT_VERSION } from '../../../shared/creationInputs.js';
 
 function cancelled(message = 'Cancelled') {
  const error = new Error(message); error.name = 'AbortError'; return error;
@@ -7,7 +8,7 @@ function cancelled(message = 'Cancelled') {
 const isFile = value => typeof File !== 'undefined' && value instanceof File;
 
 // No DOM dependency: controllers supply confirmation UI; adapters supply transport.
-export function createCreationWorkflow({ draft, request, send, upload, importSend, importer, restoreRecipe, lineage = () => ({}), formatMentions = () => 'Some mentions could not be resolved. Submit anyway?' }) {
+export function createCreationWorkflow({ draft, request, send, upload, importSend, importer, restoreRecipe, formatMentions = () => 'Some mentions could not be resolved. Submit anyway?' }) {
  let destroyed = false;
  let editingCreation = null;
  let editingRevision = 0;
@@ -110,7 +111,19 @@ export function createCreationWorkflow({ draft, request, send, upload, importSen
   assertAlive(signal);
   publish('submitting');
   const imageUrls = Object.entries(args).filter(([key]) => ['image_url', 'input_images', 'image'].includes(key) || ['image_url', 'image_url_array'].includes(intent.fields?.[key]?.type)).flatMap(([, value]) => Array.isArray(value) ? value : [value]).filter(value => typeof value === 'string' && value);
-  const result = await send({ ...(snapshot.recipeLineage ? {} : lineage(imageUrls, snapshot)), ...deriveCreateLineage(snapshot, imageUrls), ...intent, serverId, methodKey, args, creditCost, hydrateMentions,
+  const bound = materializeInputBindings(snapshot.inputs || [], args, intent.fields);
+  const legacyRecipe = snapshot.recipeLineage;
+  if (legacyRecipe?.images?.length && Array.isArray(legacyRecipe.parentIds) && legacyRecipe.parentIds.length > 1 &&
+   imageUrls.length === legacyRecipe.images.length && imageUrls.every(url => legacyRecipe.images.includes(url)) &&
+   bound.inputs.every(input => input.source.kind === 'external-image')) {
+   throw new Error('The original inputs cannot be identified from this older recipe. Choose the source images again.');
+  }
+  const typedInputs = bound.inputs.length ? { inputContractVersion: CREATION_INPUT_CONTRACT_VERSION, inputs: bound.inputs, inputBindings: bound.bindings } : {};
+  const submissionIntent = { ...intent };
+  delete submissionIntent.mutateOfId;
+  delete submissionIntent.mutateGroupId;
+  delete submissionIntent.mutateParentIds;
+  const result = await send({ ...submissionIntent, ...typedInputs, recreateOf: intent.recreateOf ?? snapshot.recreateOf, serverId, methodKey, args, creditCost, hydrateMentions,
    styleKey: intent.mode === 'basic' ? (intent.styleKey ?? snapshot.styleKey) === 'none' ? undefined : intent.styleKey ?? snapshot.styleKey : intent.styleKey,
    signal, clearPrompt: false, isCurrent: () => !destroyed, confirmOccupancy: (occupancy, options) => {
     publish('confirming'); return ask(confirm, { kind: 'occupancy', occupancy, options: { ...options, signal } }, signal).then(bid => { publish('submitting'); return bid; });
@@ -156,11 +169,11 @@ export function createCreationWorkflow({ draft, request, send, upload, importSen
   beginEditing,
   beginCreate() {
    endEditing();
-   return edit({ imageChange: { type: 'clear' } });
+   return edit({ imageChange: { type: 'clear' }, recreateOf: null });
   },
   selectTextToImage(options = {}) {
    endEditing();
-   return edit({ ...createModeChange({ ...options, mode: 'basic' }), imageChange: { type: 'clear' } });
+   return edit({ ...createModeChange({ ...options, mode: 'basic' }), imageChange: { type: 'clear' }, recreateOf: null });
   },
   endEditing,
   getEditingCreation: () => editingCreation ? { ...editingCreation } : null,

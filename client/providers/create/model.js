@@ -23,7 +23,6 @@ export function createModeChange({ mode, engine = 'ltx', prompt, aspectRatio, se
  if (video) change.videoEngine = engine;
  return change;
 }
-
 export function projectCreateMode(draft, { mode = draft.mode, fields, values } = {}) {
  const form = draft.fieldValues;
  if (mode === 'basic') return { prompt: form.prompt || '', model: form.model };
@@ -53,16 +52,14 @@ export function projectCreateMode(draft, { mode = draft.mode, fields, values } =
  return result;
 }
 
-export function createSourceChange({ imageUrl, sourceId, published } = {}) {
+export function createSourceChange({ imageUrl, sourceId, groupId, published } = {}) {
  if (typeof imageUrl !== 'string' || !imageUrl.trim()) throw new TypeError('A source image URL is required');
  const url = imageUrl.trim();
- return { imageChange: { type: 'replace', images: [url] }, recipeLineage: null, imageSources: { [url]: { sourceId: Number(sourceId) > 0 ? Number(sourceId) : null, published: published === true } } };
-}
-
-export function deriveCreateLineage(draft, imageUrls) {
- const used = [...new Set(imageUrls)];
- const recipe = draft.recipeLineage;
- const recipeIds = recipe?.images?.length && used.length === new Set(recipe.images).size && used.every(url => recipe.images.includes(url)) ? recipe.parentIds || [] : [];
- const ids = [...new Set([...recipeIds, ...imageUrls.map(url => Number(draft.imageSources?.[url]?.sourceId)).filter(id => Number.isFinite(id) && id > 0)])];
- return ids.length ? { mutateParentIds: ids, ...(ids.length === 1 ? { mutateOfId: ids[0] } : {}) } : {};
+ const source = Number(sourceId);
+ const group = Number(groupId);
+ return { imageChange: { type: 'replace', images: [url] }, recipeLineage: null, recreateOf: null, imageSources: { [url]: {
+  sourceId: Number.isFinite(source) && source > 0 ? source : null,
+  groupId: Number.isFinite(group) && group > 0 ? group : null,
+  published: published === true,
+ } } };
 }

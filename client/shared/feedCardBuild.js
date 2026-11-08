@@ -425,12 +425,15 @@ export function getFeedItemGroupCarouselSources(item, preferThumbnail = false) {
 	const seen = new Set();
 	const out = [];
 	for (const source of sourcesRaw) {
+		const sourceId = Number(source?.id);
+		if (!Number.isFinite(sourceId) || sourceId <= 0) continue;
 		const filePath = typeof source?.file_path === 'string' ? source.file_path.trim() : '';
 		const url = appendCreationIdToMediaUrl(filePath, creationId);
-		if (!url || seen.has(url)) continue;
-		seen.add(url);
+		if (!url || seen.has(sourceId)) continue;
+		seen.add(sourceId);
 		const sourceTitle = typeof source?.title === 'string' ? source.title.trim() : '';
 		out.push({
+			id: sourceId,
 			url: nsfwMediaUrl(url, item),
 			displayUrl: nsfwMediaUrl(preferThumbnail ? appendThumbnailVariant(url) : url, item),
 			title: sourceTitle || item?.title || 'Grouped creation image'
@@ -482,6 +485,11 @@ export function setupFeedCardGroupCarousel(imageContainer, item, options = {}) {
 		for (let i = 0; i < groupImages.length; i += 1) {
 			groupImages[i].classList.toggle('is-active', i === next);
 		}
+		const card = imageContainer.closest('.feed-card');
+		if (card instanceof HTMLElement) {
+			card.dataset.selectedGroupSourceId = String(sources[next].id);
+			card.dataset.selectedGroupSourceUrl = sources[next].url;
+		}
 	};
 	const getActiveIndex = () => {
 		const idx = groupImages.findIndex((img) => img.classList.contains('is-active'));
@@ -510,6 +518,8 @@ export function setupFeedCardGroupCarousel(imageContainer, item, options = {}) {
 
 	const cardEl = imageContainer.closest('.feed-card');
 	if (cardEl instanceof HTMLElement) {
+		cardEl.dataset.selectedGroupSourceId = String(sources[0].id);
+		cardEl.dataset.selectedGroupSourceUrl = sources[0].url;
 		try {
 			cardEl.dataset.feedGroupCarouselUrls = JSON.stringify(sources.map((s) => s.url));
 		} catch {
@@ -1588,7 +1598,7 @@ function buildFeedCreationCard(
 	const coverSource =
 		parsedMeta && typeof parsedMeta.cover_source === 'string' ? parsedMeta.cover_source.trim().toLowerCase() : '';
 	if (coverSource) card.dataset.coverSource = coverSource;
-	const isGroupCreationCard = parsedMeta?.group?.kind === 'group_creations';
+	const isGroupCreationCard = parsedMeta?.group?.kind === 'group_creations' || parsedMeta?.group?.kind === 'group_v2';
 	card.dataset.groupCreation = isGroupCreationCard ? '1' : '0';
 	const groupSourceCount = Array.isArray(parsedMeta?.group?.source_creations)
 		? parsedMeta.group.source_creations.length
@@ -1861,7 +1871,8 @@ function buildFeedCreationCard(
 		detailsButton.addEventListener('click', (e) => {
 			e.preventDefault();
 			e.stopPropagation();
-			const href = `/creations/${item.created_image_id}`;
+			const selectedId = Number(card.dataset.selectedGroupSourceId);
+			const href = `/creations/${item.created_image_id}${Number.isFinite(selectedId) && selectedId > 0 ? `?source_id=${encodeURIComponent(selectedId)}` : ''}`;
 			if (typeof performCreationNavigation === 'function') {
 				performCreationNavigation(href, e);
 			} else {
@@ -2156,6 +2167,12 @@ function finishFeedCreationCardMediaAndClick(
 				} catch {
 					// keep default href
 				}
+			}
+			const selectedId = Number(card.dataset.selectedGroupSourceId);
+			if (Number.isFinite(selectedId) && selectedId > 0 && /^\/creations\/\d+(?:[?#]|$)/.test(href)) {
+				const target = new URL(href, window.location.origin);
+				target.searchParams.set('source_id', String(selectedId));
+				href = `${target.pathname}${target.search}${target.hash}`;
 			}
 			if (typeof performCreationNavigation === 'function') {
 				recordFeedImpressionOnClick(item);

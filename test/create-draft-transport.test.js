@@ -13,13 +13,13 @@ async function mount(fetch) {
   HTMLElement: w.HTMLElement, File: w.File, AbortController: w.AbortController, CustomEvent: w.CustomEvent, DOMException: w.DOMException, Headers, URL, URLSearchParams,
   fetch, setTimeout, clearTimeout, console });
  const modules = new Map();
- const load = file => { file = path.resolve(file); if (!modules.has(file)) modules.set(file, new vm.SourceTextModule(fs.readFileSync(file, 'utf8'), { context, identifier: file })); return modules.get(file); };
+ const load = file => { file = path.resolve(file); if (!modules.has(file)) modules.set(file, new vm.SourceTextModule(file.endsWith('.css') ? 'export default {};' : fs.readFileSync(file, 'utf8'), { context, identifier: file })); return modules.get(file); };
  const entry = load('client/providers/create/index.js');
  await entry.link((specifier, parent) => load(path.resolve(path.dirname(parent.identifier), specifier))); await entry.evaluate();
  const host = modules.get(path.resolve('client/shared/createWorkflowHost.js')).namespace;
  host.setCreateWorkflowHost({ root: w.document.getElementById('root'), pendingCreations: { key: 'test-pending' } });
  const provider = entry.namespace.createCreateProvider({ viewerId: 91 }); provider.workflow.enterMode({ mode: 'image-edit', prompt: 'hello' });
- provider.workflow.openSource({ imageUrl: '/a.png', sourceId: 17 });
+ provider.workflow.openSource({ imageUrl: '/a.png', sourceId: 17, groupId: 44 });
  return { provider, w, close() { provider.destroy(); dom.window.close(); } };
 }
 test('real provider transport creates pending, posts snapshot and promotes accepted job', { skip: !vm.SourceTextModule }, async () => {
@@ -32,7 +32,10 @@ test('real provider transport creates pending, posts snapshot and promotes accep
   const result = app.provider.workflow.submit({ mode: 'image-edit', navigate: 'none' });
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(JSON.parse(app.w.sessionStorage.getItem('test-pending'))[0].status, 'pending');
-  assert.equal(posted.args.image_url, '/a.png'); assert.equal(posted.mutate_of_id, 17); assert.deepEqual(posted.mutate_parent_ids, [17]); assert.ok(posted.creation_token);
+  assert.equal(posted.args.image_url, '/a.png'); assert.equal(posted.input_contract_version, 1);
+  assert.deepEqual(posted.inputs[0].source, { kind: 'group-member', groupId: 44, member: { kind: 'creation', creationId: 17 } });
+  assert.deepEqual(posted.input_bindings, [{ field: 'image_url', attachmentIds: [posted.inputs[0].id] }]);
+  assert.equal(posted.group_id, undefined); assert.ok(posted.creation_token);
   pending.resolve(json({ id: 91, status: 'queued', credits_remaining: 12 }));
   assert.equal((await result).id, 91); assert.equal(JSON.parse(app.w.sessionStorage.getItem('test-pending'))[0].id, 91);
   assert.equal(app.provider.draft.read().fieldValues.prompt, ''); assert.equal(app.provider.draft.read().inputImages[0], '/a.png');

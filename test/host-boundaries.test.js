@@ -51,6 +51,9 @@ test("beta share test alias serves share paths but redirects unrelated documents
 		let continued = false;
 		shareHostBoundary(request("beta-sh.parascene.com", "/s/v1/token"), response(), () => { continued = true; });
 		assert.equal(continued, true);
+		continued = false;
+		shareHostBoundary(request("beta-sh.parascene.com", "/share/share.js?v=asset"), response(), () => { continued = true; });
+		assert.equal(continued, true);
 
 		const res = response();
 		shareHostBoundary(request("beta-sh.parascene.com", "/about"), res, () => {});

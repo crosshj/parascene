@@ -14,7 +14,7 @@ export function attachFeedCardCreationDragSource(card) {
 	const mediaType = (card.dataset.mediaType || 'image').trim().toLowerCase();
 	const status = (card.dataset.creationStatus || '').trim().toLowerCase();
 	const creationId = idRaw != null && idRaw !== '' ? Number(idRaw) : NaN;
-	if (!Number.isFinite(creationId) || creationId <= 0 || !imageUrl) return;
+	if (!Number.isFinite(creationId) || creationId <= 0 || (!imageUrl && card.dataset.groupCreation !== '1')) return;
 	if (mediaType === 'video') return;
 	if (status === 'creating' || status === 'pending') return;
 
@@ -27,16 +27,22 @@ export function attachFeedCardCreationDragSource(card) {
 	}
 
 	const published = card.dataset.published === '1';
+	const groupId = card.dataset.groupCreation === '1' ? creationId : Number(card.dataset.groupId) || null;
 
 	card.addEventListener('dragstart', (e) => {
 		if (!e.dataTransfer) return;
+		const selectedSourceId = Number(card.dataset.selectedGroupSourceId);
+		const selectedImageUrl = Number.isFinite(selectedSourceId) && selectedSourceId > 0
+			? (card.dataset.selectedGroupSourceUrl || '').trim() : imageUrl;
+		if (!selectedImageUrl) { e.preventDefault(); return; }
 		const payload = JSON.stringify({
-			creationId,
-			imageUrl,
+			creationId: Number.isFinite(selectedSourceId) && selectedSourceId > 0 ? selectedSourceId : creationId,
+			imageUrl: selectedImageUrl,
 			published,
+			...(groupId ? { groupId } : {}),
 		});
 		e.dataTransfer.setData(PRSN_FEED_CREATION_DRAG_MIME, payload);
-		e.dataTransfer.setData('text/plain', imageUrl);
+		e.dataTransfer.setData('text/plain', selectedImageUrl);
 		e.dataTransfer.effectAllowed = 'copy';
 		card.setAttribute('aria-grabbed', 'true');
 		document.body.classList.add('prsn-creation-composer-drag-active');
@@ -73,10 +79,12 @@ export function parseCreationDragDataTransfer(dt) {
 			if (!imageUrl) return null;
 			const cid = Number(parsed?.creationId);
 			const published = parsed?.published === true || parsed?.published === 1;
+			const groupId = Number(parsed?.groupId);
 			return {
 				...(Number.isFinite(cid) && cid > 0 ? { creationId: cid } : {}),
 				imageUrl,
 				...(published ? { published: true } : {}),
+				...(Number.isFinite(groupId) && groupId > 0 ? { groupId } : {}),
 			};
 		}
 	} catch {
@@ -100,7 +108,7 @@ function dataTransferHasCreationPayload(dt) {
  * @param {HTMLElement} composerRoot `.create-composer`
  * @param {HTMLElement} dropSurface drop target (usually `.create-composer-input-shell`)
  * @param {{
- *   onAttachImageUrl: (url: string, detail: { creationId?: number, published?: boolean }) => void,
+ *   onAttachImageUrl: (url: string, detail: { creationId?: number, groupId?: number, published?: boolean }) => void,
  *   isDisabled?: () => boolean,
  * }} handlers
  * @returns {() => void} teardown
@@ -149,6 +157,7 @@ export function bindCreateComposerCreationDropTargets(composerRoot, dropSurface,
 		if (!parsed?.imageUrl) return;
 		onAttach(parsed.imageUrl, {
 			creationId: parsed.creationId,
+			groupId: parsed.groupId,
 			published: parsed.published,
 		});
 	};

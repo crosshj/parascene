@@ -63,7 +63,6 @@ let fetchJsonWithStatusDeduped;
 let readRasterFileDimensions;
 let readImageUrlDimensions;
 let showOccupancyConfirm;
-let getMutateLineageForImageUrls;
 let attachPromptFieldClear;
 let attachAutoGrowTextarea;
 let attachPromptInlineSuggest;
@@ -178,7 +177,6 @@ function initializeDependencies() {
 		readImageUrlDimensions = createSubmitMod.readImageUrlDimensions;
 		showOccupancyConfirm = gpuOccupancyMod.showOccupancyConfirm;
 
-		getMutateLineageForImageUrls = mutateQueueSyncMod.getMutateLineageForImageUrls;
 
 		attachPromptFieldClear = promptFieldClearMod.attachPromptFieldClear;
 

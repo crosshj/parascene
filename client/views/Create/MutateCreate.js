@@ -384,7 +384,9 @@ if (!lifetime.active) return;
 			}
 		}
 
-		if (!creation) {
+		// A seeded preview is not proof that this group member can be submitted.
+		// Resolve the selected member against current group membership on every grouped Mutate load.
+		if (!creation || needsSourceMatch) {
 			const response = await fetch(imageApiUrl, { credentials: 'include' });
 if (!lifetime.active) return;
 			if (!response.ok) {
@@ -418,6 +420,7 @@ if (!lifetime.active) return;
 				providers.create.workflow.openSource({
 					imageUrl: toParasceneImageUrl(sourceImageUrl),
 					sourceId: mutateSourceId,
+					groupId: mutateGroupId,
 					published: creation.published === true || creation.published === 1,
 				});
 			} catch (error) {
@@ -1080,6 +1083,7 @@ if (!lifetime.active) return;
 							aspectRatio,
 							imageUrl,
 							sourceId,
+							groupId: Number(editContent.dataset.mutateGroupId || '') || null,
 							published,
 						};
 						const route = syncMutatePageToAdvancedCreate(snapshot);

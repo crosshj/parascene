@@ -1384,6 +1384,8 @@ async function handleRecreateInAdvanced() {
 				? recreateMeta.args
 				: null,
 		userPrompt: userPromptFromRecreateMeta(recreateMeta),
+  inputRecipe: recreateMeta.input_recipe,
+  recreateOf: lastDetailIsGroupCreation ? getGroupActionTarget()?.sourceId : getCreationId(),
   parentIds: recreateMeta.direct_parent_ids,
   mutateOfId: recreateMeta.mutate_of_id,
 		outputMode,
@@ -4925,12 +4927,17 @@ async function loadCreation() {
 		};
 		const groupMeta = meta?.group && typeof meta.group === 'object' ? meta.group : null;
 		const isGroupCreation = groupMeta?.kind === 'group_creations';
+		const groupSourcesRaw = Array.isArray(groupMeta?.source_creations) ? groupMeta.source_creations : [];
 		const groupCan = (key) => groupActionSupported(groupMeta, key);
 		if (isGroupCreation) {
 			actionsContext.showCheckAgain = false;
 			actionsContext.showQueueFromFrame = false;
 			actionsContext.showSetVideoPoster = false;
-			actionsContext.showAdjustImage = false;
+			// Adjust applies to the active member artifact, not to the group container.
+			actionsContext.showAdjustImage = !isAdmin && groupSourcesRaw.some((source) => {
+				const sourceMeta = source?.meta && typeof source.meta === 'object' ? source.meta : {};
+				return source?.status === 'completed' && sourceMeta.media_type !== 'video' && sourceMeta.media_type !== 'audio';
+			});
 			actionsContext.showChangeCover = false;
 		} else if (canEdit && !adminViewingUserDeleted) {
 			void Promise.resolve(saveVideoFirstFramePosterBundledMod).then((mod) => {
@@ -4939,7 +4946,6 @@ async function loadCreation() {
 				return mod.maybeSaveVideoFirstFramePoster(creation);
 			});
 		}
-		const groupSourcesRaw = Array.isArray(groupMeta?.source_creations) ? groupMeta.source_creations : [];
 		const groupSourcesMapped = groupSourcesRaw
 			.map((source, index) => {
 				const sourceObj = source && typeof source === 'object' ? source : null;
@@ -7656,7 +7662,7 @@ async function loadCreation() {
 							}
 						} else {
 							try {
-								addToMutateQueue({ sourceId: queueSourceId, imageUrl: queueImageUrl, published: isPublished });
+								addToMutateQueue({ sourceId: queueSourceId, groupId: isGroupCreation ? getCreationId() : undefined, imageUrl: queueImageUrl, published: isPublished });
 								if (labelEl) labelEl.textContent = 'Remove from queue';
 								showToast('Added to queue');
 							} catch {
@@ -7678,12 +7684,15 @@ async function loadCreation() {
 						});
 					},
 					'adjust-image': async () => {
-						if (!actionsContext.showAdjustImage || !creation.url) return;
+						const adjustTarget = lastDetailIsGroupCreation
+							? getGroupActionTarget()
+							: { sourceId: Number(creationId), imageUrl: creation.url };
+						if (!actionsContext.showAdjustImage || !adjustTarget?.sourceId || !adjustTarget.imageUrl) return;
 						closeMobileMoreMenu();
 						if (typeof openAdjustImageModal !== 'function') return;
 						openAdjustImageModal({
-							imageUrl: String(creation.url),
-							sourceId: Number(creationId),
+							imageUrl: String(adjustTarget.imageUrl),
+							sourceId: Number(adjustTarget.sourceId),
 							showToast,
 							onSave: async (file, adjustments) => {
 								const formData = new FormData();
@@ -7691,7 +7700,7 @@ async function loadCreation() {
 								formData.append('brightness', String(adjustments.brightness));
 								formData.append('contrast', String(adjustments.contrast));
 								formData.append('saturation', String(adjustments.saturation));
-								const res = await fetch(`/api/create/images/${encodeURIComponent(creationId)}/adjust`, {
+								const res = await fetch(`/api/create/images/${encodeURIComponent(adjustTarget.sourceId)}/adjust`, {
 									method: 'POST',
 									credentials: 'include',
 									body: formData,
@@ -8190,8 +8199,9 @@ async function loadCreation() {
 					}
 				});
 			}
-			// Keep the cover media from the main load path as-is to avoid reloading and flicker.
-			setActiveGroupSource(groupSources[0].id, { updateMedia: false });
+			const requestedSourceId = Number(new URLSearchParams(window.location.search).get('source_id'));
+			const initialSourceId = sourceById.has(requestedSourceId) ? requestedSourceId : Number(groupSources[0].id);
+			setActiveGroupSource(initialSourceId, { updateMedia: initialSourceId !== Number(groupSources[0].id) });
 		} else {
 			perf.skipPart('groupHero', isGroupCreation ? 'no-sources' : 'not-group');
 		}

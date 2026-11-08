@@ -8,7 +8,7 @@
     "build": "npm run check:client-boundary && rollup -c rollup.config.mjs",
     "dev": "node scripts/dev.js",
     "test": "node --test",
-    "verify:create-draft": "node --experimental-vm-modules --test test/create-draft*.test.js",
+    "verify:create-draft": "node --experimental-vm-modules --experimental-loader ./scripts/test/ignore-css-loader.mjs --test test/create-draft*.test.js",
     "verify:messages": "node --experimental-vm-modules --test test/messages-presentation-parity.test.js"
   },
   "dependencies": {
@@ -26,6 +26,7 @@
     "isomorphic-dompurify": "^3.19.0",
     "jsonwebtoken": "^9.0.2",
     "marked": "^17.0.6",
+    "qrcode": "^1.5.4",
     "rollup": "^4.60.2",
     "sharp": "^0.34.5",
     "ws": "^8.21.3"

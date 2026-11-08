@@ -1,10 +1,12 @@
 import { registerCreationLibraryRoutes } from './creationLibrary.js';
 import express from "express";
 import path from "path";
+import sharp from "sharp";
 
 import Busboy from "busboy";
 
 import { appendCreationIdToMediaUrl, getThumbnailUrl, getShareBaseUrl } from "../services/create/url.js";
+import { materializeArchivedGroupInput } from "../services/create/materializeArchivedGroupInput.js";
 
 import { buildProviderHeaders } from "../services/create/providerAuth.js";
 import { runCreationJob, runProviderPollJob, healProviderPollOnRead, PROVIDER_TIMEOUT_MS } from "../services/create/creationJob.js";
@@ -35,7 +37,7 @@ import { verifyQStashRequest } from "../services/create/qstashVerification.js";
 import { creationIdFromParasceneVideoUrl, resolveCreatedImageRowForProviderImageUrl } from "../services/create/resolveCreatedImageStorageFilename.js";
 
 import { mapCreatedImageRowMediaFields } from "../services/create/resolveCreationDisplayMedia.js";
-import { applyCostumeToCreationPayload, isGroupV2Meta, isHiddenInGroupMeta, wantsRawGroupV2 } from "../services/create/projectGroupV2.js";
+import { applyCostumeToCreationPayload, costumeProjectV2Meta, groupActionSupportedForMeta, isGroupV2Meta, isHiddenInGroupMeta, wantsRawGroupV2 } from "../services/create/projectGroupV2.js";
 import {
 	appendCreationToOwnedGroupV2,
 	fillThinGroupV2ItemViews,
@@ -78,6 +80,7 @@ import { healChallengeOrganizerRefsForCreationList } from "../services/create/ch
 
 import { applySourceShareUrlToMutateArgsWhenMatching } from "../services/create/mutateLineageImageUrl.js";
 import { buildMutateLineageMetaFields } from "../services/create/mutateLineageMeta.js";
+import { isArchivedV1GroupMember, resolveCreationInputs } from "../services/create/resolveCreationInputs.js";
 import { bumpFeedVersionCounter } from "../services/feed/feedVersion.js";
 import { invalidateFeedCatalogSnapshot } from "../services/feed/ranking/catalogSnapshot.js";
 function buildGenericUrl(key) {
@@ -257,11 +260,14 @@ async function buildGroupMutateSourcePayload({ groupRow, sourceId, viewerUser })
 		const groupId = Number(groupRow.id);
 		const sid = Number(sourceId);
 		if (!Number.isFinite(groupId) || groupId <= 0 || !Number.isFinite(sid) || sid <= 0) return null;
-		if (!viewerOwnsCreationRow(groupRow, viewerUser.id) && viewerUser.role !== "admin") return null;
-		if (!isGroupSourceOfSharedCreation(groupRow, sid)) return null;
-
-		const groupMeta = parseMeta(groupRow.meta);
+		if (!viewerCanMutateGroup(groupRow, viewerUser)) return null;
+		const nativeMeta = parseMeta(groupRow.meta);
+		if (!groupActionSupportedForMeta(nativeMeta, "remix")) return null;
+		const groupMeta = isGroupV2Meta(nativeMeta)
+			? costumeProjectV2Meta(nativeMeta, { title: groupRow.title })
+			: nativeMeta;
 		const groupPayload = groupMeta?.group && typeof groupMeta.group === "object" ? groupMeta.group : null;
+		if (!collectGroupSourceCreationIds(groupPayload).has(sid)) return null;
 		const snap = findGroupSourceSnapshot(groupPayload, sid);
 
 		let sourceRow = null;
@@ -270,12 +276,15 @@ async function buildGroupMutateSourcePayload({ groupRow, sourceId, viewerUser })
 		} catch {
 			sourceRow = null;
 		}
+		const nativeV2 = isGroupV2Meta(nativeMeta);
+		if (nativeV2 && !sourceRow) return null;
+		if (sourceRow?.unavailable_at && !isArchivedV1GroupMember({ groupRow, sourceRow, snapshot: snap, groupMeta: nativeMeta })) return null;
 
 		const status = sourceRow?.status || snap?.status || "completed";
 		if (status !== "completed") return { error: "not_ready" };
 
 		let filename =
-			typeof snap?.filename === "string" && snap.filename.trim() && !snap.filename.startsWith("group/")
+			!nativeV2 && typeof snap?.filename === "string" && snap.filename.trim() && !snap.filename.startsWith("group/")
 				? snap.filename.trim()
 				: "";
 		if (!filename && sourceRow?.filename) {
@@ -283,7 +292,7 @@ async function buildGroupMutateSourcePayload({ groupRow, sourceId, viewerUser })
 			if (fn && !fn.startsWith("group/")) filename = fn;
 		}
 
-		let filePath = typeof snap?.file_path === "string" ? snap.file_path.trim() : "";
+		let filePath = !nativeV2 && typeof snap?.file_path === "string" ? snap.file_path.trim() : "";
 		if (!filePath && sourceRow?.file_path) filePath = String(sourceRow.file_path).trim();
 
 		let rawUrl = filePath || (filename ? storage.getImageUrl(filename) : null);
@@ -350,6 +359,12 @@ function viewerOwnsCreationRow(row, viewerUserId) {
 		if (!row || viewerUserId == null) return false;
 		return Number(row.user_id) === Number(viewerUserId);
 	}
+function viewerCanMutateGroup(groupRow, viewerUser) {
+		if (!groupRow || !viewerUser) return false;
+		if (viewerOwnsCreationRow(groupRow, viewerUser.id) || viewerUser.role === "admin") return true;
+		return (groupRow.published === 1 || groupRow.published === true) &&
+			(groupRow.status || "completed") === "completed" && !groupRow.unavailable_at;
+	}
 function parsePositiveIntQuery(value) {
 		const n = typeof value === "string" ? parseInt(value, 10) : Number(value);
 		return Number.isFinite(n) && n > 0 ? n : null;
@@ -362,6 +377,12 @@ async function selectOwnedGroupRow(groupId, viewerUserId) {
 		const any = await queries.selectCreatedImageByIdAnyUser?.get(gid);
 		if (any && viewerOwnsCreationRow(any, viewerUserId)) return any;
 		return null;
+	}
+async function selectMutateGroupRow(groupId, viewerUser) {
+		const owned = await selectOwnedGroupRow(groupId, viewerUser.id);
+		if (owned) return owned;
+		const any = await queries.selectCreatedImageByIdAnyUser?.get(Number(groupId));
+		return viewerCanMutateGroup(any, viewerUser) ? any : null;
 	}
 function isModeratedError(status, meta) {
 		if (status !== "failed" || meta == null) return false;
@@ -889,6 +910,11 @@ router.post("/api/create", asyncRoute(async (req, res) => {
 					args,
 					creation_token: fields.creation_token,
 					retry_of_id: fields.retry_of_id,
+					input_contract_version: fields.input_contract_version,
+					inputs: fields.inputs ? JSON.parse(fields.inputs) : undefined,
+					input_bindings: fields.input_bindings ? JSON.parse(fields.input_bindings) : undefined,
+					destination_group_id: fields.destination_group_id,
+					recreate_of: fields.recreate_of,
 					mutate_of_id: fields.mutate_of_id,
 					mutate_parent_ids: fields.mutate_parent_ids,
 					credit_cost: fields.credit_cost,
@@ -915,13 +941,24 @@ router.post("/api/create", asyncRoute(async (req, res) => {
 			hydrate_mentions,
 			style_key,
 			group_id: bodyGroupId,
-			group_of: bodyGroupOf
+			group_of: bodyGroupOf,
+			input_contract_version,
+			inputs,
+			input_bindings,
+			destination_group_id,
+			recreate_of
 		} = req.body;
-		const requestedGroupId = parsePositiveIntQuery(bodyGroupId ?? bodyGroupOf);
+		const typedInputs = input_contract_version === 1 || input_contract_version === "1";
+		if (input_contract_version != null && !typedInputs) return res.status(400).json({ error: "Unsupported input contract" });
+		if (typedInputs && (bodyGroupId != null || bodyGroupOf != null || mutate_of_id != null || mutate_parent_ids != null)) return res.status(400).json({ error: "Conflicting input lineage" });
+		if (destination_group_id != null && !parsePositiveIntQuery(destination_group_id)) return res.status(400).json({ error: "Invalid destination group" });
+		if (destination_group_id != null && (bodyGroupId != null || bodyGroupOf != null)) return res.status(400).json({ error: "Conflicting group destination" });
+		const requestedGroupId = parsePositiveIntQuery(destination_group_id ?? (typedInputs ? null : bodyGroupId ?? bodyGroupOf));
 		const resolvedGroup = await resolveOwnedGroupV2Id(queries, user.id, requestedGroupId);
 		if (resolvedGroup.error) {
 			return res.status(resolvedGroup.status || 404).json({ error: resolvedGroup.error });
 		}
+		if (destination_group_id != null && !resolvedGroup.groupId) return res.status(404).json({ error: 'destination_forbidden' });
 		const v2GroupId = resolvedGroup.groupId;
 		const safeArgs = args && typeof args === "object" ? { ...args } : {};
 		const hydrateMentions = hydrate_mentions === true || hydrate_mentions === "true" || hydrate_mentions === 1 || hydrate_mentions === "1";
@@ -1293,7 +1330,7 @@ router.post("/api/create", asyncRoute(async (req, res) => {
 			}
 
 			// Mutate lineage: create/extend meta.history
-			if (mutate_of_id != null && Number.isFinite(Number(mutate_of_id))) {
+			if (!typedInputs && mutate_of_id != null && Number.isFinite(Number(mutate_of_id))) {
 				const sourceId = Number(mutate_of_id);
 
 				let source = await queries.selectCreatedImageById.get(sourceId, user.id);
@@ -1311,9 +1348,22 @@ router.post("/api/create", asyncRoute(async (req, res) => {
 				if (!source) {
 					const groupIdForMutate = parsePositiveIntQuery(bodyGroupId ?? bodyGroupOf);
 					if (groupIdForMutate) {
-						const groupRow = await selectOwnedGroupRow(groupIdForMutate, user.id);
+						const groupRow = await selectMutateGroupRow(groupIdForMutate, user);
 						if (groupRow && isGroupSourceOfSharedCreation(groupRow, sourceId)) {
 							source = await queries.selectCreatedImageByIdAnyUser?.get(sourceId);
+							if (!source && viewerCanMutateGroup(groupRow, user)) {
+								const groupPayload = parseMeta(groupRow.meta)?.group;
+							const snapshot = findGroupSourceSnapshot(groupPayload, sourceId);
+							if (snapshot) {
+								source = {
+									...snapshot,
+									id: sourceId,
+									meta: snapshot.meta || {},
+									status: snapshot.status || "completed",
+									published: groupRow.published === 1 || groupRow.published === true,
+								};
+							}
+							}
 						}
 					}
 				}
@@ -1379,7 +1429,7 @@ router.post("/api/create", asyncRoute(async (req, res) => {
 
 			// Single parent from create flow (e.g. one queued image): track lineage like mutate so we don't lose the chain.
 			if (
-				(mutate_of_id == null || !Number.isFinite(Number(mutate_of_id))) &&
+				!typedInputs && (mutate_of_id == null || !Number.isFinite(Number(mutate_of_id))) &&
 				mutateParentIds.length === 1
 			) {
 				const sourceId = Number(mutateParentIds[0]);
@@ -1425,7 +1475,7 @@ router.post("/api/create", asyncRoute(async (req, res) => {
 			}
 
 			// Merge any additional ancestor IDs into meta.history so lineage can reference multiple parents.
-			if (mutateParentIds.length > 0) {
+			if (!typedInputs && mutateParentIds.length > 0) {
 				const base = Array.isArray(meta.history) ? meta.history : [];
 				const merged = [...base, ...mutateParentIds];
 				const seenMerge = new Set();
@@ -1533,6 +1583,53 @@ router.post("/api/create", asyncRoute(async (req, res) => {
 					);
 					safeArgs[key] = arr;
 					meta.args[key] = arr;
+				}
+			}
+
+			if (typedInputs) {
+				try {
+					const submittedInputsById = new Map((Array.isArray(inputs) ? inputs : []).map(input => [input?.id, input]));
+					for (const binding of Array.isArray(input_bindings) ? input_bindings : []) {
+						const raw = args?.[binding?.field];
+						const rawUrls = (Array.isArray(raw) ? raw : [raw]).filter(value => typeof value === 'string' && value.trim());
+						const previews = (binding?.attachmentIds || []).map(id => submittedInputsById.get(id)?.preview?.url);
+						if (rawUrls.length !== previews.length || rawUrls.some((url, index) => url.trim() !== previews[index])) {
+							throw Object.assign(new Error('Image argument differs from bound input'), { status: 400, code: 'input_binding_mismatch' });
+						}
+					}
+					const effectiveBindings = Array.isArray(input_bindings) ? input_bindings.map(binding => ({ ...binding })) : [];
+					if (methodFields.input_images?.type === 'image_url_array' && !methodFields.image_url &&
+						!effectiveBindings.some(binding => binding.field === 'input_images')) {
+						const scalar = effectiveBindings.find(binding => binding.field === 'image_url');
+						if (scalar) scalar.field = 'input_images';
+					}
+					const boundFields = new Set(effectiveBindings.map(binding => binding?.field));
+					if (!boundFields.size) throw Object.assign(new Error('Missing image bindings'), { status: 400, code: 'invalid_input_bindings' });
+					for (const [key, value] of Object.entries(safeArgs)) {
+						const imageField = ['image_url', 'image', 'input_images'].includes(key) || ['image_url', 'image_url_array'].includes(methodFields[key]?.type);
+						if (imageField && !boundFields.has(key) && value != null && value !== '' && (!Array.isArray(value) || value.length)) {
+							throw Object.assign(new Error('Unbound image argument'), { status: 400, code: 'invalid_input_bindings' });
+						}
+					}
+					const resolved = await resolveCreationInputs({ inputs, bindings: effectiveBindings, fields: methodFields, args: meta.args, queries, user, shareUrlForImage, providerBase,
+						resolveInternalUrl: url => resolveCreatedImageRowForProviderImageUrl({ queries, url, baseOrigin: providerBase }),
+						materializeArchived: ({ filename }) => materializeArchivedGroupInput({ storage, userId: user.id, filename }) });
+					meta.args = resolved.args;
+					meta.input_recipe = { ...resolved.recipe, serverId: Number(server_id), method, userPrompt: originalPromptForMeta,
+						...(parsePositiveIntQuery(recreate_of) ? { recreateOf: parsePositiveIntQuery(recreate_of) } : {}) };
+					if (resolved.directParentIds.length) {
+						meta.direct_parent_ids = resolved.directParentIds;
+						const history = [];
+						for (const parentId of resolved.directParentIds) {
+							const parent = await queries.selectCreatedImageByIdAnyUser?.get(parentId);
+							const lineage = buildMutateLineageMetaFields(parseMeta(parent?.meta), parentId);
+							for (const id of lineage?.history || []) if (!history.includes(id)) history.push(id);
+						}
+						meta.history = history;
+						if (resolved.directParentIds.length === 1) meta.mutate_of_id = resolved.directParentIds[0];
+					}
+				} catch (error) {
+					return res.status(error.status || 400).json({ error: error.code || 'invalid_creation_inputs' });
 				}
 			}
 
@@ -1982,7 +2079,7 @@ router.get("/api/create/images/:id/mutate-source", asyncRoute(async (req, res) =
 				return res.status(400).json({ error: "group id and source_id are required" });
 			}
 
-			const groupRow = await selectOwnedGroupRow(groupId, user.id);
+			const groupRow = await selectMutateGroupRow(groupId, user);
 			if (!groupRow) {
 				return res.status(404).json({ error: "Image not found" });
 			}
@@ -2592,6 +2689,90 @@ async function loadOwnedCompletedAudio(req, res) {
 			credits: target.credits,
 			method: target.method,
 		});
+	}));
+
+	// Save a client-adjusted image as a new creation. The source ID is the selected
+	// creation/member ID, which can differ from the group detail route ID.
+	router.post("/api/create/images/:id/adjust", asyncRoute(async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+		const id = Number(req.params.id);
+		if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Invalid creation id" });
+
+		const image = await queries.selectCreatedImageByIdAnyUser?.get(id);
+		if (!image) return res.status(404).json({ error: "Creation not found" });
+		const isOwner = Number(image.user_id) === Number(user.id);
+		const isAdmin = user.role === "admin";
+		const isPublished = image.published === true || image.published === 1;
+		if (!isOwner && !isAdmin && !isPublished) return res.status(403).json({ error: "Forbidden" });
+		if (image.status !== "completed") return res.status(400).json({ error: "Only completed creations can be adjusted" });
+		const sourceMeta = parseMeta(image.meta) || {};
+		if (sourceMeta.media_type === "video" || sourceMeta.media_type === "audio" || sourceMeta.video?.file_path) {
+			return res.status(400).json({ error: "Adjust is only available for image creations" });
+		}
+		if (!req.is("multipart/form-data")) {
+			return res.status(400).json({ error: "Request must be multipart/form-data with an image file" });
+		}
+
+		let uploadedFilePath = null;
+		try {
+			const { fields, files } = await parseMultipartCreate(req, { maxFileBytes: 20 * 1024 * 1024 });
+			const imageFile = files?.image;
+			if (!imageFile || !Buffer.isBuffer(imageFile.buffer) || imageFile.buffer.length === 0) {
+				return res.status(400).json({ error: "No image file provided; use form field name 'image'" });
+			}
+			if (!String(imageFile.mimeType || "").toLowerCase().startsWith("image/")) {
+				return res.status(400).json({ error: "File must be an image" });
+			}
+			const clampAdjustment = (value) => {
+				const parsed = Number(value);
+				return Number.isFinite(parsed) ? Math.max(0, Math.min(200, Math.round(parsed))) : 100;
+			};
+			const brightness = clampAdjustment(fields?.brightness);
+			const contrast = clampAdjustment(fields?.contrast);
+			const saturation = clampAdjustment(fields?.saturation);
+			if (brightness === 100 && contrast === 100 && saturation === 100) {
+				return res.status(400).json({ error: "No adjustments to save" });
+			}
+
+			const pngBuffer = await sharp(imageFile.buffer).png().toBuffer();
+			const dimensions = await sharp(pngBuffer).metadata();
+			const width = Number(dimensions.width);
+			const height = Number(dimensions.height);
+			if (!(width > 0 && height > 0)) return res.status(400).json({ error: "Could not read image dimensions" });
+			if (typeof storage?.uploadImage !== "function") return res.status(503).json({ error: "Image storage is not available" });
+
+			const filename = `${user.id}_${Date.now()}_${Math.random().toString(36).slice(2, 9)}.png`;
+			uploadedFilePath = await storage.uploadImage(pngBuffer, filename);
+			const lineage = buildMutateLineageMetaFields(sourceMeta, id);
+			if (!lineage) return res.status(400).json({ error: "Invalid source creation for adjust" });
+			const meta = {
+				media_type: "image",
+				method: "adjust",
+				method_name: "Adjust",
+				args: { brightness, contrast, saturation },
+				...lineage,
+			};
+			const inserted = await queries.insertCreatedImage.run(
+				user.id, filename, uploadedFilePath, width, height, image.color ?? null, "completed", meta
+			);
+			const newId = Number(inserted?.insertId);
+			if (!(newId > 0)) throw new Error("Failed to create adjusted image");
+			const title = typeof image.title === "string" ? image.title.trim() : "";
+			const description = typeof image.description === "string" ? image.description.trim() : "";
+			if ((title || description) && queries.updateCreatedImage?.run) {
+				await queries.updateCreatedImage.run(newId, user.id, title || null, description || null, false);
+			}
+			await bumpFeedVersionCounter(queries);
+			void invalidateFeedCatalogSnapshot().catch(() => {});
+			return res.json({ ok: true, id: newId, url: uploadedFilePath, width, height });
+		} catch (err) {
+			console.error("[POST /api/create/images/:id/adjust]", err);
+			return res.status(Number(err?.status) || 500).json({
+				error: "Failed to save adjusted image",
+				message: err?.message || "Failed to save adjusted image",
+			});
+		}
 	}));
 
 	router.post("/api/create/images/:id/share-audio", asyncRoute(async (req, res) => {

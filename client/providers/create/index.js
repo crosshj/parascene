@@ -1,7 +1,7 @@
 import { importCreationMedia } from './imports.js';
 import { createCreationWorkflow } from './workflow.js';
 import { submitCreationWithPending, importCreationWithPending, uploadImageFile, formatMentionsFailureForDialog } from './transport.js';
-import { getMutateLineageForImageUrls, syncSavedCreateImagesToQueue, syncCreationDetailToAdvancedCreate } from '../../shared/mutateQueueSync.js';
+import { syncSavedCreateImagesToQueue, syncCreationDetailToAdvancedCreate } from '../../shared/mutateQueueSync.js';
 import { createCreateApi } from './api.js';
 import { getSavedCreateDraftStore, persistSavedCreateForm } from '../../shared/createSettingsSync.js';
 /**
@@ -35,7 +35,7 @@ function makeWorkflow() {
   upload: uploadImageFile,
   importSend: options => importCreationWithPending({ ...options, pendingKey }),
   importer: importCreationMedia,
-  restoreRecipe: syncCreationDetailToAdvancedCreate, lineage: getMutateLineageForImageUrls, formatMentions: formatMentionsFailureForDialog });
+  restoreRecipe: syncCreationDetailToAdvancedCreate, formatMentions: formatMentionsFailureForDialog });
 }
 let workflow = makeWorkflow();
 const composer = {

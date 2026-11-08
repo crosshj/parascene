@@ -1138,6 +1138,8 @@ export function mountCreateComposer(host, opts = {}) {
 	/** Parallel to attachmentItems: source creation id when attached via mutate/drop. */
 	/** @type {(number|null)[]} */
 	let attachmentMutateSourceIds = [];
+	/** @type {(number|null)[]} */
+	let attachmentMutateGroupIds = [];
 	/** Parallel to attachmentItems: aspect used for early `edited` upload (null when unknown). */
 	/** @type {(string|null)[]} */
 	let attachmentUploadAspects = [];
@@ -1231,6 +1233,10 @@ export function mountCreateComposer(host, opts = {}) {
 		return {
 			mutateOfId: unique.length === 1 ? unique[0] : undefined,
 			mutateParentIds: unique,
+			...(() => {
+				const groups = [...new Set(attachmentMutateGroupIds.filter((id) => Number.isFinite(id) && id > 0))];
+				return groups.length === 1 ? { mutateGroupId: groups[0] } : {};
+			})(),
 		};
 	}
 
@@ -1242,10 +1248,12 @@ export function mountCreateComposer(host, opts = {}) {
 			for (const item of queueItems) {
 				const url = typeof item?.imageUrl === 'string' ? item.imageUrl.trim() : '';
 				const sid = Number(item?.sourceId);
-				if (!url || !Number.isFinite(sid) || sid <= 0) continue;
+				const gid = Number(item?.groupId);
+				if (!url) continue;
 				const norm = normalizeAttachmentUrlForQueueMatch(url);
-				if (norm && !byUrl.has(norm)) byUrl.set(norm, sid);
-				if (url && !byUrl.has(url)) byUrl.set(url, sid);
+				const value = { sourceId: Number.isFinite(sid) && sid > 0 ? sid : null, groupId: Number.isFinite(gid) && gid > 0 ? gid : null };
+				if (norm && !byUrl.has(norm)) byUrl.set(norm, value);
+				if (url && !byUrl.has(url)) byUrl.set(url, value);
 			}
 			if (byUrl.size === 0) return;
 			if (attachmentUploadAspects.length < attachmentItems.length) {
@@ -1253,7 +1261,7 @@ export function mountCreateComposer(host, opts = {}) {
 					(_, i) => attachmentUploadAspects[i] ?? null
 				);
 			}
-			attachmentMutateSourceIds = attachmentItems.map((item) => {
+			const matches = attachmentItems.map((item) => {
 				if (typeof item !== 'string') return null;
 				const trimmed = item.trim();
 				if (!trimmed) return null;
@@ -1263,18 +1271,21 @@ export function mountCreateComposer(host, opts = {}) {
 					null
 				);
 			});
+			attachmentMutateSourceIds = matches.map((item, index) => attachmentMutateSourceIds[index] ?? item?.sourceId ?? null);
+			attachmentMutateGroupIds = matches.map((item, index) => attachmentMutateGroupIds[index] ?? item?.groupId ?? null);
 		} catch {
 			// ignore storage errors
 		}
 	}
 
-	function setMutateAttachmentFromCreation(url, creationId, published) {
+	function setMutateAttachmentFromCreation(url, creationId, published, groupId) {
 		const trimmed = typeof url === 'string' ? url.trim() : '';
 		const cid = Number(creationId);
 		if (!trimmed || !Number.isFinite(cid) || cid <= 0) return;
 		try {
 			addToMutateQueue({
 				sourceId: cid,
+				groupId,
 				imageUrl: trimmed,
 				published: published === true,
 			});
@@ -1291,6 +1302,7 @@ export function mountCreateComposer(host, opts = {}) {
 		attachmentMutateSourceIds = snapshots.map((item) =>
 			Number.isFinite(item.sourceId) && item.sourceId > 0 ? item.sourceId : null
 		);
+		attachmentMutateGroupIds = snapshots.map((item) => Number.isFinite(item.groupId) && item.groupId > 0 ? item.groupId : null);
 		attachmentUploadAspects = snapshots.map(() => null);
 		saveAttachmentsToStorage();
 		renderAttachmentStrip();
@@ -2097,12 +2109,15 @@ export function mountCreateComposer(host, opts = {}) {
 	function saveAttachmentsToStorage() {
 		const urls = [];
 		const sourceIds = [];
+		const groupIds = [];
 		for (let i = 0; i < attachmentItems.length; i++) {
 			const item = attachmentItems[i];
 			if (typeof item !== 'string' || !item.trim()) continue;
 			urls.push(item.trim());
 			const sid = attachmentMutateSourceIds[i];
 			sourceIds.push(Number.isFinite(sid) && sid > 0 ? sid : null);
+			const gid = attachmentMutateGroupIds[i];
+			groupIds.push(Number.isFinite(gid) && gid > 0 ? gid : null);
 		}
 		try {
 			if (urls.length > 0) {
@@ -2112,22 +2127,22 @@ export function mountCreateComposer(host, opts = {}) {
 			}
 		} catch (_) {}
 		try {
-			syncMutateQueueFromComposerAttachments(urls, sourceIds);
+			syncMutateQueueFromComposerAttachments(urls, sourceIds, groupIds);
 		} catch (_) {}
 		if (createProvider?.draft?.read && createProvider?.workflow?.edit) {
 			const current = createProvider.draft.read();
-			const sourcesUnchanged = urls.every((url, index) => current.imageSources?.[url]?.sourceId === (Number(sourceIds[index]) > 0 ? Number(sourceIds[index]) : null));
+			const sourcesUnchanged = urls.every((url, index) => current.imageSources?.[url]?.sourceId === (Number(sourceIds[index]) > 0 ? Number(sourceIds[index]) : null) && current.imageSources?.[url]?.groupId === (Number(groupIds[index]) > 0 ? Number(groupIds[index]) : null));
 			if (JSON.stringify(current.inputImages) !== JSON.stringify(urls) || !sourcesUnchanged) {
 				const imageSources = {};
 				urls.forEach((url, index) => {
 					const existing = current.imageSources?.[url];
 					const sourceId = Number(sourceIds[index]);
-					imageSources[url] = existing || { sourceId: Number.isFinite(sourceId) && sourceId > 0 ? sourceId : null, published: false };
+					imageSources[url] = { ...(existing || { published: false }), sourceId: Number.isFinite(sourceId) && sourceId > 0 ? sourceId : null, groupId: Number(groupIds[index]) > 0 ? Number(groupIds[index]) : null };
 				});
 				editProviderDraft({ imageChange: { type: 'replace', images: urls }, imageSources });
 			}
 		}
-		return { urls, sourceIds };
+		return { urls, sourceIds, groupIds };
 	}
 
 	function getAttachmentPreviewSrc(item, index) {
@@ -2194,6 +2209,7 @@ export function mountCreateComposer(host, opts = {}) {
 		revokeAttachmentBlobUrls();
 		attachmentItems = [];
 		attachmentMutateSourceIds = [];
+		attachmentMutateGroupIds = [];
 		attachmentUploadAspects = [];
 		attachmentUploadingCount = 0;
 		saveAttachmentsToStorage();
@@ -2214,6 +2230,7 @@ export function mountCreateComposer(host, opts = {}) {
 		}
 		attachmentItems.splice(index, 1);
 		attachmentMutateSourceIds.splice(index, 1);
+		attachmentMutateGroupIds.splice(index, 1);
 		attachmentUploadAspects.splice(index, 1);
 		saveAttachmentsToStorage();
 		renderAttachmentStrip();
@@ -2224,8 +2241,10 @@ export function mountCreateComposer(host, opts = {}) {
 		const trimmed = typeof url === 'string' ? url.trim() : '';
 		if (!trimmed) return;
 		const cid = Number(options?.mutateSourceCreationId);
+		const gid = Number(options?.mutateGroupId);
 		attachmentItems.push(trimmed);
 		attachmentMutateSourceIds.push(Number.isFinite(cid) && cid > 0 ? cid : null);
+		attachmentMutateGroupIds.push(Number.isFinite(gid) && gid > 0 ? gid : null);
 		attachmentUploadAspects.push(null);
 		saveAttachmentsToStorage();
 		renderAttachmentStrip();
@@ -2242,6 +2261,7 @@ export function mountCreateComposer(host, opts = {}) {
 		const uploadAspect = getEarlyUploadAspectRatio();
 		attachmentItems.push(file);
 		attachmentMutateSourceIds.push(null);
+		attachmentMutateGroupIds.push(null);
 		attachmentUploadAspects.push(null);
 		attachmentUploadingCount += 1;
 		renderAttachmentStrip();
@@ -2255,11 +2275,13 @@ export function mountCreateComposer(host, opts = {}) {
 			} else {
 				attachmentItems.splice(index, 1);
 				attachmentMutateSourceIds.splice(index, 1);
+				attachmentMutateGroupIds.splice(index, 1);
 				attachmentUploadAspects.splice(index, 1);
 			}
 		} catch (err) {
 			attachmentItems.splice(index, 1);
 			attachmentMutateSourceIds.splice(index, 1);
+			attachmentMutateGroupIds.splice(index, 1);
 			attachmentUploadAspects.splice(index, 1);
 			alert(err?.message || 'Image upload failed');
 		} finally {
@@ -2271,11 +2293,23 @@ export function mountCreateComposer(host, opts = {}) {
 
 	function restoreAttachments(urls, sourceIds = []) {
 		revokeAttachmentBlobUrls();
+		const savedInputs = createProvider?.draft?.read?.()?.inputs || [];
 		attachmentItems = urls
 			.map((v) => (typeof v === 'string' ? v.trim() : ''))
 			.filter(Boolean);
 		attachmentMutateSourceIds = attachmentItems.map((_, index) => {
+			const input = savedInputs[index];
+			if (input?.preview?.url === attachmentItems[index]) {
+				const typedId = Number(input.source?.member?.creationId ?? input.source?.creationId ?? input.source?.parentCreationId);
+				if (Number.isFinite(typedId) && typedId > 0) return typedId;
+			}
 			const saved = Number(sourceIds[index]);
+			return Number.isFinite(saved) && saved > 0 ? saved : null;
+		});
+		attachmentMutateGroupIds = attachmentItems.map((_, index) => {
+			const input = savedInputs[index];
+			if (input?.preview?.url === attachmentItems[index] && Number(input.source?.groupId) > 0) return Number(input.source.groupId);
+			const saved = Number(createProvider?.draft?.read?.()?.imageSources?.[attachmentItems[index]]?.groupId);
 			return Number.isFinite(saved) && saved > 0 ? saved : null;
 		});
 		attachmentUploadAspects = attachmentItems.map(() => null);
@@ -2401,6 +2435,7 @@ export function mountCreateComposer(host, opts = {}) {
 		revokeAttachmentBlobUrls();
 		attachmentItems = [];
 		attachmentMutateSourceIds = [];
+		attachmentMutateGroupIds = [];
 		attachmentUploadAspects = [];
 		attachmentUploadingCount = 0;
 		try {
@@ -3314,7 +3349,7 @@ export function mountCreateComposer(host, opts = {}) {
 				if (outputMode !== 'image') setOutputMode('image');
 				const cid = Number(detail?.creationId);
 				if (Number.isFinite(cid) && cid > 0) {
-					setMutateAttachmentFromCreation(url, cid, detail?.published === true);
+					setMutateAttachmentFromCreation(url, cid, detail?.published === true, detail?.groupId);
 					return;
 				}
 				addAttachmentUrl(url);

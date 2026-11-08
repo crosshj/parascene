@@ -2,6 +2,51 @@ import test from 'node:test';import assert from 'node:assert/strict';import fs f
 async function harness(url,fetcher,{mobile=false,keepSentinelVisible=false}={}){const dom=new JSDOM('<div class="app-outlet__scroll"><div id="outlet"></div></div>',{url:'http://localhost'+url,pretendToBeVisual:true}),w=dom.window;w.HTMLElement.prototype.scrollTo=function(){};const observers=[];class Observer{constructor(callback,options){this.callback=callback;this.options=options;this.targets=new Set();this.disconnected=false;observers.push(this)}observe(target){this.targets.add(target);if(keepSentinelVisible&&this.options?.rootMargin==='800px'&&target instanceof w.HTMLElement&&!target.hidden)this.callback([{target,isIntersecting:true}])}unobserve(target){this.targets.delete(target)}disconnect(){this.disconnected=true}}w.matchMedia=()=>({matches:mobile,addEventListener(){},removeEventListener(){}});w.HTMLMediaElement.prototype.play=async function(){};w.HTMLMediaElement.prototype.pause=function(){};w.HTMLMediaElement.prototype.load=function(){};w.HTMLDialogElement.prototype.showModal=function(){this.open=true};w.HTMLDialogElement.prototype.close=function(){this.open=false};const names=['document','Document','HTMLElement','HTMLMetaElement','HTMLDivElement','HTMLInputElement','HTMLTextAreaElement','HTMLSelectElement','HTMLButtonElement','HTMLAnchorElement','HTMLImageElement','HTMLTemplateElement','HTMLFormElement','HTMLMediaElement','HTMLAudioElement','HTMLVideoElement','Element','SVGElement','Node','Image','File','FormData','Event','CustomEvent','KeyboardEvent','DOMException','AbortController','AbortSignal','customElements','localStorage','sessionStorage','navigator','location','MutationObserver'];const context=vm.createContext({...Object.fromEntries(names.map(n=>[n,w[n]])),window:w,innerWidth:w.innerWidth,innerHeight:w.innerHeight,matchMedia:w.matchMedia,console,URL,URLSearchParams,CSS:{escape:v=>v},getComputedStyle:w.getComputedStyle.bind(w),IntersectionObserver:Observer,ResizeObserver:Observer,requestAnimationFrame:w.requestAnimationFrame.bind(w),cancelAnimationFrame:w.cancelAnimationFrame.bind(w),setTimeout,clearTimeout,setInterval:w.setInterval.bind(w),clearInterval:w.clearInterval.bind(w),queueMicrotask,fetch:fetcher,alert(){},confirm:()=>true});const modules=new Map();function module(file){file=path.resolve(file);if(modules.has(file))return modules.get(file);let code=fs.readFileSync(file,'utf8');if(file.endsWith('.css'))code='export default {}';if(file.endsWith('.html'))code='export default '+JSON.stringify(code);const mod=new vm.SourceTextModule(code,{identifier:file,context});modules.set(file,mod);return mod}async function load(file){const mod=module(path.resolve('client',file));if(mod.status==='unlinked')await mod.link((name,parent)=>module(path.resolve(path.dirname(parent.identifier),name)));if(mod.status!=='evaluated')await mod.evaluate();return mod.namespace}const navigations=[],actions={navigate:(...args)=>navigations.push(args),dismissOverlay(){}},services={session:{user:{id:1,role:'consumer',meta:{}},redirectToLogin(){throw Error('Unexpected auth redirect')},refresh:async()=>{}},providers:{document:{setTitle(){},get baseTitle(){return 'parascene'}}}};const searchComposer=(await load('components/SearchComposer/SearchComposer.js')).createSearchComposerElement();w.document.body.append(searchComposer);return {w,load,searchComposer,outlet:w.document.getElementById('outlet'),actions,services,navigations,observers,close:()=>dom.window.close()}}
 const tick=()=>new Promise(resolve=>setImmediate(resolve)),response=data=>new Response(JSON.stringify(data),{headers:{"content-type":"application/json"}});
 
+test('carousel selection is the member dragged into Create', { skip: !vm.SourceTextModule }, async () => {
+ const h = await harness('/creations', async () => response({}));
+ try {
+  const { setupFeedCardGroupCarousel } = await h.load('shared/feedCardBuild.js');
+  const { attachFeedCardCreationDragSource, PRSN_FEED_CREATION_DRAG_MIME } = await h.load('shared/creationComposerDrag.js');
+  const card = h.w.document.createElement('div'); card.className = 'feed-card';
+  card.dataset.imageId = '50'; card.dataset.imageUrlFull = '/cover.png'; card.dataset.groupCreation = '1';
+  const media = h.w.document.createElement('div'); media.className = 'feed-card-image'; card.append(media); h.outlet.append(card);
+  const item = { id: 50, title: 'Group', meta: { group: { kind: 'group_creations', cover_source_id: 91, source_creations: [
+   { id: 91, file_path: '/api/images/created/red.png', title: 'Red' },
+   { id: 92, file_path: '/api/images/created/blue.png', title: 'Blue' },
+  ] } } };
+  assert.equal(setupFeedCardGroupCarousel(media, item), true);
+  attachFeedCardCreationDragSource(card);
+  media.querySelector('.feed-card-group-nav--next').click();
+  assert.equal(card.dataset.selectedGroupSourceId, '92');
+  const values = new Map();
+  const drag = new h.w.Event('dragstart', { bubbles: true, cancelable: true });
+  Object.defineProperty(drag, 'dataTransfer', { value: { setData(type, value) { values.set(type, value); }, setDragImage() {}, effectAllowed: '' } });
+  card.dispatchEvent(drag);
+  const payload = JSON.parse(values.get(PRSN_FEED_CREATION_DRAG_MIME));
+  assert.equal(payload.creationId, 92);
+  assert.equal(payload.groupId, 50);
+  assert.match(payload.imageUrl, /blue\.png/);
+ } finally { h.close(); }
+});
+
+test('card navigation carries the selected carousel member to detail', { skip: !vm.SourceTextModule }, async () => {
+ const h = await harness('/creations', async () => response({}));
+ try {
+  const { createFeedItemCard } = await h.load('shared/feedCardBuild.js');
+  const item = { id: 50, created_image_id: 50, title: 'Group', media_type: 'image', url: '/cover.png', file_path: '/cover.png', published: true,
+   meta: { group: { kind: 'group_creations', cover_source_id: 91, source_creations: [
+    { id: 91, file_path: '/api/images/created/red.png', title: 'Red' },
+    { id: 92, file_path: '/api/images/created/blue.png', title: 'Blue' },
+   ] } } };
+  const visited = [];
+  const card = createFeedItemCard(item, 0, { performCreationNavigation: href => visited.push(href) });
+  h.outlet.append(card);
+  card.querySelector('.feed-card-group-nav--next').click();
+  card.querySelector('.feed-card-image').click();
+  assert.deepEqual(visited, ['/creations/50?source_id=92']);
+ } finally { h.close(); }
+});
+
 test('Creations metadata updates retain image visibility and request state', { skip: !vm.SourceTextModule }, async () => {
  const h = await harness('/creations', async () => response({}));
  let dispose;
