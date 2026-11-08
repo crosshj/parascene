@@ -60,6 +60,47 @@ test('archived group snapshot is materialized from its recorded artifact', async
  assert.deepEqual(result.directParentIds, [92]);
 });
 
+test('native v2 member uses an authorized live row path and rejects a missing row', async () => {
+ const data = fixture();
+ data.rows.get(92).filename = null;
+ data.rows.get(92).file_path = '/api/images/created/blue.png';
+ data.rows.get(50).meta = { group: { kind: 'group_v2', items: [
+  { pointer: { kind: 'creation', creationId: 91 }, view: { filename: 'red.png', status: 'completed' } },
+  { pointer: { kind: 'creation', creationId: 92 }, view: { filePath: '/api/images/created/blue.png', status: 'completed', mediaType: 'image' } },
+ ] } };
+ const input = group(50, 92, '/preview-of-blue.png');
+ const requested = [];
+ const result = await resolveCreationInputs({ inputs: [input], bindings: [{ field: 'input_images', attachmentIds: [input.id] }], fields,
+  args: { input_images: [input.preview.url] }, queries: data.queries, user, providerBase: 'https://app.example',
+  shareUrlForImage: id => `https://app.example/fetch/${id}`,
+  materializeArchived: async value => { requested.push(value); return 'https://cdn.example/edited/blue.png'; } });
+ assert.deepEqual(requested, [{ groupId: 50, creationId: 92, filename: 'blue.png' }]);
+ assert.deepEqual(result.args.input_images, ['https://cdn.example/edited/blue.png']);
+ assert.deepEqual(result.directParentIds, [92]);
+ data.rows.delete(92);
+ await assert.rejects(resolveCreationInputs({ inputs: [input], bindings: [{ field: 'input_images', attachmentIds: [input.id] }], fields,
+  args: { input_images: [input.preview.url] }, queries: data.queries, user, providerBase: 'https://app.example',
+  materializeArchived: async () => 'https://cdn.example/edited/blue.png' }), { code: 'source_unavailable' });
+});
+
+test('group member with a live row but no filename uses its saved member artifact', async () => {
+ const data = fixture();
+ data.rows.get(92).filename = null;
+ data.rows.get(50).meta.group.source_creations = [{ id: 92, filename: 'blue.png', status: 'completed' }];
+ const input = group(50, 92);
+ const requested = [];
+ const result = await resolveCreationInputs({ inputs: [input], bindings: [{ field: 'input_images', attachmentIds: [input.id] }], fields,
+  args: { input_images: [input.preview.url] }, queries: data.queries, user, providerBase: 'https://app.example',
+  shareUrlForImage: id => `https://app.example/fetch/${id}`,
+  materializeArchived: async value => { requested.push(value); return 'https://cdn.example/edited/blue.png'; } });
+ assert.deepEqual(requested, [{ groupId: 50, creationId: 92, filename: 'blue.png' }]);
+ assert.deepEqual(result.args.input_images, ['https://cdn.example/edited/blue.png']);
+ data.rows.get(92).unavailable_at = '2026-11-08';
+ await assert.rejects(resolveCreationInputs({ inputs: [input], bindings: [{ field: 'input_images', attachmentIds: [input.id] }], fields,
+  args: { input_images: [input.preview.url] }, queries: data.queries, user, providerBase: 'https://app.example',
+  materializeArchived: async () => 'https://cdn.example/edited/blue.png' }), { code: 'source_unavailable' });
+});
+
 test('archived source materialization publishes the selected snapshot pixels for provider fetch', async () => {
  const blue = await sharp({ create: { width: 2, height: 2, channels: 4, background: '#0000ff' } }).png().toBuffer();
  let uploaded;

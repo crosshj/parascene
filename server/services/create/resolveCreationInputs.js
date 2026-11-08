@@ -1,5 +1,6 @@
 import { validateInputBindings, creationInputParentId } from '../../../shared/creationInputs.js';
 import { groupV2Items, groupActionSupportedForMeta, parseMeta } from './groupV2.js';
+import { extractFilenameFromCreatedImagePath } from './resolveCreatedImageStorageFilename.js';
 import { getCdnOrigin } from './url.js';
 
 const allowed = (row, user) => row && (Number(row.user_id) === Number(user.id) || user.role === 'admin' ||
@@ -12,6 +13,28 @@ function containsCreation(meta, creationId) {
  if (group?.kind !== 'group_creations') return false;
  return (group.source_creation_ids || []).some(id => Number(id) === creationId) ||
   (group.source_creations || []).some(item => Number(item?.id) === creationId);
+}
+
+function groupSnapshot(meta, creationId) {
+ const group = meta?.group;
+ if (group?.kind === 'group_creations') {
+  return (group.source_creations || []).find(item => Number(item?.id) === creationId) || null;
+ }
+ if (group?.kind === 'group_v2') {
+  const item = groupV2Items(meta).find(item => item.pointer?.kind === 'creation' && Number(item.pointer.creationId) === creationId);
+  if (!item) return null;
+  const view = item.view || {};
+  return { filename: view.filename, file_path: view.filePath || view.url,
+   status: view.status, meta: { media_type: view.mediaType || 'image' } };
+ }
+ return null;
+}
+
+function storageFilename(record) {
+ const filename = typeof record?.filename === 'string' ? record.filename.trim() : '';
+ if (filename && !/^(?:group|group_v2|project)\//.test(filename)) return filename;
+ const fromPath = extractFilenameFromCreatedImagePath(record?.file_path);
+ return fromPath && !/^(?:group|group_v2|project)\//.test(fromPath) ? fromPath : null;
 }
 
 export async function resolveCreationInputs({ inputs, bindings, fields, args, queries, user, shareUrlForImage, providerBase, resolveInternalUrl, materializeArchived }) {
@@ -40,24 +63,25 @@ export async function resolveCreationInputs({ inputs, bindings, fields, args, qu
       if (!containsCreation(groupMeta, creationId)) throw failure('member_not_in_group');
      }
      const row = await queries.selectCreatedImageByIdAnyUser?.get(creationId);
-     if (!row && source.kind === 'group-member' && groupMeta?.group?.kind === 'group_creations') {
-      const snapshot = (groupMeta.group.source_creations || []).find(item => Number(item?.id) === creationId);
-      const filename = typeof snapshot?.filename === 'string' ? snapshot.filename.trim() : '';
-      if (snapshot?.status && snapshot.status !== 'completed') throw failure('source_not_ready', 409);
-      if (!filename || filename.startsWith('group/') || snapshot?.meta?.media_type === 'video' || !materializeArchived) throw failure('source_unavailable');
-      revision = `${filename}:${snapshot.updated_at || snapshot.created_at || ''}`;
-      if (input.media?.revision && input.media.revision !== revision) throw failure('source_changed', 409);
-      url = await materializeArchived({ groupId: source.groupId, creationId, filename });
-      if (!url) throw failure('source_unavailable');
-     } else {
-      if (!row) throw failure('source_unavailable');
-      if ((row.status || '') !== 'completed') throw failure('source_not_ready', 409);
-      if (row.unavailable_at || !row.filename || parseMeta(row.meta)?.media_type === 'video') throw failure('source_unavailable');
-      if (source.kind === 'creation' && !allowed(row, user)) throw failure('source_unavailable');
+     const snapshot = source.kind === 'group-member' ? groupSnapshot(groupMeta, creationId) : null;
+     if (row && (row.status || '') !== 'completed') throw failure('source_not_ready', 409);
+     if (!row && snapshot?.status && snapshot.status !== 'completed') throw failure('source_not_ready', 409);
+     if (row?.unavailable_at || parseMeta(row?.meta)?.media_type === 'video' || snapshot?.meta?.media_type === 'video') throw failure('source_unavailable');
+     if (source.kind === 'creation' && !allowed(row, user)) throw failure('source_unavailable');
+     const liveFilename = storageFilename(row);
+     // Native v2 views are client supplied display data. They must not authorize
+     // a storage read after the creation row disappears.
+     const snapshotFilename = groupMeta?.group?.kind === 'group_creations' ? storageFilename(snapshot) : null;
+     const filename = liveFilename || snapshotFilename;
+     if (!filename) throw failure('source_unavailable');
+     revision = `${filename}:${row?.updated_at || row?.created_at || snapshot?.updated_at || snapshot?.created_at || ''}`;
+     if (input.media?.revision && input.media.revision !== revision) throw failure('source_changed', 409);
+     if (row && liveFilename && row.filename === liveFilename) {
       url = shareUrlForImage(creationId, user.id);
-      if (!url) throw failure('source_unavailable');
-      revision = `${row.filename}:${row.updated_at || row.created_at || ''}`;
+     } else if (source.kind === 'group-member' && materializeArchived) {
+      url = await materializeArchived({ groupId: source.groupId, creationId, filename });
      }
+     if (!url) throw failure('source_unavailable');
      if (input.media?.revision && input.media.revision !== revision) throw failure('source_changed', 409);
      if (!directParentIds.includes(creationId)) directParentIds.push(creationId);
     } else if (source.kind === 'external-image' || source.kind === 'upload' || source.kind === 'derived-still') {

@@ -36,7 +36,7 @@ import { verifyQStashRequest } from "../services/create/qstashVerification.js";
 import { creationIdFromParasceneVideoUrl, resolveCreatedImageRowForProviderImageUrl } from "../services/create/resolveCreatedImageStorageFilename.js";
 
 import { mapCreatedImageRowMediaFields } from "../services/create/resolveCreationDisplayMedia.js";
-import { applyCostumeToCreationPayload, isGroupV2Meta, isHiddenInGroupMeta, wantsRawGroupV2 } from "../services/create/projectGroupV2.js";
+import { applyCostumeToCreationPayload, costumeProjectV2Meta, groupActionSupportedForMeta, isGroupV2Meta, isHiddenInGroupMeta, wantsRawGroupV2 } from "../services/create/projectGroupV2.js";
 import {
 	appendCreationToOwnedGroupV2,
 	fillThinGroupV2ItemViews,
@@ -260,10 +260,13 @@ async function buildGroupMutateSourcePayload({ groupRow, sourceId, viewerUser })
 		const sid = Number(sourceId);
 		if (!Number.isFinite(groupId) || groupId <= 0 || !Number.isFinite(sid) || sid <= 0) return null;
 		if (!viewerCanMutateGroup(groupRow, viewerUser)) return null;
-		if (!isGroupSourceOfSharedCreation(groupRow, sid)) return null;
-
-		const groupMeta = parseMeta(groupRow.meta);
+		const nativeMeta = parseMeta(groupRow.meta);
+		if (!groupActionSupportedForMeta(nativeMeta, "remix")) return null;
+		const groupMeta = isGroupV2Meta(nativeMeta)
+			? costumeProjectV2Meta(nativeMeta, { title: groupRow.title })
+			: nativeMeta;
 		const groupPayload = groupMeta?.group && typeof groupMeta.group === "object" ? groupMeta.group : null;
+		if (!collectGroupSourceCreationIds(groupPayload).has(sid)) return null;
 		const snap = findGroupSourceSnapshot(groupPayload, sid);
 
 		let sourceRow = null;
@@ -272,12 +275,15 @@ async function buildGroupMutateSourcePayload({ groupRow, sourceId, viewerUser })
 		} catch {
 			sourceRow = null;
 		}
+		const nativeV2 = isGroupV2Meta(nativeMeta);
+		if (nativeV2 && !sourceRow) return null;
+		if (sourceRow?.unavailable_at) return null;
 
 		const status = sourceRow?.status || snap?.status || "completed";
 		if (status !== "completed") return { error: "not_ready" };
 
 		let filename =
-			typeof snap?.filename === "string" && snap.filename.trim() && !snap.filename.startsWith("group/")
+			!nativeV2 && typeof snap?.filename === "string" && snap.filename.trim() && !snap.filename.startsWith("group/")
 				? snap.filename.trim()
 				: "";
 		if (!filename && sourceRow?.filename) {
@@ -285,7 +291,7 @@ async function buildGroupMutateSourcePayload({ groupRow, sourceId, viewerUser })
 			if (fn && !fn.startsWith("group/")) filename = fn;
 		}
 
-		let filePath = typeof snap?.file_path === "string" ? snap.file_path.trim() : "";
+		let filePath = !nativeV2 && typeof snap?.file_path === "string" ? snap.file_path.trim() : "";
 		if (!filePath && sourceRow?.file_path) filePath = String(sourceRow.file_path).trim();
 
 		let rawUrl = filePath || (filename ? storage.getImageUrl(filename) : null);

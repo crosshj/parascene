@@ -384,7 +384,9 @@ if (!lifetime.active) return;
 			}
 		}
 
-		if (!creation) {
+		// A seeded preview is not proof that this group member can be submitted.
+		// Resolve the selected member against current group membership on every grouped Mutate load.
+		if (!creation || needsSourceMatch) {
 			const response = await fetch(imageApiUrl, { credentials: 'include' });
 if (!lifetime.active) return;
 			if (!response.ok) {
