@@ -61,6 +61,36 @@ loadAdminDataTable(document.querySelector('[data-email-sends]'), {
 	]
 });
 
+const runCronButton = document.querySelector('[data-run-notifications-cron]');
+const runCronSpinner = document.querySelector('[data-run-notifications-spinner]');
+const runCronLabel = document.querySelector('[data-run-notifications-label]');
+const runCronStatus = document.querySelector('[data-run-notifications-status]');
+runCronButton?.addEventListener('click', async () => {
+	runCronButton.disabled = true;
+	runCronButton.setAttribute('aria-busy', 'true');
+	runCronSpinner.hidden = false;
+	runCronLabel.textContent = 'Running…';
+	runCronStatus.textContent = 'Running notifications cron…';
+	runCronStatus.hidden = false;
+	runCronStatus.classList.remove('admin-status--error');
+	try {
+		const response = await fetch('/api/admin-tools/run-notifications-cron', {
+			method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: '{}'
+		});
+		const result = await response.json().catch(() => ({}));
+		if (!response.ok) throw new Error(result.error || `Request failed (${response.status})`);
+		runCronStatus.textContent = result.message || 'Cron completed.';
+	} catch (error) {
+		runCronStatus.textContent = error.message || 'Unable to run cron.';
+		runCronStatus.classList.add('admin-status--error');
+	} finally {
+		runCronButton.disabled = false;
+		runCronButton.removeAttribute('aria-busy');
+		runCronSpinner.hidden = true;
+		runCronLabel.textContent = 'Run cron now';
+	}
+});
+
 const settingDefinitions = [
 	{ key: 'email_use_test_recipient', label: 'Send to test address', type: 'checkbox', description: "Route lifecycle and transactional emails to Resend's test address instead of real users." },
 	{ key: 'email_dry_run', label: 'Dry run', type: 'checkbox', description: 'Scheduled digest sends are recorded without delivering email. Admin broadcasts also honor this setting.' },

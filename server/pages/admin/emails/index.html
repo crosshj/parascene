@@ -16,7 +16,19 @@
 				<button class="admin-tabs__tab" data-admin-tab="send">Manual send</button>
 				<button class="admin-tabs__tab" data-admin-tab="settings">Settings</button>
 			</div>
-			<section class="admin-tabs__panel" data-admin-panel="sends"><div data-email-sends data-admin-table></div></section>
+			<section class="admin-tabs__panel" data-admin-panel="sends">
+				<div class="admin-section-heading">
+					<h2>Recent sends</h2>
+					<div class="admin-actions">
+						<button class="admin-button admin-run-cron" type="button" data-run-notifications-cron>
+							<span class="admin-spinner" data-run-notifications-spinner hidden aria-hidden="true"></span>
+							<span data-run-notifications-label>Run cron now</span>
+						</button>
+					</div>
+				</div>
+				<p class="admin-status" data-run-notifications-status role="status" aria-live="polite" hidden></p>
+				<div data-email-sends data-admin-table></div>
+			</section>
 			<section class="admin-tabs__panel" data-admin-panel="templates" hidden><div class="admin-email-templates" data-email-templates></div></section>
 			<section class="admin-tabs__panel" data-admin-panel="send" hidden>
 				<form class="admin-form" data-manual-email-form>

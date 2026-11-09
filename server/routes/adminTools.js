@@ -481,6 +481,12 @@ export default function createAdminToolsRoutes({ client, users, servers, queries
 		});
 		res.json({ items, total: result.count || 0 });
 	}));
+	// Keep the legacy admin action available while the notifications worker is
+	// migrated into this deployment. Do not report success until a root-owned
+	// worker is wired here; that migration remains tracked separately.
+	router.post('/api/admin-tools/run-notifications-cron', guard(async (_req, res) => {
+		res.status(503).json({ error: 'The notifications worker has not yet been migrated to this server.' });
+	}));
 	router.get('/api/admin-tools/email-settings', guard(async (_req, res) => res.json(await emailSettings())));
 	router.patch('/api/admin-tools/email-settings', guard(async (req, res) => {
 		for (const [key, raw] of Object.entries(req.body || {})) {

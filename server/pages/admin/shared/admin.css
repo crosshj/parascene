@@ -89,6 +89,8 @@
 .admin-connect-actions { flex-wrap: wrap; }
 .admin-connect-actions .admin-dialog-spacer { flex: 1; }
 .admin-clear-expired-submit { position: relative; display: grid; min-width: 12rem; place-items: center; }
+.admin-run-cron { position: relative; min-width: 9rem; }
+.admin-run-cron[aria-busy="true"] [data-run-notifications-label] { visibility: hidden; }
 .admin-spinner { position: absolute; inset: 50% auto auto 50%; width: 1rem; height: 1rem; margin: -.5rem 0 0 -.5rem; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: admin-spinner-turn .7s linear infinite; }
 .admin-expired-pin-list { display: grid; gap: .5rem; margin: 0; padding: 0; list-style: none; }
 .admin-expired-pin-list li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .25rem .75rem; padding: .65rem; border: 1px solid var(--admin-border); border-radius: .4rem; }
