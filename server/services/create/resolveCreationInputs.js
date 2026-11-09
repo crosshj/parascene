@@ -103,8 +103,10 @@ export async function resolveCreationInputs({ inputs, bindings, fields, args, qu
      const parasceneHost = parsed.hostname === 'parascene.com' || parsed.hostname.endsWith('.parascene.com');
      const internalMediaPath = /^\/(?:api\/images\/created|images\/created|api\/creations\/media|api\/share)\//.test(parsed.pathname);
      if (parasceneHost && internalMediaPath) throw failure('source_kind_unsupported', 400);
+     // Queue-from-frame uses the default image upload, which stores files under profile/<user>/generic_... .
+     const ownedFrameUpload = new RegExp(`^/api/images/generic/profile/${Number(user.id)}/generic_\\d+_[A-Za-z0-9_-]+\\.[a-z0-9]{1,10}$`).test(parsed.pathname);
      if (source.kind === 'derived-still' &&
-      (!parsed.pathname.startsWith('/api/images/generic/edited/') || ![getCdnOrigin(), ownOrigin].includes(parsed.origin))) {
+      (!(parsed.pathname.startsWith('/api/images/generic/edited/') || ownedFrameUpload) || ![getCdnOrigin(), ownOrigin].includes(parsed.origin))) {
       throw failure('source_kind_unsupported', 400);
      }
      if (parsed.origin === ownOrigin && !parsed.pathname.startsWith('/api/images/generic/')) throw failure('source_kind_unsupported', 400);

@@ -172,3 +172,46 @@ test("a provider poll releases its lock before the scheduled follow-up", async (
 		}
 	}
 });
+
+test("a late owner check detects expired Blue output and fails the creation", async () => {
+	const priorFetch = globalThis.fetch;
+	const row = {
+		id: 42,
+		user_id: 7,
+		status: "queued",
+		meta: {
+			provider_async: true,
+			provider_method: "text2image",
+			provider_job_id: "blue-job",
+			provider_last_payload: { async: true, job_id: "blue-job", status: "pending" },
+			server_id: 6,
+			started_at: new Date(Date.now() - 5 * 60 * 60_000).toISOString(),
+		},
+	};
+	let providerPolls = 0;
+	try {
+		globalThis.fetch = async () => {
+			providerPolls += 1;
+			return {
+				ok: false,
+				status: 410,
+				statusText: "Gone",
+				headers: { get: () => "application/json" },
+				text: async () => JSON.stringify({ async: true, data_removed: true, error: "Output data removed" }),
+			};
+		};
+		const queries = {
+			selectCreatedImageById: { get: async () => ({ ...row, meta: { ...row.meta } }) },
+			selectServerById: { get: async () => ({ status: "active", server_url: "https://blue.example/generate" }) },
+			claimCreatedImageProviderPollLock: { run: async (_id, _uid, meta) => { row.meta = meta; return { changes: 1 }; } },
+			updateCreatedImageJobFailed: { run: async (_id, _uid, update) => { row.status = "failed"; row.meta = update.meta; } },
+		};
+		const result = await runProviderPollJob({ queries, payload: { created_image_id: 42, user_id: 7, server_id: 6, credit_cost: 0 } });
+		assert.equal(providerPolls, 1);
+		assert.equal(result.reason, "provider_failed");
+		assert.equal(row.status, "failed");
+		assert.equal(row.meta.error_code, "output_expired");
+	} finally {
+		globalThis.fetch = priorFetch;
+	}
+});

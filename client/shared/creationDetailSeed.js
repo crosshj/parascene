@@ -12,6 +12,7 @@ import {
 } from './audioCoverWaveform.js';
 import {
 	creationCanRecheckAfterTimeout,
+	creationCanCheckProviderStatus,
 	creationGpuWaitMarkup,
 	isCreationFinishTimedOut,
 	isCreationGpuInFlight,
@@ -1151,7 +1152,7 @@ function seedStripPlan(seed) {
 		isOwner &&
 		!adminViewingUserDeleted &&
 		!isImportEmbed &&
-		(creationCanRecheckAfterTimeout(status, meta) ||
+		(creationCanCheckProviderStatus(status, meta) ||
 			(isCreationGpuInFlight(status) && Boolean(meta?.revived_from_timeout_at)));
 	const showMoreInfo =
 		isFailed &&

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { creationCardMarkup } from '../client/shared/creationGrid.js';
-import { creationGpuWaitLabel } from '../client/shared/creationGpuWait.js';
+import { creationCanCheckProviderStatus, creationGpuWaitLabel } from '../client/shared/creationGpuWait.js';
 import { createPendingCreationsStore } from '../client/providers/creations/pending.js';
 
 function installSession() {
@@ -77,4 +77,13 @@ test('a timed-out creation shows the timeout state on the grid', () => {
 	assert.match(plainFailed, />FAILED</);
 	assert.doesNotMatch(plainFailed, /TIMED OUT/);
 	assert.doesNotMatch(stillRunning, /GENERATING/);
+});
+
+test('an owner can check a queued Blue job before the display timeout', () => {
+	const meta = { provider_async: true, provider_job_id: 'blue-job' };
+	assert.equal(creationCanCheckProviderStatus('queued', meta), true);
+	assert.equal(creationCanCheckProviderStatus('processing', meta), true);
+	assert.equal(creationCanCheckProviderStatus('completed', meta), false);
+	assert.equal(creationCanCheckProviderStatus('queued', { provider_async: true }), false);
+	assert.equal(creationCanCheckProviderStatus('failed', { error_code: 'timeout', provider_job_id: 'blue-job' }), true);
 });
