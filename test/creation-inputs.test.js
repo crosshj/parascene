@@ -181,7 +181,7 @@ test('queue retains two members with one display URL and reorders by identity', 
  } finally { globalThis.window = previousWindow; }
 });
 test('a queued frame submits its captured artifact and keeps validated video provenance', async () => {
- const frameUrl = 'https://cdn.parascene.com/api/images/generic/edited/7/frame.png';
+ const frameUrl = 'https://cdn.parascene.com/api/images/generic/profile/7/generic_1762646400000_abc1234.png';
  const input = inputFromLegacyImage(frameUrl, { sourceId: 93, fromFrame: true, frameTimeSec: 2.5 }, 'frame');
  assert.equal(input.source.kind, 'derived-still');
  const result = await resolveCreationInputs({ inputs: [input], bindings: [{ field: 'image_url', attachmentIds: ['frame'] }],
@@ -190,6 +190,13 @@ test('a queued frame submits its captured artifact and keeps validated video pro
  assert.equal(result.args.image_url, frameUrl);
  assert.deepEqual(result.directParentIds, [93]);
  assert.equal(result.recipe.inputs[0].source.frameTimeSec, 2.5);
+});
+test('a queued frame rejects another user’s generic upload', async () => {
+ const frameUrl = 'https://cdn.parascene.com/api/images/generic/profile/8/generic_1762646400000_abc1234.png';
+ const input = inputFromLegacyImage(frameUrl, { sourceId: 93, fromFrame: true, frameTimeSec: 2.5 }, 'frame');
+ await assert.rejects(resolveCreationInputs({ inputs: [input], bindings: [{ field: 'image_url', attachmentIds: ['frame'] }],
+  fields: { image_url: { type: 'image_url' } }, args: { image_url: frameUrl }, queries: fixture().queries, user,
+  providerBase: 'https://sh.parascene.com' }), { code: 'source_kind_unsupported' });
 });
 test('pasted internal media URL cannot bypass source authorization', async () => {
  const input = inputFromLegacyImage('https://www.parascene.com/api/images/created/blue.png', {}, 'pasted');
