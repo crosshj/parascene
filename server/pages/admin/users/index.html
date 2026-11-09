@@ -18,6 +18,10 @@
 				<button class="admin-tabs__tab" data-admin-tab="settings">Settings</button>
 			</div>
 			<section class="admin-tabs__panel" data-admin-panel="active">
+				<div class="admin-user-export">
+					<button class="admin-button" type="button" data-active-export-copy>Copy active users</button>
+					<p class="admin-status" data-active-export-status role="status" aria-live="polite"></p>
+				</div>
 				<div data-active-users data-admin-table></div>
 			</section>
 			<section class="admin-tabs__panel" data-admin-panel="other" hidden>
@@ -27,15 +31,15 @@
 				<div data-tips-table data-admin-table></div>
 			</section>
 			<section class="admin-tabs__panel" data-admin-panel="settings" hidden>
-				<form class="admin-form" data-users-settings>
-					<div class="admin-field">
-						<label class="admin-field__label" for="min-days-before-tip">Minimum days before tipping</label>
-						<input class="admin-input" id="min-days-before-tip" name="min_days_before_tip" type="number" min="0" step="1" required>
-						<p class="admin-field__help">Free accounts must have been present this many days before they can tip. Upgraded accounts are exempt.</p>
-					</div>
-					<button class="admin-button admin-button--primary" type="submit">Save settings</button>
-					<p class="admin-status" data-settings-status role="status" aria-live="polite"></p>
-				</form>
+				<div class="admin-table-wrap">
+					<table class="admin-table admin-user-settings-table" aria-label="User settings">
+						<thead><tr><th scope="col">Setting</th><th scope="col">Value</th></tr></thead>
+						<tbody><tr class="admin-table__interactive-row" data-tip-setting-row tabindex="0" role="button" aria-label="Edit minimum days before tipping">
+							<th scope="row">Minimum days before tipping</th><td data-tip-setting-value>Loading…</td>
+						</tr></tbody>
+					</table>
+				</div>
+				<p class="admin-status" data-settings-table-status role="status" aria-live="polite"></p>
 			</section>
 		</admin-tabs>
 	</main>
@@ -70,6 +74,34 @@
 				<button class="admin-button admin-button--primary" type="submit" data-action-submit>Confirm</button>
 			</footer>
 		</form>
+	</dialog>
+	<dialog class="admin-dialog" data-settings-dialog aria-labelledby="admin-settings-title">
+		<header class="admin-dialog__header">
+			<h2 id="admin-settings-title">Minimum days before tipping</h2>
+			<button class="admin-button" type="button" data-settings-close aria-label="Close">Close</button>
+		</header>
+		<form class="admin-dialog__body admin-form" data-users-settings>
+			<div class="admin-field">
+				<label class="admin-field__label" for="min-days-before-tip">Minimum days before tipping</label>
+				<input class="admin-input" id="min-days-before-tip" name="min_days_before_tip" type="number" min="0" step="1" required>
+				<p class="admin-field__help">Free accounts must have been present this many days before they can tip. Upgraded accounts are exempt.</p>
+			</div>
+			<p class="admin-status" data-settings-status role="status" aria-live="polite"></p>
+			<footer class="admin-dialog__actions">
+				<button class="admin-button" type="button" data-settings-cancel>Cancel</button>
+				<button class="admin-button admin-button--primary" type="submit" data-settings-save>Save setting</button>
+			</footer>
+		</form>
+	</dialog>
+	<dialog class="admin-dialog" data-tip-dialog aria-labelledby="admin-tip-title">
+		<header class="admin-dialog__header">
+			<h2 id="admin-tip-title">Tip details</h2>
+			<button class="admin-button" type="button" data-tip-close aria-label="Close">Close</button>
+		</header>
+		<div class="admin-dialog__body">
+			<dl class="admin-user-details" data-tip-details></dl>
+			<p class="admin-status" data-tip-message></p>
+		</div>
 	</dialog>
 </body>
 </html>

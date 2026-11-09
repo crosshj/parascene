@@ -4835,11 +4835,24 @@ async function loadCreation() {
 		const isImportEmbedCreation = isExternalImportCreation(mediaType, meta);
 		const retryBlockedImport = ['youtube', 'suno'].includes(getCreationImportProvider(meta));
 		const canRetryCreation = canEdit && !adminViewingUserDeleted && !retryBlockedImport;
+		const isGroupedCreation = meta?.group?.kind === 'group_creations';
+		const isVideoCreation = mediaType === 'video' || Boolean(creation.video_url);
+		const providerPollPayload = meta?.provider_last_payload && typeof meta.provider_last_payload === 'object'
+			? meta.provider_last_payload
+			: null;
+		const hasProviderJobContext =
+			Number(meta?.server_id) > 0 &&
+			Boolean((typeof providerPollPayload?.job_id === 'string' && providerPollPayload.job_id.trim()) || (typeof meta?.provider_job_id === 'string' && meta.provider_job_id.trim())) &&
+			Boolean((typeof meta?.provider_method === 'string' && meta.provider_method.trim()) || (typeof meta?.method === 'string' && meta.method.trim()));
 		const showAdminVideoTools =
 			isAdmin &&
 			!adminViewingUserDeleted &&
+			!isGroupedCreation &&
+			isVideoCreation &&
 			!isImportEmbedCreation &&
 			(status === 'completed' || status === 'failed' || status === 'creating');
+		const showAdminProviderRecovery = showAdminVideoTools && hasProviderJobContext;
+		const showAdminProviderRepair = showAdminProviderRecovery && !creation.video_url;
 		const normalizedImageUrlForQueue = showQueueForLater ? normalizeImageUrlForQueue(creation.url) : '';
 		let isQueuedForLater = false;
 		if (showQueueForLater && normalizedImageUrlForQueue) {
@@ -5252,15 +5265,40 @@ async function loadCreation() {
 
 		// User-deleted notice (admin only; owner gets 404)
 		let userDeletedNotice = '';
-		if (creation.user_deleted) {
+		if (isAdmin && creation.user_deleted) {
 			userDeletedNotice = html`
 				<div class="creation-detail-user-deleted-notice" role="status">
 					<span class="creation-detail-user-deleted-notice-text">User deleted this creation. Visible to admin only.</span>
-					<button type="button" class="btn-secondary creation-detail-user-deleted-restore-btn" data-admin-restore-user-deleted>Restore for user</button>
-					<p class="creation-detail-user-deleted-restore-error" data-admin-restore-user-deleted-error hidden></p>
+					<button type="button" class="btn-secondary creation-detail-user-deleted-restore-btn" data-admin-restore-user-deleted aria-busy="false"><span data-admin-restore-user-deleted-label>Restore for user</span><span class="creation-detail-user-deleted-restore-spinner" aria-hidden="true"></span></button>
+					<p class="creation-detail-user-deleted-restore-error" data-admin-restore-user-deleted-error role="alert" aria-live="polite" hidden></p>
 				</div>
 			`;
 		}
+		const adminToolsHtml = isAdmin && (showAdminVideoTools || creation.user_deleted)
+			? html`<section class="creation-detail-admin-tools" aria-label="Admin tools">
+				<h3 class="creation-detail-admin-tools-title">Admin tools</h3>
+				${userDeletedNotice}
+				${showAdminVideoTools ? html`
+				<div class="creation-detail-admin-video" data-admin-video-section>
+					<p class="creation-detail-admin-video-label">${creation.video_url ? 'Replace video' : 'Add video'}</p>
+					<form class="creation-detail-admin-video-form" data-admin-video-form>
+						<input type="file" name="video" accept="video/*" class="creation-detail-admin-video-input" data-admin-video-input />
+						<button type="submit" class="btn-primary creation-detail-admin-video-submit" data-admin-video-submit>${creation.video_url ? 'Replace' : 'Upload'}</button>
+					</form>
+					${showAdminProviderRecovery ? html`<div class="creation-detail-admin-video-repair" data-admin-provider-repair-wrap>
+						<p class="creation-detail-admin-video-repair-label">Provider recovery</p>
+						<p class="creation-detail-admin-video-repair-hint">Fetch the completed video directly from the provider, or probe the job to inspect its current response without saving changes.</p>
+						<div class="creation-detail-admin-video-actions">
+							<button type="button" class="btn-secondary creation-detail-admin-provider-probe" data-admin-provider-probe>Probe provider job</button>
+							${showAdminProviderRepair ? html`<button type="button" class="btn-secondary creation-detail-admin-provider-repair" data-admin-provider-repair>Fetch video from provider</button>` : ''}
+						</div>
+						<p class="creation-detail-admin-provider-probe-status" data-admin-provider-probe-status role="status" aria-live="polite" hidden></p>
+						${showAdminProviderRepair ? html`<p class="creation-detail-admin-provider-repair-status" data-admin-provider-repair-status role="status" aria-live="polite" hidden></p>` : ''}
+					</div>` : ''}
+					<p class="creation-detail-admin-video-error" data-admin-video-error role="alert" hidden></p>
+				</div>` : ''}
+			</section>`
+			: '';
 
 		const publishedDateRaw = creation.published_at || creation.created_at || null;
 		const publishedDate = publishedDateRaw ? new Date(publishedDateRaw) : null;
@@ -5906,25 +5944,7 @@ async function loadCreation() {
 			${groupLeadDescriptionHtml}
 			${groupSectionHtml}
 			${groupSectionHtml ? html`<div class="creation-detail-group-divider" aria-hidden="true"></div>` : ''}
-			${userDeletedNotice}
-			${showAdminVideoTools ? html`
-			<div class="creation-detail-admin-video" data-admin-video-section>
-				<p class="creation-detail-admin-video-label">${creation.video_url ? 'Replace video' : 'Add video'}</p>
-				<form class="creation-detail-admin-video-form" data-admin-video-form>
-					<input type="file" name="video" accept="video/*" class="creation-detail-admin-video-input"
-						data-admin-video-input />
-					<button type="submit" class="btn-primary creation-detail-admin-video-submit"
-						data-admin-video-submit>${creation.video_url ? 'Replace' : 'Upload'}</button>
-				</form>
-				<div class="creation-detail-admin-video-repair" data-admin-provider-repair-wrap>
-					<p class="creation-detail-admin-video-repair-label">Provider recovery</p>
-					<p class="creation-detail-admin-video-repair-hint">Single request to the provider (same POST body as the worker poll). No QStash and no client-side polling—if the job is done, the response can be the video bytes in one round trip.</p>
-					<button type="button" class="btn-secondary creation-detail-admin-provider-repair" data-admin-provider-repair>Fetch video from provider</button>
-					<p class="creation-detail-admin-provider-repair-status" data-admin-provider-repair-status role="status" hidden></p>
-				</div>
-				<p class="creation-detail-admin-video-error" data-admin-video-error role="alert" hidden></p>
-			</div>
-			` : ''}
+			${adminToolsHtml}
 			
 			${descriptionHtml}
 			${challengeSlotHtml}
@@ -6981,6 +7001,8 @@ async function loadCreation() {
 					adminRestoreUserDeletedErr.textContent = '';
 				}
 				adminRestoreUserDeletedBtn.disabled = true;
+				adminRestoreUserDeletedBtn.classList.add('is-loading');
+				adminRestoreUserDeletedBtn.setAttribute('aria-busy', 'true');
 				try {
 					const res = await fetch(`/api/create/images/${creationId}/admin-restore-user-delete`, {
 						method: 'POST',
@@ -7003,12 +7025,41 @@ async function loadCreation() {
 					}
 				} finally {
 					adminRestoreUserDeletedBtn.disabled = false;
+					adminRestoreUserDeletedBtn.classList.remove('is-loading');
+					adminRestoreUserDeletedBtn.setAttribute('aria-busy', 'false');
 				}
 			});
 		}
 
 		const adminProviderRepairBtn = detailContent.querySelector('[data-admin-provider-repair]');
 		const adminProviderRepairStatus = detailContent.querySelector('[data-admin-provider-repair-status]');
+		const adminProviderProbeBtn = detailContent.querySelector('[data-admin-provider-probe]');
+		const adminProviderProbeStatus = detailContent.querySelector('[data-admin-provider-probe-status]');
+		if (adminProviderProbeBtn instanceof HTMLButtonElement) {
+			adminProviderProbeBtn.addEventListener('click', async () => {
+				if (adminProviderProbeStatus) {
+					adminProviderProbeStatus.hidden = false;
+					adminProviderProbeStatus.textContent = 'Checking provider job…';
+				}
+				adminProviderProbeBtn.disabled = true;
+				try {
+					const res = await fetch(`/api/create/images/${creationId}/admin-provider-video-recovery`, {
+						method: 'POST',
+						credentials: 'include',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ mode: 'probe' }),
+					});
+					const data = await res.json().catch(() => ({}));
+					const probe = data?.probe || data;
+					const result = probe?.summary || probe?.message || probe?.reason || data?.error || `Probe failed (${res.status})`;
+					if (adminProviderProbeStatus) adminProviderProbeStatus.textContent = res.ok ? result : `Probe failed: ${result}`;
+				} catch (error) {
+					if (adminProviderProbeStatus) adminProviderProbeStatus.textContent = error?.message || 'Probe request failed.';
+				} finally {
+					adminProviderProbeBtn.disabled = false;
+				}
+			});
+		}
 		if (adminProviderRepairBtn instanceof HTMLButtonElement) {
 			adminProviderRepairBtn.addEventListener('click', async () => {
 				const adminVideoErrorEl = detailContent.querySelector('[data-admin-video-error]');
@@ -7022,7 +7073,7 @@ async function loadCreation() {
 					adminVideoErrorEl.hidden = true;
 				}
 				try {
-					const res = await fetch(`/admin/creations/${creationId}/provider-async-video-recovery`, {
+					const res = await fetch(`/api/create/images/${creationId}/admin-provider-video-recovery`, {
 						method: 'POST',
 						credentials: 'include',
 						headers: { 'Content-Type': 'application/json' },
@@ -7764,61 +7815,6 @@ async function loadCreation() {
 				if (typeof targets[action] === 'function') targets[action]();
 				closeMobileMoreMenu();
 			}, { signal: moreMenuSignal });
-		}
-
-		// Admin: upload video to creation
-		const adminUploadSection = detailContent.querySelector('[data-admin-upload-video]');
-		if (adminUploadSection) {
-			const form = adminUploadSection.querySelector('[data-admin-upload-video-form]');
-			const fileInput = adminUploadSection.querySelector('[data-admin-upload-video-input]');
-			const submitBtn = adminUploadSection.querySelector('[data-admin-upload-video-btn]');
-			const errorEl = adminUploadSection.querySelector('[data-admin-upload-video-error]');
-			if (fileInput) {
-				fileInput.addEventListener('change', () => {
-					if (submitBtn) submitBtn.disabled = !(fileInput.files && fileInput.files.length > 0);
-					if (errorEl) { errorEl.textContent = ''; errorEl.hidden = true; }
-				});
-			}
-			if (form && submitBtn) {
-				form.addEventListener('submit', async (e) => {
-					e.preventDefault();
-					if (!fileInput?.files?.length) return;
-					const file = fileInput.files[0];
-					if (!file || !file.type.startsWith('video/')) {
-						if (errorEl) { errorEl.textContent = 'Please choose a video file.'; errorEl.hidden = false; }
-						return;
-					}
-					submitBtn.disabled = true;
-					if (errorEl) { errorEl.textContent = ''; errorEl.hidden = true; }
-					try {
-						const fd = new FormData();
-						fd.append('video', file);
-						const res = await fetch(`/admin/creations/${creationId}/upload-video`, {
-							method: 'POST',
-							credentials: 'include',
-							body: fd
-						});
-						const data = await res.json().catch(() => ({}));
-						if (!res.ok) {
-							if (errorEl) {
-								errorEl.textContent = data?.error || data?.message || `Upload failed (${res.status})`;
-								errorEl.hidden = false;
-							}
-							submitBtn.disabled = false;
-							return;
-						}
-						fileInput.value = '';
-						submitBtn.disabled = true;
-						refreshAfterMutation('status-changed', { creationId });
-					} catch (err) {
-						if (errorEl) {
-							errorEl.textContent = err?.message || 'Upload failed';
-							errorEl.hidden = false;
-						}
-						submitBtn.disabled = false;
-					}
-				});
-			}
 		}
 
 		if (!shareMountedPrivate) {

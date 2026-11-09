@@ -8,7 +8,32 @@
 </head>
 <body class="admin-page">
 	{{ADMIN_HEADER}}
-	<main class="admin-page__content"><admin-tabs class="admin-tabs" sync-hash active="shares"><div class="admin-tabs__list" data-admin-tab-list aria-label="Analytics sections"><button class="admin-tabs__tab" data-admin-tab="shares">Share views</button><button class="admin-tabs__tab" data-admin-tab="tries">Try requests</button><button class="admin-tabs__tab" data-admin-tab="blog">Blog views</button></div><section class="admin-tabs__panel" data-admin-panel="shares"><div data-share-table data-admin-table></div></section><section class="admin-tabs__panel" data-admin-panel="tries" hidden><div data-try-table data-admin-table></div></section><section class="admin-tabs__panel" data-admin-panel="blog" hidden><div data-blog-table data-admin-table></div></section></admin-tabs></main>
+	<main class="admin-page__content">
+		<admin-tabs class="admin-tabs" sync-hash active="shares">
+			<div class="admin-tabs__list" data-admin-tab-list aria-label="Analytics sections">
+				<button class="admin-tabs__tab" data-admin-tab="shares">Share views</button>
+				<button class="admin-tabs__tab" data-admin-tab="anonymous">Try flow</button>
+				<button class="admin-tabs__tab" data-admin-tab="tries">Try requests</button>
+				<button class="admin-tabs__tab" data-admin-tab="blog">Blog views</button>
+			</div>
+			<section class="admin-tabs__panel" data-admin-panel="shares"><div class="admin-user-export"><button class="admin-button" type="button" data-export="share-views">Copy share export</button><span class="admin-status" data-export-status="share-views" aria-live="polite"></span></div><div data-share-table data-admin-table></div></section>
+			<section class="admin-tabs__panel" data-admin-panel="anonymous" hidden><div class="admin-user-export"><button class="admin-button" type="button" data-export="anon-summary">Copy anon summary</button><button class="admin-button" type="button" data-export="anon-expanded">Copy anon requests</button><span class="admin-status" data-export-status="anonymous" aria-live="polite"></span></div><div data-anon-table data-admin-table></div></section>
+			<section class="admin-tabs__panel" data-admin-panel="tries" hidden><div data-try-table data-admin-table></div></section>
+			<section class="admin-tabs__panel" data-admin-panel="blog" hidden><div class="admin-user-export"><button class="admin-button" type="button" data-export="blog-views">Copy blog views export</button><span class="admin-status" data-export-status="blog-views" aria-live="polite"></span></div><div data-blog-table data-admin-table></div></section>
+		</admin-tabs>
+	</main>
+	<dialog class="admin-dialog" data-anon-dialog aria-labelledby="anon-dialog-title">
+		<header class="admin-dialog__header"><h2 id="anon-dialog-title" data-anon-dialog-title>Try requests</h2><button class="admin-button" type="button" data-anon-dialog-close>Close</button></header>
+		<div class="admin-dialog__body" data-anon-dialog-body></div>
+	</dialog>
+	<dialog class="admin-dialog" data-share-dialog aria-labelledby="share-dialog-title">
+		<header class="admin-dialog__header"><h2 id="share-dialog-title">Share view details</h2><button class="admin-button" type="button" data-share-dialog-close>Close</button></header>
+		<div class="admin-dialog__body" data-share-dialog-body></div>
+	</dialog>
+	<dialog class="admin-dialog" data-record-dialog aria-labelledby="record-dialog-title">
+		<header class="admin-dialog__header"><h2 id="record-dialog-title" data-record-dialog-title>Details</h2><button class="admin-button" type="button" data-record-dialog-close>Close</button></header>
+		<div class="admin-dialog__body" data-record-dialog-body></div>
+	</dialog>
 	<script type="module" src="/admin/analytics/page.js"></script>
 </body>
 </html>

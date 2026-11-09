@@ -210,7 +210,7 @@ export default function createAdminUsersRoutes({ client, users, storage }) {
 			const sortBy = validSort.has(req.query.sort_by) ? req.query.sort_by : 'created_at';
 			const ascending = req.query.sort_dir === 'asc';
 			const { data: tips, count, error } = await client.from(TIPS)
-				.select('id,from_user_id,to_user_id,created_image_id,amount,message,created_at', { count: 'exact' })
+				.select('id,from_user_id,to_user_id,created_image_id,amount,message,source,meta,created_at', { count: 'exact' })
 				.order(sortBy, { ascending, nullsFirst: false })
 				.range(offset, offset + limit - 1);
 			if (error) throw error;
@@ -223,12 +223,20 @@ export default function createAdminUsersRoutes({ client, users, storage }) {
 			if (userResult.error) throw userResult.error;
 			const profiles = new Map((profileResult.data || []).map((row) => [Number(row.user_id), row]));
 			const userRows = new Map((userResult.data || []).map((row) => [Number(row.id), row]));
+			const username = (id) => profiles.get(Number(id))?.user_name || null;
 			const label = (id) => {
 				const profile = profiles.get(Number(id));
 				const user = userRows.get(Number(id));
-				return profile?.display_name || profile?.user_name || user?.email?.split('@')[0] || `#${id}`;
+				return profile?.user_name || user?.email?.split('@')[0] || `#${id}`;
 			};
-			return res.json({ items: (tips || []).map((row) => ({ ...row, from_label: label(row.from_user_id), to_label: label(row.to_user_id) })), total: count || 0 });
+			return res.json({ items: (tips || []).map((row) => ({
+				...row,
+				tip_kind: row.source === 'challenge' || row.meta?.challenge_id != null ? 'challenge_prize' : 'user_tip',
+				from_user_name: username(row.from_user_id),
+				to_user_name: username(row.to_user_id),
+				from_label: label(row.from_user_id),
+				to_label: label(row.to_user_id)
+			})), total: count || 0 });
 		} catch (error) { next(error); }
 	});
 

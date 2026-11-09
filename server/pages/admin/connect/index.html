@@ -6,9 +6,32 @@
 	<title>Admin · Connect</title>
 	<link rel="stylesheet" href="/admin/shared/admin.css">
 </head>
-<body class="admin-page">
+<body class="admin-page admin-page--connect">
 	{{ADMIN_HEADER}}
-	<main class="admin-page__content"><admin-tabs class="admin-tabs" active="servers"><div class="admin-tabs__list" data-admin-tab-list aria-label="Connect sections"><button class="admin-tabs__tab" data-admin-tab="servers">Servers</button><button class="admin-tabs__tab" data-admin-tab="activity">Conversations</button></div><section class="admin-tabs__panel" data-admin-panel="servers"><div data-servers-table data-admin-table></div></section><section class="admin-tabs__panel" data-admin-panel="activity" hidden><p>Conversation moderation and connected community activity are not ported yet.</p></section></admin-tabs></main>
+	<main class="admin-page__content">
+		<admin-tabs class="admin-tabs" sync-hash active="servers">
+			<div class="admin-tabs__list" data-admin-tab-list aria-label="Connect sections">
+				<button class="admin-tabs__tab" data-admin-tab="servers">Servers</button>
+				<button class="admin-tabs__tab" data-admin-tab="activity">Conversations</button>
+			</div>
+			<section class="admin-tabs__panel" data-admin-panel="servers"><div data-servers-table data-admin-table></div></section>
+			<section class="admin-tabs__panel" data-admin-panel="activity" hidden><div data-threads-table data-admin-table></div></section>
+		</admin-tabs>
+	</main>
+	<dialog class="admin-dialog" data-server-dialog aria-labelledby="server-dialog-title">
+		<header class="admin-dialog__header"><h2 id="server-dialog-title" data-server-title>Server details</h2><button class="admin-button" type="button" data-server-close>Close</button></header>
+		<form class="admin-form" data-server-form>
+			<div class="admin-dialog__body" data-server-fields></div>
+			<p class="admin-status" data-server-status role="status" aria-live="polite"></p>
+			<footer class="admin-dialog__actions admin-connect-actions"><button class="admin-button" type="button" data-server-test>Test connection</button><button class="admin-button" type="button" data-server-refresh>Refresh capabilities</button><span class="admin-dialog-spacer"></span><button class="admin-button admin-button--primary" type="submit">Save</button></footer>
+		</form>
+	</dialog>
+	<dialog class="admin-dialog" data-thread-dialog aria-labelledby="thread-dialog-title">
+		<header class="admin-dialog__header"><h2 id="thread-dialog-title">Conversation details</h2><button class="admin-button" type="button" data-thread-close>Close</button></header>
+		<div class="admin-dialog__body" data-thread-details></div>
+		<p class="admin-status" data-thread-status role="status" aria-live="polite"></p>
+		<footer class="admin-dialog__actions"><button class="admin-button admin-button--danger" type="button" data-thread-delete>Delete conversation</button></footer>
+	</dialog>
 	<script type="module" src="/admin/connect/page.js"></script>
 </body>
 </html>

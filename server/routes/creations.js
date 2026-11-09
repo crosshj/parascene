@@ -535,6 +535,7 @@ export function createCreationsRoutes({ creations, users, appendChallengeEligibi
 			if (posted) applyPostedProof(creation, row, posted);
 			const payload = {
 				...creation,
+				...(viewer.role === "admin" ? { user_deleted: row.unavailable_at != null && String(row.unavailable_at).trim() !== "" } : {}),
 				like_count: 0,
 				viewer_liked: false,
 				liked_by: [],

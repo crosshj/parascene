@@ -9,7 +9,7 @@ import { appendCreationIdToMediaUrl, getThumbnailUrl, getShareBaseUrl } from "..
 import { materializeArchivedGroupInput } from "../services/create/materializeArchivedGroupInput.js";
 
 import { buildProviderHeaders } from "../services/create/providerAuth.js";
-import { runCreationJob, runProviderPollJob, healProviderPollOnRead, PROVIDER_TIMEOUT_MS } from "../services/create/creationJob.js";
+import { runCreationJob, runProviderPollJob, healProviderPollOnRead, PROVIDER_TIMEOUT_MS, probeProviderAsyncJob, repairProviderAsyncVideoJob, fetchImageBufferFromUrl, createPlaceholderImageBuffer } from "../services/create/creationJob.js";
 import {
 	isCreationFinishTimedOut,
 	isCreationGpuInFlight,
@@ -2816,6 +2816,158 @@ async function loadOwnedCompletedAudio(req, res) {
 			});
 		}
 	}));
+
+// Admin-only recovery actions surfaced from Creation Detail. Keep these on the
+// create API so the detail controls never depend on the retired admin router.
+router.post("/api/create/images/:id/admin-provider-video-recovery", asyncRoute(async (req, res) => {
+	const user = await requireUser(req, res);
+	if (!user) return;
+	if (user.role !== "admin") return res.status(403).json({ error: "Forbidden: Admin role required" });
+	const id = Number(req.params.id);
+	if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Invalid creation id" });
+	const body = req.body && typeof req.body === "object" ? req.body : {};
+	const mode = ["probe", "repair", "probe_then_repair"].includes(body.mode) ? body.mode : "repair";
+	const force = body.force === true;
+	const maxMb = Number(body.max_video_mb);
+	const repairTimeout = Number(body.repair_timeout_ms);
+	const options = {
+		force,
+		...(Number.isFinite(maxMb) && maxMb > 0 ? { maxVideoBytes: Math.round(maxMb * 1024 * 1024) } : {}),
+		...(Number.isFinite(repairTimeout) && repairTimeout >= 5000 ? { repairTimeoutMs: repairTimeout } : {}),
+	};
+	try {
+		if (mode === "probe") {
+			const probe = await probeProviderAsyncJob({ queries, createdImageId: id });
+			if (!probe.ok && probe.reason === "not_found") return res.status(404).json({ mode, probe });
+			if (!probe.ok) return res.status(400).json({ mode, probe });
+			return res.json({ mode, probe });
+		}
+		if (mode === "repair") {
+			const repair = await repairProviderAsyncVideoJob({ queries, storage, createdImageId: id, options });
+			if (!repair.ok && repair.reason === "not_found") return res.status(404).json({ mode, repair });
+			if (!repair.ok && ["invalid_id", "missing_server_id", "missing_job_id", "missing_method", "fetch_error", "storage_upload_video_unavailable", "missing_db_query", "server_not_found", "invalid_user_id"].includes(repair.reason)) {
+				return res.status(400).json({ mode, repair });
+			}
+			return res.json({ mode, repair });
+		}
+		const probe = await probeProviderAsyncJob({ queries, createdImageId: id });
+		if (!probe.ok && probe.reason === "not_found") return res.status(404).json({ mode, probe, repair: null });
+		if (!probe.ok) return res.status(400).json({ mode, probe, repair: { skipped: true, reason: "probe_failed" } });
+		if (probe.kind !== "video" || !probe.recoverable_video) {
+			return res.json({ mode, probe, repair: { skipped: true, reason: probe.still_in_progress ? "provider_still_json_in_progress" : "probe_did_not_see_video_response" } });
+		}
+		const repair = await repairProviderAsyncVideoJob({ queries, storage, createdImageId: id, options });
+		return res.json({ mode, probe, repair });
+	} catch (error) {
+		console.error("[admin] provider video recovery failed:", error);
+		return res.status(500).json({ error: "Recovery failed", message: error?.message || "Error" });
+	}
+}));
+
+router.post("/api/create/images/:id/admin-add-video", asyncRoute(async (req, res) => {
+	const user = await requireUser(req, res);
+	if (!user) return;
+	if (user.role !== "admin") return res.status(403).json({ error: "Forbidden: Admin role required" });
+	const id = Number(req.params.id);
+	if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Invalid creation id" });
+	const image = await queries.selectCreatedImageByIdAnyUser?.get(id);
+	if (!image) return res.status(404).json({ error: "Creation not found" });
+	if (typeof storage?.uploadVideo !== "function") return res.status(503).json({ error: "Video upload not available" });
+	if (!req.is("multipart/form-data")) return res.status(400).json({ error: "Request must be multipart/form-data with a video file" });
+	try {
+		const { files } = await parseMultipartCreate(req, { maxFileBytes: 200 * 1024 * 1024 });
+		const videoFile = files?.video;
+		if (!videoFile?.buffer?.length) return res.status(400).json({ error: "No video file provided; use form field name 'video'" });
+		const contentType = String(videoFile.mimeType || "").trim();
+		if (!contentType.startsWith("video/")) return res.status(400).json({ error: "File must be a video (e.g. video/mp4)" });
+		const rawExt = contentType.split("/")[1]?.split("+")[0]?.split(";")[0]?.trim() || "mp4";
+		const extension = /^[a-z0-9]+$/i.test(rawExt) ? rawExt : "mp4";
+		const now = new Date().toISOString();
+		const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+		const filename = `video/${image.user_id}_${id}_${suffix}.${extension}`;
+		const videoUrl = await storage.uploadVideo(videoFile.buffer, filename, { contentType });
+		const existingMeta = parseMeta(image.meta) || {};
+		const status = image.status || "completed";
+		const repairing = status !== "completed";
+		const args = existingMeta.args && typeof existingMeta.args === "object" ? existingMeta.args : {};
+		const sourceUrl = [args.image_url, args.image, ...(Array.isArray(args.input_images) ? args.input_images : [])]
+			.find((value) => typeof value === "string" && value.trim()) || null;
+		const meta = {
+			...existingMeta,
+			media_type: "video",
+			...(repairing ? { completed_at: existingMeta.completed_at || now, provider_status: "succeeded", admin_video_repaired_at: now } : {}),
+			...(!existingMeta.source_image_url && sourceUrl ? { source_image_url: sourceUrl.trim() } : {}),
+			video: { filename, file_path: videoUrl, content_type: contentType },
+		};
+		if (!image.file_path && typeof storage.uploadImage === "function") {
+			let thumbBuffer;
+			try { thumbBuffer = sourceUrl ? await fetchImageBufferFromUrl(sourceUrl.trim()) : await createPlaceholderImageBuffer(); }
+			catch { thumbBuffer = await createPlaceholderImageBuffer(); }
+			const thumbFilename = `${image.user_id}_${id}_${suffix}.png`;
+			const thumbUrl = await storage.uploadImage(thumbBuffer, thumbFilename);
+			let width = image.width ?? null;
+			let height = image.height ?? null;
+			try {
+				const dimensions = await sharp(thumbBuffer, { failOn: "none" }).metadata();
+				if (dimensions.width > 0) width = dimensions.width;
+				if (dimensions.height > 0) height = dimensions.height;
+			} catch { /* preserve existing dimensions */ }
+			const result = await queries.updateCreatedImageJobCompleted.run(id, image.user_id, {
+				filename: thumbFilename, file_path: thumbUrl, width, height, color: image.color ?? null, meta,
+			});
+			if (!result.changes) return res.status(500).json({ error: "Failed to update creation with thumbnail" });
+		} else {
+			const result = await queries.updateCreatedImageMetaAnyUser.run(id, meta);
+			if (!result.changes) return res.status(500).json({ error: "Failed to update creation metadata" });
+			if (repairing) await queries.updateCreatedImageStatus.run(id, image.user_id, "completed");
+		}
+		await bumpFeedVersionCounter(queries);
+		void invalidateFeedCatalogSnapshot().catch(() => {});
+		return res.json({ ok: true, video_url: videoUrl, repaired: repairing });
+	} catch (error) {
+		const status = error?.message === "File too large" ? 413 : 500;
+		return res.status(status).json({ error: "Failed to add video", message: error?.message || "Upload failed" });
+	}
+}));
+
+router.post("/api/create/images/:id/admin-restore-user-delete", asyncRoute(async (req, res) => {
+	const user = await requireUser(req, res);
+	if (!user) return;
+	if (user.role !== "admin") return res.status(403).json({ error: "Forbidden: Admin role required" });
+	const id = Number(req.params.id);
+	if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Invalid creation id" });
+	if (!queries.selectCreatedImageByIdAnyUser?.get || !queries.unmarkCreatedImageUnavailable?.run) {
+		return res.status(503).json({ error: "Restore not available" });
+	}
+	try {
+		const image = await queries.selectCreatedImageByIdAnyUser.get(id);
+		if (!image) return res.status(404).json({ error: "Creation not found" });
+		if (image.unavailable_at == null || String(image.unavailable_at).trim() === "") {
+			return res.status(400).json({ error: "Creation is not user-deleted" });
+		}
+		const result = await queries.unmarkCreatedImageUnavailable.run(id, image.user_id);
+		if (!result?.changes) return res.status(500).json({ error: "Failed to restore creation" });
+		const isPublished = image.published === true || image.published === 1;
+		if (isPublished && queries.insertFeedItem?.run) {
+			let existingFeed = null;
+			try { existingFeed = await queries.selectFeedItemByCreatedImageId?.get?.(id); } catch { /* restore still succeeds */ }
+			if (!existingFeed) {
+				let author = "User";
+				try {
+					const owner = await queries.selectUserById?.get?.(image.user_id);
+					if (owner?.email) author = owner.email;
+				} catch { /* use fallback */ }
+				await queries.insertFeedItem.run(String(image.title || "").trim() || "Untitled", image.description ? String(image.description).trim() : "", author, null, id);
+			}
+		}
+		await bumpFeedVersionCounter(queries);
+		void invalidateFeedCatalogSnapshot().catch(() => {});
+		return res.json({ ok: true, restored: true });
+	} catch (error) {
+		console.error("[admin] restore user-deleted creation failed:", error);
+		return res.status(500).json({ error: "Failed to restore creation", message: error?.message || String(error) });
+	}
+}));
 
 	router.post("/api/create/images/:id/video-placeholder", asyncRoute(async (req, res) => {
 		const user = await requireUser(req, res);
