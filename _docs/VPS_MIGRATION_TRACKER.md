@@ -7,7 +7,6 @@ This is an open-work list only. Completed ports and confirmed behavior are inten
 ### 1. Finish admin behavior parity
 
 - [ ] Decide which legacy-only tools remain operationally required (especially Todo, moderation, policy/cron controls, anonymous-user investigation, and provider/creation repair tools). The root admin currently has no matching page for these; record explicit retirements so parity scope is deliberate.
-- [ ] **Analytics:** current root page lists share views, try requests, and blog views. Add anonymous-user aggregation and per-anonymous-user request/image investigation (including useful creation links/details); compare filters, pagination, and any summary/graph behavior with legacy.
 - [ ] **Jobs:** current root page is a read-only jobs and failed-try table. Compare legacy job detail/status/error visibility and any retry/recovery actions; port required actions with safe confirmation and visible result/error states.
 - [ ] **Emails:** current root page has send history and automated-email settings only. Port template preview, recipient/template selection, one-recipient manual sends, feature-request replies, test sends, and broadcast audience preview/send. Preserve eligibility, duplicate-send protection, confirmation, and per-send reporting.
 - [ ] **Algo:** current root page has transition rows and related-ranking weights. Port the transition graph and feed editorial pin editor/defaults; verify settings validation and saved values.
