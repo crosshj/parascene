@@ -64,6 +64,12 @@
 .admin-user-details { display: grid; grid-template-columns: minmax(9rem, .7fr) minmax(0, 1.3fr); gap: .45rem 1rem; margin: 0; }
 .admin-user-details dt { color: var(--admin-muted); }
 .admin-user-details dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
+.admin-user-settings-table td:last-child { min-width: 10rem; font-variant-numeric: tabular-nums; }
+.admin-user-export { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .75rem; padding-bottom: .65rem; }
+.admin-user-export .admin-status { margin: 0; }
+.admin-user-identity { display: inline-flex; align-items: center; gap: .5rem; min-width: max-content; }
+.admin-user-identity__avatar { width: 2rem; height: 2rem; border-radius: 50%; object-fit: cover; }
+.admin-tip-challenge-marker { color: var(--admin-muted); }
 .admin-user-actions { flex-wrap: wrap; }
 .admin-user-actions [data-user-profile] { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
 .admin-dialog__body > p { margin: 0; }

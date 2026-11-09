@@ -6,10 +6,16 @@ This is an open-work list only. Completed ports and confirmed behavior are inten
 
 ### 1. Finish admin behavior parity
 
-- [ ] Complete a page-by-page behavior inventory against the legacy admin as a read-only reference. Record which actions exist, are intentionally omitted, or are still missing; use the [admin UI component inventory](ADMIN_UI_COMPONENT_INVENTORY.md) for shared presentation patterns.
-- [ ] Port remaining admin behavior, including email template preview/manual send and conversation moderation, if those remain required after the inventory.
-- [ ] Verify role enforcement in both page and API access, plus search/pagination, error states, destructive actions, and auditability.
-- [ ] Compare each admin page with its required behavior and record explicit exceptions. Existing page shells and shared components alone do not establish parity.
+- [ ] Decide which legacy-only tools remain operationally required (especially Todo, moderation, policy/cron controls, anonymous-user investigation, and provider/creation repair tools). The root admin currently has no matching page for these; record explicit retirements so parity scope is deliberate.
+- [ ] **Analytics:** current root page lists share views, try requests, and blog views. Add anonymous-user aggregation and per-anonymous-user request/image investigation (including useful creation links/details); compare filters, pagination, and any summary/graph behavior with legacy.
+- [ ] **Jobs:** current root page is a read-only jobs and failed-try table. Compare legacy job detail/status/error visibility and any retry/recovery actions; port required actions with safe confirmation and visible result/error states.
+- [ ] **Emails:** current root page has send history and automated-email settings only. Port template preview, recipient/template selection, one-recipient manual sends, feature-request replies, test sends, and broadcast audience preview/send. Preserve eligibility, duplicate-send protection, confirmation, and per-send reporting.
+- [ ] **Algo:** current root page has transition rows and related-ranking weights. Port the transition graph and feed editorial pin editor/defaults; verify settings validation and saved values.
+- [ ] **Connect:** current root page lists servers only. Port server detail/edit, test, and refresh actions, plus legacy conversation-thread moderation (inspect/delete) if still used. Preserve authorization and require confirmation for destructive actions.
+- [ ] **Todo/work queue:** legacy admin opens on a Todo tool with list modes, item editing, dependencies, priority/impact/time controls, and read-only mode. Root `/` is only an overview and has no Todo page/API; decide whether this internal tool is still needed, then port it or explicitly retire it.
+- [ ] **Moderation and policy operations:** legacy exposes moderation data, policy/provider inspection, general admin settings, and a run-notifications-cron action. Root has no corresponding admin page/routes; confirm which operations are still used and port the required subset with clear read/write boundaries.
+- [ ] **Creation/provider support:** inventory legacy admin recovery actions (provider job probe/recovery, video upload/recovery, and related server operations). Root admin currently exposes none of these. Decide which are needed for production support, then port only those with auditable outcomes and safeguards.
+- [ ] **Shared behavior and security:** compare search, filters, sorting, pagination, empty/loading/error states, and mobile behavior per page. Verify page and API role checks independently, no-store handling, destructive-action safeguards, and useful operator/audit feedback. Existing page shells and shared components do not establish parity.
 
 ### 2. Move the API off Vercel
 

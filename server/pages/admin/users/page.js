@@ -5,8 +5,14 @@ const otherUsers = document.querySelector('[data-other-users]');
 const tipsTable = document.querySelector('[data-tips-table]');
 const settingsForm = document.querySelector('[data-users-settings]');
 const settingsStatus = document.querySelector('[data-settings-status]');
+const settingsTableStatus = document.querySelector('[data-settings-table-status]');
+const settingsValue = document.querySelector('[data-tip-setting-value]');
+const settingsRow = document.querySelector('[data-tip-setting-row]');
+const settingsDialog = document.querySelector('[data-settings-dialog]');
+const settingsSave = document.querySelector('[data-settings-save]');
 const userDialog = document.querySelector('[data-user-dialog]');
 const actionDialog = document.querySelector('[data-user-action-dialog]');
+const tipDialog = document.querySelector('[data-tip-dialog]');
 const actionForm = document.querySelector('[data-user-action-form]');
 const actionFields = document.querySelector('[data-action-fields]');
 const actionError = document.querySelector('[data-action-error]');
@@ -14,6 +20,7 @@ const actionSubmit = document.querySelector('[data-action-submit]');
 const userTables = [];
 let currentUser = null;
 let viewerId = null;
+let exportInFlight = false;
 
 async function request(url, options) {
 	const response = await fetch(url, { credentials: 'same-origin', ...options });
@@ -175,6 +182,53 @@ async function refreshUserTables() {
 	for (const table of userTables) await table.refresh();
 }
 
+async function copyActiveUsers() {
+	if (exportInFlight) return;
+	exportInFlight = true;
+	const button = document.querySelector('[data-active-export-copy]');
+	const status = document.querySelector('[data-active-export-status]');
+	button.disabled = true;
+	status.textContent = 'Preparing active users export…';
+	try {
+		const activeUsers = [];
+		const limit = 200;
+		for (let offset = 0; ; offset += limit) {
+			const page = await request(`/api/admin/users?segment=active&limit=${limit}&offset=${offset}`);
+			activeUsers.push(...(Array.isArray(page.items) ? page.items : []));
+			if (activeUsers.length >= Number(page.total || 0) || !page.items?.length) break;
+		}
+		const payload = {
+			export_version: 1,
+			exported_at: new Date().toISOString(),
+			scope: '/users#active',
+			item_count: activeUsers.length,
+			data: { activeUsers }
+		};
+		const text = `PARASCENE_ADMIN_EXPORT\n\`\`\`json\n${JSON.stringify(payload, null, 2)}\n\`\`\`\n`;
+		try {
+			await navigator.clipboard.writeText(text);
+		} catch {
+			const textarea = document.createElement('textarea');
+			textarea.value = text;
+			textarea.setAttribute('readonly', 'true');
+			textarea.style.position = 'fixed';
+			textarea.style.left = '-9999px';
+			document.body.append(textarea);
+			textarea.select();
+			const copied = document.execCommand('copy');
+			textarea.remove();
+			if (!copied) throw new Error('Copy to clipboard failed.');
+		}
+		window.__parasceneAdminChatGPTExport = text;
+		status.textContent = `Copied ${activeUsers.length} active users to clipboard.`;
+	} catch (error) {
+		status.textContent = `Export failed: ${error.message}`;
+	} finally {
+		button.disabled = false;
+		exportInFlight = false;
+	}
+}
+
 async function runUserAction(event) {
 	event.preventDefault();
 	if (!currentUser) return;
@@ -217,11 +271,60 @@ async function runUserAction(event) {
 	}
 }
 
-const userColumns = [
-	{ key: 'user_name', label: 'Username', render: (user) => user.user_name || '—' },
-	{ key: 'last_active_at', label: 'Last active', sortKey: 'last_active_at', render: (user) => user.last_active_at ? new Date(user.last_active_at).toLocaleString() : '—' },
+function usernameCell(user) {
+	const wrap = document.createElement('span');
+	wrap.className = 'admin-user-identity';
+	if (user.avatar_url) {
+		const avatar = document.createElement('img');
+		avatar.className = 'admin-user-identity__avatar';
+		avatar.src = user.avatar_url;
+		avatar.alt = '';
+		avatar.loading = 'lazy';
+		avatar.decoding = 'async';
+		wrap.append(avatar);
+	}
+	const username = document.createElement('span');
+	username.textContent = user.user_name || '—';
+	wrap.append(username);
+	return wrap;
+}
+
+const relativeTime = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
+function relativeDateCell(timestamp) {
+	if (!timestamp) return '—';
+	const date = new Date(timestamp);
+	if (Number.isNaN(date.getTime())) return '—';
+	const elapsedSeconds = (date.getTime() - Date.now()) / 1000;
+	const units = [
+		['year', 60 * 60 * 24 * 365], ['month', 60 * 60 * 24 * 30],
+		['week', 60 * 60 * 24 * 7], ['day', 60 * 60 * 24],
+		['hour', 60 * 60], ['minute', 60]
+	];
+	const [unit, seconds] = units.find(([, threshold]) => Math.abs(elapsedSeconds) >= threshold) || ['second', 1];
+	const text = unit === 'second' && Math.abs(elapsedSeconds) < 10
+		? 'just now'
+		: relativeTime.format(Math.round(elapsedSeconds / seconds), unit);
+	const label = document.createElement('time');
+	label.dateTime = date.toISOString();
+	label.title = date.toLocaleString();
+	label.textContent = text;
+	return label;
+}
+function lastActiveCell(user) {
+	return relativeDateCell(user.last_active_at);
+}
+
+const otherUserColumns = [
+	{ key: 'user_name', label: 'Username', render: usernameCell },
+	{ key: 'last_active_at', label: 'Last active', sortKey: 'last_active_at', render: lastActiveCell },
 	{ key: 'credits', label: 'Credits', render: (user) => Number(user.credits || 0).toFixed(1) },
 	{ key: 'status', label: 'Status', render: (user) => user.suspended ? 'Suspended' : (user.meta?.plan === 'founder' ? 'Founder' : 'Active') }
+];
+const activeUserColumns = [
+	{ key: 'user_name', label: 'Username', render: usernameCell },
+	{ key: 'last_active_at', label: 'Last active', sortKey: 'last_active_at', render: lastActiveCell },
+	{ key: 'credits', label: 'Credits', render: (user) => Number(user.credits || 0).toFixed(1) },
+	{ key: 'created_at', label: 'Joined', sortKey: 'created_at', render: (user) => relativeDateCell(user.created_at) }
 ];
 
 try {
@@ -234,7 +337,7 @@ for (const [container, segment] of [[activeUsers, 'active'], [otherUsers, 'other
 		fetchUrl: '/api/admin/users',
 		itemsKey: 'items',
 		ariaLabel: `${segment === 'active' ? 'Active' : 'Other'} users`,
-		columns: userColumns,
+		columns: segment === 'active' ? activeUserColumns : otherUserColumns,
 		pageSize: 25,
 		defaultSortBy: 'last_active_at',
 		defaultSortDir: 'desc',
@@ -264,13 +367,14 @@ void loadAdminDataTable(tipsTable, {
 	fetchUrl: '/api/admin/tips',
 	itemsKey: 'items',
 	ariaLabel: 'Tips',
+	rowLabel: 'tip details',
+	getRowLabel: (row) => `View ${tipKindLabel(row)} from ${row.from_user_name || row.from_label || row.from_user_id} to ${row.to_user_name || row.to_label || row.to_user_id}`,
+	onRowClick: openTipDetails,
 	columns: [
-		{ key: 'created_at', label: 'Date', sortKey: 'created_at', render: (row) => row.created_at ? new Date(row.created_at).toLocaleString() : '—' },
-		{ key: 'from_label', label: 'From' },
-		{ key: 'to_label', label: 'To' },
-		{ key: 'amount', label: 'Amount', render: (row) => `${Number(row.amount || 0).toFixed(1)} credits` },
-		{ key: 'created_image_id', label: 'Creation' },
-		{ key: 'message', label: 'Message' }
+		{ key: 'created_at', label: 'Date', sortKey: 'created_at', render: (row) => relativeDateCell(row.created_at) },
+		{ key: 'from_user_name', label: 'From', render: tipFromCell },
+		{ key: 'to_user_name', label: 'To', render: (row) => row.to_user_name ? `@${row.to_user_name}` : `#${row.to_user_id}` },
+		{ key: 'amount', label: 'Amount (credits)', render: (row) => Number(row.amount || 0).toFixed(1) }
 	],
 	pageSize: 25,
 	defaultSortBy: 'created_at',
@@ -278,18 +382,100 @@ void loadAdminDataTable(tipsTable, {
 	emptyMessage: 'No tips yet.'
 });
 
+function appendTipDetail(details, label, content) {
+	const term = document.createElement('dt');
+	term.textContent = label;
+	const value = document.createElement('dd');
+	if (content instanceof Node) value.append(content);
+	else value.textContent = content == null || content === '' ? '—' : String(content);
+	details.append(term, value);
+}
+
+function tipKindLabel(row) {
+	return row.tip_kind === 'challenge_prize' ? 'Challenge prize' : 'User tip';
+}
+
+function tipFromCell(row) {
+	if (row.tip_kind === 'challenge_prize') {
+		const marker = document.createElement('span');
+		marker.className = 'admin-tip-challenge-marker';
+		marker.textContent = '[challenge]';
+		return marker;
+	}
+	return row.from_user_name ? `@${row.from_user_name}` : `#${row.from_user_id}`;
+}
+
+function tipProfileLink(username, id) {
+	const link = document.createElement('a');
+	link.href = `/user/${encodeURIComponent(id)}`;
+	link.textContent = username ? `@${username}` : `#${id}`;
+	link.target = '_blank';
+	link.rel = 'noopener';
+	return link;
+}
+
+function openTipDetails(row) {
+	const details = tipDialog.querySelector('[data-tip-details]');
+	details.replaceChildren();
+	appendTipDetail(details, 'Tip ID', row.id);
+	appendTipDetail(details, 'Type', tipKindLabel(row));
+	appendTipDetail(details, 'Date', row.created_at ? new Date(row.created_at).toLocaleString() : '—');
+	appendTipDetail(details, 'From', row.from_user_id ? tipProfileLink(row.from_user_name, row.from_user_id) : row.from_label);
+	appendTipDetail(details, 'To', row.to_user_id ? tipProfileLink(row.to_user_name, row.to_user_id) : row.to_label);
+	if (row.tip_kind === 'challenge_prize') {
+		appendTipDetail(details, 'Challenge', row.meta?.challenge_id || '—');
+		appendTipDetail(details, 'Prize reason', row.meta?.reason || '—');
+	}
+	appendTipDetail(details, 'Amount (credits)', Number(row.amount || 0).toFixed(1));
+	appendTipDetail(details, 'Creation', row.created_image_id ? creationLink(row.created_image_id) : '—');
+	appendTipDetail(details, 'Message', typeof row.message === 'string' ? row.message.trim() || '—' : '—');
+	tipDialog.showModal();
+}
+
+tipDialog.querySelector('[data-tip-close]').addEventListener('click', () => tipDialog.close());
+tipDialog.addEventListener('click', (event) => { if (event.target === tipDialog) tipDialog.close(); });
+
+function creationLink(id) {
+	if (!id) return '—';
+	const link = document.createElement('a');
+	link.href = `/creations/${encodeURIComponent(id)}`;
+	link.textContent = String(id);
+	return link;
+}
+
+document.querySelector('[data-active-export-copy]').addEventListener('click', copyActiveUsers);
+
 async function loadSettings() {
 	try {
 		const settings = await request('/api/admin/users/settings');
 		settingsForm.elements.min_days_before_tip.value = settings.min_days_before_tip ?? 60;
+		settingsValue.textContent = String(settings.min_days_before_tip ?? 60);
+		settingsTableStatus.textContent = '';
 	} catch (error) {
 		settingsStatus.textContent = error.message;
+		settingsTableStatus.textContent = error.message;
 	}
 }
+
+function openSettingsDialog() {
+	settingsStatus.textContent = '';
+	settingsDialog.showModal();
+}
+
+settingsRow.addEventListener('click', openSettingsDialog);
+settingsRow.addEventListener('keydown', (event) => {
+	if (event.key !== 'Enter' && event.key !== ' ') return;
+	event.preventDefault();
+	openSettingsDialog();
+});
+settingsDialog.querySelector('[data-settings-close]').addEventListener('click', () => settingsDialog.close());
+settingsDialog.querySelector('[data-settings-cancel]').addEventListener('click', () => settingsDialog.close());
+settingsDialog.addEventListener('click', (event) => { if (event.target === settingsDialog) settingsDialog.close(); });
 
 settingsForm.addEventListener('submit', async (event) => {
 	event.preventDefault();
 	settingsStatus.textContent = 'Saving…';
+	settingsSave.disabled = true;
 	try {
 		const result = await request('/api/admin/users/settings', {
 			method: 'PATCH',
@@ -297,9 +483,12 @@ settingsForm.addEventListener('submit', async (event) => {
 			body: JSON.stringify({ min_days_before_tip: Number(settingsForm.elements.min_days_before_tip.value) })
 		});
 		settingsForm.elements.min_days_before_tip.value = result.min_days_before_tip;
+		settingsValue.textContent = String(result.min_days_before_tip);
 		settingsStatus.textContent = 'Settings saved.';
 	} catch (error) {
 		settingsStatus.textContent = error.message;
+	} finally {
+		settingsSave.disabled = false;
 	}
 });
 
