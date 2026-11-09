@@ -7,7 +7,7 @@
  * No `name` attributes — may live inside a form elsewhere.
  */
 
-import { esc } from '../../../shared/challenges/constants.js';
+import { esc } from '../../../shared.js';
 import { undoIcon } from '../../../icons/svg-strings.js';
 
 /** @param {number | null | undefined} n */

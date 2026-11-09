@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createChallengeVotes } from '../client/providers/challenges/votes.js';
 import { saveChallengeVote } from '../server/services/challenges/voteStore.js';
-import { CHALLENGE_SCORE_REACTION_KEYS as keys } from '../client/shared/challenges/constants.js';
+import { CHALLENGE_SCORE_REACTION_KEYS as keys } from '../shared/index.js';
 import { mergeThreadsInbox } from '../client/providers/threads/model.js';
 
 const tick = () => new Promise(resolve => setTimeout(resolve, 5));

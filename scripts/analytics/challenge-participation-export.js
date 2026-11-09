@@ -24,23 +24,23 @@ import { fileURLToPath } from 'url';
 import { createClient } from '@supabase/supabase-js';
 import { REPO_ROOT, loadEnv } from '../repo-root.cjs';
 import { findChallengesChannelThreadId } from '../../server/services/create/challengeSubmitShared.js';
-import { extractChallengeEvents } from '../../client/shared/challenges/model/extractEvents.js';
-import { summarizeLatestChallengeConfigs } from '../../client/shared/challenges/model/organizerSummaries.js';
+import { extractChallengeEvents } from '../../shared/index.js';
+import { summarizeLatestChallengeConfigs } from '../../shared/index.js';
 import {
 	mergeFullChallengeConfigForChallenge,
 	pickChallengeConfigTimestamp
-} from '../../client/shared/challenges/challengeAdmin.js';
-import { resolveChallengePrizes } from '../../client/shared/challenges/model/prizes.js';
-import { deriveChallengePhase } from '../../client/shared/challenges/model/phases.js';
+} from '../../shared/index.js';
+import { resolveChallengePrizes } from '../../shared/index.js';
+import { deriveChallengePhase } from '../../shared/index.js';
 import {
 	buildReactionsByMessageId
-} from '../../client/shared/challenges/model/participantSlice.js';
+} from '../../shared/index.js';
 import {
 	CHALLENGE_SCORE_REACTION_KEYS,
 	challengeReactionKeyToScore,
 	totalVoteCountFromChallengeReactions,
 	parseIso
-} from '../../client/shared/challenges/constants.js';
+} from '../../shared/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 loadEnv();

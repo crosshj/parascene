@@ -1,9 +1,9 @@
-import { esc } from '../../../shared/challenges/constants.js';
+import { esc } from '../../../shared.js';
 import {
 	pickChallengeHeroImageUrl,
 	pickChallengeResultsCreationUrl,
 	pickChallengeTopicVoteCreationUrl
-} from '../../../shared/challenges/challengeAdmin.js';
+} from '../../../shared.js';
 import { fetchCreationEmbedPayload, parseHeroCreationOrShareRef } from '../../../shared/userText.js';
 import { creationCardMarkup, createCreationMediaLoader, creationMediaType, creationOriginalUrl } from '../../../shared/creationGrid.js';
 import {

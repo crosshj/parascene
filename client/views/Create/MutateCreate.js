@@ -5,7 +5,7 @@ import * as autogrowModule from '../../shared/autogrow.js';
 import * as triggeredSuggestModule from '../../shared/triggeredSuggest.js';
 import * as userTextModule from '../../shared/userText.js';
 import * as mutateOptionsModule from '../../shared/mutateOptions.js';
-import * as generationDefaultsModule from '../../shared/generationDefaults.js';
+import * as generationDefaultsModule from '../../shared.js';
 import * as emptyStateModule from '../../shared/emptyState.js';
 import * as mutateQueueModule from '../../shared/mutateQueue.js';
 import * as mutateQueueSyncModule from '../../shared/mutateQueueSync.js';

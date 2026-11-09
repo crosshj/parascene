@@ -1,4 +1,4 @@
-import express from 'express';import path from 'node:path';import Busboy from 'busboy';import {shouldDeleteOldProfileAvatarKey,storeProcessedProfileAvatar} from '../services/account/profileAvatar.js';import {applySocialFieldUpdates} from '../../client/shared/profileSocials.js';import {bumpFeedVersionCounter} from '../services/feed/feedVersion.js';
+import express from 'express';import path from 'node:path';import Busboy from 'busboy';import {shouldDeleteOldProfileAvatarKey,storeProcessedProfileAvatar} from '../services/account/profileAvatar.js';import {applySocialFieldUpdates} from '../shared.js';import {bumpFeedVersionCounter} from '../services/feed/feedVersion.js';
 export default function createAdminProfileRoutes({queries,storage,users}){const router=express.Router();router.use((req,res,next)=>{res.set('Cache-Control','private, no-store');res.on('finish',()=>{if(req.method!=='GET'&&res.statusCode<400)users?.invalidateCache?.(Number(req.params.id))});next()});
 function safeJsonParse(value, fallback) {
 		if (value == null) return fallback;

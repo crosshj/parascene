@@ -44,12 +44,12 @@ import {
 	resolveOwnedGroupV2Id,
 } from "../services/create/groupV2Ops.js";
 
-import { parseAspectRatioString } from "../../client/shared/aspectRatio.js";
+import { parseAspectRatioString } from "../shared.js";
 import { normalizeEditedUploadBuffer } from "../services/create/editedImageUpload.js";
 import { ACTIVE_SHARE_VERSION, mintShareToken } from "./utils/shareLink.js";
 import { getStyleInfo } from "../services/create/createStyles.js";
-import { PARASCENE_BLUE_SERVER_ID } from "../../client/shared/generationDefaults.js";
-import { resolveProductNamedPrice } from "../../shared/gpuOccupancy.js";
+import { PARASCENE_BLUE_SERVER_ID } from "../shared.js";
+import { resolveProductNamedPrice } from "../shared.js";
 import { importSunoCreation, previewSunoImport } from "../services/create/importSunoCreation.js";
 import { importYoutubeCreation, previewYoutubeImport, refreshYoutubeImportCover } from "../services/create/importYoutubeCreation.js";
 import { finalizeAudioFileImport, startAudioFileImport } from "../services/create/importAudioFileCreation.js";

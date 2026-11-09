@@ -1,10 +1,10 @@
 import { createStorageCache } from '../../core/storageCache.js';
 import { challengeEntryRequests, challengeIdsWithEntries, createChallengeEntryCache } from './entryCreations.js';
-import { pickChallengeConfigTimestamp } from '../../shared/challenges/challengeAdmin.js';
-import { parseIso } from '../../shared/challenges/constants.js';
+import { pickChallengeConfigTimestamp } from '../../shared.js';
+import { parseIso } from '../../shared.js';
 import { buildChallengesChannelModel } from '../../shared/challenges/model/buildChannelModel.js';
-import { ACTIVE_PARTICIPANT_PHASES } from '../../shared/challenges/model/participantSlice.js';
-import { deriveChallengePhase } from '../../shared/challenges/model/phases.js';
+import { ACTIVE_PARTICIPANT_PHASES } from '../../shared.js';
+import { deriveChallengePhase } from '../../shared.js';
 
 const CACHE_PREFIX = 'prsn-challenge-history-v1';
 const ACTIVE_MAX_AGE_MS = 15_000;

@@ -1,12 +1,12 @@
 import './gpuOccupancy.css';
 import { requestCreate } from '../providers/create/api.js';
-import { PARASCENE_BLUE_SERVER_ID } from './generationDefaults.js';
+import { PARASCENE_BLUE_SERVER_ID } from '../shared.js';
 import {
 	clampProductBoost,
 	formatCreditsBoost,
 	namedPriceFromBoost,
 	productBoostRange,
-} from '../../shared/gpuOccupancy.js';
+} from '../shared.js';
 
 /**
  * Occupancy peek from Blue / Parascene query. Missing `idle` means the server

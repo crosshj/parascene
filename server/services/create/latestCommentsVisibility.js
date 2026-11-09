@@ -6,11 +6,11 @@
 import {
 	creationMetaHasActiveChallengeFeedPin,
 	listActiveChallengeFeedPinsFromMeta
-} from "../../../client/shared/challengeSubmitMeta.js";
+} from "../../shared.js";
 import {
 	creationMetaHasChallengeResultsOrganizerRef,
 	pickChallengeTitleFromOrganizerRefs
-} from "../../../client/shared/challengeOrganizerRefMeta.js";
+} from "../../shared.js";
 import { challengeIdsFromCreationMeta } from "./challengeTitleLookup.js";
 import {
 	creationMetaIsChallengeEditorialMedia,

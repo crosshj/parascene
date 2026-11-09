@@ -7,7 +7,7 @@ import {
 import {
 	resolveChallengeOrganizerAllowlistFromMessages,
 	viewerCanOperateChallengePayout
-} from '../client/shared/challenges/challengeAdmin.js';
+} from '../shared/index.js';
 
 const CHALLENGE_ID = '2026-09-29-suno-44f50b52';
 

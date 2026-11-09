@@ -1,5 +1,5 @@
 import { buildChallengesChannelModel } from './buildChannelModel.js';
-import { rankedSubmissionsForPeerVoting } from './participantSlice.js';
+import { rankedSubmissionsForPeerVoting } from '../../../shared.js';
 
 const VOTE_PHASES = new Set(['voting', 'submit_and_vote']);
 

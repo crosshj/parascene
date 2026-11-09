@@ -4,7 +4,7 @@ import {
 	MOBILE_CHAT_SLOT_PACK_STRUCTURED_LEN,
 	MOBILE_CHAT_SPOTLIGHT_GROUP_COUNT,
 	MOBILE_CHAT_SPOTLIGHT_VIDEOS_PER_GROUP
-} from "../../../../client/shared/chatFeedMobilePartition.js";
+} from "../../../shared.js";
 import { authorCountsFromRows, enforceCreatorCapOnPage, rowEngagementScore } from "./creatorCap.js";
 import { FEED_DEFAULT_PARAMS } from "./params.js";
 import { appendFeedMergeReason } from "./reason.js";

@@ -1,4 +1,4 @@
-import { MOBILE_CHAT_SLOT_PACK_STRUCTURED_LEN } from "../../../../client/shared/chatFeedMobilePartition.js";
+import { MOBILE_CHAT_SLOT_PACK_STRUCTURED_LEN } from "../../../shared.js";
 import { isFeedRelaxedPage, countFeedRemainingEligible } from "./seen.js";
 import { isFeedAssumedHasMorePage } from "./hasMore.js";
 import { feedRowCreationIdKey } from "./rowMedia.js";

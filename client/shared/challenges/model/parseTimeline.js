@@ -1,5 +1,5 @@
-import { extractChallengeEvents } from './extractEvents.js';
-import { pickParticipantFocusConfig, submissionsForLatestChallenge } from './participantSlice.js';
+import { extractChallengeEvents } from '../../../shared.js';
+import { pickParticipantFocusConfig, submissionsForLatestChallenge } from '../../../shared.js';
 
 /**
  * Back-compat shape used by older imports: latest challenge config + matching submissions only.

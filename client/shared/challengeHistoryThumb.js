@@ -3,8 +3,8 @@ import {
 	parseHeroCreationOrShareRef,
 	parseHeroDirectMediaUrl
 } from './userText.js';
-import { mergeFullChallengeConfigForChallenge, pickChallengeHeroImageUrl } from './challenges/challengeAdmin.js';
-import { extractChallengeEvents } from './challenges/model/extractEvents.js';
+import { mergeFullChallengeConfigForChallenge, pickChallengeHeroImageUrl } from '../shared.js';
+import { extractChallengeEvents } from '../shared.js';
 import { fetchAllChatThreadMessages } from './challenges/model/buildChannelModel.js';
 import { readChallengesChannelCache } from './challenges/challengesChannelCache.js';
 import {

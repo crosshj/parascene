@@ -11,8 +11,8 @@ import {parseCreationMeta} from '../services/create/resolveCreatedImageStorageFi
 import {computeWelcome,WELCOME_VERSION} from '../services/account/welcome.js';
 import {getClientIdFromRequest,mergePrsnCidsIntoProfileMeta,prsnCidFromMeta} from '../services/account/prsnCids.js';
 import {appendPrsnCidsForUserId,tryRequestMetaFromRow} from '../services/account/userPrsnCids.js';
-import {applySocialFieldUpdates,applySocialObjectUpdates} from '../../client/shared/profileSocials.js';
-import {creationMetaHasChallengeSubmission} from '../../client/shared/challengeSubmitMeta.js';
+import {applySocialFieldUpdates,applySocialObjectUpdates} from '../shared.js';
+import {creationMetaHasChallengeSubmission} from '../shared.js';
 import {enrichCreationComments} from '../db/creations.js';
 export default function createProfileRoutes({queries,storage:storageAdapter,users,client}) {
 async function getReactionsForCommentIds(_queries,ids,viewerId){return new Map((await enrichCreationComments(client,ids.map(id=>({id})),viewerId)).map(row=>[Number(row.id),row]));}

@@ -17,7 +17,7 @@ import { parseChallengeEditorialPinId } from "../feed/editorialPin.js";
 import {
 	upsertChallengeFeedPinInMeta,
 	removeChallengeFeedPinFromMeta
-} from "../../../client/shared/challengeSubmitMeta.js";
+} from "../../shared.js";
 
 export const OPEN_PIN_WINDOW_DAYS = 7;
 export const WINNERS_PIN_WINDOW_DAYS = 14;

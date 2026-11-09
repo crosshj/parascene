@@ -27,7 +27,7 @@ import { invalidateFeedCatalogSnapshot } from "../../server/services/feed/rankin
 import {
 	isReferenceToVideoCreation,
 	shouldAutoSetVideoPosterFromFirstFrame,
-} from "../../client/shared/aspectRatio.js";
+} from "../../shared/index.js";
 
 loadEnv();
 

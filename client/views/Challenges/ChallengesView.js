@@ -5,7 +5,7 @@ import { mountChallengesPane, renderCachedPreviousChallengesHtml } from './mount
 import { omitWithdrawnChallengeSubmissions } from './views/entryBoardView.js';
 import { outstandingChallengeVotes } from '../../shared/challenges/model/outstandingVotes.js';
 import { mountOrganizeSnapshot } from './organizePageMain.js';
-import { isChallengeChannelAdmin, pickLatestChallengesGlobalConfig, resolveChallengeOrganizerAllowlistFromMessages } from '../../shared/challenges/challengeAdmin.js';
+import { isChallengeChannelAdmin, pickLatestChallengesGlobalConfig, resolveChallengeOrganizerAllowlistFromMessages } from '../../shared.js';
 import { mountChallengesOrganizerTools } from './mountOrganizerSidebar.js';
 import { detailOrganizerHeaderActions } from './views/organizeBoardView.js';
 import { challengesMessagesFingerprint } from '../../shared/challenges/challengesChannelCache.js';

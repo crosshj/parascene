@@ -1,4 +1,4 @@
-import { FEED_CURSOR_SENTINEL_AT } from "../../../../client/shared/feedContinuation.js";
+import { FEED_CURSOR_SENTINEL_AT } from "../../../shared.js";
 
 export { FEED_CURSOR_SENTINEL_AT };
 

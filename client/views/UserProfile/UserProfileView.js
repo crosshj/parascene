@@ -14,10 +14,10 @@ import * as skeletonMod from '../../shared/skeleton.js';
 import * as creationBadgesMod from '../../shared/creationBadges.js';
 import * as creationCardMod from '../../shared/creationCard.js';
 import * as routeCardGroupMod from '../../shared/routeCardGroupMedia.js';
-import * as challengeMetaMod from '../../shared/challengeSubmitMeta.js';
+import * as challengeMetaMod from '../../shared.js';
 import * as userCardMod from '../../shared/userCard.js';
 import * as iconsMod from '../../icons/svg-strings.js';
-import * as socialsMod from '../../shared/profileSocials.js';
+import * as socialsMod from '../../shared.js';
 import * as tooltipTapMod from '../../shared/reactionTooltipTap.js';
 import * as whoLabelsMod from '../../shared/whoLabels.js';
 export const UserProfileView=Object.freeze({mount({outlet,actions,services,url,restoreState}){
@@ -568,7 +568,7 @@ function renderProfilePage(
 							${(isSelf || isAdmin) ? html`<button class="btn-primary user-profile-edit" type="button">Edit Profile</button>` :
 							''}
 							${!isSelf && viewerUserId != null && Number(user?.id) > 0 ? html`
-							<a class="btn-secondary user-profile-dm" href="/chat/dm/${encodeURIComponent(userNameValue ? userNameValue.toLowerCase() : String(user.id))}" aria-label="Message ${escapeHtml(displayName)}">Message</a>
+							<a class="btn-secondary user-profile-dm" href="/dm/${encodeURIComponent(userNameValue ? userNameValue.toLowerCase() : String(user.id))}" aria-label="Message ${escapeHtml(displayName)}">Message</a>
 							` : ''}
 							${!isSelf && !isAdmin ? html`
 							<button class="${viewerFollows ? 'btn-secondary' : 'btn-primary'} user-profile-follow" type="button"

@@ -4,28 +4,28 @@ import {
 	fetchThreadMessagesChronological,
 	tryParseChallengeJsonBody
 } from "../create/challengeSubmitShared.js";
-import { deriveChallengePhase } from "../../../client/shared/challenges/model/phases.js";
+import { deriveChallengePhase } from "../../shared.js";
 import {
 	listActiveParticipantConfigs,
 	pickParticipantFocusConfig,
 	ACTIVE_PARTICIPANT_PHASES
-} from "../../../client/shared/challenges/model/participantSlice.js";
+} from "../../shared.js";
 import {
 	mergeFullChallengeConfigForChallenge,
 	pickChallengeConfigTimestamp,
 	pickChallengeHeroImageUrl,
 	sanitizeChallengeHeroImageUrl,
 	isChallengeListedForUpcoming
-} from "../../../client/shared/challenges/challengeAdmin.js";
-import { summarizeLatestChallengeConfigs } from "../../../client/shared/challenges/model/organizerSummaries.js";
+} from "../../shared.js";
+import { summarizeLatestChallengeConfigs } from "../../shared.js";
 import {
 	challengeConfigHasPrizesBlock,
 	formatCreditsLabel,
 	resolveChallengePrizes,
 	totalPrizeCredits
-} from "../../../client/shared/challenges/model/prizes.js";
-import { pickChallengeTrack, challengeTrackListRank } from "../../../client/shared/challenges/model/tracks.js";
-import { CHALLENGE_SCORE_REACTION_KEYS } from "../../../client/shared/challenges/constants.js";
+} from "../../shared.js";
+import { pickChallengeTrack, challengeTrackListRank } from "../../shared.js";
+import { CHALLENGE_SCORE_REACTION_KEYS } from "../../shared.js";
 import { appendCreationIdToMediaUrl, getThumbnailUrl } from "../create/url.js";
 import { verifyShareToken } from "../../routes/utils/shareLink.js";
 

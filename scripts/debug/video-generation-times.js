@@ -19,7 +19,7 @@
 
 import "dotenv/config";
 import { createClient } from "@supabase/supabase-js";
-import { PARASCENE_BLUE_SERVER_ID } from "../../client/shared/generationDefaults.js";
+import { PARASCENE_BLUE_SERVER_ID } from "../../shared/index.js";
 
 const TABLE = "prsn_created_images";
 const PAGE_SIZE = 1000;

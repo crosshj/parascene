@@ -5,15 +5,15 @@ import {
 	rankSubmissionsForChallenge,
 	rankedSubmissionsForPeerVoting,
 	submissionsForLatestChallenge
-} from '../../shared/challenges/model/participantSlice.js';
+} from '../../shared.js';
 import {
 	isChallengeConfigPurged,
 	isChallengeConfigSoftDeleted,
 	mergeFullChallengeConfigForChallenge,
 	pickChallengeConfigTimestamp
-} from '../../shared/challenges/challengeAdmin.js';
-import { parseIso } from '../../shared/challenges/constants.js';
-import { deriveChallengePhase } from '../../shared/challenges/model/phases.js';
+} from '../../shared.js';
+import { parseIso } from '../../shared.js';
+import { deriveChallengePhase } from '../../shared.js';
 import {
 	renderEmptyParticipantPane,
 	challengeDetailNeighbors,
@@ -39,13 +39,13 @@ import {
 } from '../../shared/userText.js';
 import { hydrateChallengeHistoryThumbnails } from '../../shared/challengeHistoryThumb.js';
 import { createChallengeVoteModal, buildVoteSlidesNewestFirst } from './challengeVoteModal.js';
-import { pickChallengeTrack } from '../../shared/challenges/model/tracks.js';
+import { pickChallengeTrack } from '../../shared.js';
 import {
 	challengesDetailsHref,
 	isChallengesDetailsPathname,
 	parseChallengesDetailsPath
 } from '../../shared/challenges/model/detailsRoute.js';
-import { esc, CHALLENGE_SCORE_REACTION_KEYS } from '../../shared/challenges/constants.js';
+import { esc, CHALLENGE_SCORE_REACTION_KEYS } from '../../shared.js';
 
 function assetQuery() {
 	const v = document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim();

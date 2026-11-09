@@ -1,8 +1,8 @@
 import { createThreadCanvases } from './threadCanvases.js';
 import crypto from 'node:crypto';
 import { broadcastThreadHint } from './threadBroadcast.js';
-import { plainTextReplyPreview } from '../../shared/plainTextReplyPreview.js';
-import { REACTION_ORDER, normalizeReactionBucket } from '../../shared/reactions.js';
+import { plainTextReplyPreview } from '../shared.js';
+import { REACTION_ORDER, normalizeReactionBucket } from '../shared.js';
 import { collectChatMiscGenericKeysFromMessageBody, isChatMiscGenericKeyOwnedByUser } from './threadAttachmentKeys.js';
 import {
 	buildThreadMetaWithChannelPin,
@@ -11,7 +11,7 @@ import {
 	isCanvasMessageRow,
 	isSystemEventMessageRow,
 	viewerCanPinChannelMessages,
-} from '../../shared/channelPin.js';
+} from '../shared.js';
 import { normalizeTag } from '../services/account/tag.js';
 
 const RESERVED_HASHTAG_CHANNEL_SLUGS = new Set(['comments', 'feed', 'explore', 'creations', 'feedback']);

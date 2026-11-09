@@ -1,12 +1,12 @@
-import { pickChallengeHeroImageUrl, pickChallengeHeroPreviewUrl } from '../../../shared/challenges/challengeAdmin.js';
+import { pickChallengeHeroImageUrl, pickChallengeHeroPreviewUrl } from '../../../shared.js';
 import {
 	challengeConfigHasPrizesBlock,
 	challengePrizesParticipationEnabled,
 	formatCreditsLabel,
 	resolveChallengePrizes
-} from '../../../shared/challenges/model/prizes.js';
-import { pickChallengeTrack } from '../../../shared/challenges/model/tracks.js';
-import { esc } from '../../../shared/challenges/constants.js';
+} from '../../../shared.js';
+import { pickChallengeTrack } from '../../../shared.js';
+import { esc } from '../../../shared.js';
 import { createModalDismissButton } from '../../../shared/modalDismiss.js';
 
 /**

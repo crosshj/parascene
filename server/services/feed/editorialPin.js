@@ -5,7 +5,7 @@ import {
 	loadEditorialPinPolicyDocument,
 	normalizeEditorialPinDefaults
 } from "./editorialPinPolicy.js";
-import { listActiveChallengeFeedPinsFromMeta } from "../../../client/shared/challengeSubmitMeta.js";
+import { listActiveChallengeFeedPinsFromMeta } from "../../shared.js";
 
 /**
  * @param {object|null|undefined} item

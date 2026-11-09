@@ -1,14 +1,14 @@
-# VPS/Beta migration guidance
+# VPS migration guide
 
-This is the canonical home for migration and cutover requirements. The [VPS migration tracker](BETA_VPS_MIGRATION_TRACKER.md) is the current checklist of remaining scope; plans, feature documents and agent instructions reference this policy rather than restating requirements.
+This is the parity and cutover guide for moving from the old WWW/Vercel solution to the root-deployed app. The [VPS migration tracker](VPS_MIGRATION_TRACKER.md) is the current open-work list. This guide owns the parity reference and migration boundaries.
 
 For client ownership, composition, controllers, and overlay routing, follow
-[VPS client architecture and cleanup contract](BETA_VPS_CLIENT_ARCHITECTURE.md).
+[VPS client architecture and cleanup contract](VPS_CLIENT_ARCHITECTURE.md).
 That document defines the target structure; it does not declare the port complete.
 
 ## Reference implementation
 
-**The active WWW SPA is the only default reference for the VPS/Beta frontend migration.**
+**The active WWW SPA is the default reference for frontend parity.**
 
 We are bringing the SPA over. The deprecated standalone/page-oriented WWW code is not the design reference and must go away as much as practical. Do not use standalone route markup, standalone route CSS, old page shells, or old page-specific breakpoints just because they are easier to locate.
 
@@ -33,6 +33,7 @@ When shared behavior is needed:
 - use the active WWW SPA code under `_legacy/` as the reference;
 - port the required implementation into the app root;
 - keep the port’s boundary and ownership clear;
+- keep browser/server-independent modules in root `shared/`, export them through `shared/index.js`, and consume them through `client/shared.js` or `server/shared.js`;
 - verify the module graph from the Docker image’s `/app` root before deploying.
 
 **The server must not import `client/`, including `client/shared`.** That tree is client-only. Code shared by client and server lives in `shared`. If the server needs a helper that currently sits under `client/shared`, move the helper into `shared` and have the client import it. A server import of a client module loads that module in Node, and a CSS import there exits the process on startup.
@@ -70,7 +71,7 @@ overlay and comments dialog, with router-owned slide URL changes. The API port
 retains WWW ranking, catalog fallback, composition, editorial pins, challenge
 engagement, seen/impression tracking and timeline selection in `server/services/feed`.
 
-The Feed and Doom Scroll ports, including live beta review, are complete. These
+The Feed and Doom Scroll ports, including live review, are complete. These
 behaviors are regression criteria for future changes.
 
 ## Import adaptation

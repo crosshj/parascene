@@ -1,6 +1,6 @@
-import { esc } from '../../shared/challenges/constants.js';
+import { esc } from '../../shared.js';
 import { challengesDetailsHref } from '../../shared/challenges/model/detailsRoute.js';
-import { resolveChallengeAcceptedMedia } from '../../shared/challenges/model/tracks.js';
+import { resolveChallengeAcceptedMedia } from '../../shared.js';
 import {
 	audioClipMusicIcon,
 	infoIcon,

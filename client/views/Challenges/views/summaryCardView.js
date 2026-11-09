@@ -1,10 +1,10 @@
-import { esc } from '../../../shared/challenges/constants.js';
-import { challengePhaseDisplayLabel } from '../../../shared/challenges/model/phases.js';
-import { CHALLENGE_TRACK_LABELS, pickChallengeTrack } from '../../../shared/challenges/model/tracks.js';
-import { rankedSubmissionsForPeerVoting } from '../../../shared/challenges/model/participantSlice.js';
+import { esc } from '../../../shared.js';
+import { challengePhaseDisplayLabel } from '../../../shared.js';
+import { CHALLENGE_TRACK_LABELS, pickChallengeTrack } from '../../../shared.js';
+import { rankedSubmissionsForPeerVoting } from '../../../shared.js';
 import { participantHeroViewModel } from './presentParticipantHero.js';
 import { renderChallengeCountdowns } from './countdownView.js';
-import { pickChallengeHeroImageUrl, pickChallengeHeroPreviewUrl } from '../../../shared/challenges/challengeAdmin.js';
+import { pickChallengeHeroImageUrl, pickChallengeHeroPreviewUrl } from '../../../shared.js';
 
 /**
  * Compact summary card for the /challenges board (one per active challenge).

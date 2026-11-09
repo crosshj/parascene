@@ -1,6 +1,6 @@
 import { deploymentCdnHost, deploymentShareHost, deploymentSiteOrigin } from './deploymentHosts.js';
 import { eyeHiddenIcon, linkIcon2 } from '../icons/svg-strings.js';
-import { isChatBroadcastMentionSlug } from './chatBroadcastMentions.js';
+import { isChatBroadcastMentionSlug } from '../shared.js';
 import { SPECIAL_HASHTAG_HREFS } from './hashtagDestination.js';
 import {
 	attachMediaAudioLeveling,

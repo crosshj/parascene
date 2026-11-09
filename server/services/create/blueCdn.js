@@ -1,4 +1,4 @@
-import { PARASCENE_BLUE_SERVER_ID } from "../../../client/shared/generationDefaults.js";
+import { PARASCENE_BLUE_SERVER_ID } from "../../shared.js";
 import { buildProviderHeaders } from "./providerAuth.js";
 
 const MINT_TIMEOUT_MS = 20_000;

@@ -296,6 +296,10 @@ class AppModalNotifications extends HTMLElement {
 			item.addEventListener('click', async () => {
 				const id = Number(item.getAttribute('data-id'));
 				const notification = id ? this.notifications.find((n) => n.id === id) : null;
+				if (notification?.type === 'tip') {
+					this.openDetail(id);
+					return;
+				}
 				const goDirect = hasClickTarget(notification);
 				if (goDirect) {
 					item.classList.add('is-loading');
@@ -352,6 +356,14 @@ class AppModalNotifications extends HTMLElement {
 		};
 
 		const notification = this.notifications[this.activeIndex];
+		const tipMeta = notification?.type === 'tip' && notification.meta && typeof notification.meta === 'object'
+			? notification.meta
+			: {};
+		const tipAmount = Number(tipMeta.amount);
+		const tipAmountLabel = Number.isFinite(tipAmount) && tipAmount > 0
+			? `${tipAmount.toLocaleString(undefined, { maximumFractionDigits: 1 })} credits`
+			: '';
+		const tipNote = typeof tipMeta.tip_note === 'string' ? tipMeta.tip_note.trim() : '';
 
 		if (acknowledge && !notification.acknowledged_at) {
 			this.acknowledgeNotification(notification.id);
@@ -370,6 +382,11 @@ class AppModalNotifications extends HTMLElement {
 			<div class="notification-title">${escapeHtml(notification.title || 'Notification')}</div>
 		</div>
 		<div class="notification-message">${escapeHtml(notification.message || '')}</div>
+		${notification.type === 'tip' && (tipAmountLabel || tipNote) ? html`
+		<div class="notification-tip-summary">
+			${tipAmountLabel ? html`<div class="notification-tip-amount"><span>Tip amount</span><strong>${escapeHtml(tipAmountLabel)}</strong></div>` : ''}
+			${tipNote ? html`<div class="notification-tip-note"><span>Tip note</span><p>${escapeHtml(tipNote)}</p></div>` : ''}
+		</div>` : ''}
 		<div class="notification-time" title="${escapeHtml(timeTitle)}">${escapeHtml(time)}</div>
 		<div class="notification-actions">
 			<button class="notification-action" type="button">View all notifications</button>
@@ -536,6 +553,35 @@ class AppModalNotifications extends HTMLElement {
           overflow-wrap: anywhere;
           word-break: break-word;
           white-space: pre-wrap;
+        }
+        .notification-tip-summary {
+          display: grid;
+          gap: 10px;
+          padding: 12px 14px;
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          background: var(--surface-strong);
+        }
+        .notification-tip-amount,
+        .notification-tip-note {
+          display: grid;
+          gap: 4px;
+        }
+        .notification-tip-amount span,
+        .notification-tip-note span {
+          color: var(--text-muted);
+          font-size: 0.82rem;
+        }
+        .notification-tip-amount strong {
+          color: var(--text);
+          font-size: 1.05rem;
+        }
+        .notification-tip-note p {
+          margin: 0;
+          color: var(--text);
+          line-height: 1.5;
+          white-space: pre-wrap;
+          overflow-wrap: anywhere;
         }
         .notification-time {
           font-size: 0.9rem;

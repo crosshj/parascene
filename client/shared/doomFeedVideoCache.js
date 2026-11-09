@@ -2,7 +2,7 @@
  * Keeps feed vertical-video bytes alive so doom scroll can adopt the same
  * element instead of starting a second download when a card is opened.
  */
-import { isFeedRowVideoCreation } from './chatFeedMobilePartition.js';
+import { isFeedRowVideoCreation } from '../shared.js';
 import { resumeMediaAudioLevelingFromGesture, primeMediaElementForAudioLeveling } from './mediaAudioLeveling.js';
 import { nsfwShouldBlur } from './nsfwPolicy.js';
 import { feedItemPlayableVideoUrl } from './videoFirstFramePoster.js';

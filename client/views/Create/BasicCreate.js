@@ -5,7 +5,7 @@ import * as mutateQueueSyncModule from '../../shared/mutateQueueSync.js';
 import * as triggeredSuggestModule from '../../shared/triggeredSuggest.js';
 import * as promptFieldClearModule from '../../shared/promptFieldClear.js';
 import * as createStylesModule from '../../shared/createStyles.js';
-import * as generationDefaultsModule from '../../shared/generationDefaults.js';
+import * as generationDefaultsModule from '../../shared.js';
 import '../../elements/tabs.js';
 import * as autogrowModule from '../../shared/autogrow.js';
 import * as createSettingsSyncModule from '../../shared/createSettingsSync.js';

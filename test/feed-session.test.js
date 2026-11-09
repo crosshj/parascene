@@ -5,7 +5,7 @@ import { fillFeedPageFromPast } from '../server/services/feed/ranking/fillPageTo
 import { createFeedSession, parseFeedSession } from '../server/services/feed/ranking/feedSession.js';
 import { parseFeedAckFromQuery } from '../server/services/feed/ranking/continuation.js';
 import { FEED_DEFAULT_PARAMS } from '../server/services/feed/ranking/params.js';
-import { encodeFeedAck } from '../client/shared/feedContinuation.js';
+import { encodeFeedAck } from '../shared/index.js';
 
 const row = (id, userId = id) => ({ id, created_image_id: id, created_at: new Date(Date.UTC(2026, 0, 1) + id * 60000).toISOString(), user_id: userId, url: `/api/images/created/${id}.png`, like_count: id % 3, comment_count: 0 });
 const scoreContext = { nowMs: Date.UTC(2026, 0, 2), followingIds: new Set(), newcomerAuthorIds: new Set(), newcomerHandles: new Set(), params: FEED_DEFAULT_PARAMS };

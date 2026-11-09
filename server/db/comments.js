@@ -1,6 +1,6 @@
 import { enrichCreationComments } from './creations.js';
-import { REACTION_ORDER } from '../../shared/reactions.js';
-import { plainTextReplyPreview } from '../../client/shared/plainTextReplyPreview.js';
+import { REACTION_ORDER } from '../shared.js';
+import { plainTextReplyPreview } from '../shared.js';
 
 function fail(status, message) { throw Object.assign(new Error(message), { status }); }
 async function result(query) { const { data, error, count } = await query; if (error) throw error; return { data, count }; }

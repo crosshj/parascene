@@ -7,10 +7,10 @@ import { insertNotificationsForChatMentions } from "../services/challenges/chatM
 import { fetchChatChannelThreadRow, findChallengesChannelThreadId, validateChallengeSubmission, listChallengeConfigsAcceptingSubmissions, summarizeAcceptingChallengesForEligibility, filterAcceptingChallengesByMedia, fetchThreadMessagesChronological, metaHasChallengeSubmission, isChatThreadMember, summarizeChallengeSubmissionPhases } from "../services/create/challengeSubmitShared.js";
 import {
 	creationMediaTypeFromMeta
-} from "../../client/shared/challenges/model/tracks.js";
+} from "../shared.js";
 import { getCreationFeedPinStatus } from "../services/feed/editorialPin.js";
-import { creationMetaHasActiveChallengeFeedPin } from "../../client/shared/challengeSubmitMeta.js";
-import { creationMetaHasChallengeOrganizerRef } from "../../client/shared/challengeOrganizerRefMeta.js";
+import { creationMetaHasActiveChallengeFeedPin } from "../shared.js";
+import { creationMetaHasChallengeOrganizerRef } from "../shared.js";
 
 export default function createChallengeCreationRoutes({ queries, storage }) {
 const router = express.Router();

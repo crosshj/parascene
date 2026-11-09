@@ -4,9 +4,9 @@ import {
 	dimensionsForAspectRatioLongEdge,
 	isReferenceToVideoMethod,
 	parseAspectRatioString,
-} from "../../../client/shared/aspectRatio.js";
+} from "../../shared.js";
 import { letterboxImageBuffer } from "./editedImageUpload.js";
-import { UPLOAD_IMAGE_METHOD_KEY } from "../../../client/shared/generationDefaults.js";
+import { UPLOAD_IMAGE_METHOD_KEY } from "../../shared.js";
 import { normalizeProviderArgsForAspectRatio } from "./normalizeProviderInputImages.js";
 import { resolveEphemeralStillProviderArgs } from "./importEphemeralStill.js";
 import sharp from "sharp";

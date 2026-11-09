@@ -2,7 +2,7 @@
  * Mutate: server list from cache → bundle → background /api/servers.
  */
 
-import { isPublicGenerationServerId } from './generationDefaults.js';
+import { isPublicGenerationServerId } from '../shared.js';
 
 
 export function getMethodIntentList(method) {

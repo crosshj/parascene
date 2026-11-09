@@ -1,4 +1,4 @@
-import { totalVoteCountFromChallengeReactions } from '../../../shared/challenges/constants.js';
+import { totalVoteCountFromChallengeReactions } from '../../../shared.js';
 
 const ENDED_PHASES = new Set(['finalizing', 'results', 'deleted', 'purged']);
 

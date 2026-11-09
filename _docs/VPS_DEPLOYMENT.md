@@ -1,7 +1,7 @@
-# Parascene VPS beta
+# Parascene VPS deployment
 
-This is the focused beta deployment, not a second copy of the full Parascene
-application. `server/server.js` is the process entrypoint, `server/routes/` contains
+The root-deployed app runs from this repository. `server/server.js` is the
+process entrypoint, `server/routes/` contains
 route and middleware code, and `server/db/` composes focused Supabase adapters for
 users, sessions, and profile files. Each route receives only the adapter it
 uses. `server/pages/` contains server-rendered HTML modules (including `pages/index/` and
@@ -12,14 +12,14 @@ modules. `public/` contains static assets.
 Page assets are exposed at page-relative URLs such as `/auth/auth.css`, not
 through a `/pages` URL namespace.
 
-The beta/CDN proof is accepted. The Files tool streams raw request bodies of up
+The Files tool streams raw request bodies of up
 to 50 MiB to Supabase Storage, supports owner-scoped hard deletion, and keeps
 storage credentials server-side. The CDN also exposes the www-compatible
 `/api/images/generic` contract, and browser generic/edited/chat uploads use it
 by default. A temporary `legacyGenericUploads=1` URL flag or
 `parascene:generic-upload-transport=legacy` local-storage value rolls a
-browser back to the www path. Remaining production validation and hardening is
-tracked in [`BETA_VPS_MIGRATION_TRACKER.md`](BETA_VPS_MIGRATION_TRACKER.md).
+browser back to the old WWW path. Remaining migration work is tracked in
+[`VPS_MIGRATION_TRACKER.md`](VPS_MIGRATION_TRACKER.md).
 
 The VPS image includes `ffmpeg`/`ffprobe`; video uploads are normalized to
 browser-streamable H.264/AAC MP4 with fast-start metadata while retaining the
@@ -27,7 +27,7 @@ original filename. Chat now distinguishes files from creations while using
 the creation-style media presentation: shared audio uses the same Suno-like
 player, embedded artwork or a generated fallback, and a download action.
 
-The authenticated beta SPA includes a client-side `/files` page. It calls the
+The authenticated app includes a client-side `/files` page. It calls the
 owner-scoped `https://cdn.parascene.com/api/files` API to upload, enumerate,
 stream, and delete objects from the signed-in user's
 `prsn_misc/profile/{userId}` prefix. Both beta and prod mint media URLs on
@@ -46,13 +46,13 @@ npm install
 npm run dev
 ```
 
-This starts the Express beta server and Rollup in watch mode together. Changes
+This starts the Express app and Rollup in watch mode together. Changes
 to `client/` rebuild the hashed JS/CSS assets; changes to server modules restart
 the server; changes to page HTML/CSS are served on the next browser refresh.
 The launcher preserves the calling shell's `NODE_ENV` (defaulting to
 `development` when unset) and sets `LOCAL_REPORTS_ENABLED=1` so local reports
 also work when the shell uses production mode.
-Open the local beta origin printed by the server (normally
+Open the local app origin printed by the server (normally
 `http://localhost:3000/`). The first dev loop intentionally uses a normal
 browser refresh rather than runtime style injection or hot-module replacement,
 so the behavior remains close to the production asset path.
@@ -87,8 +87,9 @@ The Cloudflare API token is stored as a GitHub Actions secret and installed on
 the VPS in a root-only Certbot credentials file; it is not passed to the app
 container.
 Keep the Cloudflare apex A record proxied and use Full (strict) SSL/TLS; keep
-the apex redirect at the origin as a fallback and canonical signal. The API
-remains on Vercel for payments and webhooks.
+the apex redirect at the origin as a fallback and canonical signal. `api`
+currently remains on Vercel for payments and webhooks; moving it to the VPS is
+open work in the [migration tracker](VPS_MIGRATION_TRACKER.md).
 Both VPS sites publish creation and provider-poll jobs through QStash to the
 legacy `api.parascene.com` worker. Local development runs those jobs in process.
 Each deploy validates the complete Nginx configuration, restores the prior

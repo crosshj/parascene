@@ -9,7 +9,7 @@ import {
 	TRY_DEFAULT_MODEL,
 	TRY_DEFAULT_SERVER_ID,
 	TRY_PROMPT_STYLE_SUFFIX,
-} from "../../client/shared/generationDefaults.js";
+} from "../shared.js";
 
 const COOKIE_PS_CID = "ps_cid";
 

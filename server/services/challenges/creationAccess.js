@@ -1,6 +1,6 @@
 import { getSupabaseServiceClient } from '../create/supabaseService.js';
 import { canViewUnpublishedCreationViaChallengeMessage, canViewUnpublishedCreationViaChallengeHero, summarizeChallengeSubmissionPhases } from '../create/challengeSubmitShared.js';
-import { listChallengeOrganizerRefsFromMeta, challengeOrganizerRefRoleLabel } from '../../../client/shared/challengeOrganizerRefMeta.js';
+import { listChallengeOrganizerRefsFromMeta, challengeOrganizerRefRoleLabel } from '../../shared.js';
 
 export async function challengeCreationForViewer({ creations, viewer, creationId, query = {}, sb = getSupabaseServiceClient() }) {
  if (!sb || !viewer || typeof creations.byIdForShare !== 'function') return null;

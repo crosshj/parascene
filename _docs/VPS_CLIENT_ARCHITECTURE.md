@@ -26,7 +26,7 @@ Call this a **controller-based SPA**, or **MVC with application coordination**. 
 
 The current problem is overlapping ownership, not file length. `app/runtime.js` hides application assembly; sidebar behavior spans `app/sidebar.js`, `app/shell.js`, layout, and session; router, layout, and the copied detail script all manipulate history. App state mostly records outcomes rather than providing a consistent interaction contract. Moving these responsibilities between files does not resolve them.
 
-This document governs client organization. [Migration source of truth](BETA_VPS_SPA_MIGRATION_SOURCE_OF_TRUTH.md) governs which WWW behavior to port; [data and state](BETA_VPS_CLIENT_DATA_AND_STATE.md) provides the detailed resource contract. Creation detail is an explicit migration exception: the active WWW SPA embeds the full detail implementation. Preserve that implementation as a native fragment, with its document/navigation assumptions adapted.
+This document governs client organization. The [VPS migration guide](VPS_MIGRATION_GUIDE.md) governs old-WWW parity; [data and state](VPS_CLIENT_DATA_AND_STATE.md) provides the detailed resource contract. Creation detail is an explicit migration exception: the active WWW SPA embeds the full detail implementation. Preserve that implementation as a native fragment, with its document/navigation assumptions adapted.
 
 ## 1. `app.js` is the composition root
 
@@ -159,11 +159,11 @@ WWW references: `src/shared/spaPageOverlay.js` handles history, dismissal, and s
 2. **Finish the sidebar boundary.** Declare sidebar as a child of the shared app shell, selected through route composition—not an explicit `app.js` mount. Move `app/sidebar.js` beside `SidebarView.js`; create/dispose its controller through the view mount. Absorb sidebar subscriptions from `app/shell.js` and account rendering from session. Keep provider policy in its domain provider. Remove the duplicate sidebar snapshot from app state; retain sidebar/controller across routes that share that shell.
 3. **Make composition visible.** Move session/router construction out of `app/runtime.js` into `app.js`; distribute storage/refresh handling to resources and startup/disposal to lifecycle. Remove `app/shell.js` once its bindings have owners. Keep route/view inputs current instead of capturing preferences once at startup.
 4. **Creation Detail mount contract (implemented).** Pass `creationId`, seed, and navigation actions through the detail mount; keep page-load listeners within its lifetime and preserve the full feature behavior.
-5. **Close the build boundary.** Follow [migration import and build requirements](BETA_VPS_SPA_MIGRATION_SOURCE_OF_TRUTH.md#import-adaptation), including custom-element dependencies.
+5. **Close the build boundary.** Follow [migration import and build requirements](VPS_MIGRATION_GUIDE.md#import-adaptation), including custom-element dependencies.
 
 Verify deep-link → close, grid → A → B → Back/Forward, dismiss/reopen, pending-load dismissal, scroll retention, seed-first paint, and session expiry. Assert that sidebar/background controllers and subscriptions survive overlay transitions, state changes update retained views without duplicate subscriptions, and unmount disposes each controller exactly once. Also check that importing the view barrel does not mutate history and that browser module requests resolve. Building alone does not verify these behaviors.
 
-Completion and cutover requirements: [VPS/Beta migration guidance](BETA_VPS_SPA_MIGRATION_SOURCE_OF_TRUTH.md#completion-and-cutover).
+Completion and cutover requirements: [VPS migration guide](VPS_MIGRATION_GUIDE.md#completion-and-cutover).
 
 ## Right sidebar interaction contract
 
@@ -226,7 +226,7 @@ projection and subscriptions. `providers.create.draft` exposes the editor API;
 and issue explicit image actions; omitted/unsupported fields remain saved. Basic
 shows and submits only the first image while preserving the full list.
 
-The [client data and state contract](BETA_VPS_CLIENT_DATA_AND_STATE.md#create-provider-draft-contract) defines the shared Create draft behavior.
+The [client data and state contract](VPS_CLIENT_DATA_AND_STATE.md#create-provider-draft-contract) defines the shared Create draft behavior.
 
 ### Native account and Library fragments (2026-10-04)
 

@@ -12,7 +12,7 @@ import {
 	CREATE_SERVERS_CACHE_KEY,
 	DEFAULT_CREATE_SERVERS,
 } from './defaults.js';
-import { isPublicGenerationServerId } from '../../shared/generationDefaults.js';
+import { isPublicGenerationServerId } from '../../shared.js';
 
 export function createCreateProvider({ viewerId, pendingCreations } = {}) {
 const api = createCreateApi();

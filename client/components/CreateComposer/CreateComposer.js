@@ -6,7 +6,7 @@
  */
 import { sendIcon } from '../../icons/svg-strings.js';
 import * as aspectRatioMod from '../../shared/aspectRatio.js';
-import * as generationDefaultsMod from '../../shared/generationDefaults.js';
+import * as generationDefaultsMod from '../../shared.js';
 import * as createSubmitMod from '../../providers/create/transport.js';
 import * as triggeredSuggestMod from '../../shared/triggeredSuggest.js';
 import * as autogrowMod from '../../shared/autogrow.js';

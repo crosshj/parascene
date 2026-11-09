@@ -809,4 +809,4 @@ export const REACTION_ICONS = {
 };
 
 /** Display order for reaction strip (same as API REACTION_ORDER). */
-export { REACTION_ORDER } from '../../shared/reactions.js';
+export { REACTION_ORDER } from '../shared.js';

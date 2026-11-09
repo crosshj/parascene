@@ -1,4 +1,4 @@
-import { CHALLENGE_SCORE_REACTION_KEYS, challengeScoreToReactionKey } from '../../../client/shared/challenges/constants.js';
+import { CHALLENGE_SCORE_REACTION_KEYS, challengeScoreToReactionKey } from '../../shared.js';
 
 // Keep revisions with the reaction document so one conditional UPDATE commits
 // both the score and its ordering token. API serialization only exposes known keys.

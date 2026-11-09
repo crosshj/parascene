@@ -354,7 +354,7 @@ export function appendReservedPseudoChannels(threads) {
 }
 
 /**
- * Thread-shaped rows for the sidebar top strip (plain titles, same URLs as /chat/c/:slug).
+ * Thread-shaped rows for the sidebar top strip (plain titles, same URLs as /ch/:slug).
  * @returns {object[]}
  */
 export function buildSidebarPseudoStripRows() {
@@ -368,7 +368,7 @@ export function buildSidebarPseudoStripRows() {
 }
 
 /**
- * Top-strip slug when the request path is a pseudo channel URL (`/chat/c/:slug`), else null.
+ * Top-strip slug when the request path is a pseudo channel URL (`/ch/:slug`), else null.
  * @param {string} [requestPath]
  * @returns {string | null}
  */
@@ -377,7 +377,7 @@ export function pseudoStripActiveSlugFromRequestPath(requestPath) {
 	if (!raw) return null;
 	const pathOnly = stripRequestPathname(raw);
 	if (pathOnly === '/prompt-library') return 'prompt-library';
-	const match = raw.match(/\/chat\/c\/([^/?#]+)/);
+	const match = pathOnly.match(/^\/ch\/([^/?#]+)/) || pathOnly.match(/^\/chat\/c\/([^/?#]+)/);
 	if (!match) return null;
 	try {
 		const slug = decodeURIComponent(match[1]).trim().toLowerCase();
@@ -550,7 +550,7 @@ function isPrivateChannelMeta(meta) {
 
 /** @param {object} meta */
 export function buildChatThreadUrl(meta) {
-	if (!meta) return '/connect#chat';
+	if (!meta) return '/chat';
 	if (meta.type === 'sidebar_notes') {
 		return SIDEBAR_NOTES_STRIP_HREF;
 	}
@@ -577,7 +577,7 @@ export function buildChatThreadUrl(meta) {
 	if (Number.isFinite(id) && id > 0) {
 		return `/chat/t/${encodeURIComponent(String(id))}`;
 	}
-	return '/connect#chat';
+	return '/chat';
 }
 
 /** Same rules as chat sidebar `normalizePathForCompare` — keep pseudo-strip active state aligned. */
@@ -760,8 +760,7 @@ function resolveSidebarThreadIdForParsed(parsed, threads, viewerId) {
 }
 
 /**
- * Whether `href` points at the current chat location, including when the URL was canonicalized to `/chat/t/:id`
- * while the sidebar still links via `/chat/dm/…` or `/chat/c/:slug`.
+ * Whether `href` points at the current chat location, including legacy `/chat/t/:id` thread URLs.
  *
  * @param {string} href
  * @param {{ pathname?: string, threads?: object[], viewerId?: unknown }} [ctx]

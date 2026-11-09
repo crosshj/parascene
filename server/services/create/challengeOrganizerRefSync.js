@@ -5,13 +5,13 @@ import {
 	isChallengeConfigSoftDeleted,
 	isChallengeConfigPurged,
 	mergeFullChallengeConfigForChallenge
-} from "../../../client/shared/challenges/challengeAdmin.js";
+} from "../../shared.js";
 import { parseCreationIdFromChallengeHeroRef } from "./challengeSubmitShared.js";
 import {
 	upsertChallengeOrganizerRefInMeta,
 	removeChallengeOrganizerRefFromMeta,
 	listChallengeOrganizerRefsFromMeta
-} from "../../../client/shared/challengeOrganizerRefMeta.js";
+} from "../../shared.js";
 import {
 	ensureChallengeHeroPreview,
 	persistChallengeHeroPreviewUrlOnConfig

@@ -1,5 +1,5 @@
 import { createModeChange, createSourceChange } from '../providers/create/model.js';
-import { inputFromLegacyImage, normalizeCreationInput } from '../../shared/creationInputs.js';
+import { inputFromLegacyImage, normalizeCreationInput } from '../shared.js';
 /**
  * Sync mutate queue ↔ create attachment storage and lineage helpers.
  */
@@ -34,7 +34,7 @@ import {
 	MUTATE_VIDEO_LTX_METHOD_KEY,
 	MUTATE_VIDEO_LTX_MODEL,
 	MUTATE_VIDEO_LTX_SERVER_ID,
-} from './generationDefaults.js';
+} from '../shared.js';
 export { MUTATE_QUEUE_UPDATED_EVENT, notifyMutateQueueUpdated } from './mutateQueueEvents.js';
 
 export const MUTATE_QUEUE_STORAGE_KEY = 'mutateQueue:v1';

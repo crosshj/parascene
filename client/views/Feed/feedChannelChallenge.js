@@ -2,7 +2,7 @@
  * Chat `#feed` only: challenge engagement loads after the main feed response.
  */
 
-import { isChatFeedChallengePlaceholder } from "../../shared/chatFeedMobilePartition.js";
+import { isChatFeedChallengePlaceholder } from "../../shared.js";
 import { hydrateChallengeFeedCardThumbsLikePane } from "../../shared/challengeHistoryThumb.js";
 
 export const CHAT_FEED_CHALLENGE_ENGAGEMENT_URL = '/api/feed/challenge-engagement';

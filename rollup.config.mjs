@@ -1,5 +1,5 @@
 import fs from "node:fs/promises";
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
@@ -62,6 +62,32 @@ export function assertClientBoundaryOnDisk() {
 			'Do not preserve a mirrored WWW tree or forwarding wrappers.',
 			entries.length ? 'Found:' : 'The directory is empty; remove it from the deployment source.',
 			...entries,
+		].join('\n'));
+	}
+	assertServerBoundaryOnDisk();
+}
+
+function assertServerBoundaryOnDisk() {
+	const serverRoot = path.join(appRoot, 'server');
+	const violations = [];
+	for (const file of listFiles(serverRoot).filter((entry) => entry.endsWith('.js'))) {
+		const source = readFileSync(file, 'utf8');
+		const imports = source.matchAll(/(?:from\s*|import\s*\(\s*|import\s*)(?:['"])([^'"]+)(?:['"])/g);
+		for (const [, specifier] of imports) {
+			const resolved = specifier.startsWith('.')
+				? path.resolve(path.dirname(file), specifier)
+				: specifier;
+			const relative = path.relative(appRoot, resolved).split(path.sep).join('/');
+			if (relative === 'client' || relative.startsWith('client/')) {
+				violations.push(`  - ${path.relative(appRoot, file)} → ${specifier}`);
+			}
+		}
+	}
+	if (violations.length) {
+		throw new Error([
+			'The server must not import client modules.',
+			'Move cross-runtime helpers into shared/ and expose them through server/shared.js.',
+			...violations,
 		].join('\n'));
 	}
 }
