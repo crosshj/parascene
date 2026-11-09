@@ -118,7 +118,7 @@ app.use(createAudioClipsRoutes(db.library));
 app.use(createSuggestRoutes({ queries: db.suggestions }));
 app.use(createExploreRoutes({ explore: db.explore, users: db.users }));
 app.use(createCommentsRoutes({ comments: db.comments, users: db.users }));
-app.use(createCreationsRoutes({ creations: db.creations, users: db.users, appendChallengeEligibility: challengeCreations.appendEligibility }));
+app.use(createCreationsRoutes({ creations: db.creations, users: db.users, createQueries: db.create.queries, createStorage: db.create.storage, appendChallengeEligibility: challengeCreations.appendEligibility }));
 app.use(createAuthRoutes({ users: db.users, sessions: db.sessions }));
 app.use(createBlogRoutes({ client: db.account.client, users: db.users, pagesDir }));
 app.use(createSeoRoutes());

@@ -193,6 +193,8 @@ async function enqueueProviderPollFollowUp({
 	credit_cost,
 	delaySeconds,
 	useBackoff = delaySeconds == null,
+	// A finished poll must hand off its lock before the next QStash callback arrives.
+	releasePollLock = false,
 }) {
 	const asyncEnv = isRemoteAsyncEnv();
 	let latestMeta = null;
@@ -205,6 +207,9 @@ async function enqueueProviderPollFollowUp({
 		}
 	}
 	if (isProviderPollAlreadyScheduled(latestMeta)) {
+		if (releasePollLock && queries?.updateCreatedImageMeta?.run && latestMeta) {
+			await queries.updateCreatedImageMeta.run(imageId, userId, mergeMeta(latestMeta, { provider_poll_lock_until_ms: 0 }));
+		}
 		logCreation("Provider poll already scheduled; skip enqueue", { imageId, userId });
 		return { ok: true, reason: "async_poll_already_scheduled" };
 	}
@@ -216,7 +221,10 @@ async function enqueueProviderPollFollowUp({
 		await queries.updateCreatedImageMeta.run(
 			imageId,
 			userId,
-			mergeMeta(latestMeta, { provider_next_poll_at: nextPollAtIso }),
+			mergeMeta(latestMeta, {
+				provider_next_poll_at: nextPollAtIso,
+				...(releasePollLock ? { provider_poll_lock_until_ms: 0 } : {}),
+			}),
 		);
 	}
 	if (asyncEnv) {
@@ -329,6 +337,7 @@ async function continueOrTimeoutPoll({
 			userId,
 			server_id,
 			credit_cost,
+			releasePollLock: true,
 		});
 	}
 	const timeoutErr = new Error("Timed out waiting for generation to finish.");
@@ -472,9 +481,6 @@ export async function healProviderPollOnRead({
 	userId,
 	force = false,
 }) {
-	// The legacy API worker owns the QStash poll chain. Both VPS sites read the
-	// same rows, so automatic read repair here could publish duplicate polls.
-	if (isRemoteAsyncEnv()) return { kicked: false, revived: false };
 	if (!image) return { kicked: false, revived: false };
 	const meta = parseMeta(image.meta) || {};
 	if (isRecoverableTimedOutCreation(image.status, meta, Date.now(), { force })) {
@@ -1917,6 +1923,7 @@ export async function runProviderPollJob({ queries, storage, payload }) {
 						server_id,
 						credit_cost,
 						delaySeconds: 1,
+						releasePollLock: true,
 					});
 				}
 
@@ -2080,6 +2087,7 @@ export async function runProviderPollJob({ queries, storage, payload }) {
 				userId,
 				server_id,
 				credit_cost,
+				releasePollLock: true,
 			});
 		}
 		return markProviderPollFailed({

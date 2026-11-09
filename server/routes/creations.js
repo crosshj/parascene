@@ -10,6 +10,8 @@ import { ACTIVE_SHARE_VERSION, mintShareToken, verifyShareToken } from "./utils/
 import { costumeGroupV2Meta } from '../services/create/groupV2.js';
 import { computeChallengeEndedByImageId } from '../services/create/challengeSubmitShared.js';
 import { getSupabaseServiceClient } from '../services/create/supabaseService.js';
+import { healProviderPollOnRead, recheckCreationProviderPoll } from '../services/create/creationJob.js';
+import { isCreationGpuInFlight } from '../services/create/creationGpuWait.js';
 
 function integer(value, fallback, min, max) {
 	const n = Number.parseInt(String(value ?? ""), 10);
@@ -202,7 +204,7 @@ function gridThumbnail(input) {
 		.toBuffer();
 }
 
-export function createCreationsRoutes({ creations, users, appendChallengeEligibility, resolveChallengeEnded = images => computeChallengeEndedByImageId({ sb: getSupabaseServiceClient(), images }), extractVideoFrame = readVideoFrame }) {
+export function createCreationsRoutes({ creations, users, createQueries, createStorage, appendChallengeEligibility, resolveChallengeEnded = images => computeChallengeEndedByImageId({ sb: getSupabaseServiceClient(), images }), extractVideoFrame = readVideoFrame }) {
 	async function serializeList(rows) {
 		const items = rows.map(serializeCreation);
 		try {
@@ -447,6 +449,20 @@ export function createCreationsRoutes({ creations, users, appendChallengeEligibi
 			const posted = row ? null : await creationViaPostedProof(req, req.params.id);
 			if (posted) row = posted.row;
 			if (!row) return res.status(404).json({ error: "Image not found" });
+			if (Number(row.user_id) === Number(viewer.id) && (isCreationGpuInFlight(row.status) || row.status === "failed")) {
+				try {
+					await healProviderPollOnRead({
+						queries: createQueries,
+						storage: createStorage,
+						image: row,
+						userId: viewer.id,
+						force: row.status === "failed",
+					});
+					row = await creations.byIdForViewer(req.auth.userId, row.id, { isAdmin: viewer.role === "admin" }) || row;
+				} catch {
+					// Keep the loaded creation available if a recovery attempt fails.
+				}
+			}
 			const payload = await serializeWithCreator(row);
 			if (posted) applyPostedProof(payload, row, posted);
 			if (req.query.lineage_of != null) {
@@ -458,6 +474,29 @@ export function createCreationsRoutes({ creations, users, appendChallengeEligibi
    await appendChallengeEligibility?.(req, viewer, row, parseMeta(row.meta), payload);
    await appendChallengeEntryState(parseMeta(row.meta), payload);
    return res.json(payload);
+		} catch (error) { return next(error); }
+	});
+
+	router.post("/api/create/images/:id/check", noStore, requireAuth, async (req, res, next) => {
+		try {
+			const image = await createQueries.selectCreatedImageById.get(req.params.id, req.auth.userId);
+			if (!image) return res.status(404).json({ ok: false, error: "Image not found" });
+			const result = await recheckCreationProviderPoll({
+				queries: createQueries,
+				storage: createStorage,
+				image,
+				userId: req.auth.userId,
+			});
+			if (!result.ok) {
+				return res.status(result.reason === "not_found" ? 404 : 400).json({
+					ok: false,
+					error: result.reason === "not_recheckable" ? "Nothing to check" :
+						result.reason === "missing_server" ? "Creation is missing server details" : "Failed to check creation",
+					status: result.status ?? image.status ?? null,
+					id: Number(image.id),
+				});
+			}
+			return res.json({ ok: true, id: result.id, status: result.status });
 		} catch (error) { return next(error); }
 	});
 
