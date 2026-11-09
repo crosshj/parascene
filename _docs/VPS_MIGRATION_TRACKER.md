@@ -6,10 +6,6 @@ This is an open-work list only. Completed ports and confirmed behavior are inten
 
 ### 1. Finish admin behavior parity
 
-- [ ] Decide which legacy-only tools remain operationally required (moderation, policy/cron controls, anonymous-user investigation, and provider/creation repair tools). Record explicit retirements so parity scope is deliberate.
-- [ ] **Connect:** current root page lists servers only. Port server detail/edit, test, and refresh actions, plus legacy conversation-thread moderation (inspect/delete) if still used. Preserve authorization and require confirmation for destructive actions.
-- [ ] **Moderation and policy operations:** legacy exposes moderation data, policy/provider inspection, general admin settings, and a run-notifications-cron action. Root has no corresponding admin page/routes; confirm which operations are still used and port the required subset with clear read/write boundaries.
-- [ ] **Creation/provider support:** inventory legacy admin recovery actions (provider job probe/recovery, video upload/recovery, and related server operations). Root admin currently exposes none of these. Decide which are needed for production support, then port only those with auditable outcomes and safeguards.
 - [ ] **Shared behavior and security:** compare search, filters, sorting, pagination, empty/loading/error states, and mobile behavior per page. Verify page and API role checks independently, no-store handling, destructive-action safeguards, and useful operator/audit feedback. Existing page shells and shared components do not establish parity.
 
 ### 2. Move the API off Vercel

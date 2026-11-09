@@ -3588,13 +3588,86 @@ body.view-nsfw .creation-detail-image-wrapper.nsfw::after {
 	border-radius: 6px;
 }
 
+.creation-detail-admin-tools {
+	margin: 16px 0;
+	padding: 12px;
+	border: 1px solid color-mix(in srgb, var(--text-muted) 28%, transparent);
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--text-muted) 5%, transparent);
+}
+
+.creation-detail-admin-tools-title {
+	margin: 0 0 12px;
+	font-size: 0.95rem;
+}
+
+.creation-detail-admin-video-label,
+.creation-detail-admin-video-repair-label {
+	margin: 0 0 8px;
+	font-size: 0.875rem;
+	font-weight: 600;
+}
+
+.creation-detail-admin-video-form,
+.creation-detail-admin-video-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+}
+
+.creation-detail-admin-video-input {
+	max-width: 100%;
+}
+
+.creation-detail-admin-video-repair {
+	margin-top: 14px;
+}
+
+.creation-detail-admin-video-repair-hint {
+	margin: 0 0 8px;
+	color: var(--text-muted);
+	font-size: 0.825rem;
+}
+
+.creation-detail-admin-provider-probe-status,
+.creation-detail-admin-provider-repair-status {
+	margin: 8px 0 0;
+	font-size: 0.85rem;
+	color: var(--text-muted);
+}
+
 .creation-detail-user-deleted-notice-text {
 	flex: 1 1 200px;
 	min-width: 0;
 }
 
 .creation-detail-user-deleted-restore-btn {
+	position: relative;
 	flex-shrink: 0;
+}
+
+.creation-detail-user-deleted-restore-spinner {
+	display: none;
+	width: 1em;
+	height: 1em;
+	border: 2px solid color-mix(in srgb, currentColor 40%, transparent);
+	border-top-color: currentColor;
+	border-radius: 50%;
+	animation: spin 0.8s linear infinite;
+}
+
+.creation-detail-user-deleted-restore-btn.is-loading [data-admin-restore-user-deleted-label] {
+	visibility: hidden;
+}
+
+.creation-detail-user-deleted-restore-btn.is-loading .creation-detail-user-deleted-restore-spinner {
+	display: block;
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	margin-top: -0.5em;
+	margin-left: -0.5em;
 }
 
 .creation-detail-user-deleted-restore-error {

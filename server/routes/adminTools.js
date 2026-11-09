@@ -4,6 +4,8 @@ import { getEmailTemplateSampleData } from '../email/sampleData.js';
 import { loadEditorialPinPolicyDocument, parseEditorialPinPolicyDocument, serializeEditorialPinPolicyDocument, validateEditorialPinPolicyDocument, FEED_EDITORIAL_PINS_POLICY_KEY } from '../services/feed/editorialPinPolicy.js';
 import { bumpFeedVersionCounter } from '../services/feed/feedVersion.js';
 import { filterRecommendableCreationIds } from '../services/create/recommendableCreations.js';
+import { broadcastChatThreadDeleted } from '../services/challenges/realtimeBroadcast.js';
+import { resolveProviderAuthToken } from '../services/create/providerAuth.js';
 
 const RELATED_KEYS = [
 	'related.recsys_weight', 'related.semantic_weight', 'related.semantic_weight_no_click_next',
@@ -46,6 +48,14 @@ function parseBroadcastBody(body) {
 }
 
 const settingIsTrue = (value) => ['true', '1'].includes(String(value || '').trim().toLowerCase());
+
+function serverChannelSlug(name) {
+	let raw = String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-{2,}/g, '-').replace(/^-+|-+$/g, '');
+	if (!raw) raw = 'server';
+	raw = raw.slice(0, 32).replace(/-+$/g, '');
+	if (raw.length < 2) raw = 'server';
+	return /^[a-z0-9][a-z0-9_-]{1,31}$/.test(raw) ? raw : 'server';
+}
 
 export default function createAdminToolsRoutes({ client, users, servers, queries = {} }) {
 	const router = express.Router();
@@ -305,7 +315,119 @@ export default function createAdminToolsRoutes({ client, users, servers, queries
 	}));
 	router.get('/api/admin-tools/servers', guard(async (req, res) => {
 		const result = await servers.list(req.auth.userId);
-		res.json({ items: result.servers, total: result.servers.length });
+		const allowedSort = new Set(['id', 'name', 'status', 'members_count', 'created_at']);
+		const sortBy = allowedSort.has(req.query.sort_by) ? req.query.sort_by : 'id';
+		const direction = req.query.sort_dir === 'asc' ? 1 : -1;
+		const items = [...result.servers].sort((a, b) => String(a[sortBy] ?? '').localeCompare(String(b[sortBy] ?? ''), undefined, { numeric: true }) * direction);
+		const { limit, offset } = page(req);
+		res.json({ items: items.slice(offset, offset + limit), total: items.length });
+	}));
+	router.get('/api/admin-tools/servers/:id', guard(async (req, res) => {
+		const id = Number(req.params.id);
+		if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ error: 'Invalid server ID' });
+		const result = await client.from('prsn_servers').select('id,user_id,name,description,status,status_date,members_count,created_at,updated_at,server_url,auth_token,server_config').eq('id', id).maybeSingle();
+		if (result.error) throw result.error;
+		if (!result.data) return res.status(404).json({ error: 'Server not found' });
+		res.json({ server: result.data });
+	}));
+	router.put('/api/admin-tools/servers/:id', guard(async (req, res) => {
+		const id = Number(req.params.id);
+		if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ error: 'Invalid server ID' });
+		const existing = await client.from('prsn_servers').select('id').eq('id', id).maybeSingle();
+		if (existing.error) throw existing.error;
+		if (!existing.data) return res.status(404).json({ error: 'Server not found' });
+		const body = req.body || {};
+		const patch = { updated_at: new Date().toISOString() };
+		if (body.user_id !== undefined) {
+			const userId = Number(body.user_id);
+			if (!Number.isSafeInteger(userId) || userId <= 0) return res.status(400).json({ error: 'user_id must be a positive number when provided' });
+			patch.user_id = userId;
+		}
+		if (body.name !== undefined) {
+			const name = String(body.name || '').trim();
+			if (!name) return res.status(400).json({ error: 'name must be a non-empty string when provided' });
+			patch.name = name;
+		}
+		if (body.status !== undefined) {
+			const status = String(body.status || '').trim();
+			if (!status) return res.status(400).json({ error: 'status must be a non-empty string when provided' });
+			patch.status = status;
+		}
+		if (body.server_url !== undefined) {
+			if (typeof body.server_url !== 'string' || !body.server_url.trim()) return res.status(400).json({ error: 'server_url must be a non-empty string when provided' });
+			let url;
+			try { url = new URL(body.server_url.trim()); } catch { return res.status(400).json({ error: 'server_url must be a valid URL' }); }
+			if (!['http:', 'https:'].includes(url.protocol)) return res.status(400).json({ error: 'server_url must be an HTTP or HTTPS URL' });
+			patch.server_url = url.toString().replace(/\/$/, '');
+		}
+		if (body.auth_token !== undefined) {
+			if (body.auth_token !== null && typeof body.auth_token !== 'string') return res.status(400).json({ error: 'auth_token must be a string when provided' });
+			patch.auth_token = resolveProviderAuthToken(body.auth_token);
+		}
+		if (body.status_date !== undefined) patch.status_date = body.status_date || null;
+		if (body.description !== undefined) patch.description = body.description || null;
+		if (body.members_count !== undefined) {
+			const count = Number(body.members_count);
+			if (!Number.isFinite(count) || count < 0) return res.status(400).json({ error: 'members_count must be a non-negative number when provided' });
+			patch.members_count = Math.floor(count);
+		}
+		if (body.server_config !== undefined) {
+			let config = body.server_config;
+			if (typeof config === 'string') {
+				try { config = config.trim() ? JSON.parse(config) : null; } catch { return res.status(400).json({ error: 'server_config must be valid JSON when provided' }); }
+			}
+			if (config != null && (typeof config !== 'object' || Array.isArray(config))) return res.status(400).json({ error: 'server_config must be a JSON object when provided' });
+			patch.server_config = config;
+		}
+		const result = await client.from('prsn_servers').update(patch).eq('id', id).select('id,user_id,name,description,status,status_date,members_count,created_at,updated_at,server_url,auth_token,server_config').maybeSingle();
+		if (result.error) throw result.error;
+		if (!result.data) return res.status(500).json({ error: 'Failed to update server' });
+		res.json({ success: true, server: result.data });
+	}));
+	router.get('/api/admin-tools/connect-threads', guard(async (req, res) => {
+		const [threadsResult, serversResult] = await Promise.all([
+			client.from('prsn_chat_threads').select('id,type,channel_slug,dm_pair_key,created_at').order('id', { ascending: false }),
+			client.from('prsn_servers').select('name')
+		]);
+		if (threadsResult.error) throw threadsResult.error;
+		if (serversResult.error) throw serversResult.error;
+		const serverSlugs = new Set((serversResult.data || []).map((row) => serverChannelSlug(row.name)));
+		const items = (threadsResult.data || []).filter((thread) => {
+			if (thread.type === 'dm') return false;
+			if (thread.type === 'channel' && thread.channel_slug && serverSlugs.has(String(thread.channel_slug).trim().toLowerCase())) return false;
+			return true;
+		});
+		const allowedSort = new Set(['id', 'type', 'channel_slug', 'created_at']);
+		const sortBy = allowedSort.has(req.query.sort_by) ? req.query.sort_by : 'id';
+		const direction = req.query.sort_dir === 'asc' ? 1 : -1;
+		items.sort((a, b) => String(a[sortBy] ?? '').localeCompare(String(b[sortBy] ?? ''), undefined, { numeric: true }) * direction);
+		const { limit, offset } = page(req);
+		res.json({ items: items.slice(offset, offset + limit), total: items.length });
+	}));
+	router.delete('/api/admin-tools/connect-threads/:id', guard(async (req, res) => {
+		const id = Number(req.params.id);
+		if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ error: 'Invalid thread id' });
+		const [threadResult, membersResult, countResult] = await Promise.all([
+			client.from('prsn_chat_threads').select('id,type,channel_slug').eq('id', id).maybeSingle(),
+			client.from('prsn_chat_members').select('user_id').eq('thread_id', id),
+			client.from('prsn_chat_messages').select('id', { count: 'exact', head: true }).eq('thread_id', id)
+		]);
+		if (threadResult.error) throw threadResult.error;
+		if (membersResult.error) throw membersResult.error;
+		if (countResult.error) throw countResult.error;
+		if (!threadResult.data) return res.status(404).json({ error: 'Thread not found' });
+		if (threadResult.data.type === 'dm') return res.status(400).json({ error: 'Direct messages cannot be removed here' });
+		const serverRows = await client.from('prsn_servers').select('name');
+		if (serverRows.error) throw serverRows.error;
+		const serverSlugs = new Set((serverRows.data || []).map((row) => serverChannelSlug(row.name)));
+		if (threadResult.data.type === 'channel' && serverSlugs.has(String(threadResult.data.channel_slug || '').trim().toLowerCase())) {
+			return res.status(400).json({ error: 'Server-linked channels cannot be removed here' });
+		}
+		const { error } = await client.from('prsn_chat_threads').delete().eq('id', id);
+		if (error) throw error;
+		const memberIds = (membersResult.data || []).map((row) => Number(row.user_id)).filter((value) => Number.isSafeInteger(value) && value > 0);
+		void broadcastChatThreadDeleted(id, memberIds);
+		res.json({ ok: true, deleted_thread_id: id, removed_messages: countResult.count ?? null, member_count: memberIds.length });
 	}));
 	async function emailSettings() {
 		const result = await client.from('prsn_policy_knobs').select('key,value').in('key', EMAIL_KEYS);

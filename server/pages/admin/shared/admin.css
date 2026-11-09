@@ -46,6 +46,7 @@
 .admin-table-wrap { max-width: 100%; overflow-x: auto; }
 .admin-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
 .admin-table th, .admin-table td { padding: .55rem .7rem; border-bottom: 1px solid var(--admin-border); text-align: left; vertical-align: top; }
+.admin-page--connect .admin-table th, .admin-page--connect .admin-table td { vertical-align: middle; }
 .admin-table th { color: var(--admin-muted); font-weight: 600; white-space: nowrap; }
 .admin-table__interactive-row { cursor: pointer; }
 .admin-table__interactive-row:hover, .admin-table__interactive-row:focus-visible { background: var(--admin-hover); outline: none; }
@@ -85,6 +86,8 @@
 .admin-dialog__header h2 { margin: 0; font-size: 1.1rem; }
 .admin-dialog__body { display: grid; gap: .85rem; max-height: min(65dvh, 36rem); overflow: auto; }
 .admin-dialog__actions { display: flex; justify-content: flex-end; gap: .5rem; border-top: 1px solid var(--admin-border); }
+.admin-connect-actions { flex-wrap: wrap; }
+.admin-connect-actions .admin-dialog-spacer { flex: 1; }
 .admin-clear-expired-submit { position: relative; display: grid; min-width: 12rem; place-items: center; }
 .admin-spinner { position: absolute; inset: 50% auto auto 50%; width: 1rem; height: 1rem; margin: -.5rem 0 0 -.5rem; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: admin-spinner-turn .7s linear infinite; }
 .admin-expired-pin-list { display: grid; gap: .5rem; margin: 0; padding: 0; list-style: none; }
