@@ -1,6 +1,9 @@
 import express from 'express';
 import { renderEmailTemplate, sendTemplatedEmail } from '../email/index.js';
 import { getEmailTemplateSampleData } from '../email/sampleData.js';
+import { loadEditorialPinPolicyDocument, parseEditorialPinPolicyDocument, serializeEditorialPinPolicyDocument, validateEditorialPinPolicyDocument, FEED_EDITORIAL_PINS_POLICY_KEY } from '../services/feed/editorialPinPolicy.js';
+import { bumpFeedVersionCounter } from '../services/feed/feedVersion.js';
+import { filterRecommendableCreationIds } from '../services/create/recommendableCreations.js';
 
 const RELATED_KEYS = [
 	'related.recsys_weight', 'related.semantic_weight', 'related.semantic_weight_no_click_next',
@@ -44,7 +47,7 @@ function parseBroadcastBody(body) {
 
 const settingIsTrue = (value) => ['true', '1'].includes(String(value || '').trim().toLowerCase());
 
-export default function createAdminToolsRoutes({ client, users, servers }) {
+export default function createAdminToolsRoutes({ client, users, servers, queries = {} }) {
 	const router = express.Router();
 	router.use((req, res, next) => { res.set('Cache-Control', 'private, no-store'); next(); });
 	async function admin(req, res) {
@@ -245,6 +248,60 @@ export default function createAdminToolsRoutes({ client, users, servers }) {
 		const result = await client.from('prsn_policy_knobs').select('key,value').like('key', 'related.%');
 		if (result.error) throw result.error;
 		res.json(Object.fromEntries((result.data || []).map(({ key, value }) => [key, value])));
+	}));
+	router.get('/api/admin-tools/feed-editorial-pins', guard(async (req, res) => {
+		const document = await loadEditorialPinPolicyDocument(queries);
+		const { limit, offset } = page(req);
+		const allowedSort = new Set(['created_image_id', 'enabled', 'until', 'surfaces']);
+		const sortBy = allowedSort.has(req.query.sort_by) ? req.query.sort_by : 'created_image_id';
+		const direction = req.query.sort_dir === 'asc' ? 1 : -1;
+		const items = [...document.pins].sort((a, b) => {
+			const left = a[sortBy] ?? '';
+			const right = b[sortBy] ?? '';
+			return (typeof left === 'number' && typeof right === 'number' ? left - right : String(left).localeCompare(String(right), undefined, { numeric: true })) * direction;
+		});
+		res.json({ ...document, items: items.slice(offset, offset + limit), total: items.length });
+	}));
+	async function loadEditorialPinPolicyStrict() {
+		if (!queries.selectPolicyByKey?.get) throw new Error('Policy storage unavailable.');
+		const row = await queries.selectPolicyByKey.get(FEED_EDITORIAL_PINS_POLICY_KEY);
+		if (typeof row?.value !== 'string' || !row.value.trim()) return parseEditorialPinPolicyDocument({});
+		try { return parseEditorialPinPolicyDocument(JSON.parse(row.value)); }
+		catch { return parseEditorialPinPolicyDocument({}); }
+	}
+	async function persistEditorialPinPolicy(document) {
+		if (!queries.upsertPolicyKey?.run) throw new Error('Policy storage unavailable.');
+		const serialized = serializeEditorialPinPolicyDocument(document);
+		await queries.upsertPolicyKey.run(FEED_EDITORIAL_PINS_POLICY_KEY, serialized, 'Sitewide editorial feed pins: inject creations on page 1 with placement and display knobs.');
+		await bumpFeedVersionCounter(queries);
+	}
+	router.post('/api/admin-tools/feed-editorial-pins/clear-expired', guard(async (_req, res) => {
+		const current = await loadEditorialPinPolicyStrict();
+		const now = Date.now();
+		const pins = current.pins.filter((pin) => !pin.until || !Number.isFinite(Date.parse(pin.until)) || Date.parse(pin.until) >= now);
+		const removed = current.pins.length - pins.length;
+		if (removed) await persistEditorialPinPolicy({ defaults: current.defaults, pins });
+		res.json({ ...current, pins, removed });
+	}));
+	router.patch('/api/admin-tools/feed-editorial-pins', guard(async (req, res) => {
+		const parsed = parseEditorialPinPolicyDocument(req.body);
+		const validated = validateEditorialPinPolicyDocument(parsed);
+		if (!validated.ok) return res.status(400).json({ error: validated.error });
+		const current = await loadEditorialPinPolicyStrict();
+		const previousById = new Map(current.pins.map((pin) => [pin.id, pin]));
+		const ids = validated.document.pins
+			.filter((pin) => {
+				const previous = previousById.get(pin.id);
+				return !previous || Number(previous.created_image_id) !== Number(pin.created_image_id);
+			})
+			.map((pin) => Number(pin.created_image_id));
+		if (ids.length) {
+			const found = new Set(await filterRecommendableCreationIds(client, ids));
+			const missing = ids.filter((id) => !found.has(id));
+			if (missing.length) return res.status(400).json({ error: `Creation not found or unavailable: ${missing.join(', ')}` });
+		}
+		await persistEditorialPinPolicy(validated.document);
+		res.json(validated.document);
 	}));
 	router.get('/api/admin-tools/servers', guard(async (req, res) => {
 		const result = await servers.list(req.auth.userId);

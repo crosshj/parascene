@@ -115,7 +115,10 @@ function editSetting(definition) {
 	if (definition.type === 'checkbox') input.checked = String(settings[definition.key]) === 'true' || String(settings[definition.key]) === '1';
 	else { input.value = settings[definition.key] ?? ''; if (definition.type === 'number') { input.min = String(definition.min); input.step = '1'; } }
 	const help = document.createElement('p'); help.className = 'admin-field__help'; help.textContent = definition.description;
-	field.append(caption, input, help); settingEditor.append(field); settingDialog.showModal();
+	if (definition.type === 'checkbox') {
+		const row = document.createElement('span'); row.className = 'admin-field__checkbox-row'; row.append(input, caption); field.append(row, help);
+	} else field.append(caption, input, help);
+	settingEditor.append(field); settingDialog.showModal();
 }
 
 document.querySelector('[data-email-setting-close]')?.addEventListener('click', () => settingDialog?.close());
