@@ -1,4 +1,6 @@
 import express from 'express';
+import { renderEmailTemplate, sendTemplatedEmail } from '../email/index.js';
+import { getEmailTemplateSampleData } from '../email/sampleData.js';
 
 const RELATED_KEYS = [
 	'related.recsys_weight', 'related.semantic_weight', 'related.semantic_weight_no_click_next',
@@ -7,7 +9,40 @@ const RELATED_KEYS = [
 	'related.transition_cap_k', 'related.transition_decay_half_life_days', 'related.transition_window_days',
 	'related.random_slots_per_batch', 'related.batch_size', 'related.candidate_cap_per_signal'
 ];
-const EMAIL_KEYS = ['email_use_test_recipient', 'email_dry_run', 'digest_utc_windows', 'max_digests_per_user_per_day', 'digest_activity_hours_lookback', 'welcome_email_delay_hours', 'reengagement_inactive_days', 'reengagement_cooldown_days', 'creation_highlight_lookback_hours', 'creation_highlight_cooldown_days', 'creation_highlight_min_comments'];
+const EMAIL_DEFAULTS = {
+	email_use_test_recipient: 'false', email_dry_run: 'true', digest_utc_windows: '09:00,18:00',
+	max_digests_per_user_per_day: '2', digest_activity_hours_lookback: '24', welcome_email_delay_hours: '1',
+	reengagement_inactive_days: '14', reengagement_cooldown_days: '30', creation_highlight_lookback_hours: '48',
+	creation_highlight_cooldown_days: '7', creation_highlight_min_comments: '1'
+};
+const EMAIL_KEYS = Object.keys(EMAIL_DEFAULTS);
+const TEST_EMAIL_TEMPLATES = [
+	'helloFromParascene', 'commentReceived', 'commentReceivedDelegated', 'featureRequest', 'featureRequestFeedback',
+	'passwordReset', 'digestActivity', 'welcome', 'firstCreationNudge', 'reengagement', 'creationHighlight', 'supportReport'
+];
+const EMAIL_TEMPLATE_LABELS = [
+	['helloFromParascene', 'Hello from parascene'], ['commentReceived', 'Comment received'],
+	['commentReceivedDelegated', 'Comment received (delegated)'], ['featureRequest', 'Feature request'],
+	['featureRequestFeedback', 'Feature request feedback'], ['passwordReset', 'Password reset'],
+	['digestActivity', 'Digest activity'], ['welcome', 'Welcome'], ['firstCreationNudge', 'First creation nudge'],
+	['reengagement', 'Re-engagement'], ['creationHighlight', 'Creation highlight'], ['supportReport', 'Support report'],
+	['adminBroadcast', 'Admin broadcast']
+];
+
+function parseBroadcastBody(body) {
+	const emailSubject = typeof body?.emailSubject === 'string' ? body.emailSubject.trim() : '';
+	const message = typeof body?.message === 'string' ? body.message.trim() : '';
+	const ctaText = typeof body?.ctaText === 'string' ? body.ctaText.trim() : '';
+	const ctaUrl = typeof body?.ctaUrl === 'string' ? body.ctaUrl.trim() : '';
+	const headline = typeof body?.headline === 'string' && body.headline.trim() ? body.headline.trim() : emailSubject;
+	if (!emailSubject) return { ok: false, error: 'Email subject is required for Admin broadcast.' };
+	if (!message) return { ok: false, error: 'Message is required for Admin broadcast.' };
+	if (!ctaText) return { ok: false, error: 'Button label is required for Admin broadcast.' };
+	if (!/^https?:\/\//i.test(ctaUrl)) return { ok: false, error: 'Button URL must start with http:// or https://.' };
+	return { ok: true, data: { emailSubject, headline, message, ctaText, ctaUrl } };
+}
+
+const settingIsTrue = (value) => ['true', '1'].includes(String(value || '').trim().toLowerCase());
 
 export default function createAdminToolsRoutes({ client, users, servers }) {
 	const router = express.Router();
@@ -215,30 +250,166 @@ export default function createAdminToolsRoutes({ client, users, servers }) {
 		const result = await servers.list(req.auth.userId);
 		res.json({ items: result.servers, total: result.servers.length });
 	}));
+	async function emailSettings() {
+		const result = await client.from('prsn_policy_knobs').select('key,value').in('key', EMAIL_KEYS);
+		if (result.error) throw result.error;
+		return { ...EMAIL_DEFAULTS, ...Object.fromEntries((result.data || []).map(({ key, value }) => [key, String(value)])) };
+	}
+	async function emailRecipients() {
+		const [allUsers, allProfiles] = await Promise.all([
+			tableRows('users', 'id,email,role,meta', 'id'),
+			tableRows('user_profiles', 'user_id,user_name,display_name', 'user_id')
+		]);
+		const eligible = allUsers.filter((user) => {
+			const meta = jsonMeta(user.meta);
+			return user.role === 'consumer' && meta.suspended !== true && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(user.email || '').trim());
+		});
+		const profiles = new Map(allProfiles.map((profile) => [Number(profile.user_id), profile]));
+		return eligible.map((user) => ({ ...user, ...(profiles.get(Number(user.id)) || {}) }));
+	}
+	async function broadcastAlreadySent(subject) {
+		if (!subject) return new Set();
+		const sentIds = new Set();
+		for (let offset = 0; ; offset += 1000) {
+			const result = await client.from('prsn_email_sends').select('user_id,meta').eq('campaign', 'admin_broadcast').order('id', { ascending: true }).range(offset, offset + 999);
+			if (result.error) throw result.error;
+			for (const row of result.data || []) {
+				if (String(jsonMeta(row.meta).subject || '').trim() === subject && row.user_id != null) sentIds.add(Number(row.user_id));
+			}
+			if (!result.data || result.data.length < 1000) break;
+		}
+		return sentIds;
+	}
+	const campaignUserLabel = (user) => user.user_name?.trim() ? `@${user.user_name.trim()}` : user.display_name?.trim() || String(user.email || '').split('@')[0] || `#${user.id}`;
+
 	router.get('/api/admin-tools/email-sends', guard(async (req, res) => {
 		const { limit, offset } = page(req);
-		const result = await client.from('prsn_email_sends').select('id,user_id,campaign,created_at,meta', { count: 'exact' }).order('created_at', { ascending: false }).range(offset, offset + limit - 1);
+		const sort = ['id', 'user_id', 'campaign', 'created_at'].includes(req.query.sort_by) ? req.query.sort_by : 'created_at';
+		const result = await client.from('prsn_email_sends').select('id,user_id,campaign,created_at,meta', { count: 'exact' }).order(sort, { ascending: req.query.sort_dir === 'asc' }).range(offset, offset + limit - 1);
 		if (result.error) throw result.error;
-		res.json({ items: result.data || [], total: result.count || 0 });
+		const userIds = [...new Set((result.data || []).map((row) => row.user_id).filter((id) => id != null).map(Number))];
+		const [usersResult, profileRows] = userIds.length ? await Promise.all([
+			client.from('prsn_users').select('id,email').in('id', userIds),
+			client.from('prsn_user_profiles').select('user_id,user_name,display_name').in('user_id', userIds)
+		]) : [{ data: [], error: null }, { data: [], error: null }];
+		if (usersResult.error) throw usersResult.error;
+		if (profileRows.error) throw profileRows.error;
+		const usersById = new Map((usersResult.data || []).map((user) => [Number(user.id), user]));
+		const profilesById = new Map((profileRows.data || []).map((profile) => [Number(profile.user_id), profile]));
+		const items = (result.data || []).map((row) => {
+			const user = { ...usersById.get(Number(row.user_id)), ...profilesById.get(Number(row.user_id)) };
+			return { ...row, user_email: user.email || null, user_label: campaignUserLabel({ ...user, id: row.user_id }) };
+		});
+		res.json({ items, total: result.count || 0 });
 	}));
-	router.get('/api/admin-tools/email-settings', guard(async (_req, res) => {
-		const result = await client.from('prsn_policy_knobs').select('key,value').in('key', EMAIL_KEYS);
-		if (result.error) throw result.error;
-		res.json(Object.fromEntries((result.data || []).map(({ key, value }) => [key, value])));
-	}));
+	router.get('/api/admin-tools/email-settings', guard(async (_req, res) => res.json(await emailSettings())));
 	router.patch('/api/admin-tools/email-settings', guard(async (req, res) => {
 		for (const [key, raw] of Object.entries(req.body || {})) {
-			if (!EMAIL_KEYS.includes(key) || !['string', 'number', 'boolean'].includes(typeof raw)) continue;
+			if (!EMAIL_KEYS.includes(key)) continue;
+			let value;
+			if (key === 'email_use_test_recipient' || key === 'email_dry_run') {
+				if (typeof raw !== 'boolean') continue;
+				value = String(raw);
+			} else if (key === 'digest_utc_windows') {
+				if (typeof raw !== 'string' || !raw.trim() || !raw.split(',').every((part) => /^\s*(?:[01]?\d|2[0-3])(?::[0-5]\d)?\s*$/.test(part))) return res.status(400).json({ error: 'Enter comma-separated UTC times such as 09:00,18:00.' });
+				value = raw.trim();
+			} else {
+				const number = Number(raw);
+				if (!Number.isInteger(number) || number < (key === 'max_digests_per_user_per_day' || key === 'creation_highlight_min_comments' ? 0 : 1)) return res.status(400).json({ error: `${key.replaceAll('_', ' ')} must be a valid non-negative whole number.` });
+				value = String(number);
+			}
 			const existing = await client.from('prsn_policy_knobs').select('key').eq('key', key).limit(1);
 			if (existing.error) throw existing.error;
-			const result = existing.data?.length
-				? await client.from('prsn_policy_knobs').update({ value: String(raw) }).eq('key', key)
-				: await client.from('prsn_policy_knobs').insert({ key, value: String(raw) });
+			const result = existing.data?.length ? await client.from('prsn_policy_knobs').update({ value }).eq('key', key) : await client.from('prsn_policy_knobs').insert({ key, value });
 			if (result.error) throw result.error;
 		}
-		const result = await client.from('prsn_policy_knobs').select('key,value').in('key', EMAIL_KEYS);
-		if (result.error) throw result.error;
-		res.json(Object.fromEntries((result.data || []).map(({ key, value }) => [key, value])));
+		res.json(await emailSettings());
+	}));
+	router.get('/api/admin-tools/email-recipients', guard(async (_req, res) => {
+		const users = await emailRecipients();
+		res.json({ items: users.map(({ id, email, user_name, display_name }) => ({ id, email, user_name, display_name, label: campaignUserLabel({ id, email, user_name, display_name }) })), total: users.length });
+	}));
+	router.get('/api/admin-tools/email-templates', guard(async (_req, res) => res.json({ items: EMAIL_TEMPLATE_LABELS.map(([name, label]) => ({ name, label })) })));
+	router.get('/api/admin-tools/email-templates/:templateName', guard(async (req, res) => {
+		const templateName = req.params.templateName;
+		const sampleData = getEmailTemplateSampleData();
+		if (!sampleData[templateName]) return res.status(404).json({ error: 'Unknown email template.' });
+		try {
+			const actualName = templateName === 'commentReceivedDelegated' ? 'commentReceived' : templateName;
+			const rendered = renderEmailTemplate(actualName, sampleData[templateName]);
+			res.type('html').send(rendered.html);
+		} catch (error) { res.status(500).json({ error: error.message || 'Failed to render template.' }); }
+	}));
+	router.post('/api/admin-tools/email-templates/adminBroadcast/preview', guard(async (req, res) => {
+		const parsed = parseBroadcastBody(req.body);
+		if (!parsed.ok) return res.status(400).json({ error: parsed.error });
+		try {
+			const rendered = renderEmailTemplate('adminBroadcast', { recipientName: 'Alex', ...parsed.data });
+			res.type('html').send(rendered.html);
+		} catch (error) { res.status(500).json({ error: error.message || 'Failed to render preview.' }); }
+	}));
+	router.get('/api/admin-tools/broadcast-audience', guard(async (req, res) => {
+		const eligible = await emailRecipients();
+		const subject = typeof req.query.subject === 'string' ? req.query.subject.trim() : '';
+		const alreadySent = await broadcastAlreadySent(subject);
+		const settings = await emailSettings();
+		const alreadySentCount = eligible.filter((user) => alreadySent.has(Number(user.id))).length;
+		res.json({ eligibleCount: eligible.length, alreadySentCount, remainingCount: eligible.length - alreadySentCount, dryRun: settingIsTrue(settings.email_dry_run), emailUseTestRecipient: settingIsTrue(settings.email_use_test_recipient) });
+	}));
+	router.post('/api/admin-tools/send-test-email', guard(async (req, res) => {
+		const to = typeof req.body?.to === 'string' ? req.body.to.trim() : '';
+		const templateName = typeof req.body?.template === 'string' ? req.body.template.trim() : '';
+		if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return res.status(400).json({ error: 'Enter a valid recipient email.' });
+		if (!TEST_EMAIL_TEMPLATES.includes(templateName)) return res.status(400).json({ error: 'Choose a supported test template.' });
+		const sampleData = getEmailTemplateSampleData();
+		const data = sampleData[templateName];
+		if (!data) return res.status(400).json({ error: 'Template has no sample data.' });
+		if (templateName === 'featureRequestFeedback') {
+			if (typeof req.body.recipientName === 'string' && req.body.recipientName.trim()) data.recipientName = req.body.recipientName.trim();
+			data.originalRequest = typeof req.body.originalRequest === 'string' ? req.body.originalRequest.trim() : '';
+			data.message = typeof req.body.message === 'string' ? req.body.message.trim() : '';
+			if (!data.message) return res.status(400).json({ error: 'Enter a reply message for the feature request.' });
+		}
+		try {
+			const result = await sendTemplatedEmail({ to, template: templateName === 'commentReceivedDelegated' ? 'commentReceived' : templateName, data });
+			res.json({ ok: true, id: result?.id || null });
+		} catch (error) { res.status(502).json({ error: error.message || 'Failed to send email.' }); }
+	}));
+	router.post('/api/admin-tools/send-broadcast', guard(async (req, res) => {
+		const parsed = parseBroadcastBody(req.body);
+		if (!parsed.ok) return res.status(400).json({ error: parsed.error });
+		const shared = parsed.data;
+		const settings = await emailSettings();
+		const eligible = await emailRecipients();
+		const alreadySent = await broadcastAlreadySent(shared.emailSubject);
+		const recipients = eligible.filter((user) => !alreadySent.has(Number(user.id)));
+		if (!eligible.length) return res.status(400).json({ error: 'No eligible recipients (active consumers with email).' });
+		if (settingIsTrue(settings.email_dry_run)) return res.json({ ok: true, dryRun: true, emailUseTestRecipient: settingIsTrue(settings.email_use_test_recipient), eligible: eligible.length, alreadySent: eligible.length - recipients.length, sent: 0, failed: 0 });
+		if (!process.env.RESEND_API_KEY || !process.env.RESEND_SYSTEM_EMAIL) return res.status(503).json({ error: 'Email delivery is not configured (missing Resend environment variables).' });
+		let sent = 0; const errors = [];
+		for (let index = 0; index < recipients.length; index++) {
+			const user = recipients[index];
+			const intendedEmail = String(user.email).trim();
+			const to = settingIsTrue(settings.email_use_test_recipient) ? 'delivered@resend.dev' : intendedEmail;
+			let delivered = false; let lastError;
+			for (let attempt = 0; attempt < 6 && !delivered; attempt++) {
+				try {
+					if (attempt) await new Promise((resolve) => setTimeout(resolve, 1500 * attempt));
+					await sendTemplatedEmail({ to, template: 'adminBroadcast', data: { recipientName: user.user_name?.trim() ? `@${user.user_name.trim()}` : user.display_name?.trim() || intendedEmail.split('@')[0], ...shared } });
+					delivered = true;
+				} catch (error) {
+					lastError = error;
+					if (!/too many requests|\b429\b/i.test(error.message || '')) break;
+				}
+			}
+			if (delivered) {
+				const insert = await client.from('prsn_email_sends').insert({ user_id: user.id, campaign: 'admin_broadcast', meta: { subject: shared.emailSubject } });
+				if (insert.error) throw insert.error;
+				sent++;
+			} else errors.push({ userId: user.id, userName: campaignUserLabel(user), email: intendedEmail, message: lastError?.message || 'Send failed' });
+			if (index < recipients.length - 1) await new Promise((resolve) => setTimeout(resolve, 200));
+		}
+		res.json({ ok: true, dryRun: false, emailUseTestRecipient: settingIsTrue(settings.email_use_test_recipient), eligible: eligible.length, alreadySent: eligible.length - recipients.length, sent, failed: errors.length, errors: errors.length ? errors : undefined });
 	}));
 	return router;
 }

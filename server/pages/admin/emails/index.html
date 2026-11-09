@@ -6,9 +6,55 @@
 	<title>Admin · Emails</title>
 	<link rel="stylesheet" href="/admin/shared/admin.css">
 </head>
-<body class="admin-page">
+<body class="admin-page admin-page--emails">
 	{{ADMIN_HEADER}}
-	<main class="admin-page__content"><admin-tabs class="admin-tabs" sync-hash active="sends"><div class="admin-tabs__list" data-admin-tab-list aria-label="Email sections"><button class="admin-tabs__tab" data-admin-tab="sends">Sends</button><button class="admin-tabs__tab" data-admin-tab="templates">Templates</button><button class="admin-tabs__tab" data-admin-tab="send">Manual send</button><button class="admin-tabs__tab" data-admin-tab="settings">Settings</button></div><section class="admin-tabs__panel" data-admin-panel="sends"><div data-email-sends data-admin-table></div></section><section class="admin-tabs__panel" data-admin-panel="templates" hidden><p>Email template preview is not available in the current server build.</p></section><section class="admin-tabs__panel" data-admin-panel="send" hidden><p>Manual email sending is not available in the current server build.</p></section><section class="admin-tabs__panel" data-admin-panel="settings" hidden><form class="admin-form" data-email-settings><div data-email-settings-fields></div><button class="admin-button admin-button--primary" type="submit">Save settings</button><p class="admin-status" data-email-settings-status role="status"></p></form></section></admin-tabs></main>
+	<main class="admin-page__content">
+		<admin-tabs class="admin-tabs" sync-hash active="sends">
+			<div class="admin-tabs__list" data-admin-tab-list aria-label="Email sections">
+				<button class="admin-tabs__tab" data-admin-tab="sends">Sends</button>
+				<button class="admin-tabs__tab" data-admin-tab="templates">Templates</button>
+				<button class="admin-tabs__tab" data-admin-tab="send">Manual send</button>
+				<button class="admin-tabs__tab" data-admin-tab="settings">Settings</button>
+			</div>
+			<section class="admin-tabs__panel" data-admin-panel="sends"><div data-email-sends data-admin-table></div></section>
+			<section class="admin-tabs__panel" data-admin-panel="templates" hidden><div class="admin-email-templates" data-email-templates></div></section>
+			<section class="admin-tabs__panel" data-admin-panel="send" hidden>
+				<form class="admin-form" data-manual-email-form>
+					<div class="admin-field"><label class="admin-field__label" for="email-template">Email template</label><select class="admin-input" id="email-template" name="template" required><option value="">Choose a template</option></select><span class="admin-field__help">Choose “Admin broadcast” to send a community announcement.</span></div>
+					<section data-single-send-mode>
+						<p class="admin-card__detail" data-template-prompt>Select a template to show its recipient and message fields.</p>
+						<div data-single-template-fields hidden>
+							<p class="admin-card__detail" data-template-help></p>
+							<div class="admin-field"><label class="admin-field__label" for="email-recipient">Recipient</label><select class="admin-input" id="email-recipient" name="recipient"><option value="" disabled selected>Choose a recipient</option><option value="manual">Enter an email address</option></select><span class="admin-field__help">Choose an active user, or select “Enter an email address” to type one.</span></div>
+							<div class="admin-field" data-manual-recipient-fields hidden><label class="admin-field__label" for="email-to">Email address</label><input class="admin-input" id="email-to" name="to" type="email" autocomplete="email"></div>
+							<div class="admin-field" data-recipient-name-field hidden><label class="admin-field__label" for="email-recipient-name">Recipient name</label><input class="admin-input" id="email-recipient-name" name="recipientName" type="text"></div>
+							<div class="admin-field" data-feature-feedback-fields hidden><label class="admin-field__label" for="email-original-request">Original feature request</label><textarea class="admin-input" id="email-original-request" name="originalRequest"></textarea><label class="admin-field__label" for="email-feedback-message">Reply</label><textarea class="admin-input" id="email-feedback-message" name="message"></textarea></div>
+							<div class="admin-card__actions"><button class="admin-button admin-button--primary" type="button" data-send-email>Send email</button></div>
+						</div>
+					</section>
+					<section class="admin-email-broadcast-section" data-broadcast-fields hidden>
+						<h2>Community broadcast</h2>
+						<p class="admin-card__detail">Send a separate email to eligible active consumers. People who already received the same subject are skipped.</p>
+						<p class="admin-card__detail" data-broadcast-audience aria-live="polite"></p>
+						<label class="admin-field"><span class="admin-field__label">Email subject</span><input class="admin-input" name="emailSubject" type="text"></label>
+						<label class="admin-field"><span class="admin-field__label">Headline in email (optional)</span><input class="admin-input" name="headline" type="text" placeholder="Defaults to email subject"></label>
+						<label class="admin-field"><span class="admin-field__label">Message</span><textarea class="admin-input admin-email-broadcast-message" name="broadcastMessage"></textarea><span class="admin-field__help">Each person gets their own email, starting with their name. Wrap a phrase in **double asterisks** to make it bold. The sign-off is added for you.</span></label>
+						<label class="admin-field"><span class="admin-field__label">Button label</span><input class="admin-input" name="ctaText" type="text"></label>
+						<label class="admin-field"><span class="admin-field__label">Button URL</span><input class="admin-input" name="ctaUrl" type="url"></label>
+						<div class="admin-card__actions"><button class="admin-button" type="button" data-preview-broadcast>Preview email</button><button class="admin-button admin-button--primary" type="button" data-send-broadcast>Send broadcast</button></div>
+					</section>
+					<p class="admin-status" data-manual-email-status role="status" aria-live="polite"></p>
+				</form>
+			</section>
+			<section class="admin-tabs__panel" data-admin-panel="settings" hidden>
+				<div data-email-settings-table></div>
+				<p class="admin-status" data-email-settings-status role="status" aria-live="polite"></p>
+			</section>
+		</admin-tabs>
+	</main>
+	<dialog class="admin-dialog" data-email-dialog aria-labelledby="email-dialog-title"><header class="admin-dialog__header"><h2 id="email-dialog-title" data-email-dialog-title>Email details</h2><button class="admin-button" type="button" data-email-dialog-close>Close</button></header><div class="admin-dialog__body" data-email-dialog-body></div></dialog>
+	<dialog class="admin-dialog" data-email-setting-dialog aria-labelledby="email-setting-dialog-title"><header class="admin-dialog__header"><h2 id="email-setting-dialog-title" data-email-setting-title>Edit setting</h2><button class="admin-button" type="button" data-email-setting-close>Close</button></header><form class="admin-form" data-email-setting-form><div class="admin-dialog__body" data-email-setting-editor></div><div class="admin-dialog__actions"><button class="admin-button" type="button" data-email-setting-cancel>Cancel</button><button class="admin-button admin-button--primary" type="submit">Save</button></div><p class="admin-status" data-email-setting-status role="status"></p></form></dialog>
+	<dialog class="admin-dialog admin-email-preview-dialog" data-broadcast-preview-dialog aria-labelledby="broadcast-preview-title"><header class="admin-dialog__header"><h2 id="broadcast-preview-title">Broadcast preview</h2><button class="admin-button" type="button" data-broadcast-preview-close>Close</button></header><iframe title="Admin broadcast email preview" data-broadcast-preview-frame sandbox></iframe></dialog>
 	<script type="module" src="/admin/emails/page.js"></script>
 </body>
 </html>

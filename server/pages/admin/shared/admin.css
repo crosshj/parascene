@@ -76,6 +76,22 @@
 .admin-job-detail { display: grid; gap: .35rem; min-width: 0; }
 .admin-job-detail h3 { margin: 0; font-size: .95rem; }
 .admin-job-detail__json { max-height: min(40dvh, 24rem); margin: 0; padding: .65rem; overflow: auto; border: 1px solid var(--admin-border); border-radius: .35rem; background: color-mix(in srgb, CanvasText 5%, Canvas); font: .8rem/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.admin-page--emails [data-email-sends] .admin-table th, .admin-page--emails [data-email-sends] .admin-table td { white-space: nowrap; }
+.admin-page--emails [data-email-sends] .admin-email-cell-date { width: 10rem; }
+.admin-page--emails [data-email-sends] .admin-table td:nth-child(n+2) { max-width: 16rem; overflow: hidden; text-overflow: ellipsis; }
+.admin-email-settings-table td:last-child { min-width: 10rem; font-variant-numeric: tabular-nums; }
+.admin-email-templates { display: grid; gap: 1rem; }
+.admin-page--emails [hidden] { display: none !important; }
+.admin-page--emails [data-single-template-fields] { display: grid; gap: .75rem; }
+.admin-email-template { display: grid; gap: .5rem; min-width: 0; padding: .75rem; border: 1px solid var(--admin-border); border-radius: .5rem; }
+.admin-email-template h2 { margin: 0; font-size: 1rem; }
+.admin-email-template iframe { width: 100%; height: 34rem; border: 1px solid var(--admin-border); border-radius: .35rem; background: #fff; }
+.admin-email-broadcast-section { display: grid; gap: .75rem; min-width: 0; padding-top: 1rem; border-top: 1px solid var(--admin-border); }
+.admin-email-broadcast-section h2 { margin: 0; font-size: 1.1rem; }
+.admin-email-broadcast-section input { max-width: 18rem; }
+.admin-email-broadcast-message { box-sizing: border-box; width: 100% !important; max-width: 100% !important; min-height: 200px !important; resize: vertical; }
+.admin-email-preview-dialog { width: min(56rem, calc(100vw - 2rem)); }
+.admin-email-preview-dialog iframe { width: 100%; height: min(75dvh, 55rem); border: 0; background: #fff; }
 .admin-page [data-failures-table] .admin-table th, .admin-page [data-failures-table] .admin-table td { white-space: nowrap; }
 .admin-page [data-failures-table] .admin-jobs-failure-created { width: 9rem; }
 .admin-page [data-failures-table] .admin-jobs-failure-prompt, .admin-page [data-failures-table] .admin-jobs-failure-error { max-width: 16rem; overflow: hidden; text-overflow: ellipsis; }
