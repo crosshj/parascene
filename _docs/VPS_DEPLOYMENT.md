@@ -98,3 +98,8 @@ deployments run as root, the SSH deploy user therefore needs non-interactive
 sudo permission for the required Nginx backup, install, validation, reload,
 and cleanup commands. Certificates and private keys remain host-owned and are
 never copied into the repository.
+
+The admin Todo list remains source-controlled in `_docs/TODO.json`. CI copies
+only that file into `server/data/TODO.json` in the deployment package because
+the general `_docs/` tree is excluded. VPS Todo is read-only; local development
+continues to read and write `_docs/TODO.json`.

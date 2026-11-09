@@ -366,6 +366,9 @@ tar --exclude='.env' \
 	--exclude='./build' \
 	-czf "$PACKAGE_PATH" .
 tar -xzf "$PACKAGE_PATH" -C "$BUILD_DIR"
+mkdir -p "$BUILD_DIR/server/data"
+cp _docs/TODO.json "$BUILD_DIR/server/data/TODO.json"
+tar -czf "$PACKAGE_PATH" -C "$BUILD_DIR" .
 docker build --tag parascene:ci "$BUILD_DIR"
 
 # Keep the private key and known-hosts file inside the runner's temporary area.
@@ -403,6 +406,8 @@ printf '%s\n' \
 	"UPSTASH_REDIS_REST_TOKEN=${UPSTASH_REDIS_REST_TOKEN:-}" \
 	"UPSTASH_REDIS_REST_URL=${UPSTASH_REDIS_REST_URL:-}" \
 	"APP_ORIGIN=$APP_ORIGIN" \
+	"ADMIN_TODO_PATH=/app/server/data/TODO.json" \
+	"ADMIN_TODO_READ_ONLY=true" \
 	"API_HOSTNAME=$API_HOSTNAME" \
 	"CDN_HOSTNAME=$CDN_HOSTNAME" \
 	"CDN_HOST_ALIASES=${CDN_HOST_ALIASES:-}" \

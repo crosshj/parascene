@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Admin · Todo</title>
+	<link rel="stylesheet" href="/admin/shared/admin.css">
+	<script type="module" src="/admin/todo/page.js"></script>
+</head>
+<body class="admin-page admin-page--todo">
+	{{ADMIN_HEADER}}
+	<main class="admin-page__content">
+		<section class="admin-section-heading">
+			<div><h1>Todo</h1><p class="admin-card__detail" data-todo-formula>Loading priority rules…</p></div>
+			<button class="admin-button admin-button--primary" type="button" data-todo-add hidden>Add task</button>
+		</section>
+		<div class="admin-actions admin-todo-modes" role="group" aria-label="Priority mode">
+			<button class="admin-button" type="button" data-todo-mode="gated" aria-pressed="true">Gated</button>
+			<button class="admin-button" type="button" data-todo-mode="ratio" aria-pressed="false">Ratio</button>
+			<button class="admin-button" type="button" data-todo-mode="impact" aria-pressed="false">Impact</button>
+			<button class="admin-button" type="button" data-todo-mode="cost" aria-pressed="false">Cost</button>
+		</div>
+		<div data-todo-table data-admin-table></div>
+	</main>
+	<dialog class="admin-dialog" data-todo-dialog aria-labelledby="todo-dialog-title">
+		<header class="admin-dialog__header"><h2 id="todo-dialog-title" data-todo-dialog-title>Todo item</h2><button class="admin-button" type="button" data-todo-close>Close</button></header>
+		<section class="admin-dialog__body admin-todo-readonly" data-todo-readonly hidden>
+			<p data-todo-readonly-description></p>
+			<div class="admin-todo-readonly-ratings">
+				<div><span data-todo-readonly-cost></span><span>Cost</span></div>
+				<div><span data-todo-readonly-impact></span><span>Impact</span></div>
+			</div>
+		</section>
+		<form class="admin-dialog__body admin-form" data-todo-form>
+			<div class="admin-field"><label class="admin-field__label" for="todo-name">Name</label><input class="admin-input" id="todo-name" name="name" maxlength="200" required></div>
+			<div class="admin-field"><label class="admin-field__label" for="todo-description">Description</label><textarea class="admin-input" id="todo-description" name="description" rows="4" maxlength="5000" required></textarea></div>
+			<label class="admin-field--checkbox"><input class="admin-input" type="checkbox" name="starred"><span>Starred</span></label>
+			<input type="hidden" name="dependsOn" value="[]">
+			<div class="admin-field"><span class="admin-field__label">Depends on</span><div class="admin-actions"><select class="admin-input" data-todo-dependency-select aria-label="Select dependency"></select><button class="admin-button" type="button" data-todo-dependency-add>Add dependency</button></div><ul class="admin-todo-dependencies" data-todo-dependencies></ul></div>
+			<label class="admin-field"><span class="admin-field__label">Cost <output data-todo-cost-value>50</output></span><input class="admin-input" name="time" type="range" min="1" max="100" value="50" required><span class="admin-field__help">1 is low cost; 100 is high cost.</span></label>
+			<label class="admin-field"><span class="admin-field__label">Impact <output data-todo-impact-value>50</output></span><input class="admin-input" name="impact" type="range" min="1" max="100" value="50" required><span class="admin-field__help">1 is low impact; 100 is high impact.</span></label>
+			<p class="admin-status admin-status--error" data-todo-error role="alert" hidden></p>
+			<footer class="admin-dialog__actions admin-todo-dialog-actions"><button class="admin-button admin-button--danger" type="button" data-todo-delete hidden>Delete</button><span class="admin-todo-dialog-spacer"></span><button class="admin-button" type="button" data-todo-cancel>Cancel</button><button class="admin-button admin-button--primary" type="submit" data-todo-save>Save</button></footer>
+		</form>
+	</dialog>
+</body>
+</html>

@@ -5,6 +5,7 @@ import { clearSessionCookie, hashToken } from "./utils/session.js";
 
 const ADMIN_PAGES = {
 	"/": { file: "index.html", label: "Overview" },
+	"/todo": { file: "todo/index.html", label: "Todo" },
 	"/users": { file: "users/index.html", label: "Users" },
 	"/analytics": { file: "analytics/index.html", label: "Analytics" },
 	"/jobs": { file: "jobs/index.html", label: "Jobs" },
