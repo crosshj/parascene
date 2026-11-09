@@ -39,6 +39,11 @@ actual targets: the legacy API worker and both VPS sites. Verify a Blue
 "Check again." The read recovery is a temporary backstop, not the long-term
 driver of job completion. Recover live stuck rows while Blue still has their
 artifacts; a `410` from Blue means the artifact can no longer be collected.
+Owners must also be able to check any queued or processing async Blue job from
+Creation Detail. A check should fetch Blue's current state even if the normal
+poll deadline has passed. If Blue reports expired output, mark the creation
+failed with an explicit reason, refund the attempt once, and expose Retry in
+place. Retry starts a new Blue job; it cannot restore an expired artifact.
 
 ## Phase 1: durable job state and one poll owner
 

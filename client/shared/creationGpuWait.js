@@ -122,3 +122,12 @@ export function creationCanRecheckAfterTimeout(status, meta) {
 	return Boolean(jobId);
 }
 
+export function creationCanCheckProviderStatus(status, meta) {
+	if (creationCanRecheckAfterTimeout(status, meta)) return true;
+	if (!meta?.provider_async || !isCreationGpuInFlight(status)) return false;
+	const jobId =
+		(typeof meta?.provider_job_id === "string" && meta.provider_job_id.trim()) ||
+		(typeof meta?.provider_last_payload?.job_id === "string" && meta.provider_last_payload.job_id.trim());
+	return Boolean(jobId);
+}
+

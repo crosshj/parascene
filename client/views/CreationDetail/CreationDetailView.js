@@ -134,6 +134,7 @@ const {
 	creationGpuWaitMarkup,
 	creationLinePlace,
 	creationCanRecheckAfterTimeout,
+	creationCanCheckProviderStatus,
 	isCreationFinishTimedOut,
 	isCreationTimedOutDisplay,
 	isCreationGpuInFlight,
@@ -4905,7 +4906,7 @@ async function loadCreation() {
 				isOwner &&
 				!adminViewingUserDeleted &&
 				!isImportEmbedCreation &&
-				(creationCanRecheckAfterTimeout(status, meta) ||
+				(creationCanCheckProviderStatus(status, meta) ||
 					(isCreationGpuInFlight(status) && Boolean(meta?.revived_from_timeout_at))),
 			showMoreInfoPill: hasDetailsForFailed,
 			showDelete: canEdit && !isAdmin,

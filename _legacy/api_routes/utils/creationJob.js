@@ -590,6 +590,7 @@ function inferErrorCode(err) {
 	if (!err) return "unknown";
 	if (err.name === "AbortError") return "timeout";
 	if (err.code === "AUDIO_RESOLVE_FAILED") return "audio_resolve_failed";
+	if (Number(err.provider?.status) === 410 || err.provider?.body?.data_removed === true) return "output_expired";
 	return "provider_error";
 }
 
@@ -1675,25 +1676,8 @@ export async function runProviderPollJob({ queries, storage, payload }) {
 		return { ok: false, reason: "not_async" };
 	}
 
-	if (!shouldKeepProviderPoll(image.status, existingMeta)) {
-		logCreation("Poll: hard cap reached; marking failed", {
-			imageId,
-			userId,
-			status: image.status,
-			timeout_at: existingMeta.timeout_at || null,
-			started_at: existingMeta.started_at || null,
-		});
-		const timeoutErr = new Error("Timed out waiting for generation to finish.");
-		timeoutErr.name = "AbortError";
-		return markProviderPollFailed({
-			queries,
-			imageId,
-			userId,
-			existingMeta,
-			credit_cost,
-			providerError: timeoutErr,
-		});
-	}
+	// Check Blue once even after the poll deadline. Its artifact may have
+	// finished since the last callback; a still-running response times out below.
 
 	const lock = await claimProviderPollRunLock({
 		queries,
