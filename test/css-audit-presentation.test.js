@@ -98,36 +98,50 @@ test('share modal optional rows start hidden and toggle via hidden', async () =>
 		assert.equal(vynly.hidden, false);
 		assert.equal(google.hidden, true);
 		assert.equal(watermarked.hidden, false);
+		assert.equal(watermarked.querySelector('.share-action-cta-label').textContent, 'Download');
 		el.close();
 		await el.open(2, { vynlyConfigured: true, vynlyVideo: true, imageExportEligible: false });
 		assert.equal(watermarked.hidden, false);
-		watermarked.click();
-		assert.equal(el.videoDialog.open, true);
-		assert.equal(el.videoDialog.querySelector('[data-video-title]').textContent, 'Download copy');
+		assert.equal(watermarked.querySelector('.share-action-cta-label').textContent, 'Open');
 		const calls = [];
+		const openedUrls = [];
+		let releaseFirstPrepare;
+		const firstPrepare = new Promise((resolve) => { releaseFirstPrepare = resolve; });
+		let holdFirstPrepare = true;
+		window.open = (url) => { openedUrls.push(url); return {}; };
 		globalThis.fetch = async (url, options = {}) => {
 			calls.push({ url, options });
-			if (String(url).includes('/watermarked-video/prepare')) return new Response(JSON.stringify({ id: 'job-1' }), { status: 202 });
+			if (String(url).includes('/watermarked-video/prepare')) {
+				if (holdFirstPrepare) { holdFirstPrepare = false; await firstPrepare; }
+				return new Response(JSON.stringify({ id: 'job-1' }), { status: 202 });
+			}
 			if (String(url).includes('/api/create/watermarked-video/')) return new Response(JSON.stringify({ status: 'ready', url: 'https://sh.parascene.com/api/share/watermarked-video/job-1', downloadUrl: '/api/create/watermarked-video/job-1/download' }));
 			if (String(url) === '/api/vynly/share-from-creation') return new Response(JSON.stringify({ openUrl: 'https://vynly.co/p/example' }));
 			return new Response('{}', { status: 404 });
 		};
-		await el.prepareVideoShare();
+		const copyAction = el.handleVideoDownloadCopy(watermarked);
+		assert.equal(watermarked.querySelector('[data-cta]').dataset.state, 'loading');
+		assert.match(watermarked.querySelector('[data-copy-subtitle]').textContent, /Preparing your copy/);
+		assert.equal(el.videoDialog.open, false);
+		releaseFirstPrepare();
+		await copyAction;
 		assert.equal(calls.some(({ url }) => url === '/api/vynly/share-from-creation'), false);
-		assert.equal(el.videoDialog.querySelector('[data-video-view]').href, 'https://sh.parascene.com/api/share/watermarked-video/job-1');
-		assert.equal(el.videoDialog.querySelector('[data-video-view]').hidden, false);
-		assert.equal(el.videoDialog.querySelector('[data-video-view]').textContent.trim(), 'Open');
-		assert.equal(el.videoDialog.querySelector('[data-video-download]'), null);
-		el.closeVideoDialog();
-		el.querySelector('[data-share-vynly]').click();
+		assert.deepEqual(openedUrls, ['https://sh.parascene.com/api/share/watermarked-video/job-1']);
+		assert.equal(watermarked.querySelector('.share-action-cta-label').textContent, 'Open');
+		assert.equal(watermarked.querySelector('[data-cta]').dataset.state, undefined);
+		await el.handleVynly(vynly);
+		assert.equal(el.videoDialog.open, true);
 		assert.match(el.videoDialog.querySelector('[data-video-message]').textContent, /prepare your video/i);
 		assert.doesNotMatch(el.videoDialog.querySelector('[data-video-message]').textContent, /watermark/i);
-		await el.prepareVideoShare();
 		assert.equal(calls.at(-1).url, '/api/vynly/share-from-creation');
 		assert.equal(JSON.parse(calls.at(-1).options.body).preparedVideoId, 'job-1');
 		assert.equal(el.videoDialog.querySelector('[data-video-view]').href, 'https://vynly.co/p/example');
 		assert.equal(el.videoDialog.querySelector('[data-video-view]').hidden, false);
 		assert.equal(el.videoDialog.querySelector('[data-video-view]').textContent.trim(), 'View on Vynly');
+		assert.equal(vynly.querySelector('.share-action-cta-label').textContent, 'View on Vynly');
+		await el.handleVynly(vynly);
+		assert.equal(openedUrls.at(-1), 'https://vynly.co/p/example');
+		assert.equal(calls.filter(({ url }) => url === '/api/vynly/share-from-creation').length, 1);
 		el.close();
 		el.remove();
 	} finally {
