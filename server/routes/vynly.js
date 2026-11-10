@@ -17,7 +17,7 @@ export function vynlyPostUrl(result) {
 /**
  * @param {{ queries: object, storage: object }} deps
  */
-export default function createVynlyRoutes({ queries, storage, watermarkedVideoCache }) {
+export default function createVynlyRoutes({ queries, storage, watermarkedVideoCache, comments }) {
 	const router = express.Router();
 	const client = createVynlyClient();
 
@@ -195,6 +195,7 @@ export default function createVynlyRoutes({ queries, storage, watermarkedVideoCa
 				},
 				client,
 				videoCache: watermarkedVideoCache,
+				comments,
 				token
 			});
 

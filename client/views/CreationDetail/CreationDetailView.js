@@ -5434,6 +5434,22 @@ async function loadCreation() {
 			`;
 		}
 
+		const vynlyPosts = Number(creation?.user_id) === Number(currentUserId) && !hideIdentifyActionChrome
+			? (Array.isArray(meta?.vynly?.posts) ? meta.vynly.posts : [])
+				.map((post) => {
+					try {
+						const url = new URL(String(post?.url || ''));
+						return url.protocol === 'https:' && url.hostname === 'vynly.co' && url.pathname.startsWith('/p/') && url.pathname.split('/').filter(Boolean).length === 2 ? url.href : '';
+					} catch { return ''; }
+				})
+				.filter(Boolean)
+			: [];
+		const vynlyPostHtml = vynlyPosts.length
+			? '<section class="creation-detail-vynly-posts" aria-label="Vynly posts"><span class="creation-detail-vynly-posts-label">On Vynly</span>' +
+				vynlyPosts.map((url) => '<a href="' + escapeHtml(url) + '" target="_blank" rel="noopener noreferrer">View post</a>').join('') +
+				'</section>'
+			: '';
+
 		// Show description block if we have user description, lineage (ancestors/descendants), prompt, style, or meta (server/method/duration).
 		let descriptionHtml = '';
 		const descriptionText = typeof creation.description === 'string' ? creation.description.trim() : '';
@@ -5456,6 +5472,7 @@ async function loadCreation() {
 				hasAbc ||
 				hasStyle ||
 				hasAudioClip ||
+				vynlyPosts.length > 0 ||
 				lineageSectionHtml ||
 				hasMetaInDescription);
 
@@ -5534,6 +5551,7 @@ async function loadCreation() {
 						</div>
 					</div>
 					` : ''}
+					${vynlyPostHtml}
 					${audioClipHtml}
 					${lineageSectionHtml}
 					${metaLineHtml}

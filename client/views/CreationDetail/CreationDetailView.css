@@ -23,6 +23,42 @@
 
 /* Creation Detail Page */
 
+.creation-detail-vynly-posts {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin: 14px 0 18px;
+	padding: 11px 13px;
+	border: 1px solid color-mix(in srgb, var(--share-vynly, #16aca6) 28%, var(--border));
+	border-radius: 12px;
+	background: color-mix(in srgb, var(--share-vynly, #16aca6) 7%, var(--surface));
+}
+
+.creation-detail-vynly-posts-label {
+	margin-right: auto;
+	color: var(--text-muted);
+	font-size: 0.84rem;
+	font-weight: 650;
+}
+
+.creation-detail-vynly-posts a {
+	display: inline-flex;
+	align-items: center;
+	min-height: 34px;
+	padding: 0 11px;
+	border: 1px solid color-mix(in srgb, var(--share-vynly, #16aca6) 32%, var(--border));
+	border-radius: 999px;
+	color: var(--text);
+	font-size: 0.84rem;
+	font-weight: 650;
+	text-decoration: none;
+}
+
+.creation-detail-vynly-posts a:hover {
+	background: color-mix(in srgb, var(--share-vynly, #16aca6) 12%, var(--surface));
+}
+
 /* Embed iframe: same hidden-scrollbar pattern as .creation-detail-action-strip-scroll / .chat-page-messages. */
 
 @media (max-width: 768px) {
