@@ -77,6 +77,7 @@ app.use("/api/auth", express.json({ limit: "1mb" }));
 app.use(/^\/api\/create\/images\/[^/]+\/fit-thumbnail$/, express.json({ limit: "12mb" }));
 app.use("/api", express.json({ limit: "1mb" }));
 app.use("/api/notifications", express.urlencoded({ extended: false }));
+app.use("/oauth/token", express.json({ limit: "64kb" }));
 app.use('/oauth',express.urlencoded({extended:false}));
 app.use(cookieParser());
 app.use(apiHostBoundary);

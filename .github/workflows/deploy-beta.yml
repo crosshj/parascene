@@ -12,6 +12,7 @@ concurrency:
 
 jobs:
   deploy:
+    name: Deploy to Beta
     runs-on: ubuntu-latest
     concurrency:
       group: deploy-vps-queue
