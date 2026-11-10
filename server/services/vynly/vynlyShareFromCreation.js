@@ -1,6 +1,7 @@
 import { VynlyApiError } from "./vynlyClient.js";
 import { resolveCreatedImageStorageFilename } from "../create/resolveCreatedImageStorageFilename.js";
-import { applyVynlyShareWatermark } from "./vynlyShareWatermark.js";
+import { applyImageWatermark } from "../create/imageWatermark.js";
+import { creationRowIsVideo } from "../create/creationMedia.js";
 
 const MAX_BYTES = 4 * 1024 * 1024;
 const CAPTION_MAX = 2000;
@@ -30,6 +31,9 @@ const ALLOWED_DECLARED = new Set([
 	"claude",
 	"other"
 ]);
+const ALLOWED_VIDEO_DECLARED = new Set([
+	"sora", "veo", "runway", "kling", "pika", "luma", "hailuo", "haiper", "wan", "grok", "seedance", "other"
+]);
 
 /**
  * @param {unknown} raw
@@ -41,6 +45,11 @@ export function normalizeDeclaredSource(raw) {
 		.toLowerCase();
 	if (ALLOWED_DECLARED.has(s)) return s;
 	return "other";
+}
+
+export function normalizeVideoDeclaredSource(raw) {
+	const source = String(raw || "").trim().toLowerCase();
+	return ALLOWED_VIDEO_DECLARED.has(source) ? source : "other";
 }
 
 /**
@@ -56,21 +65,6 @@ function parseMeta(raw) {
 	} catch {
 		return null;
 	}
-}
-
-/**
- * @param {unknown} metaRaw - row.meta
- * @returns {boolean}
- */
-export function creationRowIsVideo(metaRaw) {
-	const meta = parseMeta(metaRaw);
-	if (!meta || typeof meta !== "object") return false;
-	if (meta.video && typeof meta.video === "object") return true;
-	const fp = typeof meta.file_path === "string" ? meta.file_path.trim() : "";
-	if (fp.startsWith("/api/videos/created/")) return true;
-	const vf = typeof meta.video_filename === "string" ? meta.video_filename : "";
-	if (vf.startsWith("video/")) return true;
-	return false;
 }
 
 /**
@@ -90,7 +84,7 @@ function guessContentType(filename) {
  * @param {object} row - created_images row
  * @param {string} [overrideCaption]
  */
-function defaultCaption(row, overrideCaption) {
+function defaultCaption(row, overrideCaption, fallback = "Shared from Parascene #aiart") {
 	if (typeof overrideCaption === "string" && overrideCaption.trim()) {
 		const t = overrideCaption.trim();
 		return t.length > CAPTION_MAX ? `${t.slice(0, CAPTION_MAX - 1)}…` : t;
@@ -105,7 +99,7 @@ function defaultCaption(row, overrideCaption) {
 		const base = `From Parascene: ${prompt}`;
 		return base.length > CAPTION_MAX ? `${base.slice(0, CAPTION_MAX - 1)}…` : base;
 	}
-	return "Shared from Parascene #aiart";
+	return fallback;
 }
 
 /**
@@ -156,11 +150,7 @@ async function resolveAuthorizedImageRow(deps, user, creationId) {
 		return { error: "Only completed images can be shared", status: 400 };
 	}
 
-	if (creationRowIsVideo(image.meta)) {
-		return { error: "Video creations cannot be posted to Vynly from Parascene yet", status: 400 };
-	}
-
-	if (!image.filename) {
+	if (!creationRowIsVideo(image.meta) && !image.filename) {
 		return { error: "Image file missing", status: 400 };
 	}
 
@@ -189,6 +179,41 @@ export async function shareCreationToVynly(deps) {
 	}
 
 	const { image } = resolved;
+	if (creationRowIsVideo(image.meta)) {
+		const caption = captionForVynly(defaultCaption(image, options.caption, "Shared from Parascene #aivideo"));
+		const tagsRaw = typeof options.tags === "string" ? options.tags.trim() : "";
+		try {
+			const videoUrl = deps.videoCache.preparedUrl(options.preparedVideoId, user.id, image.id);
+			const prepared = deps.videoCache.get(options.preparedVideoId);
+			if (!prepared) {
+				const err = new Error("Prepared video has expired. Please try again.");
+				err.status = 409;
+				throw err;
+			}
+			if (prepared.duration > 60) {
+				const err = new Error("Vynly accepts videos up to 60 seconds");
+				err.status = 400;
+				throw err;
+			}
+			if (prepared.outputBytes > 100 * 1024 * 1024) {
+				const err = new Error("Vynly accepts videos up to 100 MB");
+				err.status = 413;
+				throw err;
+			}
+			return await client.postVideo(token, {
+				videoUrl,
+				caption,
+				tags: tagsRaw || "parascene,aivideo",
+				declaredSource: normalizeVideoDeclaredSource(options.declaredSource)
+			});
+		} catch (e) {
+			if (e instanceof VynlyApiError || e?.status) throw e;
+			const err = new Error("Failed to post to Vynly");
+			err.status = 502;
+			err.cause = e;
+			throw err;
+		}
+	}
 	const storageFilename = resolveCreatedImageStorageFilename(image);
 	if (!storageFilename) {
 		const err = new Error("Image file missing");
@@ -216,7 +241,7 @@ export async function shareCreationToVynly(deps) {
 			: String(image.filename || "image.png");
 
 	try {
-		const wm = await applyVynlyShareWatermark(buf);
+		const wm = await applyImageWatermark(buf, { maxBytes: MAX_BYTES });
 		if (wm.contentType && wm.filenameSuffix && wm.buffer) {
 			uploadBuf = wm.buffer;
 			uploadContentType = wm.contentType;

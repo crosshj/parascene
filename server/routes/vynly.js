@@ -3,10 +3,21 @@ import { createVynlyClient, VynlyApiError } from "../services/vynly/vynlyClient.
 import { getVynlyBearerToken, isVynlyConfiguredForUser } from "../services/vynly/vynlyAuth.js";
 import { shareCreationToVynly } from "../services/vynly/vynlyShareFromCreation.js";
 
+export function vynlyPostUrl(result) {
+	if (!result || typeof result !== "object") return null;
+	const id = result.id == null ? "" : String(result.id).trim();
+	if (id) return `https://vynly.co/p/${encodeURIComponent(id)}`;
+	try {
+		const url = new URL(String(result.url || ""));
+		if (url.protocol === "https:" && url.hostname === "vynly.co" && /^\/p\/[^/]+\/?$/.test(url.pathname)) return url.href;
+	} catch { /* no direct post URL */ }
+	return null;
+}
+
 /**
  * @param {{ queries: object, storage: object }} deps
  */
-export default function createVynlyRoutes({ queries, storage }) {
+export default function createVynlyRoutes({ queries, storage, watermarkedVideoCache }) {
 	const router = express.Router();
 	const client = createVynlyClient();
 
@@ -156,6 +167,7 @@ export default function createVynlyRoutes({ queries, storage }) {
 		}
 	});
 
+
 	router.post("/api/vynly/share-from-creation", async (req, res) => {
 		const user = await requireUser(req, res);
 		if (!user) return;
@@ -175,25 +187,18 @@ export default function createVynlyRoutes({ queries, storage }) {
 				creationId,
 				options: {
 					caption: req.body?.caption,
+					preparedVideoId: req.body?.preparedVideoId,
 					tags: req.body?.tags,
 					declaredSource: req.body?.declaredSource,
 					width: req.body?.width,
 					height: req.body?.height
 				},
 				client,
+				videoCache: watermarkedVideoCache,
 				token
 			});
 
-			let openUrl = "https://vynly.co/";
-			if (result && typeof result === "object") {
-				if (typeof result.url === "string" && result.url.trim()) {
-					openUrl = result.url.trim();
-				} else if (result.id != null) {
-					openUrl = `https://vynly.co/?post=${encodeURIComponent(String(result.id))}`;
-				}
-			}
-
-			return res.json({ ...(typeof result === "object" && result ? result : {}), openUrl });
+			return res.json({ ...(typeof result === "object" && result ? result : {}), openUrl: vynlyPostUrl(result) });
 		} catch (err) {
 			return sendRouteError(res, err);
 		}
