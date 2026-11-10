@@ -2826,7 +2826,10 @@ async function downloadOwnerCreationVideo() {
 	}
 	const filename = filenameFromVideoUrl(target.url, target.id || 'video');
 	if (typeof showToast === 'function') showToast('Downloading…');
-	const res = await fetch(target.url, { credentials: 'include' });
+	// The media endpoint authenticates the same-origin request, then redirects video
+	// bytes to signed storage. Do not forward cookies to that cross-origin redirect:
+	// credentialed CORS on the storage host can make fetch reject as a network error.
+	const res = await fetch(target.url, { credentials: 'same-origin' });
 	if (!res.ok) {
 		throw new Error('Could not download video');
 	}
