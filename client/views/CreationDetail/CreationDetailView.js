@@ -5434,6 +5434,22 @@ async function loadCreation() {
 			`;
 		}
 
+		const vynlyPosts = Number(creation?.user_id) === Number(currentUserId) && !hideIdentifyActionChrome
+			? (Array.isArray(meta?.vynly?.posts) ? meta.vynly.posts : [])
+				.map((post) => {
+					try {
+						const url = new URL(String(post?.url || ''));
+						return url.protocol === 'https:' && url.hostname === 'vynly.co' && url.pathname.startsWith('/p/') && url.pathname.split('/').filter(Boolean).length === 2 ? url.href : '';
+					} catch { return ''; }
+				})
+				.filter(Boolean)
+			: [];
+		const vynlyPostHtml = vynlyPosts.length
+			? '<section class="creation-detail-vynly-posts" aria-label="Vynly posts"><span class="creation-detail-vynly-posts-label">On Vynly</span>' +
+				vynlyPosts.map((url) => '<div class="creation-detail-vynly-post" data-vynly-post><a href="' + escapeHtml(url) + '" target="_blank" rel="noopener noreferrer">View post</a><button type="button" data-remove-vynly-post data-vynly-url="' + escapeHtml(url) + '" aria-label="Remove Vynly post link" title="Remove link">×</button></div>').join('') +
+				'</section>'
+			: '';
+
 		// Show description block if we have user description, lineage (ancestors/descendants), prompt, style, or meta (server/method/duration).
 		let descriptionHtml = '';
 		const descriptionText = typeof creation.description === 'string' ? creation.description.trim() : '';
@@ -5456,6 +5472,7 @@ async function loadCreation() {
 				hasAbc ||
 				hasStyle ||
 				hasAudioClip ||
+				vynlyPosts.length > 0 ||
 				lineageSectionHtml ||
 				hasMetaInDescription);
 
@@ -5534,6 +5551,7 @@ async function loadCreation() {
 						</div>
 					</div>
 					` : ''}
+					${vynlyPostHtml}
 					${audioClipHtml}
 					${lineageSectionHtml}
 					${metaLineHtml}
@@ -6105,6 +6123,32 @@ async function loadCreation() {
 				e.preventDefault();
 				e.stopPropagation();
 				await copyTextToClipboard(promptText);
+			});
+		}
+		for (const removeButton of detailContent.querySelectorAll('[data-remove-vynly-post]')) {
+			removeButton.addEventListener('click', async (event) => {
+				event.preventDefault();
+				event.stopPropagation();
+				const url = removeButton.dataset.vynlyUrl || '';
+				if (!window.confirm('Remove this Vynly link from the creation? This will not delete the post on Vynly.')) return;
+				removeButton.disabled = true;
+				try {
+					const response = await fetch('/api/vynly/creations/' + encodeURIComponent(creation.id) + '/posts', {
+						method: 'DELETE',
+						credentials: 'include',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ url })
+					});
+					const data = await response.json().catch(() => null);
+					if (!response.ok) throw new Error(String(data?.error || 'Could not remove the Vynly link'));
+					const row = removeButton.closest('[data-vynly-post]');
+					const section = removeButton.closest('.creation-detail-vynly-posts');
+					row?.remove();
+					if (section && !section.querySelector('[data-vynly-post]')) section.remove();
+				} catch (error) {
+					window.alert(error?.message || 'Could not remove the Vynly link');
+					removeButton.disabled = false;
+				}
 			});
 		}
 		const copyAbcBtn = detailContent.querySelector('[data-copy-abc-btn]');

@@ -131,17 +131,10 @@ async function resolveAuthorizedImageRow(deps, user, creationId) {
 	}
 
 	let image = await queries.selectCreatedImageById?.get(id, user.id);
-
 	if (!image) {
 		const any = await queries.selectCreatedImageByIdAnyUser?.get(id);
-		if (!any) {
-			return { error: "Image not found", status: 404 };
-		}
-		const isPublished = any.published === 1 || any.published === true;
-		const isAdmin = user.role === "admin";
-		if (!isPublished && !isAdmin) {
-			return { error: "Image not found", status: 404 };
-		}
+		if (!any) return { error: "Image not found", status: 404 };
+		if (!(any.published === true || any.published === 1) && user.role !== "admin") return { error: "Image not found", status: 404 };
 		image = any;
 	}
 
@@ -157,6 +150,43 @@ async function resolveAuthorizedImageRow(deps, user, creationId) {
 	return { image };
 }
 
+function vynlyPostReference(result, user) {
+	if (!result || typeof result !== "object") return null;
+	const id = result.id == null ? "" : String(result.id).trim();
+	let url = id ? "https://vynly.co/p/" + encodeURIComponent(id) : "";
+	if (!url) {
+		try {
+			const candidate = new URL(String(result.url || ""));
+			if (candidate.protocol === "https:" && candidate.hostname === "vynly.co" && /^\/p\/[^/]+\/?$/.test(candidate.pathname)) url = candidate.href;
+		} catch { /* no canonical post URL */ }
+	}
+	if (!url) return null;
+	return { url, post_id: id || url.split("/").pop(), posted_at: new Date().toISOString(), user_id: Number(user.id) };
+}
+
+async function annotateVynlyPost(queries, comments, image, user, result) {
+	const post = vynlyPostReference(result, user);
+	if (!post) return;
+	if (Number(image.user_id) !== Number(user.id)) {
+		try {
+			await comments?.post?.(user, image.id, "Shared to Vynly: " + post.url);
+		} catch (error) {
+			console.error("[vynly] posted successfully but could not add creation comment", error?.message || error);
+		}
+		return;
+	}
+	if (typeof queries.updateCreatedImageMeta?.run !== "function") return;
+	const meta = parseMeta(image.meta) || {};
+	const existing = meta.vynly && typeof meta.vynly === "object" ? meta.vynly : {};
+	const posts = Array.isArray(existing.posts) ? existing.posts.filter((item) => item && typeof item.url === "string") : [];
+	const nextPosts = [...posts.filter((item) => item.url !== post.url), post].slice(-20);
+	try {
+		await queries.updateCreatedImageMeta.run(image.id, user.id, { ...meta, vynly: { ...existing, posts: nextPosts } });
+	} catch (error) {
+		console.error("[vynly] posted successfully but could not save creation reference", error?.message || error);
+	}
+}
+
 /**
  * @param {object} deps
  * @param {object} deps.queries
@@ -169,7 +199,7 @@ async function resolveAuthorizedImageRow(deps, user, creationId) {
  * @returns {Promise<object>}
  */
 export async function shareCreationToVynly(deps) {
-	const { queries, storage, user, creationId, options = {}, client, token } = deps;
+	const { queries, storage, user, creationId, options = {}, client, token, comments } = deps;
 
 	const resolved = await resolveAuthorizedImageRow({ queries }, user, creationId);
 	if (resolved.error) {
@@ -200,12 +230,14 @@ export async function shareCreationToVynly(deps) {
 				err.status = 413;
 				throw err;
 			}
-			return await client.postVideo(token, {
+			const result = await client.postVideo(token, {
 				videoUrl,
 				caption,
 				tags: tagsRaw || "parascene,aivideo",
 				declaredSource: normalizeVideoDeclaredSource(options.declaredSource)
 			});
+			await annotateVynlyPost(queries, comments, image, user, result);
+			return result;
 		} catch (e) {
 			if (e instanceof VynlyApiError || e?.status) throw e;
 			const err = new Error("Failed to post to Vynly");
@@ -273,7 +305,7 @@ export async function shareCreationToVynly(deps) {
 	const declaredSource = normalizeDeclaredSource(options.declaredSource);
 
 	try {
-		return await client.postImageMultipart(token, {
+		const result = await client.postImageMultipart(token, {
 			buffer: uploadBuf,
 			filename: uploadFilename || "image.png",
 			contentType: uploadContentType,
@@ -283,6 +315,8 @@ export async function shareCreationToVynly(deps) {
 			width,
 			height
 		});
+		await annotateVynlyPost(queries, comments, image, user, result);
+		return result;
 	} catch (e) {
 		if (e instanceof VynlyApiError) throw e;
 		const err = new Error("Failed to post to Vynly");

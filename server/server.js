@@ -109,7 +109,7 @@ app.use(createPresenceRoutes(db.account));
 app.use(createIntegrationRoutes(db.account));
 app.use(createGooglePhotosRoutes(db.account));
 const watermarkedVideoCache = createWatermarkedVideoCache({ storage: db.create.storage });
-app.use(createVynlyRoutes({ ...db.account, watermarkedVideoCache }));
+app.use(createVynlyRoutes({ ...db.account, watermarkedVideoCache, comments: db.comments }));
 app.use(createAppDataRoutes({ users: db.users, credits: db.credits, notifications: db.notifications, servers: db.servers }));
 app.use(createCreateRoutes(db.create));
 app.use(createCreationExportRoutes({ queries: db.create.queries, storage: db.create.storage, watermarkedVideoCache }));
