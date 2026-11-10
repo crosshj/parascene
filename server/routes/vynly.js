@@ -6,7 +6,7 @@ import { shareCreationToVynly } from "../services/vynly/vynlyShareFromCreation.j
 /**
  * @param {{ queries: object, storage: object }} deps
  */
-export default function createVynlyRoutes({ queries, storage }) {
+export default function createVynlyRoutes({ queries, storage, watermarkedVideoCache }) {
 	const router = express.Router();
 	const client = createVynlyClient();
 
@@ -156,6 +156,7 @@ export default function createVynlyRoutes({ queries, storage }) {
 		}
 	});
 
+
 	router.post("/api/vynly/share-from-creation", async (req, res) => {
 		const user = await requireUser(req, res);
 		if (!user) return;
@@ -175,12 +176,14 @@ export default function createVynlyRoutes({ queries, storage }) {
 				creationId,
 				options: {
 					caption: req.body?.caption,
+					preparedVideoId: req.body?.preparedVideoId,
 					tags: req.body?.tags,
 					declaredSource: req.body?.declaredSource,
 					width: req.body?.width,
 					height: req.body?.height
 				},
 				client,
+				videoCache: watermarkedVideoCache,
 				token
 			});
 

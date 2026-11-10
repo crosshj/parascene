@@ -5,10 +5,11 @@ import createVynlyRoutes from '../server/routes/vynly.js';
 import { createVynlyClient, VynlyApiError } from '../server/services/vynly/vynlyClient.js';
 import { getVynlyBearerToken, isVynlyConfiguredForUser } from '../server/services/vynly/vynlyAuth.js';
 import {
-	creationRowIsVideo,
 	normalizeDeclaredSource,
+	normalizeVideoDeclaredSource,
 	shareCreationToVynly
 } from '../server/services/vynly/vynlyShareFromCreation.js';
+import { creationRowIsVideo } from '../server/services/create/creationMedia.js';
 
 async function withApp(deps, run) {
 	const app = express();
@@ -40,11 +41,14 @@ test('vynlyAuth reads token from user meta only', () => {
 test('normalizeDeclaredSource and creationRowIsVideo', () => {
 	assert.equal(normalizeDeclaredSource('Flux'), 'flux');
 	assert.equal(normalizeDeclaredSource('nope'), 'other');
+	assert.equal(normalizeVideoDeclaredSource('Veo'), 'veo');
+	assert.equal(normalizeVideoDeclaredSource('flux'), 'other');
 	assert.equal(creationRowIsVideo(null), false);
 	assert.equal(creationRowIsVideo({ video: { file_path: '/x.mp4' } }), true);
 	assert.equal(creationRowIsVideo({ file_path: '/api/videos/created/a.mp4' }), true);
 	assert.equal(creationRowIsVideo({ file_path: '/api/images/created/a.png' }), false);
 	assert.equal(creationRowIsVideo({ video_filename: 'video/x.mp4' }), true);
+	assert.equal(creationRowIsVideo({ media_type: 'video' }), true);
 });
 
 test('createVynlyClient forwards auth and throws on non-OK', async () => {
@@ -58,6 +62,10 @@ test('createVynlyClient forwards auth and throws on non-OK', async () => {
 	};
 	const client = createVynlyClient({ baseUrl: 'https://example.test', fetchImpl });
 	const data = await client.getPosts('tok', { limit: 3, before: '9' });
+	await client.postVideo('tok', { videoUrl: 'https://example.test/a.mp4', declaredSource: 'veo' });
+	assert.equal(calls.at(-1).url, 'https://example.test/api/posts');
+	assert.equal(calls.at(-1).init.method, 'POST');
+	assert.equal(JSON.parse(calls.at(-1).init.body).declaredSource, 'veo');
 	assert.equal(data.ok, true);
 	const u = new URL(calls[0].url);
 	assert.equal(`${u.origin}${u.pathname}`, 'https://example.test/api/posts');
@@ -128,7 +136,7 @@ test('POST /api/vynly/share-from-creation requires token and valid creationId', 
 	);
 });
 
-test('shareCreationToVynly rejects video and posts multipart for images', async () => {
+test('shareCreationToVynly posts a public video URL and multipart images', async () => {
 	const png = Buffer.from(
 		'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
 		'base64'
@@ -139,22 +147,41 @@ test('shareCreationToVynly rejects video and posts multipart for images', async 
 		status: 'completed',
 		width: 64,
 		height: 64,
-		meta: { video: { file_path: '/api/videos/created/x.mp4' } }
+		meta: { media_type: 'video', video: { filename: 'video/x.mp4', file_path: '/api/videos/created/video/x.mp4' } }
 	};
-	await assert.rejects(
-		() =>
-			shareCreationToVynly({
-				queries: {
-					selectCreatedImageById: { get: async () => videoRow }
-				},
-				storage: { getImageBuffer: async () => png },
-				user: { id: 1 },
-				creationId: 11,
-				client: createVynlyClient({ baseUrl: 'https://example.test', fetchImpl: async () => new Response('{}') }),
-				token: 'tok'
-			}),
-		(err) => err.status === 400 && /Video creations/.test(err.message)
-	);
+	let videoPost = null;
+	const videoCache = { preparedUrl: (id, userId, creationId) => {
+		assert.equal(id, 'prepared-11');
+		assert.equal(userId, 1);
+		assert.equal(creationId, 11);
+		return 'https://sh.parascene.com/api/share/watermarked-video/prepared-11';
+	}, get: () => ({ duration: 12, outputBytes: 2_000_000 }) };
+	await shareCreationToVynly({
+		queries: { selectCreatedImageById: { get: async () => videoRow } },
+		storage: { getImageBuffer: async () => { throw new Error('Video should not read image buffer'); } },
+		user: { id: 1 },
+		creationId: 11,
+		options: { declaredSource: 'veo', preparedVideoId: 'prepared-11' },
+		client: { postVideo: async (_token, body) => { videoPost = body; return { id: 98 }; } },
+		videoCache,
+		token: 'tok'
+	});
+	assert.equal(videoPost.videoUrl, 'https://sh.parascene.com/api/share/watermarked-video/prepared-11');
+	assert.equal(videoPost.declaredSource, 'veo');
+	assert.equal(videoPost.tags, 'parascene,aivideo');
+	await assert.rejects(() => shareCreationToVynly({
+		queries: { selectCreatedImageById: { get: async () => videoRow } },
+		user: { id: 1 }, creationId: 11, options: { preparedVideoId: 'prepared-11' },
+		videoCache: { ...videoCache, get: () => ({ duration: 61, outputBytes: 2_000_000 }) },
+		client: { postVideo: async () => { throw new Error('Should not post'); } }, token: 'tok'
+	}), (err) => err.status === 400 && /60 seconds/.test(err.message));
+
+	await assert.rejects(() => shareCreationToVynly({
+		queries: { selectCreatedImageById: { get: async () => videoRow } },
+		user: { id: 1 }, creationId: 11, options: { preparedVideoId: 'bad' },
+		videoCache: { preparedUrl: () => { throw Object.assign(new Error('Not ready'), { status: 409 }); } },
+		client: { postVideo: async () => { throw new Error('Should not post'); } }, token: 'tok'
+	}), (err) => err.status === 409);
 
 	const imageRow = {
 		id: 12,

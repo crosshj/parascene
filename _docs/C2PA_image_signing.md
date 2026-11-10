@@ -12,7 +12,7 @@
 - No C2PA implementation in repo today
 - Images: `sharp` processing → PNG → `storage.uploadImage()`
 - Main hook: `finalizeCreationJob` in `api_routes/utils/creationJob.js` (before upload)
-- Share/watermark path: `api_routes/utils/vynlyShareWatermark.js` — sign after watermark if export-only
+- Share/watermark path: `server/services/create/imageWatermark.js` — sign after watermark if export-only
 
 ## Prerequisites
 
@@ -49,7 +49,7 @@
 ## Where to wire in parascene
 
 - **At creation:** sign in `finalizeCreationJob` right before `storage.uploadImage()`
-- **On export/share only:** sign after `applyVynlyShareWatermark`
+- **On export/share only:** sign after `applyImageWatermark`
 - **On publish:** alternative if not every stored asset needs manifest
 - Suggested module: `api_routes/utils/c2paSign.js`
 - Env: cert paths / KMS config (`C2PA_CERT_PATH`, etc.)

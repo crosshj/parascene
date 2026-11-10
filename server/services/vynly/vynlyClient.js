@@ -137,6 +137,14 @@ export function createVynlyClient(opts = {}) {
 			});
 		},
 
+		async postVideo(token, body) {
+			return await authorizedFetch(token, "/api/posts", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(body)
+			});
+		},
+
 		/**
 		 * @param {string} token
 		 * @param {{

@@ -8346,10 +8346,10 @@ let lastGroupSelectedSourceId = null;
 let lastGroupSourcesById = new Map();
 
 /**
- * Video creations cannot use Vynly share (server + client). Mirrors api_routes/utils/vynlyShareFromCreation.js.
+ * Audio creations and videos without a stored clip cannot use Vynly sharing.
  * @returns {boolean}
  */
-function isCurrentCreationVideoForVynly() {
+function isCurrentCreationUnsupportedForVynly() {
 	const c = lastCreationMeta;
 	if (!c || typeof c !== 'object') return false;
 	let meta = c.meta;
@@ -8362,16 +8362,11 @@ function isCurrentCreationVideoForVynly() {
 	}
 	if (meta && typeof meta === 'object') {
 		if (meta.import && typeof meta.import === 'object') return false;
-		if (meta.video && typeof meta.video === 'object') return true;
-		const fp = typeof meta.file_path === 'string' ? meta.file_path.trim() : '';
-		if (fp.startsWith('/api/videos/created/')) return true;
-		const vf = typeof meta.video_filename === 'string' ? meta.video_filename : '';
-		if (vf.startsWith('video/')) return true;
-		if (typeof meta.media_type === 'string' && meta.media_type === 'video') return true;
+		if (meta.media_type === 'video') return !(meta.video && typeof meta.video === 'object');
 		if (typeof meta.media_type === 'string' && meta.media_type === 'audio') return true;
 	}
 	const mediaType = typeof c.media_type === 'string' ? c.media_type : 'image';
-	return mediaType === 'video' || mediaType === 'audio';
+	return mediaType === 'audio' || (mediaType === 'video' && !(meta?.video && typeof meta.video === 'object'));
 }
 
 function paintCreationDetailFromSeed(seed, detailContent, imageEl, chromeHtmlFromSeed, applyHeroAspect) {
@@ -8697,7 +8692,8 @@ addCreationDetailDocumentListener('click', async (e) => {
 		e.preventDefault();
 		const creationId = getCreationId();
 		if (!creationId) return;
-		const vynlyShareEligible = !isCurrentCreationVideoForVynly();
+		const vynlyShareEligible = !isCurrentCreationUnsupportedForVynly();
+		const vynlyVideo = lastCreationMeta?.media_type === 'video' || lastCreationMeta?.meta?.media_type === 'video';
 		const imageExportEligible = shareBtn.dataset.imageExportEligible === '1';
 		const creationMeta =
 			lastCreationMeta?.meta && typeof lastCreationMeta.meta === 'object' ? lastCreationMeta.meta : null;
@@ -8718,6 +8714,7 @@ addCreationDetailDocumentListener('click', async (e) => {
 			detail: {
 				creationId,
 				vynlyShareEligible,
+				vynlyVideo,
 				vynlyConfigured,
 				imageExportEligible,
 				isGroupCreation

@@ -108,6 +108,10 @@ class AppModalShare extends HTMLElement {
 		this._ctaTimers = new Set();
 		this._vynlyStatusRequestId = 0;
 		this._vynlyShareEligible = true;
+		this._vynlyVideo = false;
+		this._videoFlowId = 0;
+		this._videoPosting = false;
+		this._videoShareMode = "vynly";
 		this._googlePhotosStatusRequestId = 0;
 		this._googlePhotosConfigured = false;
 		this._googlePhotosRowState = "hidden";
@@ -134,6 +138,7 @@ class AppModalShare extends HTMLElement {
 		document.removeEventListener("close-all-modals", this.handleCloseAllModals);
 		this.dialog?.removeEventListener("close", this.handleDialogClose);
 		this.qrDialog?.removeEventListener("close", this.handleQrDialogClose);
+		this.closeVideoDialog();
 
 		for (const t of this._ctaTimers) clearTimeout(t);
 		this._ctaTimers.clear();
@@ -148,6 +153,11 @@ class AppModalShare extends HTMLElement {
 	/** @returns {HTMLDialogElement | null} */
 	get qrDialog() {
 		const el = this.querySelector("dialog[data-qr-overlay]");
+		return el?.tagName === "DIALOG" ? /** @type {HTMLDialogElement} */ (el) : null;
+	}
+
+	get videoDialog() {
+		const el = this.querySelector("dialog[data-video-overlay]");
 		return el?.tagName === "DIALOG" ? /** @type {HTMLDialogElement} */ (el) : null;
 	}
 
@@ -309,8 +319,18 @@ class AppModalShare extends HTMLElement {
 								<span class="share-action-left">
 									<span class="share-option-icon">${iconPicture}</span>
 									<span class="share-action-text">
-										<span class="share-action-title">Open watermarked image</span>
-										<span class="share-action-subtitle">Copy or share image file anywhere</span>
+										<span class="share-action-title">Watermarked copy</span>
+										<span class="share-action-subtitle">Ready to share anywhere</span>
+									</span>
+								</span>
+								<span class="share-action-cta" data-cta><span class="share-action-cta-label">Open</span></span>
+							</button>
+							<button type="button" class="share-action-row" data-open-watermarked-video hidden>
+								<span class="share-action-left">
+									<span class="share-option-icon">${iconPicture}</span>
+									<span class="share-action-text">
+										<span class="share-action-title">Watermarked copy</span>
+										<span class="share-action-subtitle">Ready to share anywhere</span>
 									</span>
 								</span>
 								<span class="share-action-cta" data-cta><span class="share-action-cta-label">Open</span></span>
@@ -336,6 +356,19 @@ class AppModalShare extends HTMLElement {
 				<header class="qr-modal-header"></header>
 				<div class="qr-modal-body">
 					<div class="qr-modal-svg-wrap" data-qr-content></div>
+				</div>
+			</dialog>
+			<dialog class="app-dialog share-video-dialog" data-video-overlay aria-labelledby="share-video-title">
+				<header class="app-dialog__header"><h2 id="share-video-title" class="app-dialog__title" data-video-title>Prepare video</h2></header>
+				<div class="app-dialog__body share-video-body">
+					<p data-video-message>We’ll add the Parascene watermark to a share copy, then post it to Vynly. Your original video stays as it is.</p>
+					<p class="share-video-status" data-video-status role="status" aria-live="polite"></p>
+					<p class="share-video-error" data-video-error role="alert" hidden></p>
+					<div class="share-video-actions">
+						<button type="button" class="btn-secondary" data-video-cancel>Cancel</button>
+						<button type="button" class="btn-primary" data-video-confirm>Prepare and post</button>
+						<a class="btn-primary" data-video-view href="#" target="_blank" rel="noopener noreferrer" hidden>Open video</a>
+					</div>
 				</div>
 			</dialog>
 		`;
@@ -368,6 +401,7 @@ class AppModalShare extends HTMLElement {
 		const cancelBtn = this.querySelector("[data-cancel]");
 		const copyBtn = this.querySelector("[data-copy-link]");
 		const openWatermarkedBtn = this.querySelector("[data-open-watermarked]");
+		const openWatermarkedVideoBtn = this.querySelector("[data-open-watermarked-video]");
 		const qrBtn = this.querySelector("[data-qr-code]");
 		const nativeBtn = this.querySelector("[data-native-share]");
 		const shareImageFileBtn = this.querySelector("[data-share-image-file]");
@@ -391,6 +425,7 @@ class AppModalShare extends HTMLElement {
 
 		if (copyBtn) copyBtn.addEventListener("click", (e) => void this.handleCopy(e.currentTarget));
 		if (openWatermarkedBtn) openWatermarkedBtn.addEventListener("click", (e) => void this.handleOpenWatermarked(e.currentTarget));
+		if (openWatermarkedVideoBtn) openWatermarkedVideoBtn.addEventListener("click", () => this.openVideoDialog("export"));
 		if (qrBtn) qrBtn.addEventListener("click", (e) => void this.handleQrCode(e.currentTarget));
 		if (nativeBtn) nativeBtn.addEventListener("click", (e) => void this.handleNativeShare(e.currentTarget));
 		if (shareImageFileBtn) {
@@ -405,6 +440,13 @@ class AppModalShare extends HTMLElement {
 			if (e.target === qrDialog) this.closeQrModal();
 		});
 		qrDialog?.addEventListener("close", this.handleQrDialogClose);
+		this.videoDialog?.querySelector("[data-video-cancel]")?.addEventListener("click", () => this.closeVideoDialog());
+		this.videoDialog?.querySelector("[data-video-confirm]")?.addEventListener("click", () => void this.prepareVideoShare());
+		this.videoDialog?.addEventListener("cancel", (e) => {
+			if (this._videoPosting) e.preventDefault();
+			else this._videoFlowId++;
+		});
+		this.videoDialog?.addEventListener("close", () => { this._videoFlowId++; });
 
 		if (smsBtn) smsBtn.addEventListener("click", (e) => void this.handleSms(e.currentTarget));
 		if (emailBtn) emailBtn.addEventListener("click", (e) => void this.handleEmail(e.currentTarget));
@@ -428,9 +470,10 @@ class AppModalShare extends HTMLElement {
 	handleOpen(e) {
 		const id = e.detail?.creationId ?? null;
 		const vynlyShareEligible = e.detail?.vynlyShareEligible !== false;
+		const vynlyVideo = e.detail?.vynlyVideo === true;
 		const imageExportEligible = e.detail?.imageExportEligible === true;
 		const isGroupCreation = e.detail?.isGroupCreation === true;
-		this.open(id, { vynlyShareEligible, imageExportEligible, isGroupCreation });
+		this.open(id, { vynlyShareEligible, vynlyVideo, imageExportEligible, isGroupCreation });
 	}
 
 	handleCloseAllModals() {
@@ -454,7 +497,12 @@ class AppModalShare extends HTMLElement {
 		this._openRequestId++;
 		const openGen = this._openRequestId;
 		this._vynlyShareEligible = options.vynlyShareEligible !== false;
+		this._vynlyVideo = options.vynlyVideo === true;
+		const watermarkedVideoRow = this.querySelector("[data-open-watermarked-video]");
+		if (watermarkedVideoRow) watermarkedVideoRow.hidden = !this._vynlyVideo;
 		this._imageExportEligible = options.imageExportEligible === true;
+		const watermarkedImageRow = this.querySelector("[data-open-watermarked]");
+		if (watermarkedImageRow) watermarkedImageRow.hidden = !this._imageExportEligible;
 		this._isGroupCreation = options.isGroupCreation === true;
 		this.resetAllCtas();
 
@@ -486,6 +534,7 @@ class AppModalShare extends HTMLElement {
 	}
 
 	close(opts = {}) {
+		this.closeVideoDialog();
 		this.closeQrModal();
 		this._isOpen = false;
 		this._loading = false;
@@ -495,6 +544,7 @@ class AppModalShare extends HTMLElement {
 		this._vynlyStatusRequestId++;
 		this._googlePhotosStatusRequestId++;
 		this._vynlyShareEligible = true;
+		this._vynlyVideo = false;
 		this._googlePhotosConfigured = false;
 		this._googlePhotosRowState = "hidden";
 		this._googlePhotosAuthMessage = "";
@@ -511,6 +561,7 @@ class AppModalShare extends HTMLElement {
 		for (const selector of [
 			"[data-share-image-file]",
 			"[data-open-watermarked]",
+			"[data-open-watermarked-video]",
 			"[data-share-google-photos]",
 			"[data-share-vynly]"
 		]) {
@@ -891,6 +942,10 @@ class AppModalShare extends HTMLElement {
 
 	async handleVynly(buttonEl) {
 		if (this._vynlyShareEligible === false) return;
+		if (this._vynlyVideo) {
+			this.openVideoDialog("vynly");
+			return;
+		}
 		await this.runCtaAction(
 			buttonEl,
 			async () => {
@@ -919,6 +974,104 @@ class AppModalShare extends HTMLElement {
 			},
 			{ successLabel: "Posted", errorLabel: "Failed", resetMs: 1600 }
 		);
+	}
+
+	openVideoDialog(mode = "vynly") {
+		const dialog = this.videoDialog;
+		if (!dialog) return;
+		this._videoShareMode = mode;
+		this._videoFlowId++;
+		this._videoPosting = false;
+		this.setVideoDialogState({ status: "", error: "", busy: false });
+		const title = dialog.querySelector("[data-video-title]");
+		if (title) title.textContent = mode === "export" ? "Open watermarked video" : "Post video to Vynly";
+		const message = dialog.querySelector("[data-video-message]");
+		if (message) message.textContent = mode === "export"
+			? "We’ll prepare a watermarked share copy. Your original video stays as it is."
+			: "We’ll add the Parascene watermark to a share copy, then post it to Vynly. Your original video stays as it is.";
+		if (!dialog.open && typeof dialog.showModal === "function") dialog.showModal();
+	}
+
+	closeVideoDialog() {
+		if (this._videoPosting) return;
+		this._videoFlowId++;
+		const dialog = this.videoDialog;
+		if (dialog?.open) dialog.close();
+	}
+
+	setVideoDialogState({ status, error, busy, postedUrl }) {
+		const dialog = this.videoDialog;
+		if (!dialog) return;
+		dialog.toggleAttribute("data-busy", Boolean(busy));
+		const statusEl = dialog.querySelector("[data-video-status]");
+		const errorEl = dialog.querySelector("[data-video-error]");
+		const confirm = dialog.querySelector("[data-video-confirm]");
+		const cancel = dialog.querySelector("[data-video-cancel]");
+		const view = dialog.querySelector("[data-video-view]");
+		if (statusEl) statusEl.textContent = status || "";
+		if (errorEl) { errorEl.textContent = error || ""; errorEl.hidden = !error; }
+		if (confirm) { confirm.disabled = Boolean(busy); confirm.hidden = Boolean(postedUrl); confirm.textContent = error ? "Try again" : this._videoShareMode === "export" ? "Prepare video" : "Prepare and post"; }
+		if (cancel) { cancel.disabled = this._videoPosting; cancel.textContent = postedUrl ? "Close" : "Cancel"; }
+		if (view) { view.hidden = !postedUrl; view.textContent = this._videoShareMode === "export" ? "Open video" : "View on Vynly"; if (postedUrl) view.href = postedUrl; }
+	}
+
+	async prepareVideoShare() {
+		const creationId = Number(this._creationId);
+		if (!Number.isFinite(creationId) || creationId <= 0) return;
+		const flow = ++this._videoFlowId;
+		const current = () => flow === this._videoFlowId && this.videoDialog?.open;
+		const request = async (url, options) => {
+			const res = await fetch(url, { credentials: "include", ...options });
+			const data = await res.json().catch(() => null);
+			if (!res.ok) throw new Error(String(data?.error || data?.message || "Video share failed"));
+			return data;
+		};
+		try {
+			this.setVideoDialogState({ status: "Preparing your watermarked video…", error: "", busy: true });
+			const started = await request(`/api/create/images/${creationId}/watermarked-video/prepare`, { method: "POST" });
+			if (!current()) return;
+			const jobId = String(started?.id || "");
+			if (!jobId) throw new Error("Video preparation did not start");
+			const deadline = Date.now() + 5 * 60_000;
+			for (;;) {
+				if (!current()) return;
+				const job = await request(`/api/create/watermarked-video/${encodeURIComponent(jobId)}`);
+				if (!current()) return;
+				if (job?.status === "ready") {
+					if (this._videoShareMode === "export") {
+						const url = new URL(String(job.url || ""));
+						const allowedHost = (url.protocol === "https:" && ["sh.parascene.com", "beta-sh.parascene.com"].includes(url.hostname)) ||
+							(url.protocol === "http:" && url.hostname === window.location.hostname && ["localhost", "127.0.0.1"].includes(url.hostname));
+						if (!allowedHost || !url.pathname.startsWith("/api/share/watermarked-video/")) throw new Error("Watermarked video link is unavailable");
+						this.setVideoDialogState({ status: "Your watermarked video is ready. This temporary link expires automatically.", error: "", busy: false, postedUrl: url.href });
+						return;
+					}
+					break;
+				}
+				if (job?.status === "failed") throw new Error(String(job.error || "Could not prepare this video"));
+				if (Date.now() > deadline) throw new Error("Video preparation took too long. Please try again.");
+				await new Promise((resolve) => setTimeout(resolve, 1500));
+			}
+			this._videoPosting = true;
+			this.setVideoDialogState({ status: "Posting to Vynly…", error: "", busy: true });
+			const data = await request("/api/vynly/share-from-creation", {
+				method: "POST", headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ creationId, preparedVideoId: jobId })
+			});
+			if (!current()) return;
+			let postedUrl = "https://vynly.co/";
+			try {
+				const url = new URL(String(data?.openUrl || ""));
+				if (url.protocol === "https:" && url.hostname === "vynly.co") postedUrl = url.href;
+			} catch { /* keep Vynly home */ }
+			this.setVideoDialogState({ status: "Your watermarked video is live on Vynly.", error: "", busy: false, postedUrl });
+		} catch (err) {
+			if (current()) this.setVideoDialogState({ status: "", error: err?.message || "Vynly share failed", busy: false });
+		} finally {
+			this._videoPosting = false;
+			const cancel = this.videoDialog?.querySelector("[data-video-cancel]");
+			if (cancel) cancel.disabled = false;
+		}
 	}
 
 	async handleFacebook(buttonEl) {

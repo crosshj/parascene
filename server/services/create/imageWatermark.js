@@ -25,7 +25,7 @@ async function rasterizeWatermarkLogo(w, h, opts = {}) {
 	// Always read from disk so edits to watermark.svg apply without restarting the server.
 	const svgRaw = await readFile(WATERMARK_SVG_PATH, "utf8");
 	const fillColor = darkVariant ? DARK_WATERMARK_FILL : LIGHT_WATERMARK_FILL;
-	const svgText = svgRaw.replace(/fill="#[0-9a-fA-F]{3,8}"/u, `fill="${fillColor}"`);
+	const svgText = svgRaw.replaceAll('fill="#ffffff"', `fill="${fillColor}"`);
 	const svgBuf = Buffer.from(svgText, "utf8");
 	const aspect = WATERMARK_VIEW_W / WATERMARK_VIEW_H;
 	const minSide = Math.min(w, h);
@@ -96,13 +96,14 @@ async function samplePlacementLuminance(baseBuffer, imgW, imgH, left, top, regio
 }
 
 /**
- * Bottom-right logo from `watermark.svg` for Vynly share exports.
+ * Bottom-right logo from `watermark.svg` for share exports.
  * Returns original buffer on sharp failure (caller still uploads).
  *
  * @param {Buffer} buffer
+ * @param {{ maxBytes?: number }} [options]
  * @returns {Promise<{ buffer: Buffer, contentType: string | null, filenameSuffix: string | null }>}
  */
-export async function applyVynlyShareWatermark(buffer) {
+export async function applyImageWatermark(buffer, options = {}) {
 	if (!buffer || !Buffer.isBuffer(buffer)) {
 		return { buffer, contentType: null, filenameSuffix: null };
 	}
@@ -123,7 +124,7 @@ export async function applyVynlyShareWatermark(buffer) {
 
 	const w = Math.max(1, meta.width || 1);
 	const h = Math.max(1, meta.height || 1);
-	const maxBytes = 4 * 1024 * 1024;
+	const maxBytes = Number.isFinite(options.maxBytes) && options.maxBytes > 0 ? options.maxBytes : Infinity;
 
 	let logo;
 	try {
@@ -166,9 +167,7 @@ export async function applyVynlyShareWatermark(buffer) {
 		}
 
 		if (out.length > maxBytes) {
-			const e = new Error(
-				"Watermarked image exceeds the 4 MB Vynly upload limit. Use a smaller source image."
-			);
+			const e = new Error("Watermarked image exceeds the output size limit. Use a smaller source image.");
 			e.status = 413;
 			throw e;
 		}
