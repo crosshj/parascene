@@ -12,6 +12,7 @@ concurrency:
 
 jobs:
   deploy:
+    name: Deploy to Prod
     runs-on: ubuntu-latest
     concurrency:
       group: deploy-vps-queue
