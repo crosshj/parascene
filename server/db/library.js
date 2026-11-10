@@ -3,6 +3,24 @@ function prefixedTable(name) { return `prsn_${name}`; }
 export function createLibraryQueries(client) {
 const serviceClient = client; const supabase = client;
 return {
+getLibraryFoldersSnapshot: {
+	get: async (userId) => {
+		const { data, error } = await serviceClient.rpc("prsn_library_folders_get_snapshot", { p_user_id: Number(userId) });
+		if (error) throw error;
+		return data ?? { ok: true, revision: 0, folders: [] };
+	}
+},
+mutateLibraryFolders: {
+	run: async (userId, baseRevision, operations) => {
+		const { data, error } = await serviceClient.rpc("prsn_library_folders_mutate", {
+			p_user_id: Number(userId),
+			p_base_revision: Number(baseRevision),
+			p_operations: operations
+		});
+		if (error) throw error;
+		return data ?? { ok: false, error: "validation", message: "empty mutate response" };
+	}
+},
 selectUserProfilesByUserIds: async (userIds) => {
 			const idList = Array.isArray(userIds) ? userIds.filter((id) => id != null && Number.isFinite(Number(id))) : [];
 			if (idList.length === 0) return new Map();

@@ -34,7 +34,8 @@ import { creationMethodIsAudio, resolveVoiceFileForProvider } from "../services/
 
 import { getSupabaseServiceClient } from "../services/create/supabaseService.js";
 import { verifyQStashRequest } from "../services/create/qstashVerification.js";
-import { creationIdFromParasceneVideoUrl, resolveCreatedImageRowForProviderImageUrl } from "../services/create/resolveCreatedImageStorageFilename.js";
+import { creationIdFromParasceneVideoUrl, resolveCreatedImageRowForProviderImageUrl, resolveCreatedImageStorageFilename } from "../services/create/resolveCreatedImageStorageFilename.js";
+import { shouldGenerateFitThumbnail } from "../services/create/fitThumbnail.js";
 
 import { mapCreatedImageRowMediaFields } from "../services/create/resolveCreationDisplayMedia.js";
 import { applyCostumeToCreationPayload, costumeProjectV2Meta, groupActionSupportedForMeta, isGroupV2Meta, isHiddenInGroupMeta, wantsRawGroupV2 } from "../services/create/projectGroupV2.js";
@@ -161,6 +162,38 @@ function coverFailure(res, err, fallback) {
 
 export default function createCreateRoutes({ queries, storage, canUseServer }) {
 const router = express.Router();
+router.post('/api/create/images/:id/fit-thumbnail', async (req, res, next) => {
+	try {
+		if (!req.auth?.userId) return res.status(401).json({ error: 'Unauthorized' });
+		const id = Number(req.params.id);
+		if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ error: 'Invalid creation id' });
+		const row = await queries.selectCreatedImageById.get(id, req.auth.userId);
+		if (!row) return res.status(404).json({ error: 'Image not found' });
+		const filename = resolveCreatedImageStorageFilename(row);
+		if (!filename) return res.status(400).json({ error: 'No storage filename for creation' });
+		const raw = typeof req.body?.image_base64 === 'string' ? req.body.image_base64.trim() : '';
+		let fromClient = Boolean(raw);
+		let source;
+		if (fromClient) {
+			const encoded = raw.replace(/^data:image\/[a-zA-Z0-9+.-]+;base64,/, '');
+			if (!/^[A-Za-z0-9+/]*={0,2}$/.test(encoded) || !encoded || encoded.length > 12 * 1024 * 1024) {
+				return res.status(400).json({ error: 'Invalid image_base64' });
+			}
+			source = Buffer.from(encoded, 'base64');
+			if (!source.length || source.length > 8 * 1024 * 1024) return res.status(400).json({ error: 'Image too large' });
+		} else {
+			source = await storage.getImageBuffer(filename, { throwIfMissing: true });
+		}
+		const { width, height } = await sharp(source, { failOn: 'none' }).metadata();
+		if (!width || !height) return res.status(400).json({ error: 'Invalid image' });
+		if (!shouldGenerateFitThumbnail(width, height)) {
+			if (fromClient) return res.status(400).json({ error: 'Uploaded fit thumbnail is square; expected native aspect' });
+			return res.json({ ok: true, skipped: true, reason: 'square', id });
+		}
+		await storage.uploadFitThumbnail(source, filename);
+		return res.json({ ok: true, id, filename, from_client: fromClient, width, height });
+	} catch (error) { next(error); }
+});
  router.use('/api/create', asyncRoute(async (req, res, next) => {
   res.setHeader('Cache-Control', 'private, no-store');
   if (req.method === 'POST' && ['/', '/query', '/preview'].includes(req.path) && req.body?.server_id) {
