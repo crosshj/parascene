@@ -167,6 +167,40 @@ export default function createVynlyRoutes({ queries, storage, watermarkedVideoCa
 		}
 	});
 
+	router.delete("/api/vynly/creations/:creationId/posts", async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+		const creationId = Number(req.params.creationId);
+		if (!Number.isSafeInteger(creationId) || creationId <= 0) return res.status(400).json({ error: "Invalid creationId" });
+		const rawUrl = typeof req.body?.url === "string" ? req.body.url : "";
+		let postUrl;
+		try {
+			const url = new URL(rawUrl);
+			if (url.protocol !== "https:" || url.hostname !== "vynly.co" || !/^\/p\/[^/]+\/?$/.test(url.pathname)) throw new Error("invalid");
+			postUrl = url.href;
+		} catch {
+			return res.status(400).json({ error: "Invalid Vynly post URL" });
+		}
+		try {
+			const image = await queries.selectCreatedImageById?.get(creationId, user.id);
+			if (!image) return res.status(404).json({ error: "Creation not found" });
+			const meta = image.meta && typeof image.meta === "object" && !Array.isArray(image.meta)
+				? { ...image.meta }
+				: typeof image.meta === "string" ? (() => { try { const value = JSON.parse(image.meta); return value && typeof value === "object" && !Array.isArray(value) ? value : {}; } catch { return {}; } })() : {};
+			const vynly = meta.vynly && typeof meta.vynly === "object" && !Array.isArray(meta.vynly) ? { ...meta.vynly } : {};
+			const posts = Array.isArray(vynly.posts) ? vynly.posts.filter((post) => post && post.url !== postUrl) : [];
+			if (posts.length) vynly.posts = posts;
+			else delete vynly.posts;
+			if (Object.keys(vynly).length) meta.vynly = vynly;
+			else delete meta.vynly;
+			if (typeof queries.updateCreatedImageMeta?.run !== "function") return res.status(503).json({ error: "Creation metadata is unavailable" });
+			await queries.updateCreatedImageMeta.run(creationId, user.id, meta);
+			return res.json({ ok: true });
+		} catch (err) {
+			return sendRouteError(res, err);
+		}
+	});
+
 
 	router.post("/api/vynly/share-from-creation", async (req, res) => {
 		const user = await requireUser(req, res);

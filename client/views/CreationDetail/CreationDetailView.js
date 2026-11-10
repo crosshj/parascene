@@ -5446,7 +5446,7 @@ async function loadCreation() {
 			: [];
 		const vynlyPostHtml = vynlyPosts.length
 			? '<section class="creation-detail-vynly-posts" aria-label="Vynly posts"><span class="creation-detail-vynly-posts-label">On Vynly</span>' +
-				vynlyPosts.map((url) => '<a href="' + escapeHtml(url) + '" target="_blank" rel="noopener noreferrer">View post</a>').join('') +
+				vynlyPosts.map((url) => '<div class="creation-detail-vynly-post" data-vynly-post><a href="' + escapeHtml(url) + '" target="_blank" rel="noopener noreferrer">View post</a><button type="button" data-remove-vynly-post data-vynly-url="' + escapeHtml(url) + '" aria-label="Remove Vynly post link" title="Remove link">×</button></div>').join('') +
 				'</section>'
 			: '';
 
@@ -6123,6 +6123,32 @@ async function loadCreation() {
 				e.preventDefault();
 				e.stopPropagation();
 				await copyTextToClipboard(promptText);
+			});
+		}
+		for (const removeButton of detailContent.querySelectorAll('[data-remove-vynly-post]')) {
+			removeButton.addEventListener('click', async (event) => {
+				event.preventDefault();
+				event.stopPropagation();
+				const url = removeButton.dataset.vynlyUrl || '';
+				if (!window.confirm('Remove this Vynly link from the creation? This will not delete the post on Vynly.')) return;
+				removeButton.disabled = true;
+				try {
+					const response = await fetch('/api/vynly/creations/' + encodeURIComponent(creation.id) + '/posts', {
+						method: 'DELETE',
+						credentials: 'include',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ url })
+					});
+					const data = await response.json().catch(() => null);
+					if (!response.ok) throw new Error(String(data?.error || 'Could not remove the Vynly link'));
+					const row = removeButton.closest('[data-vynly-post]');
+					const section = removeButton.closest('.creation-detail-vynly-posts');
+					row?.remove();
+					if (section && !section.querySelector('[data-vynly-post]')) section.remove();
+				} catch (error) {
+					window.alert(error?.message || 'Could not remove the Vynly link');
+					removeButton.disabled = false;
+				}
 			});
 		}
 		const copyAbcBtn = detailContent.querySelector('[data-copy-abc-btn]');
