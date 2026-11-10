@@ -103,7 +103,7 @@ test('share modal optional rows start hidden and toggle via hidden', async () =>
 		assert.equal(watermarked.hidden, false);
 		watermarked.click();
 		assert.equal(el.videoDialog.open, true);
-		assert.match(el.videoDialog.textContent, /Download video/);
+		assert.equal(el.videoDialog.querySelector('[data-video-title]').textContent, 'Download copy');
 		const calls = [];
 		globalThis.fetch = async (url, options = {}) => {
 			calls.push({ url, options });
@@ -115,7 +115,9 @@ test('share modal optional rows start hidden and toggle via hidden', async () =>
 		await el.prepareVideoShare();
 		assert.equal(calls.some(({ url }) => url === '/api/vynly/share-from-creation'), false);
 		assert.equal(el.videoDialog.querySelector('[data-video-view]').href, 'https://sh.parascene.com/api/share/watermarked-video/job-1');
-		assert.equal(el.videoDialog.querySelector('[data-video-download]').pathname, '/api/create/watermarked-video/job-1/download');
+		assert.equal(el.videoDialog.querySelector('[data-video-view]').hidden, false);
+		assert.equal(el.videoDialog.querySelector('[data-video-view]').textContent.trim(), 'Open');
+		assert.equal(el.videoDialog.querySelector('[data-video-download]'), null);
 		el.closeVideoDialog();
 		el.querySelector('[data-share-vynly]').click();
 		assert.match(el.videoDialog.querySelector('[data-video-message]').textContent, /prepare your video/i);
@@ -123,6 +125,9 @@ test('share modal optional rows start hidden and toggle via hidden', async () =>
 		await el.prepareVideoShare();
 		assert.equal(calls.at(-1).url, '/api/vynly/share-from-creation');
 		assert.equal(JSON.parse(calls.at(-1).options.body).preparedVideoId, 'job-1');
+		assert.equal(el.videoDialog.querySelector('[data-video-view]').href, 'https://vynly.co/p/example');
+		assert.equal(el.videoDialog.querySelector('[data-video-view]').hidden, false);
+		assert.equal(el.videoDialog.querySelector('[data-video-view]').textContent.trim(), 'View on Vynly');
 		el.close();
 		el.remove();
 	} finally {
