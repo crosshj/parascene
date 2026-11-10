@@ -11,12 +11,12 @@ function imageContentType(filename) {
 	return ({ ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif", ".avif": "image/avif" })[extension] || "image/png";
 }
 
-function sendImage(res, buffer, contentType, filename) {
+function sendImage(res, buffer, contentType, filename, download = false) {
 	res.set({
 		"Cache-Control": "private, no-store, max-age=0",
 		"Content-Type": contentType,
 		"Content-Length": String(buffer.length),
-		"Content-Disposition": `inline; filename="${filename}"`
+		"Content-Disposition": `${download ? "attachment" : "inline"}; filename="${filename}"`
 	});
 	return res.send(buffer);
 }
@@ -80,7 +80,21 @@ export default function createCreationExportRoutes({ queries, storage, watermark
 			const job = videoCache.get(req.params.jobId);
 			if (!job || job.userId !== Number(req.auth.userId)) return res.status(404).json({ error: "Preparation unavailable" });
 			return res.json({ status: job.status, error: job.error || undefined,
-				url: job.status === "ready" ? videoCache.preparedUrl(job.id, req.auth.userId, job.creationId) : undefined });
+				url: job.status === "ready" ? videoCache.preparedUrl(job.id, req.auth.userId, job.creationId) : undefined,
+				downloadUrl: job.status === "ready" ? `/api/create/watermarked-video/${encodeURIComponent(job.id)}/download` : undefined });
+		} catch (error) { return next(error); }
+	});
+
+	router.get("/api/create/watermarked-video/:jobId/download", async (req, res, next) => {
+		try {
+			if (!req.auth?.userId) return res.status(401).json({ error: "Unauthorized" });
+			await videoCache.init();
+			const job = videoCache.get(req.params.jobId);
+			if (!job || job.status !== "ready" || job.userId !== Number(req.auth.userId)) {
+				return res.status(404).json({ error: "Video unavailable" });
+			}
+			res.set("Cache-Control", "no-store");
+			return res.download(job.path, `parascene-${job.creationId}-watermarked.mp4`);
 		} catch (error) { return next(error); }
 	});
 
@@ -99,7 +113,7 @@ export default function createCreationExportRoutes({ queries, storage, watermark
 				const contentType = watermark?.contentType || imageContentType(resolved.filename);
 				const suffix = watermark?.filenameSuffix || ({ "image/jpeg": ".jpg", "image/webp": ".webp", "image/gif": ".gif" })[contentType] || ".png";
 				const name = `parascene-${resolved.id}${watermarked ? "-watermarked" : ""}${suffix}`;
-				return sendImage(res, buffer, contentType, name);
+				return sendImage(res, buffer, contentType, name, watermarked && req.query.download === "1");
 			} catch (error) {
 				return next(error);
 			}

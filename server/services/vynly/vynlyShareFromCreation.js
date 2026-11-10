@@ -186,7 +186,7 @@ export async function shareCreationToVynly(deps) {
 			const videoUrl = deps.videoCache.preparedUrl(options.preparedVideoId, user.id, image.id);
 			const prepared = deps.videoCache.get(options.preparedVideoId);
 			if (!prepared) {
-				const err = new Error("Watermarked video has expired. Please prepare it again.");
+				const err = new Error("Prepared video has expired. Please try again.");
 				err.status = 409;
 				throw err;
 			}

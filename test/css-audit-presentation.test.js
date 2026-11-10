@@ -84,38 +84,42 @@ test('share modal optional rows start hidden and toggle via hidden', async () =>
 		document.body.appendChild(el);
 		const vynly = el.querySelector('[data-share-vynly]');
 		const google = el.querySelector('[data-share-google-photos]');
-		const watermarkedVideo = el.querySelector('[data-open-watermarked-video]');
+		const watermarked = el.querySelector('[data-open-watermarked]');
 		assert.ok(vynly instanceof HTMLButtonElement);
 		assert.ok(google instanceof HTMLButtonElement);
 		assert.equal(vynly.hidden, true);
 		assert.equal(google.hidden, true);
-		assert.equal(watermarkedVideo.hidden, true);
+		assert.equal(watermarked.hidden, true);
+		assert.equal([...el.querySelectorAll('.share-action-title')].filter((node) => node.textContent === 'Download copy').length, 1);
 		await el.open(1, {
 			vynlyConfigured: true,
-			imageExportEligible: false,
+			imageExportEligible: true,
 		});
 		assert.equal(vynly.hidden, false);
 		assert.equal(google.hidden, true);
+		assert.equal(watermarked.hidden, false);
 		el.close();
 		await el.open(2, { vynlyConfigured: true, vynlyVideo: true, imageExportEligible: false });
-		assert.equal(watermarkedVideo.hidden, false);
-		assert.equal(el.querySelector('[data-open-watermarked]').hidden, true);
-		watermarkedVideo.click();
+		assert.equal(watermarked.hidden, false);
+		watermarked.click();
 		assert.equal(el.videoDialog.open, true);
-		assert.match(el.videoDialog.textContent, /Open watermarked video/);
+		assert.match(el.videoDialog.textContent, /Download video/);
 		const calls = [];
 		globalThis.fetch = async (url, options = {}) => {
 			calls.push({ url, options });
 			if (String(url).includes('/watermarked-video/prepare')) return new Response(JSON.stringify({ id: 'job-1' }), { status: 202 });
-			if (String(url).includes('/api/create/watermarked-video/')) return new Response(JSON.stringify({ status: 'ready', url: 'https://sh.parascene.com/api/share/watermarked-video/job-1' }));
+			if (String(url).includes('/api/create/watermarked-video/')) return new Response(JSON.stringify({ status: 'ready', url: 'https://sh.parascene.com/api/share/watermarked-video/job-1', downloadUrl: '/api/create/watermarked-video/job-1/download' }));
 			if (String(url) === '/api/vynly/share-from-creation') return new Response(JSON.stringify({ openUrl: 'https://vynly.co/p/example' }));
 			return new Response('{}', { status: 404 });
 		};
 		await el.prepareVideoShare();
 		assert.equal(calls.some(({ url }) => url === '/api/vynly/share-from-creation'), false);
 		assert.equal(el.videoDialog.querySelector('[data-video-view]').href, 'https://sh.parascene.com/api/share/watermarked-video/job-1');
+		assert.equal(el.videoDialog.querySelector('[data-video-download]').pathname, '/api/create/watermarked-video/job-1/download');
 		el.closeVideoDialog();
 		el.querySelector('[data-share-vynly]').click();
+		assert.match(el.videoDialog.querySelector('[data-video-message]').textContent, /prepare your video/i);
+		assert.doesNotMatch(el.videoDialog.querySelector('[data-video-message]').textContent, /watermark/i);
 		await el.prepareVideoShare();
 		assert.equal(calls.at(-1).url, '/api/vynly/share-from-creation');
 		assert.equal(JSON.parse(calls.at(-1).options.body).preparedVideoId, 'job-1');

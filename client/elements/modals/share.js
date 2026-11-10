@@ -55,6 +55,15 @@ function openShareUrl(url) {
 	}
 }
 
+function downloadShareUrl(url) {
+	const link = document.createElement("a");
+	link.href = url;
+	link.download = "";
+	document.body.appendChild(link);
+	link.click();
+	link.remove();
+}
+
 function buildSmsHref(body) {
 	const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent || "");
 	const sep = isIOS ? "&" : "?";
@@ -315,25 +324,15 @@ class AppModalShare extends HTMLElement {
 								<span class="share-action-cta" data-cta><span class="share-action-cta-label">Show</span></span>
 							</button>
 			
-							<button type="button" class="share-action-row" data-open-watermarked>
+							<button type="button" class="share-action-row" data-open-watermarked hidden>
 								<span class="share-action-left">
 									<span class="share-option-icon">${iconPicture}</span>
 									<span class="share-action-text">
-										<span class="share-action-title">Watermarked copy</span>
-										<span class="share-action-subtitle">Ready to share anywhere</span>
+										<span class="share-action-title">Download copy</span>
+										<span class="share-action-subtitle">Save and share anywhere</span>
 									</span>
 								</span>
-								<span class="share-action-cta" data-cta><span class="share-action-cta-label">Open</span></span>
-							</button>
-							<button type="button" class="share-action-row" data-open-watermarked-video hidden>
-								<span class="share-action-left">
-									<span class="share-option-icon">${iconPicture}</span>
-									<span class="share-action-text">
-										<span class="share-action-title">Watermarked copy</span>
-										<span class="share-action-subtitle">Ready to share anywhere</span>
-									</span>
-								</span>
-								<span class="share-action-cta" data-cta><span class="share-action-cta-label">Open</span></span>
+								<span class="share-action-cta" data-cta><span class="share-action-cta-label">Download</span></span>
 							</button>
 
 							<button type="button" class="share-action-row" data-copy-link>
@@ -361,13 +360,14 @@ class AppModalShare extends HTMLElement {
 			<dialog class="app-dialog share-video-dialog" data-video-overlay aria-labelledby="share-video-title">
 				<header class="app-dialog__header"><h2 id="share-video-title" class="app-dialog__title" data-video-title>Prepare video</h2></header>
 				<div class="app-dialog__body share-video-body">
-					<p data-video-message>We’ll add the Parascene watermark to a share copy, then post it to Vynly. Your original video stays as it is.</p>
+					<p data-video-message>We’ll prepare your video and post it to Vynly. This may take a moment.</p>
 					<p class="share-video-status" data-video-status role="status" aria-live="polite"></p>
 					<p class="share-video-error" data-video-error role="alert" hidden></p>
 					<div class="share-video-actions">
 						<button type="button" class="btn-secondary" data-video-cancel>Cancel</button>
 						<button type="button" class="btn-primary" data-video-confirm>Prepare and post</button>
 						<a class="btn-primary" data-video-view href="#" target="_blank" rel="noopener noreferrer" hidden>Open video</a>
+						<a class="btn-primary" data-video-download href="#" hidden>Download video</a>
 					</div>
 				</div>
 			</dialog>
@@ -401,7 +401,6 @@ class AppModalShare extends HTMLElement {
 		const cancelBtn = this.querySelector("[data-cancel]");
 		const copyBtn = this.querySelector("[data-copy-link]");
 		const openWatermarkedBtn = this.querySelector("[data-open-watermarked]");
-		const openWatermarkedVideoBtn = this.querySelector("[data-open-watermarked-video]");
 		const qrBtn = this.querySelector("[data-qr-code]");
 		const nativeBtn = this.querySelector("[data-native-share]");
 		const shareImageFileBtn = this.querySelector("[data-share-image-file]");
@@ -424,8 +423,10 @@ class AppModalShare extends HTMLElement {
 		if (cancelBtn) cancelBtn.addEventListener("click", () => this.close());
 
 		if (copyBtn) copyBtn.addEventListener("click", (e) => void this.handleCopy(e.currentTarget));
-		if (openWatermarkedBtn) openWatermarkedBtn.addEventListener("click", (e) => void this.handleOpenWatermarked(e.currentTarget));
-		if (openWatermarkedVideoBtn) openWatermarkedVideoBtn.addEventListener("click", () => this.openVideoDialog("export"));
+		if (openWatermarkedBtn) openWatermarkedBtn.addEventListener("click", (e) => {
+			if (this._vynlyVideo) this.openVideoDialog("export");
+			else void this.handleDownloadCopy(e.currentTarget);
+		});
 		if (qrBtn) qrBtn.addEventListener("click", (e) => void this.handleQrCode(e.currentTarget));
 		if (nativeBtn) nativeBtn.addEventListener("click", (e) => void this.handleNativeShare(e.currentTarget));
 		if (shareImageFileBtn) {
@@ -498,11 +499,9 @@ class AppModalShare extends HTMLElement {
 		const openGen = this._openRequestId;
 		this._vynlyShareEligible = options.vynlyShareEligible !== false;
 		this._vynlyVideo = options.vynlyVideo === true;
-		const watermarkedVideoRow = this.querySelector("[data-open-watermarked-video]");
-		if (watermarkedVideoRow) watermarkedVideoRow.hidden = !this._vynlyVideo;
 		this._imageExportEligible = options.imageExportEligible === true;
-		const watermarkedImageRow = this.querySelector("[data-open-watermarked]");
-		if (watermarkedImageRow) watermarkedImageRow.hidden = !this._imageExportEligible;
+		const watermarkedRow = this.querySelector("[data-open-watermarked]");
+		if (watermarkedRow) watermarkedRow.hidden = !(this._imageExportEligible || this._vynlyVideo);
 		this._isGroupCreation = options.isGroupCreation === true;
 		this.resetAllCtas();
 
@@ -561,7 +560,6 @@ class AppModalShare extends HTMLElement {
 		for (const selector of [
 			"[data-share-image-file]",
 			"[data-open-watermarked]",
-			"[data-open-watermarked-video]",
 			"[data-share-google-photos]",
 			"[data-share-vynly]"
 		]) {
@@ -813,14 +811,14 @@ class AppModalShare extends HTMLElement {
 		}, { successLabel: "Copied", errorLabel: "Copy failed", resetMs: 1600 });
 	}
 
-	async handleOpenWatermarked(buttonEl) {
+	async handleDownloadCopy(buttonEl) {
 		await this.runCtaAction(buttonEl, async () => {
 			const creationId = Number(this._creationId);
 			if (!Number.isFinite(creationId) || creationId <= 0) {
 				throw new Error("Invalid creation");
 			}
-			openShareUrl(`/api/create/images/${creationId}/watermarked`);
-		}, { successLabel: "Opened", errorLabel: "Failed", resetMs: 1200 });
+			downloadShareUrl(`/api/create/images/${creationId}/watermarked?download=1`);
+		}, { successLabel: "Downloading", errorLabel: "Failed", resetMs: 1200 });
 	}
 
 	async handleNativeShare(buttonEl) {
@@ -966,11 +964,7 @@ class AppModalShare extends HTMLElement {
 						(data && (data.error || data.message)) ? String(data.error || data.message) : "Vynly share failed"
 					);
 				}
-				const openUrl =
-					data && typeof data.openUrl === "string" && data.openUrl.trim()
-						? data.openUrl.trim()
-						: "https://vynly.co/";
-				openShareUrl(openUrl);
+				if (typeof data?.openUrl === "string" && data.openUrl.trim()) openShareUrl(data.openUrl.trim());
 			},
 			{ successLabel: "Posted", errorLabel: "Failed", resetMs: 1600 }
 		);
@@ -984,11 +978,11 @@ class AppModalShare extends HTMLElement {
 		this._videoPosting = false;
 		this.setVideoDialogState({ status: "", error: "", busy: false });
 		const title = dialog.querySelector("[data-video-title]");
-		if (title) title.textContent = mode === "export" ? "Open watermarked video" : "Post video to Vynly";
+		if (title) title.textContent = mode === "export" ? "Download video" : "Post video to Vynly";
 		const message = dialog.querySelector("[data-video-message]");
 		if (message) message.textContent = mode === "export"
-			? "We’ll prepare a watermarked share copy. Your original video stays as it is."
-			: "We’ll add the Parascene watermark to a share copy, then post it to Vynly. Your original video stays as it is.";
+			? "We’ll prepare a copy you can download and share."
+			: "We’ll prepare your video and post it to Vynly. This may take a moment.";
 		if (!dialog.open && typeof dialog.showModal === "function") dialog.showModal();
 	}
 
@@ -999,7 +993,7 @@ class AppModalShare extends HTMLElement {
 		if (dialog?.open) dialog.close();
 	}
 
-	setVideoDialogState({ status, error, busy, postedUrl }) {
+	setVideoDialogState({ status, error, busy, postedUrl, downloadUrl, posted = false }) {
 		const dialog = this.videoDialog;
 		if (!dialog) return;
 		dialog.toggleAttribute("data-busy", Boolean(busy));
@@ -1008,11 +1002,13 @@ class AppModalShare extends HTMLElement {
 		const confirm = dialog.querySelector("[data-video-confirm]");
 		const cancel = dialog.querySelector("[data-video-cancel]");
 		const view = dialog.querySelector("[data-video-view]");
+		const download = dialog.querySelector("[data-video-download]");
 		if (statusEl) statusEl.textContent = status || "";
 		if (errorEl) { errorEl.textContent = error || ""; errorEl.hidden = !error; }
-		if (confirm) { confirm.disabled = Boolean(busy); confirm.hidden = Boolean(postedUrl); confirm.textContent = error ? "Try again" : this._videoShareMode === "export" ? "Prepare video" : "Prepare and post"; }
-		if (cancel) { cancel.disabled = this._videoPosting; cancel.textContent = postedUrl ? "Close" : "Cancel"; }
-		if (view) { view.hidden = !postedUrl; view.textContent = this._videoShareMode === "export" ? "Open video" : "View on Vynly"; if (postedUrl) view.href = postedUrl; }
+		if (confirm) { confirm.disabled = Boolean(busy); confirm.hidden = Boolean(postedUrl || downloadUrl || posted); confirm.textContent = error ? "Try again" : this._videoShareMode === "export" ? "Prepare download" : "Prepare and post"; }
+		if (cancel) { cancel.disabled = this._videoPosting; cancel.textContent = postedUrl || downloadUrl || posted ? "Close" : "Cancel"; }
+		if (view) { view.hidden = !postedUrl; view.textContent = this._videoShareMode === "export" ? "Preview video" : "View on Vynly"; if (postedUrl) view.href = postedUrl; }
+		if (download) { download.hidden = !downloadUrl; if (downloadUrl) download.href = downloadUrl; }
 	}
 
 	async prepareVideoShare() {
@@ -1027,7 +1023,7 @@ class AppModalShare extends HTMLElement {
 			return data;
 		};
 		try {
-			this.setVideoDialogState({ status: "Preparing your watermarked video…", error: "", busy: true });
+			this.setVideoDialogState({ status: "Preparing your video…", error: "", busy: true });
 			const started = await request(`/api/create/images/${creationId}/watermarked-video/prepare`, { method: "POST" });
 			if (!current()) return;
 			const jobId = String(started?.id || "");
@@ -1043,7 +1039,9 @@ class AppModalShare extends HTMLElement {
 						const allowedHost = (url.protocol === "https:" && ["sh.parascene.com", "beta-sh.parascene.com"].includes(url.hostname)) ||
 							(url.protocol === "http:" && url.hostname === window.location.hostname && ["localhost", "127.0.0.1"].includes(url.hostname));
 						if (!allowedHost || !url.pathname.startsWith("/api/share/watermarked-video/")) throw new Error("Watermarked video link is unavailable");
-						this.setVideoDialogState({ status: "Your watermarked video is ready. This temporary link expires automatically.", error: "", busy: false, postedUrl: url.href });
+						const downloadUrl = String(job.downloadUrl || "");
+						if (downloadUrl !== `/api/create/watermarked-video/${encodeURIComponent(jobId)}/download`) throw new Error("Video download is unavailable");
+						this.setVideoDialogState({ status: "Your video is ready. The preview link expires automatically.", error: "", busy: false, postedUrl: url.href, downloadUrl });
 						return;
 					}
 					break;
@@ -1059,12 +1057,12 @@ class AppModalShare extends HTMLElement {
 				body: JSON.stringify({ creationId, preparedVideoId: jobId })
 			});
 			if (!current()) return;
-			let postedUrl = "https://vynly.co/";
+			let postedUrl = null;
 			try {
 				const url = new URL(String(data?.openUrl || ""));
-				if (url.protocol === "https:" && url.hostname === "vynly.co") postedUrl = url.href;
-			} catch { /* keep Vynly home */ }
-			this.setVideoDialogState({ status: "Your watermarked video is live on Vynly.", error: "", busy: false, postedUrl });
+				if (url.protocol === "https:" && url.hostname === "vynly.co" && /^\/p\/[^/]+\/?$/.test(url.pathname)) postedUrl = url.href;
+			} catch { /* no direct post URL */ }
+			this.setVideoDialogState({ status: postedUrl ? "Your video is live on Vynly." : "Posted to Vynly. A direct post link was not returned.", error: "", busy: false, posted: true, postedUrl });
 		} catch (err) {
 			if (current()) this.setVideoDialogState({ status: "", error: err?.message || "Vynly share failed", busy: false });
 		} finally {

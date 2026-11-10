@@ -56,10 +56,12 @@ test('watermarked video is prepared, scoped to its sharer, and expires', async (
 		await recovered.init();
 		assert.equal(recovered.get(started.id)?.status, 'ready', 'prepared copy survives a server restart');
 		const app = express();
+		const stillImage = { id: 32, filename: '7_32.png', status: 'completed', meta: {} };
+		const stillPng = await sharp({ create: { width: 320, height: 240, channels: 3, background: '#888888' } }).png().toBuffer();
 		app.use((req, _res, next) => { if (req.headers['x-user-id']) req.auth = { userId: Number(req.headers['x-user-id']) }; next(); });
 		app.use(createCreationExportRoutes({
-			queries: { selectUserById: { get: async () => ({ id: 7 }) }, selectCreatedImageById: { get: async () => image } },
-			storage: { getVideoBuffer: async () => input }, watermarkedVideoCache: cache
+			queries: { selectUserById: { get: async () => ({ id: 7 }) }, selectCreatedImageById: { get: async (id) => Number(id) === 32 ? stillImage : image } },
+			storage: { getVideoBuffer: async () => input, getImageBuffer: async () => stillPng }, watermarkedVideoCache: cache
 		}));
 		const server = app.listen(0, '127.0.0.1');
 		await new Promise((resolve, reject) => { server.once('listening', resolve); server.once('error', reject); });
@@ -73,6 +75,16 @@ test('watermarked video is prepared, scoped to its sharer, and expires', async (
 			assert.equal((await fetch(`${base}/api/create/watermarked-video/${started.id}`)).status, 401);
 			const status = await (await fetch(`${base}/api/create/watermarked-video/${started.id}`, { headers: { 'x-user-id': '7' } })).json();
 			assert.equal(status.status, 'ready');
+			assert.equal(status.downloadUrl, `/api/create/watermarked-video/${started.id}/download`);
+			assert.equal((await fetch(`${base}${status.downloadUrl}`)).status, 401);
+			const videoDownload = await fetch(`${base}${status.downloadUrl}`, { headers: { 'x-user-id': '7' } });
+			assert.equal(videoDownload.status, 200);
+			assert.match(videoDownload.headers.get('content-disposition') || '', /^attachment;.*\.mp4/i);
+			await videoDownload.arrayBuffer();
+			const imageDownload = await fetch(`${base}/api/create/images/32/watermarked?download=1`, { headers: { 'x-user-id': '7' } });
+			assert.equal(imageDownload.status, 200);
+			assert.match(imageDownload.headers.get('content-disposition') || '', /^attachment;.*\.(png|jpg)/i);
+			await imageDownload.arrayBuffer();
 			const publicPath = new URL(status.url).pathname;
 			const media = await fetch(`${base}${publicPath}`, { headers: { Range: 'bytes=0-99' } });
 			assert.equal(media.status, 206);

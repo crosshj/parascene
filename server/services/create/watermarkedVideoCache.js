@@ -43,7 +43,7 @@ async function renderWatermarkedVideo(input, output, logoPath) {
 	const video = probe.streams?.find((stream) => stream.codec_type === "video");
 	const duration = Number(probe.format?.duration || video?.duration);
 	if (!video || !Number.isFinite(duration) || duration <= 0) throw publicError("Could not inspect this video");
-	if (duration > MAX_DURATION_SECONDS) throw publicError("Watermarked video exports support clips up to five minutes");
+	if (duration > MAX_DURATION_SECONDS) throw publicError("Video export supports clips up to five minutes");
 	const sourceW = Number(video.width);
 	const sourceH = Number(video.height);
 	if (!(sourceW > 0 && sourceH > 0)) throw publicError("Could not inspect this video");
@@ -63,10 +63,10 @@ async function renderWatermarkedVideo(input, output, logoPath) {
 			"-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", output
 		], 5 * 60_000);
 	} catch {
-		throw publicError("Could not prepare a watermarked video", 502);
+		throw publicError("Could not prepare this video", 502);
 	}
 	const result = await stat(output);
-	if (!result.size || result.size > MAX_VIDEO_BYTES) throw publicError("Watermarked video exceeds the export size limit", 413);
+	if (!result.size || result.size > MAX_VIDEO_BYTES) throw publicError("Video export exceeds the size limit", 413);
 	return { duration, outputBytes: result.size };
 }
 
@@ -186,7 +186,7 @@ export function createWatermarkedVideoCache({ storage, now = () => Date.now(), c
 	function preparedUrl(id, userId, creationId) {
 		const job = get(id);
 		if (!job || job.userId !== Number(userId) || job.creationId !== Number(creationId) || job.status !== "ready") {
-			throw publicError("Watermarked video is not ready. Please prepare it again.", 409);
+			throw publicError("Prepared video is not ready. Please try again.", 409);
 		}
 		return `${publicOrigin}/api/share/watermarked-video/${encodeURIComponent(job.id)}`;
 	}

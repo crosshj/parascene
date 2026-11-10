@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import express from 'express';
-import createVynlyRoutes from '../server/routes/vynly.js';
+import createVynlyRoutes, { vynlyPostUrl } from '../server/routes/vynly.js';
 import { createVynlyClient, VynlyApiError } from '../server/services/vynly/vynlyClient.js';
 import { getVynlyBearerToken, isVynlyConfiguredForUser } from '../server/services/vynly/vynlyAuth.js';
 import {
@@ -36,6 +36,13 @@ test('vynlyAuth reads token from user meta only', () => {
 	assert.equal(isVynlyConfiguredForUser({ id: 1, meta: {} }), false);
 	assert.equal(isVynlyConfiguredForUser({ id: 1, meta: { vynlyBearerToken: '  abc  ' } }), true);
 	assert.equal(getVynlyBearerToken({ user: { meta: { vynlyBearerToken: '  abc  ' } } }), 'abc');
+});
+
+test('Vynly post links use the public /p/:id route', () => {
+	assert.equal(vynlyPostUrl({ id: 'mwa4yjsf8yyhwf' }), 'https://vynly.co/p/mwa4yjsf8yyhwf');
+	assert.equal(vynlyPostUrl({ id: 'mwa4yjsf8yyhwf', url: 'https://vynly.co/?post=mwa4yjsf8yyhwf' }), 'https://vynly.co/p/mwa4yjsf8yyhwf');
+	assert.equal(vynlyPostUrl({ url: 'https://vynly.co/p/abc123' }), 'https://vynly.co/p/abc123');
+	assert.equal(vynlyPostUrl({ url: 'https://vynly.co/' }), null);
 });
 
 test('normalizeDeclaredSource and creationRowIsVideo', () => {
