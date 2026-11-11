@@ -274,6 +274,11 @@ if [[ "${1:-}" == "remote" ]]; then
 	install -d -m 755 "$STAGING_DIR"
 	tar -xzf "$PACKAGE_PATH" -C "$STAGING_DIR"
 	rm -f "$PACKAGE_PATH"
+	# Held across the image build so a cleanup started by the previous deploy
+	# cannot delete layers this build is still using.
+	DOCKER_LOCK="/tmp/parascene-docker.lock"
+	exec 9>"$DOCKER_LOCK"
+	flock 9
 	docker build --tag "$IMAGE_TAG" "$STAGING_DIR"
 
 	# Replace the on-disk deployment only after the new image builds successfully.
@@ -304,12 +309,14 @@ if [[ "${1:-}" == "remote" ]]; then
 
 	# Verify the public nginx-to-Docker path. Keep retrying while the container starts.
 	# Prod serves the site, CDN and canonical share host; API remains on Vercel.
+	deploy_healthy=0
 	for attempt in {1..30}; do
 		if [[ "$DEPLOY_ENV" == "prod" ]]; then
 			if https_ok "$SITE_HOST" / && \
 				https_ok "$CDN_HOSTNAME" /healthz && \
 				https_ok "sh.parascene.com" /; then
-				exit 0
+				deploy_healthy=1
+				break
 			fi
 		else
 			api_status="$(https_status "$API_TEST_HOSTNAME" /)"
@@ -317,11 +324,25 @@ if [[ "${1:-}" == "remote" ]]; then
 			if https_ok "$SITE_HOST" / && \
 				https_ok "$CDN_TEST_HOSTNAME" /healthz && \
 				[[ "$api_status" == "302" && "$share_status" == "302" ]]; then
-				exit 0
+				deploy_healthy=1
+				break
 			fi
 		fi
 		sleep 2
 	done
+	if [[ "$deploy_healthy" == "1" ]]; then
+		# Stopped containers and unused images are leftover builds. A running
+		# container keeps its image, so the other slot stays in place. Detach
+		# the prune so this deploy can finish; the lock makes the next build wait.
+		echo "Starting Docker cleanup in the background"
+		# Release this deploy's lock first. The cleanup takes it again, so a
+		# following build waits instead of deleting layers it is still using.
+		exec 9>&-
+		setsid nohup flock "$DOCKER_LOCK" \
+			bash -c 'docker container prune -f; docker image prune -af' \
+			>/tmp/parascene-docker-prune.log 2>&1 </dev/null &
+		exit 0
+	fi
 	docker ps -a --filter "name=${CONTAINER_NAME}"
 	docker logs --tail=200 "$CONTAINER_NAME"
 	exit 1
