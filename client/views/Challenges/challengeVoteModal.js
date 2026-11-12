@@ -411,23 +411,13 @@ export function createChallengeVoteModal(opts) {
 		}
 
 		if (mediaType === 'video' && videoUrl) {
-			const poster = (thumb || url).trim();
-			if (poster) {
-				const posterImg = new Image();
-				posterImg.decoding = 'async';
-				posterImg.src = poster;
-				prefetchKeepAlive.push(posterImg);
-			}
-			const warmVid = document.createElement('video');
-			warmVid.preload = 'auto';
-			warmVid.muted = true;
-			warmVid.src = videoUrl;
-			try {
-				warmVid.load();
-			} catch {
-				// ignore
-			}
-			prefetchKeepAlive.push(warmVid);
+			/* Warm the still only. A hidden video here would download the file for slides the viewer is not on. */
+			const poster = voteVideoPosterUrl(c);
+			if (!poster) return;
+			const posterImg = new Image();
+			posterImg.decoding = 'async';
+			posterImg.src = poster;
+			prefetchKeepAlive.push(posterImg);
 			trimPrefetchKeepAlive();
 			return;
 		}
@@ -470,15 +460,17 @@ export function createChallengeVoteModal(opts) {
 		return overlay?.querySelector(sel) ?? null;
 	}
 
-	function wireVoteModalVideoTap(stage) {
-		const v = stage.querySelector('video.challenge-vote-modal-video');
-		if (!(v instanceof HTMLVideoElement)) return;
-		const onClick = (e) => {
-			e.stopPropagation();
-			if (v.paused) void v.play().catch(() => {});
-			else v.pause();
-		};
-		v.addEventListener('click', onClick);
+	/**
+	 * First-frame still for a video entry. Prefer the server frame over the grid thumbnail.
+	 * @param {object | null | undefined} c
+	 * @returns {string}
+	 */
+	function voteVideoPosterUrl(c) {
+		const frame = typeof c?.video_thumbnail_url === 'string' ? c.video_thumbnail_url.trim() : '';
+		if (frame) return frame;
+		const thumb = typeof c?.thumbnail_url === 'string' ? c.thumbnail_url.trim() : '';
+		const url = typeof c?.url === 'string' ? c.url.trim() : '';
+		return thumb || url;
 	}
 
 	/** @param {HTMLElement} stage */
@@ -596,10 +588,9 @@ export function createChallengeVoteModal(opts) {
 		}
 
 		if (mediaType === 'video' && videoUrl) {
-			const poster = thumb || url ? escAttr(thumb || url) : '';
-			/* No native `controls` — they capture vertical touch before our swipe-to-next handler runs. */
-			stage.innerHTML = `<video class="challenge-vote-modal-video" playsinline preload="metadata" title="Tap to play or pause"${poster ? ` poster="${poster}"` : ''} src="${escAttr(videoUrl)}"${idAttr}></video>`;
-			wireVoteModalVideoTap(stage);
+			const posterRaw = voteVideoPosterUrl(c);
+			const poster = posterRaw ? escAttr(posterRaw) : '';
+			stage.innerHTML = `<video class="challenge-vote-modal-video" controls playsinline preload="metadata"${poster ? ` poster="${poster}"` : ''} src="${escAttr(videoUrl)}"${idAttr}></video>`;
 			lastVoteMediaCreationId = cid;
 			return;
 		}
@@ -837,6 +828,8 @@ export function createChallengeVoteModal(opts) {
 		if (vid instanceof HTMLVideoElement) {
 			try {
 				vid.pause();
+				vid.removeAttribute('src');
+				vid.load();
 			} catch {
 				// ignore
 			}
