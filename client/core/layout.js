@@ -388,7 +388,8 @@ export function createLayout({ root, views, services } = {}) {
 		if (name === 'overlay') host.scrollTop = 0;
 		const record = { key: descriptor.key, handle: null, active: true };
 		mounted[name] = record;
-		const restored = name === 'overlay' ? overlayRestoreStates.get(descriptor.key) : null;
+		const restoreOverlayScroll = name === 'overlay' && descriptor.key !== 'overlay:/create:';
+		const restored = restoreOverlayScroll ? overlayRestoreStates.get(descriptor.key) : null;
 		const result = descriptor.view.mount({
 			outlet: host,
 			restoreState: restored?.state,

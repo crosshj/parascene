@@ -569,6 +569,26 @@
 	touch-action: none;
 }
 
+.challenge-vote-modal-media-stage:has(.challenge-vote-modal-video) {
+	position: relative;
+	align-self: stretch;
+	width: 100%;
+	height: 100%;
+}
+
+.challenge-vote-modal-video {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	max-width: none;
+	max-height: none;
+	object-fit: contain;
+	background: #000;
+	border-radius: 0;
+	touch-action: auto;
+}
+
 .challenge-vote-modal-media--suno {
 	background: #0b1220;
 }
