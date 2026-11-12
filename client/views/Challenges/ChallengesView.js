@@ -80,7 +80,9 @@ export const ChallengesView = Object.freeze({
    status.textContent = blocked ? `Vote not saved: ${blocked.error}. Your selection is kept.`
     : pending.length ? `${pending.length} vote${pending.length === 1 ? '' : 's'} waiting to save${threads.votes.durable ? '.' : ' — keep this tab open; browser storage is unavailable.'}`
     : failed ? 'Showing cached challenges. Refresh failed; try again.' : '';
-   status.hidden = !status.textContent; retry.hidden = !blocked && !failed;
+   const covered = Boolean(mounted?.isVoteOpen?.());
+   status.hidden = covered || !status.textContent;
+   retry.hidden = covered || (!blocked && !failed);
   }
   let controller = null;
   async function refresh() {
@@ -174,7 +176,7 @@ export const ChallengesView = Object.freeze({
   }
   function onHeaderMediaChange() { if (!destroyed) header(headerEligible); }
   mobileHeaderMedia.addEventListener('change', onHeaderMediaChange);
-  const afterClose = () => queueMicrotask(() => { if (!destroyed) controller?.repaint(); });
+  const afterClose = () => queueMicrotask(() => { if (!destroyed) { delivery(); controller?.repaint(); } });
   function showPrevious(messages) {
    if (location.pathname !== '/challenges' || mounted || historyPainted) return;
    historyPainted = true;

@@ -165,9 +165,17 @@ export function openFullPageRoute(href) {
  * the card from here — queued, then generating, then the finished media.
  * @param {{ creationId?: number|string }} [options]
  */
+function resetCreatePageScroll() {
+	const path = window.location.pathname.replace(/\/+$/, '') || '/';
+	if (path !== '/create') return;
+	const overlay = document.querySelector('[data-overlay-content]');
+	if (overlay) overlay.scrollTop = 0;
+}
+
 export function refreshAfterSubmit(options = {}) {
 	const creationId = Number(options.creationId);
 	if (!(Number.isFinite(creationId) && creationId > 0)) return;
+	resetCreatePageScroll();
 
 	const reason = 'create-submitted';
 	const payload = {
