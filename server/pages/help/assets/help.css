@@ -1,5 +1,12 @@
 /* Help Pages Styles */
 
+.help-page,
+.help-page *,
+.help-page *::before,
+.help-page *::after {
+	box-sizing: border-box;
+}
+
 .help-page {
 	min-height: 100vh;
 	background: var(--bg);
@@ -22,6 +29,16 @@
 	display: grid;
 	grid-template-columns: 240px 1fr;
 	gap: 32px;
+}
+
+.help-container,
+.help-article-wrapper,
+.help-article,
+.help-article-content,
+.help-content,
+.help-body {
+	min-width: 0;
+	max-width: 100%;
 }
 
 @media (max-width: 768px) {
@@ -215,7 +232,7 @@
 
 @media (max-width: 768px) {
 	.help-content h1 {
-		font-size: 1.5rem;
+		font-size: 1.2rem;
 	}
 }
 
@@ -228,7 +245,7 @@
 
 @media (max-width: 768px) {
 	.help-description {
-		font-size: 1rem;
+		font-size: 0.875rem;
 		margin-bottom: 24px;
 	}
 }
@@ -236,6 +253,30 @@
 .help-body {
 	color: var(--text);
 	line-height: 1.7;
+	overflow-x: auto;
+}
+
+@media (max-width: 768px) {
+	.help-body {
+		font-size: 0.875rem;
+	}
+}
+
+.help-body a,
+.help-body code {
+	overflow-wrap: anywhere;
+}
+
+.help-body img,
+.help-body video {
+	max-width: 100%;
+	height: auto;
+}
+
+.help-body table {
+	display: block;
+	max-width: 100%;
+	overflow-x: auto;
 }
 
 .help-body h2 {
@@ -249,7 +290,7 @@
 
 @media (max-width: 768px) {
 	.help-body h2 {
-		font-size: 1.25rem;
+		font-size: 1.05rem;
 		margin: 24px 0 12px;
 	}
 }
@@ -263,8 +304,12 @@
 
 @media (max-width: 768px) {
 	.help-body h3 {
-		font-size: 1.1rem;
+		font-size: 0.95rem;
 		margin: 20px 0 10px;
+	}
+
+	.help-body h4 {
+		font-size: 0.875rem;
 	}
 }
 
@@ -351,6 +396,13 @@
 	color: var(--text);
 }
 
+@media (max-width: 768px) {
+	.help-index h2 {
+		font-size: 1.2rem;
+		margin-bottom: 24px;
+	}
+}
+
 .help-index-section {
 	margin-bottom: 40px;
 }
@@ -400,6 +452,13 @@
 
 .help-index-link:hover h4 {
 	color: var(--accent);
+}
+
+@media (max-width: 768px) {
+	.help-index-section-title,
+	.help-index-link h4 {
+		font-size: 0.875rem;
+	}
 }
 
 /* Search Results Highlighting */
