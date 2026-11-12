@@ -79,6 +79,11 @@
 			width: 100%;
 		}
 
+		.vl-intro {
+			align-self: stretch;
+			width: 100%;
+		}
+
 		.vl-logo {
 			display: block;
 			line-height: 0;
@@ -94,6 +99,30 @@
 
 		.vl-logo .logo-text {
 			fill: var(--text);
+		}
+
+		.vl-tagline {
+			align-self: stretch;
+			margin: 4px 0 0;
+			padding: 0 24px;
+			min-width: 0;
+			font-size: 1.125rem;
+			font-weight: 500;
+			line-height: 1.35;
+			text-align: center;
+			color: var(--text);
+		}
+
+		.vl-subline {
+			align-self: stretch;
+			margin: 6px 0 0;
+			padding: 0 24px;
+			min-width: 0;
+			font-size: 0.9rem;
+			font-weight: 400;
+			line-height: 1.3;
+			text-align: center;
+			color: var(--text-muted);
 		}
 
 		.vl-video {
@@ -302,7 +331,7 @@
 			--vl-cta-3: #e9e3ff;
 			--vl-cta-bg: linear-gradient(155deg, var(--vl-cta-1) 50%, var(--vl-cta-2) 80%, var(--vl-cta-3) 100%);
 			--vl-cta-accent: #ce4cff;
-			--vl-cta-text: #ffffff;
+			--vl-cta-text: color-mix(in srgb, #ffffff 90%, var(--vl-cta-1));
 			display: flex;
 			flex-direction: column;
 			align-items: center;
@@ -317,7 +346,6 @@
 				--vl-cta-2: #00b4a0;
 				--vl-cta-3: #00c8b4;
 				--vl-cta-accent: rgba(0, 200, 180, 0.5);
-				--vl-cta-text: #ffffff;
 			}
 		}
 
@@ -342,10 +370,12 @@
 			display: inline-block;
 			padding: 14px 32px;
 			font-size: 1.05rem;
-			font-weight: 600;
+			font-weight: 400;
+			letter-spacing: 0.16em;
 			color: var(--vl-cta-text);
 			text-decoration: none;
-			border-radius: 999px;
+			border-radius: 36px;
+			corner-shape: squircle;
 			background: var(--vl-cta-bg);
 			border: 0.25px solid var(--vl-cta-accent);
 			box-shadow: 0 4px 20px color-mix(in srgb, var(--vl-cta-2) 35%, transparent);
@@ -358,6 +388,7 @@
 			position: absolute;
 			inset: 0;
 			border-radius: inherit;
+			corner-shape: inherit;
 			background: linear-gradient(105deg, transparent 8%, rgba(255, 255, 255, 0.16) 24%, rgba(255, 255, 255, 0.55) 50%, rgba(255, 255, 255, 0.16) 76%, transparent 92%);
 			transform: translateX(-140%);
 			opacity: 0;
@@ -417,7 +448,8 @@
 				flex: 1 1 auto;
 				min-height: 0;
 				overflow: hidden;
-				padding: 10px 0;
+				justify-content: flex-start;
+				padding: 0;
 				width: 100%;
 				max-width: 100%;
 			}
@@ -430,27 +462,61 @@
 				min-height: 0;
 			}
 
+			.vl-hero {
+				--vl-frame: min(52dvh, calc(100vw * 9 / 16));
+			}
+
+			.vl-intro {
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				justify-content: center;
+				flex-shrink: 0;
+				height: var(--vl-frame);
+			}
+
 			.vl-logo,
+			.vl-tagline,
+			.vl-subline,
 			.vl-cta-row {
 				padding-left: 20px;
 				padding-right: 20px;
 			}
 
+			.vl-tagline {
+				margin-top: 4px;
+				/* Shrink with the screen so the sentence stays one line. */
+				font-size: clamp(0.62rem, calc((100vw - 40px) / 29), 1rem);
+			}
+
+			.vl-subline {
+				margin-top: 4px;
+				font-size: clamp(0.55rem, calc((100vw - 40px) / 34), 0.8rem);
+			}
+
 			.vl-logo svg {
-				width: 200px;
+				width: min(255px, calc(100vw - 48px));
+				padding-bottom: 0.5em;
 			}
 
 			.vl-video {
 				width: 150vw;
 				max-width: none;
 				max-height: min(52dvh, calc(150vw * 9 / 16));
-				margin-top: 12px;
+				margin-top: 0;
 				border-radius: 0;
 				flex-shrink: 1;
 			}
 
+			/* Opt out of the 150vw bleed so the whole frame stays on screen. */
+			.vl-video.vl-video-contained {
+				width: 100%;
+				max-width: 100%;
+				max-height: var(--vl-frame);
+			}
+
 			.vl-cta-row {
-				margin-top: 20px;
+				margin-top: calc(var(--vl-frame) * 0.22);
 				flex-shrink: 0;
 			}
 
@@ -467,8 +533,9 @@
 	<main>
 		<div class="vl-shell">
 			<div class="vl-hero">
+			<div class="vl-intro">
 			<a href="/" class="vl-logo" aria-label="Parascene home">
-				<svg class="logo" width="240" height="80" viewBox="0 0 185 40" aria-hidden="true">
+				<svg class="logo" width="240" height="37" viewBox="4.1 8.87 178.2 27.54" aria-hidden="true">
 					<g class="logo-text">
 						<path style="opacity: 1;" d="M 4.201 36.305 L 8.683 9.305 L 13.869 9.305 L 13.271 12.609 L 13.429 12.609 Q 13.922 11.801 14.721 10.975 Q 15.521 10.148 16.699 9.603 Q 17.877 9.059 19.459 9.059 Q 21.41 9.059 22.93 9.929 Q 24.451 10.799 25.339 12.53 Q 26.226 14.262 26.226 16.828 Q 26.226 18.937 25.637 21.126 Q 25.048 23.314 23.862 25.16 Q 22.675 27.006 20.882 28.148 Q 19.089 29.291 16.664 29.291 Q 14.994 29.291 13.93 28.711 Q 12.867 28.131 12.287 27.287 Q 11.707 26.443 11.461 25.652 L 11.214 25.652 L 9.474 36.305 Z M 15.17 25.055 Q 16.629 25.055 17.701 24.281 Q 18.773 23.508 19.476 22.295 Q 20.179 21.082 20.513 19.711 Q 20.847 18.34 20.847 17.127 Q 20.847 15.369 20.074 14.323 Q 19.3 13.277 17.683 13.277 Q 16.277 13.277 15.214 13.989 Q 14.15 14.701 13.438 15.87 Q 12.726 17.039 12.357 18.419 Q 11.988 19.799 11.988 21.152 Q 11.988 22.963 12.797 24.009 Q 13.605 25.055 15.17 25.055 Z M 34.036 29.291 Q 31.786 29.291 30.16 28.113 Q 28.534 26.936 27.848 24.677 Q 27.163 22.418 27.708 19.148 Q 28.27 15.791 29.729 13.55 Q 31.188 11.309 33.192 10.184 Q 35.196 9.059 37.376 9.059 Q 39.046 9.059 40.056 9.612 Q 41.067 10.166 41.612 10.992 Q 42.157 11.818 42.386 12.609 L 42.561 12.609 L 43.106 9.305 L 48.362 9.305 L 45.11 28.957 L 39.925 28.957 L 40.434 25.811 L 40.188 25.811 Q 39.678 26.619 38.852 27.419 Q 38.026 28.219 36.831 28.755 Q 35.636 29.291 34.036 29.291 Z M 36.374 25.055 Q 37.727 25.055 38.791 24.308 Q 39.854 23.561 40.575 22.233 Q 41.296 20.906 41.577 19.148 Q 41.876 17.355 41.603 16.037 Q 41.331 14.719 40.505 13.998 Q 39.678 13.277 38.325 13.277 Q 36.936 13.277 35.864 14.033 Q 34.792 14.789 34.097 16.107 Q 33.403 17.426 33.122 19.148 Q 32.841 20.871 33.104 22.207 Q 33.368 23.543 34.185 24.299 Q 35.003 25.055 36.374 25.055 Z M 48.344 28.957 L 51.596 9.305 L 56.694 9.305 L 56.149 12.732 L 56.36 12.732 Q 57.186 10.904 58.61 9.973 Q 60.034 9.041 61.686 9.041 Q 62.108 9.041 62.565 9.085 Q 63.022 9.129 63.373 9.217 L 62.582 13.928 Q 62.231 13.805 61.572 13.734 Q 60.913 13.664 60.35 13.664 Q 59.137 13.664 58.1 14.183 Q 57.063 14.701 56.369 15.624 Q 55.674 16.547 55.463 17.777 L 53.618 28.957 Z"></path>
 						<path style="opacity: 0.7;" d="M 68.879 29.291 Q 66.629 29.291 65.003 28.113 Q 63.377 26.936 62.691 24.677 Q 62.006 22.418 62.551 19.148 Q 63.113 15.791 64.572 13.55 Q 66.031 11.309 68.035 10.184 Q 70.039 9.059 72.219 9.059 Q 73.888 9.059 74.899 9.612 Q 75.91 10.166 76.455 10.992 Q 77 11.818 77.228 12.609 L 77.404 12.609 L 77.949 9.305 L 83.205 9.305 L 79.953 28.957 L 74.767 28.957 L 75.277 25.811 L 75.031 25.811 Q 74.521 26.619 73.695 27.419 Q 72.869 28.219 71.674 28.755 Q 70.478 29.291 68.879 29.291 Z M 71.217 25.055 Q 72.57 25.055 73.634 24.308 Q 74.697 23.561 75.418 22.233 Q 76.138 20.906 76.42 19.148 Q 76.719 17.355 76.446 16.037 Q 76.174 14.719 75.347 13.998 Q 74.521 13.277 73.168 13.277 Q 71.779 13.277 70.707 14.033 Q 69.635 14.789 68.94 16.107 Q 68.246 17.426 67.965 19.148 Q 67.683 20.871 67.947 22.207 Q 68.211 23.543 69.028 24.299 Q 69.845 25.055 71.217 25.055 Z M 91.165 29.344 Q 88.792 29.344 87.035 28.649 Q 85.277 27.955 84.301 26.689 Q 83.326 25.424 83.22 23.684 Q 83.22 23.596 83.211 23.534 Q 83.203 23.473 83.203 23.42 L 88.142 22.91 Q 88.283 24.281 89.047 24.879 Q 89.812 25.477 91.412 25.477 Q 92.378 25.477 93.24 25.213 Q 94.101 24.949 94.672 24.448 Q 95.244 23.947 95.314 23.227 Q 95.367 22.559 94.883 22.102 Q 94.4 21.645 93.222 21.398 L 89.953 20.695 Q 87.386 20.15 86.156 18.77 Q 84.925 17.391 85.083 15.369 Q 85.207 13.33 86.455 11.924 Q 87.703 10.518 89.698 9.788 Q 91.693 9.059 94.048 9.059 Q 97.511 9.059 99.401 10.447 Q 101.29 11.836 101.537 14.086 Q 101.572 14.191 101.589 14.279 Q 101.607 14.367 101.607 14.473 L 96.914 14.947 Q 96.773 13.945 96.123 13.392 Q 95.472 12.838 94.066 12.838 Q 93.205 12.838 92.378 13.102 Q 91.552 13.365 90.99 13.857 Q 90.427 14.35 90.357 15.088 Q 90.287 15.756 90.744 16.195 Q 91.201 16.635 92.431 16.916 L 95.841 17.619 Q 98.425 18.146 99.665 19.43 Q 100.904 20.713 100.746 22.699 Q 100.64 24.264 99.84 25.494 Q 99.04 26.725 97.705 27.586 Q 96.369 28.447 94.69 28.895 Q 93.011 29.344 91.165 29.344 Z M 110.891 29.344 Q 108.272 29.344 106.409 28.315 Q 104.546 27.287 103.544 25.433 Q 102.542 23.578 102.542 21.082 Q 102.542 18.814 103.263 16.661 Q 103.983 14.508 105.389 12.794 Q 106.796 11.08 108.87 10.069 Q 110.944 9.059 113.669 9.059 Q 115.444 9.059 116.886 9.516 Q 118.327 9.973 119.373 10.834 Q 120.419 11.695 120.99 12.908 Q 121.561 14.121 121.597 15.633 L 116.587 16.477 Q 116.534 15.703 116.349 15.105 Q 116.165 14.508 115.805 14.077 Q 115.444 13.646 114.908 13.427 Q 114.372 13.207 113.616 13.207 Q 112.139 13.207 111.041 13.963 Q 109.942 14.719 109.239 15.932 Q 108.536 17.145 108.193 18.551 Q 107.85 19.957 107.85 21.24 Q 107.85 22.418 108.184 23.314 Q 108.518 24.211 109.23 24.703 Q 109.942 25.195 111.05 25.195 Q 111.841 25.195 112.561 24.949 Q 113.282 24.703 113.889 24.246 Q 114.495 23.789 114.97 23.147 Q 115.444 22.506 115.725 21.715 L 120.489 22.699 Q 119.962 24.246 119.056 25.468 Q 118.151 26.689 116.921 27.56 Q 115.69 28.43 114.17 28.887 Q 112.649 29.344 110.891 29.344 Z"></path>
@@ -476,7 +543,10 @@
 					</g>
 				</svg>
 			</a>
-			<div class="vl-video" data-posters="/assets/splash-poster-alley.jpg,/assets/splash-poster-crystal.jpg,/assets/splash-poster-tv.jpg,/assets/splash-poster-city.jpg,/assets/splash-poster-cliff.jpg">
+			<p class="vl-tagline">A home for strange ideas, and the people who make them.</p>
+			<p class="vl-subline">Create. Share. Find your people.</p>
+			</div>
+			<div class="vl-video vl-video-contained" data-posters="/assets/splash-poster-door.jpg,/assets/splash-poster-ridge.jpg,/assets/splash-poster-bus.jpg,/assets/splash-poster-sofa.jpg">
 				<img class="vl-video-poster" alt="" decoding="async">
 				<script>
 					(function () {
