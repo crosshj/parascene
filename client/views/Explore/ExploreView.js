@@ -3,6 +3,7 @@ import { mergeExploreSearchKeywordSemantic } from '../../providers/explore/model
 import { creationCardMarkup, createCreationMediaLoader } from '../../shared/creationGrid.js';
 import { includeInCollection } from '../../shared/nsfwPolicy.js';
 import { createFeedItemCard } from '../../shared/feedCardBuild.js';
+import { attachFeedCardCreationDragSource } from '../../shared/creationComposerDrag.js';
 import '../../components/CreationGrid/CreationGrid.css';
 import './ExploreView.css';
 import { bindSearchComposer } from '../../components/SearchComposer/SearchComposer.js';
@@ -24,8 +25,8 @@ export const ExploreView = Object.freeze({
    media.disconnect();grid.querySelectorAll('video,audio').forEach(player=>{player.pause();player.removeAttribute('src');player.load()}); grid.replaceChildren();
    grid.classList.toggle('content-cards-image-grid', !large); root.classList.toggle('explore-view--large', large);
    for (const [index, item] of rows.filter(includeInCollection).entries()) {
-    const card = large ? createFeedItemCard(item, index, { preferThumbnail: true, hideFeedCardMetadata: false, hidePublishedBadge: true, performCreationNavigation: href => actions.navigate(href, { seed: item }), performShellNavigation: href => actions.navigate(href) }) : document.createRange().createContextualFragment(creationCardMarkup(item, { hidePublishedBadge: true })).firstElementChild;
-    if (!card) continue; card.__creationRecord = item; grid.append(card);
+    const card = large ? createFeedItemCard(item, index, { preferThumbnail: true, hideFeedCardMetadata: false, hidePublishedBadge: true, enableComposerDragSource: true, performCreationNavigation: href => actions.navigate(href, { seed: item }), performShellNavigation: href => actions.navigate(href) }) : document.createRange().createContextualFragment(creationCardMarkup(item, { hidePublishedBadge: true })).firstElementChild;
+    if (!card) continue; card.__creationRecord = item; if (!large) attachFeedCardCreationDragSource(card); grid.append(card);
    }
    media.observe();
   }

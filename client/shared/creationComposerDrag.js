@@ -16,15 +16,19 @@ export function attachFeedCardCreationDragSource(card) {
 	const creationId = idRaw != null && idRaw !== '' ? Number(idRaw) : NaN;
 	if (!Number.isFinite(creationId) || creationId <= 0 || (!imageUrl && card.dataset.groupCreation !== '1')) return;
 	if (mediaType === 'video') return;
-	if (status === 'creating' || status === 'pending') return;
+	if (status === 'creating' || status === 'pending' || status === 'queued' || status === 'processing' || status === 'running') return;
 
 	card.setAttribute('draggable', 'true');
 	card.setAttribute('aria-grabbed', 'false');
+	card.querySelectorAll('img').forEach((img) => {
+		if (img instanceof HTMLImageElement) img.draggable = false;
+	});
+	// Card updates copy attributes from fresh markup and wipe `draggable`.
+	// The listener stays on the element, so a later call only restores the attribute.
+	if (card.__composerDragBound) return;
+	card.__composerDragBound = true;
 
 	const img = card.querySelector('.feed-card-img');
-	if (img instanceof HTMLImageElement) {
-		img.draggable = false;
-	}
 
 	const published = card.dataset.published === '1';
 	const groupId = card.dataset.groupCreation === '1' ? creationId : Number(card.dataset.groupId) || null;
