@@ -79,6 +79,23 @@ const BASIC_CREATE_DEFAULT_SERVER_ID = 1;
 const BASIC_CREATE_DEFAULT_METHOD_KEY = 'replicate';
 const BASIC_CREATE_DEFAULT_MODEL = 'xai/grok-imagine-image';
 const BASIC_MODEL_DISPLAY = 'Z-Image Turbo';
+const BLUE_TEXT2VIDEO_METHOD_KEY = 'text2video';
+
+/**
+ * Parascene Blue image models for the composer, in display order.
+ * Shown immediately after the Replicate group. Included only when the live method still offers that value.
+ * Krea 2 Turbo is the int8 checkpoint; the fp8 twin stays in advanced.
+ */
+const BLUE_COMPOSER_IMAGE_MODELS = [
+	{ methodKey: 'text2image', value: 'diffusion_models/flux3-image-klein-base-int8-convrot.safetensors', label: 'Flux 3 Klein' },
+	{ methodKey: 'text2image', value: 'diffusion_models/krea2/krea2_turbo_int8_convrot.safetensors', label: 'Krea 2 Turbo' },
+	{ methodKey: 'text2image', value: 'diffusion_models/moss_image_sft_int8_convrot.safetensors', label: 'MOSS Image SFT' },
+	{ methodKey: 'text2image', value: 'diffusion_models/qwen_image_2.1_int8_convrot.safetensors', label: 'Qwen Image 2.1' },
+	{ methodKey: 'text2image', value: 'diffusion_models/z-image/z_image_turbo_bf16.safetensors', label: 'Z-Image Turbo' },
+	{ methodKey: 'image2image', value: 'flux3_klein_i2i', label: 'Flux 3 Klein' },
+	{ methodKey: 'image2image', value: 'moss_image_i2i', label: 'MOSS Image SFT' },
+	{ methodKey: 'image2image', value: 'qwen_image_2_1_i2i', label: 'Qwen Image 2.1' },
+];
 
 const MVP_ASPECT_RATIOS = ['1:1', '9:16', '4:5', '16:9'];
 
@@ -156,6 +173,23 @@ function isComposerAudioMethod(methodKey, methodDef) {
 	if (intent === 'voice_train') return false;
 	const lower = key.toLowerCase();
 	return lower.includes('speech') || lower.includes('music');
+}
+
+function methodHasImageInput(fields) {
+	if (!fields || typeof fields !== 'object') return false;
+	for (const [key, field] of Object.entries(fields)) {
+		const type = String(field?.type || '').toLowerCase();
+		if (type === 'image_url' || type === 'image_url_array' || type === 'image' || type === 'image_array') {
+			return true;
+		}
+		if (key === 'image' || key === 'image_url' || key === 'input_images') return true;
+	}
+	return false;
+}
+
+/** Text-to-video needs no start image. Image-to-video and cloud video do. */
+function videoMethodNeedsImage(methodKey) {
+	return methodKey !== BLUE_TEXT2VIDEO_METHOD_KEY;
 }
 
 function isComposerAudioInputField(fieldKey, field) {
@@ -643,6 +677,12 @@ function collectVideoModelOptionsFromServers(servers) {
 		'LTX Self-hosted'
 	);
 	addMethodModels(
+		servers.find((s) => Number(s?.id) === Number(PARASCENE_BLUE_SERVER_ID)),
+		BLUE_TEXT2VIDEO_METHOD_KEY,
+		null,
+		null
+	);
+	addMethodModels(
 		servers.find((s) => Number(s?.id) === Number(MUTATE_DEFAULT_SERVER_ID)),
 		MUTATE_VIDEO_DEFAULT_METHOD_KEY,
 		MUTATE_VIDEO_DEFAULT_MODEL,
@@ -774,6 +814,42 @@ function resolveMethodFieldsFromServers(servers, serverId, methodKey) {
 	return fields && typeof fields === 'object' ? fields : null;
 }
 
+/**
+ * @param {unknown} server
+ * @returns {ImageModelOption[]}
+ */
+function collectCuratedBlueImageOptions(server) {
+	if (!server || Number(/** @type {{ id?: unknown }} */ (server).id) !== Number(PARASCENE_BLUE_SERVER_ID)) {
+		return [];
+	}
+	const cfg = parseServerConfig(server);
+	const methods =
+		cfg?.methods && typeof cfg.methods === 'object'
+			? /** @type {Record<string, { fields?: Record<string, { options?: unknown, choices?: unknown, enum?: unknown }> }>} */ (
+					cfg.methods
+				)
+			: null;
+	if (!methods) return [];
+	/** @type {ImageModelOption[]} */
+	const out = [];
+	for (const entry of BLUE_COMPOSER_IMAGE_MODELS) {
+		const methodDef = methods[entry.methodKey];
+		const field = methodDef?.fields?.model;
+		const values = normalizeModelOptions(field?.options ?? field?.choices ?? field?.enum);
+		if (!values.some((opt) => opt.value === entry.value)) continue;
+		out.push(
+			toImageModelOption(
+				PARASCENE_BLUE_SERVER_ID,
+				entry.methodKey,
+				entry.value,
+				entry.label,
+				getComposerMethodGroupLabel(methodDef, entry.methodKey)
+			)
+		);
+	}
+	return out;
+}
+
 async function fetchBasicModelOptions() {
 	const fallback = [
 		toImageModelOption(
@@ -788,7 +864,11 @@ async function fetchBasicModelOptions() {
 		if (!result?.ok) return fallback;
 		const servers = Array.isArray(result.data?.servers) ? result.data.servers : [];
 		const server = servers.find((s) => Number(s?.id) === BASIC_CREATE_DEFAULT_SERVER_ID);
-		const opts = collectImageModelOptionsFromServer(server);
+		const blue = servers.find((s) => Number(s?.id) === Number(PARASCENE_BLUE_SERVER_ID));
+		const serverOptions = collectImageModelOptionsFromServer(server);
+		const replicate = serverOptions.filter((opt) => opt.methodKey === BASIC_CREATE_DEFAULT_METHOD_KEY);
+		const afterReplicate = serverOptions.filter((opt) => opt.methodKey !== BASIC_CREATE_DEFAULT_METHOD_KEY);
+		const opts = [...replicate, ...collectCuratedBlueImageOptions(blue), ...afterReplicate];
 		return opts.length > 0 ? opts : fallback;
 	} catch {
 		return fallback;
@@ -810,8 +890,10 @@ function sortVideoModelOptions(options) {
 				return 0;
 			}
 			if (o.methodKey === MUTATE_VIDEO_LTX_METHOD_KEY) return 1;
-			if (o.methodKey === MUTATE_VIDEO_DEFAULT_METHOD_KEY) return 2;
-			return 3;
+			if (o.methodKey === BLUE_TEXT2VIDEO_METHOD_KEY && o.value === 'ltx_t2v') return 2;
+			if (o.methodKey === BLUE_TEXT2VIDEO_METHOD_KEY) return 3;
+			if (o.methodKey === MUTATE_VIDEO_DEFAULT_METHOD_KEY) return 4;
+			return 5;
 		};
 		const diff = rank(a) - rank(b);
 		if (diff !== 0) return diff;
@@ -1168,10 +1250,6 @@ export function mountCreateComposer(host, opts = {}) {
 	/** @type {{ value: string, label: string }[]} */
 	let modelOptions = imageModelOptions.map((o) => ({ value: o.selectValue, label: o.label }));
 	let selectedModel = initialModelValue;
-	const mutateOptions = {
-		serverId: MUTATE_DEFAULT_SERVER_ID,
-		methodKey: MUTATE_DEFAULT_METHOD_KEY,
-	};
 	/** @type {unknown[]} */
 	let composerServers = [];
 	/** @type {Map<string, number>} */
@@ -1362,10 +1440,18 @@ export function mountCreateComposer(host, opts = {}) {
 
 	function shouldShowAspectSelector() {
 		if (isAudioMode()) return false;
-		if (isVideoMode()) {
-			return isLtxVideoRoute(getSelectedVideoRoute());
-		}
 		return shouldUseAspectRatioSelector(getFormFieldContext());
+	}
+
+	function selectedImageRouteAcceptsImages() {
+		const route = getSelectedImageRoute();
+		if (!route) return false;
+		const fields = resolveMethodFieldsFromServers(composerServers, route.serverId, route.methodKey);
+		if (fields) return methodHasImageInput(fields);
+		return (
+			Number(route.serverId) === BASIC_CREATE_DEFAULT_SERVER_ID &&
+			route.methodKey === BASIC_CREATE_DEFAULT_METHOD_KEY
+		);
 	}
 
 	/** User can pick output ratio (image models or LTX video). */
@@ -1727,10 +1813,6 @@ export function mountCreateComposer(host, opts = {}) {
 			if (!route) return null;
 			return { serverId: route.serverId, methodKey: route.methodKey };
 		}
-		if (hasAttachment()) {
-			if (!mutateOptions.serverId || !mutateOptions.methodKey) return null;
-			return { serverId: mutateOptions.serverId, methodKey: mutateOptions.methodKey };
-		}
 		const route = getSelectedImageRoute();
 		if (!route) return null;
 		return { serverId: route.serverId, methodKey: route.methodKey };
@@ -1961,11 +2043,14 @@ export function mountCreateComposer(host, opts = {}) {
 				: 'Enter the words to speak…';
 		}
 		if (isVideoMode()) {
+			if (!videoMethodNeedsImage(getSelectedVideoRoute()?.methodKey)) {
+				return 'Describe the video…';
+			}
 			return hasAttachment()
 				? 'Describe the motion or camera movement…'
 				: 'Add an image, then describe the motion…';
 		}
-		return hasAttachment()
+		return hasAttachment() && selectedImageRouteAcceptsImages()
 			? 'Describe what you want to change…'
 			: 'Describe what you want to create…';
 	}
@@ -2514,6 +2599,7 @@ export function mountCreateComposer(host, opts = {}) {
 
 	function updateSubmitButtonState() {
 		if (!(submitBtn instanceof HTMLButtonElement)) return;
+		submitBtn.title = '';
 		if (submitInFlight) {
 			submitBtn.disabled = true;
 			return;
@@ -2539,7 +2625,8 @@ export function mountCreateComposer(host, opts = {}) {
 			return;
 		}
 		if (isVideoMode()) {
-			submitBtn.disabled = !hasAttachment();
+			const needsImage = videoMethodNeedsImage(getSelectedVideoRoute()?.methodKey);
+			submitBtn.disabled = needsImage && !hasAttachment();
 			return;
 		}
 		if (isAudioMode()) {
@@ -2547,12 +2634,12 @@ export function mountCreateComposer(host, opts = {}) {
 			return;
 		}
 		const hasPrompt = promptText.length > 0;
-		if (hasAttachment()) {
-			const hasMutate = Boolean(mutateOptions.serverId && mutateOptions.methodKey);
-			submitBtn.disabled = !hasPrompt || !hasMutate;
-		} else {
-			submitBtn.disabled = !hasPrompt;
+		if (hasAttachment() && !selectedImageRouteAcceptsImages()) {
+			submitBtn.disabled = true;
+			submitBtn.title = 'This model does not take an image.';
+			return;
 		}
+		submitBtn.disabled = !hasPrompt;
 	}
 
 	function positionAspectPopover() {
@@ -2882,39 +2969,42 @@ export function mountCreateComposer(host, opts = {}) {
 		}
 
 		if (isVideoMode()) {
-			if (!hasAttachment()) return;
 			if (!userPrompt) return;
 			const route = getSelectedVideoRoute();
 			if (!route) return;
+			const needsImage = videoMethodNeedsImage(route.methodKey);
+			if (needsImage && !hasAttachment()) return;
 			if (!(await confirmAspectMismatchBeforeSubmit())) return;
 			setComposerSubmitting(true);
-			let imageUrls;
-			try {
-				imageUrls = await resolveAttachmentUrls(uploadImageFile);
-			} catch (err) {
-				setComposerSubmitting(false);
-				alert(err?.message || 'Image upload failed');
-				return;
+			let imageUrls = [];
+			if (needsImage) {
+				try {
+					imageUrls = await resolveAttachmentUrls(uploadImageFile);
+				} catch (err) {
+					setComposerSubmitting(false);
+					alert(err?.message || 'Image upload failed');
+					return;
+				}
+				if (imageUrls.length === 0) {
+					setComposerSubmitting(false);
+					alert('Please choose an image.');
+					return;
+				}
 			}
-			if (imageUrls.length === 0) {
-				setComposerSubmitting(false);
-				alert('Please choose an image.');
-				return;
-			}
-			const primaryImage = imageUrls[0];
-			const ltxVideo = isLtxVideoRoute(route);
-			const videoAspect = ltxVideo ? getAspectRatioForSubmit() || selectedAspect : undefined;
-			const args = ltxVideo
-				? {
-						seed: '',
-						model: route.value,
-						prompt: userPrompt,
-						input_images: imageUrls,
-						...(videoAspect ? { aspect_ratio: videoAspect } : {}),
-					}
+			const blueVideo = Number(route.serverId) === Number(PARASCENE_BLUE_SERVER_ID);
+			const args = blueVideo
+				? buildSubmitArgs(
+						{
+							...(isLtxVideoRoute(route) ? { seed: '', input_images: imageUrls } : {}),
+							model: route.value,
+							prompt: userPrompt,
+						},
+						getAspectRatioForSubmit(),
+						getFormFieldContext()
+					)
 				: {
 						prompt: userPrompt,
-						image: primaryImage,
+						image: imageUrls[0],
 						model: route.value,
 					};
 			const mutateLineage = getMutateLineageForSubmit();
@@ -3002,13 +3092,10 @@ export function mountCreateComposer(host, opts = {}) {
 
 		if (!userPrompt) return;
 
+		const attachedImageRoute = hasAttachment() ? getSelectedImageRoute() : null;
 		if (hasAttachment()) {
-			if (!mutateOptions.serverId || !mutateOptions.methodKey) {
-				return;
-			}
-			if (!(await confirmAspectMismatchBeforeSubmit())) {
-				return;
-			}
+			if (!attachedImageRoute || !selectedImageRouteAcceptsImages()) return;
+			if (!(await confirmAspectMismatchBeforeSubmit())) return;
 		}
 
 		setComposerSubmitting(true);
@@ -3022,25 +3109,26 @@ export function mountCreateComposer(host, opts = {}) {
 				alert(err?.message || 'Image upload failed');
 				return;
 			}
-			if (imageUrls.length === 0) {
+			if (imageUrls.length === 0 || !attachedImageRoute) {
 				setComposerSubmitting(false);
 				alert('Please choose an image.');
 				return;
 			}
-			const imageRoute = getSelectedImageRoute();
 			const mutateArgs = {
 				prompt: userPrompt,
-				model: imageRoute?.value || selectedModel,
+				model: attachedImageRoute.value,
 				input_images: imageUrls,
 			};
-			if (imageUrls.length === 1) mutateArgs.image_url = imageUrls[0];
+			if (imageUrls.length === 1 && Number(attachedImageRoute.serverId) !== Number(PARASCENE_BLUE_SERVER_ID)) {
+				mutateArgs.image_url = imageUrls[0];
+			}
 			const args = buildSubmitArgs(mutateArgs, getAspectRatioForSubmit(), getFormFieldContext());
 			const mutateLineage = getMutateLineageForSubmit();
 			const mentions = extractMentions(userPrompt);
 			if (mentions.length === 0) {
 				dispatchCreationSubmit({
-					serverId: mutateOptions.serverId,
-					methodKey: mutateOptions.methodKey,
+					serverId: attachedImageRoute.serverId,
+					methodKey: attachedImageRoute.methodKey,
 					args,
 					hydrateMentions: false,
 					...mutateLineage,
@@ -3050,8 +3138,8 @@ export function mountCreateComposer(host, opts = {}) {
 			const validateResult = await validateMentionsSimple({ args });
 			if (validateResult.ok) {
 				dispatchCreationSubmit({
-					serverId: mutateOptions.serverId,
-					methodKey: mutateOptions.methodKey,
+					serverId: attachedImageRoute.serverId,
+					methodKey: attachedImageRoute.methodKey,
 					args,
 					hydrateMentions: true,
 					...mutateLineage,
@@ -3061,8 +3149,8 @@ export function mountCreateComposer(host, opts = {}) {
 			const message = formatMentionsFailureForDialog(validateResult.data);
 			if (window.confirm(message + '\n\nSubmit anyway?')) {
 				dispatchCreationSubmit({
-					serverId: mutateOptions.serverId,
-					methodKey: mutateOptions.methodKey,
+					serverId: attachedImageRoute.serverId,
+					methodKey: attachedImageRoute.methodKey,
 					args,
 					hydrateMentions: false,
 					...mutateLineage,
