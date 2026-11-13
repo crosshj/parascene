@@ -1060,6 +1060,15 @@ body.prsn-creation-composer-drag-active .create-composer:not(.is-drop-target) .c
 	text-transform: uppercase;
 }
 
+.app-dialog.create-composer-notice-dialog {
+	width: min(94vw, 28rem);
+	max-width: 28rem;
+}
+
+.create-composer-notice-message {
+	margin: 0;
+}
+
 .create-composer button.create-composer-model-option {
 	display: block;
 	width: 100%;
