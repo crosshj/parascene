@@ -7,6 +7,8 @@ import { getVynlyBearerToken, isVynlyConfiguredForUser } from '../server/service
 import {
 	normalizeDeclaredSource,
 	normalizeVideoDeclaredSource,
+	vynlyDeclaredSourceFromModel,
+	vynlyVideoDeclaredSourceFromModel,
 	shareCreationToVynly
 } from '../server/services/vynly/vynlyShareFromCreation.js';
 import { creationRowIsVideo } from '../server/services/create/creationMedia.js';
@@ -48,6 +50,25 @@ test('Vynly post links use the public /p/:id route', () => {
 test('normalizeDeclaredSource and creationRowIsVideo', () => {
 	assert.equal(normalizeDeclaredSource('Flux'), 'flux');
 	assert.equal(normalizeDeclaredSource('nope'), 'other');
+	assert.equal(vynlyDeclaredSourceFromModel('checkpoints/FLUX1/flux1-schnell-fp8.safetensors'), 'flux');
+	assert.equal(vynlyDeclaredSourceFromModel('black-forest-labs/flux-2-pro'), 'flux');
+	assert.equal(vynlyDeclaredSourceFromModel('xai/grok-imagine-image'), 'grok');
+	assert.equal(vynlyDeclaredSourceFromModel('openai/gpt-image-1.5'), 'gptimage');
+	assert.equal(vynlyDeclaredSourceFromModel('google/nano-banana-pro'), 'gemini');
+	assert.equal(vynlyDeclaredSourceFromModel('leonardoai/lucid-origin'), 'leonardo');
+	assert.equal(vynlyDeclaredSourceFromModel('checkpoints/xl/sd_xl_base_1.0.safetensors'), 'stablediffusion');
+	assert.equal(vynlyDeclaredSourceFromModel('checkpoints/1.5/cyberrealistic_v20.safetensors'), 'stablediffusion');
+	assert.equal(vynlyDeclaredSourceFromModel('checkpoints/pony/cyberrealisticPony_v130.safetensors'), 'stablediffusion');
+	assert.equal(vynlyDeclaredSourceFromModel('pixflux'), 'other');
+	assert.equal(vynlyDeclaredSourceFromModel('bytedance/seedream-4'), 'other');
+	assert.equal(vynlyDeclaredSourceFromModel('luma/photon'), 'other');
+	assert.equal(vynlyDeclaredSourceFromModel('sana'), 'other');
+	assert.equal(vynlyDeclaredSourceFromModel('advanced_generate'), 'other');
+	assert.equal(vynlyVideoDeclaredSourceFromModel('wan-video/wan-2.2-i2v-fast'), 'wan');
+	assert.equal(vynlyVideoDeclaredSourceFromModel('wan_t2v'), 'wan');
+	assert.equal(vynlyVideoDeclaredSourceFromModel('ltx_i2v'), 'other');
+	assert.equal(vynlyVideoDeclaredSourceFromModel('luma/photon'), 'luma');
+	assert.equal(vynlyVideoDeclaredSourceFromModel('bytedance/seedance-1'), 'seedance');
 	assert.equal(normalizeVideoDeclaredSource('Veo'), 'veo');
 	assert.equal(normalizeVideoDeclaredSource('flux'), 'other');
 	assert.equal(creationRowIsVideo(null), false);
@@ -222,4 +243,6 @@ test('shareCreationToVynly posts a public video URL and multipart images', async
 	assert.equal(posted.declaredSource, 'flux');
 	assert.match(posted.caption, /Hello/);
 	assert.ok(Buffer.isBuffer(posted.buffer));
+	assert.match(posted.buffer.toString('latin1'), /trainedAlgorithmicMedia/);
+	assert.match(posted.buffer.toString('latin1'), /\/creations\/12/);
 });

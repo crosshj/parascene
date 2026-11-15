@@ -3,6 +3,7 @@ import path from "node:path";
 import { resolveCreationImageForExport } from "../services/account/resolveCreationImageForExport.js";
 import { resolveCreatedImageStorageFilename } from "../services/create/resolveCreatedImageStorageFilename.js";
 import { applyImageWatermark } from "../services/create/imageWatermark.js";
+import { writeProvenance } from "../services/create/provenance.js";
 import { creationRowIsVideo } from "../services/create/creationMedia.js";
 import { createWatermarkedVideoCache } from "../services/create/watermarkedVideoCache.js";
 
@@ -109,8 +110,9 @@ export default function createCreationExportRoutes({ queries, storage, watermark
 				const source = await storage.getImageBuffer(resolved.filename);
 				if (!Buffer.isBuffer(source)) return res.status(500).json({ error: "Failed to read image" });
 				const watermark = watermarked ? await applyImageWatermark(source) : null;
-				const buffer = watermark?.buffer && Buffer.isBuffer(watermark.buffer) ? watermark.buffer : source;
+				let buffer = watermark?.buffer && Buffer.isBuffer(watermark.buffer) ? watermark.buffer : source;
 				const contentType = watermark?.contentType || imageContentType(resolved.filename);
+				if (watermarked) buffer = writeProvenance(buffer, resolved.image, { composite: Boolean(watermark?.contentType) });
 				const suffix = watermark?.filenameSuffix || ({ "image/jpeg": ".jpg", "image/webp": ".webp", "image/gif": ".gif" })[contentType] || ".png";
 				const name = `parascene-${resolved.id}${watermarked ? "-watermarked" : ""}${suffix}`;
 				return sendImage(res, buffer, contentType, name, watermarked && req.query.download === "1");

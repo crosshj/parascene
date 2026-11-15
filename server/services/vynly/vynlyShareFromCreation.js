@@ -2,8 +2,10 @@ import { VynlyApiError } from "./vynlyClient.js";
 import { resolveCreatedImageStorageFilename } from "../create/resolveCreatedImageStorageFilename.js";
 import { applyImageWatermark } from "../create/imageWatermark.js";
 import { creationRowIsVideo } from "../create/creationMedia.js";
+import { readProvenance, writeProvenance } from "../create/provenance.js";
 
 const MAX_BYTES = 4 * 1024 * 1024;
+const PROVENANCE_RESERVE = 8 * 1024;
 const CAPTION_MAX = 2000;
 
 /**
@@ -28,7 +30,6 @@ const ALLOWED_DECLARED = new Set([
 	"leonardo",
 	"runway",
 	"sora",
-	"claude",
 	"other"
 ]);
 const ALLOWED_VIDEO_DECLARED = new Set([
@@ -45,6 +46,66 @@ export function normalizeDeclaredSource(raw) {
 		.toLowerCase();
 	if (ALLOWED_DECLARED.has(s)) return s;
 	return "other";
+}
+
+const IMAGE_MODEL_RULES = [
+	[/gpt-image|gptimage/, "gptimage"],
+	[/dall-?e/, "dalle"],
+	[/nano-banana/, "gemini"],
+	[/stable[- ]?diffusion|stability-ai\/sd|sd[_-]?xl|(?<![a-z])sdxl(?![a-z])|checkpoints\/(?:xl|1\.5|pony)\//, "stablediffusion"],
+	[/(?<![a-z])midjourney(?![a-z])/, "midjourney"],
+	[/(?<![a-z])ideogram(?![a-z])/, "ideogram"],
+	[/(?<![a-z])leonardo/, "leonardo"],
+	[/(?<![a-z])firefly(?![a-z])/, "firefly"],
+	[/(?<![a-z])imagen(?![a-z])/, "imagen"],
+	[/(?<![a-z])gemini(?![a-z])/, "gemini"],
+	[/(?<![a-z])chatgpt(?![a-z])/, "chatgpt"],
+	[/(?<![a-z])runway(?![a-z])/, "runway"],
+	[/(?<![a-z])sora(?![a-z])/, "sora"],
+	[/(?<![a-z])grok(?![a-z])/, "grok"],
+	[/(?<![a-z])flux(?![a-z])/, "flux"]
+];
+const VIDEO_MODEL_RULES = [
+	[/(?<![a-z])seedance(?![a-z])/, "seedance"],
+	[/(?<![a-z])hailuo(?![a-z])/, "hailuo"],
+	[/(?<![a-z])haiper(?![a-z])/, "haiper"],
+	[/(?<![a-z])kling(?![a-z])/, "kling"],
+	[/(?<![a-z])runway(?![a-z])/, "runway"],
+	[/(?<![a-z])luma(?![a-z])|(?<![a-z])photon(?![a-z])/, "luma"],
+	[/(?<![a-z])pika(?![a-z])/, "pika"],
+	[/(?<![a-z])veo(?![a-z])/, "veo"],
+	[/(?<![a-z])sora(?![a-z])/, "sora"],
+	[/(?<![a-z])grok(?![a-z])/, "grok"],
+	[/(?<![a-z])wan(?![a-z])/, "wan"]
+];
+
+function matchDeclaredSource(model, rules) {
+	const text = String(model || "").toLowerCase();
+	for (const [pattern, source] of rules) {
+		if (pattern.test(text)) return source;
+	}
+	return "other";
+}
+
+/** Map an image model id onto Vynly's image generator list. Unknown ids stay "other". */
+export function vynlyDeclaredSourceFromModel(model) {
+	return matchDeclaredSource(model, IMAGE_MODEL_RULES);
+}
+
+/** Map a video model id onto Vynly's video generator list. Unknown ids stay "other". */
+export function vynlyVideoDeclaredSourceFromModel(model) {
+	return matchDeclaredSource(model, VIDEO_MODEL_RULES);
+}
+
+function modelFromImage(image) {
+	const meta = parseMeta(image?.meta) || {};
+	const args = meta.args && typeof meta.args === "object" && !Array.isArray(meta.args) ? meta.args : {};
+	return typeof args.model === "string" ? args.model : "";
+}
+
+function declaredSourceForBuffer(buffer, explicit) {
+	if (String(explicit || "").trim()) return normalizeDeclaredSource(explicit);
+	return vynlyDeclaredSourceFromModel(readProvenance(buffer).model);
 }
 
 export function normalizeVideoDeclaredSource(raw) {
@@ -199,11 +260,11 @@ async function prepareWatermarkedImage(storage, image) {
 	let output = buffer;
 	let contentType = guessContentType(image.filename);
 	let filename = originalFilename;
-	const wm = await applyImageWatermark(buffer, { maxBytes: MAX_BYTES });
+	const wm = await applyImageWatermark(buffer, { maxBytes: MAX_BYTES - PROVENANCE_RESERVE });
 	if (!wm.contentType || !wm.filenameSuffix || !Buffer.isBuffer(wm.buffer) || wm.buffer === buffer) {
 		throw Object.assign(new Error("Could not watermark every image in this group"), { status: 502 });
 	}
-	output = wm.buffer;
+	output = writeProvenance(wm.buffer, image, { composite: true });
 	contentType = wm.contentType;
 	const stem = String(filename || "image").replace(/\.[^.]+$/u, "") || "image";
 	filename = `${stem}${wm.filenameSuffix}`;
@@ -258,7 +319,9 @@ export async function shareCreationToVynly(deps) {
 				videoUrl,
 				caption,
 				tags: tagsRaw || "parascene,aivideo",
-				declaredSource: normalizeVideoDeclaredSource(options.declaredSource)
+				declaredSource: String(options.declaredSource || "").trim()
+					? normalizeVideoDeclaredSource(options.declaredSource)
+					: vynlyVideoDeclaredSourceFromModel(modelFromImage(image))
 			});
 			await annotateVynlyPost(queries, comments, image, user, result);
 			return result;
@@ -298,7 +361,7 @@ export async function shareCreationToVynly(deps) {
 				...cover,
 				caption,
 				tags,
-				declaredSource: normalizeDeclaredSource(options.declaredSource),
+				declaredSource: "other", // one post, many images; do not claim a single generator
 				width: Math.max(1, Math.floor(Number(sources[0].width) || 1024)),
 				height: Math.max(1, Math.floor(Number(sources[0].height) || 1024)),
 				extraImages
@@ -339,19 +402,23 @@ export async function shareCreationToVynly(deps) {
 			? image.filename.split("/").pop()
 			: String(image.filename || "image.png");
 
+	let watermarked = false;
 	try {
-		const wm = await applyImageWatermark(buf, { maxBytes: MAX_BYTES });
+		const wm = await applyImageWatermark(buf, { maxBytes: MAX_BYTES - PROVENANCE_RESERVE });
 		if (wm.contentType && wm.filenameSuffix && wm.buffer) {
 			uploadBuf = wm.buffer;
 			uploadContentType = wm.contentType;
 			const stem = String(uploadFilename || "image").replace(/\.[^.]+$/u, "") || "image";
 			uploadFilename = `${stem}${wm.filenameSuffix}`;
+			watermarked = true;
 		}
 	} catch (wmErr) {
 		if (wmErr && typeof wmErr === "object" && "status" in wmErr && typeof /** @type {{ status: number }} */ (wmErr).status === "number") {
 			throw wmErr;
 		}
 	}
+
+	uploadBuf = writeProvenance(uploadBuf, image, { composite: watermarked });
 
 	if (uploadBuf.length > MAX_BYTES) {
 		const err = new Error("Image is too large to post via Parascene (over 4 MB). Try a smaller export.");
@@ -369,7 +436,7 @@ export async function shareCreationToVynly(deps) {
 	const caption = captionForVynly(defaultCaption(image, options.caption));
 	const tagsRaw = typeof options.tags === "string" ? options.tags.trim() : "";
 	const tags = tagsRaw || "parascene,aiart";
-	const declaredSource = normalizeDeclaredSource(options.declaredSource);
+	const declaredSource = declaredSourceForBuffer(uploadBuf, options.declaredSource);
 
 	try {
 		const result = await client.postImageMultipart(token, {

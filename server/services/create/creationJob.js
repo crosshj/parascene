@@ -28,6 +28,7 @@ import {
 	seedAudioCover,
 } from "./audioCoverProcedural.js";
 import { refreshGroupV2MemberView } from "./groupV2Ops.js";
+import { writeProvenance } from "./provenance.js";
 import {
 	gpuWaitMetaPatch,
 	isCreationGpuInFlight,
@@ -971,6 +972,7 @@ async function finalizeCreationJob({
 	}
 
 	// Upload after audio cover persist so we store the real still, not the temp placeholder.
+	imageBuffer = writeProvenance(imageBuffer, { id: imageId, meta: existingMeta });
 	logCreation("Uploading image to storage");
 	const timestamp = Date.now();
 	const random = Math.random().toString(36).substring(2, 9);
