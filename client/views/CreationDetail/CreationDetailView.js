@@ -8739,12 +8739,13 @@ addCreationDetailDocumentListener('click', async (e) => {
 		e.preventDefault();
 		const creationId = getCreationId();
 		if (!creationId) return;
-		const vynlyShareEligible = !isCurrentCreationUnsupportedForVynly();
 		const vynlyVideo = lastCreationMeta?.media_type === 'video' || lastCreationMeta?.meta?.media_type === 'video';
 		const imageExportEligible = shareBtn.dataset.imageExportEligible === '1';
 		const creationMeta =
 			lastCreationMeta?.meta && typeof lastCreationMeta.meta === 'object' ? lastCreationMeta.meta : null;
 		const isGroupCreation = creationMeta?.group?.kind === 'group_creations';
+		const vynlyGroupImages = isGroupCreation && !vynlyVideo && lastCreationMeta?.media_type !== 'audio';
+		const vynlyShareEligible = isGroupCreation ? vynlyGroupImages : !isCurrentCreationUnsupportedForVynly();
 		let vynlyConfigured = false;
 		if (vynlyShareEligible) {
 			try {
@@ -8762,6 +8763,7 @@ addCreationDetailDocumentListener('click', async (e) => {
 				creationId,
 				vynlyShareEligible,
 				vynlyVideo,
+				vynlyGroupImages,
 				vynlyConfigured,
 				imageExportEligible,
 				isGroupCreation

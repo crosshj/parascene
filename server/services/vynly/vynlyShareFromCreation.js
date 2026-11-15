@@ -187,6 +187,30 @@ async function annotateVynlyPost(queries, comments, image, user, result) {
 	}
 }
 
+async function prepareWatermarkedImage(storage, image) {
+	const storageFilename = resolveCreatedImageStorageFilename(image);
+	if (!storageFilename) throw Object.assign(new Error("Image file missing"), { status: 400 });
+	const buffer = await storage.getImageBuffer(storageFilename);
+	if (!Buffer.isBuffer(buffer)) throw Object.assign(new Error("Failed to read image"), { status: 500 });
+	if (buffer.length > MAX_BYTES) throw Object.assign(new Error("Image is too large to post via Parascene (over 4 MB). Try a smaller export."), { status: 413 });
+	const originalFilename = typeof image.filename === "string" && image.filename.includes("/")
+		? image.filename.split("/").pop()
+		: String(image.filename || "image.png");
+	let output = buffer;
+	let contentType = guessContentType(image.filename);
+	let filename = originalFilename;
+	const wm = await applyImageWatermark(buffer, { maxBytes: MAX_BYTES });
+	if (!wm.contentType || !wm.filenameSuffix || !Buffer.isBuffer(wm.buffer) || wm.buffer === buffer) {
+		throw Object.assign(new Error("Could not watermark every image in this group"), { status: 502 });
+	}
+	output = wm.buffer;
+	contentType = wm.contentType;
+	const stem = String(filename || "image").replace(/\.[^.]+$/u, "") || "image";
+	filename = `${stem}${wm.filenameSuffix}`;
+	if (output.length > MAX_BYTES) throw Object.assign(new Error("Image is too large to post via Parascene (over 4 MB). Try a smaller export."), { status: 413 });
+	return { buffer: output, filename, contentType };
+}
+
 /**
  * @param {object} deps
  * @param {object} deps.queries
@@ -243,6 +267,49 @@ export async function shareCreationToVynly(deps) {
 			const err = new Error("Failed to post to Vynly");
 			err.status = 502;
 			err.cause = e;
+			throw err;
+		}
+	}
+	const imageMeta = parseMeta(image.meta) || {};
+	if (imageMeta?.group?.kind === "group_creations") {
+		const sourceCreations = Array.isArray(imageMeta.group.source_creations) ? imageMeta.group.source_creations : [];
+		const ordered = sourceCreations
+			.filter((source) => source && Number.isSafeInteger(Number(source.id)) && Number(source.id) > 0)
+			.sort((a, b) => Number(a.order ?? 0) - Number(b.order ?? 0));
+		const sourceIds = [...new Set(ordered.map((source) => Number(source.id)))];
+		if (sourceIds.length < 2) throw Object.assign(new Error("This image group has no shareable images"), { status: 400 });
+		if (sourceIds.length > 10) throw Object.assign(new Error("Vynly image posts support up to 10 images per group"), { status: 400 });
+		const sources = [];
+		for (const sourceId of sourceIds) {
+			const row = await queries.selectCreatedImageById?.get(sourceId, user.id);
+			if (!row || !row.filename) throw Object.assign(new Error("A grouped image is no longer available"), { status: 404 });
+			if (creationRowIsVideo(row.meta) || String(row.status || "completed") !== "completed") {
+				throw Object.assign(new Error("Only completed image groups can be shared to Vynly"), { status: 400 });
+			}
+			sources.push(row);
+		}
+		const watermarked = [];
+		for (const source of sources) watermarked.push(await prepareWatermarkedImage(storage, source));
+		const [cover, ...extraImages] = watermarked;
+		const caption = captionForVynly(defaultCaption(image, options.caption));
+		const tags = typeof options.tags === "string" && options.tags.trim() ? options.tags.trim() : "parascene,aiart";
+		try {
+			const result = await client.postImageMultipart(token, {
+				...cover,
+				caption,
+				tags,
+				declaredSource: normalizeDeclaredSource(options.declaredSource),
+				width: Math.max(1, Math.floor(Number(sources[0].width) || 1024)),
+				height: Math.max(1, Math.floor(Number(sources[0].height) || 1024)),
+				extraImages
+			});
+			await annotateVynlyPost(queries, comments, image, user, result);
+			return result;
+		} catch (error) {
+			if (error instanceof VynlyApiError || error?.status) throw error;
+			const err = new Error("Failed to post image group to Vynly");
+			err.status = 502;
+			err.cause = error;
 			throw err;
 		}
 	}

@@ -140,6 +140,7 @@ class AppModalShare extends HTMLElement {
 		this._googlePhotosAuthMessage = "";
 		this._imageExportEligible = false;
 		this._isGroupCreation = false;
+		this._vynlyGroupImages = false;
 
 		this.handleOpen = this.handleOpen.bind(this);
 		this.handleCloseAllModals = this.handleCloseAllModals.bind(this);
@@ -518,6 +519,7 @@ class AppModalShare extends HTMLElement {
 		const watermarkedRow = this.querySelector("[data-open-watermarked]");
 		if (watermarkedRow) watermarkedRow.hidden = !(this._imageExportEligible || this._vynlyVideo);
 		this._isGroupCreation = options.isGroupCreation === true;
+		this._vynlyGroupImages = options.vynlyGroupImages === true;
 		this.resetAllCtas();
 		for (const selector of ["[data-open-watermarked]", "[data-share-vynly]"]) {
 			const row = this.querySelector(selector);
@@ -533,6 +535,10 @@ class AppModalShare extends HTMLElement {
 
 		if (this._isGroupCreation) {
 			this.hideSingleImageShareRows();
+			const vynlyRow = this.querySelector("[data-share-vynly]");
+			if (vynlyRow instanceof HTMLButtonElement) {
+				vynlyRow.hidden = !this._vynlyGroupImages || this._vynlyShareEligible === false || options.vynlyConfigured !== true;
+			}
 		} else {
 			const vynlyRow = this.querySelector("[data-share-vynly]");
 			if (vynlyRow instanceof HTMLButtonElement) {
@@ -578,6 +584,7 @@ class AppModalShare extends HTMLElement {
 		this._googlePhotosAuthMessage = "";
 		this._imageExportEligible = false;
 		this._isGroupCreation = false;
+		this._vynlyGroupImages = false;
 		const dialog = this.dialog;
 		if (!opts.fromDialog && dialog?.open && typeof dialog.close === "function") {
 			dialog.close();
@@ -593,13 +600,16 @@ class AppModalShare extends HTMLElement {
 		for (const selector of [
 			"[data-share-image-file]",
 			"[data-open-watermarked]",
-			"[data-share-google-photos]",
-			"[data-share-vynly]"
+			"[data-share-google-photos]"
 		]) {
 			const row = this.querySelector(selector);
 			if (row instanceof HTMLElement) {
 				row.hidden = true;
 			}
+		}
+		if (!this._vynlyGroupImages) {
+			const vynlyRow = this.querySelector("[data-share-vynly]");
+			if (vynlyRow instanceof HTMLElement) vynlyRow.hidden = true;
 		}
 	}
 
@@ -688,7 +698,7 @@ class AppModalShare extends HTMLElement {
 		if (!(row instanceof HTMLButtonElement)) return;
 
 		row.hidden = true;
-		if (this._isGroupCreation || this._vynlyShareEligible === false) {
+		if ((this._isGroupCreation && !this._vynlyGroupImages) || this._vynlyShareEligible === false) {
 			return;
 		}
 
