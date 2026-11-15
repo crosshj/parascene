@@ -485,9 +485,11 @@ class AppModalShare extends HTMLElement {
 		const id = e.detail?.creationId ?? null;
 		const vynlyShareEligible = e.detail?.vynlyShareEligible !== false;
 		const vynlyVideo = e.detail?.vynlyVideo === true;
+		const vynlyGroupImages = e.detail?.vynlyGroupImages === true;
+		const vynlyConfigured = e.detail?.vynlyConfigured === true;
 		const imageExportEligible = e.detail?.imageExportEligible === true;
 		const isGroupCreation = e.detail?.isGroupCreation === true;
-		this.open(id, { vynlyShareEligible, vynlyVideo, imageExportEligible, isGroupCreation });
+		this.open(id, { vynlyShareEligible, vynlyVideo, vynlyGroupImages, vynlyConfigured, imageExportEligible, isGroupCreation });
 	}
 
 	handleCloseAllModals() {
