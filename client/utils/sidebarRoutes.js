@@ -30,6 +30,7 @@ export function parseSidebarPath(pathname) {
 
 export function isSidebarRouteActive(item, pathname) {
 	if (!item?.path) return false;
+	if (cleanPath(pathname) === '/' && typeof matchMedia === 'function' && matchMedia('(min-width: 769px)').matches) return false;
 	const current = parseSidebarPath(pathname);
 	const target = item.route || parseSidebarPath(item.path);
 	if (current.kind === 'channel' && target.kind === 'channel') return current.slug === target.slug;

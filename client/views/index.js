@@ -10,6 +10,7 @@ import { mountMobileHeaderView } from './MobileHeader/MobileHeaderView.js';
 import { ChatRosterView } from './ChatRoster/ChatRosterView.js';
 import { mountSidebarView } from './Sidebar/SidebarView.js';
 import { FeedView } from './Feed/FeedView.js';
+import { HomeView } from './Home/HomeView.js';
 import { ExploreView } from './Explore/ExploreView.js';
 import { ChallengesView } from './Challenges/ChallengesView.js';
 import { CommentsView } from './Comments/CommentsView.js';
@@ -68,6 +69,7 @@ export const appViews = Object.freeze({
 		},
 	},
 	Feed: FeedView,
+	Home: HomeView,
 	Explore: ExploreView,
 	Challenges: ChallengesView,
 	Comments: CommentsView,

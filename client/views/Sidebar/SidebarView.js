@@ -425,6 +425,9 @@ function mountSidebarPresentation({ outlet, model = {}, onAction }) {
 	// Set the initial fade/edge state before first paint so overflowing items
 	// don't flash unobscured while waiting for the next animation frame.
 	syncFooterHeight();
+	const desktopHomeMedia = window.matchMedia('(min-width: 769px)');
+	const onDesktopHomeChange = () => syncRoute(currentPath, { closeMenus: false });
+	desktopHomeMedia.addEventListener('change', onDesktopHomeChange);
 
 	return {
 		root,
@@ -465,6 +468,7 @@ function mountSidebarPresentation({ outlet, model = {}, onAction }) {
 			}
 		},
 		destroy() {
+			desktopHomeMedia.removeEventListener('change', onDesktopHomeChange);
 			if (resizeFrame) cancelAnimationFrame(resizeFrame);
 			footerResizeObserver?.disconnect();
 			rowMenu.destroy();

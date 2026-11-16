@@ -23,12 +23,14 @@ const ICONS = {
 	info: '<circle cx="12" cy="12" r="10"/><path d="M12 11v5M12 8h.01"/>',
 	chart: '<path d="M5 19V11M12 19V5M19 19V8"/>',
 	help: '<circle cx="12" cy="12" r="10"/><path d="M9.6 9a2.5 2.5 0 1 1 4.7 1.2c-.7 1.1-2.3 1.4-2.3 3M12 17h.01"/>',
-	close: '<path d="m18 6-12 12M6 6l12 12"/>'
+	close: '<path d="m18 6-12 12M6 6l12 12"/>',
+	chevronRight: '<path d="m9 18 6-6-6-6"/>'
 	, music: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>'
 	, video: '<path d="M3 7a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v2l5-3v12l-5-3v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/>'
 };
 
 const STROKE_WIDTHS = {
+	chevronRight: 2,
 	home: 2,
 	trophy: 2,
 	eyeHidden: 2,
