@@ -301,7 +301,7 @@ function presentChallenge(item) {
 }
 
 function presentHomeCard(id, item) {
-	if (item?.skeleton) return { skeleton: true, width: Number(item.width) || 201, height: Number(item.height) || 268 };
+	if (item?.skeleton) return { skeleton: true, width: Number(item.width) || 201, height: Number(item.height) || 230 };
 	if (id === 'challenges') return presentChallenge(item);
 	if (id === 'articles') return presentArticle(item);
 	return presentCreation(item);

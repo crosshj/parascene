@@ -9,7 +9,7 @@ export const HOME_SECTIONS = Object.freeze([
 	Object.freeze({ id: 'articles', title: 'Articles', href: '/blog', kind: 'article', empty: 'No articles yet.' })
 ]);
 
-const TILE_HEIGHT = 268;
+const TILE_HEIGHT = 230;
 
 function cacheKey(viewerId) {
 	return `prsn-home-v3:${viewerId}`;

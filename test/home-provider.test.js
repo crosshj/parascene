@@ -288,7 +288,7 @@ test('the home view renders delivered rows and leaves source assembly to the pro
 	assert.equal(feed.querySelector('.home-tile--more .home-tile__more-label').textContent, '+ More');
 	assert.ok(feed.querySelector('.home-tile--more .home-tile__more-mark rect'));
 	assert.equal(outlet.querySelectorAll('[data-home-section="challenges"] .home-tile--skeleton').length, 2);
-	assert.equal(outlet.querySelector('[data-home-section="challenges"] .home-tile--skeleton').getAttribute('style'), 'width:168px;height:268px');
+	assert.equal(outlet.querySelector('[data-home-section="challenges"] .home-tile--skeleton').getAttribute('style'), 'width:144px;height:230px');
 	assert.equal(outlet.querySelector('[data-home-section="challenges"]').getAttribute('aria-busy'), 'true');
 	assert.equal(outlet.querySelector('[data-home-section="commented"] .home-empty').textContent, 'No comments yet.');
 	assert.equal(outlet.querySelector('[data-home-section="explore"] .home-empty').textContent, 'Could not load this section.');

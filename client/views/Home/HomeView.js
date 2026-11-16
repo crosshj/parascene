@@ -52,7 +52,7 @@ function thumbFor(item) {
 }
 
 function tileBox(item) {
-	const height = 268;
+	const height = 230;
 	const width = Number(item?.width);
 	const sourceHeight = Number(item?.height);
 	const px = width > 0 && sourceHeight > 0 ? Math.max(1, Math.round(height * (width / sourceHeight))) : 201;

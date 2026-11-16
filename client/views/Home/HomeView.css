@@ -136,8 +136,8 @@ body.home-desktop-composer .home-hero .create-composer .create-composer-input-sh
 .home-row {
 	display: flex;
 	align-items: flex-end;
-	height: 268px;
-	min-height: 268px;
+	height: 230px;
+	min-height: 230px;
 	gap: 0.6em;
 	overflow-x: auto;
 	overflow-y: hidden;
@@ -157,7 +157,7 @@ body.home-desktop-composer .home-hero .create-composer .create-composer-input-sh
 
 .home-tile--media {
 	position: relative;
-	height: 268px;
+	height: 230px;
 	width: auto;
 	overflow: hidden;
 	border-radius: 14px;
@@ -201,7 +201,7 @@ body.home-desktop-composer .home-hero .create-composer .create-composer-input-sh
 
 .home-tile--media:not([style]) .home-tile__thumb {
 	width: auto;
-	height: 268px;
+	height: 230px;
 }
 
 .home-tile--media:not([style]) .home-tile__thumb--empty {
@@ -225,7 +225,7 @@ body.home-desktop-composer .home-hero .create-composer .create-composer-input-sh
 	gap: 0.25em;
 	box-sizing: border-box;
 	width: 188px;
-	height: 268px;
+	height: 230px;
 	border: 1px solid color-mix(in srgb, var(--text) 8%, var(--bg));
 	border-radius: 16px;
 	background: var(--home-more-fill);
@@ -273,7 +273,7 @@ body.home-desktop-composer .home-hero .create-composer .create-composer-input-sh
 }
 
 .home-tile--skeleton {
-	height: 268px;
+	height: 230px;
 	border-radius: 14px;
 	background: var(--image-placeholder);
 	box-sizing: border-box;
