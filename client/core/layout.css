@@ -8,8 +8,8 @@
 	--app-chrome-row-height: 48px;
 	--app-mobile-header-row-height: 65px;
 	--app-page-gutter: 24px;
-	--app-canvas-background: #ffffff;
-	--app-panel-background: #eef1f6;
+	--app-canvas-background: #eef1f6;
+	--app-panel-background: #ffffff;
 	--app-accent: #7c3aed;
 	--app-accent-text: #ffffff;
 	--app-text-muted: #525a6b;
@@ -240,7 +240,7 @@ body.is-resizing-viewport .creation-detail-suno-play {
 
 @media (prefers-color-scheme: dark) {
 	:root {
-		--app-canvas-background: #0e0d19;
+		--app-canvas-background: #090412;
 		--app-panel-background: color-mix(in srgb, #191627 88%, #0e0d19);
 		--app-accent: #05c76f;
 		--app-accent-text: #0f0d1a;

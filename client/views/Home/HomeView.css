@@ -9,7 +9,7 @@
 .home-view {
 	display: flex;
 	flex-direction: column;
-	gap: 0.9em;
+	gap: 0.45em;
 	width: 100%;
 	max-width: 1792px;
 	margin-right: auto;
@@ -100,11 +100,11 @@ body.home-desktop-composer .home-hero .create-composer .create-composer-input-sh
 }
 
 .home-section + .home-section {
-	margin-top: 0.9em;
+	margin-top: 0.45em;
 }
 
 .home-section__head {
-	margin: 0 0 0.9em;
+	margin: 0 0 0.45em;
 	font-weight: 500;
 }
 
@@ -161,7 +161,7 @@ body.home-desktop-composer .home-hero .create-composer .create-composer-input-sh
 	width: auto;
 	overflow: hidden;
 	border-radius: 14px;
-	background: var(--surface);
+	background: var(--image-placeholder);
 }
 
 .home-tile[draggable="true"] {
@@ -196,7 +196,7 @@ body.home-desktop-composer .home-hero .create-composer .create-composer-input-sh
 	width: 100%;
 	height: 100%;
 	object-fit: cover;
-	background: var(--surface);
+	background: var(--image-placeholder);
 }
 
 .home-tile--media:not([style]) .home-tile__thumb {
@@ -275,6 +275,6 @@ body.home-desktop-composer .home-hero .create-composer .create-composer-input-sh
 .home-tile--skeleton {
 	height: 268px;
 	border-radius: 14px;
-	background: var(--surface);
+	background: var(--image-placeholder);
 	box-sizing: border-box;
 }

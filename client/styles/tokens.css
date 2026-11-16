@@ -30,8 +30,8 @@
 	--color-amber-bg-subtle: color-mix(in srgb, var(--color-amber) 18%, var(--surface));
 	--color-purple: #7c3aed;
 	--color-red-fg: #b91c1c;
-	--image-placeholder: rgba(15, 23, 42, 0.06);
-	--skeleton: color-mix(in srgb, var(--text) 12%, var(--surface));
+	--image-placeholder: #e4e7ee;
+	--skeleton: #e4e7ee;
 	--skeleton-shine: rgba(0, 0, 0, 0.06);
 	--shadow: 0 10px 25px rgba(15, 23, 42, 0.08);
 	--icon-image-unavailable: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='%23000' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='6' width='16' height='12' rx='1.5'/%3E%3Cpath d='M4 18L20 6'/%3E%3C/g%3E%3C/svg%3E");
