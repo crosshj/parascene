@@ -15,7 +15,15 @@ test('matches sidebar rows through aliases and canonical thread urls', () => {
 	const feed = { path: '/', route: { kind: 'channel', slug: 'feed' } };
 	const dm = { path: '/chat/dm/tonygen', route: { kind: 'dm', userName: 'tonygen', threadId: 103 } };
 	const files = { path: '/files', route: { kind: 'path', path: '/files' } };
+	assert.equal(isSidebarRouteActive(feed, '/'), true);
+	assert.equal(isSidebarRouteActive(feed, '/feed'), true);
 	assert.equal(isSidebarRouteActive(feed, '/chat/c/feed'), true);
+	assert.equal(isSidebarRouteActive({ path: '/' }, '/'), true);
+	assert.equal(isSidebarRouteActive({ path: '/' }, '/feed'), false);
+	assert.equal(isSidebarRouteActive({ path: '/feed' }, '/feed'), true);
+	assert.equal(isSidebarRouteActive({ path: '/feed' }, '/feed/doom/4'), true);
+	assert.equal(isSidebarRouteActive({ path: '/feed' }, '/'), false);
+	assert.equal(isSidebarRouteActive({ path: '/explore' }, '/'), false);
 	assert.equal(isSidebarRouteActive(feed, '/explore'), false);
 	assert.equal(isSidebarRouteActive(dm, '/chat/t/103/friendly-name'), true);
 	assert.equal(isSidebarRouteActive(dm, '/chat/t/104'), false);

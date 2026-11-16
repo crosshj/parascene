@@ -2,6 +2,7 @@ import { escapeHtml } from '../../utils/dom.js';
 
 const ICONS = {
 	home: '<path d="M3 9 12 2l9 7v11a2 2 0 0 1-2 2h-4V12H9v10H5a2 2 0 0 1-2-2Z"/>',
+	feed: '<path d="M4 11a9 9 0 0 1 9 9"/><path d="M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1" fill="currentColor" stroke="none"/>',
 	trophy: '<path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4ZM7 8H5a2 2 0 0 1-2-2V5h2M17 8h2a2 2 0 0 0 2-2V5h-2"/>',
 	eyeHidden: '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/><path d="m3 3 18 18"/>',
 	picture: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8" cy="10" r="2"/><path d="m21 17-5-5L5 19"/>',
@@ -24,14 +25,17 @@ const ICONS = {
 	chart: '<path d="M5 19V11M12 19V5M19 19V8"/>',
 	help: '<circle cx="12" cy="12" r="10"/><path d="M9.6 9a2.5 2.5 0 1 1 4.7 1.2c-.7 1.1-2.3 1.4-2.3 3M12 17h.01"/>',
 	close: '<path d="m18 6-12 12M6 6l12 12"/>',
-	chevronRight: '<path d="m9 18 6-6-6-6"/>'
+	chevronRight: '<path d="m9 18 6-6-6-6"/>',
+	stack: '<g transform="translate(12 12.4)"><rect x="-4.2" y="-7" width="8.4" height="10.6" rx="1.5" transform="translate(-3.2 0) rotate(-18 0 3.2)"/><rect x="-4.2" y="-7" width="8.4" height="10.6" rx="1.5" transform="translate(0 -0.55) rotate(-4 0 3.2)"/><rect x="-4.2" y="-7" width="8.4" height="10.6" rx="1.5" transform="translate(3.2 0) rotate(18 0 3.2)"/></g>'
 	, music: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>'
 	, video: '<path d="M3 7a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v2l5-3v12l-5-3v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/>'
 };
 
 const STROKE_WIDTHS = {
 	chevronRight: 2,
+	stack: 0.6,
 	home: 2,
+	feed: 2,
 	trophy: 2,
 	eyeHidden: 2,
 	picture: 2,

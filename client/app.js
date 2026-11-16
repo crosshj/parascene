@@ -66,7 +66,7 @@ const routeDefinitions = [
 		path: '/feed',
 		view: views.Feed,
 		title: 'Feed',
-		icon: 'home',
+		icon: 'feed',
 		composer: 'creation',
 	},
 	{

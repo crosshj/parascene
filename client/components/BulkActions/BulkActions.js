@@ -14,6 +14,65 @@ export function createBulkActions({ root, grid, cardSelector, getItem, actions =
  grid.before(bar);
  root.append(modal);
  root.classList.add('bulk-actions-host');
+ const desktopMedia = window.matchMedia('(max-width: 768px)');
+ const desktop = () => !desktopMedia.matches;
+ let coveredComposer = null;
+ let coveredHost = null;
+ let dock = null;
+ let dockFrame = null;
+ let dockResize = null;
+ function releaseDock() {
+  bar.classList.remove('creations-bulk-bar--dock');
+  if (coveredHost instanceof HTMLElement) {
+   coveredHost.inert = false;
+   coveredHost.removeAttribute('aria-hidden');
+   coveredHost = null;
+  }
+  coveredComposer?.classList.remove('is-bulk-covered');
+  coveredComposer = null;
+  dockResize?.disconnect();
+  dockResize = null;
+  dockFrame?.style.removeProperty('--bulk-dock-height');
+  dockFrame = null;
+  const parent = dock;
+  dock = null;
+  if (grid.isConnected) grid.before(bar);
+  parent?.remove();
+ }
+ function syncDockHeight() {
+  if (!(dockFrame instanceof HTMLElement) || !(dock instanceof HTMLElement)) return;
+  dockFrame.style.setProperty('--bulk-dock-height', `${Math.ceil(dock.getBoundingClientRect().height)}px`);
+ }
+ function placeBar() {
+  releaseDock();
+  if (!active || !desktop()) return;
+  const frame = root.closest('.app-outlet__frame');
+  if (!(frame instanceof HTMLElement)) return;
+  bar.classList.add('creations-bulk-bar--dock');
+  const composer = frame.querySelector('[data-layout-creation-composer]');
+  if (composer instanceof HTMLElement && !composer.hidden) {
+   composer.append(bar);
+   const host = composer.querySelector('[data-create-composer-host]');
+   if (host instanceof HTMLElement) {
+    host.inert = true;
+    host.setAttribute('aria-hidden', 'true');
+    coveredHost = host;
+   }
+   composer.classList.add('is-bulk-covered');
+   coveredComposer = composer;
+   return;
+  }
+  dock = document.createElement('div');
+  dock.className = 'app-outlet__creation-composer creations-bulk-dock';
+  dock.append(bar);
+  frame.append(dock);
+  dockFrame = frame;
+  dockResize = new ResizeObserver(syncDockHeight);
+  dockResize.observe(dock);
+  syncDockHeight();
+ }
+ const onDesktopChange = () => { if (active) placeBar(); };
+ desktopMedia.addEventListener?.('change', onDesktopChange);
  const actionHost = bar.querySelector('[data-bulk-actions]');
  const error = bar.querySelector('[data-bulk-error]');
  const message = modal.querySelector('[data-creations-bulk-delete-message]');
@@ -80,11 +139,12 @@ export function createBulkActions({ root, grid, cardSelector, getItem, actions =
   if (destroyed || busy) return;
   modal.close(); selected.clear(); active = true;
   root.classList.add('is-bulk-mode'); bar.removeAttribute('aria-hidden');
-  error.hidden = true; sync();
+  error.hidden = true; placeBar(); sync();
  }
  function exit() {
   modal.close(); selected.clear(); active = false;
-  root.classList.remove('is-bulk-mode'); bar.setAttribute('aria-hidden', 'true'); sync();
+  root.classList.remove('is-bulk-mode'); bar.setAttribute('aria-hidden', 'true');
+  releaseDock(); sync();
  }
  function toggle(card) {
   if (busy) return;
@@ -93,6 +153,32 @@ export function createBulkActions({ root, grid, cardSelector, getItem, actions =
   if (selected.has(id)) selected.delete(id); else selected.add(id);
   sync();
  }
+ function clearNativeGridSelection() {
+  const selection = window.getSelection?.();
+  if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return;
+  const node = selection.anchorNode;
+  const host = node instanceof Element ? node : node?.parentElement;
+  if (host && (grid.contains(host) || root.contains(host))) selection.removeAllRanges();
+ }
+ const onShiftKey = (event) => {
+  if (event.key !== 'Shift' || event.repeat) return;
+  document.documentElement.classList.toggle('prsn-shift-held', event.type === 'keydown');
+  if (event.type === 'keyup') clearNativeGridSelection();
+ };
+ document.addEventListener('keydown', onShiftKey, { signal });
+ document.addEventListener('keyup', onShiftKey, { signal });
+ window.addEventListener('blur', () => document.documentElement.classList.remove('prsn-shift-held'), { signal });
+ grid.addEventListener('selectstart', event => {
+  if (!event.shiftKey && !active) return;
+  event.preventDefault();
+ }, { capture: true, signal });
+ grid.addEventListener('mousedown', event => {
+  if (event.button !== 0 || !event.shiftKey) return;
+  const card = event.target.closest?.(cardSelector);
+  if (!card || event.target.closest?.('input, textarea, button')) return;
+  event.preventDefault();
+  clearNativeGridSelection();
+ }, { capture: true, signal });
  grid.addEventListener('click', event => {
   const card = event.target.closest?.(cardSelector);
   if (!card) return;
@@ -100,7 +186,7 @@ export function createBulkActions({ root, grid, cardSelector, getItem, actions =
   if (!active && event.shiftKey) {
    event.preventDefault(); event.stopImmediatePropagation(); enter();
    const item = getItem(card); if (item) selected.add(String(item.id));
-   sync(); return;
+   clearNativeGridSelection(); sync(); return;
   }
   if (!active) return;
   event.stopImmediatePropagation();
@@ -109,7 +195,7 @@ export function createBulkActions({ root, grid, cardSelector, getItem, actions =
    if (busy || !item) { event.preventDefault(); return; }
    if (event.target.checked) selected.add(String(item.id)); else selected.delete(String(item.id));
    update();
-  } else { event.preventDefault(); toggle(card); }
+  } else { event.preventDefault(); clearNativeGridSelection(); toggle(card); }
  }, { capture: true, signal });
  grid.addEventListener('keydown', event => {
   if (!active || !['Enter', ' '].includes(event.key)) return;
@@ -171,5 +257,5 @@ export function createBulkActions({ root, grid, cardSelector, getItem, actions =
    if (!destroyed) { confirm.disabled = !deleteItems.length; cancel.disabled = false; confirm.classList.remove('is-loading'); update(); }
   }
  }, { signal });
- return { enter, sync, get active() { return active; }, destroy() { destroyed = true; lifetime.abort(); modal.close(); modal.remove(); bar.remove(); root.classList.remove('is-bulk-mode', 'bulk-actions-host'); } };
+ return { enter, sync, get active() { return active; }, destroy() { destroyed = true; lifetime.abort(); document.documentElement.classList.remove('prsn-shift-held'); desktopMedia.removeEventListener?.('change', onDesktopChange); modal.close(); modal.remove(); releaseDock(); bar.remove(); root.classList.remove('is-bulk-mode', 'bulk-actions-host'); } };
 }

@@ -4,6 +4,11 @@
 
 export const PRSN_FEED_CREATION_DRAG_MIME = 'application/x-parascene-creation+json';
 
+const DRAG_START_PX = 4;
+const dropTargets = new Set();
+let dragOverlay = null;
+let dragFocusWatch = null;
+
 /**
  * @param {HTMLElement} card
  */
@@ -14,58 +19,170 @@ export function attachFeedCardCreationDragSource(card) {
 	const mediaType = (card.dataset.mediaType || 'image').trim().toLowerCase();
 	const status = (card.dataset.creationStatus || '').trim().toLowerCase();
 	const creationId = idRaw != null && idRaw !== '' ? Number(idRaw) : NaN;
-	if (!Number.isFinite(creationId) || creationId <= 0 || (!imageUrl && card.dataset.groupCreation !== '1')) return;
-	if (mediaType === 'video') return;
+	const hasId = Number.isFinite(creationId) && creationId > 0;
+	if ((!hasId && !imageUrl) || (hasId && !imageUrl && card.dataset.groupCreation !== '1')) return;
+	if (mediaType === 'video' || mediaType === 'audio') return;
 	if (status === 'creating' || status === 'pending' || status === 'queued' || status === 'processing' || status === 'running') return;
 
-	card.setAttribute('draggable', 'true');
-	card.setAttribute('aria-grabbed', 'false');
+	card.dataset.creationDragSource = '1';
 	card.querySelectorAll('img').forEach((img) => {
-		if (img instanceof HTMLImageElement) img.draggable = false;
+		if (!(img instanceof HTMLImageElement)) return;
+		img.draggable = false;
+		img.style.setProperty('-webkit-user-drag', 'none');
 	});
-	// Card updates copy attributes from fresh markup and wipe `draggable`.
-	// The listener stays on the element, so a later call only restores the attribute.
+	// Card updates copy attributes from fresh markup and wipe the marker.
+	// The listener stays on the element, so a later call only restores the marker.
 	if (card.__composerDragBound) return;
 	card.__composerDragBound = true;
 
-	const img = card.querySelector('.feed-card-img');
-
-	const published = card.dataset.published === '1';
-	const groupId = card.dataset.groupCreation === '1' ? creationId : Number(card.dataset.groupId) || null;
-
-	card.addEventListener('dragstart', (e) => {
-		if (!e.dataTransfer) return;
-		const selectedSourceId = Number(card.dataset.selectedGroupSourceId);
-		const selectedImageUrl = Number.isFinite(selectedSourceId) && selectedSourceId > 0
-			? (card.dataset.selectedGroupSourceUrl || '').trim() : imageUrl;
-		if (!selectedImageUrl) { e.preventDefault(); return; }
-		const payload = JSON.stringify({
-			creationId: Number.isFinite(selectedSourceId) && selectedSourceId > 0 ? selectedSourceId : creationId,
-			imageUrl: selectedImageUrl,
-			published,
-			...(groupId ? { groupId } : {}),
-		});
-		e.dataTransfer.setData(PRSN_FEED_CREATION_DRAG_MIME, payload);
-		e.dataTransfer.setData('text/plain', selectedImageUrl);
-		e.dataTransfer.effectAllowed = 'copy';
-		card.setAttribute('aria-grabbed', 'true');
-		document.body.classList.add('prsn-creation-composer-drag-active');
-		if (img instanceof HTMLImageElement && img.complete && img.naturalWidth > 0) {
-			try {
-				e.dataTransfer.setDragImage(img, img.naturalWidth / 2, img.naturalHeight / 2);
-			} catch {
-				// ignore setDragImage failures
+	const highlight = dragHighlightElement(card);
+	card.addEventListener('dragstart', (event) => event.preventDefault());
+	card.addEventListener('click', (event) => {
+		if (!card.__suppressCreationClick) return;
+		card.__suppressCreationClick = false;
+		event.preventDefault();
+		event.stopPropagation();
+	}, true);
+	card.addEventListener('pointerdown', (event) => {
+		if (event.button !== 0 || pointerStartedOnControl(event.target, card)) return;
+		const pointerId = event.pointerId;
+		const startX = event.clientX;
+		const startY = event.clientY;
+		let dragging = false;
+		const move = (next) => {
+			if (next.pointerId !== pointerId) return;
+			if (!dragging) {
+				if (Math.hypot(next.clientX - startX, next.clientY - startY) < DRAG_START_PX) return;
+				dragging = true;
+				beginCreationPointerDrag(card, highlight);
 			}
-		}
+			next.preventDefault();
+			placeDragOverlay(highlight);
+			markComposerUnderPoint(next.clientX, next.clientY);
+		};
+		const end = (next) => {
+			if (next.pointerId !== pointerId) return;
+			window.removeEventListener('pointermove', move);
+			window.removeEventListener('pointerup', end);
+			window.removeEventListener('pointercancel', end);
+			if (!dragging) return;
+			const target = dropTargetAt(next.clientX, next.clientY);
+			endCreationPointerDrag(card);
+			card.__suppressCreationClick = true;
+			setTimeout(() => { card.__suppressCreationClick = false; }, 0);
+			if (!target) return;
+			const payload = readCreationDragPayload(card);
+			if (!payload?.imageUrl) return;
+			target.handlers.onAttachImageUrl(payload.imageUrl, {
+				creationId: payload.creationId,
+				groupId: payload.groupId,
+				published: payload.published,
+			});
+		};
+		window.addEventListener('pointermove', move);
+		window.addEventListener('pointerup', end);
+		window.addEventListener('pointercancel', end);
 	});
+}
 
-	card.addEventListener('dragend', () => {
-		card.setAttribute('aria-grabbed', 'false');
-		document.body.classList.remove('prsn-creation-composer-drag-active');
-		document.querySelectorAll('.create-composer.is-drop-target').forEach((el) => {
-			el.classList.remove('is-drop-target');
-		});
-	});
+function dragHighlightElement(card) {
+	const imageBox = card.querySelector('.feed-card-image');
+	if (imageBox instanceof HTMLElement && imageBox.tagName !== 'IMG') return imageBox;
+	return card;
+}
+
+function pointerStartedOnControl(target, card) {
+	const ElementCtor = globalThis.Element;
+	if (!ElementCtor || !(target instanceof ElementCtor)) return false;
+	const control = target.closest('button, input, textarea, select, label');
+	return control instanceof ElementCtor && control !== card && card.contains(control);
+}
+
+export function readCreationDragPayload(card) {
+	if (!(card instanceof HTMLElement)) return null;
+	const idRaw = card.dataset.imageId || card.getAttribute('data-creation-id');
+	const imageUrl = (card.dataset.imageUrlFull || '').trim();
+	const creationId = idRaw != null && idRaw !== '' ? Number(idRaw) : NaN;
+	const hasId = Number.isFinite(creationId) && creationId > 0;
+	const selectedSourceId = Number(card.dataset.selectedGroupSourceId);
+	const selectedImageUrl = Number.isFinite(selectedSourceId) && selectedSourceId > 0
+		? (card.dataset.selectedGroupSourceUrl || '').trim() : imageUrl;
+	if (!selectedImageUrl) return null;
+	const draggedId = Number.isFinite(selectedSourceId) && selectedSourceId > 0 ? selectedSourceId : creationId;
+	const published = card.dataset.published === '1';
+	const groupId = hasId && card.dataset.groupCreation === '1' ? creationId : Number(card.dataset.groupId) || null;
+	return {
+		...(Number.isFinite(draggedId) && draggedId > 0 ? { creationId: draggedId } : {}),
+		imageUrl: selectedImageUrl,
+		...(published ? { published: true } : {}),
+		...(groupId ? { groupId } : {}),
+	};
+}
+
+function beginCreationPointerDrag(card, highlight) {
+	document.documentElement.classList.add('prsn-creation-composer-drag-active');
+	document.body.classList.add('prsn-creation-composer-drag-active');
+	dragOverlay?.remove();
+	dragOverlay = document.createElement('div');
+	dragOverlay.className = 'creation-drag-highlight';
+	dragOverlay.setAttribute('aria-hidden', 'true');
+	document.body.append(dragOverlay);
+	placeDragOverlay(highlight);
+	blurDragSource(card);
+	dragFocusWatch = (event) => {
+		const target = event.target;
+		if (target instanceof HTMLElement && (target === card || card.contains(target))) target.blur();
+	};
+	document.addEventListener('focusin', dragFocusWatch, true);
+}
+
+function placeDragOverlay(highlight) {
+	if (!dragOverlay) return;
+	const box = highlight.getBoundingClientRect();
+	dragOverlay.style.left = `${box.left}px`;
+	dragOverlay.style.top = `${box.top}px`;
+	dragOverlay.style.width = `${box.width}px`;
+	dragOverlay.style.height = `${box.height}px`;
+	const styleOf = window.getComputedStyle;
+	dragOverlay.style.borderRadius = typeof styleOf === 'function' ? styleOf(highlight).borderRadius : '';
+}
+
+function endCreationPointerDrag(card) {
+	dragOverlay?.remove();
+	dragOverlay = null;
+	if (dragFocusWatch) document.removeEventListener('focusin', dragFocusWatch, true);
+	dragFocusWatch = null;
+	document.documentElement.classList.remove('prsn-creation-composer-drag-active');
+	document.body.classList.remove('prsn-creation-composer-drag-active');
+	for (const entry of dropTargets) entry.composerRoot.classList.remove('is-drop-target');
+	blurDragSource(card);
+	if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => blurDragSource(card));
+}
+
+function blurDragSource(card) {
+	const active = document.activeElement;
+	if (active instanceof HTMLElement && (active === card || card.contains(active))) active.blur();
+}
+
+function pointsIn(x, y) {
+	if (typeof document.elementsFromPoint === 'function') return document.elementsFromPoint(x, y);
+	const hit = document.elementFromPoint(x, y);
+	return hit ? [hit] : [];
+}
+
+function dropTargetAt(x, y) {
+	const stack = pointsIn(x, y);
+	for (const entry of dropTargets) {
+		if (typeof entry.handlers.isDisabled === 'function' && entry.handlers.isDisabled()) continue;
+		const over = stack.some((node) => node && (entry.composerRoot.contains(node) || entry.dropSurface.contains(node)));
+		if (over) return entry;
+	}
+	return null;
+}
+
+function markComposerUnderPoint(x, y) {
+	const over = dropTargetAt(x, y);
+	for (const entry of dropTargets) entry.composerRoot.classList.toggle('is-drop-target', entry === over);
 }
 
 /**
@@ -123,6 +240,8 @@ export function bindCreateComposerCreationDropTargets(composerRoot, dropSurface,
 	}
 	const onAttach = handlers?.onAttachImageUrl;
 	if (typeof onAttach !== 'function') return () => {};
+	const entry = { composerRoot, dropSurface, handlers };
+	dropTargets.add(entry);
 
 	let dragDepth = 0;
 
@@ -172,6 +291,7 @@ export function bindCreateComposerCreationDropTargets(composerRoot, dropSurface,
 	dropSurface.addEventListener('drop', onDrop);
 
 	return () => {
+		dropTargets.delete(entry);
 		dropSurface.removeEventListener('dragenter', onDragEnter);
 		dropSurface.removeEventListener('dragleave', onDragLeave);
 		dropSurface.removeEventListener('dragover', onDragOver);

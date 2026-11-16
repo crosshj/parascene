@@ -30,7 +30,11 @@ export function parseSidebarPath(pathname) {
 
 export function isSidebarRouteActive(item, pathname) {
 	if (!item?.path) return false;
-	if (cleanPath(pathname) === '/' && typeof matchMedia === 'function' && matchMedia('(min-width: 769px)').matches) return false;
+	const currentPath = cleanPath(pathname);
+	const itemPath = cleanPath(item.path);
+	// Home and Feed share the old feed-channel alias. Match the product links by path so only one is active.
+	if (!item.route && itemPath === '/') return currentPath === '/' || currentPath === '/index.html';
+	if (!item.route && itemPath === '/feed') return currentPath === '/feed' || currentPath.startsWith('/feed/');
 	const current = parseSidebarPath(pathname);
 	const target = item.route || parseSidebarPath(item.path);
 	if (current.kind === 'channel' && target.kind === 'channel') return current.slug === target.slug;

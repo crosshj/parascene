@@ -113,6 +113,16 @@ Small community: show meaningful developments and open opportunities. Do not sho
 
 Editorial homepage. Not an infinite scroll. Not a dashboard of tools.
 
+Items for this page:
+
+- drive challenges
+- longform / involved content
+- legacy content
+- new users
+- leaderboard
+- rewards
+- engagement
+
 Suno home is the density. A few short groups, then one way into more. Section names come from the next image, because Suno’s are songs and albums.
 
 ![Suno home](strategy-shift/suno-home.jpg)
@@ -152,7 +162,23 @@ Desktop only for now. Lay it out so the same sections can later stack into the m
 
 Done when a desktop visit lands here, a game and the last winner are still on the page after newer posts, and each section can open a fuller list.
 
+Load later. The rows will change, so do not build the store until they settle. The store should not care which rows exist.
+
+Same idea as the feed catalog. A snapshot is already waiting. Opening the page reads it. It does not build it.
+
+- Browser keeps the last payload and shows it at once. The next snapshot loads behind that and replaces it.
+- Actions write a live pool as they happen. Publish, comment, like, challenge enter or close, new account, new article. The write records the event. It does not rebuild the page.
+- About every 15 minutes that pool is reconciled into the snapshot the client reads. Caps, dedupe, and one voice not filling a row happen there.
+- Redis holds the pool and the snapshot. Same kind of store the feed catalog already uses. One shared read. No section queries on the request.
+- Named slots. Adding or dropping a row changes what reconcile fills, not the path.
+- A personal row stays out of the shared snapshot. NSFW blur is applied at read, as the feed already does for the viewer.
+- If the store misses, serve the last snapshot. Do not assemble the page from the database for that request.
+
 ## Challenges
+
+- more automated admin
+- flair for winners
+- notify results, @everyone
 
 Public entries are a condition of entering, said up front. Not a silent change to something already private.
 

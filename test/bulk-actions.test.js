@@ -140,6 +140,94 @@ test('deletion while Creations is unmounted updates persisted provider data and 
  } finally { provider?.destroy(); h.close(); }
 });
 
+test('desktop bulk controls cover the composer, or take its place when the page has none', { skip: !vm.SourceTextModule }, async () => {
+ const h = await harness('/creations', async () => response({})); let bulk;
+ try {
+  const { createBulkActions } = await h.load('components/BulkActions/BulkActions.js');
+  const frame = h.w.document.createElement('div');
+  frame.className = 'app-outlet__frame';
+  const composer = h.w.document.createElement('div');
+  composer.className = 'app-outlet__creation-composer';
+  composer.setAttribute('data-layout-creation-composer', '');
+  composer.innerHTML = '<div data-create-composer-host></div>';
+  frame.append(composer);
+  h.w.document.body.append(frame);
+  frame.append(h.outlet);
+  h.outlet.innerHTML = '<div id="grid"><div data-card="1"></div></div>';
+  const grid = h.outlet.querySelector('#grid');
+  bulk = createBulkActions({ root: h.outlet, grid, cardSelector: '[data-card]', getItem: el => ({ id: el.dataset.card }), remove() {} });
+  bulk.enter();
+  const bar = () => frame.querySelector('[data-creations-bulk-bar]');
+  assert.equal(composer.classList.contains('is-bulk-covered'), true);
+  assert.equal(bar()?.parentElement, composer);
+  assert.equal(bar()?.classList.contains('creations-bulk-bar--dock'), true);
+  assert.equal(composer.querySelector('[data-create-composer-host]').getAttribute('aria-hidden'), 'true');
+  assert.equal(frame.querySelector('.creations-bulk-dock'), null);
+  bar().querySelector('[data-creations-bulk-close]').click();
+  assert.equal(composer.classList.contains('is-bulk-covered'), false);
+  assert.equal(bar()?.parentElement, grid.parentElement);
+  assert.equal(bar()?.classList.contains('creations-bulk-bar--dock'), false);
+  composer.hidden = true;
+  bulk.enter();
+  const dock = frame.querySelector('.creations-bulk-dock');
+  assert.ok(dock);
+  assert.equal(dock.classList.contains('app-outlet__creation-composer'), true);
+  assert.equal(bar()?.parentElement, dock);
+  assert.equal(composer.classList.contains('is-bulk-covered'), false);
+  bulk.destroy(); bulk = null;
+  assert.equal(frame.querySelector('[data-creations-bulk-bar]'), null);
+  assert.equal(frame.querySelector('.creations-bulk-dock'), null);
+ } finally { bulk?.destroy(); h.close(); }
+});
+
+test('holding shift does not leave a native selection on bulk grid cards', { skip: !vm.SourceTextModule }, async () => {
+ const h = await harness('/creations', async () => response({})); let bulk;
+ try {
+  const { createBulkActions } = await h.load('components/BulkActions/BulkActions.js');
+  h.outlet.innerHTML = '<div id="grid"><div data-card="1"><img></div><div data-card="2"><img></div></div>';
+  const grid = h.outlet.querySelector('#grid');
+  bulk = createBulkActions({ root: h.outlet, grid, cardSelector: '[data-card]', getItem: el => ({ id: el.dataset.card }), remove() {} });
+  h.w.document.dispatchEvent(new h.w.KeyboardEvent('keydown', { key: 'Shift', bubbles: true }));
+  assert.equal(h.w.document.documentElement.classList.contains('prsn-shift-held'), true);
+  const select = new h.w.Event('selectstart', { bubbles: true, cancelable: true });
+  Object.assign(select, { shiftKey: true });
+  grid.firstElementChild.dispatchEvent(select);
+  assert.equal(select.defaultPrevented, true);
+  const down = new h.w.MouseEvent('mousedown', { bubbles: true, cancelable: true, shiftKey: true, button: 0 });
+  grid.firstElementChild.querySelector('img').dispatchEvent(down);
+  assert.equal(down.defaultPrevented, true);
+  const plain = new h.w.Event('selectstart', { bubbles: true, cancelable: true });
+  grid.lastElementChild.dispatchEvent(plain);
+  assert.equal(plain.defaultPrevented, false);
+  bulk.enter();
+  const during = new h.w.Event('selectstart', { bubbles: true, cancelable: true });
+  grid.lastElementChild.dispatchEvent(during);
+  assert.equal(during.defaultPrevented, true);
+ } finally { bulk?.destroy(); h.close(); }
+});
+
+test('mobile bulk controls stay inline with the rows', { skip: !vm.SourceTextModule }, async () => {
+ const h = await harness('/files', async () => response({}), { mobile: true }); let bulk;
+ try {
+  const { createBulkActions } = await h.load('components/BulkActions/BulkActions.js');
+  const frame = h.w.document.createElement('div');
+  frame.className = 'app-outlet__frame';
+  const composer = h.w.document.createElement('div');
+  composer.className = 'app-outlet__creation-composer';
+  composer.setAttribute('data-layout-creation-composer', '');
+  frame.append(composer);
+  h.w.document.body.append(frame);
+  frame.append(h.outlet);
+  h.outlet.innerHTML = '<div id="grid"><div data-card="1"></div></div>';
+  const grid = h.outlet.querySelector('#grid');
+  bulk = createBulkActions({ root: h.outlet, grid, cardSelector: '[data-card]', getItem: el => ({ id: el.dataset.card }), remove() {} });
+  bulk.enter();
+  assert.equal(grid.previousElementSibling?.matches('[data-creations-bulk-bar]'), true);
+  assert.equal(composer.querySelector('[data-creations-bulk-bar]'), null);
+  assert.equal(frame.querySelector('.creations-bulk-dock'), null);
+ } finally { bulk?.destroy(); h.close(); }
+});
+
 test('a retry status change updates the cached creation while Creations is unmounted', { skip: !vm.SourceTextModule }, async () => {
  const h = await harness('/feed', async () => response({ creations: [], has_more: false })); let provider;
  try {

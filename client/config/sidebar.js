@@ -1,7 +1,8 @@
 // Static product navigation and interaction definitions. Conversation and
 // server data comes from the chat provider; this module holds sidebar options.
 export const navigationItems = [
-	{ id: 'feed', label: 'Feed', path: '/feed', icon: 'home' },
+	{ id: 'home', label: 'Home', path: '/', icon: 'home' },
+	{ id: 'feed', label: 'Feed', path: '/feed', icon: 'feed' },
 	{ id: 'challenges', label: 'Challenges', path: '/challenges', icon: 'trophy' },
 	{ id: 'creations', label: 'My Creations', path: '/creations', icon: 'picture' },
 	{ id: 'files', label: 'My Files', path: '/files', icon: 'files' },

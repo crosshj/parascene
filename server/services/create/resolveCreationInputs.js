@@ -1,10 +1,12 @@
 import { validateInputBindings, creationInputParentId } from '../../shared.js';
 import { groupV2Items, groupActionSupportedForMeta, parseMeta } from './groupV2.js';
 import { extractFilenameFromCreatedImagePath } from './resolveCreatedImageStorageFilename.js';
+import { creationEligibleForLatestCommentsStream } from './latestCommentsVisibility.js';
 import { getCdnOrigin } from './url.js';
 
+// Comments already shows unpublished challenge results. A visible image can be a source.
 const allowed = (row, user) => row && (Number(row.user_id) === Number(user.id) || user.role === 'admin' ||
- ((row.published === 1 || row.published === true) && (row.status || 'completed') === 'completed' && !row.unavailable_at));
+ (creationEligibleForLatestCommentsStream(row) && (row.status || 'completed') === 'completed'));
 const failure = (code, status = 404) => Object.assign(new Error(code), { code, status });
 
 function containsCreation(meta, creationId) {

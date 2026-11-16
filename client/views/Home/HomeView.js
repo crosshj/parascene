@@ -1,29 +1,16 @@
-import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
-import { createChatFeedFetchPage } from '../../providers/feed/feed.js';
-import { buildChallengesChannelModel } from '../../shared/challenges/model/buildChannelModel.js';
 import { challengesDetailsHref } from '../../shared/challenges/model/detailsRoute.js';
 import { iconMarkup } from '../../components/Icon/Icon.js';
 import { creationMediaType, creationThumbnailUrl } from '../../shared/creationGrid.js';
 import { nsfwMediaUrl, nsfwShouldBlur } from '../../shared/nsfwPolicy.js';
-import {
-	ACTIVE_PARTICIPANT_PHASES,
-	deriveChallengePhase,
-	mergeFullChallengeConfigForChallenge,
-	pickChallengeConfigTimestamp,
-	pickChallengeHeroImageUrl,
-	pickChallengeHeroPreviewUrl,
-	summarizeLatestChallengeConfigs
-} from '../../shared.js';
-import {
-	fetchCreationEmbedPayload,
-	parseHeroCreationOrShareRef,
-	parseHeroDirectMediaUrl
-} from '../../shared/userText.js';
+import { BLOG_CAMPAIGN_INTERNAL, buildBlogPostPublicPath } from '../../shared/blogCampaignPath.js';
+import { attachFeedCardCreationDragSource } from '../../shared/creationComposerDrag.js';
+import { isGroupCreationItem } from '../../shared/creationGroupMedia.js';
+import { feedItemCardOriginalImageUrl, getFeedItemGroupCarouselSources } from '../../shared/feedCardBuild.js';
 import { FeedView } from '../Feed/FeedView.js';
 import './HomeView.css';
 
 const MOBILE = '(max-width: 768px)';
-const SAMPLE = 8;
+const SECTION_MISS = 'Could not load this section.';
 
 function escapeHtml(value) {
 	return String(value ?? '')
@@ -36,15 +23,6 @@ function escapeHtml(value) {
 function creationId(item) {
 	const id = Number(item?.created_image_id ?? item?.id);
 	return Number.isFinite(id) && id > 0 ? id : 0;
-}
-
-function isCreation(item) {
-	if (!item || item.type === 'engagement' || item.type === 'blog' || item.type === 'tip') return false;
-	return creationId(item) > 0;
-}
-
-function isPinnedChallengeAnnouncement(item) {
-	return item?.editorial_pin === true && String(item?.editorial_pin_id || '').startsWith('challenge-');
 }
 
 function withFitVariant(url) {
@@ -73,11 +51,12 @@ function thumbFor(item) {
 	return withFitVariant(source) || creationThumbnailUrl(item);
 }
 
-function aspectStyle(item) {
+function tileBox(item) {
+	const height = 268;
 	const width = Number(item?.width);
-	const height = Number(item?.height);
-	if (!(width > 0) || !(height > 0)) return '';
-	return ` style="aspect-ratio:${width} / ${height}"`;
+	const sourceHeight = Number(item?.height);
+	const px = width > 0 && sourceHeight > 0 ? Math.max(1, Math.round(height * (width / sourceHeight))) : 201;
+	return ` style="width:${px}px;height:${height}px"`;
 }
 
 function nsfwBadge(item) {
@@ -85,32 +64,43 @@ function nsfwBadge(item) {
 	return `<span class="home-tile__nsfw" role="img" aria-label="NSFW">${iconMarkup('eyeHidden')}</span>`;
 }
 
+function dragAttrs(item) {
+	const id = creationId(item);
+	const url = feedItemCardOriginalImageUrl(item);
+	const type = String(creationMediaType(item) || item?.media_type || 'image').trim().toLowerCase();
+	const status = typeof item?.status === 'string' ? item.status.trim().toLowerCase() : '';
+	if (!id || !url || type === 'video' || type === 'audio') return '';
+	if (status === 'creating' || status === 'pending' || status === 'queued' || status === 'processing' || status === 'running') return '';
+	const published = item?.published === true || item?.published === 1;
+	const group = isGroupCreationItem(item);
+	const sources = group ? getFeedItemGroupCarouselSources(item, false) : [];
+	const selected = sources.length > 1 ? sources[0] : null;
+	const groupAttr = group ? ' data-group-creation="1"' : '';
+	const selectedAttr = selected
+		? ` data-selected-group-source-id="${selected.id}" data-selected-group-source-url="${escapeHtml(selected.url)}"`
+		: '';
+	return ` draggable="true"${groupAttr}${selectedAttr} data-image-id="${id}" data-image-url-full="${escapeHtml(url)}" data-media-type="${escapeHtml(type)}" data-published="${published ? '1' : '0'}" data-creation-status="${escapeHtml(status)}"`;
+}
+
 function creationTile(item) {
 	const id = creationId(item);
 	const title = String(item?.title || '').trim() || 'Creation';
 	const thumb = nsfwMediaUrl(thumbFor(item), item);
 	const media = thumb
-		? `<img class="home-tile__thumb" src="${escapeHtml(thumb)}" alt="">`
+		? `<img class="home-tile__thumb" src="${escapeHtml(thumb)}" alt="" draggable="false">`
 		: `<span class="home-tile__thumb home-tile__thumb--empty" aria-hidden="true"></span>`;
-	return `<a class="home-tile home-tile--media"${aspectStyle(item)} href="/creations/${id}" aria-label="${escapeHtml(title)}">${media}${nsfwBadge(item)}</a>`;
-}
-
-function creationFromComment(comment) {
-	const creation = comment?.creation && typeof comment.creation === 'object' ? comment.creation : null;
-	const id = creationId(creation) || creationId({ created_image_id: comment?.created_image_id });
-	if (!creation || !id || creationMediaType(creation) === 'audio') return null;
-	const item = { ...creation, id, created_image_id: id, nsfw: creation.nsfw || comment.nsfw === true };
-	return thumbFor(item) ? item : null;
+	const drag = dragAttrs(item);
+	return `<a class="home-tile home-tile--media"${tileBox(item)}${drag} href="/creations/${id}" aria-label="${escapeHtml(title)}">${media}${nsfwBadge(item)}</a>`;
 }
 
 function challengeTile(card) {
 	const href = challengesDetailsHref(card.challengeId);
-	const sized = card.width > 0 && card.height > 0 ? ` style="aspect-ratio:${card.width} / ${card.height}"` : '';
 	const media = card.image
-		? `<img class="home-tile__thumb" src="${escapeHtml(card.image)}" alt=""${sized}>`
+		? `<img class="home-tile__thumb" src="${escapeHtml(card.image)}" alt="" draggable="false">`
 		: `<span class="home-tile__thumb home-tile__thumb--empty" aria-hidden="true"></span>`;
 	const badge = card.nsfw ? `<span class="home-tile__nsfw" role="img" aria-label="NSFW">${iconMarkup('eyeHidden')}</span>` : '';
-	return `<a class="home-tile home-tile--media"${sized} href="${escapeHtml(href)}" aria-label="${escapeHtml(card.title)}">${media}${badge}</a>`;
+	const drag = card.creation ? dragAttrs(card.creation) : '';
+	return `<a class="home-tile home-tile--media"${tileBox(card)}${drag} href="${escapeHtml(href)}" aria-label="${escapeHtml(card.title)}">${media}${badge}</a>`;
 }
 
 function placeComposer(slot) {
@@ -128,12 +118,65 @@ function placeComposer(slot) {
 	};
 }
 
-function sectionMarkup({ title, href, tiles, empty }) {
+function articleTile(post) {
+	const title = String(post?.title || post?.slug || 'Article').trim() || 'Article';
+	const href = buildBlogPostPublicPath(post?.slug, BLOG_CAMPAIGN_INTERNAL);
+	const thumb = nsfwMediaUrl(String(post?.image || post?.image_url || '').trim(), post);
+	const media = thumb
+		? `<img class="home-tile__thumb" src="${escapeHtml(thumb)}" alt="" draggable="false">`
+		: `<span class="home-tile__thumb home-tile__thumb--empty" aria-hidden="true"></span>`;
+	const drag = dragAttrs({
+		id: post?.creation_id,
+		created_image_id: post?.creation_id,
+		image_url: post?.file_path || post?.filename || '',
+		file_path: post?.file_path,
+		filename: post?.filename,
+		media_type: 'image',
+		published: post?.published === true,
+		status: post?.status
+	});
+	return `<a class="home-tile home-tile--media"${tileBox(post)}${drag} href="${escapeHtml(href)}" aria-label="${escapeHtml(title)}">${media}${nsfwBadge(post)}</a>`;
+}
+
+function moreTile(href, title) {
+	return `<a class="home-tile home-tile--more" href="${escapeHtml(href)}" aria-label="More ${escapeHtml(title)}"><span class="home-tile__more-mark" aria-hidden="true">${iconMarkup('stack')}</span><span class="home-tile__more-label">+ More</span></a>`;
+}
+
+function skeletonTile(item) {
+	return `<div class="home-tile home-tile--skeleton"${tileBox(item)}></div>`;
+}
+
+function tilesFor(section) {
+	return section.items.map((item) => {
+		if (item?.skeleton) return skeletonTile(item);
+		if (section.kind === 'challenge') return challengeTile(item);
+		if (section.kind === 'article') return articleTile(item);
+		return creationTile(item);
+	});
+}
+
+function sectionStamp(section) {
+	if (!section.items.length && (section.status === 'idle' || section.status === 'loading')) return 'pending';
+	if (!section.items.length && (section.status === 'error' || section.status === 'stale-error')) return 'error';
+	if (!section.items.length) return 'empty';
+	return section.items.map((item) => {
+		if (item?.skeleton) return `s:${item.width}x${item.height}`;
+		if (section.kind === 'challenge') return `${item.challengeId}:${item.image || ''}:${item.title || ''}`;
+		if (section.kind === 'article') return `${item.slug}:${item.image_url || ''}:${item.title || ''}`;
+		return `${item.created_image_id || item.id}:${item.title || ''}:${item.image || item.image_url || ''}:${item.width || 0}x${item.height || 0}`;
+	}).join('|');
+}
+
+function sectionMarkup(section) {
+	const stamp = sectionStamp(section);
+	const tiles = section.items.length ? tilesFor(section) : [];
+	const busy = section.items.some((item) => item?.skeleton);
+	const empty = stamp === 'error' ? SECTION_MISS : section.empty;
 	const body = tiles.length
-		? `<div class="home-row">${tiles.join('')}</div>`
-		: `<p class="home-empty">${escapeHtml(empty)}</p>`;
-	return `<section class="home-section">
-		<h2 class="home-section__head"><a class="home-section__link" href="${escapeHtml(href)}">${escapeHtml(title)} <span class="home-section__chevron" aria-hidden="true">${iconMarkup('chevronRight')}</span></a></h2>
+		? `<div class="home-row">${tiles.join('')}${moreTile(section.href, section.title)}</div>`
+		: (stamp === 'pending' ? '' : `<p class="home-empty">${escapeHtml(empty)}</p>`);
+	return `<section class="home-section" data-home-section="${escapeHtml(section.id)}" data-stamp="${escapeHtml(stamp)}"${busy ? ' aria-busy="true"' : ''}>
+		<h2 class="home-section__head"><a class="home-section__link" href="${escapeHtml(section.href)}">${escapeHtml(section.title)} <span class="home-section__chevron" aria-hidden="true">${iconMarkup('chevronRight')}</span></a></h2>
 		${body}
 	</section>`;
 }
@@ -154,169 +197,57 @@ function mountDesktop({ outlet, actions, services }) {
 	const restoreComposer = placeComposer(root.querySelector('[data-home-composer]'));
 	services.providers.document.setTitle('Home · Parascene');
 	let destroyed = false;
-	let releaseMessages = () => {};
 	const sections = root.querySelector('[data-home-sections]');
-	const cachedGet = async (path, options = {}) => {
-		const result = await fetchJsonWithStatusDeduped(path, { credentials: 'include', ...options }, { windowMs: 30000 });
-		if (result?.status === 401) {
-			const error = new Error('Unauthorized');
-			error.status = 401;
-			throw error;
-		}
-		return result;
-	};
 
+	let suppressClick = false;
+	root.addEventListener('dragstart', () => { suppressClick = true; });
+	root.addEventListener('dragend', () => { setTimeout(() => { suppressClick = false; }, 50); });
 	root.addEventListener('click', (event) => {
+		if (suppressClick) {
+			suppressClick = false;
+			event.preventDefault();
+			return;
+		}
 		const link = event.target.closest('a');
 		if (!link || link.target || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
 		const target = new URL(link.href, location.origin);
 		if (target.origin !== location.origin) return;
+		if (target.pathname === '/blog' || target.pathname.startsWith('/blog/')) return;
 		event.preventDefault();
 		void actions.navigate(target.pathname + target.search + target.hash);
 	});
 
-	function challengeCards(messages) {
-		const model = buildChallengesChannelModel(messages, { viewerId: Number(services.session.user?.id) || null });
-		const configs = model.raw?.configs || [];
-		const cards = [];
-		for (const summary of summarizeLatestChallengeConfigs(configs)) {
-			const challengeId = String(summary.challenge_id || '').trim();
-			if (!challengeId) continue;
-			const cfg = {
-				...summary.payload,
-				...mergeFullChallengeConfigForChallenge(configs, challengeId)
-			};
-			const phase = deriveChallengePhase(cfg, Date.now());
-			if (phase === 'pre_submit' || phase === 'deleted' || phase === 'purged' || phase === 'empty') continue;
-			const end = Date.parse(String(pickChallengeConfigTimestamp(cfg, 'voting_end_at') || ''));
-			cards.push({
-				challengeId,
-				title: String(summary.title || cfg.title || 'Challenge').trim() || 'Challenge',
-				active: ACTIVE_PARTICIPANT_PHASES.has(phase),
-				preview: pickChallengeHeroPreviewUrl(cfg),
-				hero: pickChallengeHeroImageUrl(cfg),
-				end: Number.isFinite(end) ? end : 0
+	function paint(list) {
+		for (const section of list) {
+			const stamp = sectionStamp(section);
+			const current = sections.querySelector(`[data-home-section="${section.id}"]`);
+			if (current?.dataset.stamp === stamp) continue;
+			const html = sectionMarkup(section);
+			if (current) current.outerHTML = html;
+			else sections.insertAdjacentHTML('beforeend', html);
+			const next = sections.querySelector(`[data-home-section="${section.id}"]`);
+			next?.querySelectorAll('.home-tile[data-image-url-full]').forEach((tile) => {
+				attachFeedCardCreationDragSource(tile);
 			});
 		}
-		cards.sort((a, b) => (a.active === b.active ? b.end - a.end : a.active ? -1 : 1));
-		return cards.slice(0, SAMPLE);
 	}
 
-	async function imageForChallenge(card) {
-		const preview = String(card.preview || '').trim();
-		const hero = String(card.hero || '').trim();
-		const direct = parseHeroDirectMediaUrl(hero);
-		const ref = parseHeroCreationOrShareRef(hero);
-		if (!ref) return { url: preview || direct || '', width: 0, height: 0, nsfw: false };
-		const data = await fetchCreationEmbedPayload(ref.creationId, ref.shareOpts, { challengeId: card.challengeId });
-		if (!data || data._error) return { url: preview || direct || '', width: 0, height: 0, nsfw: false };
-		const blur = nsfwShouldBlur(data);
-		return {
-			url: blur ? nsfwMediaUrl(thumbFor(data), data) : (preview || thumbFor(data)),
-			width: Number(data.width) || 0,
-			height: Number(data.height) || 0,
-			nsfw: blur
-		};
-	}
-
-	async function loadChallengeCards() {
-		const threads = services.providers?.threads;
-		if (!threads?.query) return { ok: true, items: [] };
-		await threads.query.loadIfNeeded();
-		if (destroyed) return { ok: true, items: [] };
-		const thread = threads.query.data?.threads?.find((row) => row.channel_slug === 'challenges');
-		const threadId = Number(thread?.id);
-		if (!threadId) return { ok: true, items: [] };
-		const lease = threads.acquireMessages(threadId, { persist: true, complete: true });
-		releaseMessages = () => lease.release();
-		await lease.query.loadIfNeeded();
-		if (destroyed) return { ok: true, items: [] };
-		const rawMessages = lease.query.data?.messages || [];
-		const messages = threads.votes?.project?.(rawMessages) || rawMessages;
-		const cards = challengeCards(messages);
-		const images = await Promise.all(cards.map((card) => imageForChallenge(card)));
-		return {
-			ok: true,
-			items: cards.map((card, index) => ({
-				...card,
-				image: images[index].url,
-				width: images[index].width,
-				height: images[index].height,
-				nsfw: images[index].nsfw
-			}))
-		};
-	}
-
-	async function loadCommentImages() {
-		const picked = [];
-		const seen = new Set();
-		let cursor = null;
-		for (let page = 0; page < 2 && picked.length < SAMPLE; page += 1) {
-			const params = new URLSearchParams({ limit: '24' });
-			if (cursor?.before) params.set('before', String(cursor.before));
-			if (cursor?.before_id) params.set('before_id', String(cursor.before_id));
-			const result = await cachedGet(`/api/comments/latest?${params}`);
-			if (!result?.ok) return picked.length ? { ok: true, items: picked } : { ok: false, items: [] };
-			const comments = Array.isArray(result?.data?.comments) ? result.data.comments : [];
-			for (const comment of comments) {
-				const id = Number(comment?.created_image_id);
-				if (!id || seen.has(id)) continue;
-				const item = creationFromComment(comment);
-				if (!item) continue;
-				seen.add(id);
-				picked.push(item);
-				if (picked.length >= SAMPLE) break;
-			}
-			if (result?.data?.has_more !== true || !result?.data?.next_cursor) break;
-			cursor = result.data.next_cursor;
-		}
-		return { ok: true, items: picked };
-	}
-
-	async function load() {
-		const jobs = await Promise.allSettled([
-			createChatFeedFetchPage({
-				fetchJsonWithStatusDeduped: cachedGet,
-				mobileChatSlotPack: false
-			})({ initial: true, items: [] }),
-			loadCommentImages(),
-			cachedGet('/api/explore?limit=40'),
-			loadChallengeCards()
-		]);
+	const stop = services.providers.home?.observe?.((delivery) => {
 		if (destroyed) return;
-		if (jobs.some((job) => job.status === 'rejected' && job.reason?.status === 401) || jobs.some((job) => job.status === 'fulfilled' && job.value?.status === 401)) {
+		if (delivery.unauthorized) {
 			services.session.redirectToLogin();
 			return;
 		}
-		const value = (index) => jobs[index].status === 'fulfilled' ? jobs[index].value : null;
-		const failed = (index) => jobs[index].status === 'rejected' || jobs[index].value?.ok === false;
-		const miss = 'Could not load this section.';
-		const feedItems = (value(0)?.pageItems || [])
-			.filter((item) => isCreation(item) && !isPinnedChallengeAnnouncement(item))
-			.slice(0, SAMPLE);
-		const comments = value(1)?.ok ? value(1).items || [] : [];
-		const explore = (value(2)?.ok ? value(2).data?.items : [])
-			.filter((item) => isCreation(item) && creationMediaType(item) !== 'audio')
-			.slice(0, SAMPLE);
-		const challenges = value(3)?.ok ? value(3).items || [] : [];
-
-		sections.innerHTML = [
-			sectionMarkup({ title: 'Feed', href: '/feed', tiles: feedItems.map(creationTile), empty: failed(0) ? miss : 'Nothing new in the feed.' }),
-			sectionMarkup({ title: 'Challenges', href: '/challenges', tiles: challenges.map(challengeTile), empty: failed(3) ? miss : 'No challenges yet.' }),
-			sectionMarkup({ title: 'Commented', href: '/comments', tiles: comments.map(creationTile), empty: failed(1) ? miss : 'No comments yet.' }),
-			sectionMarkup({ title: 'Explore', href: '/explore', tiles: explore.map(creationTile), empty: failed(2) ? miss : 'Nothing here.' })
-		].join('');
+		paint(delivery.sections);
+	}) || (() => {});
+	if (!services.providers.home?.observe) {
+		sections.innerHTML = `<p class="home-status home-status--error" role="status">Unable to load home.</p>`;
 	}
-
-	void load().catch((error) => {
-		if (destroyed || error?.name === 'AbortError') return;
-		sections.innerHTML = `<p class="home-status home-status--error" role="status">${escapeHtml(error?.message || 'Unable to load home.')}</p>`;
-	});
 
 	return {
 		destroy() {
 			destroyed = true;
-			releaseMessages();
+			stop();
 			restoreComposer();
 			header?.classList.remove('is-hidden-for-home');
 			frame?.classList.remove('is-home-desktop');

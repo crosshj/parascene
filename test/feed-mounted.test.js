@@ -6,7 +6,7 @@ test('carousel selection is the member dragged into Create', { skip: !vm.SourceT
  const h = await harness('/creations', async () => response({}));
  try {
   const { setupFeedCardGroupCarousel } = await h.load('shared/feedCardBuild.js');
-  const { attachFeedCardCreationDragSource, PRSN_FEED_CREATION_DRAG_MIME } = await h.load('shared/creationComposerDrag.js');
+  const { attachFeedCardCreationDragSource, readCreationDragPayload } = await h.load('shared/creationComposerDrag.js');
   const card = h.w.document.createElement('div'); card.className = 'feed-card';
   card.dataset.imageId = '50'; card.dataset.imageUrlFull = '/cover.png'; card.dataset.groupCreation = '1';
   const media = h.w.document.createElement('div'); media.className = 'feed-card-image'; card.append(media); h.outlet.append(card);
@@ -18,11 +18,7 @@ test('carousel selection is the member dragged into Create', { skip: !vm.SourceT
   attachFeedCardCreationDragSource(card);
   media.querySelector('.feed-card-group-nav--next').click();
   assert.equal(card.dataset.selectedGroupSourceId, '92');
-  const values = new Map();
-  const drag = new h.w.Event('dragstart', { bubbles: true, cancelable: true });
-  Object.defineProperty(drag, 'dataTransfer', { value: { setData(type, value) { values.set(type, value); }, setDragImage() {}, effectAllowed: '' } });
-  card.dispatchEvent(drag);
-  const payload = JSON.parse(values.get(PRSN_FEED_CREATION_DRAG_MIME));
+  const payload = readCreationDragPayload(card);
   assert.equal(payload.creationId, 92);
   assert.equal(payload.groupId, 50);
   assert.match(payload.imageUrl, /blue\.png/);

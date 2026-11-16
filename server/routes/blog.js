@@ -3,6 +3,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { marked } from "marked";
 import { randomUUID } from "node:crypto";
+import { creationMediaKey } from "../db/creations.js";
+import { verifyShareToken } from "./utils/shareLink.js";
 
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const CAMPAIGN = /^[a-z0-9]{1,12}$/;
@@ -20,6 +22,51 @@ function page({ title = "Blog", description = "", content = "", canonical = "", 
 	const safeFullTitle = esc(fullTitle);
 	const canonicalTags = canonical ? `<link rel="canonical" href="${esc(canonical)}"><meta property="og:url" content="${esc(canonical)}">` : "";
 	return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="description" content="${safeDescription}"><meta property="og:title" content="${safeFullTitle}"><meta name="twitter:title" content="${safeFullTitle}"><meta property="og:description" content="${safeDescription}"><meta name="twitter:description" content="${safeDescription}"><meta property="og:type" content="${esc(type)}">${canonicalTags}<meta name="color-scheme" content="light dark"><meta name="theme-color" content="#f6f7fb" media="(prefers-color-scheme: light)"><meta name="theme-color" content="#1a1628" media="(prefers-color-scheme: dark)"><link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/icons/icon-180.png"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/blog-assets/blog.css"><title>${safeFullTitle}</title>${preview ? '<meta name="robots" content="noindex,nofollow">' : ""}</head><body class="blog-page"><header class="blog-header"><div class="blog-header-inner"><a class="blog-brand" href="/blog" aria-label="Parascene blog"><picture><source srcset="/brand/logo-wordmark-on-night.svg" media="(prefers-color-scheme: dark)"><img class="blog-brand-logo" src="/brand/logo-wordmark.svg" alt="parascene" width="120" height="26"></picture><span class="blog-brand-section">BLOG</span></a><nav class="blog-nav" aria-label="Blog"><a href="/blog">Posts</a><a href="/">Home</a></nav></div></header><main class="blog-main"><article class="blog-content">${content}</article></main><footer class="blog-footer">© 2026 parascene. All rights reserved.</footer></body></html>`;
+}
+
+function firstPostImage(body) {
+	const source = String(body || "");
+	const html = source.match(/<img\b[^>]*?\bsrc\s*=\s*["']([^"']+)["']/i);
+	if (html?.[1]) return html[1].trim();
+	const markdown = source.match(/!\[[^\]]*]\(\s*<?([^)\s>]+)>?/);
+	return markdown?.[1]?.trim() || "";
+}
+
+function shareImageRef(raw) {
+	try {
+		const parsed = new URL(String(raw || "").trim(), "http://parascene.local");
+		const match = parsed.pathname.match(/^\/api\/share\/(v\d+)\/([^/]+)\/image$/i);
+		if (!match) return null;
+		const verified = verifyShareToken({ version: match[1], token: decodeURIComponent(match[2]) });
+		if (!verified.ok) return null;
+		return { imageId: verified.imageId, url: parsed.pathname };
+	} catch {
+		return null;
+	}
+}
+
+function cardImageUrl(raw) {
+	const value = String(raw || "").trim();
+	if (!value || /^javascript:/i.test(value) || /^data:/i.test(value)) return "";
+	const share = shareImageRef(value);
+	if (share) return share.url;
+	try {
+		const parsed = new URL(value, "http://parascene.local");
+		if (parsed.protocol === "http:" || parsed.protocol === "https:") return value;
+		if (value.startsWith("/")) return `${parsed.pathname}${parsed.search}`;
+	} catch {
+		return "";
+	}
+	return "";
+}
+
+function creationMediaPath(row, variant = "") {
+	const key = creationMediaKey(row);
+	if (!key || !row?.id) return "";
+	const encoded = key.split("/").map((part) => encodeURIComponent(part)).join("/");
+	const query = new URLSearchParams({ creation_id: String(row.id) });
+	if (variant) query.set("variant", variant);
+	return `/api/creations/media/${encoded}?${query}`;
 }
 
 function parsePath(segments) {
@@ -65,6 +112,57 @@ export default function createBlogRoutes({ client, users, pagesDir }) {
 		const origin = (process.env.APP_ORIGIN || "https://www.parascene.com").replace(/\/$/, "");
 		return res.status(200).send(page({ title, description, content: html, canonical: `${origin}/blog` }));
 	}
+
+	router.get("/api/blog/published", async (req, res) => {
+		try {
+			const limit = Math.min(Math.max(1, Number(req.query.limit) || 8), 24);
+			const candidates = [];
+			let seen = 0;
+			for (const post of await publishedPosts()) {
+				if (candidates.length >= limit || seen >= 24) break;
+				seen += 1;
+				const rawImage = firstPostImage(post.body_md);
+				const imageUrl = cardImageUrl(rawImage);
+				if (!imageUrl) continue;
+				candidates.push({ post, imageUrl, share: shareImageRef(rawImage) });
+			}
+			const ids = [...new Set(candidates.map((item) => item.share?.imageId).filter((id) => Number.isInteger(id) && id > 0))];
+			const creations = new Map();
+			if (ids.length) {
+				const { data, error } = await client.from("prsn_created_images").select("id,filename,file_path,width,height,meta,published,status").in("id", ids);
+				if (error) throw error;
+				for (const row of data || []) creations.set(Number(row.id), row);
+			}
+			res.set("Cache-Control", "private, max-age=30");
+			return res.json({
+				posts: candidates.map(({ post, imageUrl, share }) => {
+					const creation = share ? creations.get(share.imageId) : null;
+					const meta = creation?.meta && typeof creation.meta === "object" ? creation.meta : {};
+					const nsfw = meta.nsfw === true;
+					const fit = creation ? creationMediaPath(creation, "fit") : "";
+					return {
+						id: post.id,
+						slug: post.slug,
+						title: post.title,
+						description: post.description || "",
+						published_at: post.published_at,
+						image_url: nsfw && fit ? fit : imageUrl,
+						creation_id: share?.imageId || null,
+						file_path: typeof creation?.file_path === "string" ? creation.file_path : null,
+						filename: typeof creation?.filename === "string" ? creation.filename : null,
+						published: creation?.published === true,
+						status: typeof creation?.status === "string" ? creation.status : null,
+						width: Number(creation?.width) || 0,
+						height: Number(creation?.height) || 0,
+						nsfw
+					};
+				})
+			});
+		} catch (error) {
+			console.error("[blog] published list failed", error);
+			return res.status(500).json({ error: "Blog unavailable" });
+		}
+	});
 
 	router.get("/blog", async (_req, res) => {
 		try { return await renderIndex(res); }

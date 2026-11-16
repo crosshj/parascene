@@ -515,7 +515,7 @@ body.is-resizing-sidebar main#app-outlet { pointer-events: none; }
 	[data-mobile-mode="roster"] .sidebar-view__panel::before,
 	[data-mobile-mode="roster"] .sidebar-view__panel::after { display: none; }
 	[data-mobile-mode="roster"] .sidebar-view__scroll { position: static; flex: 0 0 auto; overflow: visible; overscroll-behavior-y: auto; padding: calc(72px + env(safe-area-inset-top)) clamp(8px, 2.4vw, 14px) calc(92px + env(safe-area-inset-bottom)); }
-	[data-mobile-mode="roster"] .sidebar-view__menu-item:is([data-sidebar-item="feed"], [data-sidebar-item="challenges"], [data-sidebar-item="creations"]) { display: none; }
+	[data-mobile-mode="roster"] .sidebar-view__menu-item:is([data-sidebar-item="home"], [data-sidebar-item="feed"], [data-sidebar-item="challenges"], [data-sidebar-item="creations"]) { display: none; }
 	[data-mobile-mode="roster"] .sidebar-view__section-head { padding: 6px clamp(8px, 2.4vw, 14px) 4px; min-height: 44px; }
 	[data-mobile-mode="roster"] .sidebar-view__section-head button { width: clamp(36px, 10vw, 44px); height: clamp(36px, 10vw, 44px); }
 	[data-mobile-mode="roster"] .sidebar-view__rows { gap: clamp(0px, .6vw, 3px); padding: 0 clamp(4px, 1.5vw, 8px); }

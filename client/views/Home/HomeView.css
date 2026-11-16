@@ -9,7 +9,7 @@
 .home-view {
 	display: flex;
 	flex-direction: column;
-	gap: 32px;
+	gap: 0.9em;
 	width: 100%;
 	max-width: 1792px;
 	margin-right: auto;
@@ -21,7 +21,7 @@
 	flex-direction: column;
 	align-items: center;
 	gap: 18px;
-	padding: 2em 0 4px;
+	padding: 5em 0 0;
 }
 
 .home-hero__line {
@@ -59,12 +59,11 @@ body.home-desktop-composer .home-hero .app-outlet__creation-composer {
 }
 
 .home-section + .home-section {
-	margin-top: 28px;
+	margin-top: 0.9em;
 }
 
 .home-section__head {
-	margin: 0 0 14px;
-	font-size: 0.875rem;
+	margin: 0 0 0.9em;
 	font-weight: 500;
 }
 
@@ -73,6 +72,7 @@ body.home-desktop-composer .home-hero .app-outlet__creation-composer {
 	align-items: center;
 	gap: 2px;
 	color: var(--text);
+	font-size: 0.875rem;
 	text-decoration: none;
 }
 
@@ -95,7 +95,9 @@ body.home-desktop-composer .home-hero .app-outlet__creation-composer {
 .home-row {
 	display: flex;
 	align-items: flex-end;
-	gap: 16px;
+	height: 268px;
+	min-height: 268px;
+	gap: 0.6em;
 	overflow-x: auto;
 	overflow-y: hidden;
 	scrollbar-width: none;
@@ -119,6 +121,10 @@ body.home-desktop-composer .home-hero .app-outlet__creation-composer {
 	overflow: hidden;
 	border-radius: 14px;
 	background: var(--surface);
+}
+
+.home-tile[draggable="true"] {
+	cursor: grab;
 }
 
 .home-tile__nsfw {
@@ -169,8 +175,65 @@ body.home-desktop-composer .home-hero .app-outlet__creation-composer {
 	font-weight: 600;
 }
 
+.home-tile--more {
+	--home-more-fill: color-mix(in srgb, var(--text) 4.5%, var(--bg));
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 0.25em;
+	box-sizing: border-box;
+	width: 188px;
+	height: 268px;
+	border: 1px solid color-mix(in srgb, var(--text) 8%, var(--bg));
+	border-radius: 16px;
+	background: var(--home-more-fill);
+	color: color-mix(in srgb, var(--text) 58%, var(--bg));
+	font-weight: 400;
+	transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+}
+
+.home-tile--more:hover,
+.home-tile--more:focus-visible {
+	--home-more-fill: color-mix(in srgb, var(--text) 7%, var(--bg));
+	border-color: color-mix(in srgb, var(--text) 11%, var(--bg));
+	color: color-mix(in srgb, var(--text) 74%, var(--bg));
+	outline: none;
+}
+
+.home-tile__more-mark {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	color: inherit;
+}
+
+.home-tile__more-mark svg {
+	display: block;
+	width: 4em;
+	height: 4em;
+	stroke-width: 0.03em;
+}
+
+.home-tile__more-mark rect {
+	fill: var(--home-more-fill);
+}
+
+.home-tile__more-label {
+	font-size: 0.875rem;
+	font-weight: 400;
+	letter-spacing: 0.01em;
+}
+
 .home-empty {
 	margin: 0;
 	color: var(--text-muted);
 	font-size: 0.875rem;
+}
+
+.home-tile--skeleton {
+	height: 268px;
+	border-radius: 14px;
+	background: var(--surface);
+	box-sizing: border-box;
 }
