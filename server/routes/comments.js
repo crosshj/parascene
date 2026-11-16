@@ -16,7 +16,7 @@ export function createCommentsRoutes({ comments, users }) {
   if (before != null && !Number.isFinite(Date.parse(before))) throw Object.assign(new Error('Invalid comment cursor'), { status: 400 });
   const page = await comments.latest(viewer, { limit: Math.min(100, Math.max(1, Number.parseInt(req.query.limit, 10) || 50)), before, before_id: req.query.before_id == null ? undefined : positive(req.query.before_id) });
   return { ...page, comments: page.comments.map(row => {
-   const creation = serializeCreation({ id: row.created_image_id, user_id: row.created_image_user_id, file_path: row.created_image_url, meta: row.created_image_meta, title: row.created_image_title, published: row.created_image_published, created_at: row.created_image_created_at });
+   const creation = serializeCreation({ id: row.created_image_id, user_id: row.created_image_user_id, file_path: row.created_image_url, meta: row.created_image_meta, title: row.created_image_title, published: row.created_image_published, created_at: row.created_image_created_at, width: row.created_image_width, height: row.created_image_height });
    return { ...row, creation, created_image_url: creation.url, created_image_thumbnail_url: creation.video_thumbnail_url || creation.thumbnail_url };
   }) };
  }));

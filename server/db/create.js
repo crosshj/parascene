@@ -914,7 +914,7 @@ selectLatestCreatedImageComments: {
 				if (createdImageIds.length > 0) {
 					const { data: imageRows, error: imageError } = await serviceClient
 						.from(prefixedTable("created_images"))
-						.select("id, title, published, user_id, file_path, created_at, meta, unavailable_at")
+						.select("id, title, published, user_id, file_path, created_at, meta, unavailable_at, width, height")
 						.in("id", createdImageIds);
 					if (imageError) throw imageError;
 					imageById = new Map((imageRows ?? []).map((row) => [String(row.id), row]));
@@ -1021,6 +1021,8 @@ selectLatestCreatedImageComments: {
 							),
 							created_image_url: image?.file_path ?? null,
 							created_image_meta: image?.meta ?? null,
+							created_image_width: Number(image?.width) > 0 ? Number(image.width) : (Number(image?.meta?.width) > 0 ? Number(image.meta.width) : null),
+							created_image_height: Number(image?.height) > 0 ? Number(image.height) : (Number(image?.meta?.height) > 0 ? Number(image.meta.height) : null),
 							created_image_created_at: image?.created_at ?? null,
 							created_image_published: image?.published ?? null,
 							created_image_user_id: image?.user_id ?? null,

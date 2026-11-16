@@ -21,10 +21,33 @@
 	flex-direction: column;
 	align-items: center;
 	gap: 18px;
+	position: relative;
+	z-index: 0;
 	padding: 5em 0 0;
 }
 
+.home-hero__glow {
+	position: absolute;
+	left: 50%;
+	top: 62%;
+	width: min(1080px, 100%);
+	height: 360px;
+	z-index: -1;
+	overflow: visible;
+	pointer-events: none;
+	transform: translate(-50%, -50%);
+}
+
+.home-hero__glow-canvas {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+}
+
 .home-hero__line {
+	position: relative;
+	z-index: 1;
 	margin: 0;
 	font-size: 1.75rem;
 	font-weight: 600;
@@ -32,6 +55,8 @@
 }
 
 .home-hero [data-home-composer] {
+	position: relative;
+	z-index: 1;
 	width: min(640px, 100%);
 }
 
@@ -47,6 +72,22 @@ body.home-desktop-composer .home-hero .app-outlet__creation-composer {
 	margin: 0;
 	padding: 0;
 	z-index: auto;
+}
+
+body.home-desktop-composer .home-hero .create-composer .create-composer-input-shell {
+	background: color-mix(in srgb, var(--input-bg) 55%, transparent);
+	-webkit-backdrop-filter: blur(18px) saturate(1.35);
+	backdrop-filter: blur(18px) saturate(1.35);
+}
+
+@media (prefers-color-scheme: light) {
+	.home-hero__line {
+		color: #3b1468;
+	}
+
+	body.home-desktop-composer .home-hero .create-composer .create-composer-input-shell {
+		background: color-mix(in srgb, var(--input-bg) 60%, transparent);
+	}
 }
 
 .home-status {

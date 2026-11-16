@@ -103,6 +103,92 @@ function challengeTile(card) {
 	return `<a class="home-tile home-tile--media"${tileBox(card)}${drag} href="${escapeHtml(href)}" aria-label="${escapeHtml(card.title)}">${media}${badge}</a>`;
 }
 
+function mountHeroGlow(canvas) {
+	if (/jsdom/i.test(window.navigator?.userAgent || '')) return () => {};
+	let context = null;
+	try {
+		context = canvas.getContext('2d');
+	} catch {
+		context = null;
+	}
+	const schedule = window.requestAnimationFrame?.bind(window);
+	const cancel = window.cancelAnimationFrame?.bind(window);
+	if (!context || !schedule || !cancel) return () => {};
+	const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
+	const scheme = window.matchMedia('(prefers-color-scheme: dark)');
+	const wash = [
+		{ x: 0.4, y: 0.5, rx: 0.34, ry: 0.42, tone: [88, 46, 176], lightTone: [196, 150, 255], alpha: 0.26, lightAlpha: 0.22 },
+		{ x: 0.56, y: 0.46, rx: 0.3, ry: 0.38, tone: [124, 72, 210], lightTone: [214, 176, 255], alpha: 0.18, lightAlpha: 0.15 },
+		{ x: 0.62, y: 0.56, rx: 0.26, ry: 0.34, tone: [214, 46, 168], lightTone: [255, 150, 224], alpha: 0.34, lightAlpha: 0.26, pulse: true }
+	];
+	let frame = 0;
+	let width = 0;
+	let height = 0;
+	const resize = () => {
+		const bounds = canvas.getBoundingClientRect();
+		const ratio = Math.min(window.devicePixelRatio || 1, 2);
+		const nextWidth = Math.max(1, Math.round(bounds.width * ratio));
+		const nextHeight = Math.max(1, Math.round(bounds.height * ratio));
+		if (nextWidth === width && nextHeight === height) return;
+		width = nextWidth;
+		height = nextHeight;
+		canvas.width = nextWidth;
+		canvas.height = nextHeight;
+	};
+	const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(resize) : null;
+	observer?.observe(canvas);
+	const draw = (now) => {
+		resize();
+		if (!width || !height) return;
+		const time = motion.matches ? 0 : (now || 0) / 1000;
+		const presence = motion.matches ? 0.45 : Math.pow(Math.max(0, Math.sin(time * 0.28)), 2);
+		context.clearRect(0, 0, width, height);
+		wash.forEach((spot, index) => {
+			const driftX = Math.sin(time * 0.12 + index) * width * 0.012;
+			const driftY = Math.cos(time * 0.1 + index * 1.4) * height * 0.018;
+			const x = width * spot.x + driftX;
+			const y = height * spot.y + driftY;
+			const radiusX = width * spot.rx;
+			const radiusY = height * spot.ry;
+			const tone = scheme.matches ? spot.tone : spot.lightTone;
+			const alpha = (scheme.matches ? spot.alpha : spot.lightAlpha) * (spot.pulse ? presence : 1);
+			context.save();
+			context.translate(x, y);
+			context.scale(radiusX, radiusY);
+			const gradient = context.createRadialGradient(0, 0, 0, 0, 0, 1);
+			gradient.addColorStop(0, `rgba(${tone[0]}, ${tone[1]}, ${tone[2]}, ${alpha})`);
+			gradient.addColorStop(0.55, `rgba(${tone[0]}, ${tone[1]}, ${tone[2]}, ${alpha * 0.28})`);
+			gradient.addColorStop(1, `rgba(${tone[0]}, ${tone[1]}, ${tone[2]}, 0)`);
+			context.fillStyle = gradient;
+			context.beginPath();
+			context.arc(0, 0, 1, 0, Math.PI * 2);
+			context.fill();
+			context.restore();
+		});
+	};
+	const tick = (now) => {
+		draw(now);
+		if (!motion.matches) frame = schedule(tick);
+	};
+	const onMotion = () => {
+		cancel(frame);
+		frame = schedule(tick);
+	};
+	const onScheme = () => {
+		cancel(frame);
+		frame = schedule(tick);
+	};
+	frame = schedule(tick);
+	motion.addEventListener?.('change', onMotion);
+	scheme.addEventListener?.('change', onScheme);
+	return () => {
+		cancel(frame);
+		observer?.disconnect();
+		motion.removeEventListener?.('change', onMotion);
+		scheme.removeEventListener?.('change', onScheme);
+	};
+}
+
 function placeComposer(slot) {
 	const bar = document.querySelector('[data-layout-creation-composer]');
 	if (!(bar instanceof HTMLElement) || !(slot instanceof HTMLElement)) return () => {};
@@ -185,6 +271,7 @@ function mountDesktop({ outlet, actions, services }) {
 	const root = document.createElement('div');
 	root.className = 'home-view';
 	root.innerHTML = `<header class="home-hero">
+		<div class="home-hero__glow" aria-hidden="true"><canvas class="home-hero__glow-canvas"></canvas></div>
 		<p class="home-hero__line">Turn a thought into a creation.</p>
 		<div data-home-composer></div>
 	</header>
@@ -195,6 +282,7 @@ function mountDesktop({ outlet, actions, services }) {
 	header?.classList.add('is-hidden-for-home');
 	frame?.classList.add('is-home-desktop');
 	const restoreComposer = placeComposer(root.querySelector('[data-home-composer]'));
+	const stopGlow = mountHeroGlow(root.querySelector('.home-hero__glow-canvas'));
 	services.providers.document.setTitle('Home · Parascene');
 	let destroyed = false;
 	const sections = root.querySelector('[data-home-sections]');
@@ -248,6 +336,7 @@ function mountDesktop({ outlet, actions, services }) {
 		destroy() {
 			destroyed = true;
 			stop();
+			stopGlow();
 			restoreComposer();
 			header?.classList.remove('is-hidden-for-home');
 			frame?.classList.remove('is-home-desktop');

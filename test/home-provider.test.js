@@ -180,7 +180,7 @@ test('home sections are normalized rows, not the source payloads', async () => {
 		}
 		if (path.startsWith('/api/comments/latest')) {
 			return { ok: true, status: 200, data: { comments: [
-				{ created_image_id: 5, creation: creation(5, 'Commented') },
+				{ created_image_id: 5, creation: { ...creation(5, 'Commented'), width: 800, height: 450 } },
 				{ created_image_id: 6, creation: { ...creation(6), media_type: 'audio', audio_url: 'https://cdn.example/a.mp3' } }
 			] } };
 		}
@@ -194,6 +194,8 @@ test('home sections are normalized rows, not the source payloads', async () => {
 	assert.deepEqual(feed.items.map((item) => item.id), [3]);
 	const commented = await loadHomeSection('commented', { fetchJson });
 	assert.deepEqual(commented.items.map((item) => item.id), [5]);
+	assert.equal(commented.items[0].width, 800);
+	assert.equal(commented.items[0].height, 450);
 	const explore = await loadHomeSection('explore', { fetchJson });
 	assert.deepEqual(explore.items.map((item) => item.id), [7]);
 	const articles = await loadHomeSection('articles', { fetchJson });
