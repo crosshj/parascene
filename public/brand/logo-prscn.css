@@ -1,0 +1,40 @@
+/* Wordmark mark. Letters follow --text / currentColor, so light and dark pages keep contrast.
+   Local is green, beta is blue, production is purple — same environments as the favicons.
+   Dark mode uses the light-to-vivid ramp from the prscn lockup. */
+:root {
+	--logo-mark-0: #4c1d94;
+	--logo-mark-1: #7c3aed;
+	--logo-mark-2: #9C51FA;
+}
+
+:root[data-env="local"] {
+	--logo-mark-0: #064e3b;
+	--logo-mark-1: #0f9f55;
+	--logo-mark-2: #1d944c;
+}
+
+:root[data-env="beta"] {
+	--logo-mark-0: #1e3a8a;
+	--logo-mark-1: #2563eb;
+	--logo-mark-2: #3b82f6;
+}
+
+@media (prefers-color-scheme: dark) {
+	:root:not([data-logo-scheme="light"]) {
+		--logo-mark-0: #FCF7FF;
+		--logo-mark-1: #E3BBFA;
+		--logo-mark-2: #9C51FA;
+	}
+
+	:root[data-env="local"]:not([data-logo-scheme="light"]) {
+		--logo-mark-0: #F4FFF8;
+		--logo-mark-1: #B7E8C8;
+		--logo-mark-2: #3DDB7A;
+	}
+
+	:root[data-env="beta"]:not([data-logo-scheme="light"]) {
+		--logo-mark-0: #F5F9FF;
+		--logo-mark-1: #C5DCFB;
+		--logo-mark-2: #60A5FA;
+	}
+}

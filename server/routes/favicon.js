@@ -14,9 +14,9 @@ export function createFaviconRoutes({ publicDir }) {
 	const router = express.Router();
 	const manifest = JSON.parse(readFileSync(path.join(publicDir, 'manifest.webmanifest'), 'utf8'));
 	const environments = {
-		local: { favicon: 'favicon-local', iconPrefix: 'icon-local-', color: '#002412' },
-		beta: { favicon: 'favicon-app', iconPrefix: 'icon-', color: '#001326' },
-		prod: { favicon: 'favicon', iconPrefix: 'icon-prod-', color: '#1a1628' },
+		local: { favicon: 'favicon-mark-local', iconPrefix: 'icon-mark-local-', color: '#002412' },
+		beta: { favicon: 'favicon-mark-beta', iconPrefix: 'icon-mark-', color: '#001326' },
+		prod: { favicon: 'favicon-mark', iconPrefix: 'icon-mark-prod-', color: '#1a1628' },
 	};
 	function send(req, res, name) {
 		res.set('Cache-Control', 'no-store');

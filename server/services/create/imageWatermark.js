@@ -10,7 +10,7 @@ const DARK_WATERMARK_FILL = "#000000";
 const LIGHT_BG_LUMINANCE_THRESHOLD = 0.62;
 
 /** viewBox from watermark.svg — used for aspect ratio when scaling */
-const WATERMARK_VIEW_W = 185;
+const WATERMARK_VIEW_W = 272;
 const WATERMARK_VIEW_H = 40;
 
 /**

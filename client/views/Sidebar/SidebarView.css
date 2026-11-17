@@ -90,7 +90,7 @@
 	width: auto;
 	max-width: 100%;
 	margin-top: 5px;
-	margin-left: 8px;
+	margin-left: -2px;
 	fill: currentColor;
 }
 .sidebar-view__scroll {
