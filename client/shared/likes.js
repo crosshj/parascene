@@ -1,5 +1,5 @@
-import { announceCreationChange } from './creationDetailRuntime.js';
 import { applyWhoTooltipAttr } from './whoLabels.js';
+import { projectCreationEngagement, toggleCreationLike } from './creationEngagement.js';
 import { setupWhoTooltips } from './reactionTooltipTap.js';
 
 function getCreationLikeId(creation) {
@@ -18,23 +18,6 @@ function getCreationLikeId(creation) {
 function toSafeInt(value, fallback = 0) {
 	const n = Number.parseInt(String(value ?? ''), 10);
 	return Number.isFinite(n) ? n : fallback;
-}
-
-function invalidateRelatedCachesAfterLikeMutation() {
-	if (typeof navigator === 'undefined' || !navigator.serviceWorker) return;
-	const message = {
-		type: 'PRSN_SW_INVALIDATE',
-		tags: ['creations', 'feed', 'explore']
-	};
-	if (navigator.serviceWorker.controller) {
-		navigator.serviceWorker.controller.postMessage(message);
-		return;
-	}
-	navigator.serviceWorker.ready
-		.then((registration) => {
-			registration?.active?.postMessage(message);
-		})
-		.catch(() => {});
 }
 
 export function getCreationBaseLikeCount(creation) {
@@ -159,6 +142,19 @@ const likeButtonCreations = new WeakMap();
 export function initLikeButton(buttonEl, creation) {
 	if (buttonEl && creation) likeButtonCreations.set(buttonEl, creation);
 	if (!(buttonEl instanceof HTMLElement)) return false;
+	const live = projectCreationEngagement({
+		created_image_id: creation?.created_image_id ?? creation?.creation_id ?? creation?.id,
+		like_count: creation?.like_count,
+		viewer_liked: creation?.viewer_liked,
+		liked_by: creation?.liked_by
+	}, { incoming: true });
+	if (creation && live) {
+		creation.like_count = live.like_count;
+		creation.viewer_liked = live.viewer_liked;
+		if (Array.isArray(live.liked_by)) creation.liked_by = live.liked_by;
+		creation.comment_count = live.comment_count;
+		if (Array.isArray(live.commented_by)) creation.commented_by = live.commented_by;
+	}
 
 	const id = getCreationLikeId(creation);
 	if (id) buttonEl.dataset.likeId = id;
@@ -169,6 +165,14 @@ export function initLikeButton(buttonEl, creation) {
 	setDisplayedLikeCount(buttonEl, creation, liked);
 	applyLikedByTooltip(buttonEl, creation?.liked_by);
 	return liked;
+}
+
+function showLikeSnapshot(buttonEl, snapshot) {
+	const countEl = getLikeCountEl(buttonEl);
+	const full = Math.max(0, Number(snapshot?.like_count) || 0);
+	if (countEl) countEl.textContent = String(full);
+	const liked = snapshot?.viewer_liked === true;
+	buttonEl.dataset.likeBaseCount = String(Math.max(0, full - (liked ? 1 : 0)));
 }
 
 const rootsWithListener = new WeakSet();
@@ -195,83 +199,28 @@ export function enableLikeButtons(root = document) {
 		// Long-press who-tooltip just fired — don't toggle.
 		if (button.dataset.whoLongPressSuppressClick === '1') return;
 
-		const baseCount = toSafeInt(button.dataset.likeBaseCount, null);
-		const baseCreation = { like_count: baseCount !== null ? baseCount : undefined };
-
 		e.preventDefault();
 		e.stopPropagation();
 
-		const prev = button.getAttribute('aria-pressed') === 'true';
-		const next = !prev;
-		const creation = likeButtonCreations.get(button);
-		const updateCreation = (liked, count, likedBy) => {
-			if (!creation) return;
-			creation.viewer_liked = liked;
-			creation.like_count = count;
-			if (likedBy) creation.liked_by = likedBy;
+		const shown = toSafeInt(getLikeCountEl(button)?.textContent, 0);
+		const creation = likeButtonCreations.get(button) || {
+			id,
+			like_count: shown,
+			viewer_liked: button.getAttribute('aria-pressed') === 'true'
 		};
-		const previousCount = creation?.like_count;
-		updateCreation(next, Math.max(0, (baseCount ?? 0) + (next ? 1 : 0)));
+		const result = toggleCreationLike(creation);
+		if (!result) return;
 
-		// Always recompute from base + local liked state (don’t trust rendered text).
-		setDisplayedLikeCount(button, baseCreation, next);
-		applyLikeButtonState(button, next, next);
-
-		const imageId = Number.parseInt(id, 10);
-		if (!Number.isFinite(imageId) || imageId <= 0) {
-			// Not a created-image id; no backend support.
-			setDisplayedLikeCount(button, baseCreation, prev);
-			applyLikeButtonState(button, prev, false);
-			return;
-		}
-
+		showLikeSnapshot(button, result);
+		applyLikeButtonState(button, result.viewer_liked, result.viewer_liked);
 		button.dataset.likeBusy = '1';
-
-		const url = `/api/created-images/${encodeURIComponent(String(imageId))}/like`;
-		const method = next ? 'POST' : 'DELETE';
-
-		fetch(url, { method, credentials: 'include' })
-			.then(async (res) => {
-				if (!res.ok) {
-					let detail = '';
-					try {
-						const json = await res.json();
-						detail = json?.error ? `: ${json.error}` : '';
-					} catch {
-						// ignore
-					}
-					throw new Error(`Like request failed (${res.status})${detail}`);
-				}
-				return res.json();
-			})
-			.then((meta) => {
-				const likeCount = Math.max(0, toSafeInt(meta?.like_count, 0));
-				const viewerLiked = Boolean(meta?.viewer_liked);
-				const newBase = Math.max(0, likeCount - (viewerLiked ? 1 : 0));
-				const likedBy = Array.isArray(meta?.liked_by) ? meta.liked_by : [];
-				updateCreation(viewerLiked, likeCount, likedBy);
-
-				button.dataset.likeBaseCount = String(newBase);
-				setDisplayedLikeCount(button, { like_count: newBase }, viewerLiked);
-				applyLikeButtonState(button, viewerLiked, false);
-				applyLikedByTooltip(button, likedBy);
-				invalidateRelatedCachesAfterLikeMutation();
-				announceCreationChange({
-					creationId: imageId,
-					reason: 'like-changed',
-					like_count: likeCount,
-					viewer_liked: viewerLiked,
-					liked_by: likedBy,
-				});
-			})
-			.catch(() => {
-				updateCreation(prev, previousCount);
-				// Revert optimistic state on failure.
-				setDisplayedLikeCount(button, baseCreation, prev);
-				applyLikeButtonState(button, prev, false);
-			})
-			.finally(() => {
-				delete button.dataset.likeBusy;
-			});
+		result.done.then((settled) => {
+			if (!settled) return;
+			showLikeSnapshot(button, settled);
+			applyLikeButtonState(button, settled.viewer_liked, false);
+			if (settled.ok) applyLikedByTooltip(button, settled.liked_by);
+		}).finally(() => {
+			delete button.dataset.likeBusy;
+		});
 	}, { capture: true });
 }

@@ -4,7 +4,7 @@ import { serializeCreation } from './creations.js';
 
 function positive(value) { const id = Number(value); if (!Number.isSafeInteger(id) || id <= 0) throw Object.assign(new Error('Invalid id'), { status: 400 }); return id; }
 function commentText(value) { const text = typeof value === 'string' ? value.replace(/\u0000/g, '').trim() : ''; if (!text || text.length > 4000) throw Object.assign(new Error(text ? 'Comment too long (max 4000 chars)' : 'Comment text is required'), { status: 400 }); return text; }
-export function createCommentsRoutes({ comments, users }) {
+export function createCommentsRoutes({ comments, users, creations }) {
  const router = express.Router();
  router.use(['/api/comments', '/api/created-images/:id/comments'], requireAuth, (_req, res, next) => { res.set('Cache-Control', 'private, no-store'); next(); });
  const handle = action => async (req, res, next) => {
@@ -15,9 +15,13 @@ export function createCommentsRoutes({ comments, users }) {
   const before = req.query.before;
   if (before != null && !Number.isFinite(Date.parse(before))) throw Object.assign(new Error('Invalid comment cursor'), { status: 400 });
   const page = await comments.latest(viewer, { limit: Math.min(100, Math.max(1, Number.parseInt(req.query.limit, 10) || 50)), before, before_id: req.query.before_id == null ? undefined : positive(req.query.before_id) });
+  const engagement = typeof creations?.engagementForViewer === 'function'
+   ? await creations.engagementForViewer(viewer.id, page.comments.map(row => row.created_image_id))
+   : {};
   return { ...page, comments: page.comments.map(row => {
    const creation = serializeCreation({ id: row.created_image_id, user_id: row.created_image_user_id, file_path: row.created_image_url, meta: row.created_image_meta, title: row.created_image_title, published: row.created_image_published, created_at: row.created_image_created_at, width: row.created_image_width, height: row.created_image_height });
-   return { ...row, creation, created_image_url: creation.url, created_image_thumbnail_url: creation.video_thumbnail_url || creation.thumbnail_url };
+   const stats = engagement[String(row.created_image_id)] || { like_count: 0, comment_count: 0, viewer_liked: false };
+   return { ...row, creation: { ...creation, ...stats }, created_image_url: creation.url, created_image_thumbnail_url: creation.video_thumbnail_url || creation.thumbnail_url };
   }) };
  }));
  router.post('/api/comments/:id/reactions', async (req, res, next) => {

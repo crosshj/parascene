@@ -5,12 +5,34 @@ import { parseIso } from '../constants.js';
  * @param {string} phase
  */
 export function challengePhaseDisplayLabel(phase) {
-	if (phase === 'submit_and_vote') return 'Open for submissions & voting';
-	if (phase === 'finalizing') return 'Finalizing (winners soon)';
-	if (phase === 'results') return 'Winners announced';
+	if (phase === 'submit_and_vote') return 'Open';
+	if (phase === 'finalizing') return 'Finalizing';
+	if (phase === 'results') return 'Winners';
 	if (phase === 'deleted') return 'Deleted';
 	const s = String(phase || '').replace(/_/g, ' ');
 	return s || '—';
+}
+
+/** Short status line used on challenge cards and the feed. */
+export function challengePhaseStatusLabel(phase) {
+	switch (phase) {
+		case 'pre_submit':
+			return 'Starts soon';
+		case 'submitting':
+			return 'Submissions open';
+		case 'submit_and_vote':
+			return 'Submit and vote';
+		case 'voting':
+			return 'Voting open';
+		case 'between':
+			return 'Between rounds';
+		case 'finalizing':
+			return 'Finalizing';
+		case 'results':
+			return 'Winners announced';
+		default:
+			return 'Community challenge';
+	}
 }
 
 /**

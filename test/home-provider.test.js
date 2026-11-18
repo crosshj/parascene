@@ -19,7 +19,7 @@ function storage() {
 }
 
 function seed(store, sections) {
-	store.setItem('prsn-home-v3:7', JSON.stringify({ version: 1, updatedAt: 1, data: { sections } }));
+	store.setItem('prsn-home-v11:7', JSON.stringify({ version: 1, updatedAt: 1, data: { sections } }));
 }
 
 function deferred() {
@@ -41,7 +41,7 @@ function creation(id, title = 'Creation') {
 }
 
 function snapshot(rows) {
-	return ['feed', 'challenges', 'commented', 'explore', 'articles'].map((id) => ({
+	return ['images', 'videos', 'songs', 'challenges', 'commented', 'newbies', 'articles'].map((id) => ({
 		id,
 		items: rows[id] || []
 	}));
@@ -71,7 +71,7 @@ test('an empty cache delivers every skeleton, then one snapshot when the cache e
 	});
 
 	assert.equal(seen.length, 1);
-	assert.equal(seen[0].length, 5);
+	assert.equal(seen[0].length, 7);
 	assert.ok(seen[0].every((row) => row.skeleton && row.count === homeSkeletonItems().length && row.status === 'loading'));
 	assert.ok(homeSkeletonItems().every((item) => item.width === item.height));
 
@@ -80,23 +80,28 @@ test('an empty cache delivers every skeleton, then one snapshot when the cache e
 	for (let i = 0; i < 8; i += 1) await Promise.resolve();
 	assert.equal(seen.length, 1);
 
-	gates.get('feed').resolve({ items: [creation(2, 'Fresh')] });
-	for (const id of ['commented', 'explore', 'articles']) gates.get(id).resolve({ items: [] });
+	gates.get('images').resolve({ items: [creation(2, 'Fresh')] });
+	for (const id of ['videos', 'songs', 'commented', 'newbies', 'articles']) gates.get(id).resolve({ items: [] });
 	for (let i = 0; i < 10; i += 1) await Promise.resolve();
 	assert.equal(seen.length, 2);
-	assert.equal(seen[1].find((row) => row.id === 'feed').first, 2);
+	assert.equal(seen[1].find((row) => row.id === 'images').first, 2);
 	assert.equal(seen[1].find((row) => row.id === 'challenges').first, 'weekly');
 	assert.ok(seen[1].every((row) => !row.skeleton && row.status === 'ready'));
-	const stored = JSON.parse(store.getItem('prsn-home-v3:7')).data.sections;
-	assert.equal(stored.find((row) => row.id === 'feed').items[0].id, 2);
+	const stored = JSON.parse(store.getItem('prsn-home-v11:7')).data.sections;
+	assert.equal(stored.find((row) => row.id === 'images').items[0].id, 2);
 	assert.equal(stored.find((row) => row.id === 'challenges').items[0].image, 'https://cdn.example/weekly.png');
+	home.noteEngagement(2, { like_count: 4, viewer_liked: true, comment_count: 1 });
+	const liked = JSON.parse(store.getItem('prsn-home-v11:7')).data.sections.find((row) => row.id === 'images').items[0];
+	assert.equal(liked.like_count, 4);
+	assert.equal(liked.viewer_liked, true);
+	assert.equal(liked.comment_count, 1);
 	home.destroy();
 });
 
 test('a cached home paints every section once and does not call back when storage updates', async () => {
 	const store = storage();
 	seed(store, snapshot({
-		feed: [{ id: 1, created_image_id: 1, title: 'Cached', image: 'https://cdn.example/1.png', width: 300, height: 400 }],
+		images: [{ id: 1, created_image_id: 1, title: 'Cached', image: 'https://cdn.example/1.png', width: 300, height: 400 }],
 		challenges: [{ challengeId: 'weekly', title: 'Weekly', image: 'https://cdn.example/weekly.png', width: 400, height: 300 }]
 	}));
 	const gates = new Map();
@@ -112,28 +117,28 @@ test('a cached home paints every section once and does not call back when storag
 	const seen = [];
 	home.observe((delivery) => {
 		seen.push({
-			feed: section(delivery, 'feed').items[0],
+			images: section(delivery, 'images').items[0],
 			challenges: section(delivery, 'challenges').items[0],
 			count: delivery.sections.length,
 			unauthorized: delivery.unauthorized
 		});
 	});
 	assert.equal(seen.length, 1);
-	assert.equal(seen[0].count, 5);
+	assert.equal(seen[0].count, 7);
 	assert.equal(seen[0].unauthorized, false);
-	assert.equal(seen[0].feed.id, 1);
-	assert.equal(seen[0].feed.image, 'https://cdn.example/1.png');
-	assert.equal(seen[0].feed.width, 300);
+	assert.equal(seen[0].images.id, 1);
+	assert.equal(seen[0].images.image, 'https://cdn.example/1.png');
+	assert.equal(seen[0].images.width, 300);
 	assert.equal(seen[0].challenges.image, 'https://cdn.example/weekly.png');
 
 	await Promise.resolve();
-	for (const [id, gate] of gates) gate.resolve({ items: id === 'feed' ? [creation(9, 'Next')] : [] });
+	for (const [id, gate] of gates) gate.resolve({ items: id === 'images' ? [creation(9, 'Next')] : [] });
 	for (let i = 0; i < 10; i += 1) await Promise.resolve();
 	assert.equal(seen.length, 1);
-	assert.equal(JSON.parse(store.getItem('prsn-home-v3:7')).data.sections.find((row) => row.id === 'feed').items[0].id, 9);
+	assert.equal(JSON.parse(store.getItem('prsn-home-v11:7')).data.sections.find((row) => row.id === 'images').items[0].id, 9);
 
 	const second = [];
-	home.observe((delivery) => second.push(section(delivery, 'feed').items[0].id));
+	home.observe((delivery) => second.push(section(delivery, 'images').items[0].id));
 	assert.equal(second[0], 9);
 	home.destroy();
 });
@@ -143,22 +148,22 @@ test('clearing the home cache drops the snapshot, and the next visit starts from
 	const home = createHomeProvider({
 		viewerId: 7,
 		storage: () => store,
-		loadSection: async (id) => ({ items: id === 'explore' ? [creation(8)] : [] })
+		loadSection: async (id) => ({ items: id === 'newbies' ? [creation(8)] : [] })
 	});
 	let latest = null;
 	home.observe((delivery) => { latest = delivery; });
 	for (let i = 0; i < 8; i += 1) await Promise.resolve();
-	assert.equal(section(latest, 'explore').status, 'ready');
-	assert.ok(store.getItem('prsn-home-v3:7'));
+	assert.equal(section(latest, 'newbies').status, 'ready');
+	assert.ok(store.getItem('prsn-home-v11:7'));
 	home.clearCache();
-	assert.equal(store.getItem('prsn-home-v3:7'), null);
+	assert.equal(store.getItem('prsn-home-v11:7'), null);
 	const next = createHomeProvider({
 		viewerId: 7,
 		storage: () => store,
 		loadSection: () => new Promise(() => {})
 	});
 	let first = null;
-	next.observe((delivery) => { if (!first) first = section(delivery, 'explore').items; });
+	next.observe((delivery) => { if (!first) first = section(delivery, 'newbies').items; });
 	assert.equal(first.length, homeSkeletonItems().length);
 	assert.ok(first.every((item) => item.skeleton));
 	home.destroy();
@@ -167,16 +172,18 @@ test('clearing the home cache drops the snapshot, and the next visit starts from
 
 test('home sections are normalized rows, not the source payloads', async () => {
 	const posts = [
-		{ slug: 'kept', title: 'Kept', image_url: 'https://cdn.example/post.png' },
+		{ slug: 'kept', title: 'Kept', description: 'A short note', published_at: '2026-01-21T12:00:00.000Z', image_url: 'https://cdn.example/post.png' },
 		{ slug: 'bare', title: 'Bare', image_url: '' }
 	];
 	const fetchJson = async (path) => {
-		if (path.startsWith('/api/feed')) {
-			return { ok: true, status: 200, data: { items: [
-				{ type: 'tip', id: 1 },
-				{ editorial_pin: true, editorial_pin_id: 'challenge-9', created_image_id: 2, image_url: 'https://cdn.example/pin.png' },
-				creation(3, 'Shown')
-			] } };
+		if (path.startsWith('/api/home/latest')) {
+			const type = new URL(path, 'http://local').searchParams.get('type');
+			const items = {
+				image: [creation(3, 'Shown'), { ...creation(4), media_type: 'video' }],
+				video: [{ ...creation(11, 'Clip'), media_type: 'video' }, creation(13, 'Still')],
+				audio: [{ ...creation(12, 'Song'), media_type: 'audio' }, creation(14, 'Poster')]
+			}[type] || [];
+			return { ok: true, status: 200, data: { items } };
 		}
 		if (path.startsWith('/api/comments/latest')) {
 			return { ok: true, status: 200, data: { comments: [
@@ -184,25 +191,32 @@ test('home sections are normalized rows, not the source payloads', async () => {
 				{ created_image_id: 6, creation: { ...creation(6), media_type: 'audio', audio_url: 'https://cdn.example/a.mp3' } }
 			] } };
 		}
-		if (path.startsWith('/api/explore')) {
-			return { ok: true, status: 200, data: { items: [creation(7, 'Explore'), { ...creation(8), media_type: 'audio', audio_url: 'https://cdn.example/b.mp3' }] } };
+		if (path.startsWith('/api/home/newbies')) {
+			return { ok: true, status: 200, data: { items: [creation(7, 'Welcome @ada'), creation(8, 'Profile portrait')] } };
 		}
 		if (path.startsWith('/api/blog/published')) return { ok: true, status: 200, data: { posts } };
 		return { ok: false, status: 500, data: {} };
 	};
-	const feed = await loadHomeSection('feed', { fetchJson });
-	assert.deepEqual(feed.items.map((item) => item.id), [3]);
+	const images = await loadHomeSection('images', { fetchJson });
+	assert.deepEqual(images.items.map((item) => item.id), [3]);
+	const videos = await loadHomeSection('videos', { fetchJson });
+	assert.deepEqual(videos.items.map((item) => item.id), [11]);
+	const songs = await loadHomeSection('songs', { fetchJson });
+	assert.deepEqual(songs.items.map((item) => item.id), [12]);
+	assert.equal(songs.items[0].media_type, 'audio');
 	const commented = await loadHomeSection('commented', { fetchJson });
 	assert.deepEqual(commented.items.map((item) => item.id), [5]);
 	assert.equal(commented.items[0].width, 800);
 	assert.equal(commented.items[0].height, 450);
-	const explore = await loadHomeSection('explore', { fetchJson });
-	assert.deepEqual(explore.items.map((item) => item.id), [7]);
+	const newbies = await loadHomeSection('newbies', { fetchJson });
+	assert.deepEqual(newbies.items.map((item) => item.id), [7, 8]);
 	const articles = await loadHomeSection('articles', { fetchJson });
 	assert.deepEqual(articles.items.map((post) => post.slug), ['kept']);
+	assert.equal(articles.items[0].description, 'A short note');
+	assert.equal(articles.items[0].published_at, '2026-01-21T12:00:00.000Z');
 
 	await assert.rejects(
-		() => loadHomeSection('explore', { fetchJson: async () => ({ ok: false, status: 401, data: {} }) }),
+		() => loadHomeSection('newbies', { fetchJson: async () => ({ ok: false, status: 401, data: {} }) }),
 		(error) => error.status === 401
 	);
 });
@@ -216,10 +230,12 @@ test('the home view renders delivered rows and leaves source assembly to the pro
 	const dom = new JSDOM('<div class="app-outlet__frame"><div id="outlet"></div></div>', { url: 'http://localhost/', pretendToBeVisual: true });
 	const window = dom.window;
 	window.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
-	const names = ['document', 'HTMLElement', 'HTMLDivElement', 'HTMLAnchorElement', 'HTMLImageElement', 'Element', 'Node', 'Event', 'location'];
+	const names = ['document', 'Document', 'HTMLElement', 'HTMLButtonElement', 'HTMLDivElement', 'HTMLAnchorElement', 'HTMLImageElement', 'Element', 'Node', 'Event', 'CustomEvent', 'MutationObserver', 'location'];
 	const context = vm.createContext({
 		...Object.fromEntries(names.map((name) => [name, window[name]])),
 		window,
+		Date,
+		Intl,
 		console,
 		URL,
 		URLSearchParams,
@@ -261,14 +277,16 @@ test('the home view renders delivered rows and leaves source assembly to the pro
 		return {
 			unauthorized: false,
 			sections: [
-				{ id: 'feed', title: 'Feed', href: '/feed', kind: 'creation', empty: 'Nothing new in the feed.', status: 'stale', errorStatus: 0, items: [creation(9, 'Cached')] },
+				{ id: 'images', title: 'Images', href: '/feed', kind: 'creation', empty: 'No images yet.', status: 'stale', errorStatus: 0, items: [creation(9, 'Cached')] },
+				{ id: 'videos', title: 'Videos', href: '/feed', kind: 'creation', empty: 'No videos yet.', status: 'ready', errorStatus: 0, items: [creation(10, 'Clip')] },
+				{ id: 'songs', title: 'Songs', href: '/feed', kind: 'creation', empty: 'No songs yet.', status: 'ready', errorStatus: 0, items: [creation(11, 'Song')] },
 				{ id: 'challenges', title: 'Challenges', href: '/challenges', kind: 'challenge', empty: 'No challenges yet.', status: 'loading', errorStatus: 0, items: [
 					{ skeleton: true, width: 168, height: 268 },
 					{ skeleton: true, width: 240, height: 268 }
 				] },
-				{ id: 'commented', title: 'Commented', href: '/comments', kind: 'creation', empty: 'No comments yet.', status: 'ready', errorStatus: 0, items: [] },
-				{ id: 'explore', title: 'Explore', href: '/explore', kind: 'creation', empty: 'Nothing here.', status: 'error', errorStatus: 500, items: [] },
-				{ id: 'articles', title: 'Articles', href: '/blog', kind: 'article', empty: 'No articles yet.', status: 'ready', errorStatus: 0, items: [{ slug: 'note', title: 'Note', image_url: 'https://cdn.example/note.png' }] },
+				{ id: 'commented', title: 'Comments', href: '/comments', kind: 'creation', empty: 'No comments yet.', status: 'ready', errorStatus: 0, items: [{ ...creation(15, 'Noted'), width: 9, height: 16, like_count: 3, comment_count: 300, viewer_liked: true, liked_by: ['@ada'], commented_by: ['@cy', 2] }] },
+				{ id: 'newbies', title: 'Newbies', href: '/feed', kind: 'creation', empty: 'No new people yet.', status: 'error', errorStatus: 500, items: [] },
+				{ id: 'articles', title: 'Articles', href: '/blog', kind: 'article', empty: 'No articles yet.', status: 'ready', errorStatus: 0, items: [{ slug: 'note', title: 'Note', description: 'A short note', published_at: '2026-01-21T12:00:00.000Z', image_url: 'https://cdn.example/note.png' }] },
 				...[]
 			],
 			...extra
@@ -283,29 +301,63 @@ test('the home view renders delivered rows and leaves source assembly to the pro
 			providers: { document: { setTitle() {} }, home }
 		}
 	});
-	const feed = outlet.querySelector('[data-home-section="feed"]');
-	assert.ok(feed.querySelector('a[href="/creations/9"]'));
-	assert.equal(feed.querySelector('.home-tile--more .home-tile__more-label').textContent, '+ More');
-	assert.ok(feed.querySelector('.home-tile--more .home-tile__more-mark rect'));
+	const images = outlet.querySelector('[data-home-section="images"]');
+	assert.ok(images.querySelector('a[href="/creations/9"]'));
+	assert.equal(images.querySelector('.home-tile--more .home-tile__more-label').textContent, '+ More');
+	assert.ok(images.querySelector('.home-tile--more .home-tile__more-mark rect'));
+	for (const id of ['images', 'videos', 'songs']) {
+		const section = outlet.querySelector(`[data-home-section="${id}"]`);
+		assert.equal(section.querySelector('.home-section__link').getAttribute('href'), '/feed');
+		assert.equal(section.querySelector('.home-tile--more').getAttribute('href'), '/feed');
+	}
 	assert.equal(outlet.querySelectorAll('[data-home-section="challenges"] .home-tile--skeleton').length, 2);
-	assert.equal(outlet.querySelector('[data-home-section="challenges"] .home-tile--skeleton').getAttribute('style'), 'width:144px;height:230px');
+	assert.equal(outlet.querySelector('[data-home-section="challenges"] .home-row--challenge .home-tile--skeleton').hasAttribute('style'), false);
 	assert.equal(outlet.querySelector('[data-home-section="challenges"]').getAttribute('aria-busy'), 'true');
-	assert.equal(outlet.querySelector('[data-home-section="commented"] .home-empty').textContent, 'No comments yet.');
-	assert.equal(outlet.querySelector('[data-home-section="explore"] .home-empty').textContent, 'Could not load this section.');
-	assert.ok(outlet.querySelector('[data-home-section="articles"] a[href="/blog/n/note"]'));
+	const comments = outlet.querySelector('[data-home-section="commented"] .home-tile--media');
+	assert.equal(comments.getAttribute('style'), 'width:158px;height:280px');
+	assert.equal(comments.querySelector('[data-home-comment-count]').textContent, '300');
+	assert.equal(comments.querySelector('[data-like-count]').textContent, '3');
+	assert.equal(comments.querySelector('button[data-like-button]').getAttribute('aria-pressed'), 'true');
+	assert.equal(comments.querySelector('button[data-like-button]').closest('a'), null);
+	assert.equal(comments.querySelector('button[data-like-button]').getAttribute('data-tooltip'), '@ada');
+	assert.equal(comments.querySelector('.home-tile__stat--comment').getAttribute('data-tooltip'), '@cy, and 2 others');
+	assert.equal(images.querySelector('[data-home-comment-count]'), null);
+	assert.ok(images.querySelector('button[data-like-button]'));
+	assert.equal(outlet.querySelector('[data-home-section="newbies"] .home-empty').textContent, 'Could not load this section.');
+	const article = outlet.querySelector('[data-home-section="articles"] a[href="/blog/n/note"]');
+	assert.ok(article);
+	assert.equal(article.classList.contains('home-tile--article'), true);
+	assert.equal(article.closest('.home-row').classList.contains('home-row--article'), true);
+	assert.equal(article.querySelector('.home-article__title').textContent, 'Note');
+	assert.equal(article.querySelector('.home-article__summary').textContent, 'A short note');
+	assert.match(article.querySelector('.home-article__date').textContent, /2026/);
+	assert.equal(article.querySelector('.home-article__img').getAttribute('src'), 'https://cdn.example/note.png');
+	assert.equal(article.hasAttribute('style'), false);
 
 	listener({
 		unauthorized: false,
-		sections: delivery().sections.map((row) => row.id === 'challenges'
-			? { ...row, status: 'ready', items: [{ challengeId: 'weekly', title: 'Weekly', image: 'https://cdn.example/weekly.png' }] }
-			: row)
+		sections: delivery().sections.map((row) => {
+			if (row.id === 'challenges') return { ...row, status: 'ready', items: [{ challengeId: 'weekly', title: 'Weekly', image: 'https://cdn.example/weekly.png', phase: 'voting', phaseLabel: 'voting', status: 'Voting open', timeLeft: '1 day left to vote', stats: [{ key: 'creators', label: 'Creators entered', value: '4' }, { key: 'entries', label: 'Entries so far', value: '6' }, { key: 'votes', label: 'Total votes', value: '5' }] }] };
+			if (row.id === 'newbies') return { ...row, status: 'ready', errorStatus: 0, items: [{ ...creation(8, 'Profile portrait'), user_name: 'ada' }] };
+			return row;
+		})
 	});
-	assert.equal(outlet.querySelector('[data-home-section="feed"]'), feed);
-	assert.ok(outlet.querySelector('[data-home-section="challenges"] a[href="/challenges/details/weekly"]'));
+	assert.equal(outlet.querySelector('[data-home-section="images"]'), images);
+	const challenge = outlet.querySelector('[data-home-section="challenges"] a[href="/challenges/details/weekly"]');
+	assert.ok(challenge);
+	assert.equal(challenge.classList.contains('home-tile--challenge'), true);
+	assert.equal(challenge.querySelector('.home-challenge__status').textContent, 'Voting open');
+	assert.equal(challenge.querySelector('.home-challenge__time span').textContent, '1 day left to vote');
+	assert.equal(challenge.querySelectorAll('.home-challenge__stat').length, 3);
+	assert.equal(challenge.hasAttribute('style'), false);
+	const newbie = outlet.querySelector('[data-home-section="newbies"] a[href="/creations/8"]');
+	assert.equal(newbie.querySelector('.home-tile__name').textContent, '@ada');
+	assert.equal(newbie.getAttribute('aria-label'), '@ada, Profile portrait');
+	assert.equal(images.querySelector('.home-tile__name'), null);
 
 	listener({ unauthorized: true, sections: delivery().sections });
 	assert.equal(redirects, 1);
-	assert.equal(outlet.querySelector('[data-home-section="feed"]'), feed);
+	assert.equal(outlet.querySelector('[data-home-section="images"]'), images);
 	handle.destroy();
 	window.close();
 });

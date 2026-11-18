@@ -337,6 +337,8 @@ export function patchCreationCardLikeInDocument(creationId, likeState, root = do
 		`.feed-card[data-creation-id="${id}"] button[data-like-button]`,
 		`.feed-card[data-image-id="${id}"] button[data-like-button]`,
 		`.chat-doom-slide[data-creation-id="${id}"] button[data-like-button]`,
+		`.home-tile[data-creation-id="${id}"] button[data-like-button]`,
+		`button[data-like-button][data-like-id="${id}"]`,
 	];
 	for (const sel of selectors) {
 		scopeRoot.querySelectorAll(sel).forEach((btn) => {
@@ -359,6 +361,7 @@ export function patchCreationCardCommentInDocument(creationId, commentCount, roo
 		`.feed-card[data-creation-id="${id}"] button[data-comment-button] [data-comment-count]`,
 		`.feed-card[data-image-id="${id}"] button[data-comment-button] [data-comment-count]`,
 		`.chat-doom-slide[data-creation-id="${id}"] [data-chat-doom-comments] .chat-doom-rail-count`,
+		`.home-tile[data-creation-id="${id}"] [data-home-comment-count]`,
 	];
 	for (const sel of selectors) {
 		scopeRoot.querySelectorAll(sel).forEach((el) => {

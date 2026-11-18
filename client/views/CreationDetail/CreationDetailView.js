@@ -8316,11 +8316,6 @@ async function loadCreation() {
 					onCommentCountChange: (count) => {
 						const n = Number(count);
 						if (!Number.isFinite(n)) return;
-						// Skip the first (initial-load) value; only sync real changes.
-						if (lastSyncedCommentCount === null) {
-							lastSyncedCommentCount = n;
-							return;
-						}
 						if (n === lastSyncedCommentCount) return;
 						lastSyncedCommentCount = n;
 						announceCreationChange({

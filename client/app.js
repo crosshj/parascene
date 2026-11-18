@@ -14,6 +14,7 @@ import { setAfterCreateSubmitHandoff } from './shared/createPageRuntime.js';
 import { installConsoleGen } from './shared/consoleGen.js';
 import { bindCreationDetailHashtagClicks } from './shared/creationDetailRuntime.js';
 import { bindCreationChangeParent } from './shared/creationDetailEmbedShell.js';
+import { bindCreationEngagement } from './shared/creationEngagement.js';
 
 function hydrateNsfwFromBootstrap(user) {
 	const meta = user?.meta && typeof user.meta === 'object' ? user.meta : null;
@@ -282,6 +283,7 @@ const lifecycle = connectLifecycle({ state, session, providers, router });
 
 await lifecycle.start();
 bindCreationChangeParent();
+bindCreationEngagement();
 bindCreationDetailHashtagClicks();
 window.addEventListener('pagehide', () => {
 	stopCommandPaletteRoster?.();

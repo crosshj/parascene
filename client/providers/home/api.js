@@ -1,24 +1,32 @@
 import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
-import { getHiddenFeedItems } from '../../shared/feedHiddenItems.js';
+import { HOME_ROW_HEIGHT } from '../../shared/homeRow.js';
 import { creationMediaType, creationThumbnailUrl } from '../../shared/creationGrid.js';
 import { nsfwMediaUrl, nsfwShouldBlur } from '../../shared/nsfwPolicy.js';
 import { buildChallengesChannelModel } from '../../shared/challenges/model/buildChannelModel.js';
 import {
 	ACTIVE_PARTICIPANT_PHASES,
+	challengePhaseDisplayLabel,
+	challengePhaseStatusLabel,
 	deriveChallengePhase,
 	mergeFullChallengeConfigForChallenge,
 	pickChallengeConfigTimestamp,
 	pickChallengeHeroImageUrl,
 	pickChallengeHeroPreviewUrl,
+	pickChallengeTrack,
+	rankSubmissionsForChallenge,
+	resolveChallengeAcceptedMedia,
+	submissionsForLatestChallenge,
 	summarizeLatestChallengeConfigs
 } from '../../shared.js';
+import { participantHeroViewModel } from '../../views/Challenges/views/presentParticipantHero.js';
+import { challengeTimeLeftLabel } from '../../views/Challenges/views/countdownView.js';
 import {
 	fetchCreationEmbedPayload,
 	parseHeroCreationOrShareRef,
 	parseHeroDirectMediaUrl
 } from '../../shared/userText.js';
 
-export const HOME_SAMPLE = 8;
+export const HOME_SAMPLE = 12;
 
 function creationId(item) {
 	const id = Number(item?.created_image_id ?? item?.id);
@@ -82,17 +90,19 @@ async function readJson(fetchJson, path, signal) {
 	return result;
 }
 
-async function loadFeed({ fetchJson, signal }) {
-	const params = new URLSearchParams({ limit: '28', feed_surface: 'chat', offset: '0' });
-	const result = await readJson(fetchJson, `/api/feed?${params}`, signal);
-	if (!result?.ok) failed(result, 'Failed to load feed');
-	const hidden = new Set((getHiddenFeedItems() || []).map((id) => String(id)));
-	const items = (Array.isArray(result.data?.items) ? result.data.items : []).filter((item) => {
-		if (!isCreation(item)) return false;
-		if (item?.editorial_pin === true && String(item?.editorial_pin_id || '').startsWith('challenge-')) return false;
-		const id = String(item.created_image_id || item.id || '');
-		return !id || !hidden.has(id);
-	}).slice(0, HOME_SAMPLE);
+function matchesLatestType(item, type) {
+	const media = creationMediaType(item);
+	if (type === 'image') return media !== 'video' && media !== 'audio';
+	return media === type;
+}
+
+async function loadLatest(type, { fetchJson, signal }) {
+	const params = new URLSearchParams({ type, limit: String(HOME_SAMPLE) });
+	const result = await readJson(fetchJson, `/api/home/latest?${params}`, signal);
+	if (!result?.ok) failed(result, 'Failed to load home');
+	const items = (Array.isArray(result.data?.items) ? result.data.items : [])
+		.filter((item) => isCreation(item) && matchesLatestType(item, type))
+		.slice(0, HOME_SAMPLE);
 	return { items };
 }
 
@@ -127,17 +137,18 @@ async function loadCommented({ fetchJson, signal }) {
 	return { items };
 }
 
-async function loadExplore({ fetchJson, signal }) {
-	const result = await readJson(fetchJson, '/api/explore?limit=40', signal);
-	if (!result?.ok) failed(result, 'Failed to load explore');
+async function loadNewbies({ fetchJson, signal }) {
+	const params = new URLSearchParams({ limit: String(HOME_SAMPLE) });
+	const result = await readJson(fetchJson, `/api/home/newbies?${params}`, signal);
+	if (!result?.ok) failed(result, 'Failed to load newbies');
 	const items = (Array.isArray(result.data?.items) ? result.data.items : [])
-		.filter((item) => isCreation(item) && creationMediaType(item) !== 'audio')
+		.filter((item) => isCreation(item))
 		.slice(0, HOME_SAMPLE);
 	return { items };
 }
 
 async function loadArticles({ fetchJson, signal }) {
-	const result = await readJson(fetchJson, '/api/blog/published?limit=8', signal);
+	const result = await readJson(fetchJson, `/api/blog/published?limit=${HOME_SAMPLE}`, signal);
 	if (!result?.ok) failed(result, 'Failed to load articles');
 	const items = (Array.isArray(result.data?.posts) ? result.data.posts : [])
 		.filter((post) => post?.slug && String(post.image_url || '').trim())
@@ -156,13 +167,33 @@ function challengeCards(messages, viewerId) {
 			...summary.payload,
 			...mergeFullChallengeConfigForChallenge(configs, challengeId)
 		};
-		const phase = deriveChallengePhase(cfg, Date.now());
+		const now = model.nowMs || Date.now();
+		const phase = deriveChallengePhase(cfg, now);
 		if (phase === 'pre_submit' || phase === 'deleted' || phase === 'purged' || phase === 'empty') continue;
 		const end = Date.parse(String(pickChallengeConfigTimestamp(cfg, 'voting_end_at') || ''));
+		const track = pickChallengeTrack(cfg);
+		const active = (model.participant?.activeChallenges || []).find((row) => row.challengeId === challengeId);
+		const ranked = active?.rankedSubmissions || rankSubmissionsForChallenge(
+			submissionsForLatestChallenge(model.raw?.submissions || [], cfg),
+			model.participant?.reactionMap
+		);
+		const heroVm = participantHeroViewModel(cfg, ranked, phase);
+		const media = resolveChallengeAcceptedMedia(cfg, { track });
 		cards.push({
 			challengeId,
 			title: String(summary.title || cfg.title || 'Challenge').trim() || 'Challenge',
 			active: ACTIVE_PARTICIPANT_PHASES.has(phase),
+			phase,
+			phaseLabel: challengePhaseDisplayLabel(phase),
+			status: challengePhaseStatusLabel(phase),
+			timeLeft: challengeTimeLeftLabel(cfg, phase, now),
+			track,
+			audio: track === 'suno' || (media.length > 0 && media.every((kind) => kind === 'audio')),
+			stats: (heroVm.stats || []).map((row) => ({
+				key: row.key,
+				label: row.label,
+				value: row.value
+			})),
 			preview: pickChallengeHeroPreviewUrl(cfg),
 			hero: pickChallengeHeroImageUrl(cfg),
 			end: Number.isFinite(end) ? end : 0
@@ -223,6 +254,13 @@ function challengeCacheItem(card, image) {
 	return {
 		challengeId: card.challengeId,
 		title: card.title,
+		phase: card.phase || '',
+		phaseLabel: card.phaseLabel || '',
+		status: card.status || '',
+		timeLeft: card.timeLeft || '',
+		track: card.track || '',
+		audio: card.audio === true,
+		stats: Array.isArray(card.stats) ? card.stats : [],
 		image: url,
 		width: Number(image?.width) || 0,
 		height: Number(image?.height) || 0,
@@ -243,9 +281,11 @@ function challengeCacheItem(card, image) {
 }
 
 const LOADERS = {
-	feed: loadFeed,
+	images: (context) => loadLatest('image', context),
+	videos: (context) => loadLatest('video', context),
+	songs: (context) => loadLatest('audio', context),
 	commented: loadCommented,
-	explore: loadExplore,
+	newbies: loadNewbies,
 	articles: loadArticles,
 	challenges: loadChallenges
 };
@@ -266,7 +306,13 @@ function presentCreation(item) {
 		media_type: creationMediaType(item) || 'image',
 		status: item?.status || '',
 		published: item?.published === true || item?.published === 1,
-		nsfw: item?.nsfw === true
+		nsfw: item?.nsfw === true,
+		user_name: String(item?.user_name || '').trim(),
+		like_count: Math.max(0, Number(item?.like_count) || 0),
+		comment_count: Math.max(0, Number(item?.comment_count) || 0),
+		viewer_liked: item?.viewer_liked === true,
+		liked_by: Array.isArray(item?.liked_by) ? item.liked_by : [],
+		commented_by: Array.isArray(item?.commented_by) ? item.commented_by : []
 	};
 }
 
@@ -275,6 +321,8 @@ function presentArticle(post) {
 	return {
 		slug: post?.slug,
 		title: post?.title || '',
+		description: String(post?.description || '').trim(),
+		published_at: post?.published_at || '',
 		width: Number(post?.width) || 0,
 		height: Number(post?.height) || 0,
 		image,
@@ -292,6 +340,13 @@ function presentChallenge(item) {
 	return {
 		challengeId: item?.challengeId,
 		title: item?.title || 'Challenge',
+		phase: item?.phase || '',
+		phaseLabel: item?.phaseLabel || '',
+		status: item?.status || '',
+		timeLeft: item?.timeLeft || '',
+		track: item?.track || '',
+		audio: item?.audio === true,
+		stats: Array.isArray(item?.stats) ? item.stats : [],
 		image: String(item?.image || '').trim(),
 		width: Number(item?.width) || 0,
 		height: Number(item?.height) || 0,
@@ -301,7 +356,7 @@ function presentChallenge(item) {
 }
 
 function presentHomeCard(id, item) {
-	if (item?.skeleton) return { skeleton: true, width: Number(item.width) || 201, height: Number(item.height) || 230 };
+	if (item?.skeleton) return { skeleton: true, width: Number(item.width) || 201, height: Number(item.height) || HOME_ROW_HEIGHT };
 	if (id === 'challenges') return presentChallenge(item);
 	if (id === 'articles') return presentArticle(item);
 	return presentCreation(item);

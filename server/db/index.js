@@ -11,6 +11,7 @@ import { createSupabaseContext } from "./supabase.js";
 import { createUsersStore } from "./users.js";
 import { createCreditsStore } from "./credits.js";
 import { createCreationsStore } from "./creations.js";
+import { createHomeLatestStore } from "./homeLatest.js";
 import { createNotificationsStore } from "./notifications.js";
 import { createThreadsStore } from './threads.js';
 import { createServersStore } from './servers.js';
@@ -28,6 +29,7 @@ export function createDb() {
  account:{queries:{...library.queries,...createAccountQueries(context.client),...createAvatarGenerationQueries(context.client)},storage:create.storage,users,client:context.client},
 		library,
 		explore: createExploreStore(context.client),
+		homeLatest: createHomeLatestStore(context.client),
 		create,
 		comments: createCommentsStore(context.client, { creations, queries: create.queries || create }),
   suggestions: createSuggestionsStore(context.client),

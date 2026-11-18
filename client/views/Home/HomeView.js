@@ -1,8 +1,14 @@
 import { challengesDetailsHref } from '../../shared/challenges/model/detailsRoute.js';
 import { iconMarkup } from '../../components/Icon/Icon.js';
+import { audioClipMusicIcon, clock3Icon, peopleOutlined, pictureIcon, thumbsUpStrokeIcon } from '../../icons/svg-strings.js';
+import { enableLikeButtons, initLikeButton } from '../../shared/likes.js';
+import { applyWhoTooltipAttr, formatWhoTooltip } from '../../shared/whoLabels.js';
+import { bindCreationEngagement, projectCreationEngagement, subscribeCreationEngagement } from '../../shared/creationEngagement.js';
+import { HOME_ROW_HEIGHT, homeTileWidth } from '../../shared/homeRow.js';
 import { creationMediaType, creationThumbnailUrl } from '../../shared/creationGrid.js';
 import { nsfwMediaUrl, nsfwShouldBlur } from '../../shared/nsfwPolicy.js';
 import { BLOG_CAMPAIGN_INTERNAL, buildBlogPostPublicPath } from '../../shared/blogCampaignPath.js';
+import { formatDate } from '../../shared/datetime.js';
 import { attachFeedCardCreationDragSource } from '../../shared/creationComposerDrag.js';
 import { isGroupCreationItem } from '../../shared/creationGroupMedia.js';
 import { feedItemCardOriginalImageUrl, getFeedItemGroupCarouselSources } from '../../shared/feedCardBuild.js';
@@ -52,11 +58,44 @@ function thumbFor(item) {
 }
 
 function tileBox(item) {
-	const height = 230;
-	const width = Number(item?.width);
-	const sourceHeight = Number(item?.height);
-	const px = width > 0 && sourceHeight > 0 ? Math.max(1, Math.round(height * (width / sourceHeight))) : 201;
-	return ` style="width:${px}px;height:${height}px"`;
+	const px = homeTileWidth(item?.width, item?.height);
+	return ` style="width:${px}px;height:${HOME_ROW_HEIGHT}px"`;
+}
+
+function countText(value) {
+	return String(Math.max(0, Number(value) || 0));
+}
+
+function whoAttr(list) {
+	const tip = formatWhoTooltip(list);
+	return tip ? ` data-tooltip="${escapeHtml(tip)}"` : '';
+}
+
+function likePill(item) {
+	const liked = item?.viewer_liked === true;
+	return `<button type="button" class="home-tile__stat home-tile__stat--like who-tooltip${liked ? ' is-liked' : ''}" aria-label="Like" aria-pressed="${liked ? 'true' : 'false'}" data-like-button${whoAttr(item?.liked_by)}>${iconMarkup('heart')}<span data-like-count>${countText(item?.like_count)}</span></button>`;
+}
+
+function commentPill(item) {
+	const count = countText(item?.comment_count);
+	return `<span class="home-tile__stat home-tile__stat--comment who-tooltip" aria-label="${count} comments"${whoAttr(item?.commented_by)}>${iconMarkup('comments')}<span data-home-comment-count>${count}</span></span>`;
+}
+
+function tileStats(section, item) {
+	if (section?.kind !== 'creation') return '';
+	const comment = section.id === 'commented' ? commentPill(item) : '';
+	return `<span class="home-tile__stats">${comment}${likePill(item)}</span>`;
+}
+
+function withEngagement(item) {
+	const live = projectCreationEngagement(item, { incoming: true });
+	if (!item || !live) return item;
+	item.like_count = live.like_count;
+	item.comment_count = live.comment_count;
+	item.viewer_liked = live.viewer_liked;
+	if (Array.isArray(live.liked_by)) item.liked_by = live.liked_by;
+	if (Array.isArray(live.commented_by)) item.commented_by = live.commented_by;
+	return item;
 }
 
 function nsfwBadge(item) {
@@ -82,25 +121,61 @@ function dragAttrs(item) {
 	return ` draggable="true"${groupAttr}${selectedAttr} data-image-id="${id}" data-image-url-full="${escapeHtml(url)}" data-media-type="${escapeHtml(type)}" data-published="${published ? '1' : '0'}" data-creation-status="${escapeHtml(status)}"`;
 }
 
-function creationTile(item) {
-	const id = creationId(item);
-	const title = String(item?.title || '').trim() || 'Creation';
-	const thumb = nsfwMediaUrl(thumbFor(item), item);
+function newbieHandle(item) {
+	const name = String(item?.user_name || '').trim().replace(/^@+/, '');
+	return name ? `@${name}` : '';
+}
+
+function creationTile(item, section) {
+	const row = withEngagement(item);
+	const id = creationId(row);
+	const title = String(row?.title || '').trim() || 'Creation';
+	const handle = section?.id === 'newbies' ? newbieHandle(row) : '';
+	const label = handle && !title.toLowerCase().includes(handle.toLowerCase()) ? `${handle}, ${title}` : title;
+	const name = handle ? `<span class="home-tile__name">${escapeHtml(handle)}</span>` : '';
+	const thumb = nsfwMediaUrl(thumbFor(row), row);
 	const media = thumb
 		? `<img class="home-tile__thumb" src="${escapeHtml(thumb)}" alt="" draggable="false">`
 		: `<span class="home-tile__thumb home-tile__thumb--empty" aria-hidden="true"></span>`;
-	const drag = dragAttrs(item);
-	return `<a class="home-tile home-tile--media"${tileBox(item)}${drag} href="/creations/${id}" aria-label="${escapeHtml(title)}">${media}${nsfwBadge(item)}</a>`;
+	const drag = dragAttrs(row);
+	return `<div class="home-tile home-tile--media"${tileBox(row)}${drag} data-creation-id="${id}"><a class="home-tile__open" draggable="false" href="/creations/${id}" aria-label="${escapeHtml(label)}">${media}${name}${nsfwBadge(row)}</a>${tileStats(section, row)}</div>`;
+}
+
+function challengeStatIcon(stat, card) {
+	const cls = 'home-challenge__icon';
+	if (stat?.key === 'creators') return peopleOutlined(cls);
+	if (stat?.key === 'votes') return thumbsUpStrokeIcon(cls);
+	if (stat?.key === 'entries' && card?.audio === true) return audioClipMusicIcon(cls);
+	return pictureIcon(cls);
 }
 
 function challengeTile(card) {
 	const href = challengesDetailsHref(card.challengeId);
+	const title = String(card?.title || 'Challenge').trim() || 'Challenge';
+	const phase = String(card?.phase || '').trim();
 	const media = card.image
-		? `<img class="home-tile__thumb" src="${escapeHtml(card.image)}" alt="" draggable="false">`
-		: `<span class="home-tile__thumb home-tile__thumb--empty" aria-hidden="true"></span>`;
+		? `<img class="home-challenge__img" src="${escapeHtml(card.image)}" alt="" draggable="false">`
+		: `<span class="home-challenge__img home-challenge__img--empty" aria-hidden="true"></span>`;
 	const badge = card.nsfw ? `<span class="home-tile__nsfw" role="img" aria-label="NSFW">${iconMarkup('eyeHidden')}</span>` : '';
 	const drag = card.creation ? dragAttrs(card.creation) : '';
-	return `<a class="home-tile home-tile--media"${tileBox(card)}${drag} href="${escapeHtml(href)}" aria-label="${escapeHtml(card.title)}">${media}${badge}</a>`;
+	const time = String(card?.timeLeft || '').trim();
+	const status = String(card?.status || '').trim();
+	const stats = (Array.isArray(card?.stats) ? card.stats : []).map((stat) => {
+		const label = String(stat?.label || '').trim();
+		return `<span class="home-challenge__stat" aria-label="${escapeHtml(label)}">${challengeStatIcon(stat, card)}<span>${escapeHtml(stat?.value ?? '0')}</span></span>`;
+	}).join('');
+	return `<a class="home-tile home-tile--challenge${phase ? ` home-tile--challenge-${escapeHtml(phase)}` : ''}"${drag} href="${escapeHtml(href)}" aria-label="${escapeHtml(title)}">
+		<span class="home-challenge__meta">
+			<span class="home-challenge__phase">${escapeHtml(card?.phaseLabel || '')}</span>
+			${time ? `<span class="home-challenge__time">${clock3Icon('home-challenge__icon')}<span>${escapeHtml(time)}</span></span>` : ''}
+		</span>
+		<span class="home-challenge__title">${escapeHtml(title)}</span>
+		<span class="home-challenge__hero">${media}${badge}</span>
+		<span class="home-challenge__foot">
+			<span class="home-challenge__status">${escapeHtml(status)}</span>
+			<span class="home-challenge__stats">${stats}</span>
+		</span>
+	</a>`;
 }
 
 function mountHeroGlow(canvas) {
@@ -137,8 +212,9 @@ function mountHeroGlow(canvas) {
 	};
 	const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(resize) : null;
 	observer?.observe(canvas);
+	if (!observer) window.addEventListener('resize', resize);
+	resize();
 	const draw = (now) => {
-		resize();
 		if (!width || !height) return;
 		const time = motion.matches ? 0 : (now || 0) / 1000;
 		const presence = motion.matches ? 0.45 : Math.pow(Math.max(0, Math.sin(time * 0.28)), 2);
@@ -184,6 +260,7 @@ function mountHeroGlow(canvas) {
 	return () => {
 		cancel(frame);
 		observer?.disconnect();
+		if (!observer) window.removeEventListener('resize', resize);
 		motion.removeEventListener?.('change', onMotion);
 		scheme.removeEventListener?.('change', onScheme);
 	};
@@ -209,8 +286,10 @@ function articleTile(post) {
 	const href = buildBlogPostPublicPath(post?.slug, BLOG_CAMPAIGN_INTERNAL);
 	const thumb = nsfwMediaUrl(String(post?.image || post?.image_url || '').trim(), post);
 	const media = thumb
-		? `<img class="home-tile__thumb" src="${escapeHtml(thumb)}" alt="" draggable="false">`
-		: `<span class="home-tile__thumb home-tile__thumb--empty" aria-hidden="true"></span>`;
+		? `<img class="home-article__img" src="${escapeHtml(thumb)}" alt="" draggable="false">`
+		: `<span class="home-article__img home-article__img--empty" aria-hidden="true"></span>`;
+	const date = formatDate(post?.published_at, { dateStyle: 'medium' });
+	const summary = String(post?.description || '').trim();
 	const drag = dragAttrs({
 		id: post?.creation_id,
 		created_image_id: post?.creation_id,
@@ -221,23 +300,30 @@ function articleTile(post) {
 		published: post?.published === true,
 		status: post?.status
 	});
-	return `<a class="home-tile home-tile--media"${tileBox(post)}${drag} href="${escapeHtml(href)}" aria-label="${escapeHtml(title)}">${media}${nsfwBadge(post)}</a>`;
+	return `<a class="home-tile home-tile--article"${drag} href="${escapeHtml(href)}" aria-label="${escapeHtml(title)}">
+		<span class="home-article__date">${escapeHtml(date)}</span>
+		<span class="home-article__title">${escapeHtml(title)}</span>
+		<span class="home-article__hero">${media}${nsfwBadge(post)}</span>
+		<span class="home-article__summary">${escapeHtml(summary)}</span>
+	</a>`;
 }
 
 function moreTile(href, title) {
 	return `<a class="home-tile home-tile--more" href="${escapeHtml(href)}" aria-label="More ${escapeHtml(title)}"><span class="home-tile__more-mark" aria-hidden="true">${iconMarkup('stack')}</span><span class="home-tile__more-label">+ More</span></a>`;
 }
 
-function skeletonTile(item) {
+function skeletonTile(item, section) {
+	if (section?.kind === 'challenge') return `<div class="home-tile home-tile--skeleton home-tile--challenge"></div>`;
+	if (section?.kind === 'article') return `<div class="home-tile home-tile--skeleton home-tile--article"></div>`;
 	return `<div class="home-tile home-tile--skeleton"${tileBox(item)}></div>`;
 }
 
 function tilesFor(section) {
 	return section.items.map((item) => {
-		if (item?.skeleton) return skeletonTile(item);
+		if (item?.skeleton) return skeletonTile(item, section);
 		if (section.kind === 'challenge') return challengeTile(item);
 		if (section.kind === 'article') return articleTile(item);
-		return creationTile(item);
+		return creationTile(item, section);
 	});
 }
 
@@ -247,9 +333,9 @@ function sectionStamp(section) {
 	if (!section.items.length) return 'empty';
 	return section.items.map((item) => {
 		if (item?.skeleton) return `s:${item.width}x${item.height}`;
-		if (section.kind === 'challenge') return `${item.challengeId}:${item.image || ''}:${item.title || ''}`;
-		if (section.kind === 'article') return `${item.slug}:${item.image_url || ''}:${item.title || ''}`;
-		return `${item.created_image_id || item.id}:${item.title || ''}:${item.image || item.image_url || ''}:${item.width || 0}x${item.height || 0}`;
+		if (section.kind === 'challenge') return `${item.challengeId}:${item.image || ''}:${item.title || ''}:${item.phase || ''}:${item.timeLeft || ''}:${(item.stats || []).map((stat) => stat.value).join(',')}`;
+		if (section.kind === 'article') return `${item.slug}:${item.image_url || ''}:${item.title || ''}:${item.published_at || ''}:${item.description || ''}`;
+		return `${item.created_image_id || item.id}:${item.title || ''}:${item.image || item.image_url || ''}:${item.width || 0}x${item.height || 0}:${item.user_name || ''}`;
 	}).join('|');
 }
 
@@ -259,7 +345,7 @@ function sectionMarkup(section) {
 	const busy = section.items.some((item) => item?.skeleton);
 	const empty = stamp === 'error' ? SECTION_MISS : section.empty;
 	const body = tiles.length
-		? `<div class="home-row">${tiles.join('')}${moreTile(section.href, section.title)}</div>`
+		? `<div class="home-row${section.kind === 'challenge' ? ' home-row--challenge' : ''}${section.kind === 'article' ? ' home-row--article' : ''}">${tiles.join('')}${moreTile(section.href, section.title)}</div>`
 		: (stamp === 'pending' ? '' : `<p class="home-empty">${escapeHtml(empty)}</p>`);
 	return `<section class="home-section" data-home-section="${escapeHtml(section.id)}" data-stamp="${escapeHtml(stamp)}"${busy ? ' aria-busy="true"' : ''}>
 		<h2 class="home-section__head"><a class="home-section__link" href="${escapeHtml(section.href)}">${escapeHtml(section.title)} <span class="home-section__chevron" aria-hidden="true">${iconMarkup('chevronRight')}</span></a></h2>
@@ -270,6 +356,7 @@ function sectionMarkup(section) {
 function mountDesktop({ outlet, actions, services }) {
 	const root = document.createElement('div');
 	root.className = 'home-view';
+	root.style.setProperty('--home-row-height', `${HOME_ROW_HEIGHT}px`);
 	root.innerHTML = `<header class="home-hero">
 		<div class="home-hero__glow" aria-hidden="true"><canvas class="home-hero__glow-canvas"></canvas></div>
 		<p class="home-hero__line">Turn a thought into a creation.</p>
@@ -314,12 +401,49 @@ function mountDesktop({ outlet, actions, services }) {
 			if (current) current.outerHTML = html;
 			else sections.insertAdjacentHTML('beforeend', html);
 			const next = sections.querySelector(`[data-home-section="${section.id}"]`);
-			next?.querySelectorAll('.home-tile[data-image-url-full]').forEach((tile) => {
-				attachFeedCardCreationDragSource(tile);
+			next?.querySelectorAll('.home-tile[data-creation-id]').forEach((tile) => {
+				const id = Number(tile.dataset.creationId);
+				const record = section.items.find((item) => creationId(item) === id);
+				if (record) tile.__creationRecord = record;
+				const button = tile.querySelector('button[data-like-button]');
+				if (button && record) initLikeButton(button, record);
+				if (tile.hasAttribute('data-image-url-full')) attachFeedCardCreationDragSource(tile);
 			});
 		}
 	}
 
+	function paintEngagement(state) {
+		const id = String(state?.id || '');
+		if (!id) return;
+		services.providers.home?.noteEngagement?.(id, state);
+		for (const tile of root.querySelectorAll(`.home-tile[data-creation-id="${id}"]`)) {
+			const button = tile.querySelector('button[data-like-button]');
+			if (button) {
+				button.setAttribute('aria-pressed', state.viewer_liked ? 'true' : 'false');
+				button.classList.toggle('is-liked', state.viewer_liked === true);
+				const count = button.querySelector('[data-like-count]');
+				if (count) count.textContent = countText(state.like_count);
+				if (Array.isArray(state.liked_by)) applyWhoTooltipAttr(button, state.liked_by);
+			}
+			const comments = tile.querySelector('[data-home-comment-count]');
+			if (comments) comments.textContent = countText(state.comment_count);
+			const commentStat = tile.querySelector('.home-tile__stat--comment');
+			if (commentStat && Array.isArray(state.commented_by)) applyWhoTooltipAttr(commentStat, state.commented_by);
+			if (tile.__creationRecord) {
+				tile.__creationRecord.like_count = state.like_count;
+				tile.__creationRecord.comment_count = state.comment_count;
+				tile.__creationRecord.viewer_liked = state.viewer_liked === true;
+				if (Array.isArray(state.liked_by)) tile.__creationRecord.liked_by = state.liked_by;
+				if (Array.isArray(state.commented_by)) tile.__creationRecord.commented_by = state.commented_by;
+			}
+		}
+	}
+
+	bindCreationEngagement();
+	enableLikeButtons(root);
+	const stopEngagement = subscribeCreationEngagement((state) => {
+		if (!destroyed) paintEngagement(state);
+	});
 	const stop = services.providers.home?.observe?.((delivery) => {
 		if (destroyed) return;
 		if (delivery.unauthorized) {
@@ -336,6 +460,7 @@ function mountDesktop({ outlet, actions, services }) {
 		destroy() {
 			destroyed = true;
 			stop();
+			stopEngagement();
 			stopGlow();
 			restoreComposer();
 			header?.classList.remove('is-hidden-for-home');

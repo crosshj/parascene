@@ -29,6 +29,8 @@
 	--color-amber-fg: color-mix(in srgb, var(--color-amber) 84%, var(--text));
 	--color-amber-bg-subtle: color-mix(in srgb, var(--color-amber) 18%, var(--surface));
 	--color-purple: #7c3aed;
+	--color-purple-fg: color-mix(in srgb, var(--color-purple) 80%, var(--text));
+	--color-purple-bg-subtle: color-mix(in srgb, var(--color-purple) 16%, var(--surface));
 	--color-red-fg: #b91c1c;
 	--image-placeholder: #e4e7ee;
 	--skeleton: #e4e7ee;

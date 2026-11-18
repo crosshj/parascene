@@ -1,4 +1,5 @@
 import {creationEligibleForLatestCommentsStream} from '../services/create/latestCommentsVisibility.js';
+import { buildWhoListFromProfileRows } from '../services/feed/whoMeta.js';
 import { chatMessageAllowsUnpublishedCreation, commentAllowsUnpublishedCreation } from '../services/create/postedCreationAccess.js';
 import {getActiveEditorialPins} from '../services/feed/editorialPin.js';
 import path from "node:path";
@@ -68,6 +69,32 @@ function lineageIds(meta) {
 		...(Array.isArray(parsed?.history) ? parsed.history : []),
 		...(Array.isArray(parsed?.direct_parent_ids) ? parsed.direct_parent_ids : [])
 	], 500));
+}
+
+function whoGroups(rows, profiles) {
+	const grouped = new Map();
+	const seen = new Set();
+	for (const row of rows || []) {
+		const creationId = String(row?.created_image_id || '');
+		const userId = Number(row?.user_id);
+		if (!creationId || !Number.isFinite(userId) || userId <= 0) continue;
+		const key = `${creationId}:${userId}`;
+		if (seen.has(key)) continue;
+		seen.add(key);
+		const list = grouped.get(creationId) || [];
+		if (list.length >= 8) continue;
+		list.push(profiles.get(userId) || { user_id: userId });
+		grouped.set(creationId, list);
+	}
+	return grouped;
+}
+
+async function whoProfiles(client, rows) {
+	const userIds = positiveIds((rows || []).map((row) => row?.user_id), 400);
+	if (!userIds.length) return new Map();
+	const result = await client.from("prsn_user_profiles").select("user_id, user_name, display_name").in("user_id", userIds);
+	if (result.error) throw result.error;
+	return new Map((result.data || []).map((profile) => [Number(profile.user_id), profile]));
 }
 
 function whoLabel(profile) {
@@ -182,6 +209,43 @@ if ((!owner && !discussable && !isAdmin) || (unavailable && !isAdmin)) return nu
 			const { data, error } = await client.from("prsn_created_images").select("id, meta").in("id", safeIds);
 			if (error) throw error;
 			return Object.fromEntries((data || []).map((row) => [String(row.id), Boolean(row?.meta?.nsfw)]));
+		},
+		async engagementForViewer(userId, ids) {
+			const safeIds = positiveIds(ids, 200);
+			const blank = { like_count: 0, comment_count: 0, viewer_liked: false, liked_by: [], commented_by: [] };
+			if (!safeIds.length) return {};
+			const whoLimit = Math.min(800, Math.max(safeIds.length * 12, 40));
+			const [likeResult, commentResult, viewerResult, likerResult, commenterResult] = await Promise.all([
+				client.from("prsn_created_image_like_counts").select("created_image_id, like_count").in("created_image_id", safeIds),
+				client.from("prsn_created_image_comment_counts").select("created_image_id, comment_count").in("created_image_id", safeIds),
+				client.from("prsn_likes_created_image").select("created_image_id").eq("user_id", Number(userId)).in("created_image_id", safeIds),
+				client.from("prsn_likes_created_image").select("created_image_id, user_id, created_at").in("created_image_id", safeIds).order("created_at", { ascending: false }).limit(whoLimit),
+				client.from("prsn_comments_created_image").select("created_image_id, user_id, created_at").in("created_image_id", safeIds).order("created_at", { ascending: false }).limit(whoLimit)
+			]);
+			if (likeResult.error) throw likeResult.error;
+			if (commentResult.error) throw commentResult.error;
+			if (viewerResult.error) throw viewerResult.error;
+			if (likerResult.error) throw likerResult.error;
+			if (commenterResult.error) throw commenterResult.error;
+			const likes = new Map((likeResult.data || []).map((row) => [String(row.created_image_id), Math.max(0, Number(row.like_count) || 0)]));
+			const comments = new Map((commentResult.data || []).map((row) => [String(row.created_image_id), Math.max(0, Number(row.comment_count) || 0)]));
+			const liked = new Set((viewerResult.data || []).map((row) => String(row.created_image_id)));
+			const profiles = await whoProfiles(client, [...(likerResult.data || []), ...(commenterResult.data || [])]);
+			const likers = whoGroups(likerResult.data, profiles);
+			const commenters = whoGroups(commenterResult.data, profiles);
+			return Object.fromEntries(safeIds.map((id) => {
+				const key = String(id);
+				const likeCount = likes.get(key) ?? blank.like_count;
+				const likerRows = likers.get(key) || [];
+				const commenterRows = commenters.get(key) || [];
+				return [key, {
+					like_count: likeCount,
+					comment_count: comments.get(key) ?? blank.comment_count,
+					viewer_liked: liked.has(key),
+					liked_by: buildWhoListFromProfileRows(likerRows, Math.max(likeCount, likerRows.length)),
+					commented_by: buildWhoListFromProfileRows(commenterRows, commenterRows.length)
+				}];
+			}));
 		},
 		async likeMeta(userId, creationId) {
 			const id = Number(creationId);

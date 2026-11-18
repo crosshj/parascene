@@ -590,13 +590,17 @@ export function createCreationsRoutes({ creations, users, createQueries, createS
 			const creatorProfile = await users.profileByUserId(row.user_id);
 			const creation = serializeCreation(row);
 			if (posted) applyPostedProof(creation, row, posted);
+			const engagement = typeof creations.engagementForViewer === "function"
+				? (await creations.engagementForViewer(viewer.id, [row.id]))[String(row.id)]
+				: null;
 			const payload = {
 				...creation,
 				...(viewer.role === "admin" ? { user_deleted: row.unavailable_at != null && String(row.unavailable_at).trim() !== "" } : {}),
-				like_count: 0,
-				viewer_liked: false,
-				liked_by: [],
-				comment_count: 0,
+				like_count: engagement?.like_count ?? 0,
+				viewer_liked: engagement?.viewer_liked === true,
+				liked_by: Array.isArray(engagement?.liked_by) ? engagement.liked_by : [],
+				comment_count: engagement?.comment_count ?? 0,
+				commented_by: Array.isArray(engagement?.commented_by) ? engagement.commented_by : [],
 				lineage_descendants: [],
 				feed_pin: { active: false, until: null, challenge_id: null, pins: [] },
 				challenge_organizer: { active: false, refs: [] },
