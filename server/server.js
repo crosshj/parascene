@@ -36,6 +36,8 @@ import { createCdnRoutes } from "./routes/cdn.js";
 import { createGenericRoutes } from "./routes/generic.js";
 import { createFilesCors } from "./routes/middleware/filesCors.js";
 import { createAuthMiddleware } from "./routes/middleware/auth.js";
+import { clientIdMiddleware } from "./routes/middleware/clientId.js";
+import { createVisitPulseMiddleware } from "./routes/middleware/visitPulse.js";
 import { createCdnHostBoundary } from "./routes/middleware/cdnHost.js";
 import { apiHostBoundary } from "./routes/middleware/apiHost.js";
 import { shareHostBoundary } from "./routes/middleware/shareHost.js";
@@ -55,6 +57,8 @@ import createSunoRoutes from './routes/suno.js';
 import createXRoutes from './routes/x.js';
 import createCreateRoutes from './routes/create.js';
 import { resumeLocalProviderPolls } from './services/create/creationJob.js';
+import { createVisitPulseQueries } from "./db/visitPulse.js";
+import { startVisitPulseFlushSchedule, runVisitPulseFlush } from "./services/feed/visitPulseFlush.js";
 import createBlogRoutes from './routes/blog.js';
 import createShareRoutes from './routes/share.js';
 import createCreationExportRoutes from './routes/creationExports.js';
@@ -80,11 +84,13 @@ app.use("/api/notifications", express.urlencoded({ extended: false }));
 app.use("/oauth/token", express.json({ limit: "64kb" }));
 app.use('/oauth',express.urlencoded({extended:false}));
 app.use(cookieParser());
+app.use(clientIdMiddleware);
 app.use(apiHostBoundary);
 app.use(shareHostBoundary);
 app.use(createFaviconRoutes({ publicDir: path.join(__dirname, "../public") }));
 app.use(createAuthMiddleware(db.sessions, db.users));
 app.use(apiKeyBearerMiddleware(db.account.queries));app.use(integrationBearerMiddleware());
+app.use(createVisitPulseMiddleware({ failOpen: true }));
 // The app also serves the public profile/edited-image compatibility
 // path. The CDN host serves the same route through createCdnRoutes.
 app.use("/api/images/generic", createFilesCors(), createGenericRoutes(db.genericFiles, db.users));
@@ -146,5 +152,8 @@ app.use((error, req, res, next) => {
 app.listen(port, bindHost, () => {
 	console.log(`Parascene: http://localhost:${port}/`);
 	console.log(`[parascene] bound to ${bindHost}:${port}`);
- void resumeLocalProviderPolls(db.create).catch(error => console.error("[parascene] Create poll recovery failed", error));
+	void resumeLocalProviderPolls(db.create).catch(error => console.error("[parascene] Create poll recovery failed", error));
+	startVisitPulseFlushSchedule({
+		run: (args) => runVisitPulseFlush({ args, queries: createVisitPulseQueries(db.account.client) })
+	});
 });

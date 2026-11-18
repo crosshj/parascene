@@ -9,7 +9,7 @@
 .home-view {
 	display: flex;
 	flex-direction: column;
-	gap: 0.45em;
+	gap: 4em;
 	width: 100%;
 	max-width: 1792px;
 	margin-right: auto;

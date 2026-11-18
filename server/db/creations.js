@@ -517,6 +517,52 @@ if ((!owner && !discussable && !isAdmin) || (unavailable && !isAdmin)) return nu
 			const byId = new Map((finalRows || []).filter((row) => !isHiddenInGroupMeta(row.meta) && (viewerEnableNsfw || row.meta?.nsfw !== true)).map((row) => [Number(row.id), row]));
 			return { rows: selectedIds.map((id) => byId.get(id)).filter(Boolean).map((row) => ({ ...row, related_reasons: reasonById.get(Number(row.id)) || [] })), hasMore: ranked.length > safeLimit || semanticPageFull };
 		},
+		async recordTransition(fromId, toId) {
+			const from = Number(fromId);
+			const to = Number(toId);
+			if (!Number.isInteger(from) || !Number.isInteger(to) || from < 1 || to < 1 || from === to) {
+				throw new Error("Invalid transition ids");
+			}
+			const now = new Date().toISOString();
+			const existing = await client.from("prsn_related_transitions")
+				.select("count")
+				.eq("from_created_image_id", from)
+				.eq("to_created_image_id", to)
+				.maybeSingle();
+			if (existing.error) throw existing.error;
+			if (existing.data) {
+				const { error } = await client.from("prsn_related_transitions")
+					.update({ count: Number(existing.data.count) + 1, last_updated: now })
+					.eq("from_created_image_id", from)
+					.eq("to_created_image_id", to);
+				if (error) throw error;
+			} else {
+				const { error } = await client.from("prsn_related_transitions").insert({
+					from_created_image_id: from,
+					to_created_image_id: to,
+					count: 1,
+					last_updated: now
+				});
+				if (error) throw error;
+			}
+			const knobs = await client.from("prsn_policy_knobs").select("value").eq("key", "related.transition_cap_k").maybeSingle();
+			if (knobs.error) throw knobs.error;
+			const capK = Math.max(0, parseInt(knobs.data?.value, 10) || 50);
+			const rows = await client.from("prsn_related_transitions")
+				.select("to_created_image_id")
+				.eq("from_created_image_id", from)
+				.order("last_updated", { ascending: true });
+			if (rows.error) throw rows.error;
+			if (rows.data && rows.data.length > capK) {
+				for (const row of rows.data.slice(0, rows.data.length - capK)) {
+					const { error } = await client.from("prsn_related_transitions").delete()
+						.eq("from_created_image_id", from)
+						.eq("to_created_image_id", row.to_created_image_id);
+					if (error) throw error;
+				}
+			}
+			return { changes: 1 };
+		},
 		async owns(userId, creationId) {
 			const id = Number(creationId);
 			if (!Number.isInteger(id) || id <= 0) return false;

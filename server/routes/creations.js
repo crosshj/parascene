@@ -406,6 +406,24 @@ export function createCreationsRoutes({ creations, users, createQueries, createS
 		} catch (error) { return next(error); }
 	});
 
+	router.post("/api/creations/transitions", async (req, res, next) => {
+		try {
+			if (!req.auth?.userId) return res.status(401).json({ error: "Unauthorized" });
+			const fromId = req.body?.from_created_image_id != null ? parseInt(req.body.from_created_image_id, 10) : NaN;
+			const toId = req.body?.to_created_image_id != null ? parseInt(req.body.to_created_image_id, 10) : NaN;
+			if (!Number.isFinite(fromId) || !Number.isFinite(toId) || fromId < 1 || toId < 1 || fromId === toId) {
+				return res.status(400).json({ error: "Invalid from_created_image_id or to_created_image_id" });
+			}
+			if (typeof creations.recordTransition !== "function") return res.status(204).end();
+			await creations.recordTransition(fromId, toId);
+			return res.status(204).end();
+		} catch (error) {
+			console.error("[creations] transitions error:", error);
+			if (res.headersSent) return next(error);
+			return res.status(500).json({ error: "Unable to record transition." });
+		}
+	});
+
 	router.get("/api/creations/:id/related", noStore, requireAuth, async (req, res, next) => {
 		try {
 			const { viewer, row } = await accessibleCreation(req);
