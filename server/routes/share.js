@@ -5,6 +5,7 @@ import sharp from "sharp";
 import { mintShareToken, verifyShareToken } from "./utils/shareLink.js";
 import { resolveCreatedImageStorageFilename } from "./utils/resolveCreatedImageStorageFilename.js";
 import { getBaseAppUrl, getShareBaseUrl } from "../services/create/url.js";
+import { writeProvenance } from "../services/create/provenance.js";
 
 const PAGE_PATH = fileURLToPath(new URL("../pages/share/index.html", import.meta.url));
 const ASSET_VERSION = encodeURIComponent(process.env.ASSET_VERSION || "share-v1");
@@ -182,6 +183,7 @@ export default function createShareRoutes({ queries, storage }) {
 			if (["wide", "card"].includes(String(req.query.variant || "").toLowerCase())) {
 				buffer = await sharp(buffer, { failOn: "none" }).resize(1200, 1200, { fit: "cover", position: "centre" }).extract({ left: 0, top: 262, width: 1200, height: 675 }).png().toBuffer();
 			}
+			buffer = writeProvenance(buffer, image);
 			return res.type("png").set("Cache-Control", req.query.v ? "public, max-age=31536000, immutable" : "public, max-age=3600").send(buffer);
 		} catch { return res.status(500).json({ error: "Failed to serve image" }); }
 	});

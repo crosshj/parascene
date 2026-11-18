@@ -98,6 +98,18 @@ test('share modal optional rows start hidden and toggle via hidden', async () =>
 		assert.equal(vynly.hidden, false);
 		assert.equal(google.hidden, true);
 		assert.equal(watermarked.hidden, false);
+		el.close();
+		el.handleOpen({
+			detail: {
+				creationId: 9,
+				isGroupCreation: true,
+				vynlyGroupImages: true,
+				vynlyConfigured: true,
+				vynlyShareEligible: true
+			}
+		});
+		assert.equal(vynly.hidden, false, 'image groups should offer Vynly when it is configured');
+		assert.equal(watermarked.hidden, true);
 		assert.equal(watermarked.querySelector('.share-action-cta-label').textContent, 'Download');
 		el.close();
 		await el.open(2, { vynlyConfigured: true, vynlyVideo: true, imageExportEligible: false });

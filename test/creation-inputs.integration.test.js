@@ -30,6 +30,17 @@ const resolve = (inputs, bindings, fixtureData = fixture()) => resolveCreationIn
  resolveInternalUrl: async () => null,
 });
 
+test('a commented challenge result can be a source and a private draft cannot', async () => {
+ const data = fixture();
+ data.rows.set(95, { id: 95, user_id: 19, published: false, status: 'completed', filename: 'results.png', meta: { challenge_organizer_refs: [{ challenge_id: 'summer', role: 'results' }] } });
+ data.rows.set(96, { id: 96, user_id: 19, published: false, status: 'completed', filename: 'draft.png', meta: {} });
+ const visible = inputFromLegacyImage('/results.png', { sourceId: 95 }, 'results');
+ const hidden = inputFromLegacyImage('/draft.png', { sourceId: 96 }, 'draft');
+ const result = await resolve([visible], [{ field: 'input_images', attachmentIds: [visible.id] }], data);
+ assert.deepEqual(result.args.input_images, ['https://app.example/fetch/95']);
+ await assert.rejects(resolve([hidden], [{ field: 'input_images', attachmentIds: [hidden.id] }], data), { code: 'source_unavailable' });
+});
+
 test('selected non-cover member and mixed groups resolve to ordered exact provider inputs', async () => {
  const inputs = [group(50, 92), group(60, 93)];
  const result = await resolve(inputs, [{ field: 'input_images', attachmentIds: inputs.map(input => input.id) }]);

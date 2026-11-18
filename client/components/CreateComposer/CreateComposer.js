@@ -26,6 +26,13 @@ import { refreshAfterSubmit, setCreateEditorMode } from '../../shared/createPage
 import '../../components/ProviderFields/ProviderModals.css';
 import '../../components/ProviderFields/ProviderFields.css';
 import { showOccupancyConfirm } from '../../shared/gpuOccupancy.js';
+import { createModalDismissButton } from '../../shared/modalDismiss.js';
+import {
+	collectCuratedBlueImageOptions,
+	findImageFamilyOption,
+	isBlueImageFamily,
+	resolveBlueImageVariant,
+} from './blueImageModels.js';
 
 const {
 	ASPECT_RATIO_PRESETS,
@@ -81,22 +88,6 @@ const BASIC_CREATE_DEFAULT_MODEL = 'xai/grok-imagine-image';
 const BASIC_MODEL_DISPLAY = 'Z-Image Turbo';
 const BLUE_TEXT2VIDEO_METHOD_KEY = 'text2video';
 
-/**
- * Parascene Blue image models for the composer, in display order.
- * Shown immediately after the Replicate group. Included only when the live method still offers that value.
- * Krea 2 Turbo is the int8 checkpoint; the fp8 twin stays in advanced.
- */
-const BLUE_COMPOSER_IMAGE_MODELS = [
-	{ methodKey: 'text2image', value: 'diffusion_models/flux3-image-klein-base-int8-convrot.safetensors', label: 'Flux 3 Klein' },
-	{ methodKey: 'text2image', value: 'diffusion_models/krea2/krea2_turbo_int8_convrot.safetensors', label: 'Krea 2 Turbo' },
-	{ methodKey: 'text2image', value: 'diffusion_models/moss_image_sft_int8_convrot.safetensors', label: 'MOSS Image SFT' },
-	{ methodKey: 'text2image', value: 'diffusion_models/qwen_image_2.1_int8_convrot.safetensors', label: 'Qwen Image 2.1' },
-	{ methodKey: 'text2image', value: 'diffusion_models/z-image/z_image_turbo_bf16.safetensors', label: 'Z-Image Turbo' },
-	{ methodKey: 'image2image', value: 'flux3_klein_i2i', label: 'Flux 3 Klein' },
-	{ methodKey: 'image2image', value: 'moss_image_i2i', label: 'MOSS Image SFT' },
-	{ methodKey: 'image2image', value: 'qwen_image_2_1_i2i', label: 'Qwen Image 2.1' },
-];
-
 const MVP_ASPECT_RATIOS = ['1:1', '9:16', '4:5', '16:9'];
 
 function buildAspectRatioMismatchMessage({
@@ -145,7 +136,7 @@ const STORAGE_KEYS = {
 	methodCredits: 'create_page_method_credits',
 };
 
-/** @typedef {{ selectValue: string, value: string, label: string, serverId: number, methodKey: string, methodLabel: string }} ComposerModelRouteOption */
+/** @typedef {{ selectValue: string, value: string, label: string, serverId: number, methodKey: string, methodLabel: string, groupId?: string, text2imageValue?: string, image2imageValue?: string }} ComposerModelRouteOption */
 
 /** @typedef {ComposerModelRouteOption} VideoModelOption */
 
@@ -330,6 +321,78 @@ function formatMethodKeyLabel(methodKey) {
 		.replace(/\b\w/g, (ch) => ch.toUpperCase());
 }
 
+let composerNoticeDialog = null;
+
+function closeComposerNotice() {
+	const dialog = composerNoticeDialog;
+	if (!(dialog instanceof HTMLDialogElement)) return;
+	composerNoticeDialog = null;
+	if (dialog.open) dialog.close();
+	dialog.remove();
+}
+
+function openComposerNotice({ title, message }) {
+	closeComposerNotice();
+	const dialog = document.createElement('dialog');
+	dialog.className = 'app-dialog create-composer-notice-dialog';
+	dialog.setAttribute('aria-labelledby', 'create-composer-notice-title');
+
+	const header = document.createElement('header');
+	header.className = 'app-dialog__header';
+	const heading = document.createElement('h2');
+	heading.id = 'create-composer-notice-title';
+	heading.className = 'app-dialog__title';
+	heading.textContent = title;
+	const closeBtn = createModalDismissButton();
+	header.append(heading, closeBtn);
+
+	const body = document.createElement('div');
+	body.className = 'app-dialog__body';
+	const copy = document.createElement('p');
+	copy.className = 'create-composer-notice-message';
+	copy.textContent = message;
+	body.append(copy);
+
+	const footer = document.createElement('footer');
+	footer.className = 'app-dialog__footer';
+	const ok = document.createElement('button');
+	ok.type = 'button';
+	ok.className = 'btn-primary';
+	ok.textContent = 'OK';
+	footer.append(ok);
+
+	dialog.append(header, body, footer);
+	const close = () => closeComposerNotice();
+	closeBtn.addEventListener('click', close);
+	ok.addEventListener('click', close);
+	dialog.addEventListener('click', (event) => {
+		if (event.target === dialog) close();
+	});
+	dialog.addEventListener('close', () => {
+		if (composerNoticeDialog === dialog) composerNoticeDialog = null;
+		dialog.remove();
+	});
+	document.body.append(dialog);
+	composerNoticeDialog = dialog;
+	if (typeof dialog.showModal === 'function') dialog.showModal();
+	ok.focus();
+}
+
+function openBlueImageVariantNotice(option, hasImage) {
+	const label = String(option?.label || 'This model').trim() || 'This model';
+	if (hasImage) {
+		openComposerNotice({
+			title: 'No image edit for this model',
+			message: `${label} can create from a prompt, but it can't start from an image. Remove the image or choose another model.`,
+		});
+		return;
+	}
+	openComposerNotice({
+		title: 'This model needs an image',
+		message: `${label} only edits an image. Add one or choose another model.`,
+	});
+}
+
 /**
  * @param {ComposerModelRouteOption[]} routeOptions
  * @returns {{ groupLabel: string, options: ComposerModelRouteOption[] }[]}
@@ -340,7 +403,7 @@ function groupComposerRouteOptions(routeOptions) {
 	/** @type {string[]} */
 	const order = [];
 	for (const opt of routeOptions) {
-		const groupKey = `${opt.serverId}:${opt.methodKey}`;
+		const groupKey = opt.groupId || `${opt.serverId}:${opt.methodKey}`;
 		if (!groups.has(groupKey)) {
 			order.push(groupKey);
 			groups.set(groupKey, {
@@ -812,42 +875,6 @@ function resolveMethodFieldsFromServers(servers, serverId, methodKey) {
 	const methodDef = /** @type {Record<string, { fields?: Record<string, unknown> }>} */ (methods)[methodKey];
 	const fields = methodDef?.fields;
 	return fields && typeof fields === 'object' ? fields : null;
-}
-
-/**
- * @param {unknown} server
- * @returns {ImageModelOption[]}
- */
-function collectCuratedBlueImageOptions(server) {
-	if (!server || Number(/** @type {{ id?: unknown }} */ (server).id) !== Number(PARASCENE_BLUE_SERVER_ID)) {
-		return [];
-	}
-	const cfg = parseServerConfig(server);
-	const methods =
-		cfg?.methods && typeof cfg.methods === 'object'
-			? /** @type {Record<string, { fields?: Record<string, { options?: unknown, choices?: unknown, enum?: unknown }> }>} */ (
-					cfg.methods
-				)
-			: null;
-	if (!methods) return [];
-	/** @type {ImageModelOption[]} */
-	const out = [];
-	for (const entry of BLUE_COMPOSER_IMAGE_MODELS) {
-		const methodDef = methods[entry.methodKey];
-		const field = methodDef?.fields?.model;
-		const values = normalizeModelOptions(field?.options ?? field?.choices ?? field?.enum);
-		if (!values.some((opt) => opt.value === entry.value)) continue;
-		out.push(
-			toImageModelOption(
-				PARASCENE_BLUE_SERVER_ID,
-				entry.methodKey,
-				entry.value,
-				entry.label,
-				getComposerMethodGroupLabel(methodDef, entry.methodKey)
-			)
-		);
-	}
-	return out;
 }
 
 async function fetchBasicModelOptions() {
@@ -1419,7 +1446,8 @@ export function mountCreateComposer(host, opts = {}) {
 					: null,
 			};
 		}
-		const route = getSelectedImageRoute();
+		const picker = getSelectedImageRoute();
+		const route = resolveBlueImageVariant(picker, hasAttachment()) || picker;
 		const serverId = route?.serverId ?? BASIC_CREATE_DEFAULT_SERVER_ID;
 		const methodKey = route?.methodKey ?? BASIC_CREATE_DEFAULT_METHOD_KEY;
 		return {
@@ -1446,6 +1474,7 @@ export function mountCreateComposer(host, opts = {}) {
 	function selectedImageRouteAcceptsImages() {
 		const route = getSelectedImageRoute();
 		if (!route) return false;
+		if (route.image2imageValue) return true;
 		const fields = resolveMethodFieldsFromServers(composerServers, route.serverId, route.methodKey);
 		if (fields) return methodHasImageInput(fields);
 		return (
@@ -1626,6 +1655,8 @@ export function mountCreateComposer(host, opts = {}) {
 		}
 		const byModel = imageModelOptions.find((o) => o.value === selectedModel);
 		if (byModel) return byModel;
+		const family = findImageFamilyOption(imageModelOptions, selectedModel);
+		if (family) return family;
 		const fallbackKey = getDefaultImageSelectValue();
 		return imageModelOptions.find((o) => o.selectValue === fallbackKey) || imageModelOptions[0];
 	}
@@ -1680,11 +1711,16 @@ export function mountCreateComposer(host, opts = {}) {
 				next = getDefaultAudioSelectValue();
 			}
 		} else {
+			/** @type {string[]} */
+			let storedImageKeys = [];
 			try {
 				const providerSaved = createProvider?.composer?.read?.().modelRoutes?.image;
 				const composerSaved = localStorage.getItem(STORAGE_KEYS.model);
 				const sharedSaved = localStorage.getItem(CREATE_SETTINGS_STORAGE_KEYS.model);
-				next = resolveComposerRouteFromStorage(imageModelOptions, [providerSaved, composerSaved, sharedSaved]);
+				storedImageKeys = [providerSaved, composerSaved, sharedSaved].filter(
+					(key) => typeof key === 'string' && key.trim()
+				);
+				next = resolveComposerRouteFromStorage(imageModelOptions, storedImageKeys);
 			} catch (_) {}
 			if (!next) {
 				const parsed = parseComposerRouteKey(prev);
@@ -1696,6 +1732,15 @@ export function mountCreateComposer(host, opts = {}) {
 							o.value === parsed.model
 					);
 					next = legacy?.selectValue;
+				}
+			}
+			if (!next) {
+				for (const key of [...storedImageKeys, prev]) {
+					const family = findImageFamilyOption(imageModelOptions, key);
+					if (family) {
+						next = family.selectValue;
+						break;
+					}
 				}
 			}
 			if (!next && list.some((o) => o.value === prev)) next = prev;
@@ -1813,7 +1858,8 @@ export function mountCreateComposer(host, opts = {}) {
 			if (!route) return null;
 			return { serverId: route.serverId, methodKey: route.methodKey };
 		}
-		const route = getSelectedImageRoute();
+		const picker = getSelectedImageRoute();
+		const route = resolveBlueImageVariant(picker, hasAttachment()) || picker;
 		if (!route) return null;
 		return { serverId: route.serverId, methodKey: route.methodKey };
 	}
@@ -2570,7 +2616,16 @@ export function mountCreateComposer(host, opts = {}) {
 				},
 				outputMode,
 				styleKey: payload.styleKey || getSelectedStyleKey(),
-				...(route ? { serverId: route.serverId, methodKey: route.methodKey } : {}),
+				...(payload.serverId
+					? { serverId: payload.serverId }
+					: route
+						? { serverId: route.serverId }
+						: {}),
+				...(payload.methodKey
+					? { methodKey: payload.methodKey }
+					: route
+						? { methodKey: route.methodKey }
+						: {}),
 			};
 			const submittedImages = payload.args?.input_images || payload.args?.images ||
 				[payload.args?.image_url || payload.args?.image].filter(Boolean);
@@ -2634,7 +2689,11 @@ export function mountCreateComposer(host, opts = {}) {
 			return;
 		}
 		const hasPrompt = promptText.length > 0;
-		if (hasAttachment() && !selectedImageRouteAcceptsImages()) {
+		if (
+			hasAttachment() &&
+			!selectedImageRouteAcceptsImages() &&
+			!isBlueImageFamily(getSelectedImageRoute())
+		) {
 			submitBtn.disabled = true;
 			submitBtn.title = 'This model does not take an image.';
 			return;
@@ -3092,15 +3151,21 @@ export function mountCreateComposer(host, opts = {}) {
 
 		if (!userPrompt) return;
 
-		const attachedImageRoute = hasAttachment() ? getSelectedImageRoute() : null;
-		if (hasAttachment()) {
-			if (!attachedImageRoute || !selectedImageRouteAcceptsImages()) return;
+		const pickerRoute = getSelectedImageRoute();
+		const attached = hasAttachment();
+		const imageRoute = resolveBlueImageVariant(pickerRoute, attached);
+		if (!imageRoute) {
+			openBlueImageVariantNotice(pickerRoute, attached);
+			return;
+		}
+		if (attached) {
+			if (!isBlueImageFamily(pickerRoute) && !selectedImageRouteAcceptsImages()) return;
 			if (!(await confirmAspectMismatchBeforeSubmit())) return;
 		}
 
 		setComposerSubmitting(true);
 
-		if (hasAttachment()) {
+		if (attached) {
 			let imageUrls;
 			try {
 				imageUrls = await resolveAttachmentUrls(uploadImageFile);
@@ -3109,17 +3174,17 @@ export function mountCreateComposer(host, opts = {}) {
 				alert(err?.message || 'Image upload failed');
 				return;
 			}
-			if (imageUrls.length === 0 || !attachedImageRoute) {
+			if (imageUrls.length === 0) {
 				setComposerSubmitting(false);
 				alert('Please choose an image.');
 				return;
 			}
 			const mutateArgs = {
 				prompt: userPrompt,
-				model: attachedImageRoute.value,
+				model: imageRoute.value,
 				input_images: imageUrls,
 			};
-			if (imageUrls.length === 1 && Number(attachedImageRoute.serverId) !== Number(PARASCENE_BLUE_SERVER_ID)) {
+			if (imageUrls.length === 1 && Number(imageRoute.serverId) !== Number(PARASCENE_BLUE_SERVER_ID)) {
 				mutateArgs.image_url = imageUrls[0];
 			}
 			const args = buildSubmitArgs(mutateArgs, getAspectRatioForSubmit(), getFormFieldContext());
@@ -3127,8 +3192,8 @@ export function mountCreateComposer(host, opts = {}) {
 			const mentions = extractMentions(userPrompt);
 			if (mentions.length === 0) {
 				dispatchCreationSubmit({
-					serverId: attachedImageRoute.serverId,
-					methodKey: attachedImageRoute.methodKey,
+					serverId: imageRoute.serverId,
+					methodKey: imageRoute.methodKey,
 					args,
 					hydrateMentions: false,
 					...mutateLineage,
@@ -3138,8 +3203,8 @@ export function mountCreateComposer(host, opts = {}) {
 			const validateResult = await validateMentionsSimple({ args });
 			if (validateResult.ok) {
 				dispatchCreationSubmit({
-					serverId: attachedImageRoute.serverId,
-					methodKey: attachedImageRoute.methodKey,
+					serverId: imageRoute.serverId,
+					methodKey: imageRoute.methodKey,
 					args,
 					hydrateMentions: true,
 					...mutateLineage,
@@ -3149,8 +3214,8 @@ export function mountCreateComposer(host, opts = {}) {
 			const message = formatMentionsFailureForDialog(validateResult.data);
 			if (window.confirm(message + '\n\nSubmit anyway?')) {
 				dispatchCreationSubmit({
-					serverId: attachedImageRoute.serverId,
-					methodKey: attachedImageRoute.methodKey,
+					serverId: imageRoute.serverId,
+					methodKey: imageRoute.methodKey,
 					args,
 					hydrateMentions: false,
 					...mutateLineage,
@@ -3161,12 +3226,7 @@ export function mountCreateComposer(host, opts = {}) {
 			return;
 		}
 
-		const imageRoute = getSelectedImageRoute();
-		const submitRoute = getComposerSubmitRoute();
-		if (!imageRoute || !submitRoute) {
-			setComposerSubmitting(false);
-			return;
-		}
+		const submitRoute = imageRoute;
 		const styleKey = resolveSubmitStyleKey(userPrompt);
 		const args = buildSubmitArgs(
 			{ prompt: userPrompt, model: imageRoute.value },
@@ -3662,6 +3722,7 @@ export function mountCreateComposer(host, opts = {}) {
 		syncFromMutateQueue: () => applyQueueSnapshotToAttachments({ allowEmpty: true }),
 		syncFromSharedSettings,
 		destroy() {
+		closeComposerNotice();
 		clearTimeout(promptSaveTimer);
 		aspectMismatchRevision++;
 		aspectDimensionCache.clear();

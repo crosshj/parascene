@@ -78,3 +78,8 @@ export function renderChallengeCountdowns(cfg, phase, nowMs) {
 
 	return `<div class="challenge-pane-countdown-strip" role="status"><p class="${cls}">${inner}</p></div>`;
 }
+
+/** Same words as {@link renderChallengeCountdowns}, without the markup. */
+export function challengeTimeLeftLabel(cfg, phase, nowMs) {
+	return renderChallengeCountdowns(cfg, phase, nowMs).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+}

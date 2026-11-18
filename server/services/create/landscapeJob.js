@@ -1,5 +1,6 @@
 import { buildProviderHeaders } from "./providerAuth.js";
 import sharp from "sharp";
+import { writeProvenance } from "./provenance.js";
 
 const PROVIDER_TIMEOUT_MS = 50_000;
 
@@ -206,6 +207,7 @@ export async function runLandscapeJob({ queries, storage, payload }) {
 
 	let landscapeUrl;
 	try {
+		imageBuffer = writeProvenance(imageBuffer, { id: imageId, meta: existingMeta });
 		landscapeUrl = await storage.uploadImage(imageBuffer, landscapeFilename);
 	} catch (uploadErr) {
 		logError("Landscape upload failed", uploadErr);

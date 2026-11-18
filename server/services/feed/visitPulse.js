@@ -158,6 +158,10 @@ export function parseVisitorKey(visitorKey) {
 
 let redis = null;
 
+export function pulseRedisConfigured() {
+	return Boolean(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
+}
+
 export function getPulseRedis() {
 	if (!redis) redis = Redis.fromEnv();
 	return redis;

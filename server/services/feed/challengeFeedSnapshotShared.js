@@ -4,7 +4,7 @@ import {
 	fetchThreadMessagesChronological,
 	tryParseChallengeJsonBody
 } from "../create/challengeSubmitShared.js";
-import { deriveChallengePhase } from "../../shared.js";
+import { challengePhaseStatusLabel, deriveChallengePhase } from "../../shared.js";
 import {
 	listActiveParticipantConfigs,
 	pickParticipantFocusConfig,
@@ -179,24 +179,7 @@ function prizeSummaryFromCfg(cfg) {
 }
 
 function phaseSubtitle(phase) {
-	switch (phase) {
-		case 'pre_submit':
-			return 'Starts soon';
-		case 'submitting':
-			return 'Submissions open';
-		case 'submit_and_vote':
-			return 'Submit and vote';
-		case 'voting':
-			return 'Voting open';
-		case 'between':
-			return 'Between rounds';
-		case 'finalizing':
-			return 'Finalizing';
-		case 'results':
-			return 'Winners announced';
-		default:
-			return 'Community challenge';
-	}
+	return challengePhaseStatusLabel(phase);
 }
 
 function parseChallengeStartMs(cfg) {

@@ -488,6 +488,29 @@ export function actionsPerActiveUser(store, from, to, types = CORE_ACTION_TYPES)
 	return { volume, activeUsers: active.size, perActive: pctRatio(volume, active.size) };
 }
 
+/** Per-day core actions ÷ action-active users (intensity companion to Action DAU). */
+export function actionsPerActiveSeries(store, from, to, types = CORE_ACTION_TYPES) {
+	const byDay = new Map();
+	for (const r of userDaysInRange(store, from, to)) {
+		let volume = 0;
+		for (const t of types) volume += Number(r.c?.[t]) || 0;
+		if (!volume) continue;
+		let rec = byDay.get(r.d);
+		if (!rec) {
+			rec = { volume: 0, users: new Set() };
+			byDay.set(r.d, rec);
+		}
+		rec.volume += volume;
+		rec.users.add(r.u);
+	}
+	return enumerateDays(from, to).map((day) => {
+		const rec = byDay.get(day);
+		const active = rec?.users.size || 0;
+		const volume = rec?.volume || 0;
+		return { day, per_active: pctRatio(volume, active), volume, active };
+	});
+}
+
 /* -------------------------------------------------------------- */
 /* Weekday × hour traffic heatmap.                                */
 /* -------------------------------------------------------------- */

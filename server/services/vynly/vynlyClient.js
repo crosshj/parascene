@@ -155,7 +155,8 @@ export function createVynlyClient(opts = {}) {
 		 *   tags?: string,
 		 *   declaredSource: string,
 		 *   width: number,
-		 *   height: number
+		 *   height: number,
+		 *   extraImages?: Array<{ buffer: Buffer, filename: string, contentType: string }>
 		 * }} fields
 		 */
 		async postImageMultipart(token, fields) {
@@ -167,6 +168,9 @@ export function createVynlyClient(opts = {}) {
 			fd.append("declaredSource", fields.declaredSource || "other");
 			fd.append("width", String(fields.width));
 			fd.append("height", String(fields.height));
+			for (const [index, image] of (fields.extraImages || []).entries()) {
+				fd.append(`image${index + 2}`, new Blob([image.buffer], { type: image.contentType || "image/png" }), image.filename || `image-${index + 2}.png`);
+			}
 
 			const url = `${baseUrl}/api/posts`;
 			const res = await fetchImpl(url, {

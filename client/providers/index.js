@@ -10,6 +10,7 @@ import { createProfileProvider } from './profile/index.js';
 import { createPresenceProvider } from './presence/index.js';
 import { createNotificationsProvider } from './notifications/index.js';
 import { createDocumentProvider } from './document/index.js';
+import { createHomeProvider } from './home/index.js';
 
 export function createAppProviders({ bootstrap = {} } = {}) {
 	const viewerId = Number(bootstrap.user?.id) || null;
@@ -37,6 +38,7 @@ export function createAppProviders({ bootstrap = {} } = {}) {
 		profile: createProfileProvider(),
 		notifications: createNotificationsProvider({ viewerId, registry }),
 	};
+	providers.home = createHomeProvider({ viewerId, threads: providers.threads });
 	providers.document = createDocumentProvider({
 		threads: providers.threads,
 		notifications: providers.notifications,

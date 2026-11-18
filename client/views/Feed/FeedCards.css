@@ -423,18 +423,18 @@
 	flex-shrink: 0;
 	border-radius: 0;
 	overflow: hidden;
-	background: var(--surface-muted);
+	background: var(--image-placeholder);
 }
 
 .feed-view .feed-card-image.loading {
-	background: linear-gradient(90deg, var(--surface-muted), var(--surface-strong), var(--surface-muted));
+	background: linear-gradient(90deg, var(--image-placeholder), var(--surface), var(--image-placeholder));
 	background-size: 200% 100%;
 	animation: loading 4s linear infinite;
 }
 
 .feed-view .feed-card-image.loading.feed-card-image--creation-processing,
 .feed-view .feed-card-image--creation-processing {
-	background: var(--surface-muted);
+	background: var(--image-placeholder);
 	background-size: auto;
 	animation: none;
 	color: var(--text);
@@ -492,7 +492,7 @@
 }
 
 .feed-view .feed-card-image.loaded {
-	background: var(--surface-muted);
+	background: var(--image-placeholder);
 }
 
 .feed-view .feed-card-image .feed-card-img {

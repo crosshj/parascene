@@ -9,6 +9,7 @@ import {getThumbnailUrl} from '../services/create/url.js';
 import {mapCreatedImageRowMediaFields} from '../services/create/resolveCreationDisplayMedia.js';
 import {parseCreationMeta} from '../services/create/resolveCreatedImageStorageFilename.js';
 import {computeWelcome,WELCOME_VERSION} from '../services/account/welcome.js';
+import { serializeCreation } from './creations.js';
 import {getClientIdFromRequest,mergePrsnCidsIntoProfileMeta,prsnCidFromMeta} from '../services/account/prsnCids.js';
 import {appendPrsnCidsForUserId,tryRequestMetaFromRow} from '../services/account/userPrsnCids.js';
 import {applySocialFieldUpdates,applySocialObjectUpdates} from '../shared.js';
@@ -276,6 +277,52 @@ router.use((req,res,next)=>{res.set('Cache-Control','private, no-store');res.on(
 			req.pipe(busboy);
 		});
 	}
+router.get("/api/users/recent", async (req, res) => {
+		if (!req.auth?.userId) return res.status(401).json({ error: "Unauthorized" });
+		try {
+			const limit = Math.min(12, Math.max(1, Number.parseInt(String(req.query?.limit ?? "8"), 10) || 8));
+			const { data: userRows, error } = await client
+				.from("prsn_users")
+				.select("id, created_at, role, meta")
+				.eq("role", "consumer")
+				.order("created_at", { ascending: false })
+				.limit(40);
+			if (error) throw error;
+			const recent = (userRows || []).filter((row) => row?.meta?.suspended !== true);
+			const ids = recent.map((row) => row.id);
+			let images = [];
+			if (ids.length) {
+				const { data: imageRows, error: imageError } = await client
+					.from("prsn_created_images")
+					.select("id, user_id, filename, file_path, width, height, color, status, created_at, published, published_at, title, description, meta, unavailable_at")
+					.in("user_id", ids)
+					.eq("published", true)
+					.is("unavailable_at", null)
+					.order("created_at", { ascending: true })
+					.limit(400);
+				if (imageError) throw imageError;
+				images = imageRows || [];
+			}
+			const firstByUser = new Map();
+			for (const row of images) {
+				if (row?.meta?.nsfw === true) continue;
+				const userId = Number(row.user_id);
+				if (!firstByUser.has(userId)) firstByUser.set(userId, row);
+			}
+			const posts = [];
+			for (const user of recent) {
+				const row = firstByUser.get(Number(user.id));
+				if (!row) continue;
+				const item = serializeCreation(row);
+				posts.push({ ...item, created_image_id: item.id });
+				if (posts.length >= limit) break;
+			}
+			return res.json({ posts });
+		} catch (error) {
+			console.warn("[GET /api/users/recent]", error?.message || error);
+			return res.status(500).json({ error: "Internal server error" });
+		}
+	});
 router.get("/api/users/usernames", async (req, res) => {
 		try {
 			if (!queries.selectPublicUsernames?.all) {

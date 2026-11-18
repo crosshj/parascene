@@ -378,6 +378,19 @@ body.prsn-creation-composer-drag-active .create-composer:not(.is-drop-target) .c
 	border-color: color-mix(in srgb, var(--create-composer-accent) 22%, var(--border));
 }
 
+html.prsn-creation-composer-drag-active,
+html.prsn-creation-composer-drag-active * {
+	cursor: grabbing !important;
+}
+
+.creation-drag-highlight {
+	position: fixed;
+	z-index: 6;
+	box-sizing: border-box;
+	pointer-events: none;
+	box-shadow: inset 0 0 0 3px var(--accent);
+}
+
 .create-composer[data-composer-flow='t2v'] .create-composer-input-shell {
 	border-color: color-mix(in srgb, var(--create-composer-accent-t2v) 45%, var(--border));
 }
@@ -1058,6 +1071,15 @@ body.prsn-creation-composer-drag-active .create-composer:not(.is-drop-target) .c
 	font-weight: 600;
 	letter-spacing: 0.04em;
 	text-transform: uppercase;
+}
+
+.app-dialog.create-composer-notice-dialog {
+	width: min(94vw, 28rem);
+	max-width: 28rem;
+}
+
+.create-composer-notice-message {
+	margin: 0;
 }
 
 .create-composer button.create-composer-model-option {

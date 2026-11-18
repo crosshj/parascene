@@ -42,7 +42,9 @@ test("share page renders metadata and its public image handler serves the refere
 		const image = await fetch(`${base}/api/share/v1/${token}/image`);
 		assert.equal(image.status, 200);
 		assert.match(image.headers.get("content-type"), /image\/png/);
-		assert.ok((await image.arrayBuffer()).byteLength > 0);
+		const imageBytes = Buffer.from(await image.arrayBuffer());
+		assert.match(imageBytes.toString("latin1"), /trainedAlgorithmicMedia/);
+		assert.match(imageBytes.toString("latin1"), /\/creations\/31/);
 		assert.equal(viewRows.length, 1);
 	} finally {
 		await new Promise((resolve) => server.close(resolve));

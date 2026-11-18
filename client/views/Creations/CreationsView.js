@@ -2,6 +2,7 @@ import { createBulkActions } from '../../components/BulkActions/BulkActions.js';
 import { creationBulkItem, creationBulkActions } from './bulkActions.js';
 import { bindRefs, mountTemplate } from '../../utils/dom.js';
 import { createCreationMediaLoader, creationCardMarkup } from '../../shared/creationGrid.js';
+import { attachFeedCardCreationDragSource } from '../../shared/creationComposerDrag.js';
 import { createScrollContext } from '../../core/scrollContext.js';
 import template from './CreationsView.html';
 import './CreationsView.css';
@@ -212,11 +213,13 @@ export function renderCreationsView({ outlet, creationsProvider, creationsApi, c
 			if (card) usedCards.add(card);
 			if (card) {
 				if (updateCreationCard(card, item, markup)) cardsToHydrate.push(card);
+				attachFeedCardCreationDragSource(card);
 				retainedCards.add(card);
 				desiredCards.push(card);
 			} else {
 				const nextCard = makeCreationCard(item, markup);
 				if (nextCard) {
+					attachFeedCardCreationDragSource(nextCard);
 					desiredCards.push(nextCard);
 					cardsToHydrate.push(nextCard);
 				}

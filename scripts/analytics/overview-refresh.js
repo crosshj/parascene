@@ -27,6 +27,10 @@ import {
 	yesterdayUsEastDayKey,
 	buildDaySnapshotFromRedis
 } from "../../server/services/feed/visitPulse.js";
+import {
+	attachFeedImpressionsToPulseSnapshot,
+	buildFeedImpressionSnapshotFromRedis
+} from "../../server/services/feed/impressions.js";
 import { SCHEMA_VERSION, CORE_ACTION_TYPES, RANKED_FEED_DEFAULT_ROLLOUT_AT } from "./overview/metrics.js";
 import { findChallengesChannelThreadId } from "../../server/services/create/challengeSubmitShared.js";
 import { extractChallengeEvents } from "../../shared/index.js";
@@ -382,8 +386,12 @@ async function loadTodayLive() {
 		const { Redis } = await import("@upstash/redis");
 		const redis = Redis.fromEnv();
 		const dayKey = usEastDayKey();
-		const snapshot = await buildDaySnapshotFromRedis(dayKey, redis);
-		if (!snapshot || !Number(snapshot.unique_visitors)) return null;
+		let snapshot = await buildDaySnapshotFromRedis(dayKey, redis);
+		snapshot = attachFeedImpressionsToPulseSnapshot(
+			snapshot,
+			await buildFeedImpressionSnapshotFromRedis(dayKey, redis)
+		);
+		if (!snapshot || (!Number(snapshot.unique_visitors) && !snapshot.details?.feed_impressions)) return null;
 		return buildVisitDay(snapshot);
 	} catch (err) {
 		console.warn("[overview-refresh] live Redis snapshot skipped:", err?.message || err);

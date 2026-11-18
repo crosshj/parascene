@@ -11,7 +11,7 @@ const views = {
 const definitions = [
 	{ path: '/p/:username', view: {}, presentation: 'overlay', returnFromCreation: true, defaultBackground: '/explore' },
 	{ path: '/', view: views.Feed, title: 'Feed', icon: 'home', composer: 'none' },
-	{ path: '/feed', view: views.Feed, title: 'Feed', icon: 'home', composer: 'none' },
+	{ path: '/feed', view: views.Feed, title: 'Feed', icon: 'feed', composer: 'none' },
 	{ path: '/feed/doom/:creationId', view: views.DoomScroll, title: 'Doom Scroll', icon: 'chart', presentation: 'overlay', defaultBackground: '/feed', composer: 'none' },
 	{ path: '/explore', view: views.Explore, title: 'Explore', icon: 'globe' },
 	{ path: '/challenges', view: views.Challenges, title: 'Challenges', icon: 'trophy' },
@@ -130,7 +130,7 @@ test('all declared app routes resolve with the expected overlay and dynamic rout
 		assert.equal(routes.resolve({ url: '/not-a-route' }).outlet.chrome.icon, 'info');
 		assert.equal(routes.resolve({ url: '/not-a-route' }).outlet.chrome.composer, 'none');
 		for (const [path, icon] of [
-			['/feed', 'home'], ['/explore', 'globe'], ['/challenges', 'trophy'],
+			['/feed', 'feed'], ['/explore', 'globe'], ['/challenges', 'trophy'],
 			['/challenges/organize', 'trophy'], ['/challenges/details/demo', 'trophy'],
 			['/comments', 'comments'], ['/ch/general', 'comments'], ['/dm/example', 'user'],
 			['/notes', 'notes'], ['/feedback', 'megaphone'], ['/library', 'book'],

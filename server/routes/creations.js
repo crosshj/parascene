@@ -406,6 +406,24 @@ export function createCreationsRoutes({ creations, users, createQueries, createS
 		} catch (error) { return next(error); }
 	});
 
+	router.post("/api/creations/transitions", async (req, res, next) => {
+		try {
+			if (!req.auth?.userId) return res.status(401).json({ error: "Unauthorized" });
+			const fromId = req.body?.from_created_image_id != null ? parseInt(req.body.from_created_image_id, 10) : NaN;
+			const toId = req.body?.to_created_image_id != null ? parseInt(req.body.to_created_image_id, 10) : NaN;
+			if (!Number.isFinite(fromId) || !Number.isFinite(toId) || fromId < 1 || toId < 1 || fromId === toId) {
+				return res.status(400).json({ error: "Invalid from_created_image_id or to_created_image_id" });
+			}
+			if (typeof creations.recordTransition !== "function") return res.status(204).end();
+			await creations.recordTransition(fromId, toId);
+			return res.status(204).end();
+		} catch (error) {
+			console.error("[creations] transitions error:", error);
+			if (res.headersSent) return next(error);
+			return res.status(500).json({ error: "Unable to record transition." });
+		}
+	});
+
 	router.get("/api/creations/:id/related", noStore, requireAuth, async (req, res, next) => {
 		try {
 			const { viewer, row } = await accessibleCreation(req);
@@ -572,13 +590,17 @@ export function createCreationsRoutes({ creations, users, createQueries, createS
 			const creatorProfile = await users.profileByUserId(row.user_id);
 			const creation = serializeCreation(row);
 			if (posted) applyPostedProof(creation, row, posted);
+			const engagement = typeof creations.engagementForViewer === "function"
+				? (await creations.engagementForViewer(viewer.id, [row.id]))[String(row.id)]
+				: null;
 			const payload = {
 				...creation,
 				...(viewer.role === "admin" ? { user_deleted: row.unavailable_at != null && String(row.unavailable_at).trim() !== "" } : {}),
-				like_count: 0,
-				viewer_liked: false,
-				liked_by: [],
-				comment_count: 0,
+				like_count: engagement?.like_count ?? 0,
+				viewer_liked: engagement?.viewer_liked === true,
+				liked_by: Array.isArray(engagement?.liked_by) ? engagement.liked_by : [],
+				comment_count: engagement?.comment_count ?? 0,
+				commented_by: Array.isArray(engagement?.commented_by) ? engagement.commented_by : [],
 				lineage_descendants: [],
 				feed_pin: { active: false, until: null, challenge_id: null, pins: [] },
 				challenge_organizer: { active: false, refs: [] },

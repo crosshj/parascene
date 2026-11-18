@@ -563,6 +563,7 @@ import * as M from "./metrics.js";
 		const dau = M.actionDauSeries(store, from, to);
 		const traffic = M.trafficDauSeries(store, from, to);
 
+		const perActiveSeries = M.actionsPerActiveSeries(store, from, to);
 		const stats = statGrid([
 			{ value: actionWau, label: "Action WAU" },
 			{ value: visitWau, label: "Visit WAU" },
@@ -578,6 +579,9 @@ import * as M from "./metrics.js";
 		</section>
 		<section class="grid-2">
 			${trendChart("Action DAU (this week)", dau, "dau", "day", "#0f766e", "DAU/day")}
+			${trendChart("Actions per active (this week)", perActiveSeries, "per_active", "day", "#b45309", "actions/active/day")}
+		</section>
+		<section>
 			${trendChart("Traffic DAU (this week)", traffic, "traffic_dau", "day", "#64748b", "visitors/day")}
 		</section>
 		<section class="grid-2">${actionMixCard(from, to)}${leadersCard(from, to, 8)}</section>
@@ -599,6 +603,8 @@ import * as M from "./metrics.js";
 		const newByDay = M.newUsersByDay(store, from, to);
 		const churn = M.churnSplit(store, from, to);
 		const funnel = M.signupFunnel(store, from, to);
+		const perActive = M.actionsPerActiveUser(store, from, to);
+		const perActiveSeries = M.actionsPerActiveSeries(store, from, to);
 
 		const stats = statGrid([
 			{ value: fmt1(M.avg(dau.map((r) => r.dau))), label: "Avg action DAU" },
@@ -606,6 +612,7 @@ import * as M from "./metrics.js";
 			{ value: actionMau, label: "Action MAU" },
 			{ value: visitMau, label: "Visit MAU" },
 			{ value: int(trafficMau), label: "Traffic MAU" },
+			{ value: fmt2(perActive.perActive), label: "Actions/active" },
 			{ value: pct(actionMau, visitMau), label: "Activation" }
 		]);
 
@@ -632,6 +639,9 @@ import * as M from "./metrics.js";
 		</section>
 		<section class="grid-2">
 			${trendChart("Action DAU", dau, "dau", "day", "#0f766e", "DAU/day")}
+			${trendChart("Actions per active", perActiveSeries, "per_active", "day", "#b45309", "actions/active/day")}
+		</section>
+		<section>
 			${chart("New signups by day", M.barChart(newByDay, "new_users", "day", "#d97706"))}
 		</section>
 		<section class="grid-2">${actionMixCard(from, to)}<div class="block"><div class="block-title">Signup funnel</div>${funnelTable}</div></section>
@@ -667,6 +677,7 @@ import * as M from "./metrics.js";
 		const trafficDistinct = M.trafficVisitorKeys(store, from, to).size;
 		const signups = M.newUsersInRange(store, from, to);
 		const perActive = M.actionsPerActiveUser(store, from, to);
+		const perActiveSeries = M.actionsPerActiveSeries(store, from, to);
 
 		const stats = statGrid([
 			{ value: signups, label: "Signups in range" },
@@ -686,15 +697,18 @@ import * as M from "./metrics.js";
 		</section>
 		<section class="grid-2">
 			${trendChart("Action DAU (all days in range)", dau, "dau", "day", "#0ea5e9", "DAU/day")}
+			${trendChart("Actions per active (daily)", perActiveSeries, "per_active", "day", "#b45309", "actions/active/day")}
+		</section>
+		<section class="grid-2">
 			${trendChart("Action WAU (weekly)", weekly, "wau", "week", "#2563eb", "WAU/week")}
+			${trendChart("Traffic DAU", traffic, "traffic_dau", "day", "#64748b", "visitors/day")}
 		</section>
 		<section class="grid-2">
 			${chart("Action MAU (monthly)", M.barChart(monthly, "mau", "month", "#7c3aed"))}
 			${chart("New users by week", M.barChart(newByWeek, "new_users", "week", "#d97706"))}
 		</section>
-		<section class="grid-2">
+		<section>
 			${chart("Total users (cumulative)", M.sparkline(newByWeek, "total_users", "week", "#059669"))}
-			${trendChart("Traffic DAU", traffic, "traffic_dau", "day", "#64748b", "visitors/day")}
 		</section>
 		<section>${heatmapCard(from, to)}</section>
 		${inlinePair(feedEngagementCard(from, to), relatedBrowsingCard(from, to, { showTop: true }))}

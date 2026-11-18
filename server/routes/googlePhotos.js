@@ -11,6 +11,7 @@ import {
 } from "../services/account/googlePhotosAuth.js";
 import { resolveCreationImageForExport } from "../services/account/resolveCreationImageForExport.js";
 import { getBaseAppUrl } from "../services/create/url.js";
+import { writeProvenance } from "../services/create/provenance.js";
 
 const GOOGLE_OAUTH_AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -500,7 +501,8 @@ async function uploadPartyCreationToAlbum({
 	if (!resolved.ok) {
 		throw new Error(resolved.error || "Creation not available for export");
 	}
-	const bytes = await storage.getImageBuffer(resolved.image.filename);
+	let bytes = await storage.getImageBuffer(resolved.image.filename);
+	if (Buffer.isBuffer(bytes)) bytes = writeProvenance(bytes, resolved.image);
 	const filename = `parascene-${id}.png`;
 	const uploadToken = await uploadBytesToPhotos({
 		accessToken,
