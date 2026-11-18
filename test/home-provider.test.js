@@ -285,7 +285,7 @@ test('the home view renders delivered rows and leaves source assembly to the pro
 					{ skeleton: true, width: 240, height: 268 }
 				] },
 				{ id: 'commented', title: 'Comments', href: '/comments', kind: 'creation', empty: 'No comments yet.', status: 'ready', errorStatus: 0, items: [{ ...creation(15, 'Noted'), width: 9, height: 16, like_count: 3, comment_count: 300, viewer_liked: true, liked_by: ['@ada'], commented_by: ['@cy', 2] }] },
-				{ id: 'newbies', title: 'Newbies', href: '/feed', kind: 'creation', empty: 'No new people yet.', status: 'error', errorStatus: 500, items: [] },
+				{ id: 'newbies', title: 'Newbies', href: '/explore', kind: 'creation', empty: 'No new people yet.', status: 'error', errorStatus: 500, items: [] },
 				{ id: 'articles', title: 'Articles', href: '/blog', kind: 'article', empty: 'No articles yet.', status: 'ready', errorStatus: 0, items: [{ slug: 'note', title: 'Note', description: 'A short note', published_at: '2026-01-21T12:00:00.000Z', image_url: 'https://cdn.example/note.png' }] },
 				...[]
 			],
@@ -353,6 +353,8 @@ test('the home view renders delivered rows and leaves source assembly to the pro
 	const newbie = outlet.querySelector('[data-home-section="newbies"] a[href="/creations/8"]');
 	assert.equal(newbie.querySelector('.home-tile__name').textContent, '@ada');
 	assert.equal(newbie.getAttribute('aria-label'), '@ada, Profile portrait');
+	assert.equal(outlet.querySelector('[data-home-section="newbies"] .home-section__link').getAttribute('href'), '/explore');
+	assert.equal(outlet.querySelector('[data-home-section="newbies"] .home-tile--more').getAttribute('href'), '/explore');
 	assert.equal(images.querySelector('.home-tile__name'), null);
 
 	listener({ unauthorized: true, sections: delivery().sections });
