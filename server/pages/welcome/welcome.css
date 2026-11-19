@@ -1,5 +1,28 @@
+.welcome-page [hidden] {
+	display: none !important;
+}
+
+body.welcome-page {
+	display: block;
+	--surface-strong: #f5f6fa;
+	--input-bg: var(--surface);
+	--focus: #6d28d9;
+	--shadow: 0 10px 25px rgba(15, 23, 42, 0.08);
+	--bg-card: var(--surface);
+}
+
+@media (prefers-color-scheme: dark) {
+	body.welcome-page {
+		--surface-strong: #191627;
+		--input-bg: #120f1d;
+		--focus: #a78bfa;
+		--shadow: 0 16px 32px rgba(0, 0, 0, 0.35);
+		--bg-card: var(--surface);
+	}
+}
+
 .welcome-page .auth-logo {
-	margin-top: -52px;
+	margin-top: 0;
 	margin-bottom: 18px;
 }
 
@@ -10,6 +33,12 @@
 
 .welcome-page main {
 	max-width: 420px;
+	margin: 0 auto;
+	padding: 28px 20px 48px;
+}
+
+.welcome-page p {
+	text-align: left;
 }
 
 .welcome-section {
@@ -50,7 +79,7 @@
 .welcome-stepper-progress {
 	height: 6px;
 	border-radius: 999px;
-	background: rgba(255, 255, 255, 0.08);
+	background: color-mix(in srgb, var(--text) 10%, transparent);
 	overflow: hidden;
 	margin-bottom: 8px;
 }
@@ -80,8 +109,8 @@
 	min-height: 32px;
 	padding: 6px 8px;
 	border-radius: 999px;
-	border: 1px solid rgba(255, 255, 255, 0.1);
-	background: rgba(255, 255, 255, 0.02);
+	border: 1px solid var(--border);
+	background: var(--surface);
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -471,4 +500,105 @@
 .welcome-submit {
 	width: 100%;
 	margin-top: 0;
+}
+
+.welcome-page .label-muted {
+	display: grid;
+	gap: 7px;
+	margin: 0;
+	font-weight: 400;
+	font-size: 0.8125rem;
+	color: var(--text-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+}
+
+.welcome-page .welcome-form input,
+.welcome-page .welcome-form textarea {
+	width: 100%;
+	padding: 10px 12px;
+	border-radius: 10px;
+	border: 1px solid var(--border);
+	background: var(--input-bg);
+	color: var(--text);
+	font: inherit;
+	font-size: 1rem;
+	line-height: 1.45;
+	text-transform: none;
+	letter-spacing: 0;
+}
+
+.welcome-page .welcome-username-wrap input {
+	padding-left: 2em;
+}
+
+.welcome-page .welcome-form input:focus,
+.welcome-page .welcome-form textarea:focus {
+	outline: 2px solid color-mix(in srgb, var(--focus) 35%, transparent);
+	border-color: var(--focus);
+}
+
+.welcome-page .btn-primary,
+.welcome-page .btn-secondary {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	margin-top: 0;
+	padding: 10px 16px;
+	border-radius: 10px;
+	font: inherit;
+	font-weight: 600;
+	line-height: 1.2;
+	cursor: pointer;
+}
+
+.welcome-page .btn-primary {
+	border: 1px solid var(--accent);
+	background: var(--accent);
+	color: var(--accent-text);
+}
+
+.welcome-page .btn-primary:hover:not(:disabled) {
+	filter: brightness(1.06);
+}
+
+.welcome-page .btn-secondary {
+	border: 1px solid var(--border);
+	background: var(--surface);
+	color: var(--text);
+	box-shadow: var(--shadow);
+}
+
+.welcome-page .btn-secondary:hover:not(:disabled) {
+	background: var(--surface-strong);
+	border-color: var(--accent);
+}
+
+.welcome-page .btn-primary:disabled,
+.welcome-page .btn-secondary:disabled {
+	cursor: not-allowed;
+	opacity: 0.55;
+}
+
+.welcome-page .welcome-actions .welcome-back,
+.welcome-page .welcome-shuffle-link {
+	margin-top: 0;
+	box-shadow: none;
+}
+
+.welcome-page .welcome-actions .welcome-back {
+	background: none;
+	border: none;
+	color: var(--text-muted);
+}
+
+.welcome-page .welcome-actions .welcome-back:hover:not(:disabled) {
+	background: none;
+	border: none;
+	color: var(--text);
+	text-decoration: underline;
+}
+
+.welcome-page .welcome-review-identity {
+	text-align: center;
 }

@@ -8,7 +8,7 @@ export const HOME_SECTIONS = Object.freeze([
 	Object.freeze({ id: 'songs', title: 'Songs', href: '/feed', kind: 'creation', empty: 'No songs yet.' }),
 	Object.freeze({ id: 'challenges', title: 'Challenges', href: '/challenges', kind: 'challenge', empty: 'No challenges yet.' }),
 	Object.freeze({ id: 'commented', title: 'Comments', href: '/comments', kind: 'creation', empty: 'No comments yet.' }),
-	Object.freeze({ id: 'newbies', title: 'Newbies', href: '/feed', kind: 'creation', empty: 'No new people yet.' }),
+	Object.freeze({ id: 'newbies', title: 'Newbies', href: '/explore', kind: 'creation', empty: 'No new people yet.' }),
 	Object.freeze({ id: 'articles', title: 'Articles', href: '/blog', kind: 'article', empty: 'No articles yet.' })
 ]);
 

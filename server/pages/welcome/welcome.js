@@ -181,13 +181,12 @@ async function ensureNeedsWelcome() {
 	return result.data;
 }
 
-async function submitWelcomeProfile({ displayName, userName, characterDescription, avatarUrl, avatarPrompt, welcomeComplete = false }) {
+async function submitWelcomeProfile({ userName, characterDescription, avatarUrl, avatarPrompt, welcomeComplete = false }) {
 	return await fetchJsonWithStatusDeduped('/api/profile', {
 		method: 'PUT',
 		credentials: 'include',
 		headers: { 'content-type': 'application/json' },
 		body: JSON.stringify({
-			display_name: typeof displayName === 'string' ? displayName.trim() || null : null,
 			user_name: userName,
 			character_description: characterDescription,
 			avatar_url: avatarUrl,
@@ -308,7 +307,6 @@ async function init() {
 	await loadDeps();
 	const setup = $('[data-welcome-setup]');
 	const form = $('[data-form]');
-	const displayNameInput = $('[data-display-name]');
 	const input = $('[data-username]');
 	const characterDescriptionInput = $('[data-character-description]');
 	const submit = $('[data-submit]');
@@ -459,17 +457,11 @@ async function init() {
 	}
 
 	function updateReview() {
-		const displayName = displayNameInput instanceof HTMLInputElement ? displayNameInput.value.trim() : '';
 		const normalized = normalizeUsername(input.value);
-		// When no display name, treat username as the display name: show "new2 @new2"
-		const effectiveName = displayName || (normalized || 'Not set');
-		const showHandle = Boolean(normalized);
 		if (reviewIdentityName instanceof HTMLElement) {
-			reviewIdentityName.textContent = effectiveName + (showHandle ? ' ' : '');
+			reviewIdentityName.textContent = normalized ? `@${normalized}` : 'Not set';
 		}
-		if (reviewIdentityHandle instanceof HTMLElement) {
-			reviewIdentityHandle.textContent = showHandle ? `@${normalized}` : '';
-		}
+		if (reviewIdentityHandle instanceof HTMLElement) reviewIdentityHandle.textContent = '';
 		const description = characterDescriptionInput.value.trim();
 		reviewDescription.textContent = description || 'Not set';
 		if (generatedAvatarUrl) {
@@ -624,11 +616,6 @@ async function init() {
 	const user = await ensureNeedsWelcome();
 	if (!user) return;
 
-	const existingDisplayName = typeof user?.profile?.display_name === 'string' ? user.profile.display_name.trim() : '';
-	if (existingDisplayName && displayNameInput instanceof HTMLInputElement && !displayNameInput.value.trim()) {
-		displayNameInput.value = existingDisplayName;
-	}
-
 	const existingDescription = typeof user?.profile?.character_description === 'string'
 		? user.profile.character_description.trim()
 		: '';
@@ -757,7 +744,6 @@ async function init() {
 		if (!validateStepOne() || !validateStepTwo()) return;
 		const normalized = normalizeUsername(input.value);
 		const characterDescription = characterDescriptionInput.value.trim();
-		const displayName = displayNameInput instanceof HTMLInputElement ? displayNameInput.value.trim() : '';
 		if (!normalized) return;
 
 		// Disable form interaction and show submit loading state
@@ -787,7 +773,6 @@ async function init() {
 				return;
 			}
 			const result = await submitWelcomeProfile({
-				displayName,
 				userName: normalized,
 				characterDescription,
 				avatarUrl: generatedAvatarUrl,
