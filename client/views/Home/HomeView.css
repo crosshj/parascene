@@ -65,6 +65,10 @@ body.home-desktop-composer .app-outlet__frame[data-composer="creation"] .app-out
 	padding-bottom: 24px;
 }
 
+body.home-composer-floating .app-outlet__frame.is-home-desktop .app-outlet__content {
+	padding-bottom: calc(var(--creation-composer-height, 200px) + 28px);
+}
+
 body.home-desktop-composer .home-hero .app-outlet__creation-composer {
 	position: relative;
 	inset: auto;
@@ -73,6 +77,38 @@ body.home-desktop-composer .home-hero .app-outlet__creation-composer {
 	margin: 0;
 	padding: 0;
 	z-index: auto;
+}
+
+.home-hero__line.home-composer-rise,
+.app-outlet__creation-composer.home-composer-rise {
+	transition: opacity 160ms ease-out, transform 160ms ease-out;
+}
+
+.home-hero__line.home-composer-rise--slow {
+	transition-duration: 320ms;
+}
+
+.app-outlet__creation-composer.home-composer-rise--slow {
+	transition-duration: 520ms;
+	transition-delay: 90ms;
+}
+
+.home-hero__line.home-composer-rise.is-rising,
+.app-outlet__creation-composer.home-composer-rise.is-rising {
+	opacity: 0;
+	transform: translateY(8px);
+	transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.home-hero__line.home-composer-rise,
+	.home-hero__line.home-composer-rise.is-rising,
+	.app-outlet__creation-composer.home-composer-rise,
+	.app-outlet__creation-composer.home-composer-rise.is-rising {
+		opacity: 1;
+		transform: none;
+		transition: none;
+	}
 }
 
 body.home-desktop-composer .home-hero .create-composer .create-composer-input-shell {

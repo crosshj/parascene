@@ -180,7 +180,31 @@ test('home sections are normalized rows, not the source payloads', async () => {
 			const type = new URL(path, 'http://local').searchParams.get('type');
 			const items = {
 				image: [creation(3, 'Shown'), { ...creation(4), media_type: 'video' }],
-				video: [{ ...creation(11, 'Clip'), media_type: 'video' }, creation(13, 'Still')],
+				video: [
+					{ ...creation(11, 'Clip'), media_type: 'video', video_thumbnail_url: 'https://cdn.example/11-poster.jpg', thumbnail_url: 'https://cdn.example/11-square.jpg' },
+					{
+						...creation(15, 'YouTube'),
+						media_type: 'video',
+						meta: { media_type: 'video', import: { provider: 'youtube' } },
+						url: '/api/creations/media/cover.png?creation_id=15',
+						thumbnail_url: '/api/creations/media/cover.png?creation_id=15&variant=thumbnail',
+						fit_thumbnail_url: '/api/creations/media/cover.png?creation_id=15&variant=fit',
+						width: 1280,
+						height: 720
+					},
+					{
+						id: 16,
+						created_image_id: 16,
+						title: 'Clip file',
+						media_type: 'video',
+						url: '/api/creations/media/clip.mp4?creation_id=16',
+						image_url: '/api/creations/media/clip.mp4?creation_id=16',
+						file_path: 'clip.mp4',
+						thumbnail_url: '/api/creations/media/still.jpg?creation_id=16&variant=thumbnail',
+						video_thumbnail_url: '/api/creations/media/clip.mp4?creation_id=16&variant=video_thumbnail'
+					},
+					creation(13, 'Still')
+				],
 				audio: [{ ...creation(12, 'Song'), media_type: 'audio' }, creation(14, 'Poster')]
 			}[type] || [];
 			return { ok: true, status: 200, data: { items } };
@@ -188,6 +212,7 @@ test('home sections are normalized rows, not the source payloads', async () => {
 		if (path.startsWith('/api/comments/latest')) {
 			return { ok: true, status: 200, data: { comments: [
 				{ created_image_id: 5, creation: { ...creation(5, 'Commented'), width: 800, height: 450 } },
+				{ created_image_id: 9, creation: { ...creation(9, 'Welcome @ada'), meta: { new_user: true } } },
 				{ created_image_id: 6, creation: { ...creation(6), media_type: 'audio', audio_url: 'https://cdn.example/a.mp3' } }
 			] } };
 		}
@@ -200,7 +225,10 @@ test('home sections are normalized rows, not the source payloads', async () => {
 	const images = await loadHomeSection('images', { fetchJson });
 	assert.deepEqual(images.items.map((item) => item.id), [3]);
 	const videos = await loadHomeSection('videos', { fetchJson });
-	assert.deepEqual(videos.items.map((item) => item.id), [11]);
+	assert.deepEqual(videos.items.map((item) => item.id), [11, 15, 16]);
+	assert.equal(videos.items[0].image, 'https://cdn.example/11-poster.jpg');
+	assert.equal(videos.items[1].image, '/api/creations/media/cover.png?creation_id=15');
+	assert.equal(videos.items[2].image, '/api/creations/media/clip.mp4?creation_id=16&variant=video_thumbnail');
 	const songs = await loadHomeSection('songs', { fetchJson });
 	assert.deepEqual(songs.items.map((item) => item.id), [12]);
 	assert.equal(songs.items[0].media_type, 'audio');

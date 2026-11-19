@@ -1,4 +1,5 @@
 import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
+import { isNewUserCreation } from '../../../shared/newUserCreation.js';
 import { HOME_ROW_HEIGHT } from '../../shared/homeRow.js';
 import { creationMediaType, creationThumbnailUrl } from '../../shared/creationGrid.js';
 import { nsfwMediaUrl, nsfwShouldBlur } from '../../shared/nsfwPolicy.js';
@@ -53,7 +54,32 @@ function withFitVariant(url) {
 	}
 }
 
+function youtubeImport(item) {
+	const provider = item?.meta?.import?.provider;
+	return typeof provider === 'string' && provider.trim().toLowerCase() === 'youtube';
+}
+
+function coverStill(item) {
+	const raw = String(item?.url || item?.image_url || '').trim();
+	if (!raw) return '';
+	try {
+		const parsed = new URL(raw, 'http://localhost');
+		const path = parsed.pathname;
+		if (!path.includes('/api/creations/media/') && !path.includes('/api/images/created/') && !path.includes('/api/videos/created/')) return raw;
+		if (/\.(mp4|m4v|webm|mov|ogv)(\?|$)/i.test(path)) return '';
+		parsed.searchParams.delete('variant');
+		parsed.searchParams.delete('source_variant');
+		return `${parsed.pathname}${parsed.search}`;
+	} catch {
+		return raw;
+	}
+}
+
 function thumbFor(item) {
+	if (creationMediaType(item) === 'video' && youtubeImport(item)) {
+		const still = coverStill(item);
+		if (still) return still;
+	}
 	if (creationMediaType(item) === 'video') {
 		const poster = String(item?.video_thumbnail_url || item?.thumbnail_url || item?.image_url || '').trim();
 		return poster || creationThumbnailUrl(item, { video: true });
@@ -124,7 +150,7 @@ async function loadCommented({ fetchJson, signal }) {
 		for (const comment of comments) {
 			const creation = comment?.creation && typeof comment.creation === 'object' ? comment.creation : null;
 			const id = creationId(creation) || creationId({ created_image_id: comment?.created_image_id });
-			if (!creation || !id || seen.has(id) || creationMediaType(creation) === 'audio') continue;
+			if (!creation || !id || seen.has(id) || creationMediaType(creation) === 'audio' || isNewUserCreation(creation)) continue;
 			const item = { ...creation, id, created_image_id: id, nsfw: creation.nsfw || comment.nsfw === true };
 			if (!thumbFor(item)) continue;
 			seen.add(id);
