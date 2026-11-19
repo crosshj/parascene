@@ -48,12 +48,12 @@ function withFitVariant(url) {
 
 function thumbFor(item) {
 	if (creationMediaType(item) === 'video') {
-		const poster = String(item?.video_thumbnail_url || item?.thumbnail_url || item?.image_url || '').trim();
+		const poster = String(item?.video_thumbnail_url || item?.thumbnail_url || item?.image || item?.image_url || '').trim();
 		return poster || creationThumbnailUrl(item, { video: true });
 	}
 	const fit = String(item?.fit_thumbnail_url || '').trim();
 	if (fit) return fit;
-	const source = String(item?.image_url || item?.url || item?.thumbnail_url || '').trim();
+	const source = String(item?.image || item?.image_url || item?.url || item?.thumbnail_url || '').trim();
 	return withFitVariant(source) || creationThumbnailUrl(item);
 }
 
@@ -271,13 +271,68 @@ function placeComposer(slot) {
 	if (!(bar instanceof HTMLElement) || !(slot instanceof HTMLElement)) return () => {};
 	const parent = bar.parentElement;
 	const next = bar.nextSibling;
-	slot.append(bar);
-	document.body.classList.add('home-desktop-composer');
-	return () => {
-		document.body.classList.remove('home-desktop-composer');
-		if (!parent) return;
+	const scroller = slot.closest('.app-outlet__scroll');
+	const line = slot.parentElement?.querySelector('.home-hero__line');
+	let hasSettled = false;
+
+	function restoreDock() {
+		if (!parent || bar.parentElement === parent) return;
 		if (next && next.parentNode === parent) parent.insertBefore(bar, next);
 		else parent.append(bar);
+	}
+
+	function riseIn(target, slow) {
+		if (!(target instanceof HTMLElement)) return;
+		if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+		target.classList.toggle('home-composer-rise--slow', slow === true);
+		target.classList.add('home-composer-rise', 'is-rising');
+		void target.offsetWidth;
+		target.classList.remove('is-rising');
+	}
+
+	function parkInHero() {
+		const moved = bar.parentElement !== slot;
+		if (moved) slot.append(bar);
+		slot.style.minHeight = '';
+		document.body.classList.add('home-desktop-composer');
+		document.body.classList.remove('home-composer-floating');
+		if (moved) {
+			const slow = !hasSettled;
+			hasSettled = true;
+			riseIn(line, slow);
+			riseIn(bar, slow);
+		}
+	}
+
+	function parkAtBottom() {
+		const moved = bar.parentElement === slot;
+		if (moved) {
+			slot.style.minHeight = `${Math.ceil(bar.getBoundingClientRect().height)}px`;
+			restoreDock();
+		}
+		document.body.classList.remove('home-desktop-composer');
+		document.body.classList.add('home-composer-floating');
+		if (moved) riseIn(bar, false);
+	}
+
+	parkInHero();
+	let observer = null;
+	if (typeof IntersectionObserver === 'function') {
+		observer = new IntersectionObserver((entries) => {
+			const visible = entries.some((entry) => entry.isIntersecting);
+			if (visible) parkInHero();
+			else parkAtBottom();
+		}, { root: scroller instanceof HTMLElement ? scroller : null, threshold: 0 });
+		observer.observe(slot);
+	}
+
+	return () => {
+		observer?.disconnect();
+		slot.style.minHeight = '';
+		bar.classList.remove('home-composer-rise', 'home-composer-rise--slow', 'is-rising');
+		line?.classList.remove('home-composer-rise', 'home-composer-rise--slow', 'is-rising');
+		document.body.classList.remove('home-desktop-composer', 'home-composer-floating');
+		restoreDock();
 	};
 }
 
@@ -290,17 +345,18 @@ function articleTile(post) {
 		: `<span class="home-article__img home-article__img--empty" aria-hidden="true"></span>`;
 	const date = formatDate(post?.published_at, { dateStyle: 'medium' });
 	const summary = String(post?.description || '').trim();
+	const creation = Number(post?.creation_id);
+	const hasCreation = Number.isInteger(creation) && creation > 0;
 	const drag = dragAttrs({
-		id: post?.creation_id,
-		created_image_id: post?.creation_id,
-		image_url: post?.file_path || post?.filename || '',
-		file_path: post?.file_path,
-		filename: post?.filename,
+		id: hasCreation ? creation : null,
+		created_image_id: hasCreation ? creation : null,
+		image_url: String(post?.image_url || post?.image || '').trim(),
 		media_type: 'image',
 		published: post?.published === true,
 		status: post?.status
 	});
-	return `<a class="home-tile home-tile--article"${drag} href="${escapeHtml(href)}" aria-label="${escapeHtml(title)}">
+	const creationAttr = hasCreation ? ` data-creation-id="${creation}"` : '';
+	return `<a class="home-tile home-tile--article"${creationAttr}${drag} href="${escapeHtml(href)}" aria-label="${escapeHtml(title)}">
 		<span class="home-article__date">${escapeHtml(date)}</span>
 		<span class="home-article__title">${escapeHtml(title)}</span>
 		<span class="home-article__hero">${media}${nsfwBadge(post)}</span>
@@ -401,7 +457,7 @@ function mountDesktop({ outlet, actions, services }) {
 			if (current) current.outerHTML = html;
 			else sections.insertAdjacentHTML('beforeend', html);
 			const next = sections.querySelector(`[data-home-section="${section.id}"]`);
-			next?.querySelectorAll('.home-tile[data-creation-id]').forEach((tile) => {
+			next?.querySelectorAll('.home-tile[data-creation-id], .home-tile[data-image-url-full]').forEach((tile) => {
 				const id = Number(tile.dataset.creationId);
 				const record = section.items.find((item) => creationId(item) === id);
 				if (record) tile.__creationRecord = record;

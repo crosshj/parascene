@@ -6,6 +6,23 @@ const CREDITS = 'prsn_user_credits';
 const TIPS = 'prsn_tip_activity';
 const POLICIES = 'prsn_policy_knobs';
 
+function activityStamp(value) {
+	const parsed = Date.parse(value || '');
+	return Number.isFinite(parsed) ? parsed : null;
+}
+
+export function adminUserActivityAt(row) {
+	const meta = row?.meta && typeof row.meta === 'object' ? row.meta : {};
+	const candidates = [
+		[activityStamp(row?.last_active_at), row?.last_active_at],
+		[activityStamp(row?.created_at), row?.created_at],
+		[activityStamp(meta.presence_last_seen_at), meta.presence_last_seen_at]
+	].filter(([time]) => time != null);
+	if (!candidates.length) return null;
+	candidates.sort((left, right) => right[0] - left[0]);
+	return candidates[0][1];
+}
+
 export default function createAdminUsersRoutes({ client, users, storage }) {
 	const router = express.Router();
 	router.use('/api/admin', (req, res, next) => {
@@ -49,8 +66,10 @@ export default function createAdminUsersRoutes({ client, users, storage }) {
 			const sortBy = sortColumns.has(req.query.sort_by) ? req.query.sort_by : 'last_active_at';
 			const ascending = req.query.sort_dir === 'asc';
 			selected.sort((a, b) => {
-				const left = a[sortBy] == null ? '' : String(a[sortBy]);
-				const right = b[sortBy] == null ? '' : String(b[sortBy]);
+				const leftValue = sortBy === 'last_active_at' ? adminUserActivityAt(a) : a[sortBy];
+				const rightValue = sortBy === 'last_active_at' ? adminUserActivityAt(b) : b[sortBy];
+				const left = leftValue == null ? '' : String(leftValue);
+				const right = rightValue == null ? '' : String(rightValue);
 				return (left.localeCompare(right, undefined, { numeric: true }) * (ascending ? 1 : -1)) || Number(a.id) - Number(b.id);
 			});
 			const total = selected.length;
@@ -66,7 +85,12 @@ export default function createAdminUsersRoutes({ client, users, storage }) {
 			if (creditsResult.error) throw creditsResult.error;
 			const profiles = new Map((profileResult.data || []).map((row) => [Number(row.user_id), row]));
 			const balances = new Map((creditsResult.data || []).map((row) => [Number(row.user_id), Number(row.balance) || 0]));
-			const items = page.map((row) => ({ ...row, credits: balances.get(Number(row.id)) || 0, ...(profiles.get(Number(row.id)) || {}) }));
+			const items = page.map((row) => ({
+				...row,
+				last_active_at: adminUserActivityAt(row),
+				credits: balances.get(Number(row.id)) || 0,
+				...(profiles.get(Number(row.id)) || {})
+			}));
 			return res.json({ items, total });
 		} catch (error) { next(error); }
 	});

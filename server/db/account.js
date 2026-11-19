@@ -733,18 +733,21 @@ presenceHeartbeat: {
 			run: async (userId, clientVersion) => {
 				const { data: current, error: selectError } = await serviceClient
 					.from(prefixedTable("users"))
-					.select("meta")
+					.select("meta, last_active_at")
 					.eq("id", userId)
 					.maybeSingle();
 				if (selectError) throw selectError;
 				const existing = current?.meta ?? null;
 				const meta = typeof existing === "object" && existing !== null ? { ...existing } : {};
-				meta.presence_last_seen_at = new Date().toISOString();
+				const seenAt = new Date().toISOString();
+				meta.presence_last_seen_at = seenAt;
 				meta.presence_client_version =
 					typeof clientVersion === "string" ? clientVersion.trim() : "";
+				const previousActive = Date.parse(current?.last_active_at || "");
+				const refreshActive = !Number.isFinite(previousActive) || Date.now() - previousActive >= 15 * 60 * 1000;
 				const { error } = await serviceClient
 					.from(prefixedTable("users"))
-					.update({ meta })
+					.update(refreshActive ? { meta, last_active_at: seenAt } : { meta })
 					.eq("id", userId);
 				if (error) throw error;
 				return { changes: 1 };
