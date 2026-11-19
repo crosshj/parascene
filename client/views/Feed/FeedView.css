@@ -88,6 +88,13 @@
 		color: inherit;
 		-webkit-tap-highlight-color: transparent;
 	}
+
+	.feed-view .chat-feed-channel-route .chat-feed-mobile-spotlight-cell-hit:focus,
+	.feed-view .chat-feed-channel-route .chat-feed-mobile-spotlight-cell-hit:focus-visible {
+		outline: none;
+		box-shadow: none;
+	}
+
 	.feed-view .chat-feed-channel-route .feed-card-image.chat-feed-mobile-spotlight-cell-media .chat-feed-mobile-spotlight-overlay {
 		position: absolute;
 		left: 0;
