@@ -6,6 +6,7 @@ import { bumpFeedVersionCounter } from '../services/feed/feedVersion.js';
 import { filterRecommendableCreationIds } from '../services/create/recommendableCreations.js';
 import { broadcastChatThreadDeleted } from '../services/challenges/realtimeBroadcast.js';
 import { resolveProviderAuthToken } from '../services/create/providerAuth.js';
+import { runWelcomeMail } from '../services/account/welcomeMail.js';
 
 const RELATED_KEYS = [
 	'related.recsys_weight', 'related.semantic_weight', 'related.semantic_weight_no_click_next',
@@ -481,11 +482,12 @@ export default function createAdminToolsRoutes({ client, users, servers, queries
 		});
 		res.json({ items, total: result.count || 0 });
 	}));
-	// Keep the legacy admin action available while the notifications worker is
-	// migrated into this deployment. Do not report success until a root-owned
-	// worker is wired here; that migration remains tracked separately.
 	router.post('/api/admin-tools/run-notifications-cron', guard(async (_req, res) => {
-		res.status(503).json({ error: 'The notifications worker has not yet been migrated to this server.' });
+		try {
+			return res.json(await runWelcomeMail({ client, force: true }));
+		} catch (error) {
+			return res.status(error.status || 500).json({ error: error.message || 'Welcome mail failed' });
+		}
 	}));
 	router.get('/api/admin-tools/email-settings', guard(async (_req, res) => res.json(await emailSettings())));
 	router.patch('/api/admin-tools/email-settings', guard(async (req, res) => {

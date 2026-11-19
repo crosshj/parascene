@@ -624,6 +624,290 @@ router.put("/api/account/email", async (req, res) => {
 			return res.status(500).json({ error: "Update failed", message: err?.message || "Could not update email." });
 		}
 	});
+router.put("/api/profile", async (req, res) => {
+		try {
+			if (!req.auth?.userId) {
+				return res.status(401).json({ error: "Unauthorized" });
+			}
+
+			const user = await queries.selectUserById.get(req.auth.userId);
+			if (!user) {
+				return res.status(404).json({ error: "User not found" });
+			}
+
+			const existingRow = await queries.selectUserProfileByUserId?.get(req.auth.userId);
+			const existingProfile = normalizeProfileRow(existingRow);
+			const existingUserName = typeof existingProfile.user_name === "string"
+				? existingProfile.user_name.trim()
+				: "";
+
+			const rawUserName = req.body?.user_name ?? req.body?.username;
+			const userName = normalizeUsername(rawUserName);
+			const hasExistingUserName = Boolean(existingUserName);
+			const hasUserNameInput = rawUserName !== undefined && rawUserName !== null;
+			if (hasExistingUserName && hasUserNameInput) {
+				if (!userName || userName !== existingUserName) {
+					return res.status(409).json({
+						error: "Username is permanent",
+						message: "Username cannot be changed after it is set."
+					});
+				}
+			} else if (typeof rawUserName === "string" && !userName) {
+				return res.status(400).json({
+					error: "Invalid username",
+					message: "Username must be 3-24 chars, lowercase letters/numbers/underscore, starting with a letter/number."
+				});
+			}
+
+			if (!hasExistingUserName && userName && queries.selectUserProfileByUsername?.get) {
+				const existing = await queries.selectUserProfileByUsername.get(userName);
+				if (existing && Number(existing.user_id) !== Number(req.auth.userId)) {
+					return res.status(409).json({ error: "Username already taken" });
+				}
+			}
+
+			const requestedMeta = typeof req.body?.meta === "object" && req.body.meta && !Array.isArray(req.body.meta)
+				? req.body.meta
+				: null;
+			const nextMetaBase = {
+				...(typeof existingProfile.meta === "object" && existingProfile.meta ? existingProfile.meta : {})
+			};
+			if (requestedMeta) {
+				const { prsn_cids: _prsnDrop, ...restRequested } = requestedMeta;
+				Object.assign(nextMetaBase, restRequested);
+			}
+
+			const anonCidForPrsn =
+				typeof req.cookies?.ps_cid === "string" ? req.cookies.ps_cid.trim() || null : null;
+			let tryPrsnIds = [];
+			let cachedTryReqsForAnon = null;
+			if (anonCidForPrsn && queries.selectTryRequestsByCid?.all) {
+				cachedTryReqsForAnon = (await queries.selectTryRequestsByCid.all(anonCidForPrsn)) || [];
+				tryPrsnIds = cachedTryReqsForAnon
+					.map((row) => prsnCidFromMeta(tryRequestMetaFromRow(row.meta)))
+					.filter(Boolean);
+			}
+			let nextMeta = mergePrsnCidsIntoProfileMeta(nextMetaBase, [
+				getClientIdFromRequest(req),
+				...tryPrsnIds
+			]);
+
+			const finalUserName = hasExistingUserName ? existingUserName : userName;
+			if (finalUserName) {
+				const legacy = nextMeta?.["onb_version"];
+				const prev = Number(nextMeta.welcome_version ?? legacy);
+				const prevVersion = Number.isFinite(prev) ? prev : 0;
+				nextMeta.welcome_version = Math.max(prevVersion, WELCOME_VERSION);
+				delete nextMeta["onb_version"];
+			}
+			nextMeta.character_description = typeof req.body?.character_description === "string"
+				? req.body.character_description.trim() || null
+				: (existingProfile.meta?.character_description ?? null);
+
+			let nextSocials = typeof existingProfile.socials === "object" && existingProfile.socials
+				? existingProfile.socials
+				: {};
+			if (Object.prototype.hasOwnProperty.call(req.body || {}, "socials")) {
+				const applied = applySocialObjectUpdates(nextSocials, req.body.socials);
+				if (!applied.ok) {
+					return res.status(400).json({ error: applied.error || "Invalid social link" });
+				}
+				nextSocials = applied.socials;
+			}
+
+			const payload = {
+				user_name: finalUserName,
+				display_name: typeof req.body?.display_name === "string" ? req.body.display_name.trim() : null,
+				about: typeof req.body?.about === "string" ? req.body.about.trim() : null,
+				socials: nextSocials,
+				avatar_url: typeof req.body?.avatar_url === "string" ? req.body.avatar_url.trim() : null,
+				cover_image_url: typeof req.body?.cover_image_url === "string" ? req.body.cover_image_url.trim() : null,
+				badges: Array.isArray(req.body?.badges) ? req.body.badges : [],
+				meta: nextMeta
+			};
+
+			if (!queries.upsertUserProfile?.run) {
+				return res.status(500).json({ error: "Profile storage not available" });
+			}
+
+			await queries.upsertUserProfile.run(req.auth.userId, payload);
+			let updatedRow = await queries.selectUserProfileByUserId?.get(req.auth.userId);
+			let profile = normalizeProfileRow(updatedRow);
+
+			const welcomeComplete = req.body?.welcome_complete === true;
+			const avatarUrl = payload.avatar_url || "";
+			const tryPrefix = "/api/try/images/";
+			const anonCid = typeof req.cookies?.ps_cid === "string" ? req.cookies.ps_cid.trim() : null;
+			const avatarFilename =
+				avatarUrl.includes(tryPrefix) && avatarUrl.split(tryPrefix)[1]
+					? (avatarUrl.split(tryPrefix)[1].split("/")[0].split("?")[0].trim() || null)
+					: null;
+
+			if (
+				welcomeComplete &&
+				anonCid &&
+				queries.selectTryRequestsByCid?.all &&
+				queries.selectCreatedImagesAnonByIds?.all &&
+				queries.selectCreatedImagesForUser?.all &&
+				queries.insertCreatedImage?.run &&
+				queries.updateTryRequestsTransitionedByCreatedImageAnonId?.run &&
+				queries.deleteCreatedImageAnon?.run
+			) {
+				try {
+					const storage = storageAdapter;
+					if (storage?.getImageBufferAnon && storage?.uploadImage && storage?.deleteImageAnon) {
+						const existingCreations = await queries.selectCreatedImagesForUser.all(req.auth.userId, { limit: 200 });
+						const sourceAnonIds = new Set(
+							(existingCreations || [])
+								.map((creation) => (creation.meta && typeof creation.meta === "object" && creation.meta.source_anon_id != null ? Number(creation.meta.source_anon_id) : null))
+								.filter((id) => Number.isFinite(id))
+						);
+						const reqs = cachedTryReqsForAnon || [];
+						const anonIds = [...new Set((reqs || []).map((row) => row.created_image_anon_id).filter(Boolean))];
+						if (anonIds.length > 0) {
+							const images = await queries.selectCreatedImagesAnonByIds.all(anonIds);
+							const byId = new Map((images || []).map((image) => [image.id, image]));
+							for (const id of anonIds) {
+								const row = byId.get(id);
+								if (
+									!row ||
+									row.status !== "completed" ||
+									!row.filename ||
+									row.filename.includes("..") ||
+									row.filename.includes("/")
+								) continue;
+								if (avatarFilename && row.filename === avatarFilename) continue;
+								const alreadyHas = sourceAnonIds.has(Number(row.id));
+								try {
+									let createdImageId = null;
+									if (!alreadyHas) {
+										const buffer = await storage.getImageBufferAnon(row.filename);
+										const newFilename = `transition_${req.auth.userId}_${row.id}_${Date.now()}.png`;
+										const newUrl = await storage.uploadImage(buffer, newFilename);
+										const meta = row.meta && typeof row.meta === "object" ? { ...row.meta, source_anon_id: row.id } : { source_anon_id: row.id };
+										const insertResult = await queries.insertCreatedImage.run(
+											req.auth.userId,
+											newFilename,
+											newUrl,
+											row.width ?? 1024,
+											row.height ?? 1024,
+											null,
+											"completed",
+											meta
+										);
+										createdImageId = insertResult?.insertId;
+									} else {
+										const existing = (existingCreations || []).find((creation) => creation.meta?.source_anon_id === row.id || creation.meta?.source_anon_id === Number(row.id));
+										createdImageId = existing?.id;
+									}
+									if (createdImageId != null) {
+										await queries.updateTryRequestsTransitionedByCreatedImageAnonId.run(row.id, {
+											userId: req.auth.userId,
+											createdImageId
+										});
+									}
+									await queries.deleteCreatedImageAnon.run(row.id);
+									await storage.deleteImageAnon(row.filename);
+								} catch {
+									// Keep going so one try image cannot block welcome.
+								}
+							}
+						}
+					}
+				} catch (transitionErr) {
+					console.warn("[PUT /api/profile] try image transition failed:", transitionErr?.message || transitionErr);
+				}
+			}
+
+			if (welcomeComplete && avatarUrl.includes(tryPrefix)) {
+				const storage = storageAdapter;
+				const afterPrefix = avatarUrl.split(tryPrefix)[1];
+				const filename = afterPrefix ? afterPrefix.split("/")[0].split("?")[0].trim() : "";
+				if (
+					filename &&
+					!filename.includes("..") &&
+					storage?.getImageBufferAnon &&
+					storage?.uploadImage &&
+					queries.insertCreatedImage?.run &&
+					queries.publishCreatedImage?.run &&
+					queries.insertFeedItem?.run
+				) {
+					try {
+						const buffer = await storage.getImageBufferAnon(filename);
+						const newFilename = `welcome_${req.auth.userId}_${Date.now()}.png`;
+						const newUrl = await storage.uploadImage(buffer, newFilename);
+						const avatarPrompt = typeof req.body?.avatar_prompt === "string" ? req.body.avatar_prompt.trim() || null : null;
+						const avatarAnonRow = await queries.selectCreatedImageAnonByFilename?.get?.(filename);
+						const welcomeMeta = {
+							new_user: true,
+							...(avatarPrompt ? { args: { prompt: avatarPrompt } } : {}),
+							...(avatarAnonRow?.id != null ? { source_anon_id: avatarAnonRow.id } : {})
+						};
+						const insertResult = await queries.insertCreatedImage.run(
+							req.auth.userId,
+							newFilename,
+							newUrl,
+							1024,
+							1024,
+							null,
+							"completed",
+							welcomeMeta
+						);
+						const createdImageId = insertResult?.insertId;
+						if (createdImageId) {
+							if (storage?.uploadGenericImage) {
+								try {
+									const storedAvatar = await storeProcessedProfileAvatar(storage, req.auth.userId, buffer);
+									payload.avatar_url = storedAvatar.url;
+								} catch {
+									payload.avatar_url = newUrl;
+								}
+							} else {
+								payload.avatar_url = newUrl;
+							}
+							await queries.upsertUserProfile.run(req.auth.userId, payload);
+							await bumpFeedAfterAvatarChange();
+							const handle = String(payload.user_name || "").trim();
+							const title = handle ? `Welcome @${handle}` : "Profile portrait";
+							const description = avatarPrompt || (payload.meta?.character_description ?? "").trim() || "";
+							await queries.publishCreatedImage.run(
+								createdImageId,
+								req.auth.userId,
+								title,
+								description || null,
+								false
+							);
+							const feedAuthor = (payload.display_name && String(payload.display_name).trim()) || user?.email || "User";
+							await queries.insertFeedItem.run(title, description, feedAuthor, null, createdImageId);
+						}
+						if (avatarAnonRow?.id && createdImageId && queries.updateTryRequestsTransitionedByCreatedImageAnonId?.run && queries.deleteCreatedImageAnon?.run && storage?.deleteImageAnon) {
+							try {
+								await queries.updateTryRequestsTransitionedByCreatedImageAnonId.run(avatarAnonRow.id, {
+									userId: req.auth.userId,
+									createdImageId
+								});
+								await queries.deleteCreatedImageAnon.run(avatarAnonRow.id);
+								await storage.deleteImageAnon(avatarAnonRow.filename);
+							} catch {
+								// The published portrait remains if anon cleanup fails.
+							}
+						}
+						updatedRow = await queries.selectUserProfileByUserId?.get(req.auth.userId);
+						profile = normalizeProfileRow(updatedRow);
+					} catch (promoteErr) {
+						console.warn("[PUT /api/profile] welcome avatar promote failed:", promoteErr?.message || promoteErr);
+					}
+				} else {
+					console.warn("[PUT /api/profile] welcome portrait was not published");
+				}
+			}
+
+			return res.json({ ok: true, profile });
+		} catch (error) {
+			console.error("[PUT /api/profile]", error);
+			return res.status(500).json({ error: "Internal server error" });
+		}
+	});
 router.post("/api/profile", async (req, res) => {
 		try {
 			if (!req.auth?.userId) {

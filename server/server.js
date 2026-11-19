@@ -37,6 +37,7 @@ import { createCdnRoutes } from "./routes/cdn.js";
 import { createGenericRoutes } from "./routes/generic.js";
 import { createFilesCors } from "./routes/middleware/filesCors.js";
 import { createAuthMiddleware } from "./routes/middleware/auth.js";
+import { createWelcomeGate } from "./routes/middleware/welcomeGate.js";
 import { clientIdMiddleware } from "./routes/middleware/clientId.js";
 import { createVisitPulseMiddleware } from "./routes/middleware/visitPulse.js";
 import { createCdnHostBoundary } from "./routes/middleware/cdnHost.js";
@@ -66,6 +67,8 @@ import createCreationExportRoutes from './routes/creationExports.js';
 import { createWatermarkedVideoCache } from './services/create/watermarkedVideoCache.js';
 import createQrRoutes from './routes/qr.js';
 import createSeoRoutes from './routes/seo.js';
+import { createWelcomeMailRoutes } from './routes/welcomeMail.js';
+import { startWelcomeMailSchedule } from './services/account/welcomeMail.js';
 
 // Supabase Realtime needs a WebSocket implementation on Node 20.
 if (!globalThis.WebSocket) globalThis.WebSocket = WebSocket;
@@ -91,6 +94,7 @@ app.use(shareHostBoundary);
 app.use(createFaviconRoutes({ publicDir: path.join(__dirname, "../public") }));
 app.use(createAuthMiddleware(db.sessions, db.users));
 app.use(apiKeyBearerMiddleware(db.account.queries));app.use(integrationBearerMiddleware());
+app.use(createWelcomeGate(db.account.queries));
 app.use(createVisitPulseMiddleware({ failOpen: true }));
 // The app also serves the public profile/edited-image compatibility
 // path. The CDN host serves the same route through createCdnRoutes.
@@ -140,6 +144,7 @@ app.use(createCreationsRoutes({ creations: db.creations, users: db.users, create
 app.use(createAuthRoutes({ users: db.users, sessions: db.sessions }));
 app.use(createBlogRoutes({ client: db.account.client, users: db.users, pagesDir }));
 app.use(createSeoRoutes());
+app.use(createWelcomeMailRoutes({ client: db.account.client }));
 const reportsRoutes = createReportsRoutes();
 if (reportsRoutes) app.use(reportsRoutes);
 app.use(createAdminPageRoutes({ pagesDir, users: db.users, sessions: db.sessions }));
@@ -158,4 +163,5 @@ app.listen(port, bindHost, () => {
 	startVisitPulseFlushSchedule({
 		run: (args) => runVisitPulseFlush({ args, queries: createVisitPulseQueries(db.account.client) })
 	});
+	startWelcomeMailSchedule({ client: db.account.client });
 });
