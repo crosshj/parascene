@@ -1,4 +1,6 @@
 import sharp from "sharp";
+import { creationMediaKey, creationVideoMediaKey } from "../../db/creations.js";
+import { extractVideoFrame as readVideoFrame } from "../../routes/utils/media.js";
 import { parseCreationMeta } from "./audioCoverApply.js";
 
 /**
@@ -88,4 +90,90 @@ export async function applyVideoPosterBuffer({ queries, storage, image, buffer, 
 		throw err;
 	}
 	return { filename, file_path: filePath, width, height, meta: nextMeta };
+}
+
+/** A still counts when it has a pixel that is not fully transparent. */
+export async function imageBufferHasVisiblePixels(buffer) {
+	if (!Buffer.isBuffer(buffer) || buffer.length === 0) return false;
+	try {
+		const stats = await sharp(buffer, { failOn: "none" }).stats();
+		const alpha = stats.channels.length > 3 ? stats.channels[3] : null;
+		if (!alpha) return stats.channels.some((channel) => channel.max > 0);
+		return alpha.max > 0;
+	} catch {
+		return false;
+	}
+}
+
+function rowIsVideo(image) {
+	const meta = parseCreationMeta(image?.meta) || {};
+	const group = meta.group;
+	if (group && typeof group === "object" && (group.kind === "group_creations" || group.kind === "group_v2")) {
+		return false;
+	}
+	const media = String(meta.media_type || image?.media_type || "").trim().toLowerCase();
+	if (media === "video") return true;
+	return Boolean(creationVideoMediaKey(image));
+}
+
+async function storedStillIsVisible(storage, image) {
+	const key = creationMediaKey(image);
+	if (!key || typeof storage?.getImageBuffer !== "function") return Boolean(key);
+	try {
+		const buffer = await storage.getImageBuffer(key, { throwIfMissing: true });
+		return imageBufferHasVisiblePixels(buffer);
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Give a completed video a stored cover when it does not already have one.
+ * The frame is the same server extract used for new video jobs.
+ * @param {{ queries: object, storage: object, image: object, extractVideoFrame?: typeof readVideoFrame }} params
+ * @returns {Promise<{ needed: boolean, image: object, error?: string }>}
+ */
+export async function ensureVideoCoverImage({ queries, storage, image, extractVideoFrame = readVideoFrame }) {
+	if (!rowIsVideo(image)) return { needed: false, image };
+	const meta = parseCreationMeta(image.meta) || {};
+	if (meta.video_placeholder_manual === true) return { needed: false, image };
+	if (await storedStillIsVisible(storage, image)) return { needed: false, image };
+	if (!creationRowCanSetVideoPoster(image)) {
+		return { needed: true, image, error: "This video has no cover image" };
+	}
+	const videoKey = creationVideoMediaKey(image);
+	if (!videoKey || typeof storage?.getVideoBuffer !== "function" || typeof extractVideoFrame !== "function") {
+		return { needed: true, image, error: "Could not create a cover image for this video" };
+	}
+	let videoBuffer;
+	try {
+		videoBuffer = await storage.getVideoBuffer(videoKey);
+	} catch {
+		return { needed: true, image, error: "Could not create a cover image for this video" };
+	}
+	let frame = null;
+	try {
+		frame = await extractVideoFrame(videoBuffer, 0);
+	} catch {
+		frame = null;
+	}
+	if (!frame?.length) {
+		return { needed: true, image, error: "Could not create a cover image for this video" };
+	}
+	try {
+		const applied = await applyVideoPosterBuffer({ queries, storage, image, buffer: frame });
+		return {
+			needed: true,
+			image: {
+				...image,
+				filename: applied.filename,
+				file_path: applied.file_path,
+				width: applied.width,
+				height: applied.height,
+				meta: applied.meta,
+			},
+		};
+	} catch {
+		return { needed: true, image, error: "Could not create a cover image for this video" };
+	}
 }

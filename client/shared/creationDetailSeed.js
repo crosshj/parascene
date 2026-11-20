@@ -6,6 +6,7 @@
 import { groupActionSupported, groupActionSupportedWhenKnown, groupSupportedKnown } from './creationGroupMedia.js';
 import { creationLikeSpinnerHtml } from './creationLoadingChrome.js';
 import { avatarPendingFaceHtml, getAvatarColor, normalizeAvatarUrl } from './avatar.js';
+import { detailHeroStillUrl, isDisplayableImageUrl } from './videoFirstFramePoster.js';
 import {
 	audioCoverWaveformHtml,
 	creationNeedsAudioWaveformCover,
@@ -448,11 +449,7 @@ export function feedItemToCreationDetailSeed(item) {
 	const id = numId(item.created_image_id ?? item.id);
 	if (!id) return null;
 	const groupId = numId(item.group_id);
-	const imageUrl = normalizeSeedMediaUrl(
-		(typeof item.url === 'string' && item.url.trim()) ||
-		(typeof item.image_url === 'string' && item.image_url.trim()) ||
-		(typeof item.thumbnail_url === 'string' && item.thumbnail_url.trim()) ||
-		'', id);
+	const imageUrl = normalizeSeedMediaUrl(detailHeroStillUrl(item), id);
 	const thumb =
 		normalizeSeedMediaUrl((typeof item.thumbnail_url === 'string' && item.thumbnail_url.trim()) || imageUrl, id);
 	const { text: title, untitled: titleUntitled } = seedDisplayTitle({
@@ -605,9 +602,11 @@ export function creationDetailSeedFromClick(ev, creationId) {
 				(target instanceof HTMLImageElement ? target : null);
 	const previewFromCard =
 		card instanceof Element ? String(card.dataset.previewImageUrl || '').trim() : '';
-	const src =
-		previewFromCard ||
-		(img instanceof HTMLImageElement ? String(img.currentSrc || img.src || '').trim() : '');
+	const decoded = img instanceof HTMLImageElement && img.complete && img.naturalWidth > 0;
+	const displayed = decoded ? String(img.currentSrc || img.src || '').trim() : '';
+	const displayedOk = isDisplayableImageUrl(displayed) ? displayed : '';
+	const previewOk = isDisplayableImageUrl(previewFromCard) ? previewFromCard : '';
+	const src = displayedOk || previewOk;
 	const nw = img instanceof HTMLImageElement ? Number(img.naturalWidth) : 0;
 	const nh = img instanceof HTMLImageElement ? Number(img.naturalHeight) : 0;
 	const avatarImg = card instanceof Element
@@ -664,6 +663,7 @@ export function creationDetailSeedFromClick(ev, creationId) {
 		id,
 		image_url: normalizeSeedMediaUrl(src, id),
 		thumbnail_url: normalizeSeedMediaUrl(src, id),
+		image_decoded: Boolean(displayedOk),
 		width: Number.isFinite(nw) && nw > 0 ? nw : 0,
 		height: Number.isFinite(nh) && nh > 0 ? nh : 0,
 		title,
@@ -708,6 +708,55 @@ export function writeCreationDetailSeed(seed) {
 	} catch {
 		// quota / private mode
 	}
+}
+
+export function creationIdFromHref(href) {
+	try {
+		const path = new URL(String(href || ''), 'http://localhost').pathname;
+		const match = path.match(/^\/creations\/(\d+)(?:\/|$)/);
+		const id = match ? Number(match[1]) : 0;
+		return Number.isFinite(id) && id > 0 ? id : 0;
+	} catch {
+		return 0;
+	}
+}
+
+/** Keep a poster that already decoded on the parent card ahead of a fresh URL. */
+export function withDecodedParentImage(seed, parent) {
+	if (!seed || parent?.image_decoded !== true) return seed;
+	const image = typeof parent.image_url === 'string' ? parent.image_url.trim() : '';
+	if (!isDisplayableImageUrl(image)) return seed;
+	return { ...seed, image_url: image, thumbnail_url: image, image_decoded: true };
+}
+
+/**
+ * Read the image already on screen and store it for the detail hero.
+ * @param {string} href
+ * @param {Event | null | undefined} event
+ * @returns {object | null}
+ */
+export function rememberCreationDetailSeed(href, event) {
+	const id = creationIdFromHref(href);
+	if (!id || !event) return null;
+	const fromClick = creationDetailSeedFromClick(event, id);
+	if (!fromClick) return null;
+	const seed = withDecodedParentImage(mergeCreationDetailSeeds(fromClick, readCreationDetailSeed(id)), fromClick);
+	if (seed) writeCreationDetailSeed(seed);
+	return seed;
+}
+
+/**
+ * Persist a navigation seed without dropping a poster the parent card already showed.
+ * @param {object | null | undefined} seed
+ * @returns {object | null}
+ */
+export function storeNavigationCreationSeed(seed) {
+	const mapped = feedItemToCreationDetailSeed(seed);
+	if (!mapped?.id) return null;
+	const parent = readCreationDetailSeed(mapped.id);
+	const next = withDecodedParentImage(mergeCreationDetailSeeds(mapped, parent), parent);
+	if (next) writeCreationDetailSeed(next);
+	return next;
 }
 
 /**

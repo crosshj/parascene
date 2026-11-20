@@ -59,6 +59,15 @@ function groupCoverVideoKey(meta) {
 	return creationVideoMediaKey(cover);
 }
 
+function coverSavedVideoPoster(meta) {
+	const group = meta?.group && typeof meta.group === "object" ? meta.group : null;
+	if (group?.kind !== "group_creations") return false;
+	const sources = Array.isArray(group.source_creations) ? group.source_creations : [];
+	const coverId = Number(group.cover_source_id);
+	const cover = sources.find((source) => Number(source?.id) === coverId) || sources[0];
+	return parseMeta(cover?.meta).video_placeholder_manual === true;
+}
+
 function isModeratedError(row) {
 	if (String(row?.status || "") !== "failed") return false;
 	const meta = row?.meta && typeof row.meta === "object" ? row.meta : {};
@@ -169,7 +178,7 @@ export function serializeCreation(row) {
 		published_at: row.published_at,
 		title: row.title,
 		description: row.description,
-		meta: displayMeta,
+		meta: coverSavedVideoPoster(displayMeta) ? { ...displayMeta, video_placeholder_manual: true } : displayMeta,
 		nsfw: Boolean(row.meta && typeof row.meta === "object" && row.meta.nsfw),
 		is_moderated_error: isModeratedError(row),
 		media_type: type,

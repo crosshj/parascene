@@ -26,7 +26,16 @@ async function fixture(run) {
   selectFeedItemByCreatedImageId: { get: async id => rows.get(Number(id))?.published ? { id, created_image_id: Number(id) } : undefined },
   updateFeedItem: { run: async (id, title, summary) => { calls.push(['feed-title', id, title, summary]); return { changes: 1 }; } },
  };
- const storage = { getImageUrl: name => `/api/images/created/${name}`, deleteImage: async name => { calls.push(['storage', name]); } };
+ const storage = {
+  getImageUrl: name => `/api/images/created/${name}`,
+  deleteImage: async name => { calls.push(['storage', name]); },
+  getImageBuffer: async (name) => {
+   const sharp = (await import('sharp')).default;
+   const transparent = String(name).includes('blank');
+   return sharp({ create: { width: 2, height: 2, channels: transparent ? 4 : 3, background: transparent ? { r: 0, g: 0, b: 0, alpha: 0 } : { r: 1, g: 2, b: 3 } } }).png().toBuffer();
+  },
+  getVideoBuffer: async () => { throw new Error('missing video'); },
+ };
  const app = express(); app.use(express.json());
  app.use((req, _res, next) => { const id = Number(req.headers['x-test-user']); if (id) req.auth = { userId: id }; next(); });
  app.use(createCreateRoutes({ queries, storage }));
@@ -121,6 +130,23 @@ test('group detail actions persist cover changes, reorder sources, and ungroup r
   assert.equal(rows.get(1).unavailable_at, null); assert.equal(rows.get(2).unavailable_at, null);
   assert.ok(rows.get(10).unavailable_at);
   assert.deepEqual(calls.filter(call => ['restore','soft'].includes(call[0])).slice(-3), [['restore',1,7], ['restore',2,7], ['soft',10,7]]);
+ });
+});
+
+test('moving a cover video with no still does not change the group when a frame cannot be made', async () => {
+ await fixture(async ({ request, rows }) => {
+  rows.get(1).meta = { media_type: 'video', video: { file_path: '/api/videos/created/video/one.mp4' } };
+  rows.get(2).filename = 'blank.png';
+  rows.get(2).file_path = '/api/images/created/blank.png';
+  rows.get(2).meta = { media_type: 'video', video: { file_path: '/api/videos/created/video/clip.mp4' } };
+  const made = await request('POST', '/group', { ids: [1,2] });
+  assert.equal(made.status, 200);
+  const before = rows.get(10).file_path;
+  const res = await request('POST', '/10/group-reorder', { source_id: 2 });
+  assert.equal(res.status, 422);
+  assert.match(res.data.error, /cover image/i);
+  assert.equal(rows.get(10).meta.group.cover_source_id, 1);
+  assert.equal(rows.get(10).file_path, before);
  });
 });
 

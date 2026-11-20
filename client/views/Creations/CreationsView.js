@@ -4,6 +4,7 @@ import { bindRefs, mountTemplate } from '../../utils/dom.js';
 import { createCreationMediaLoader, creationCardMarkup } from '../../shared/creationGrid.js';
 import { attachFeedCardCreationDragSource } from '../../shared/creationComposerDrag.js';
 import { createScrollContext } from '../../core/scrollContext.js';
+import { maybeSaveVideoFirstFramePoster } from '../../shared/saveVideoFirstFramePoster.js';
 import template from './CreationsView.html';
 import './CreationsView.css';
 import '../../components/CreationGrid/CreationGrid.css';
@@ -294,7 +295,10 @@ export function renderCreationsView({ outlet, creationsProvider, creationsApi, c
 				const previouslyInFlight = new Set(ids);
 				const completed = creations.filter((item) => previouslyInFlight.has(creationId(item)) && !IN_FLIGHT_STATUSES.has(String(item?.status || '').toLowerCase()));
 				render({ creations, has_more: false }, true);
-				for (const item of completed) scheduleCompletedRefresh(creationId(item));
+				for (const item of completed) {
+					scheduleCompletedRefresh(creationId(item));
+					void maybeSaveVideoFirstFramePoster(item);
+				}
 			}
 		} catch (error) {
 			if (error?.status === 401) onUnauthorized?.();
@@ -318,6 +322,7 @@ export function renderCreationsView({ outlet, creationsProvider, creationsApi, c
 				const nextCard = makeCreationCard(item);
 				const newUrl = nextCard?.querySelector('.feed-card-image')?.dataset.bgUrl;
 				render({ creations: [item], has_more: false }, true);
+				void maybeSaveVideoFirstFramePoster(item);
 				if (newUrl && oldUrl === newUrl && attempt < 3) scheduleCompletedRefresh(id, attempt + 1);
 			} catch (error) {
 				if (error?.status === 401) onUnauthorized?.();

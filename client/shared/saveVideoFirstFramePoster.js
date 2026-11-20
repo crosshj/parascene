@@ -24,6 +24,50 @@ function playableVideoUrl(creation) {
 	return path;
 }
 
+function creationMeta(creation) {
+	const meta = creation?.meta;
+	if (meta && typeof meta === 'object' && !Array.isArray(meta)) return meta;
+	if (typeof meta === 'string' && meta) {
+		try {
+			const parsed = JSON.parse(meta);
+			return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+		} catch {
+			return null;
+		}
+	}
+	return null;
+}
+
+/**
+ * A group has no poster of its own. The frame belongs to its cover video.
+ * A single video is saved as itself.
+ * @param {object|null|undefined} creation
+ * @returns {object|null}
+ */
+export function videoPosterTargetFromCreation(creation) {
+	if (!creation || typeof creation !== 'object') return null;
+	const meta = creationMeta(creation);
+	const group = meta?.group && typeof meta.group === 'object' ? meta.group : null;
+	if (group?.kind !== 'group_creations') return creation;
+	const sources = Array.isArray(group.source_creations) ? group.source_creations : [];
+	const coverId = Number(group.cover_source_id);
+	const cover = sources.find((source) => Number(source?.id) === coverId) || sources[0];
+	if (!cover || typeof cover !== 'object') return null;
+	const sourceMeta = creationMeta(cover) || {};
+	const videoUrl = playableVideoUrl({ ...cover, meta: sourceMeta });
+	const id = Number(cover.id);
+	if (!videoUrl || !Number.isFinite(id) || id <= 0) return null;
+	const sourceImage = typeof sourceMeta.source_image_url === 'string' ? sourceMeta.source_image_url.trim() : '';
+	return {
+		id,
+		status: cover.status || creation.status || 'completed',
+		media_type: sourceMeta.media_type || 'video',
+		video_url: videoUrl,
+		...(sourceImage ? { source_image_url: sourceImage } : {}),
+		meta: sourceMeta,
+	};
+}
+
 export function dispatchVideoPosterUpdated(detail) {
 	if (typeof document === 'undefined') return;
 	document.dispatchEvent(new CustomEvent('creation-video-placeholder-updated', { detail }));

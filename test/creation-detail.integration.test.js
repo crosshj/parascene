@@ -44,6 +44,22 @@ test('a video group cover is the poster, not the empty still', () => {
 		assert.equal(payload.media_type, 'video');
 		assert.equal(payload.video_url, '/api/creations/media/video/two.mp4?creation_id=35730');
 		assert.equal(payload.video_thumbnail_url, '/api/creations/media/video/two.mp4?creation_id=35730&variant=video_thumbnail');
+		assert.notEqual(payload.meta.video_placeholder_manual, true);
+	}
+});
+
+test('a saved member poster is the group hero still', () => {
+	const legacy = { id: 35730, meta: { group: { kind: 'group_creations', cover_source_id: 2, source_creations: [
+		{ id: 2, file_path: '/api/images/created/frame.png', meta: { media_type: 'video', video_placeholder_manual: true, video: { file_path: '/api/videos/created/video/two.mp4' } } }
+	] } } };
+	const v2 = { id: 35730, filename: 'group_v2/empty.png', meta: { group: { kind: 'group_v2', items: [
+		{ pointer: { kind: 'creation', creationId: 2 }, cover: true, view: { filePath: '/api/images/created/frame.png', mediaType: 'video', videoUrl: '/api/videos/created/video/two.mp4', videoPlaceholderManual: true } }
+	] } } };
+	for (const row of [legacy, v2]) {
+		const payload = serializeCreation(row);
+		assert.equal(payload.meta.video_placeholder_manual, true);
+		assert.equal(payload.url, '/api/creations/media/frame.png?creation_id=35730');
+		assert.equal(payload.meta.group.source_creations[0].meta.video_placeholder_manual, true);
 	}
 });
 

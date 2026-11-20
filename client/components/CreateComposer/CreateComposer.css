@@ -3050,7 +3050,8 @@ body.creation-detail-page main>section:first-of-type {
 	display: none;
 }
 
-.creation-detail-image-wrapper > img[data-image].is-hero-concealed {
+.creation-detail-image-wrapper > img[data-image].is-hero-concealed,
+.sequential-video-player-poster.is-hero-concealed {
 	visibility: hidden;
 }
 
