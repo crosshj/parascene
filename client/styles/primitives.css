@@ -262,3 +262,8 @@ img[data-avatar-src].is-avatar-unresolved {
 	opacity: 0;
 	pointer-events: none;
 }
+
+/* Failed loads keep their box. The browser broken-image icon is not painted. */
+img.is-media-unavailable {
+	visibility: hidden;
+}

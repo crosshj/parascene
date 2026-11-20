@@ -5,7 +5,7 @@ import path from "node:path";
 import sharp from "sharp";
 import { requireAuth } from "./middleware/auth.js";
 import { creationAudioCdnId, creationMediaKey, creationMediaKeys, creationVideoMediaKey } from "../db/creations.js";
-import { extractVideoFrame as readVideoFrame, extractVideoThumbnail } from "./utils/media.js";
+import { extractVideoFrame as readVideoFrame, extractVideoThumbnail as readVideoThumbnail } from "./utils/media.js";
 import { ACTIVE_SHARE_VERSION, mintShareToken, verifyShareToken } from "./utils/shareLink.js";
 import { costumeGroupV2Meta } from '../services/create/groupV2.js';
 import { computeChallengeEndedByImageId } from '../services/create/challengeSubmitShared.js';
@@ -44,6 +44,19 @@ function hasSunoImport(row) {
 
 function isAudioMediaKey(key) {
 	return typeof key === "string" && /\.(mp3|wav|flac|ogg|oga|aac|m4a|mp4|webm)$/i.test(key);
+}
+
+function groupCoverVideoKey(meta) {
+	const group = meta?.group && typeof meta.group === "object" ? meta.group : null;
+	if (group?.kind !== "group_creations") return "";
+	const sources = Array.isArray(group.source_creations) ? group.source_creations : [];
+	const coverId = Number(group.cover_source_id);
+	const cover = sources.find((source) => Number(source?.id) === coverId) || sources[0];
+	if (!cover || typeof cover !== "object") return "";
+	const sourceMeta = parseMeta(cover.meta);
+	const sourceType = String(cover.media_type || sourceMeta.media_type || "").trim().toLowerCase();
+	if (sourceType && sourceType !== "video") return "";
+	return creationVideoMediaKey(cover);
 }
 
 function isModeratedError(row) {
@@ -114,12 +127,15 @@ export function serializeCreation(row) {
 	// A video's still-image row is often a transparent placeholder. Never expose
 	// that still as video_url; only a real video object may be used for playback
 	// or first-frame poster extraction.
-	const videoKey = creationVideoMediaKey(row);
+	const ownVideoKey = creationVideoMediaKey(row);
 	const imageUrl = mediaUrl(row.id, key);
-	const type = mediaType(row);
 	const audioCdnId = creationAudioCdnId(row);
 	const rawMeta = parseMeta(row.meta);
 	const meta = rawMeta.group?.kind === 'group_v2' ? costumeGroupV2Meta(rawMeta, { title: row.title }) : rawMeta;
+	const rowType = mediaType(row);
+	const coverVideoKey = ownVideoKey ? "" : groupCoverVideoKey(meta);
+	const videoKey = ownVideoKey || coverVideoKey;
+	const type = rowType === "audio" ? "audio" : (rowType === "video" || coverVideoKey ? "video" : rowType);
 	const group = meta.group;
 	const displayMeta = group?.kind === 'group_creations' ? {
 		...meta,
@@ -204,7 +220,7 @@ function gridThumbnail(input) {
 		.toBuffer();
 }
 
-export function createCreationsRoutes({ creations, users, createQueries, createStorage, appendChallengeEligibility, resolveChallengeEnded = images => computeChallengeEndedByImageId({ sb: getSupabaseServiceClient(), images }), extractVideoFrame = readVideoFrame }) {
+export function createCreationsRoutes({ creations, users, createQueries, createStorage, appendChallengeEligibility, resolveChallengeEnded = images => computeChallengeEndedByImageId({ sb: getSupabaseServiceClient(), images }), extractVideoFrame = readVideoFrame, extractVideoThumbnail = readVideoThumbnail }) {
 	async function serializeList(rows) {
 		const items = rows.map(serializeCreation);
 		try {
@@ -304,13 +320,18 @@ export function createCreationsRoutes({ creations, users, createQueries, createS
 			if (variant === "blur") {
 				const requestedSource = String(req.query.source_variant || "").trim().toLowerCase();
 				const sourceVariant = requestedSource === "fit" ? "fit" : requestedSource === "original" ? "" : "thumbnail";
-				const response = await creations.fetchMedia(key, { variant: sourceVariant, method: "GET" });
+				// NSFW tiles rewrite variant=video_thumbnail to variant=blur. A video key
+				// has no image thumbnail, so take a frame first and blur that.
+				const response = await creations.fetchMedia(key, { variant: isStreamedVideoKey(key) ? "" : sourceVariant, method: "GET" });
 				if (!response.ok || !response.body) return res.status(404).json({ error: "Media not found" });
 				const chunks = [];
 				for await (const chunk of Readable.fromWeb(response.body)) chunks.push(chunk);
-				const output = sourceVariant
-					? await blurredThumbnail(Buffer.concat(chunks))
-					: await blurredOriginal(Buffer.concat(chunks));
+				const bytes = Buffer.concat(chunks);
+				const poster = isStreamedVideoKey(key) ? await extractVideoThumbnail(bytes) : bytes;
+				if (!poster) return res.status(404).json({ error: "Video thumbnail unavailable" });
+				const output = !isStreamedVideoKey(key) && !sourceVariant
+					? await blurredOriginal(poster)
+					: await blurredThumbnail(poster);
 				res.status(200);
 				res.type("jpg");
 				res.set("Content-Length", String(output.length));

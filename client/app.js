@@ -15,6 +15,9 @@ import { installConsoleGen } from './shared/consoleGen.js';
 import { bindCreationDetailHashtagClicks } from './shared/creationDetailRuntime.js';
 import { bindCreationChangeParent } from './shared/creationDetailEmbedShell.js';
 import { bindCreationEngagement } from './shared/creationEngagement.js';
+import { installUnbrokenImages } from './shared/unbrokenImages.js';
+
+installUnbrokenImages();
 
 function hydrateNsfwFromBootstrap(user) {
 	const meta = user?.meta && typeof user.meta === 'object' ? user.meta : null;

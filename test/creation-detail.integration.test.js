@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import express from 'express';
+import sharp from 'sharp';
 import { createCreationsRoutes, serializeCreation } from '../server/routes/creations.js';
 import { creationMediaKeys } from '../server/db/creations.js';
 
@@ -22,12 +23,31 @@ test('group detail serializes child thumbnails with parent access for legacy and
 		assert.equal(children[0].thumbnail_url, '/api/creations/media/one.png?creation_id=42&variant=thumbnail');
 		assert.equal(children[1].thumbnail_url, '/api/creations/media/video/two.mp4?creation_id=42&variant=video_thumbnail');
 		assert.equal(children[1].meta.video.file_path, '/api/creations/media/video/two.mp4?creation_id=42');
+		assert.equal(payload.media_type, 'image');
+		assert.equal(payload.video_thumbnail_url, null);
 		assert.deepEqual(creationMediaKeys(row).sort(), ['one.png', 'two.png', 'video/two.mp4']);
 		assert.deepEqual(row, before);
 	}
 });
 
-async function withApp(run, { mediaResponse, canAccessMedia = async () => true, fetchMedia, signedPlaybackUrl, extractVideoFrame, row: rowOverride, tips, viewer } = {}) {
+test('a video group cover is the poster, not the empty still', () => {
+	const legacy = { id: 35730, meta: { nsfw: true, group: { kind: 'group_creations', cover_source_id: 2, source_creations: [
+		{ id: 1, file_path: '/api/images/created/one.png' },
+		{ id: 2, file_path: '/api/images/created/placeholder.png', meta: { media_type: 'video', video: { file_path: '/api/videos/created/video/two.mp4' } } }
+	] } } };
+	const v2 = { id: 35730, filename: 'group_v2/empty.png', meta: { nsfw: true, group: { kind: 'group_v2', items: [
+		{ pointer: { kind: 'creation', creationId: 1 }, view: { filePath: '/api/images/created/one.png', mediaType: 'image' } },
+		{ pointer: { kind: 'creation', creationId: 2 }, cover: true, view: { filePath: '/api/images/created/placeholder.png', mediaType: 'video', videoUrl: '/api/videos/created/video/two.mp4' } }
+	] } } };
+	for (const row of [legacy, v2]) {
+		const payload = serializeCreation(row);
+		assert.equal(payload.media_type, 'video');
+		assert.equal(payload.video_url, '/api/creations/media/video/two.mp4?creation_id=35730');
+		assert.equal(payload.video_thumbnail_url, '/api/creations/media/video/two.mp4?creation_id=35730&variant=video_thumbnail');
+	}
+});
+
+async function withApp(run, { mediaResponse, canAccessMedia = async () => true, fetchMedia, signedPlaybackUrl, extractVideoFrame, extractVideoThumbnail, row: rowOverride, tips, viewer } = {}) {
 	const row = rowOverride || {
 		id: 31885,
 		user_id: 42,
@@ -59,7 +79,7 @@ async function withApp(run, { mediaResponse, canAccessMedia = async () => true, 
 	};
 	const app = express();
 	app.use((req, _res, next) => { if (req.headers.authorization === 'Bearer test') req.auth = { userId: 42 }; next(); });
-	app.use(createCreationsRoutes({ creations, users, extractVideoFrame }));
+	app.use(createCreationsRoutes({ creations, users, extractVideoFrame, extractVideoThumbnail }));
 	const server = app.listen(0);
 	try { await run(`http://127.0.0.1:${server.address().port}`); }
 	finally { await new Promise((resolve) => server.close(resolve)); }
@@ -259,6 +279,26 @@ test('creation video frame is read on the server at the requested time', async (
 		},
 	});
 	assert.deepEqual(calls, ['video/clip.mp4', { bytes: 'video-bytes', timeSec: 12.5 }]);
+});
+
+test('nsfw blur of a video poster uses an extracted frame', async () => {
+	const frame = await sharp({ create: { width: 8, height: 8, channels: 3, background: { r: 200, g: 40, b: 40 } } }).jpeg().toBuffer();
+	let fetchedVariant = 'unset';
+	await withApp(async (origin) => {
+		const response = await fetch(`${origin}/api/creations/media/video/clip.mp4?creation_id=31885&variant=blur&source_variant=thumbnail`, {
+			headers: { Authorization: 'Bearer test' },
+		});
+		assert.equal(response.status, 200);
+		assert.match(response.headers.get('content-type'), /^image\/jpeg/);
+		assert.ok((await response.arrayBuffer()).byteLength > 0);
+		assert.equal(fetchedVariant, '');
+	}, {
+		fetchMedia: async (_key, options) => {
+			fetchedVariant = options?.variant ?? '';
+			return new Response(Buffer.from('video-bytes'), { status: 200, headers: { 'Content-Type': 'video/mp4' } });
+		},
+		extractVideoThumbnail: async () => frame,
+	});
 });
 
 test('creation video frame rejects a creation that has no video', async () => {
