@@ -215,6 +215,9 @@ export function normalizeView(raw) {
 	if (raw.coverPlaceholder === true || raw.cover_placeholder === true) {
 		view.coverPlaceholder = true;
 	}
+	if (raw.videoPlaceholderManual === true || raw.video_placeholder_manual === true) {
+		view.videoPlaceholderManual = true;
+	}
 	const importRaw = raw.import;
 	if (importRaw && typeof importRaw === "object" && !Array.isArray(importRaw)) {
 		const provider = typeof importRaw.provider === "string" ? importRaw.provider.trim() : "";
@@ -378,6 +381,9 @@ export function viewFromCreationRow(row, extra = {}) {
 		(typeof meta.video?.file_path === "string" && meta.video.file_path.trim()) ||
 		"";
 	if (videoPath) view.videoUrl = videoPath;
+	if (meta.video_placeholder_manual === true || extra.video_placeholder_manual === true) {
+		view.videoPlaceholderManual = true;
+	}
 	const audioIn = extra.audio && typeof extra.audio === "object" ? extra.audio : meta.audio;
 	if (audioIn && typeof audioIn === "object") {
 		const cdnId = typeof audioIn.cdn_id === "string" ? audioIn.cdn_id.trim() : "";
@@ -504,6 +510,7 @@ export function costumeGroupV2Meta(meta, { title } = {}) {
 		const mediaType = view.mediaType || "image";
 		const snapshotMeta = { media_type: mediaType };
 		if (view.videoUrl) snapshotMeta.video = { file_path: view.videoUrl };
+		if (view.videoPlaceholderManual === true) snapshotMeta.video_placeholder_manual = true;
 		if (view.audio && typeof view.audio === "object") snapshotMeta.audio = view.audio;
 		if (view.coverPlaceholder) snapshotMeta.cover_placeholder = true;
 		if (view.import) snapshotMeta.import = view.import;

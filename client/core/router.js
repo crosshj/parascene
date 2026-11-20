@@ -1,3 +1,5 @@
+import { rememberCreationDetailSeed, storeNavigationCreationSeed } from '../shared/creationDetailSeed.js';
+
 const HISTORY_FLAG = 'parasceneSpa';
 const OVERLAY_FLAG = 'parasceneOverlay';
 const BACKGROUND_KEY = 'parasceneBackgroundUrl';
@@ -71,7 +73,10 @@ export function createRouter({ routes, state, layout } = {}) {
 		const url = pathFor(target);
 		const route = routes.match(url);
 		let backgroundUrl = null;
-		if (route.presentation === 'overlay' && route.params.creationId && options.seed) creationSeeds.set(route.params.creationId, options.seed);
+		if (route.presentation === 'overlay' && route.params.creationId && options.seed) {
+			creationSeeds.set(route.params.creationId, options.seed);
+			try { storeNavigationCreationSeed(options.seed); } catch { /* Session storage can be unavailable. */ }
+		}
 		if (route.presentation === 'overlay') {
 			backgroundUrl = currentComposition?.overlay
 				? currentComposition.backgroundUrl
@@ -140,6 +145,12 @@ export function createRouter({ routes, state, layout } = {}) {
 		return reconcile();
 	}
 
+	function onCreationSeedCapture(event) {
+		const link = event.target?.closest?.('a[href]');
+		if (!link) return;
+		try { rememberCreationDetailSeed(link.href, event); } catch { /* Ignore a missing parent image. */ }
+	}
+
 	function onDocumentClick(event) {
 		if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
 		const link = event.target.closest?.('a[data-spa-link]');
@@ -200,6 +211,7 @@ export function createRouter({ routes, state, layout } = {}) {
 		async start() {
 			if (started) return;
 			started = true;
+			document.addEventListener('click', onCreationSeedCapture, true);
 			document.addEventListener('click', onDocumentClick);
 			document.addEventListener('parascene:navigate', onNavigateRequest);
 			document.addEventListener('parascene:dismiss-overlay', onDismissOverlayRequest);
@@ -214,6 +226,7 @@ export function createRouter({ routes, state, layout } = {}) {
 		destroy() {
 			if (!started) return;
 			started = false;
+			document.removeEventListener('click', onCreationSeedCapture, true);
 			document.removeEventListener('click', onDocumentClick);
 			document.removeEventListener('parascene:navigate', onNavigateRequest);
 			document.removeEventListener('parascene:dismiss-overlay', onDismissOverlayRequest);

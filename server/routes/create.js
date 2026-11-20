@@ -42,6 +42,7 @@ import { applyCostumeToCreationPayload, costumeProjectV2Meta, groupActionSupport
 import {
 	appendCreationToOwnedGroupV2,
 	fillThinGroupV2ItemViews,
+	refreshGroupV2MemberView,
 	resolveOwnedGroupV2Id,
 } from "../services/create/groupV2Ops.js";
 
@@ -3046,6 +3047,18 @@ router.post("/api/create/images/:id/admin-restore-user-delete", asyncRoute(async
 				targetWidth,
 				targetHeight,
 			});
+			try {
+				await refreshGroupV2MemberView(queries, image.user_id, {
+					...image,
+					filename: applied.filename,
+					file_path: applied.file_path,
+					width: applied.width,
+					height: applied.height,
+					meta: applied.meta,
+				});
+			} catch {
+				// The member poster is saved. The group snapshot can catch up on the next member write.
+			}
 			await bumpFeedVersionCounter(queries);
 			void invalidateFeedCatalogSnapshot().catch(() => {});
 			return res.json({

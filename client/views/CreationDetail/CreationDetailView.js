@@ -31,7 +31,7 @@ import * as sequentialVideoPlayerBundledMod from '../../shared/sequentialVideoPl
 import * as postedCreationAccessBundledMod from '../../shared/postedCreationAccess.js';
 import * as challengeSubmitContextBundledMod from '../../shared/challengeSubmitContext.js';
 import * as saveVideoFirstFramePosterBundledMod from '../../shared/saveVideoFirstFramePoster.js';
-import { serverVideoFramePosterUrl } from '../../shared/videoFirstFramePoster.js';
+import { detailHeroStillUrl, isDisplayableImageUrl } from '../../shared/videoFirstFramePoster.js';
 import * as challengeSubmitPickerBundledMod from '../../shared/challengeSubmitPicker.js';
 
 let formatDateTime;
@@ -3371,9 +3371,9 @@ async function loadCreation() {
 	if (!detailContent || !imageEl || !backgroundEl) return;
 
 	if (detailContent.dataset.creationSeedPainted !== '1') showCreationDetailContentSkeleton(detailContent);
-	const seedHeroVisible =
-		imageEl instanceof HTMLImageElement && Boolean(String(imageEl.getAttribute('src') || '').trim());
-	if (!seedHeroVisible) {
+	const seedHeroDecoded =
+		imageEl instanceof HTMLImageElement && imageEl.complete && imageEl.naturalWidth > 0;
+	if (!seedHeroDecoded) {
 		prepareCreationDetailHeroForLoad(imageEl, imageWrapper);
 	} else {
 		imageWrapper?.classList.remove('image-loading');
@@ -3436,6 +3436,7 @@ async function loadCreation() {
 	}
 
 	function ensureHeroImageVisible() {
+		if (!heroImageHasDecoded()) return;
 		imageEl.classList.remove('is-hero-concealed');
 		if (!heroVideoAwaitingReveal()) {
 			imageWrapper?.classList.remove('image-loading', 'image-error', 'image-error-moderated', 'hero-aspect-pending');
@@ -3453,6 +3454,9 @@ async function loadCreation() {
 			return false;
 		}
 		imageEl.dataset.currentUrl = next;
+		if (!(imageEl.complete && imageEl.naturalWidth > 0 && urlsMatch(imageEl.currentSrc || imageEl.src, next))) {
+			imageEl.classList.add('is-hero-concealed');
+		}
 		imageEl.src = next;
 		return true;
 	}
@@ -3505,8 +3509,12 @@ async function loadCreation() {
 		backgroundEl.style.backgroundImage = `url("${next.replace(/"/g, '\\"')}")`;
 	}
 
+	function heroImageHasDecoded() {
+		return Boolean(imageEl.getAttribute('src') && imageEl.complete && imageEl.naturalWidth > 0);
+	}
+
 	function hasLoadedHeroImage() {
-		return Boolean(imageEl.src && imageEl.complete && imageEl.naturalWidth > 0 && !imageEl.classList.contains('is-hero-concealed'));
+		return heroImageHasDecoded() && !imageEl.classList.contains('is-hero-concealed');
 	}
 
 	function clearHeroImage() {
@@ -3718,7 +3726,7 @@ async function loadCreation() {
 		const currentUrl = String(heroImageDisplayedUrl() || '').trim();
 		if (urlsMatch(currentUrl, url)) {
 			imageEl.dataset.currentUrl = url;
-			if (hasLoadedHeroImage()) {
+			if (heroImageHasDecoded()) {
 				if (!heroVideoAwaitingReveal()) {
 					applyLoadedImageState();
 				}
@@ -3761,6 +3769,12 @@ async function loadCreation() {
 			if (!isCurrentLoad() || imageEl.dataset.pendingUrl !== url) return;
 			if (!result?.ok) {
 				delete imageEl.dataset.pendingUrl;
+				if (heroImageHasDecoded()) {
+					applyLoadedImageState();
+					return;
+				}
+				imageEl.classList.add('is-hero-concealed');
+				if (imageWrapper?.classList.contains('hero-video-pending')) return;
 				clearHeroImage();
 				imageWrapper?.classList.remove('image-loading');
 				imageWrapper?.classList.add('image-error');
@@ -4034,16 +4048,12 @@ async function loadCreation() {
 		imageEl.addEventListener('error', (event) => {
 			// Clearing the hero src while mounting the timeout overlay fires this.
 			// Leave the timed-out clock in place instead of the unavailable-image mark.
-			if (imageWrapper?.dataset.heroTimeout === '1') {
+			if (
+				imageWrapper?.dataset.heroTimeout === '1' ||
+				imageWrapper?.classList.contains('hero-video-pending') ||
+				imageWrapper?.dataset.heroResolving === '1'
+			) {
 				imageEl.classList.add('is-hero-concealed');
-				return;
-			}
-			// In overlay/embed mode the server-rendered hero <img> may carry a src the viewer
-			// can't load directly (non-owner / lineage / challenge URLs need query params the API
-			// adds). While loadCreation() is still resolving + preloading the correct URL, keep the
-			// loading state instead of flashing the "failed" icon. Genuine failures still surface via
-			// the preload-error / 404 / failed-status paths.
-			if (isCreationDetailEmbed() && imageWrapper?.dataset.heroResolving === '1') {
 				return;
 			}
 			// eslint-disable-next-line no-console
@@ -4579,7 +4589,7 @@ async function loadCreation() {
 		// Tear down any prior click-to-play Suno embed before choosing the new hero branch.
 		clearCreationDetailSunoPlayer(imageWrapper);
 
-		if (status === 'completed' && mediaType === 'image' && creation.url) {
+		if (status === 'completed' && mediaType === 'image' && creation.url && isDisplayableImageUrl(creation.url)) {
 			const groupPayloadEarly =
 				meta?.group && typeof meta.group === 'object' ? meta.group : null;
 			const groupSourceCountEarly = Array.isArray(groupPayloadEarly?.source_creations)
@@ -4607,12 +4617,8 @@ async function loadCreation() {
 			imageWrapper?.classList.add('image-loading', 'hero-video-pending');
 
 			const revealHero = detailNsfwAllowsClear();
-			const framePoster = nsfwShouldBlur(creation, { revealed: revealHero })
-				? ''
-				: serverVideoFramePosterUrl(creation);
-			const bgUrl = framePoster || creation.url || creation.thumbnail_url || null;
-			const heroStillUrl = nsfwMediaUrl(bgUrl, creation, { revealed: revealHero, sourceVariant: 'original' });
-			if (heroStillUrl) {
+			const heroStillUrl = nsfwMediaUrl(detailHeroStillUrl(creation), creation, { revealed: revealHero, sourceVariant: 'original' });
+			if (heroStillUrl && isDisplayableImageUrl(heroStillUrl)) {
 				showHeroImage(heroStillUrl);
 				setHeroBackgroundUrl(heroStillUrl);
 			}
@@ -4956,11 +4962,13 @@ async function loadCreation() {
 				return source?.status === 'completed' && sourceMeta.media_type !== 'video' && sourceMeta.media_type !== 'audio';
 			});
 			actionsContext.showChangeCover = false;
-		} else if (canEdit && !adminViewingUserDeleted) {
+		}
+		if (canEdit && !adminViewingUserDeleted) {
+			const posterTarget = saveVideoFirstFramePosterBundledMod.videoPosterTargetFromCreation(creation);
 			void Promise.resolve(saveVideoFirstFramePosterBundledMod).then((mod) => {
 				if (!isCurrentLoad()) return;
 				if (typeof mod.maybeSaveVideoFirstFramePoster !== 'function') return;
-				return mod.maybeSaveVideoFirstFramePoster(creation);
+				return mod.maybeSaveVideoFirstFramePoster(posterTarget);
 			});
 		}
 		const groupSourcesMapped = groupSourcesRaw
@@ -8015,18 +8023,19 @@ async function loadCreation() {
 					} else if (!isGroupVideo && source.videoUrl) {
 						clearGroupMemberAudio();
 						teardownGroupHeroVideoPlayer();
-						const memberFrame = serverVideoFramePosterUrl({
+						imageWrapper?.classList.add('image-loading', 'hero-video-pending');
+						const memberPoster = detailHeroStillUrl({
 							id: creation.id,
 							video_url: source.videoUrl,
 							media_type: source.mediaType,
 							meta: source.meta,
+							url: source.filePath,
+							thumbnail_url: source.thumbnailUrl,
 						});
-						const memberPoster = memberFrame || source.filePath;
-						if (memberPoster) {
+						if (memberPoster && isDisplayableImageUrl(memberPoster)) {
 							showHeroImage(memberPoster);
 							setHeroBackgroundUrl(memberPoster);
 						}
-						imageWrapper?.classList.add('image-loading', 'hero-video-pending');
 						void mountHeroVideoPlaybackEarly([source], source.id, {
 							posterUrl: typeof memberPoster === 'string' ? memberPoster : '',
 							onFirstReveal: () => markHeroReady({ state: 'group-member-video' }),
@@ -8083,13 +8092,41 @@ async function loadCreation() {
 				});
 			}
 			const groupMoveLeftButtons = Array.from(detailContent.querySelectorAll('[data-group-move-left]'));
+			function groupStripSlots() {
+				const grid = detailContent.querySelector('.creation-detail-group-grid');
+				if (!(grid instanceof HTMLElement)) return [];
+				return [...grid.querySelectorAll(':scope > .creation-detail-group-slot')];
+			}
+			function applyGroupStripOrder(slots) {
+				const grid = detailContent.querySelector('.creation-detail-group-grid');
+				if (!(grid instanceof HTMLElement)) return;
+				for (const slot of slots) grid.appendChild(slot);
+			}
+			function markGroupStripCover(sourceId) {
+				for (const btn of detailContent.querySelectorAll('[data-group-source-thumb]')) {
+					btn.classList.toggle('is-active', Number(btn.getAttribute('data-group-source-thumb')) === Number(sourceId));
+				}
+			}
+			function setGroupMoveButtonsDisabled(disabled) {
+				for (const button of detailContent.querySelectorAll('[data-group-move-left]')) {
+					if (button instanceof HTMLButtonElement) button.disabled = disabled;
+				}
+			}
 			for (const btn of groupMoveLeftButtons) {
 				btn.addEventListener('click', async (e) => {
 					e.preventDefault();
 					e.stopPropagation();
 					const sourceId = Number(btn.getAttribute('data-group-move-left'));
 					if (!Number.isFinite(sourceId) || sourceId <= 0) return;
-					btn.disabled = true;
+					const previous = groupStripSlots();
+					const index = previous.findIndex((slot) => slot.querySelector(`[data-group-move-left="${sourceId}"]`));
+					if (index <= 0) return;
+					const next = previous.slice();
+					[next[index - 1], next[index]] = [next[index], next[index - 1]];
+					applyGroupStripOrder(next);
+					if (index === 1) markGroupStripCover(sourceId);
+					setGroupMoveButtonsDisabled(true);
+					let saved = false;
 					try {
 						const res = await fetch(`/api/create/images/${creationId}/group-reorder`, {
 							method: 'POST',
@@ -8099,14 +8136,17 @@ async function loadCreation() {
 						});
 						const data = await res.json().catch(() => ({}));
 						if (!res.ok) {
-							alert(data?.error || 'Failed to reorder group sources');
-							btn.disabled = false;
-							return;
+							throw new Error(data?.error || 'Failed to reorder group sources');
 						}
+						saved = true;
 						await refreshAfterMutation('status-changed', { creationId });
 					} catch (err) {
+						if (!saved) {
+							applyGroupStripOrder(previous);
+							markGroupStripCover(currentCoverId);
+							setGroupMoveButtonsDisabled(false);
+						}
 						alert(err?.message || 'Failed to reorder group sources');
-						btn.disabled = false;
 					}
 				});
 			}
@@ -8130,23 +8170,20 @@ async function loadCreation() {
 				void (async () => {
 					if (!isCurrentLoad()) return;
 					const cover = groupSources[0];
-					const coverFrame = serverVideoFramePosterUrl({
+					imageWrapper?.classList.remove('hero-video-revealed');
+					imageWrapper?.classList.add('image-loading', 'hero-video-pending');
+					const posterUrl = detailHeroStillUrl({
 						id: creation.id,
 						video_url: cover?.videoUrl,
 						media_type: cover?.mediaType,
 						meta: cover?.meta,
+						url: cover?.filePath,
+						thumbnail_url: cover?.thumbnailUrl,
 					});
-					const posterUrl = coverFrame
-						|| (typeof cover?.filePath === 'string' ? cover.filePath.trim() : '')
-						|| creation.url
-						|| creation.thumbnail_url
-						|| '';
-					if (posterUrl) {
+					if (posterUrl && isDisplayableImageUrl(posterUrl)) {
 						showHeroImage(posterUrl);
 						setHeroBackgroundUrl(posterUrl);
 					}
-					imageWrapper?.classList.remove('hero-video-revealed');
-					imageWrapper?.classList.add('image-loading', 'hero-video-pending');
 
 					const mounted = await mountHeroVideoPlaybackEarly(groupSources, Number(cover.id), {
 						posterUrl,
@@ -8223,7 +8260,13 @@ async function loadCreation() {
 			if (setCoverBtn instanceof HTMLButtonElement) {
 				setCoverBtn.addEventListener('click', async () => {
 					if (!Number.isFinite(selectedGroupSourceId) || selectedGroupSourceId <= 0) return;
+					const previous = groupStripSlots();
+					const slot = previous.find((item) => item.querySelector(`[data-group-source-thumb="${selectedGroupSourceId}"]`));
+					const next = slot ? [slot, ...previous.filter((item) => item !== slot)] : previous;
+					applyGroupStripOrder(next);
+					markGroupStripCover(selectedGroupSourceId);
 					setCoverBtn.disabled = true;
+					let saved = false;
 					try {
 						const res = await fetch(`/api/create/images/${creationId}/group-cover`, {
 							method: 'POST',
@@ -8233,14 +8276,17 @@ async function loadCreation() {
 						});
 						const data = await res.json().catch(() => ({}));
 						if (!res.ok) {
-							alert(data?.error || 'Failed to set cover');
-							syncSetCoverButton();
-							return;
+							throw new Error(data?.error || 'Failed to set cover');
 						}
+						saved = true;
 						await refreshAfterMutation('status-changed', { creationId });
 					} catch (err) {
+						if (!saved) {
+							applyGroupStripOrder(previous);
+							markGroupStripCover(currentCoverId);
+							syncSetCoverButton();
+						}
 						alert(err?.message || 'Failed to set cover');
-						syncSetCoverButton();
 					}
 				});
 			}
@@ -8413,12 +8459,7 @@ function isCurrentCreationUnsupportedForVynly() {
 
 function paintCreationDetailFromSeed(seed, detailContent, imageEl, chromeHtmlFromSeed, applyHeroAspect) {
 	if (!seed || typeof seed !== 'object') return false;
-	const imgUrl =
-		(typeof seed.image_url === 'string' && seed.image_url.trim()) ||
-		(typeof seed.url === 'string' && seed.url.trim()) ||
-		(typeof seed.fit_thumbnail_url === 'string' && seed.fit_thumbnail_url.trim()) ||
-		(typeof seed.thumbnail_url === 'string' && seed.thumbnail_url.trim()) ||
-		'';
+	const imgUrl = detailHeroStillUrl(seed);
 	const wrap = imageEl instanceof HTMLImageElement ? imageEl.closest?.('.creation-detail-image-wrapper') : null;
 	const seedNsfw = itemIsNsfw(seed);
 	const seedClear = seedNsfw && detailNsfwAllowsClear();
@@ -8431,30 +8472,35 @@ function paintCreationDetailFromSeed(seed, detailContent, imageEl, chromeHtmlFro
 	if (wrap instanceof HTMLElement && typeof applyHeroAspect === 'function') {
 		applyInitialDetailHeroLayout(wrap, seed);
 	}
-	if (imageEl instanceof HTMLImageElement && imgUrl) {
-		imageEl.classList.remove('is-hero-concealed');
-		if (!imageEl.getAttribute('src')) imageEl.src = src;
+	if (imageEl instanceof HTMLImageElement && src && isDisplayableImageUrl(src)) {
+		const current = String(imageEl.getAttribute('src') || '').trim();
+		const same = Boolean(current) && current === src;
+		const decoded = same && imageEl.complete && imageEl.naturalWidth > 0;
+		if (!decoded) imageEl.classList.add('is-hero-concealed');
+		imageEl.alt = '';
+		if (!same) imageEl.src = src;
 		const markHeroSettled = () => {
 			if (!(wrap instanceof HTMLElement)) return;
 			if (wrap.dataset.heroLayoutKnown !== '1' && imageEl.naturalWidth > 0) {
 				applyInitialDetailHeroLayout(wrap, { width: imageEl.naturalWidth, height: imageEl.naturalHeight });
 			}
-			wrap.classList.remove('hero-aspect-pending');
 			if (imageEl.complete && imageEl.naturalWidth > 0) {
-				wrap.classList.remove('image-loading');
+				wrap.classList.remove('hero-aspect-pending', 'image-loading');
+				imageEl.classList.remove('is-hero-concealed');
 				delete wrap.dataset.heroResolving;
 			}
 		};
 		if (wrap instanceof HTMLElement) {
 			wrap.classList.add('hero-aspect-pending');
-			wrap.classList.remove('image-loading');
-			delete wrap.dataset.heroResolving;
+			if (!decoded) wrap.dataset.heroResolving = '1';
 		}
-		if (imageEl.complete && imageEl.naturalWidth > 0) {
+		if (decoded) {
 			markHeroSettled();
 		} else {
 			imageEl.addEventListener('load', markHeroSettled, { once: true });
-			imageEl.addEventListener('error', markHeroSettled, { once: true });
+			imageEl.addEventListener('error', () => {
+				imageEl.classList.add('is-hero-concealed');
+			}, { once: true });
 		}
 	} else if (wrap instanceof HTMLElement) {
 		wrap.classList.add('image-loading', 'hero-aspect-pending');
@@ -8499,9 +8545,12 @@ async function checkAndLoadCreation() {
 			const seedMod = creationDetailSeedBundledMod;
 			const aspectMod = aspectRatioBundledMod;
 			const cachedSeed = seedMod.readCreationDetailSeed(creationId);
-			const seed = activeCreationDetailSeed
-				? seedMod.mergeCreationDetailSeeds(activeCreationDetailSeed, cachedSeed)
-				: cachedSeed ? { ...cachedSeed, viewer_liked: undefined } : null;
+			const seed = seedMod.withDecodedParentImage(
+				activeCreationDetailSeed
+					? seedMod.mergeCreationDetailSeeds(activeCreationDetailSeed, cachedSeed)
+					: cachedSeed ? { ...cachedSeed, viewer_liked: undefined } : null,
+				cachedSeed
+			);
 			if (seed) {
 				paintedSeed = paintCreationDetailFromSeed(
 					seed,

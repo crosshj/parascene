@@ -133,6 +133,55 @@ export function serverVideoFramePosterUrl(item) {
 	return videoFramePosterUrl(feedItemPlayableVideoUrl(item), id);
 }
 
+const IMAGE_RESPONSE_VARIANTS = new Set(['thumbnail', 'fit', 'blur', 'grid_thumbnail', 'video_thumbnail']);
+const NON_IMAGE_EXT = /\.(?:mp4|m4v|webm|mov|ogv|mp3|wav|ogg|oga|m4a|aac|flac)(?:$|[?#])/i;
+
+/** A URL an <img> can decode. A raw video or audio file is not one. */
+export function isDisplayableImageUrl(url) {
+	const raw = typeof url === 'string' ? url.trim() : '';
+	if (!raw) return false;
+	try {
+		const parsed = new URL(raw, 'http://localhost');
+		if (IMAGE_RESPONSE_VARIANTS.has(parsed.searchParams.get('variant') || '')) return true;
+		return !NON_IMAGE_EXT.test(parsed.pathname);
+	} catch {
+		return !NON_IMAGE_EXT.test(raw);
+	}
+}
+
+/**
+ * Poster for a detail hero. A video uses its first frame unless a real poster
+ * was already saved. Raw media files are never returned.
+ * @param {object|null|undefined} item
+ * @returns {string}
+ */
+export function detailHeroStillUrl(item) {
+	if (!item || typeof item !== 'object') return '';
+	if (item.image_decoded === true) {
+		const painted = typeof item.image_url === 'string' ? item.image_url.trim() : '';
+		if (isDisplayableImageUrl(painted)) return painted;
+	}
+	const meta = parseMeta(item);
+	const videoUrl = feedItemPlayableVideoUrl(item);
+	if (videoUrl && meta?.video_placeholder_manual !== true) {
+		const id = Number(item.created_image_id ?? item.id);
+		const frame = videoFramePosterUrl(videoUrl, id);
+		if (frame) return frame;
+	}
+	const candidates = [
+		item.url,
+		item.image_url,
+		item.image,
+		item.fit_thumbnail_url,
+		item.thumbnail_url,
+		item.video_thumbnail_url,
+	];
+	for (const value of candidates) {
+		if (typeof value === 'string' && isDisplayableImageUrl(value)) return value.trim();
+	}
+	return '';
+}
+
 /** @type {WeakMap<HTMLImageElement, () => void>} */
 const cleanupByImg = new WeakMap();
 

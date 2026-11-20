@@ -122,11 +122,16 @@ export function mountSequentialVideoPlayer(container, slides, options = {}) {
 	let placeholder = null;
 	if (posterUrl) {
 		posterEl = document.createElement('img');
-		posterEl.className = 'sequential-video-player-poster';
-		posterEl.src = posterUrl;
+		posterEl.className = 'sequential-video-player-poster is-hero-concealed';
 		posterEl.alt = '';
 		posterEl.decoding = 'async';
-		posterEl.loading = 'eager';
+		posterEl.addEventListener('load', () => {
+			if (posterEl.naturalWidth > 0) posterEl.classList.remove('is-hero-concealed');
+		}, { once: true });
+		posterEl.addEventListener('error', () => {
+			posterEl.remove();
+		}, { once: true });
+		posterEl.src = posterUrl;
 	} else {
 		placeholder = document.createElement('div');
 		placeholder.className = 'sequential-video-player-placeholder skeleton';

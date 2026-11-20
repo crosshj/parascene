@@ -7,6 +7,7 @@ import { isGroupV2Meta, groupV2RejectMessage } from '../services/create/projectG
 import { getSupabaseServiceClient } from '../services/create/supabaseService.js';
 import { deleteCdnObjectBestEffort } from '../services/create/blueCdn.js';
 import { deleteCreationEmbedding } from '../services/create/deleteCreationEmbedding.js';
+import { ensureVideoCoverImage } from '../services/create/videoPoster.js';
 
 export function registerCreationLibraryRoutes({ router, requireUser, queries, storage }) {
 function parseMeta(raw) {
@@ -677,6 +678,27 @@ function buildGroupReorderLeftState({
 		};
 	}
 
+async function sourcesWithRepairedCover(sourceCreations, coverSourceId, ownerId) {
+		const id = Number(coverSourceId);
+		const row = await queries.selectCreatedImageById.get(id, ownerId);
+		if (!row) return { sources: sourceCreations };
+		const repaired = await ensureVideoCoverImage({ queries, storage, image: row });
+		if (repaired.error) return { error: repaired.error };
+		if (!repaired.needed) return { sources: sourceCreations };
+		const image = repaired.image;
+		return {
+			sources: sourceCreations.map((item) => Number(item.id) === id ? {
+				...item,
+				filename: image.filename,
+				file_path: image.file_path,
+				width: image.width,
+				height: image.height,
+				color: image.color ?? item.color,
+				meta: image.meta,
+			} : item),
+		};
+	}
+
 router.post("/api/create/images/:id/group-cover", async (req, res) => {
 		const user = await requireUser(req, res);
 		if (!user) return;
@@ -698,10 +720,14 @@ router.post("/api/create/images/:id/group-cover", async (req, res) => {
 			}
 			const sourceCreationsRaw = Array.isArray(groupPayload.source_creations) ? groupPayload.source_creations : [];
 			const sourceCreations = sourceCreationsRaw.filter((item) => item && typeof item === "object");
+			const repaired = await sourcesWithRepairedCover(sourceCreations, sourceId, user.id);
+			if (repaired.error) {
+				return res.status(422).json({ error: repaired.error });
+			}
 			const coverState = buildGroupCoverUpdateState({
 				groupMeta,
 				groupPayload,
-				sourceCreations,
+				sourceCreations: repaired.sources,
 				coverSourceId: sourceId,
 				storage,
 				fallbackGroupRow: groupRow
@@ -757,10 +783,21 @@ router.post("/api/create/images/:id/group-reorder", async (req, res) => {
 			}
 			const sourceCreationsRaw = Array.isArray(groupPayload.source_creations) ? groupPayload.source_creations : [];
 			const sourceCreations = sourceCreationsRaw.filter((item) => item && typeof item === "object");
+			const coverSourceId = Number(groupPayload.cover_source_id);
+			const ordered = normalizeGroupSourcesCoverFirst(sourceCreations, coverSourceId);
+			const movingIndex = ordered.findIndex((item) => Number(item.id) === sourceId);
+			let sourcesForReorder = sourceCreations;
+			if (movingIndex === 1) {
+				const repaired = await sourcesWithRepairedCover(sourceCreations, sourceId, user.id);
+				if (repaired.error) {
+					return res.status(422).json({ error: repaired.error });
+				}
+				sourcesForReorder = repaired.sources;
+			}
 			const reorderState = buildGroupReorderLeftState({
 				groupMeta,
 				groupPayload,
-				sourceCreations,
+				sourceCreations: sourcesForReorder,
 				sourceId,
 				storage,
 				fallbackGroupRow: groupRow
