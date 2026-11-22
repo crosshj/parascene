@@ -119,6 +119,18 @@ export default function createAdminToolsRoutes({ client, users, servers, queries
 		catch (error) { next(error); }
 	};
 
+	router.get('/api/admin-tools/unhandled-requests', guard(async (req, res) => {
+		const { limit, offset } = page(req);
+		const sort = ['hit_count', 'last_seen_at', 'first_seen_at', 'path_key', 'host', 'method', 'app_version'].includes(req.query.sort_by) ? req.query.sort_by : 'last_seen_at';
+		const result = await client.from('prsn_unhandled_requests').select('id,method,path_key,host,app_version,hit_count,first_seen_at,last_seen_at,query_keys,user_agent', { count: 'exact' }).order(sort, { ascending: req.query.sort_dir === 'asc' }).range(offset, offset + limit - 1);
+		if (result.error) {
+			if (result.error.code === '42P01' || /prsn_unhandled_requests/i.test(result.error.message || '')) {
+				return res.status(503).json({ error: 'Apply server/db/schemas/supabase_16_unhandled_requests.sql' });
+			}
+			throw result.error;
+		}
+		res.json({ items: result.data || [], total: result.count || 0 });
+	}));
 	router.get('/api/admin-tools/jobs', guard(async (req, res) => {
 		const { limit, offset } = page(req);
 		let query = client.from('prsn_jobs').select('id,job_type,status,args,meta,created_at,updated_at', { count: 'exact' });

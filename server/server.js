@@ -69,6 +69,8 @@ import createQrRoutes from './routes/qr.js';
 import createSeoRoutes from './routes/seo.js';
 import { createWelcomeMailRoutes } from './routes/welcomeMail.js';
 import { startWelcomeMailSchedule } from './services/account/welcomeMail.js';
+import { createUnhandledRequestLog } from './db/unhandledRequests.js';
+import { createUnhandledRequestMiddleware } from './routes/middleware/unhandledRequest.js';
 
 // Supabase Realtime needs a WebSocket implementation on Node 20.
 if (!globalThis.WebSocket) globalThis.WebSocket = WebSocket;
@@ -150,6 +152,7 @@ if (reportsRoutes) app.use(reportsRoutes);
 app.use(createAdminPageRoutes({ pagesDir, users: db.users, sessions: db.sessions }));
 app.use(createPageRoutes({ pagesDir, users: db.users }));
 app.use(express.static(path.join(__dirname, "../public")));
+app.use(createUnhandledRequestMiddleware({ log: createUnhandledRequestLog({ client: db.account.client }) }));
 app.use((error, req, res, next) => {
 	console.error("[parascene] request failed", error);
 	if (res.headersSent) return next(error);
