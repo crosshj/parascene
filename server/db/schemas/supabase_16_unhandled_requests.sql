@@ -13,8 +13,12 @@ CREATE TABLE IF NOT EXISTS prsn_unhandled_requests (
 	last_seen_at timestamptz NOT NULL DEFAULT now(),
 	query_keys text,
 	user_agent text,
+	meta jsonb NOT NULL DEFAULT '{}'::jsonb,
 	UNIQUE (method, path_key, host, app_version)
 );
+
+ALTER TABLE prsn_unhandled_requests
+	ADD COLUMN IF NOT EXISTS meta jsonb NOT NULL DEFAULT '{}'::jsonb;
 
 CREATE INDEX IF NOT EXISTS prsn_unhandled_requests_last_seen_idx
 	ON prsn_unhandled_requests (last_seen_at DESC);
@@ -22,3 +26,4 @@ CREATE INDEX IF NOT EXISTS prsn_unhandled_requests_last_seen_idx
 ALTER TABLE prsn_unhandled_requests ENABLE ROW LEVEL SECURITY;
 
 COMMENT ON TABLE prsn_unhandled_requests IS 'Parascene: aggregated API and OAuth route misses. RLS enabled without policies — only the service role can access. No query values, cookies, or bodies.';
+COMMENT ON COLUMN prsn_unhandled_requests.meta IS 'Spare jsonb for later fields. Empty object until something writes it. No query values, cookies, or bodies.';
