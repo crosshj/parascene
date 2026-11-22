@@ -43,5 +43,11 @@ jobs:
           UPSTASH_QSTASH_URL: ${{ vars.UPSTASH_QSTASH_URL }}
           UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
           UPSTASH_REDIS_REST_URL: ${{ vars.UPSTASH_REDIS_REST_URL }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          STRIPE_PRICE_ID_FOUNDER: ${{ secrets.STRIPE_PRICE_ID_FOUNDER }}
+          STRIPE_PRICE_ID_TOPUP_100: ${{ secrets.STRIPE_PRICE_ID_TOPUP_100 }}
+          STRIPE_PRICE_ID_TOPUP_300: ${{ secrets.STRIPE_PRICE_ID_TOPUP_300 }}
+          STRIPE_PRICE_ID_TOPUP_700: ${{ secrets.STRIPE_PRICE_ID_TOPUP_700 }}
           GITHUB_SHA: ${{ github.sha }}
         run: bash scripts/deploy-from-ci.sh
