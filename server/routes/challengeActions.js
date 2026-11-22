@@ -50,7 +50,7 @@ import {
 	viewerCanManageChallengePayouts
 } from "../shared.js";
 import { deriveChallengePhase } from "../shared.js";
-import { MAX_MACHINE_CHANNEL_MESSAGE_CHARS, maxChatMessageBodyChars } from "../services/challenges/chatMessageLimits.js";
+import { MAX_CHAT_MESSAGE_CHARS, MAX_MACHINE_CHANNEL_MESSAGE_CHARS, maxChatMessageBodyChars } from "../services/challenges/chatMessageLimits.js";
 function normalizeChatReactionsBucket(raw) {
 	const out = {};
 	if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
@@ -579,6 +579,21 @@ async function deleteChatMiscGenericFilesForMessage(storage, messageBody, sender
 }
 export default function createChallengeActionsRoutes({ queries, storage, getClient = getSupabaseServiceClient }) {
 const router = express.Router();
+router.post("/api/chat/normalize-body", async (req, res) => {
+	if (!req.auth?.userId) return res.status(401).json({ error: "Unauthorized" });
+	const body = typeof req.body?.body === "string" ? req.body.body.replace(/\u0000/g, "").trim() : "";
+	if (!body) return res.status(400).json({ error: "Bad request", message: "body required" });
+	if (body.length > MAX_CHAT_MESSAGE_CHARS) {
+		return res.status(400).json({ error: "Bad request", message: `body must be at most ${MAX_CHAT_MESSAGE_CHARS} characters` });
+	}
+	try {
+		const normalized = await normalizeUnpublishedCreationUrlsInChatBody(body, req.auth.userId, queries);
+		return res.json({ body: stabilizeChallengeConfigCreationRefsInBody(normalized) });
+	} catch (error) {
+		console.error("[POST /api/chat/normalize-body]", error);
+		return res.status(500).json({ error: "Server error", message: error.message || "Failed" });
+	}
+});
 async function challengeMessageOnly(req, res, next) {
  if (!req.auth?.userId) return next();
  const sb = getSb(res); if (!sb) return;

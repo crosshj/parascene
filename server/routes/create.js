@@ -16,7 +16,7 @@ import {
 	isCreationTimedOutDisplay,
 } from "../services/create/creationGpuWait.js";
 import { runLandscapeJob } from "../services/create/landscapeJob.js";
-import { scheduleCreationJob, scheduleAudioCoverJob } from "../services/create/scheduleCreationJob.js";
+import { scheduleCreationJob, scheduleAudioCoverJob, scheduleLandscapeJob } from "../services/create/scheduleCreationJob.js";
 import { runAudioCoverJob, albumCoverPromptFromCreation, resolveAudioCoverGenerateTarget } from "../services/create/audioCoverGenerate.js";
 import {
 	applyAudioCoverBuffer,
@@ -1924,7 +1924,230 @@ const error = new Error(appended.error || 'Failed to add creation to group');
 			return res.status([400, 402, 503].includes(error.status) ? error.status : 500).json({ error: error.status === 402 ? "Insufficient credits" : "Failed to initiate image creation", message: error.message });
 		}
 	}));
-router.post("/api/create/worker", asyncRoute(async (req, res) => {
+
+function landscapeEligibility(image) {
+	const meta = parseMeta(image?.meta) || {};
+	if (meta.media_type === "video" || meta.video || image?.video_url) {
+		return { eligible: false, reason: "Landscape is only available for images." };
+	}
+	const group = meta.group && typeof meta.group === "object" ? meta.group : null;
+	let width = Number(image?.width);
+	let height = Number(image?.height);
+	if (group?.kind === "group_creations") {
+		const sources = Array.isArray(group.source_creations) ? group.source_creations : [];
+		const cover = sources.find((source) => Number(source?.id) === Number(group.cover_source_id)) || sources[0];
+		if (Number(cover?.width) > 0 && Number(cover?.height) > 0) {
+			width = Number(cover.width);
+			height = Number(cover.height);
+		}
+	}
+	if (!(width > 0) || !(height > 0)) return { eligible: false, reason: "Could not read image dimensions." };
+	const ratio = width / height;
+	if (Math.abs(ratio - 16 / 9) <= 0.04) {
+		return { eligible: false, reason: "This creation is already 16:9. The main image is used for wide layouts." };
+	}
+	if (Math.abs(ratio - 1) > 0.04) {
+		return { eligible: false, reason: "Landscape generation works from square (1:1) images. Portrait or wide originals are not supported yet." };
+	}
+	return { eligible: true };
+}
+
+async function activeLandscapeServer(meta) {
+	if (meta?.server_id && Number.isFinite(Number(meta.server_id))) {
+		const named = await queries.selectServerById.get(Number(meta.server_id));
+		if (named?.status === "active" && named.server_url) return named;
+	}
+	const sb = getSupabaseServiceClient();
+	if (!sb) return null;
+	const listed = await sb.from("prsn_servers").select("id,status,server_url,auth_token,server_config").eq("status", "active").limit(1);
+	if (listed.error) throw listed.error;
+	return listed.data?.[0] || null;
+}
+
+router.post("/api/create/landscape/query", asyncRoute(async (req, res) => {
+	const user = await requireUser(req, res);
+	if (!user) return;
+	const creationId = Number(req.body?.creation_id);
+	if (!Number.isFinite(creationId) || creationId <= 0) {
+		return res.status(400).json({ error: "Missing required fields", message: "creation_id is required" });
+	}
+	const image = await queries.selectCreatedImageById.get(creationId, user.id);
+	if (!image) return res.status(404).json({ error: "Creation not found" });
+	if (image.status !== "completed" || !image.filename) return res.status(400).json({ error: "Creation is not ready for landscape" });
+	if (!resolveCreatedImageStorageFilename(image)) return res.json({ supported: false, message: "Could not resolve image file for landscape." });
+	const eligibility = landscapeEligibility(image);
+	if (!eligibility.eligible) return res.json({ supported: false, message: eligibility.reason });
+	const server = await activeLandscapeServer(parseMeta(image.meta));
+	if (!server) return res.status(400).json({ error: "No server available", message: "No active server available for landscape." });
+	const imageUrl = shareUrlForImage(creationId, user.id);
+	if (!imageUrl) return res.status(500).json({ error: "Failed to build image URL", message: "Could not generate share URL for provider." });
+	try {
+		const response = await fetch(server.server_url, {
+			method: "POST",
+			headers: buildProviderHeaders({ "Content-Type": "application/json", Accept: "application/json" }, server.auth_token, server.server_config?.custom_headers),
+			body: JSON.stringify({ method: "advanced_query", args: { operation: "outpaint", image_url: imageUrl } }),
+			signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS)
+		});
+		const body = await response.json().catch(() => null);
+		if (!response.ok || !body) {
+			return res.status(502).json({ error: body ? "Provider error" : "Invalid provider response", message: body?.error || body?.message || response.statusText, provider: body });
+		}
+		return res.json(body);
+	} catch (error) {
+		if (error?.name === "AbortError" || error?.name === "TimeoutError") return res.status(504).json({ error: "Timeout", message: "Server did not respond in time" });
+		return res.status(500).json({ error: "Landscape query failed", message: error.message || "Failed to query server" });
+	}
+}));
+
+router.post("/api/create/landscape", asyncRoute(async (req, res) => {
+	const user = await requireUser(req, res);
+	if (!user) return;
+	const creationId = Number(req.body?.creation_id);
+	const creditCost = Number(req.body?.credit_cost);
+	if (!Number.isFinite(creationId) || creationId <= 0) return res.status(400).json({ error: "Missing required fields", message: "creation_id is required" });
+	if (!Number.isFinite(creditCost) || creditCost <= 0) return res.status(400).json({ error: "Missing required fields", message: "credit_cost is required and must be a positive number" });
+	const image = await queries.selectCreatedImageById.get(creationId, user.id);
+	if (!image) return res.status(404).json({ error: "Creation not found" });
+	if (image.status !== "completed" || !image.filename) return res.status(400).json({ error: "Creation is not ready for landscape" });
+	if (!resolveCreatedImageStorageFilename(image)) return res.status(400).json({ error: "No image file", message: "Could not resolve image file for landscape." });
+	const eligibility = landscapeEligibility(image);
+	if (!eligibility.eligible) return res.status(400).json({ error: "Landscape not supported", message: eligibility.reason });
+	const existingMeta = parseMeta(image.meta) || {};
+	if (existingMeta.landscapeUrl === "loading") return res.status(409).json({ error: "Landscape in progress", message: "A landscape is already being generated." });
+	const server = await activeLandscapeServer(existingMeta);
+	if (!server) return res.status(400).json({ error: "No server available", message: "No active server available for landscape." });
+	const imageUrl = shareUrlForImage(creationId, user.id);
+	if (!imageUrl) return res.status(500).json({ error: "Failed to build image URL", message: "Could not generate share URL for provider." });
+	let credits = await queries.selectUserCredits.get(user.id);
+	if (!credits) {
+		await queries.insertUserCredits.run(user.id, 100, null);
+		credits = await queries.selectUserCredits.get(user.id);
+	}
+	if (!credits || Number(credits.balance) < creditCost) {
+		return res.status(402).json({ error: "Insufficient credits", message: `Landscape requires ${creditCost} credits. You have ${credits?.balance ?? 0} credits.`, required: creditCost, current: credits?.balance ?? 0 });
+	}
+	const nextMeta = { ...existingMeta, landscapeUrl: "loading" };
+	await queries.updateCreatedImageMeta.run(creationId, user.id, nextMeta);
+	await queries.updateUserCreditsBalance.run(user.id, -creditCost);
+	try {
+		await scheduleLandscapeJob({
+			payload: { created_image_id: creationId, user_id: user.id, server_id: server.id, image_url: imageUrl, credit_cost: creditCost },
+			runLandscapeJob: ({ payload }) => runLandscapeJob({ queries, storage, payload })
+		});
+	} catch (error) {
+		await queries.updateUserCreditsBalance.run(user.id, creditCost);
+		await queries.updateCreatedImageMeta.run(creationId, user.id, existingMeta);
+		return res.status(500).json({ error: "Landscape failed", message: error.message || "Could not start landscape." });
+	}
+	const updated = await queries.selectUserCredits.get(user.id);
+	return res.json({ ok: true, credits_remaining: updated?.balance ?? credits.balance });
+}));
+
+router.delete("/api/create/images/:id/landscape", asyncRoute(async (req, res) => {
+	const user = await requireUser(req, res);
+	if (!user) return;
+	const creationId = Number(req.params.id);
+	if (!Number.isFinite(creationId) || creationId <= 0) return res.status(400).json({ error: "Invalid creation id" });
+	const image = await queries.selectCreatedImageById.get(creationId, user.id);
+	if (!image) return res.status(404).json({ error: "Creation not found" });
+	const meta = parseMeta(image.meta) || {};
+	const landscapeFilename = meta.landscapeFilename;
+	const hadLandscape = Boolean(landscapeFilename || (meta.landscapeUrl && meta.landscapeUrl !== "loading" && !String(meta.landscapeUrl).startsWith("error:")));
+	if (landscapeFilename && storage?.deleteImage) {
+		try { await storage.deleteImage(landscapeFilename); } catch { /* keep the meta clear even if the file is already gone */ }
+	}
+	const nextMeta = { ...meta };
+	delete nextMeta.landscapeUrl;
+	delete nextMeta.landscapeFilename;
+	delete nextMeta.credits_refunded;
+	await queries.updateCreatedImageMeta.run(creationId, user.id, nextMeta);
+	return res.json({ ok: true, removed: hadLandscape });
+}));
+
+function lineageChild(row, { unpublished = false } = {}) {
+	const status = row.status || "completed";
+	const url = status === "completed" ? (row.file_path || (row.filename ? `/api/images/created/${row.filename}` : null)) : null;
+	const meta = parseMeta(row.meta) || {};
+	const media = typeof meta.media_type === "string" ? meta.media_type : "image";
+	const videoUrl = typeof meta.video?.file_path === "string" && meta.video.file_path ? meta.video.file_path : null;
+	return {
+		id: row.id,
+		title: row.title ?? null,
+		created_at: row.created_at,
+		url: url || null,
+		thumbnail_url: url ? getThumbnailUrl(url) : null,
+		nsfw: meta.nsfw === true,
+		media_type: media,
+		video_url: videoUrl,
+		...(unpublished ? { unpublished: true } : {})
+	};
+}
+
+router.get("/api/create/images/:id/children", asyncRoute(async (req, res) => {
+	const user = await requireUser(req, res);
+	if (!user) return;
+	const parentId = Number(req.params.id);
+	if (!Number.isFinite(parentId) || parentId <= 0) return res.status(400).json({ error: "Invalid creation id" });
+	const sb = getSupabaseServiceClient();
+	if (!sb) return res.status(503).json({ error: "Unavailable" });
+	const parent = await sb.from("prsn_created_images").select("id,user_id").eq("id", parentId).maybeSingle();
+	if (parent.error) return res.status(500).json({ error: "Failed to fetch children" });
+	const viewerId = Number(user.id);
+	const isAdmin = user.role === "admin";
+	const parentOwnerId = Number(parent.data?.user_id);
+	const canView = (row) => row.published === true || row.published === 1 || isAdmin || Number(row.user_id) === viewerId || parentOwnerId === viewerId;
+	try {
+		const directResult = await sb.from("prsn_created_images")
+			.select("id,filename,file_path,title,created_at,status,meta,published,user_id")
+			.is("unavailable_at", null)
+			.contains("meta", { mutate_of_id: parentId })
+			.order("created_at", { ascending: true });
+		if (directResult.error) throw directResult.error;
+		const direct = (directResult.data || []).filter(canView).map((row) => lineageChild(row, { unpublished: !(row.published === true || row.published === 1) }));
+		const indirectResult = await sb.from("prsn_created_images")
+			.select("id,filename,file_path,title,created_at,status,meta,published,user_id")
+			.eq("published", true)
+			.is("unavailable_at", null)
+			.filter("meta->history", "cs", JSON.stringify([parentId]))
+			.neq("meta->>mutate_of_id", String(parentId))
+			.order("created_at", { ascending: true });
+		if (indirectResult.error) throw indirectResult.error;
+		const directIds = new Set(direct.map((row) => Number(row.id)));
+		const indirect = (indirectResult.data || []).filter((row) => !directIds.has(Number(row.id))).map((row) => lineageChild(row));
+		const descendants = [...direct, ...indirect].sort((a, b) => (Date.parse(a.created_at || "") || 0) - (Date.parse(b.created_at || "") || 0) || Number(a.id) - Number(b.id));
+		return res.json({ descendants });
+	} catch (error) {
+		console.error("[GET /api/create/images/:id/children]", error);
+		return res.status(500).json({ error: "Failed to fetch children" });
+	}
+}));
+
+router.post("/api/create/images/:id/retry", asyncRoute(async (req, res) => {
+	const user = await requireUser(req, res);
+	if (!user) return;
+	const image = await queries.selectCreatedImageById.get(req.params.id, user.id);
+	if (!image) return res.status(404).json({ error: "Image not found" });
+	const meta = parseMeta(image.meta) || {};
+	const status = image.status || "completed";
+	if (status === "completed") return res.status(400).json({ error: "Cannot retry a completed image" });
+	const timedOut = isCreationFinishTimedOut(status, meta);
+	if (isCreationGpuInFlight(status) && !timedOut) return res.status(400).json({ error: "Creation is still in progress" });
+	const nextMeta = {
+		...meta,
+		failed_at: nowIso(),
+		error_code: meta.error_code || (timedOut ? "timeout" : "provider_error"),
+		error: meta.error || (timedOut ? "Timed out" : "Failed")
+	};
+	await queries.updateCreatedImageJobFailed.run(Number(req.params.id), user.id, { meta: nextMeta });
+	const creditCost = Number(nextMeta.credit_cost ?? 0);
+	if (isCreationGpuInFlight(status) && creditCost > 0 && nextMeta.credits_refunded !== true) {
+		await queries.updateUserCreditsBalance.run(user.id, creditCost);
+		await queries.updateCreatedImageJobFailed.run(Number(req.params.id), user.id, { meta: { ...nextMeta, credits_refunded: true } });
+	}
+	return res.json({ ok: true });
+}));
+
+router.post(["/api/create/worker", "/api/worker/create"], asyncRoute(async (req, res) => {
 		// Disable caching for this endpoint - QStash webhooks should never be cached
 		res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
 		res.setHeader("Pragma", "no-cache");

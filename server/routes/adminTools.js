@@ -6,7 +6,7 @@ import { bumpFeedVersionCounter } from '../services/feed/feedVersion.js';
 import { filterRecommendableCreationIds } from '../services/create/recommendableCreations.js';
 import { broadcastChatThreadDeleted } from '../services/challenges/realtimeBroadcast.js';
 import { resolveProviderAuthToken } from '../services/create/providerAuth.js';
-import { runWelcomeMail } from '../services/account/welcomeMail.js';
+import { runNotificationsCron } from '../services/account/notificationsCron.js';
 
 const RELATED_KEYS = [
 	'related.recsys_weight', 'related.semantic_weight', 'related.semantic_weight_no_click_next',
@@ -496,7 +496,7 @@ export default function createAdminToolsRoutes({ client, users, servers, queries
 	}));
 	router.post('/api/admin-tools/run-notifications-cron', guard(async (_req, res) => {
 		try {
-			return res.json(await runWelcomeMail({ client, force: true }));
+			return res.json(await runNotificationsCron({ client, force: true }));
 		} catch (error) {
 			return res.status(error.status || 500).json({ error: error.message || 'Welcome mail failed' });
 		}

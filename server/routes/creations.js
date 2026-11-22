@@ -10,6 +10,7 @@ import { ACTIVE_SHARE_VERSION, mintShareToken, verifyShareToken } from "./utils/
 import { costumeGroupV2Meta } from '../services/create/groupV2.js';
 import { computeChallengeEndedByImageId } from '../services/create/challengeSubmitShared.js';
 import { getSupabaseServiceClient } from '../services/create/supabaseService.js';
+import { runSemanticSearch } from "../services/explore/semanticSearch.js";
 import { healProviderPollOnRead, recheckCreationProviderPoll } from '../services/create/creationJob.js';
 import { isCreationGpuInFlight } from '../services/create/creationGpuWait.js';
 
@@ -478,6 +479,69 @@ export function createCreationsRoutes({ creations, users, createQueries, createS
 				commented_by: []
 			}));
 			return res.json({ items, hasMore: page.hasMore });
+		} catch (error) { return next(error); }
+	});
+
+	const creationFields = "id, user_id, filename, file_path, width, height, color, status, created_at, published, published_at, title, description, meta, unavailable_at";
+
+	async function publishedByIds(ids) {
+		const sb = getSupabaseServiceClient();
+		if (!sb || !ids.length) return [];
+		const { data, error } = await sb.from("prsn_created_images").select(creationFields).in("id", ids).eq("published", true).is("unavailable_at", null);
+		if (error) throw error;
+		const order = new Map(ids.map((id, index) => [Number(id), index]));
+		return (data || []).slice().sort((a, b) => (order.get(Number(a.id)) ?? 999) - (order.get(Number(b.id)) ?? 999));
+	}
+
+	router.get("/api/creations/:id/semantic-related", async (req, res, next) => {
+		try {
+			const id = Number.parseInt(req.params.id, 10);
+			if (!Number.isFinite(id) || id < 1) return res.status(400).json({ error: "Invalid creation id" });
+			const sb = getSupabaseServiceClient();
+			if (!sb) return res.status(503).json({ error: "Embeddings unavailable." });
+			const limit = integer(req.query.limit, 12, 1, 40);
+			const offset = integer(req.query.offset, 0, 0, 10000);
+			const embedding = await sb.from("prsn_created_embeddings").select("embedding_multi").eq("created_image_id", id).maybeSingle();
+			if (embedding.error) return res.status(500).json({ error: "Failed to load embedding." });
+			let vector = embedding.data?.embedding_multi;
+			if (typeof vector === "string") { try { vector = JSON.parse(vector); } catch { vector = null; } }
+			if (!Array.isArray(vector)) return res.status(404).json({ error: "No embedding for this creation." });
+			const nearest = await sb.rpc("prsn_created_embeddings_nearest", { target_embedding: vector, exclude_id: id, lim: limit + 1, off: offset });
+			if (nearest.error) return res.status(500).json({ error: "Similarity search failed." });
+			const rows = Array.isArray(nearest.data) ? nearest.data : [];
+			const hasMore = rows.length > limit;
+			const page = rows.slice(0, limit);
+			const ids = page.map((row) => Number(row.created_image_id)).filter((value) => value > 0);
+			const items = (await publishedByIds(ids)).map((row) => ({ ...serializeCreation(row), created_image_id: row.id, distance: page.find((item) => Number(item.created_image_id) === Number(row.id))?.distance ?? null }));
+			return res.json({ items, has_more: hasMore });
+		} catch (error) { return next(error); }
+	});
+
+	router.get("/api/embeddings/search", async (req, res, next) => {
+		try {
+			const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+			if (!q) return res.status(400).json({ error: "q is required" });
+			const sb = getSupabaseServiceClient();
+			if (!sb) return res.status(503).json({ error: "Embeddings unavailable." });
+			const limit = integer(req.query.limit, 12, 1, 40);
+			const offset = integer(req.query.offset, 0, 0, 10000);
+			const result = await runSemanticSearch(sb, { q, limit, offset });
+			const items = (await publishedByIds(result.ids)).map((row) => ({ ...serializeCreation(row), created_image_id: row.id }));
+			return res.json({ items, has_more: result.hasMore });
+		} catch (error) {
+			if (error.status) return res.status(error.status).json({ error: error.message });
+			return next(error);
+		}
+	});
+
+	router.get("/api/creations/:id/summary", noStore, requireAuth, async (req, res, next) => {
+		try {
+			const { viewer, row } = await accessibleCreation(req);
+			if (!viewer || !row) return res.status(404).json({ error: "Creation not found" });
+			if (parseMeta(row.meta).nsfw === true && viewer.meta?.enableNsfw !== true && Number(row.user_id) !== Number(viewer.id)) {
+				return res.status(404).json({ error: "Creation not found" });
+			}
+			return res.json({ item: { ...serializeCreation(row), created_image_id: row.id } });
 		} catch (error) { return next(error); }
 	});
 
