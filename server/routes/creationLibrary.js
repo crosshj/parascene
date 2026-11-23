@@ -898,5 +898,234 @@ router.post("/api/create/images/:id/ungroup", async (req, res) => {
 		}
 	});
 
+	function partyNow() {
+		return new Date().toISOString();
+	}
 
+	function groupSourceIds(meta) {
+		const raw = Array.isArray(meta?.group?.source_creation_ids) ? meta.group.source_creation_ids : [];
+		return new Set(raw.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0));
+	}
+
+	function parsePartyPushedPayload(raw) {
+		if (!Array.isArray(raw)) return null;
+		const out = [];
+		const seen = new Set();
+		for (const entry of raw) {
+			const creationId = Number(entry?.creation_id ?? entry?.creationId);
+			if (!Number.isFinite(creationId) || creationId <= 0 || seen.has(creationId)) continue;
+			seen.add(creationId);
+			const item = {
+				creation_id: creationId,
+				pushed_at: typeof entry?.pushed_at === "string" && entry.pushed_at.trim() ? entry.pushed_at.trim() : partyNow()
+			};
+			const mediaItemId = typeof entry?.google_photos_media_item_id === "string" ? entry.google_photos_media_item_id.trim() : "";
+			const albumId = typeof entry?.google_photos_album_id === "string" ? entry.google_photos_album_id.trim() : "";
+			if (mediaItemId) item.google_photos_media_item_id = mediaItemId;
+			if (albumId) item.google_photos_album_id = albumId;
+			out.push(item);
+		}
+		return out;
+	}
+
+	function parsePartyQueuePayload(raw) {
+		if (!Array.isArray(raw)) return null;
+		const allowed = new Set(["processing", "ready", "failed"]);
+		const out = [];
+		const seen = new Set();
+		for (const entry of raw) {
+			const creationId = Number(entry?.creation_id ?? entry?.creationId);
+			const status = String(entry?.status || "").toLowerCase();
+			if (!Number.isFinite(creationId) || creationId <= 0 || seen.has(creationId) || !allowed.has(status)) continue;
+			seen.add(creationId);
+			const item = {
+				creation_id: creationId,
+				status,
+				updated_at: typeof entry?.updated_at === "string" && entry.updated_at.trim() ? entry.updated_at.trim() : partyNow()
+			};
+			if (status === "failed" && typeof entry?.error === "string" && entry.error.trim()) item.error = entry.error.trim().slice(0, 280);
+			out.push(item);
+		}
+		return out;
+	}
+
+	function collectPartyDeletionIds(meta, groupId) {
+		const ids = new Set([Number(groupId)]);
+		for (const id of groupSourceIds(meta)) ids.add(id);
+		const party = meta?.party && typeof meta.party === "object" ? meta.party : {};
+		for (const entry of [...(party.queue || []), ...(party.pushed || [])]) {
+			const id = Number(entry?.creation_id ?? entry?.creationId);
+			if (Number.isFinite(id) && id > 0) ids.add(id);
+		}
+		return [...ids];
+	}
+
+	async function deleteOwnedPartyCreation(user, creationId) {
+		const id = Number(creationId);
+		if (!Number.isFinite(id) || id <= 0) return { ok: true, skipped: true };
+		const image = await queries.selectCreatedImageById.get(id, user.id);
+		if (!image) return { ok: true, skipped: true };
+		const meta = parseMeta(image.meta);
+		const status = image.status || "completed";
+		if (isCreationGpuInFlight(status) && !isCreationFinishTimedOut(status, meta)) {
+			return { ok: false, error: "Cannot delete while a photo is still processing" };
+		}
+		const challengeBlock = await challengeArchiveBlockForCreation(id, meta, "deleting");
+		if (challengeBlock) return { ok: false, error: challengeBlock };
+		const markResult = await queries.markCreatedImageUnavailable?.run(id, user.id);
+		if (!markResult || markResult.changes === 0) return { ok: false, error: "Failed to delete a party photo" };
+		if (queries.deleteFeedItemByCreatedImageId?.run) await queries.deleteFeedItemByCreatedImageId.run(id);
+		return { ok: true, deleted: id };
+	}
+
+	function removeCreationFromPartyGroupMeta(meta, creationId) {
+		const id = Number(creationId);
+		if (!Number.isFinite(id) || id <= 0) return null;
+		const baseMeta = meta && typeof meta === "object" ? { ...meta } : {};
+		const partyRaw = baseMeta.party && typeof baseMeta.party === "object" ? baseMeta.party : {};
+		const groupPayload = baseMeta.group && typeof baseMeta.group === "object" ? { ...baseMeta.group } : null;
+		let removedFromGroup = false;
+		if (groupPayload?.kind === "group_creations") {
+			const sourceCreations = (Array.isArray(groupPayload.source_creations) ? groupPayload.source_creations : []).filter((item) => item && typeof item === "object");
+			const remaining = sourceCreations.filter((item) => Number(item.id) !== id).map((item, index) => ({ ...item, order: index }));
+			removedFromGroup = remaining.length !== sourceCreations.length;
+			const coverSourceId = Number(groupPayload.cover_source_id);
+			const nextCoverId = coverSourceId === id ? Number(remaining[0]?.id) || 0 : coverSourceId > 0 ? coverSourceId : Number(remaining[0]?.id) || 0;
+			baseMeta.group = {
+				...groupPayload,
+				updated_at: partyNow(),
+				cover_source_id: nextCoverId,
+				source_creation_ids: remaining.map((item) => Number(item.id)).filter((value, index, list) => Number.isFinite(value) && value > 0 && list.indexOf(value) === index),
+				source_creations: remaining
+			};
+		}
+		baseMeta.party = {
+			...partyRaw,
+			queue: (Array.isArray(partyRaw.queue) ? partyRaw.queue : []).filter((entry) => Number(entry?.creation_id) !== id),
+			pushed: (Array.isArray(partyRaw.pushed) ? partyRaw.pushed : []).filter((entry) => Number(entry?.creation_id) !== id)
+		};
+		return { meta: baseMeta, removedFromGroup };
+	}
+
+	router.delete("/api/party/groups/:id", async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+		try {
+			const groupId = Number(req.params.id);
+			if (!Number.isFinite(groupId) || groupId <= 0) return res.status(400).json({ error: "Invalid party id" });
+			const groupRow = await queries.selectCreatedImageById.get(groupId, user.id);
+			if (!groupRow) return res.status(404).json({ error: "Party not found" });
+			const meta = parseMeta(groupRow.meta) || {};
+			if (meta?.party?.mode !== true || meta?.group?.kind !== "group_creations") return res.status(400).json({ error: "Not a party group" });
+			const deleted = [];
+			for (const id of collectPartyDeletionIds(meta, groupId)) {
+				const result = await deleteOwnedPartyCreation(user, id);
+				if (!result.ok) return res.status(400).json({ error: result.error || "Failed to delete party photos" });
+				if (result.deleted) deleted.push(result.deleted);
+			}
+			return res.json({ ok: true, deleted_creation_ids: deleted });
+		} catch (error) {
+			console.error("[DELETE /api/party/groups/:id]", error);
+			return res.status(500).json({ error: "Failed to delete party" });
+		}
+	});
+
+	router.post("/api/create/images/:id/party-settings", async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+		try {
+			const groupId = Number(req.params.id);
+			if (!Number.isFinite(groupId) || groupId <= 0) return res.status(400).json({ error: "Invalid creation id" });
+			const settingsProvided = req.body?.party_settings != null;
+			const pushedProvided = req.body?.party_pushed != null;
+			const queueProvided = req.body?.party_queue != null;
+			if (!settingsProvided && !pushedProvided && !queueProvided) return res.status(400).json({ error: "Nothing to update" });
+			const settings = settingsProvided ? parsePartySettingsPayload(req.body.party_settings) : null;
+			if (settingsProvided && !settings) return res.status(400).json({ error: "Invalid party settings" });
+			const pushedParsed = pushedProvided ? parsePartyPushedPayload(req.body.party_pushed) : null;
+			if (pushedProvided && pushedParsed === null) return res.status(400).json({ error: "Invalid party pushed list" });
+			const queueParsed = queueProvided ? parsePartyQueuePayload(req.body.party_queue) : null;
+			if (queueProvided && queueParsed === null) return res.status(400).json({ error: "Invalid party queue list" });
+			const row = await queries.selectCreatedImageById.get(groupId, user.id);
+			if (!row) return res.status(404).json({ error: "Creation not found" });
+			const meta = parseMeta(row.meta) || {};
+			if (meta?.group?.kind !== "group_creations" || meta?.party?.mode !== true) return res.status(400).json({ error: "Creation is not a party group" });
+			const sourceIds = groupSourceIds(meta);
+			const nextSettings = settings || meta.party?.settings || { version: 1, partyName: "", prompt: "", autoReviewReady: false };
+			const nextPushed = (pushedProvided ? pushedParsed : (Array.isArray(meta.party?.pushed) ? meta.party.pushed : [])).filter((entry) => !sourceIds.size || sourceIds.has(Number(entry.creation_id)));
+			const pushedIds = new Set(nextPushed.map((entry) => Number(entry.creation_id)));
+			const nextQueue = (queueProvided ? queueParsed : (Array.isArray(meta.party?.queue) ? meta.party.queue : [])).filter((entry) => {
+				const id = Number(entry.creation_id);
+				if (pushedIds.has(id)) return false;
+				return !sourceIds.size || sourceIds.has(id);
+			});
+			const partyName = nextSettings.partyName || meta.party?.name || row.title || "Party Mode";
+			const nextMeta = {
+				...meta,
+				party: { ...(meta.party && typeof meta.party === "object" ? meta.party : {}), mode: true, name: partyName, settings: { ...nextSettings, partyName }, queue: nextQueue, pushed: nextPushed }
+			};
+			const metaResult = await queries.updateCreatedImageMeta.run(groupId, user.id, nextMeta);
+			if (!metaResult || metaResult.changes === 0) return res.status(500).json({ error: "Failed to update party settings" });
+			if (settingsProvided) await queries.updateCreatedImage.run(groupId, user.id, partyName, row.description ?? null, false);
+			return res.json({ ok: true, title: partyName, meta: nextMeta });
+		} catch (error) {
+			console.error("[POST /api/create/images/:id/party-settings]", error);
+			return res.status(500).json({ error: "Failed to save party settings" });
+		}
+	});
+
+	router.post("/api/create/images/:id/party-remove-source", async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+		try {
+			const groupId = Number(req.params.id);
+			const creationId = Number(req.body?.creation_id ?? req.body?.creationId);
+			if (!Number.isFinite(groupId) || groupId <= 0) return res.status(400).json({ error: "Invalid group id" });
+			if (!Number.isFinite(creationId) || creationId <= 0 || groupId === creationId) return res.status(400).json({ error: groupId === creationId ? "Cannot remove the party group creation" : "Invalid creation id" });
+			const groupRow = await queries.selectCreatedImageById.get(groupId, user.id);
+			if (!groupRow) return res.status(404).json({ error: "Party group not found" });
+			const meta = parseMeta(groupRow.meta) || {};
+			if (meta?.party?.mode !== true || meta?.group?.kind !== "group_creations") return res.status(400).json({ error: "Creation is not a party group" });
+			const sourceRow = await queries.selectCreatedImageById.get(creationId, user.id);
+			if (sourceRow) {
+				const challengeBlock = await challengeArchiveBlockForCreation(creationId, parseMeta(sourceRow.meta), "deleting");
+				if (challengeBlock) return res.status(400).json({ error: challengeBlock });
+			}
+			const removedState = removeCreationFromPartyGroupMeta(meta, creationId);
+			if (!removedState) return res.status(400).json({ error: "Invalid creation id" });
+			let nextMeta = removedState.meta;
+			const groupPayload = nextMeta.group && typeof nextMeta.group === "object" ? nextMeta.group : null;
+			const remaining = Array.isArray(groupPayload?.source_creations) ? groupPayload.source_creations.filter((item) => item && typeof item === "object") : [];
+			const coverSourceId = Number(groupPayload?.cover_source_id);
+			if (remaining.length > 0 && Number.isFinite(coverSourceId) && coverSourceId > 0) {
+				const coverState = buildGroupCoverUpdateState({ groupMeta: nextMeta, groupPayload, sourceCreations: remaining, coverSourceId, storage, fallbackGroupRow: groupRow });
+				if (coverState) {
+					const updateResult = await queries.updateCreatedImageGroupCover?.run(groupId, user.id, coverState.updatePayload);
+					if (!updateResult || updateResult.changes === 0) return res.status(500).json({ error: "Failed to update party group cover" });
+					nextMeta = coverState.meta;
+				} else {
+					const metaResult = await queries.updateCreatedImageMeta.run(groupId, user.id, nextMeta);
+					if (!metaResult || metaResult.changes === 0) return res.status(500).json({ error: "Failed to update party group" });
+				}
+			} else {
+				const metaResult = await queries.updateCreatedImageMeta.run(groupId, user.id, nextMeta);
+				if (!metaResult || metaResult.changes === 0) return res.status(500).json({ error: "Failed to update party group" });
+			}
+			if (sourceRow) {
+				const markResult = await queries.markCreatedImageUnavailable?.run(creationId, user.id);
+				if (!markResult || markResult.changes === 0) return res.status(500).json({ error: "Failed to discard source creation" });
+				if (queries.deleteFeedItemByCreatedImageId?.run) await queries.deleteFeedItemByCreatedImageId.run(creationId);
+			}
+			const updatedGroup = await queries.selectCreatedImageById.get(groupId, user.id);
+			return res.json({
+				ok: true,
+				removed_from_group: removedState.removedFromGroup,
+				title: typeof updatedGroup?.title === "string" ? updatedGroup.title : groupRow.title,
+				meta: parseMeta(updatedGroup?.meta) || nextMeta
+			});
+		} catch (error) {
+			console.error("[POST /api/create/images/:id/party-remove-source]", error);
+			return res.status(500).json({ error: "Failed to remove source from party group" });
+		}
+	});
 }

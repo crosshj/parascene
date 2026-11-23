@@ -439,7 +439,61 @@ router.get("/api/profile", async (req, res) => {
 			appear_offline: appearOffline
 		});
 	});
-router.put("/api/profile/vynly-token", async (req, res) => {
+	function normalizeCommentStickerUrl(raw) {
+		const value = typeof raw === "string" ? raw.trim() : "";
+		if (!value || value.length > 1024 || value.includes("..")) return null;
+		if (value.startsWith("/api/images/generic/")) return value;
+		try {
+			const parsed = new URL(value);
+			if (parsed.hostname.toLowerCase() !== "cdn.parascene.com") return null;
+			if (!parsed.pathname.startsWith("/api/images/generic/")) return null;
+			return `${parsed.origin}${parsed.pathname}${parsed.search}`;
+		} catch {
+			return null;
+		}
+	}
+
+	function normalizeCommentStickerList(rawList) {
+		const out = [];
+		const seen = new Set();
+		for (const raw of Array.isArray(rawList) ? rawList : []) {
+			const url = normalizeCommentStickerUrl(raw);
+			if (!url || seen.has(url)) continue;
+			seen.add(url);
+			out.push(url);
+			if (out.length >= 120) break;
+		}
+		return out;
+	}
+
+	router.get("/api/profile/comment-stickers", async (req, res) => {
+		if (!req.auth?.userId) return res.status(401).json({ error: "Unauthorized" });
+		const user = await queries.selectUserById.get(req.auth.userId);
+		if (!user) return res.status(404).json({ error: "User not found" });
+		return res.json({ stickers: normalizeCommentStickerList(user?.meta?.comment_stickers) });
+	});
+
+	router.put("/api/profile/comment-stickers", async (req, res) => {
+		if (!req.auth?.userId) return res.status(401).json({ error: "Unauthorized" });
+		if (!Array.isArray(req.body?.stickers)) {
+			return res.status(400).json({ error: "Invalid request", message: "stickers must be an array." });
+		}
+		const stickers = normalizeCommentStickerList(req.body.stickers);
+		try {
+			const current = await queries.selectUserById.get(req.auth.userId);
+			if (!current) return res.status(404).json({ error: "User not found" });
+			const meta = current.meta && typeof current.meta === "object" ? { ...current.meta } : {};
+			meta.comment_stickers = stickers;
+			const { error } = await client.from("prsn_users").update({ meta }).eq("id", req.auth.userId);
+			if (error) throw error;
+			return res.json({ ok: true, stickers });
+		} catch (error) {
+			console.error("[PUT /api/profile/comment-stickers]", error);
+			return res.status(500).json({ error: "Failed to update", message: error?.message || "Could not update stickers." });
+		}
+	});
+
+	router.put("/api/profile/vynly-token", async (req, res) => {
 		if (!req.auth?.userId) {
 			return res.status(401).json({ error: "Unauthorized" });
 		}

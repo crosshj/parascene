@@ -1,10 +1,8 @@
 /**
- * Landing-funnel read path. Recording stays on the legacy marketing page.
- * The daily flush still copies any Redis keys into visit-pulse details so a
- * later write does not drop them.
+ * Landing-funnel counters. The daily flush copies these Redis keys into visit-pulse details.
  */
 
-import { getPulseRedis } from "./visitPulse.js";
+import { getPulseRedis, PULSE_DAY_TTL_SEC, usEastDayKey } from "./visitPulse.js";
 
 export const LANDING_FUNNEL_EVENTS = ["view", "video_play", "video_complete", "cta_click"];
 
@@ -14,6 +12,41 @@ export function landingFunnelTotalsKey(dayKey, variant) {
 
 export function landingFunnelUniqueSetKey(dayKey, variant, eventType) {
 	return `pulse:landing:uniq:${dayKey}:${variant}:${eventType}`;
+}
+
+const CLIENT_LANDING_EVENTS = new Set(["video_play", "video_complete", "cta_click"]);
+
+export function isValidClientLandingEvent(eventType) {
+	return CLIENT_LANDING_EVENTS.has(eventType);
+}
+
+export function resolveLandingVisitorKey(req) {
+	const userId = Number(req?.auth?.userId);
+	if (Number.isFinite(userId) && userId > 0) return `u:${userId}`;
+	const cid = typeof req?.clientId === "string"
+		? req.clientId.trim()
+		: typeof req?.cookies?.prsn_cid === "string"
+			? req.cookies.prsn_cid.trim()
+			: "";
+	if (cid) return `v:${cid}`;
+	return null;
+}
+
+export async function recordLandingFunnelToRedis({ visitorKey, eventType, variant = "video", nowMs = Date.now() } = {}, r = getPulseRedis()) {
+	const event = typeof eventType === "string" ? eventType.trim() : "";
+	if (!LANDING_FUNNEL_EVENTS.includes(event)) return;
+	const name = typeof variant === "string" && variant.trim() ? variant.trim().slice(0, 32) : "video";
+	const dayKey = usEastDayKey(new Date(nowMs));
+	const totalsKey = landingFunnelTotalsKey(dayKey, name);
+	const pipe = r.pipeline();
+	pipe.hincrby(totalsKey, event, 1);
+	pipe.expire(totalsKey, PULSE_DAY_TTL_SEC);
+	if (visitorKey) {
+		const uniqKey = landingFunnelUniqueSetKey(dayKey, name, event);
+		pipe.sadd(uniqKey, visitorKey);
+		pipe.expire(uniqKey, PULSE_DAY_TTL_SEC);
+	}
+	await pipe.exec();
 }
 
 function variantSnapshot(totals, uniques) {

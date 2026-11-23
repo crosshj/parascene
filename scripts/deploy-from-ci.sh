@@ -27,7 +27,7 @@ deploy_target() {
 			;;
 		prod)
 			# Same VPS, prod container. WWW is canonical; apex is a redirect alias.
-			# Share is live here; API remains on Vercel until its later cutover.
+			# Prod nginx also answers api.parascene.com. DNS still decides when that name arrives here.
 			APP_HOME_NAME="parascene-prod"
 			CONTAINER_NAME="parascene-prod"
 			HOST_PORT="3001"
@@ -66,9 +66,9 @@ render_nginx_config() {
 		__SITE_AND_CDN__)
 			server_names="${SITE_HOST} ${CDN_HOSTNAME}"
 			;;
-		__SITE_CDN_SHARE__)
-			server_names="${SITE_HOST} ${CDN_HOSTNAME} sh.parascene.com"
-			;;
+	__SITE_CDN_SHARE__)
+		server_names="${SITE_HOST} ${API_HOSTNAME} ${CDN_HOSTNAME} sh.parascene.com"
+		;;
 		__SITE_API_CDN__|"")
 			server_names="${SITE_HOST} ${API_HOSTNAME} ${CDN_HOSTNAME}"
 			;;
@@ -128,7 +128,7 @@ provision_tls_certificate() {
 	run_as_root sh -c 'printf "%s\n" "#!/bin/sh" "systemctl reload nginx" > /etc/letsencrypt/renewal-hooks/deploy/10-reload-nginx'
 	run_as_root chmod 755 /etc/letsencrypt/renewal-hooks/deploy/10-reload-nginx
 	run_as_root systemctl enable --now certbot.timer
-	for host in parascene.com beta.parascene.com beta-api.parascene.com beta-cdn.parascene.com beta-sh.parascene.com www.parascene.com cdn.parascene.com sh.parascene.com; do
+	for host in parascene.com beta.parascene.com beta-api.parascene.com beta-cdn.parascene.com beta-sh.parascene.com www.parascene.com api.parascene.com cdn.parascene.com sh.parascene.com; do
 		if ! run_as_root openssl x509 -in /etc/letsencrypt/live/parascene.com/fullchain.pem -noout -checkhost "$host" >/dev/null 2>&1; then
 			echo "The managed TLS certificate does not cover $host" >&2
 			return 1
@@ -308,7 +308,8 @@ if [[ "${1:-}" == "remote" ]]; then
 	install_nginx_config "$rendered_nginx"
 
 	# Verify the public nginx-to-Docker path. Keep retrying while the container starts.
-	# Prod serves the site, CDN and canonical share host; API remains on Vercel.
+	# Prod serves the site, CDN, share host, and api.parascene.com once DNS points here.
+	# The health check stays on hosts that already resolve to this box.
 	deploy_healthy=0
 	for attempt in {1..30}; do
 		if [[ "$DEPLOY_ENV" == "prod" ]]; then
@@ -358,6 +359,12 @@ fi
 : "${SUPABASE_ANON_KEY:?SUPABASE_ANON_KEY is required for realtime authentication}"
 : "${SUPABASE_SERVICE_ROLE_KEY:?SUPABASE_SERVICE_ROLE_KEY is required}"
 : "${SESSION_SECRET:?SESSION_SECRET is required}"
+: "${STRIPE_SECRET_KEY:?STRIPE_SECRET_KEY is required}"
+: "${STRIPE_WEBHOOK_SECRET:?STRIPE_WEBHOOK_SECRET is required}"
+: "${STRIPE_PRICE_ID_FOUNDER:?STRIPE_PRICE_ID_FOUNDER is required}"
+: "${STRIPE_PRICE_ID_TOPUP_100:?STRIPE_PRICE_ID_TOPUP_100 is required}"
+: "${STRIPE_PRICE_ID_TOPUP_300:?STRIPE_PRICE_ID_TOPUP_300 is required}"
+: "${STRIPE_PRICE_ID_TOPUP_700:?STRIPE_PRICE_ID_TOPUP_700 is required}"
 : "${UPSTASH_QSTASH_TOKEN:?UPSTASH_QSTASH_TOKEN is required for creation jobs}"
 : "${UPSTASH_QSTASH_URL:?UPSTASH_QSTASH_URL is required for creation jobs}"
 : "${CLOUDFLARE_DNS_API_TOKEN:?CLOUDFLARE_DNS_API_TOKEN is required for TLS certificate automation}"
@@ -426,6 +433,12 @@ printf '%s\n' \
 	"UPSTASH_QSTASH_URL=${UPSTASH_QSTASH_URL:-}" \
 	"UPSTASH_REDIS_REST_TOKEN=${UPSTASH_REDIS_REST_TOKEN:-}" \
 	"UPSTASH_REDIS_REST_URL=${UPSTASH_REDIS_REST_URL:-}" \
+	"STRIPE_SECRET_KEY=$STRIPE_SECRET_KEY" \
+	"STRIPE_WEBHOOK_SECRET=$STRIPE_WEBHOOK_SECRET" \
+	"STRIPE_PRICE_ID_FOUNDER=$STRIPE_PRICE_ID_FOUNDER" \
+	"STRIPE_PRICE_ID_TOPUP_100=$STRIPE_PRICE_ID_TOPUP_100" \
+	"STRIPE_PRICE_ID_TOPUP_300=$STRIPE_PRICE_ID_TOPUP_300" \
+	"STRIPE_PRICE_ID_TOPUP_700=$STRIPE_PRICE_ID_TOPUP_700" \
 	"APP_ORIGIN=$APP_ORIGIN" \
 	"ADMIN_TODO_PATH=/app/server/data/TODO.json" \
 	"ADMIN_TODO_READ_ONLY=true" \

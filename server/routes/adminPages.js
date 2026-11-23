@@ -11,7 +11,8 @@ const ADMIN_PAGES = {
 	"/jobs": { file: "jobs/index.html", label: "Jobs" },
 	"/emails": { file: "emails/index.html", label: "Emails" },
 	"/algo": { file: "algo/index.html", label: "Algo" },
-	"/connect": { file: "connect/index.html", label: "Connect" }
+	"/connect": { file: "connect/index.html", label: "Connect" },
+	"/unhandled": { file: "unhandled/index.html", label: "Unhandled" }
 };
 
 function adminHeader(currentRoute) {

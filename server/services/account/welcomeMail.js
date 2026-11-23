@@ -107,7 +107,7 @@ async function deliverOne(client, { user, profile, campaign, template, column, s
 	if (saved.error) throw saved.error;
 }
 
-export async function runWelcomeMail({ client, now = new Date(), force = false, deliver = sendTemplatedEmail } = {}) {
+export async function runWelcomeMail({ client, now = new Date(), force = false, deliver = sendTemplatedEmail, skipUserIds = [] } = {}) {
 	const settingsResult = await client.from("prsn_policy_knobs").select("key,value").in("key", SETTINGS_KEYS);
 	if (settingsResult.error) throw settingsResult.error;
 	const settings = welcomeMailSettings(settingsResult.data);
@@ -122,8 +122,9 @@ export async function runWelcomeMail({ client, now = new Date(), force = false, 
 		eachPage(() => client.from("prsn_email_user_campaign_state").select("user_id,welcome_email_sent_at,first_creation_nudge_sent_at").order("user_id", { ascending: true })),
 		eachPage(() => client.from("prsn_created_images").select("user_id,title,filename,meta").eq("published", true).is("unavailable_at", null).order("id", { ascending: true }))
 	]);
-	const welcomeIds = welcomeRecipientIds(users, states.filter((row) => row.welcome_email_sent_at).map((row) => row.user_id));
-	const nudgeIds = nudgeRecipientIds(states, published, nudgeCutoff);
+	const skipped = new Set([...skipUserIds].map((id) => String(id)));
+	const welcomeIds = welcomeRecipientIds(users, states.filter((row) => row.welcome_email_sent_at).map((row) => row.user_id)).filter((id) => !skipped.has(String(id)));
+	const nudgeIds = nudgeRecipientIds(states, published, nudgeCutoff).filter((id) => !skipped.has(String(id)));
 	const ids = [...new Set([...welcomeIds, ...nudgeIds])];
 	if (!settings.dryRun && ids.length && (!process.env.RESEND_API_KEY || !process.env.RESEND_SYSTEM_EMAIL)) {
 		const error = new Error("Email delivery is not configured (missing Resend environment variables).");

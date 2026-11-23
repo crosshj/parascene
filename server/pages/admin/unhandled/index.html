@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Admin · Unhandled</title>
+	<link rel="stylesheet" href="/admin/shared/admin.css">
+</head>
+<body class="admin-page">
+	{{ADMIN_HEADER}}
+	<main class="admin-page__content">
+		<p class="admin-card__detail">API and OAuth requests that reached this app and matched no route. A new path shows up within a few seconds. Host is the hostname the caller used. Instance is the process that recorded it.</p>
+		<div data-unhandled-table data-admin-table></div>
+	</main>
+	<dialog class="admin-dialog" data-unhandled-dialog aria-labelledby="unhandled-dialog-title">
+		<header class="admin-dialog__header"><h2 id="unhandled-dialog-title" data-unhandled-dialog-title>Unhandled request</h2><button class="admin-button" type="button" data-unhandled-dialog-close>Close</button></header>
+		<div class="admin-dialog__body" data-unhandled-dialog-body></div>
+	</dialog>
+	<script type="module" src="/admin/unhandled/page.js"></script>
+</body>
+</html>
