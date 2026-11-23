@@ -1,5 +1,6 @@
 import express from 'express';
 import { requireAuth } from './middleware/auth.js';
+import { collapseNotificationsByCreation, notificationForCollapse } from '../db/notificationCollapse.js';
 import { isDmChatMentionNotification } from '../db/notifications.js';
 
 function utcDayStart(value = new Date()) {
@@ -16,21 +17,9 @@ function integer(value, fallback, min, max) {
 	return Number.isInteger(parsed) ? Math.min(max, Math.max(min, parsed)) : fallback;
 }
 
-function publicNotification(row) {
-	let target = row?.target;
-	if (typeof target === 'string') {
-		try { target = JSON.parse(target); } catch { target = null; }
-	}
-	return {
-		id: row.id,
-		title: row.title,
-		message: row.message,
-		link: row.link,
-		type: row.type ?? null,
-		created_at: row.created_at,
-		acknowledged_at: row.acknowledged_at,
-		...(target?.creation_id != null ? { creation_id: Number(target.creation_id) } : {})
-	};
+export function presentNotificationList(rows) {
+	const visible = (rows || []).filter((row) => !isDmChatMentionNotification(row));
+	return collapseNotificationsByCreation(visible.map(notificationForCollapse));
 }
 
 function serverError(res, next, error) {
@@ -182,8 +171,7 @@ export function createAppDataRoutes({ users, credits, notifications, servers }) 
 			if (!user) return res.status(404).json({ error: 'User not found' });
 			const limit = integer(req.query.limit, 25, 1, 200);
 			const rows = notifications ? await notifications.list(user.id, user.role, { limit }) : [];
-			const visible = rows.filter((row) => !isDmChatMentionNotification(row));
-			return res.json({ notifications: visible.map(publicNotification), viewer_id: Number(req.auth.userId) });
+			return res.json({ notifications: presentNotificationList(rows), viewer_id: Number(req.auth.userId) });
 		} catch (error) { return next(error); }
 	});
 	router.post('/api/notifications/acknowledge', noStore, requireAuth, async (req, res, next) => {
