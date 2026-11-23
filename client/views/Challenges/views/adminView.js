@@ -44,7 +44,7 @@ function isChallengeReadyForResultsConfig(latest, nowMs = Date.now()) {
 }
 
 /**
- * Draft vs Public segmented toggle (create + edit while pre_submit).
+ * Draft vs Public segmented toggle. Draft stays off Home and the feed.
  * @param {object} [cfg]
  * @param {{ defaultListed?: boolean }} [opts]
  */
@@ -840,7 +840,7 @@ export function renderChallengeOrganizerEditSectionHtml(section, latest, configM
 			activeTab: opts.activeTab,
 			submitLabel: 'Save',
 			showSoftDelete: phase === 'pre_submit',
-			showListingToggle: phase === 'pre_submit',
+			showListingToggle: phase !== 'deleted' && phase !== 'purged' && phase !== 'empty',
 			templatePickerHtml: renderOrganizeTemplatePickerHtml(track, {
 				locked: trackLocked,
 				allowedTracks,

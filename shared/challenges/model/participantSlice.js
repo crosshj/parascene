@@ -4,7 +4,7 @@ import { extractChallengeEvents } from './extractEvents.js';
 import { CHALLENGE_SCORE_REACTION_KEYS } from '../constants.js';
 import { weightedScoreFromReactions } from '../constants.js';
 import { summarizeLatestChallengeConfigs } from './organizerSummaries.js';
-import { mergeFullChallengeConfigForChallenge } from '../challengeAdmin.js';
+import { isChallengeDraft, mergeFullChallengeConfigForChallenge } from '../challengeAdmin.js';
 import { challengeTrackListRank, pickChallengeTrack } from './tracks.js';
 
 /** Phases where the main challenge pane shows submissions / voting UI. */
@@ -68,6 +68,7 @@ export function listActiveParticipantConfigs(configEntries, nowMs) {
 		const merged = mergeFullChallengeConfigForChallenge(configEntries, cid);
 		const phase = deriveChallengePhase(merged, nowMs);
 		if (!ACTIVE_PARTICIPANT_PHASES.has(phase)) continue;
+		if (isChallengeDraft(merged)) continue;
 		const endMs =
 			parseIso(merged.voting_end_at) ??
 			parseIso(merged.submission_end_at) ??
@@ -107,20 +108,32 @@ export function pickParticipantFocusConfig(configEntries, nowMs) {
 		};
 	}
 
-	const { latestConfig: rawLatest, latestConfigMsg } = pickLatestConfig(configEntries);
-	if (!rawLatest) {
-		return { latestConfig: null, latestConfigMsg: null, activeConfigs: [] };
+	const summaries = summarizeLatestChallengeConfigs(configEntries);
+	for (const summary of summaries) {
+		const cid = String(summary?.challenge_id || '').trim();
+		if (!cid) continue;
+		const merged = mergeFullChallengeConfigForChallenge(configEntries, cid);
+		if (!isPublicParticipantChallenge(merged, nowMs)) continue;
+		return {
+			latestConfig: merged,
+			latestConfigMsg: pickLatestConfigMsgForChallenge(configEntries, cid),
+			activeConfigs: []
+		};
 	}
-	const cid =
-		rawLatest.challenge_id != null ? String(rawLatest.challenge_id).trim() : '';
-	if (!cid) {
-		return { latestConfig: rawLatest, latestConfigMsg, activeConfigs: [] };
-	}
-	return {
-		latestConfig: mergeFullChallengeConfigForChallenge(configEntries, cid),
-		latestConfigMsg: pickLatestConfigMsgForChallenge(configEntries, cid),
-		activeConfigs: []
-	};
+	return { latestConfig: null, latestConfigMsg: null, activeConfigs: [] };
+}
+
+/**
+ * A draft stays off the public challenge page until it is marked public.
+ * The schedule does not publish it.
+ * @param {object | null | undefined} cfg
+ * @param {number} nowMs
+ */
+function isPublicParticipantChallenge(cfg, nowMs) {
+	if (!cfg || typeof cfg !== 'object') return false;
+	const phase = deriveChallengePhase(cfg, nowMs);
+	if (phase === 'deleted' || phase === 'purged' || phase === 'empty') return false;
+	return !isChallengeDraft(cfg);
 }
 
 /**

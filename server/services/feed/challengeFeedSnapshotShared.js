@@ -15,6 +15,7 @@ import {
 	pickChallengeConfigTimestamp,
 	pickChallengeHeroImageUrl,
 	sanitizeChallengeHeroImageUrl,
+	isChallengeDraft,
 	isChallengeListedForUpcoming
 } from "../../shared.js";
 import { summarizeLatestChallengeConfigs } from "../../shared.js";
@@ -209,8 +210,8 @@ function mergedChallengePayload(configEntries, challengeId) {
 }
 
 /**
- * Feed focus: listed upcoming (pre_submit) first, else active participant challenge,
- * else latest non-draft public challenge. Unlisted drafts never become feed focus.
+ * Feed focus: listed upcoming (pre_submit) first, else a public active challenge,
+ * else the latest public challenge. Drafts never become feed focus, even after they start.
  *
  * @param {{ msg: object, payload: object }[]} configEntries
  * @param {number} nowMs
@@ -259,7 +260,7 @@ export function pickFeedFocusChallengeSummary(configEntries, nowMs) {
 	const publicFallback = summaries.filter((row) => {
 		const phase = deriveChallengePhase(row.effectivePayload, nowMs);
 		if (phase === 'deleted' || phase === 'purged') return false;
-		if (phase === 'pre_submit') return isChallengeListedForUpcoming(row.effectivePayload);
+		if (isChallengeDraft(row.effectivePayload)) return false;
 		return true;
 	});
 	return publicFallback.sort((a, b) => b.sortKey - a.sortKey)[0] || null;
@@ -390,7 +391,8 @@ export function pickChallengeFeedPreviousSummary(configEntries, nowMs, focusChal
 			const cid = String(row?.challenge_id || '').trim();
 			if (!cid || cid === excludeId) return false;
 			const phase = deriveChallengePhase(row.effectivePayload, nowMs);
-			return phase !== 'pre_submit';
+			if (phase === 'pre_submit' || phase === 'deleted' || phase === 'purged') return false;
+			return !isChallengeDraft(row.effectivePayload);
 		})
 		.sort((a, b) => {
 			const aEnd = parseChallengeVotingEndMs(a.effectivePayload);

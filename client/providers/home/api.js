@@ -9,6 +9,7 @@ import {
 	challengePhaseDisplayLabel,
 	challengePhaseStatusLabel,
 	deriveChallengePhase,
+	isChallengeDraft,
 	mergeFullChallengeConfigForChallenge,
 	pickChallengeConfigTimestamp,
 	pickChallengeHeroImageUrl,
@@ -195,6 +196,7 @@ function challengeCards(messages, viewerId) {
 		};
 		const now = model.nowMs || Date.now();
 		const phase = deriveChallengePhase(cfg, now);
+		if (isChallengeDraft(cfg)) continue;
 		if (phase === 'pre_submit' || phase === 'deleted' || phase === 'purged' || phase === 'empty') continue;
 		const end = Date.parse(String(pickChallengeConfigTimestamp(cfg, 'voting_end_at') || ''));
 		const track = pickChallengeTrack(cfg);

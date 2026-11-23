@@ -5,7 +5,10 @@ import { buildChallengesChannelModel } from '../client/shared/challenges/model/b
 import { renderChallengesPaneHtml } from '../client/views/Challenges/mountPane.js';
 import { createChallengeQueries } from '../server/db/challenges.js';
 import { viewerCanManageChallengePayouts, viewerCanOperateChallengePayout } from '../shared/index.js';
-import { resolveDisplayedOrganizeTrack } from '../client/views/Challenges/views/organizeBoardView.js';
+import { renderOrganizeBoardHtml, resolveDisplayedOrganizeTrack } from '../client/views/Challenges/views/organizeBoardView.js';
+import { renderChallengeOrganizerEditSectionHtml } from '../client/views/Challenges/views/adminView.js';
+import { pickFeedFocusChallengeSummary } from '../server/services/feed/challengeFeedSnapshotShared.js';
+import { occupiedRangesForTrack } from '../shared/challenges/model/tracks.js';
 import { challengeDetailNeighbors, renderPastChallengesSection } from '../client/views/Challenges/views/emptyParticipantView.js';
 import { creationCardMarkup } from '../client/shared/creationGrid.js';
 import { challengeEntryLightboxMedia, challengeEntryPreviewPlan, omitWithdrawnChallengeSubmissions, rememberChallengeDetailUi } from '../client/views/Challenges/views/entryBoardView.js';
@@ -346,7 +349,7 @@ test('challenge detail older and newer follow end time, including overlaps', () 
 	assert.equal(oldest.previous, null);
 	assert.equal(oldest.next.challengeId, 'after-nested');
 	const middleOverlap = challengeDetailNeighbors(overlapModel.raw.configs, 'after-nested', overlapModel.nowMs);
-	assert.equal(middleOverlap.previous.challengeId, 'nested');
+	assert.equal(middleOverlap.previous, null);
 	assert.equal(middleOverlap.next.challengeId, 'long');
 	const newest = challengeDetailNeighbors(overlapModel.raw.configs, 'long', overlapModel.nowMs);
 	assert.equal(newest.previous.challengeId, 'after-nested');
@@ -402,6 +405,44 @@ test('challenge entry preview opens detail for the viewer and a lightbox for eve
 	);
 	assert.doesNotMatch(clear, /variant=blur/);
 	assert.doesNotMatch(clear, /feed-card-image--challenge-pending/);
+});
+
+test('a draft stays off the public challenge page, home, and feed after its start time', () => {
+	const nowMs = Date.parse('2026-11-23T22:00:00.000Z');
+	const messages = [
+		{ id: 1, created_at: '2026-11-01T00:00:00Z', body: JSON.stringify({ kind: 'challenge_config', challenge_id: 'live', title: 'Live round', submission_start_at: '2026-11-20T00:00:00Z', voting_end_at: '2026-11-30T00:00:00Z' }) },
+		{ id: 2, created_at: '2026-11-23T00:00:00Z', body: JSON.stringify({ kind: 'challenge_config', challenge_id: 'quiet', title: 'Quiet round', listed: false, listed_at: null, submission_start_at: '2026-11-23T00:00:00Z', voting_end_at: '2026-11-29T00:00:00Z' }) }
+	];
+	const model = buildChallengesChannelModel(messages, { viewerId: 10, nowMs });
+	const html = renderChallengesPaneHtml(model, { viewerId: 10 });
+	assert.match(html, /Live round/);
+	assert.doesNotMatch(html, /Quiet round/);
+	const entries = messages.map((row) => ({ msg: row, payload: JSON.parse(row.body) }));
+	assert.equal(pickFeedFocusChallengeSummary(entries, nowMs)?.challenge_id, 'live');
+	const board = renderOrganizeBoardHtml({
+		rows: [
+			{ challenge_id: 'live', title: 'Live round' },
+			{ challenge_id: 'quiet', title: 'Quiet round' }
+		],
+		configEntries: entries,
+		nowMs
+	});
+	const draftAt = board.indexOf('challenges-organize-draft');
+	assert.ok(draftAt > 0);
+	assert.match(board.slice(0, draftAt), /Live round/);
+	assert.doesNotMatch(board.slice(0, draftAt), /Quiet round/);
+	assert.match(board.slice(draftAt), /Quiet round/);
+	const form = renderChallengeOrganizerEditSectionHtml('all', JSON.parse(messages[1].body), 2);
+	assert.match(form, /name="challenge_list_as_upcoming" value="0"[^>]*checked/);
+	assert.deepEqual(detailOrganizerHeaderActions('pre_submit').map((action) => action.label), ['Manage', 'Results']);
+});
+
+test('a draft does not reserve days on its track', () => {
+	const rows = [
+		{ challenge_id: 'live', merged: { track: 'monthly', title: 'Live', listed: true, listed_at: '2026-11-01T00:00:00.000Z', submission_start_at: '2026-11-01T05:00:00.000Z', voting_end_at: '2026-11-07T05:00:00.000Z' } },
+		{ challenge_id: 'quiet', merged: { track: 'monthly', title: 'Quiet', listed: false, listed_at: null, submission_start_at: '2026-11-01T05:00:00.000Z', voting_end_at: '2026-11-07T05:00:00.000Z' } }
+	];
+	assert.deepEqual(occupiedRangesForTrack(rows, 'monthly').map((row) => row.challenge_id), ['live']);
 });
 
 test('detail header actions follow active and past challenge phases', () => {

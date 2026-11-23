@@ -1,4 +1,9 @@
-import { pickChallengeConfigTimestamp, isChallengeConfigSoftDeleted, isChallengeConfigPurged } from '../challengeAdmin.js';
+import {
+	pickChallengeConfigTimestamp,
+	isChallengeConfigSoftDeleted,
+	isChallengeConfigPurged,
+	isChallengeDraft
+} from '../challengeAdmin.js';
 import {
 	addDaysYmd,
 	compareYmd,
@@ -269,6 +274,7 @@ export function challengeConfigDayRange(cfg) {
 
 /**
  * Occupied day ranges for one track (exclude a challenge id when editing).
+ * Drafts do not hold days. Only a public contest blocks another public contest.
  * @param {{ challenge_id: string, latest?: object, merged?: object }[]} summaries
  * @param {ChallengeTrack} track
  * @param {string} [excludeChallengeId]
@@ -282,7 +288,7 @@ export function occupiedRangesForTrack(summaries, track, excludeChallengeId = ''
 		const cid = String(row?.challenge_id || '').trim();
 		if (!cid || cid === exclude) continue;
 		const cfg = row.merged || row.latest || {};
-		if (isChallengeConfigPurged(cfg) || isChallengeConfigSoftDeleted(cfg)) continue;
+		if (isChallengeConfigPurged(cfg) || isChallengeConfigSoftDeleted(cfg) || isChallengeDraft(cfg)) continue;
 		if (pickChallengeTrack(cfg) !== want) continue;
 		const range = challengeConfigDayRange(cfg);
 		if (!range) continue;
