@@ -1,3 +1,5 @@
+import { creationAckLink } from "./notificationCollapse.js";
+
 const NOTIFICATIONS_TABLE = "prsn_notifications";
 const NOTIFICATION_FIELDS = "id, user_id, role, title, message, link, created_at, acknowledged_at, actor_user_id, type, target, meta";
 
@@ -69,11 +71,19 @@ export function createNotificationsStore(client) {
 		async acknowledge(userId, role, id) {
 			const notificationId = Number(id);
 			if (!Number.isInteger(notificationId) || notificationId <= 0) return 0;
-			const { data, error } = await scoped(
-				client.from(NOTIFICATIONS_TABLE).update({ acknowledged_at: new Date().toISOString() }).eq("id", notificationId),
+			const { data: row, error: readError } = await scoped(
+				client.from(NOTIFICATIONS_TABLE).select(NOTIFICATION_FIELDS).eq("id", notificationId),
 				userId,
 				role
-			).select("id");
+			).maybeSingle();
+			if (readError) throw readError;
+			if (!row) return 0;
+			const link = creationAckLink(row);
+			const update = client.from(NOTIFICATIONS_TABLE).update({ acknowledged_at: new Date().toISOString() });
+			const filtered = link
+				? update.is("acknowledged_at", null).eq("link", link)
+				: update.eq("id", notificationId);
+			const { data, error } = await scoped(filtered, userId, role).select("id");
 			if (error) throw error;
 			return data?.length || 0;
 		},

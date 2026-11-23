@@ -17,7 +17,15 @@ async function withApp(run) {
 			claimDaily: async () => ({ success: true, balance: 140, lastClaimDate: new Date().toISOString(), message: 'Daily credits claimed successfully' })
 		},
 		notifications: {
-			list: async () => [{ id: 9, title: 'Hello', message: 'World', link: '/creations/31885', type: 'comment', target: { creation_id: 31885 }, created_at: '2025-01-02T00:00:00.000Z', acknowledged_at: null }],
+			list: async () => {
+				const now = Date.now();
+				return [
+					{ id: 9, title: 'Hello', message: 'World', link: '/creations/31885', type: 'comment', target: { creation_id: 31885 }, meta: { creation_title: 'Harbor' }, created_at: new Date(now).toISOString(), acknowledged_at: null },
+					{ id: 8, title: 'Hello again', message: 'More', link: '/creations/31885', type: 'comment_thread', target: { creation_id: 31885 }, meta: { creation_title: 'Harbor' }, created_at: new Date(now - 120000).toISOString(), acknowledged_at: null },
+					{ id: 7, title: 'Credits', message: 'Added', link: '/pricing', type: 'credits', created_at: new Date(now - 60000).toISOString(), acknowledged_at: null },
+					{ id: 6, title: 'DM', message: 'hi', link: '/chat/dm/1', type: 'chat_mention', meta: { thread_type: 'dm' }, created_at: new Date(now).toISOString(), acknowledged_at: null },
+				];
+			},
 			acknowledge: async () => 1,
 			acknowledgeAll: async () => 1
 		}
@@ -66,7 +74,13 @@ test('notification APIs list and acknowledge current-user notifications', async 
 		const headers = { Authorization: 'Bearer test', 'Content-Type': 'application/json' };
 		const list = await fetch(`${origin}/api/notifications`, { headers }).then((res) => res.json());
 		const acknowledged = await fetch(`${origin}/api/notifications/acknowledge`, { method: 'POST', headers, body: '{"id":9}' }).then((res) => res.json());
+		assert.equal(list.notifications.length, 2);
+		assert.equal(list.notifications[0].type, 'creation_activity');
+		assert.equal(list.notifications[0].title, 'Activity on "Harbor"');
+		assert.equal(list.notifications[0].message, '2 comments');
 		assert.equal(list.notifications[0].creation_id, 31885);
+		assert.equal(list.notifications[0].count, 2);
+		assert.equal(list.notifications[1].type, 'credits');
 		assert.equal(acknowledged.updated, 1);
 	});
 });
