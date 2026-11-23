@@ -1683,6 +1683,54 @@ function buildGroupEmbedPosterUrl(source, creationIdNum, shareOpts) {
 	return urlWithDelegation;
 }
 
+/**
+ * Pixel size stored on a group source or video slide. Null when either side is missing.
+ * @param {object | null | undefined} source
+ * @returns {{ width: number, height: number } | null}
+ */
+function groupSourcePixelSize(source) {
+	const width = Number(source?.width);
+	const height = Number(source?.height);
+	if (!(width > 0) || !(height > 0)) return null;
+	return { width: Math.round(width), height: Math.round(height) };
+}
+
+/**
+ * Chat bubbles cap group embeds at 260px. Comments cap them at 250px.
+ * @param {Element | null | undefined} embed
+ * @returns {number}
+ */
+function chatGroupEmbedCapPx(embed) {
+	if (!(embed instanceof HTMLElement)) return 0;
+	if (embed.closest('.connect-chat-msg-bubble')) return 260;
+	if (embed.closest('.comment-text, .comments-channel-plain-msg')) return 250;
+	return 0;
+}
+
+/**
+ * Size a group embed to the capped height times the slide aspect.
+ * An inline length avoids the cyclic percentage that collapses the card to the nav button.
+ * @param {Element | null | undefined} embed
+ * @param {number} width
+ * @param {number} height
+ */
+function applyChatGroupEmbedAspect(embed, width, height) {
+	if (!(embed instanceof HTMLElement)) return;
+	const cap = chatGroupEmbedCapPx(embed);
+	const size = groupSourcePixelSize({ width, height });
+	if (size) {
+		embed.style.setProperty('--chat-group-w', String(size.width));
+		embed.style.setProperty('--chat-group-h', String(size.height));
+	}
+	if (!cap) return;
+	const w = size?.width || Number(embed.style.getPropertyValue('--chat-group-w')) || 1;
+	const h = size?.height || Number(embed.style.getPropertyValue('--chat-group-h')) || 1;
+	if (!(w > 0) || !(h > 0)) return;
+	embed.style.width = `calc(${cap}px * ${w} / ${h})`;
+	embed.style.minWidth = '0px';
+	embed.style.maxWidth = '100%';
+}
+
 /** @type {WeakMap<HTMLElement, ReturnType<typeof mountSequentialVideoPlayer>>} */
 const chatEmbedGroupVideoPlayers = new WeakMap();
 
@@ -1739,6 +1787,13 @@ function mountChatEmbedGroupVideoPlaylist(innerCarousel, slides, posterUrl) {
 		videoClass: 'connect-chat-creation-embed-group-video',
 		slotClass: 'connect-chat-creation-embed-group-video-slot sequential-video-player-slot',
 		posterUrl: typeof posterUrl === 'string' ? posterUrl.trim() : '',
+		onIndexChange: (_index, slide) => {
+			applyChatGroupEmbedAspect(
+				innerCarousel.closest('.connect-chat-creation-embed'),
+				slide?.width,
+				slide?.height
+			);
+		},
 	});
 	if (!player) return null;
 
@@ -2268,9 +2323,13 @@ export function hydrateChatCreationEmbeds(rootEl) {
 				groupSourcesRaw,
 				groupPayload?.cover_source_id
 			);
-			const groupSourceUrls = orderedGroupSources
-				.map((source) => buildGroupEmbedPosterUrl(source, creationIdNum, shareOpts))
-				.filter(Boolean);
+			const posterEntries = orderedGroupSources
+				.map((source) => ({
+					source,
+					src: buildGroupEmbedPosterUrl(source, creationIdNum, shareOpts),
+				}))
+				.filter((entry) => entry.src);
+			const groupSourceUrls = posterEntries.map((entry) => entry.src);
 			const groupVideoSlides = orderedGroupSources
 				.map((source) => buildGroupEmbedVideoSlide(source, creationIdNum, shareOpts))
 				.filter((slide) => slide && slide.url);
@@ -2332,12 +2391,18 @@ export function hydrateChatCreationEmbeds(rootEl) {
 					? ' connect-chat-creation-embed-inner--group-video-carousel'
 					: '';
 				const groupCarouselLabel = isGroupVideoGallery ? 'Open grouped videos' : 'Open grouped images';
-				const displayPosterUrls = isGroupVideoGallery ? groupSourceUrls.slice(0, 1) : groupSourceUrls;
-				const stackHtml = displayPosterUrls
-					.map(
-						(src, index) =>
-							`<img class="connect-chat-creation-embed-group-img${index === 0 ? ' is-active' : ''}" src="${escapeHtml(src)}" alt="${initialAlt}" loading="eager" decoding="async" data-group-slide-index="${index}" />`
-					)
+				const shownEntries = isGroupVideoGallery ? posterEntries.slice(0, 1) : posterEntries;
+				const initialSize = (isGroupVideoGallery && groupSourcePixelSize(groupVideoSlides[0]))
+					|| groupSourcePixelSize(shownEntries[0]?.source);
+				applyChatGroupEmbedAspect(wrap, initialSize?.width, initialSize?.height);
+				const stackHtml = shownEntries
+					.map((entry, index) => {
+						const size = groupSourcePixelSize(entry.source);
+						const sizeAttrs = size
+							? ` width="${size.width}" height="${size.height}" data-group-slide-width="${size.width}" data-group-slide-height="${size.height}"`
+							: '';
+						return `<img class="connect-chat-creation-embed-group-img${index === 0 ? ' is-active' : ''}" src="${escapeHtml(entry.src)}" alt="${initialAlt}" loading="eager" decoding="async" data-group-slide-index="${index}"${sizeAttrs} />`;
+					})
 					.join('');
 				const groupVideoOverlayHtml = isGroupVideoGallery ? INLINE_CHAT_VIDEO_PLAY_OVERLAY_HTML : '';
 				const groupNavHtml = isGroupVideoGallery
@@ -2376,12 +2441,21 @@ export function hydrateChatCreationEmbeds(rootEl) {
 				const groupImages = Array.from(wrap.querySelectorAll('.connect-chat-creation-embed-group-img'));
 				const prevBtn = wrap.querySelector('.connect-chat-creation-embed-group-nav--prev');
 				const nextBtn = wrap.querySelector('.connect-chat-creation-embed-group-nav--next');
+				const applyActiveSlideAspect = (img) => {
+					if (!(img instanceof HTMLImageElement)) return;
+					const naturalW = img.naturalWidth;
+					const naturalH = img.naturalHeight;
+					const w = naturalW > 0 ? naturalW : Number(img.dataset.groupSlideWidth);
+					const h = naturalH > 0 ? naturalH : Number(img.dataset.groupSlideHeight);
+					applyChatGroupEmbedAspect(wrap, w, h);
+				};
 				const setActiveIndex = (index) => {
 					if (groupImages.length === 0) return;
 					const next = ((index % groupImages.length) + groupImages.length) % groupImages.length;
 					for (let i = 0; i < groupImages.length; i += 1) {
 						groupImages[i].classList.toggle('is-active', i === next);
 					}
+					applyActiveSlideAspect(groupImages[next]);
 				};
 				const getActiveIndex = () => {
 					const idx = groupImages.findIndex((img) => img.classList.contains('is-active'));
@@ -2416,7 +2490,13 @@ export function hydrateChatCreationEmbeds(rootEl) {
 					);
 				} else {
 					for (const img of groupImages) {
-						if (img instanceof HTMLImageElement) bindChatCreationEmbedMediaLoadError(wrap, img);
+						if (!(img instanceof HTMLImageElement)) continue;
+						bindChatCreationEmbedMediaLoadError(wrap, img);
+						const syncAspectIfActive = () => {
+							if (img.classList.contains('is-active')) applyActiveSlideAspect(img);
+						};
+						img.addEventListener('load', syncAspectIfActive);
+						if (img.complete) syncAspectIfActive();
 					}
 				}
 				attachChatCreationEmbedDetailLinkReveal(wrap);
