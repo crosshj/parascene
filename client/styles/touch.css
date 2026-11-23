@@ -1,0 +1,26 @@
+/* Touch has no keyboard focus. A ring on any control just flashes while scrolling. */
+@media (max-width: 768px), ((hover: none) and (pointer: coarse)) {
+	*,
+	*::before,
+	*::after {
+		-webkit-tap-highlight-color: transparent;
+	}
+
+	:focus,
+	:focus-visible,
+	:focus-within {
+		outline: none !important;
+	}
+
+	:focus,
+	:focus-visible {
+		box-shadow: none !important;
+	}
+
+	:focus::before,
+	:focus::after,
+	:focus-visible::before,
+	:focus-visible::after {
+		box-shadow: none !important;
+	}
+}

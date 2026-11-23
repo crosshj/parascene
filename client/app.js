@@ -16,6 +16,7 @@ import { bindCreationDetailHashtagClicks } from './shared/creationDetailRuntime.
 import { bindCreationChangeParent } from './shared/creationDetailEmbedShell.js';
 import { bindCreationEngagement } from './shared/creationEngagement.js';
 import { installUnbrokenImages } from './shared/unbrokenImages.js';
+import './styles/touch.css';
 
 installUnbrokenImages();
 

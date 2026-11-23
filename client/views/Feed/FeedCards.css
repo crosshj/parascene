@@ -1092,24 +1092,6 @@ body.view-nsfw .feed-view .feed-card-image--nsfw-group > .creation-group-badge,
 
 }
 
-/* Scrolling on a phone focuses the links and buttons inside a card, and the
-   clickable card itself flashes the WebKit tap highlight. The picture is not
-   the focused element, so clearing its outline does nothing. */
-@media (max-width: 860px), ((hover: none) and (pointer: coarse)) {
-	.feed-view .feed-card,
-	.feed-view .feed-card * {
-		-webkit-tap-highlight-color: transparent;
-	}
-
-	.feed-view .feed-card:focus,
-	.feed-view .feed-card:focus-visible,
-	.feed-view .feed-card :focus,
-	.feed-view .feed-card :focus-visible {
-		outline: none;
-		box-shadow: none;
-	}
-}
-
 @keyframes loading {
 	0% {
 		background-position: 200% 0;
