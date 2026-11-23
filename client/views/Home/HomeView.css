@@ -592,21 +592,6 @@ button.home-tile__stat:focus-visible {
 	outline: none;
 }
 
-/* Phones wider than 768px still mount these tiles. Scrolling focuses the link
-   and the inset ring flashes. Keyboard focus on a desktop pointer stays. */
-@media (max-width: 860px), ((hover: none) and (pointer: coarse)) {
-	.home-tile__open:focus-visible::after {
-		content: none;
-		box-shadow: none;
-	}
-
-	.home-tile--challenge:focus-visible,
-	.home-tile--article:focus-visible,
-	button.home-tile__stat:focus-visible {
-		box-shadow: none;
-	}
-}
-
 .home-tile__more-mark {
 	display: inline-flex;
 	align-items: center;
