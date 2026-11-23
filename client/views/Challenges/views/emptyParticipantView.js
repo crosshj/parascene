@@ -4,6 +4,7 @@ import {
 	mergeFullChallengeConfigForChallenge,
 	pickChallengeConfigTimestamp,
 	pickChallengeHeroImageUrl,
+	isChallengeDraft,
 	isChallengeListedForUpcoming
 } from '../../../shared.js';
 import { deriveChallengePhase } from '../../../shared.js';
@@ -79,14 +80,17 @@ function pickNextChallengeSummary(configs = [], opts = {}) {
 	const upcoming = summarizeLatestChallengeConfigs(configs).filter((s) => {
 		const cid = typeof s.challenge_id === 'string' ? s.challenge_id.trim() : '';
 		if (excludeIds.has(cid)) return false;
-		const phase = deriveChallengePhase(s.payload, Date.now());
+		const payload = effectiveChallengePayload(configs, s.payload, cid);
+		const phase = deriveChallengePhase(payload, Date.now());
 		if (phase !== 'pre_submit') return false;
-		return isChallengeListedForUpcoming(s.payload);
+		return isChallengeListedForUpcoming(payload);
 	});
 	if (!upcoming.length) return null;
 	upcoming.sort((a, b) => {
-		const aStart = challengeStartsAtMs(a.payload);
-		const bStart = challengeStartsAtMs(b.payload);
+		const aPayload = effectiveChallengePayload(configs, a.payload, a.challenge_id);
+		const bPayload = effectiveChallengePayload(configs, b.payload, b.challenge_id);
+		const aStart = challengeStartsAtMs(aPayload);
+		const bStart = challengeStartsAtMs(bPayload);
 		if (aStart == null && bStart == null) return b.sortKey - a.sortKey;
 		if (aStart == null) return 1;
 		if (bStart == null) return -1;
@@ -98,7 +102,7 @@ function pickNextChallengeSummary(configs = [], opts = {}) {
 /**
  * Older is the challenge that finishes sooner. Newer is the one that finishes later.
  * Overlapping ranges stay in that line, so walking newer from the oldest reaches every stop.
- * Deleted, purged, and unlisted drafts are not stops on this path.
+ * Deleted, purged, and drafts are not stops on this path.
  * @param {{ msg: object, payload: object }[]} configs
  * @param {string} challengeId
  * @param {number} [nowMs]
@@ -121,10 +125,7 @@ export function challengeDetailNeighbors(configs, challengeId, nowMs = Date.now(
 	}).filter((row) => row.challengeId);
 	const available = (row) => {
 		if (row.phase === 'deleted' || row.phase === 'purged') return false;
-		// Unlisted only hides a draft that has not started. Once a challenge is on the
-		// main page — active, or already in the previous list — it stays a stop.
-		if (row.phase === 'pre_submit' && !isChallengeListedForUpcoming(row.payload)) return false;
-		return true;
+		return !isChallengeDraft(row.payload);
 	};
 	const timeOrLast = (ms) => (ms == null ? Number.POSITIVE_INFINITY : ms);
 	const byTime = (a, b) => {
@@ -176,6 +177,7 @@ function renderChallengeHistoryCards(configs = [], opts = {}) {
 		const phase = deriveChallengePhase(effectivePayload, Date.now());
 		if (phase === 'pre_submit' || phase === 'deleted' || phase === 'purged') return false;
 		if (ACTIVE_PARTICIPANT_PHASES.has(phase)) return false;
+		if (isChallengeDraft(effectivePayload)) return false;
 		return true;
 	}).sort((a, b) => {
 		const aPayload = effectiveChallengePayload(configs, a.payload, a.challenge_id);

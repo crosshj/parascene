@@ -9,6 +9,7 @@ import {
 import {
 	isChallengeConfigPurged,
 	isChallengeConfigSoftDeleted,
+	isChallengeDraft,
 	mergeFullChallengeConfigForChallenge,
 	pickChallengeConfigTimestamp
 } from '../../shared.js';
@@ -693,7 +694,12 @@ export function mountChallengesPane(opts) {
 		const title = item.latestConfig
 			? participantHeroViewModel(item.latestConfig, peers).title
 			: '';
-		onDetailsChrome({ challengeId: itemId, title, phase: item.phase || '' });
+		onDetailsChrome({
+			challengeId: itemId,
+			title,
+			phase: item.phase || '',
+			draft: isChallengeDraft(item.latestConfig)
+		});
 	};
 
 	const focusChallengeId =

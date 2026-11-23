@@ -428,10 +428,11 @@ export function mergeFullChallengeConfigForChallenge(configEntries, challengeId)
 }
 
 /**
- * Whether a pre_submit challenge should appear on the public Challenges page.
+ * Whether a challenge is public.
  * Explicit `listed: false` / null `listed_at` → draft (Organize only).
  * Explicit `listed_at` timestamp → listed.
  * Neither field present → legacy configs stay listed.
+ * Drafts stay off Home, the feed, and the public challenge list even after the start time.
  * @param {object | null | undefined} cfg
  */
 export function isChallengeListedForUpcoming(cfg) {
@@ -444,6 +445,15 @@ export function isChallengeListedForUpcoming(cfg) {
 	}
 	if (cfg.listed === true) return true;
 	return true;
+}
+
+/**
+ * Explicit draft. Missing listing fields stay public so older configs are unchanged.
+ * @param {object | null | undefined} cfg
+ */
+export function isChallengeDraft(cfg) {
+	if (!cfg || typeof cfg !== 'object') return false;
+	return !isChallengeListedForUpcoming(cfg);
 }
 
 /**

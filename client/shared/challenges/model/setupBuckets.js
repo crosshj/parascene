@@ -1,5 +1,5 @@
 import { deriveChallengePhase } from '../../../shared.js';
-import { isChallengeListedForUpcoming } from '../../../shared.js';
+import { isChallengeDraft, isChallengeListedForUpcoming } from '../../../shared.js';
 
 /**
  * View-model for challenge timeline / organizer strip: past vs active vs upcoming.
@@ -17,7 +17,7 @@ export function bucketConfigsForSetup(configEntries, nowMs) {
 	for (const entry of configEntries) {
 		const phase = deriveChallengePhase(entry.payload, nowMs);
 		const row = { ...entry, phase };
-		if (phase === 'deleted' || phase === 'purged' || phase === 'empty') {
+		if (phase === 'deleted' || phase === 'purged' || phase === 'empty' || isChallengeDraft(entry.payload)) {
 			continue;
 		} else if (phase === 'results') {
 			past.push(row);

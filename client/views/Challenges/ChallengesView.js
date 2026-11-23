@@ -127,7 +127,7 @@ export const ChallengesView = Object.freeze({
     });
    }
    if (eligible && detailChrome?.challengeId && location.pathname.startsWith('/challenges/details/')) {
-    for (const action of detailOrganizerHeaderActions(detailChrome.phase)) {
+    for (const action of detailOrganizerHeaderActions(detailChrome.phase, { draft: detailChrome.draft === true })) {
      accessories.push({
       label: action.label,
       ariaLabel: action.ariaLabel,
@@ -217,7 +217,7 @@ export const ChallengesView = Object.freeze({
     reactionIconHtml: (key, cls) => REACTION_ICONS[key]?.(cls) || '',
     onChallengeNav: nav => paintChallengeNav(challengeNav, nav),
     onDetailsChrome: info => {
-     detailChrome = info?.challengeId ? { challengeId: info.challengeId, phase: info.phase || '', title: info.title || '' } : null;
+     detailChrome = info?.challengeId ? { challengeId: info.challengeId, phase: info.phase || '', title: info.title || '', draft: info.draft === true } : null;
      const headerTitle = typeof info?.title === 'string' && info.title.trim() ? info.title.trim() : title;
      if (location.pathname.startsWith('/challenges/details/')) {
       setHeaderBreadcrumb?.({ parent: 'Challenges', href: '/challenges', current: headerTitle });

@@ -27,6 +27,7 @@ import {
 import {
 	mergeFullChallengeConfigForChallenge,
 	pickChallengeHeroImageUrl,
+	isChallengeDraft,
 	isChallengeListedForUpcoming
 } from '../../../shared.js';
 import { audioClipMusicIcon, clock3Icon } from '../../../icons/svg-strings.js';
@@ -39,7 +40,8 @@ export {
 
 /** @param {string} phase @param {boolean} [listed] */
 function organizePhaseLabel(phase, listed = true) {
-	if (phase === 'pre_submit') return listed ? 'Upcoming' : 'Draft';
+	if (!listed && phase !== 'deleted' && phase !== 'purged') return 'Draft';
+	if (phase === 'pre_submit') return 'Upcoming';
 	if (phase === 'submitting') return 'Submissions';
 	if (phase === 'submit_and_vote') return 'Live';
 	if (phase === 'voting') return 'Voting';
@@ -66,10 +68,11 @@ function organizeActionsForPhase(phase, opts = {}) {
 			showPurge: Boolean(opts.isOceanman)
 		};
 	}
+	const draft = opts.listed === false;
 	return {
 		showStats: phase !== 'empty',
-		showEdit: phase !== 'empty' && phase !== 'results',
-		showView: phase === 'results',
+		showEdit: phase !== 'empty' && (phase !== 'results' || draft),
+		showView: phase === 'results' && !draft,
 		showRestore: false,
 		showPurge: false
 	};
@@ -82,10 +85,15 @@ function organizeActionsForPhase(phase, opts = {}) {
  * @param {string} phase
  * @returns {{ id: 'manage' | 'view' | 'results', label: string, ariaLabel: string }[]}
  */
-export function detailOrganizerHeaderActions(phase) {
+export function detailOrganizerHeaderActions(phase, opts = {}) {
 	if (!phase || phase === 'deleted' || phase === 'purged' || phase === 'empty') return [];
+	const draft = opts.draft === true;
 	const primary =
-		ACTIVE_PARTICIPANT_PHASES.has(phase) || phase === 'finalizing'
+		draft ||
+		phase === 'pre_submit' ||
+		phase === 'between' ||
+		ACTIVE_PARTICIPANT_PHASES.has(phase) ||
+		phase === 'finalizing'
 			? { id: 'manage', label: 'Manage', ariaLabel: 'Manage challenge' }
 			: { id: 'view', label: 'View', ariaLabel: 'View challenge' };
 	return [primary, { id: 'results', label: 'Results', ariaLabel: 'Challenge results' }];
@@ -452,12 +460,12 @@ export function renderOrganizeBoardHtml(vm) {
 
 	const deletedCards = cards.filter((c) => c.phase === 'deleted');
 	const liveCards = cards.filter((c) => c.phase !== 'deleted');
-	const pastCards = liveCards.filter((c) => c.phase === 'results');
+	const pastCards = liveCards.filter((c) => c.phase === 'results' && !isChallengeDraft(c.merged));
 	const preSubmitCards = liveCards.filter((c) => c.phase === 'pre_submit');
-	const draftCards = preSubmitCards.filter((c) => !isChallengeListedForUpcoming(c.merged));
-	const upcomingCards = preSubmitCards.filter((c) => isChallengeListedForUpcoming(c.merged));
+	const draftCards = liveCards.filter((c) => isChallengeDraft(c.merged));
+	const upcomingCards = preSubmitCards.filter((c) => !isChallengeDraft(c.merged));
 	const currentCards = liveCards.filter(
-		(c) => c.phase !== 'pre_submit' && c.phase !== 'results'
+		(c) => c.phase !== 'pre_submit' && c.phase !== 'results' && !isChallengeDraft(c.merged)
 	);
 	sortByStart(currentCards, 'desc');
 	sortByStart(draftCards, 'asc');
@@ -537,9 +545,11 @@ function renderOrganizeCardHtml(c, vm) {
 	const titleRaw = mergedTitle || rowTitle || cid;
 	const title = esc(titleRaw);
 	const phase = c.phase || 'unknown';
-	const listed = phase === 'pre_submit' ? isChallengeListedForUpcoming(c.merged) : true;
+	const listed =
+		phase === 'deleted' || phase === 'purged' ? true : isChallengeListedForUpcoming(c.merged);
 	const actions = organizeActionsForPhase(phase, {
-		isOceanman: Boolean(vm.isOceanman)
+		isOceanman: Boolean(vm.isOceanman),
+		listed
 	});
 	const track = normalizeChallengeTrack(c.track || pickChallengeTrack(c.merged));
 	const meta = c.range
@@ -547,7 +557,7 @@ function renderOrganizeCardHtml(c, vm) {
 		: 'No dates set';
 	/* Icon+type first on the date line (mobile hides year + day count). */
 	const metaLead = `<span class="challenges-organize-card-meta-lead">${organizeTrackMetaHtml(track)}<span class="challenges-organize-card-meta-sep" aria-hidden="true"> · </span></span>`;
-	const isComplete = phase === 'results';
+	const isComplete = phase === 'results' && listed;
 	const needsAction = phase === 'finalizing';
 	const isLive =
 		phase === 'submitting' ||
@@ -555,7 +565,7 @@ function renderOrganizeCardHtml(c, vm) {
 		phase === 'submit_and_vote' ||
 		phase === 'between';
 	const isDeleted = phase === 'deleted';
-	const isDraft = phase === 'pre_submit' && !listed;
+	const isDraft = !listed && phase !== 'deleted' && phase !== 'purged';
 
 	const statsBtn = actions.showStats
 		? `<button type="button" class="challenges-organize-card-action challenges-organize-card-action--ghost" data-challenges-organizer-stats="${esc(cid)}" aria-label="View results for ${title}">
