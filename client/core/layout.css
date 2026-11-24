@@ -397,7 +397,7 @@ body.app-mobile-menu-open { overflow: hidden; }
 	}
 	#app-shell[data-mobile-header="true"] [data-layout-region="mobile-header"] { display: block; }
 	#app-shell[data-mobile-header="true"] .app-outlet__header { display: none; }
-	body.app-layout main#app-outlet { height: calc(100dvh - var(--app-mobile-nav-height)); min-height: calc(100dvh - var(--app-mobile-nav-height)); margin: 0; border-radius: 0; corner-shape: initial; }
+	body.app-layout main#app-outlet { height: calc(100dvh - var(--app-mobile-nav-height)); min-height: calc(100dvh - var(--app-mobile-nav-height)); margin: 0; border-radius: 0; }
 	#app-shell[data-mobile-mode="conversation"] .app-outlet__mobile-back { display: inline-flex; }
 	#app-shell[data-mobile-back="true"] .app-outlet__mobile-back { display: inline-flex; }
 	#app-shell:not([data-mobile-header="true"]) .app-outlet__mobile-menu:not([hidden]) { display: inline-flex; }
