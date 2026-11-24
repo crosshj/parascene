@@ -1092,6 +1092,27 @@ body.view-nsfw .feed-view .feed-card-image--nsfw-group > .creation-group-badge,
 
 }
 
+/* A drag that starts on the caption selects the picture. iOS then draws a
+   rounded box for that out-of-flow image, shifted so it crosses the picture. */
+@media (max-width: 768px), ((hover: none) and (pointer: coarse)) {
+	.feed-view .feed-card,
+	.feed-view .feed-card * {
+		-webkit-user-select: none;
+		user-select: none;
+		-webkit-touch-callout: none;
+		-webkit-user-drag: none;
+	}
+
+	.feed-view .feed-card *::selection {
+		background: transparent;
+	}
+
+	.feed-view .feed-card img,
+	.feed-view .feed-card video {
+		pointer-events: none;
+	}
+}
+
 @keyframes loading {
 	0% {
 		background-position: 200% 0;

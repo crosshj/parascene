@@ -34,7 +34,10 @@ const ALLOWED_PATHS = [
 	{ path: "/oauth/userinfo", method: "GET" },
 	{ path: "/oauth/authorize", method: "GET" },
 	{ path: "/oauth/authorize/continue", methods: ["POST"] },
-	{ path: "/integrations", method: "GET" }
+	{ path: "/integrations", method: "GET" },
+	{ path: "/finance", method: "GET" },
+	{ pathPrefix: "/finance/", method: "GET" },
+	{ pathPrefix: "/finance/", method: "PUT" }
 ];
 
 function isAllowed(method, pathName) {

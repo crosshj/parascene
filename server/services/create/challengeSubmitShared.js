@@ -670,11 +670,66 @@ export function challengeHeroCreationMatchesInRecentConfigs(messagesNewestFirst,
 }
 
 /**
+ * Config rows for an access check. A known challenge id is loaded by text search,
+ * then the full thread if that search misses. A bare creation id matches configs
+ * that still store `/creations/:id` or `/create/images/:id`. Neither path uses the
+ * newest-message window: finished challenges stay in #challenges and age out of it.
+ *
+ * @param {import("@supabase/supabase-js").SupabaseClient} sb
+ * @param {number} threadId
+ * @param {{ challengeId?: string, creationId?: number }} target
+ */
+async function loadChallengeConfigMessages(sb, threadId, target) {
+	const challengeId = String(target?.challengeId || "").trim();
+	const creationId = Number(target?.creationId);
+	const configs = (rows, cid) => {
+		const out = [];
+		for (const row of rows || []) {
+			const payload = tryParseChallengeJsonBody(row?.body);
+			if (!payload || String(payload.kind || "").trim() !== "challenge_config") continue;
+			if (cid && String(payload.challenge_id || "").trim() !== cid) continue;
+			out.push(row);
+		}
+		return out;
+	};
+	const newestFirst = (rows) => [...rows].sort((a, b) => Number(b.id) - Number(a.id));
+
+	if (challengeId) {
+		let rows = [];
+		try {
+			rows = configs(await fetchMessagesContainingText(sb, threadId, challengeId), challengeId);
+		} catch {
+			rows = [];
+		}
+		if (!rows.length) {
+			rows = configs(await fetchAllThreadMessagesById(sb, threadId), challengeId);
+		}
+		return newestFirst(rows);
+	}
+
+	if (!Number.isFinite(creationId) || creationId <= 0) return [];
+	const seen = new Map();
+	for (const needle of [`/creations/${creationId}`, `/create/images/${creationId}`]) {
+		let hits = [];
+		try {
+			hits = await fetchMessagesContainingText(sb, threadId, needle);
+		} catch {
+			hits = [];
+		}
+		for (const row of configs(hits, "")) {
+			const id = Number(row?.id);
+			if (Number.isFinite(id) && id > 0) seen.set(id, row);
+		}
+	}
+	return newestFirst([...seen.values()]);
+}
+
+/**
  * Viewer may load another user's unpublished creation when it is the configured hero image
  * for a challenge in #challenges.
  *
- * When `challengeId` is omitted, any recent challenge config whose hero ref resolves to the
- * creation id is accepted (supports clients that have not yet passed `?challenge_id=`).
+ * When `challengeId` is omitted, a config whose hero ref is `/creations/:id` or
+ * `/create/images/:id` is accepted. That covers image requests that only carry `creation_id`.
  *
  * @param {import("@supabase/supabase-js").SupabaseClient} sb
  * @param {{
@@ -699,7 +754,10 @@ export async function canViewUnpublishedCreationViaChallengeHero(sb, args) {
 	const slug = String(threadRow?.channel_slug || "").toLowerCase();
 	if (!threadRow || threadRow.type !== "channel" || slug !== "challenges") return false;
 
-	const messagesNewest = await fetchThreadMessagesNewestFirst(sb, threadId);
+	const messagesNewest = await loadChallengeConfigMessages(sb, threadId, {
+		challengeId,
+		creationId: ancestorRow.id
+	});
 
 	if (challengeId) {
 		return challengeHeroCreationMatchesInRecentConfigs(
@@ -767,7 +825,10 @@ export async function canViewUnpublishedCreationViaChallengeResults(sb, args) {
 	const slug = String(threadRow?.channel_slug || "").toLowerCase();
 	if (!threadRow || threadRow.type !== "channel" || slug !== "challenges") return false;
 
-	const messagesNewest = await fetchThreadMessagesNewestFirst(sb, threadId);
+	const messagesNewest = await loadChallengeConfigMessages(sb, threadId, {
+		challengeId,
+		creationId: ancestorRow.id
+	});
 
 	if (challengeId) {
 		return challengeResultsCreationMatchesInRecentConfigs(

@@ -41,7 +41,7 @@ test("welcome gate sends a new account to welcome and blocks app APIs", async ()
 
 test("welcome gate leaves welcome, profile save, and finished accounts alone", async () => {
 	const gate = gateFor(null);
-	for (const path of ["/welcome", "/welcome/welcome.js", "/api/profile", "/typography.css"]) {
+	for (const path of ["/welcome", "/welcome/welcome.js", "/api/profile", "/typography.css", "/finance", "/finance/"]) {
 		const res = response();
 		let continued = false;
 		await gate({ auth: { userId: 9 }, method: "GET", path, originalUrl: path }, res, () => { continued = true; });
@@ -51,6 +51,10 @@ test("welcome gate leaves welcome, profile save, and finished accounts alone", a
 	let putContinued = false;
 	await gate({ auth: { userId: 9 }, method: "PUT", path: "/api/profile", originalUrl: "/api/profile" }, put, () => { putContinued = true; });
 	assert.equal(putContinued, true);
+	const ledgerPut = response();
+	let ledgerContinued = false;
+	await gate({ auth: { userId: 9 }, method: "PUT", path: "/finance/api/ledger", originalUrl: "/finance/api/ledger" }, ledgerPut, () => { ledgerContinued = true; });
+	assert.equal(ledgerContinued, true);
 
 	const done = gateFor({ user_name: "ada", meta: { welcome_version: 1 } });
 	const home = response();

@@ -1,22 +1,28 @@
-/* Touch has no keyboard focus. A ring on any control just flashes while scrolling. */
+/* Focus rings are for a keyboard on a full-size screen. Touch only flashes them while scrolling. */
 @media (max-width: 768px), ((hover: none) and (pointer: coarse)) {
 	*,
 	*::before,
 	*::after {
-		-webkit-tap-highlight-color: transparent;
+		-webkit-tap-highlight-color: transparent !important;
 	}
 
 	:focus,
 	:focus-visible,
-	:focus-within {
+	:focus-within,
+	:focus::before,
+	:focus::after,
+	:focus-visible::before,
+	:focus-visible::after,
+	:focus-within::before,
+	:focus-within::after {
 		outline: none !important;
+		outline-offset: 0 !important;
+		outline-color: transparent !important;
+		-webkit-focus-ring-color: transparent !important;
 	}
 
 	:focus,
-	:focus-visible {
-		box-shadow: none !important;
-	}
-
+	:focus-visible,
 	:focus::before,
 	:focus::after,
 	:focus-visible::before,

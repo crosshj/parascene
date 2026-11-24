@@ -10,6 +10,7 @@ import {
 	logOutIcon,
 	infoIcon,
 	statsBarsIcon,
+	banknoteIcon,
 } from '../../icons/svg-strings.js';
 import { confirmAndHardReloadAfterClearingCaches } from '../../shared/clearClientCaches.js';
 
@@ -78,10 +79,14 @@ connectedCallback() {
 	renderShell() {
 		if (this.shadowRoot.querySelector('.account-menu-panel')) return;
 		const helpHref = typeof getHelpHref === 'function' ? getHelpHref('/help') : `${window.location?.origin || 'https://www.parascene.com'}/help`;
-		const reportsItem = isLocalDevHost()
+		const localItems = isLocalDevHost()
 			? html`<button type="button" class="account-menu-item" data-action="reports" role="menuitem" data-reports-item hidden>
 					${statsBarsIcon('account-menu-svg')}
 					<span class="account-menu-label">Reports</span>
+				</button>
+				<button type="button" class="account-menu-item" data-action="finances" role="menuitem" data-finances-item hidden>
+					${banknoteIcon('account-menu-svg')}
+					<span class="account-menu-label">Finances</span>
 				</button>`
 			: '';
 		this.shadowRoot.innerHTML = html`
@@ -199,7 +204,7 @@ connectedCallback() {
 					${infoIcon('account-menu-svg')}
 					<span class="account-menu-label">About</span>
 				</button>
-				${reportsItem}
+				${localItems}
 				<button type="button" class="account-menu-item" data-action="clear-cache" role="menuitem">
 					${gearIcon('account-menu-svg')}
 					<span class="account-menu-label">Clear cache</span>
@@ -282,6 +287,12 @@ connectedCallback() {
 			window.open('/reports/', '_blank', 'noopener,noreferrer');
 			return;
 		}
+		if (action === 'finances') {
+			e.preventDefault();
+			this.close();
+			window.open('/finance/', '_blank', 'noopener,noreferrer');
+			return;
+		}
 		if (action === 'clear-cache') {
 			e.preventDefault();
 			this.close();
@@ -291,23 +302,24 @@ connectedCallback() {
 		}
 	}
 
-	/** Reports item exists only on a local dev host, and only when opened from the sidebar. */
-	_syncReportsItem(el) {
-		const item = this.shadowRoot.querySelector('[data-reports-item]');
-		if (!item) return;
+	/** Reports and Finances exist only on a local dev host, and only when opened from the sidebar. */
+	_syncLocalItems(el) {
+		const items = this.shadowRoot.querySelectorAll('[data-reports-item], [data-finances-item]');
+		if (!items.length) return;
 		const fromSidebar = !!(
 			el && (
 				el.matches?.('[data-chat-sidebar-open-profile], [data-menu-key="account"]') ||
 				el.closest?.('[data-chat-sidebar-open-profile], [data-menu-key="account"]')
 			)
 		);
-		item.hidden = !(isLocalDevHost() && fromSidebar);
+		const hidden = !(isLocalDevHost() && fromSidebar);
+		for (const item of items) item.hidden = hidden;
 	}
 
 	async open(anchor) {
 		await this._initPromise;
 		const el = resolveMenuAnchor(anchor);
-		this._syncReportsItem(el);
+		this._syncLocalItems(el);
 		const rect = el?.getBoundingClientRect?.() ?? null;
 		const r = rect && Number.isFinite(rect.top) ? rect : fallbackAnchorRect();
 		const panel = this.shadowRoot.querySelector('.account-menu-panel');

@@ -1,5 +1,5 @@
 import { getSupabaseServiceClient } from '../create/supabaseService.js';
-import { canViewUnpublishedCreationViaChallengeMessage, canViewUnpublishedCreationViaChallengeHero, summarizeChallengeSubmissionPhases } from '../create/challengeSubmitShared.js';
+import { canViewUnpublishedCreationViaChallengeMessage, canViewUnpublishedCreationViaChallengeHero, canViewUnpublishedCreationViaChallengeResults, summarizeChallengeSubmissionPhases } from '../create/challengeSubmitShared.js';
 import { listChallengeOrganizerRefsFromMeta, challengeOrganizerRefRoleLabel } from '../../shared.js';
 
 export async function challengeCreationForViewer({ creations, viewer, creationId, query = {}, sb = getSupabaseServiceClient() }) {
@@ -12,7 +12,8 @@ export async function challengeCreationForViewer({ creations, viewer, creationId
  const messageId = Number(query.challenge_message_id ?? query.challenge_msg);
  const allowed = Number.isSafeInteger(messageId) && messageId > 0
   ? await canViewUnpublishedCreationViaChallengeMessage(sb, { ...args, challengeMessageId: messageId })
-  : await canViewUnpublishedCreationViaChallengeHero(sb, { ...args, challengeId: query.challenge_id });
+  : (await canViewUnpublishedCreationViaChallengeHero(sb, { ...args, challengeId: query.challenge_id })
+   || await canViewUnpublishedCreationViaChallengeResults(sb, { ...args, challengeId: query.challenge_id }));
  return allowed ? row : null;
 }
 
