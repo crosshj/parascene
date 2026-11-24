@@ -583,6 +583,12 @@ export function createCreationsRoutes({ creations, users, createQueries, createS
 				}
 			}
 			appendChallengeMediaProof(payload, req.query.challenge_message_id ?? req.query.challenge_msg);
+			const challengeIdForMedia = String(req.query.challenge_id || "").trim();
+			if (challengeIdForMedia) {
+				for (const field of ["url", "thumbnail_url", "fit_thumbnail_url", "video_thumbnail_url", "video_url", "audio_url"]) {
+					payload[field] = appendQuery(payload[field], "challenge_id", challengeIdForMedia);
+				}
+			}
    await appendChallengeEligibility?.(req, viewer, row, parseMeta(row.meta), payload);
    await appendChallengeEntryState(parseMeta(row.meta), payload);
    return res.json(payload);

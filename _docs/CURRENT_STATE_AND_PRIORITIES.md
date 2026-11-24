@@ -16,7 +16,6 @@ Observations:
 - [x] Refactored frontend and portions of backend.
 - [x] Consolidated application into a single-page app.
 - [x] Migrated most infrastructure to an AWS VPS.
-- [ ] Eliminate remaining Vercel dependencies and costs.
 - [ ] Assess ongoing hosting costs and stability.
 
 ### Competitor Research
@@ -107,7 +106,7 @@ Evaluate each opportunity against:
 - Ongoing maintenance
 
 ### Selected Priorities
-- [ ] Lock the cost floor. Drop the remaining Vercel costs, make Blue the normal generation path, and keep Replicate for overflow or paid runs.
+- [ ] Lock the cost floor. Make Blue the normal generation path, and keep Replicate for overflow or paid runs.
 - [ ] Keep the home occupied when activity is thin. Leave an active challenge up, and leave the last winner up until the next one. Measure whether people come back.
 - [ ] Turn a registration into one public act: a vote, a comment, or a challenge entry. Any credit reward spends on Blue.
 

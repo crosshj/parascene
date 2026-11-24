@@ -88,10 +88,9 @@ the VPS in a root-only Certbot credentials file; it is not passed to the app
 container.
 Keep the Cloudflare apex A record proxied and use Full (strict) SSL/TLS; keep
 the apex redirect at the origin as a fallback and canonical signal. DNS for
-`api.parascene.com` still points at Vercel. Prod nginx is already ready for
-that name. The pre-DNS checklist is in
-[PLAN_api_off_vercel.md](PLAN_api_off_vercel.md). Keep the `api` record
-DNS-only when it moves, so long worker requests are not cut off by the proxy.
+`api.parascene.com` is an A record for `35.168.177.166`, DNS-only. Prod nginx
+answers that name. Keep the `api` record
+DNS-only so long worker requests are not cut off by the proxy.
 Both VPS sites publish creation and provider-poll jobs through QStash to
 `api.parascene.com`. Local development runs those jobs in process.
 Each deploy validates the complete Nginx configuration, restores the prior
