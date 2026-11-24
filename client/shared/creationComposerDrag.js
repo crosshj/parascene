@@ -44,6 +44,9 @@ export function attachFeedCardCreationDragSource(card) {
 		event.stopPropagation();
 	}, true);
 	card.addEventListener('pointerdown', (event) => {
+		// A finger on the caption is a scroll. Starting the composer drag there
+		// paints the green accent box over the picture and cancels the scroll.
+		if (event.pointerType === 'touch' || event.pointerType === 'pen') return;
 		if (event.button !== 0 || pointerStartedOnControl(event.target, card)) return;
 		const pointerId = event.pointerId;
 		const startX = event.clientX;

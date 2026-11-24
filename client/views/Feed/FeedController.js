@@ -207,26 +207,6 @@ export function createFeedController({ root, actions, services, setHeaderMenu })
   await load(true);
   if (!destroyed) requestAnimationFrame(() => scroll.set(scrollTop));
  }
- // A drag on the caption focuses a control or selects the picture. iOS then
- // paints a rounded box the size of the image, shifted so it crosses the picture.
- let feedTouchX = 0, feedTouchY = 0, feedTouchOnCard = false;
- document.addEventListener('touchstart', (event) => {
-  const touch = event.touches[0];
-  feedTouchOnCard = !!(touch && event.target instanceof Element && event.target.closest('.feed-card'));
-  if (!feedTouchOnCard) return;
-  feedTouchX = touch.clientX;
-  feedTouchY = touch.clientY;
- }, { passive: true, capture: true, signal: lifetime.signal });
- document.addEventListener('touchmove', (event) => {
-  if (!feedTouchOnCard) return;
-  const touch = event.touches[0];
-  if (!touch || Math.hypot(touch.clientX - feedTouchX, touch.clientY - feedTouchY) < 4) return;
-  feedTouchOnCard = false;
-  const focused = document.activeElement;
-  if (focused instanceof HTMLElement && focused.closest('.feed-card')) focused.blur();
-  const selection = window.getSelection?.();
-  if (selection && !selection.isCollapsed) selection.removeAllRanges();
- }, { passive: true, capture: true, signal: lifetime.signal });
  more.addEventListener('click',()=>void load(!rows.length),{signal:lifetime.signal});
  window.addEventListener('ps:challenge-vote-modal-request',vote,{signal:lifetime.signal});
  document.addEventListener('visibilitychange',()=>{ if (document.hidden) pauseMedia(); else { resumeMedia(); void checkVersion(); } },{signal:lifetime.signal});

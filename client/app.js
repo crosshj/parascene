@@ -1,4 +1,3 @@
-import './styles/touch-focus.js';
 import './styles/index.js';
 import './elements/index.js';
 import { connectLifecycle } from './app/lifecycle.js';
