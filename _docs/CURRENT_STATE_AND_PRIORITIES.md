@@ -30,6 +30,8 @@ Observations:
 - [ ] Reconsider the separation between basic and advanced creation.
 - [ ] Reduce friction when performing repeated generations.
 - [ ] Simplify uploading and using external images.
+- [ ] Make it easy to turn a file into a creation. A loose upload should not stay a file that the rest of the app cannot publish, save, or adjust.
+- [ ] Add crop, resize, and fit to image adjust, beside brightness, contrast, and saturation.
 - [ ] Make available creation capabilities more discoverable.
 - [ ] Explore LoRA integration and greater stylistic control.
 
@@ -50,6 +52,7 @@ Supabase is filling up. A cap has to land sooner or later, or the bill and the b
 - [ ] Offer a job that exports a person's library as a zip. Expiry is only fair if they can take their files first. The archive is a job, not a request that has to finish in the browser.
 - [ ] Decide how files shared into chats and image comments survive expiry. A creation pasted into a message or a comment is still in use, even when it is unpublished and unsaved. One file can sit in many places, so removing one message must not delete the object while another chat or comment still shows it. Once nothing references it, and it was never published or saved, it can expire. Marking it unavailable today already hides it from those threads, so expiry has to follow the references or the threads break.
 - [ ] Give admin a storage summary. Total size, and how much is published, saved, still shown in a chat or image comment, or only an unpublished draft. The cap is guesswork without that.
+- [ ] Make it easy to turn a file into a creation. Until that happens, a loose file sits outside publish, save, search, export, and expiry. Crop, resize, and fit belong on that path too, next to brightness, contrast, and saturation, so the stored image is the one the person actually framed.
 
 Open questions:
 - How long does an unpublished, unsaved creation stay?
