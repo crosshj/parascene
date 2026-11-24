@@ -15,6 +15,7 @@ import {appendPrsnCidsForUserId,tryRequestMetaFromRow} from '../services/account
 import {applySocialFieldUpdates,applySocialObjectUpdates} from '../shared.js';
 import {creationMetaHasChallengeSubmission} from '../shared.js';
 import {enrichCreationComments} from '../db/creations.js';
+import {scheduleEmbeddingJob} from '../services/create/scheduleEmbeddingJob.js';
 export default function createProfileRoutes({queries,storage:storageAdapter,users,client}) {
 async function getReactionsForCommentIds(_queries,ids,viewerId){return new Map((await enrichCreationComments(client,ids.map(id=>({id})),viewerId)).map(row=>[Number(row.id),row]));}
 
@@ -933,6 +934,11 @@ router.put("/api/profile", async (req, res) => {
 							);
 							const feedAuthor = (payload.display_name && String(payload.display_name).trim()) || user?.email || "User";
 							await queries.insertFeedItem.run(title, description, feedAuthor, null, createdImageId);
+							void scheduleEmbeddingJob({
+								creation: { id: createdImageId, user_id: req.auth.userId, title, description, meta: welcomeMeta }
+							}).catch((error) => {
+								console.warn("[profile] Failed to schedule embedding job:", error?.message || error);
+							});
 						}
 						if (avatarAnonRow?.id && createdImageId && queries.updateTryRequestsTransitionedByCreatedImageAnonId?.run && queries.deleteCreatedImageAnon?.run && storage?.deleteImageAnon) {
 							try {

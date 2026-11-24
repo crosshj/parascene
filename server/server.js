@@ -59,7 +59,7 @@ import createXRoutes from './routes/x.js';
 import createCreateRoutes from './routes/create.js';
 import { resumeLocalProviderPolls } from './services/create/creationJob.js';
 import { createVisitPulseQueries } from "./db/visitPulse.js";
-import { startVisitPulseFlushSchedule, runVisitPulseFlush } from "./services/feed/visitPulseFlush.js";
+import { startProcessSchedules } from "./services/schedule/processSchedules.js";
 import createBlogRoutes from './routes/blog.js';
 import { createBlogAdminRoutes } from './routes/blogAdmin.js';
 import createShareRoutes from './routes/share.js';
@@ -75,7 +75,6 @@ import { createSiteApiRoutes } from './routes/siteApi.js';
 import { createKioskRoutes } from './routes/kiosk.js';
 import { createProviderRoutes } from './routes/provider.js';
 import { createChatInviteRoutes } from './routes/chatInvites.js';
-import { startWelcomeMailSchedule } from './services/account/welcomeMail.js';
 import { createUnhandledRequestLog } from './db/unhandledRequests.js';
 import { createUnhandledRequestMiddleware } from './routes/middleware/unhandledRequest.js';
 
@@ -178,8 +177,5 @@ app.listen(port, bindHost, () => {
 	console.log(`Parascene: http://localhost:${port}/`);
 	console.log(`[parascene] bound to ${bindHost}:${port}`);
 	void resumeLocalProviderPolls(db.create).catch(error => console.error("[parascene] Create poll recovery failed", error));
-	startVisitPulseFlushSchedule({
-		run: (args) => runVisitPulseFlush({ args, queries: createVisitPulseQueries(db.account.client) })
-	});
-	startWelcomeMailSchedule({ client: db.account.client });
+	startProcessSchedules({ client: db.account.client });
 });
