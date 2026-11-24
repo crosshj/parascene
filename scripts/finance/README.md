@@ -1,26 +1,24 @@
 # Local finance ledger
 
-This is a local-only finance page. It stores one JSON ledger in the existing
-notes-to-self DM; it does not add tables or production routes.
+The local app serves this page at `/finance/` (for example
+`http://localhost:3000/finance/`). It is mounted like Reports: development
+only, and only for a loopback client. `npm run dev` sets
+`LOCAL_FINANCE_ENABLED=1`, which also enables the route when `NODE_ENV` is
+`production`. Deployments leave it unmounted.
 
-Set one of these in `.env`:
+The page stores one JSON ledger in the notes-to-self DM for user 219. It does not add
+tables.
 
-```text
-FINANCE_USER_ID=123
-# or
-FINANCE_EMAIL=you@example.com
-# or
-FINANCE_USERNAME=awesome
-```
+The server requires `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`, and writes
+a local JSON backup before each save.
 
-Then run:
+A standalone loopback server is still available:
 
 ```bash
 node scripts/finance/server.js
 ```
 
-Open <http://127.0.0.1:2391>. The server requires `SUPABASE_URL` and
-`SUPABASE_SERVICE_ROLE_KEY`, and creates a local JSON backup before each save.
+Open <http://127.0.0.1:2391>.
 
 The initial recurring list includes clearly marked estimates for services
 referenced by the app: Supabase, Vercel, Upstash Redis/QStash, Resend, and a

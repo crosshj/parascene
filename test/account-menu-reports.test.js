@@ -42,7 +42,9 @@ test('reports menu item is absent on a deployed host', { skip: !vm.SourceTextMod
 	const { dom, menu } = await loadMenu('https://beta.parascene.com/');
 	try {
 		assert.equal(menu.shadowRoot.querySelector('[data-reports-item]'), null);
+		assert.equal(menu.shadowRoot.querySelector('[data-finances-item]'), null);
 		assert.doesNotMatch(menu.shadowRoot.textContent, /Reports/);
+		assert.doesNotMatch(menu.shadowRoot.textContent, /Finances/);
 	} finally {
 		dom.window.close();
 	}
@@ -52,12 +54,20 @@ test('reports menu item shows on localhost when opened from the sidebar', { skip
 	const { dom, menu } = await loadMenu('http://localhost:3000/');
 	try {
 		const item = menu.shadowRoot.querySelector('[data-reports-item]');
+		const finances = menu.shadowRoot.querySelector('[data-finances-item]');
 		assert.ok(item);
+		assert.ok(finances);
 		assert.equal(item.hidden, true);
+		assert.equal(finances.hidden, true);
 		const anchor = dom.window.document.createElement('button');
 		anchor.setAttribute('data-menu-key', 'account');
+		let opened = null;
+		dom.window.open = (url) => { opened = url; return null; };
 		await menu.open(anchor);
 		assert.equal(item.hidden, false);
+		assert.equal(finances.hidden, false);
+		finances.click();
+		assert.equal(opened, '/finance/');
 		assert.match(menu.shadowRoot.querySelector('style').textContent, /\[hidden\][\s\S]*display:\s*none\s*!important/);
 	} finally {
 		dom.window.close();

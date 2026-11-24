@@ -67,6 +67,12 @@ the app's JavaScript, shared CSS and `.output/overview/store.json` beneath
 Report requests must come directly from a loopback connection. Production
 deployments leave the route disabled unless `LOCAL_REPORTS_ENABLED=1` is set.
 
+Finances works the same way. The account menu opens `/finance/` on the local
+app server. The page and its ledger API live under that path, loopback only,
+and stay unmounted unless the process is in development or
+`LOCAL_FINANCE_ENABLED=1` is set. `npm run dev` sets the flag. The ledger is
+the notes-to-self JSON document for user 219.
+
 The Files page also provides a temporary signed URL at
 `https://cdn.parascene.com/s/{signed-key}/{original-filename}`. The signed key
 keeps the bucket path and storage key out of the URL, and the original filename

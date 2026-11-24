@@ -38,6 +38,24 @@ Open questions:
 - Can advanced capabilities be exposed without overwhelming casual users?
 - Is maintaining older models worthwhile for LoRA support?
 
+### Storage
+Supabase is filling up. A cap has to land sooner or later, or the bill and the bucket grow with every draft.
+
+- [ ] Limit what stays in Supabase.
+- [ ] Auto-delete creations that are neither published nor saved after a set time.
+- [ ] Keep published images. LoRA training should use that set, so expiry can take unpublished drafts without eating the training corpus.
+- [ ] Keep anything a person saved. On desktop that means a folder or a project. The web does not offer that yet.
+- [ ] Bring desktop folders and projects to the web, so saving is a real choice beside publish.
+- [ ] Let people search images. A library you cannot search has to be kept small, or it is unusable.
+- [ ] Offer a job that exports a person's library as a zip. Expiry is only fair if they can take their files first. The archive is a job, not a request that has to finish in the browser.
+- [ ] Decide how files shared into chats and image comments survive expiry. A creation pasted into a message or a comment is still in use, even when it is unpublished and unsaved. One file can sit in many places, so removing one message must not delete the object while another chat or comment still shows it. Once nothing references it, and it was never published or saved, it can expire. Marking it unavailable today already hides it from those threads, so expiry has to follow the references or the threads break.
+- [ ] Give admin a storage summary. Total size, and how much is published, saved, still shown in a chat or image comment, or only an unpublished draft. The cap is guesswork without that.
+
+Open questions:
+- How long does an unpublished, unsaved creation stay?
+- Does expiry wait until the web can save into a folder or project, so a draft has somewhere to go besides publish?
+- Is the LoRA set published images only?
+
 ### Generation Economics
 - [ ] Reduce dependence on Replicate.
 - [ ] Assess the capacity and scalability of Parascene Blue.
@@ -107,11 +125,12 @@ Evaluate each opportunity against:
 
 ### Selected Priorities
 - [ ] Lock the cost floor. Make Blue the normal generation path, and keep Replicate for overflow or paid runs.
+- [ ] Bound Supabase storage. Expire unpublished, unsaved creations. Keep published images for LoRA, and keep anything saved in a folder or project. Keep a file that a chat or an image comment still shows, and delete the stored object only after the last of those references is gone. Folders, projects, and image search on the web are how a person keeps and finds what should not be deleted. A library export job lets them download the rest as a zip before it goes. Admin gets a storage summary so the bucket can be watched before it is full.
 - [ ] Keep the home occupied when activity is thin. Leave an active challenge up, and leave the last winner up until the next one. Measure whether people come back.
 - [ ] Turn a registration into one public act: a vote, a comment, or a challenge entry. Any credit reward spends on Blue.
 
 ### Deferred
-- [ ] LoRA, older models, and the enthusiast-versus-casual question, until the bill is stable.
+- [ ] LoRA, older models, and the enthusiast-versus-casual question, until the bill is stable. The feature waits. The storage rule does not: published images stay, because that is the training set.
 - [ ] Integrated AI assistant.
 - [ ] User-created challenges and credit prize pools.
 - [ ] Sidebar cleanup, mobile layout, and documentation, until the home reliably has something in it.

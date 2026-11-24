@@ -250,6 +250,8 @@ shared CSS and refreshed JSON snapshot are served by `server/routes/reports.js`;
 the route requires a loopback connection. Production mode leaves it unmounted
 unless `LOCAL_REPORTS_ENABLED=1`; the local dev launcher sets that flag while
 preserving the inherited `NODE_ENV`. Deployed servers do not set the flag.
+Finances opens `/finance/` the same way, served by `server/routes/finance.js`
+and gated by `LOCAL_FINANCE_ENABLED`.
 
 ### Browse grids, search composer and shared lightbox (2026-10-04)
 
