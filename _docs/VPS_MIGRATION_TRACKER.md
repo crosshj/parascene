@@ -4,12 +4,11 @@ This is an open-work list only. Completed ports and confirmed behavior are inten
 
 ## Remaining work
 
-- [ ] Inventory the API routes and external consumers currently owned by Vercel. Classify each as migrate, retire, or intentionally retain; the target is no Vercel API runtime.
-- [ ] Port required endpoints into VPS-owned services while preserving request/response contracts, auth, authorization, rate limits, idempotency, and error behavior.
-- [ ] Move payment endpoints and Stripe webhook handling, preserving the verified checkout/credit behavior. Update Stripe webhook configuration and API URLs only as part of the cutover.
-- [ ] Move creation/provider-poll workers and callbacks off the legacy API worker. Define one owner for schedules, queues, writes, retries, polling, and restart recovery.
-- [ ] Port the notifications/digest email worker into the root server, including its campaign queries and delivery-state updates, then connect it to the Admin Emails “Run cron now” action. The admin button and protected API route are present, but the route returns an explicit unavailable response until the worker is migrated.
-- [ ] Resolve the published `/api/worker/create` versus mounted `/api/create/worker` path discrepancy and verify every QStash callback targets the chosen endpoint.
-- [ ] Move the `visit_pulse_flush` and `feed_beta_catalog_rebuild` jobs out of `_legacy/api_routes`; the QStash schedules currently target `/api/worker/jobs`, which the root app does not expose. Add root-owned handlers and update schedules while preserving cadence and behavior. Keep the existing `feed-beta` Redis key and schedule identifier stable unless changing them as part of a coordinated migration.
+Before DNS for `api.parascene.com`. Detail is in [PLAN_api_off_vercel.md](PLAN_api_off_vercel.md). These three are done.
+
+- [x] Point pricing checkout, plan cancel, and checkout-return at same-origin `/api/...` in `client/views/Pricing/PricingView.js`.
+- [x] Set nginx `proxy_read_timeout` and `proxy_send_timeout` to at least 300s for `/api/worker/` and `/api/try/worker`.
+- [x] Enqueue an embedding job on publish, on a title or description save of a published creation, and on admin restore.
+
 - [ ] Remove remaining `_legacy` imports from maintained scripts and tests. The current references are in feed/visit-pulse job scripts, blog migration, audio/video backfills and video metadata repair, debug/monitoring scripts, and `test/messages-presentation-parity.test.js`. Port only supported tooling to root-owned modules; retire obsolete one-off scripts or replace the test's source dependency with root-owned fixtures. Do not port the legacy DB wholesale to preserve scripts.
-- [ ] Define cutover and rollback steps, then verify production journeys, responsive behavior, media delivery, monitoring, backups, and alerting before retiring the Vercel API deployment.
+- [ ] After the checklist, point `api` at the VPS and keep that Cloudflare record DNS-only. Confirm one checkout, one plan cancel, one creation poll, one catalog rebuild, one pulse flush, and one mail cron. Then pause Vercel. Rollback is pointing `api` back at Vercel.

@@ -78,7 +78,7 @@ proof behavior, not the final sharing model.
 The host Nginx site is rendered from `infra/nginx/parascene.conf`. A push to
 `beta` installs `parascene-beta` and proxies that site's names to port 3000.
 A push to `main` installs `parascene-prod` and proxies `www.parascene.com`,
-`cdn.parascene.com`, and `sh.parascene.com` to port 3001. The production apex
+`api.parascene.com`, `cdn.parascene.com`, and `sh.parascene.com` to port 3001. The production apex
 `parascene.com` permanently redirects to
 `https://www.parascene.com`, preserving path and query. Deployments provision
 and validate a Cloudflare DNS-validated Let's Encrypt wildcard certificate for
@@ -87,11 +87,13 @@ The Cloudflare API token is stored as a GitHub Actions secret and installed on
 the VPS in a root-only Certbot credentials file; it is not passed to the app
 container.
 Keep the Cloudflare apex A record proxied and use Full (strict) SSL/TLS; keep
-the apex redirect at the origin as a fallback and canonical signal. `api`
-currently remains on Vercel for payments and webhooks; moving it to the VPS is
-open work in the [migration tracker](VPS_MIGRATION_TRACKER.md).
-Both VPS sites publish creation and provider-poll jobs through QStash to the
-legacy `api.parascene.com` worker. Local development runs those jobs in process.
+the apex redirect at the origin as a fallback and canonical signal. DNS for
+`api.parascene.com` still points at Vercel. Prod nginx is already ready for
+that name. The pre-DNS checklist is in
+[PLAN_api_off_vercel.md](PLAN_api_off_vercel.md). Keep the `api` record
+DNS-only when it moves, so long worker requests are not cut off by the proxy.
+Both VPS sites publish creation and provider-poll jobs through QStash to
+`api.parascene.com`. Local development runs those jobs in process.
 Each deploy validates the complete Nginx configuration, restores the prior
 file on failure, and reloads Nginx before public health checks. Unless
 deployments run as root, the SSH deploy user therefore needs non-interactive

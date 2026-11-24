@@ -17,6 +17,7 @@ import {
 } from "../services/create/creationGpuWait.js";
 import { runLandscapeJob } from "../services/create/landscapeJob.js";
 import { scheduleCreationJob, scheduleAudioCoverJob, scheduleLandscapeJob } from "../services/create/scheduleCreationJob.js";
+import { scheduleEmbeddingJob } from "../services/create/scheduleEmbeddingJob.js";
 import { runAudioCoverJob, albumCoverPromptFromCreation, resolveAudioCoverGenerateTarget } from "../services/create/audioCoverGenerate.js";
 import {
 	applyAudioCoverBuffer,
@@ -159,6 +160,16 @@ function coverFailure(res, err, fallback) {
 	const message = typeof err?.message === "string" && err.message.trim() ? err.message.trim() : fallback;
 	const status = Number(err?.status) || (message === "File too large" ? 413 : 500);
 	return res.status(status).json({ error: fallback, message });
+}
+
+function queueEmbedding(creation) {
+	void scheduleEmbeddingJob({ creation }).catch((error) => {
+		console.warn("[create] Failed to schedule embedding job:", error?.message || error);
+	});
+}
+
+function isPublishedCreation(row) {
+	return row?.published === true || row?.published === 1;
 }
 
 export default function createCreateRoutes({ queries, storage, canUseServer }) {
@@ -2661,6 +2672,7 @@ router.put("/api/create/images/:id", asyncRoute(async (req, res) => {
 				? await queries.selectCreatedImageById.get(id, user.id)
 				: await queries.selectCreatedImageByIdAnyUser?.get(id);
 			const updatedMeta = parseMeta(updated?.meta) || nextMeta;
+			if (isPublishedCreation(updated)) queueEmbedding(updated);
 			return res.json({
 				id: updated?.id ?? id,
 				title: updated?.title ?? title,
@@ -2712,6 +2724,15 @@ router.post("/api/create/images/:id/publish", asyncRoute(async (req, res) => {
 			}
 			await bumpFeedVersionCounter(queries);
 			void invalidateFeedCatalogSnapshot().catch(() => {});
+			let publishedRow = null;
+			try {
+				publishedRow = image.user_id === user.id
+					? await queries.selectCreatedImageById.get(id, user.id)
+					: await queries.selectCreatedImageByIdAnyUser?.get(id);
+			} catch (error) {
+				console.warn("[create] Failed to reload published creation for embedding:", error?.message || error);
+			}
+			queueEmbedding(publishedRow || { ...image, id, title: title || null, description: description || null, published: true });
 			return res.json({ success: true, id, published: true });
 		} catch (err) {
 			console.error("[POST /api/create/images/:id/publish]", err);
@@ -3219,6 +3240,12 @@ router.post("/api/create/images/:id/admin-restore-user-delete", asyncRoute(async
 		}
 		await bumpFeedVersionCounter(queries);
 		void invalidateFeedCatalogSnapshot().catch(() => {});
+		try {
+			const restored = await queries.selectCreatedImageByIdAnyUser.get(id);
+			if (isPublishedCreation(restored)) queueEmbedding(restored);
+		} catch (error) {
+			console.warn("[create] Failed to schedule embedding after restore:", error?.message || error);
+		}
 		return res.json({ ok: true, restored: true });
 	} catch (error) {
 		console.error("[admin] restore user-deleted creation failed:", error);

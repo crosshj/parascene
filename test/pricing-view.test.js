@@ -98,3 +98,30 @@ test('pricing overlay shows the current plan and a returned credit purchase', { 
 		h.close();
 	}
 });
+
+test('pricing checkout and plan changes stay on this origin', { skip: !vm.SourceTextModule }, async () => {
+	const seen = [];
+	const h = harness(async (input, init) => {
+		seen.push({ url: String(input), method: init?.method || 'GET' });
+		if (String(input) === '/api/profile') return jsonResponse({ plan: 'free', profile: {} });
+		if (String(input) === '/api/subscription/checkout') return jsonResponse({ url: 'https://checkout.stripe.test/session' });
+		if (String(input) === '/api/profile/plan') return jsonResponse({ plan: 'free' });
+		return jsonResponse({}, 404);
+	});
+	try {
+		const { PricingView } = await h.load('views/Pricing/PricingView.js');
+		const mounted = PricingView.mount({ outlet: h.outlet, url: '/pricing' });
+		await mounted.backgroundReady;
+		h.outlet.querySelector('[data-pricing-founder]').click();
+		await new Promise((resolve) => setTimeout(resolve, 20));
+		h.outlet.querySelector('[data-pricing-switch]').click();
+		await new Promise((resolve) => setTimeout(resolve, 20));
+		assert.deepEqual(seen.filter((call) => call.method !== 'GET').map((call) => call.url), [
+			'/api/subscription/checkout',
+			'/api/profile/plan',
+		]);
+		mounted.destroy();
+	} finally {
+		h.close();
+	}
+});
