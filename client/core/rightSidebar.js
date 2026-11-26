@@ -1,6 +1,7 @@
 import markup from './rightSidebar.html';
 import { createTemplateFactory } from '../utils/dom.js';
 import { CHAT_PAGE_BACK_ICON_HTML } from '../shared/chatPageHeader.js';
+import { documentHasNestedEscapeLayer } from '../shared/escapeLayers.js';
 const clone = createTemplateFactory(markup);
 
 // Layout owns the rail. Features supply a mount function and release their lease
@@ -51,11 +52,11 @@ export function createRightSidebar({ root }) {
   document.documentElement.classList.remove('app-right-sidebar-restoring');
   host.hidden = true; document.body.classList.remove('app-right-sidebar-open');
  }
- function open({ key, title: label = '', mount, onClose } = {}) {
+ function open({ key, title: label = '', mount, onClose, remember = true, sticky = false } = {}) {
   retire(); restoration = null;
   document.documentElement.classList.remove('app-right-sidebar-restoring');
-  const record = { key, onClose, handle: null, path: routePath }; active = record;
-  saveRoute(record.path, { key, title: label });
+  const record = { key, onClose, handle: null, path: routePath, sticky }; active = record;
+  if (remember) saveRoute(record.path, { key, title: label });
   title.textContent = label; closeButton.hidden = false; host.setAttribute('aria-label', label || 'Sidebar');
   host.hidden = false; document.body.classList.add('app-right-sidebar-open');
   try { record.handle = mount?.({ outlet: content, close: () => { if (active === record) close(); } }); }
@@ -79,10 +80,15 @@ export function createRightSidebar({ root }) {
  }, { signal: listeners.signal });
  closeButton.addEventListener('click', () => close(), { signal: listeners.signal });
  backButton.addEventListener('click', () => close(), { signal: listeners.signal });
+ function escapeIsForOverlay() {
+  const overlay = document.querySelector('.app-overlay-host');
+  if (overlay instanceof HTMLElement && !overlay.hidden) return true;
+  return documentHasNestedEscapeLayer();
+ }
  document.addEventListener('keydown', event => {
-  if (event.key !== 'Escape' || event.defaultPrevented || host.hidden || document.querySelector('dialog[open]')) return;
-  // Menus and dialogs receive Escape first.
-  queueMicrotask(() => { if (!event.defaultPrevented && !host.hidden) { event.preventDefault(); close(); } });
+  if (event.key !== 'Escape' || event.defaultPrevented || host.hidden || escapeIsForOverlay()) return;
+  // Menus, dialogs, and page overlays receive Escape first.
+  queueMicrotask(() => { if (!event.defaultPrevented && !host.hidden && !escapeIsForOverlay()) { event.preventDefault(); close(); } });
  }, { signal: listeners.signal });
  setWidth(width);
  function fillSkeleton() {
@@ -100,6 +106,12 @@ export function createRightSidebar({ root }) {
  function prepare(path = routePath) {
   stop();
   const nextPath = new URL(path, location.origin).pathname;
+  // A sticky pane belongs to the session, not the page that opened it.
+  if (active?.sticky) {
+   routePath = nextPath;
+   active.path = nextPath;
+   return;
+  }
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem(routeStorage) || '{}')[nextPath] || null; } catch {}
   // WWW enters mobile channels on the message view; a remembered canvas is
@@ -121,5 +133,5 @@ export function createRightSidebar({ root }) {
  }
  prepare(routePath);
  window.addEventListener('resize', () => setWidth(width), { signal: listeners.signal });
- return { open, close, prepare, header: host.querySelector('.app-right-sidebar__header'), get restoreDismissed() { return restoreDismissed; }, get restoration() { return restoration; }, get key() { return active?.key; }, destroy() { close({ forget: false }); loadingResize.disconnect(); listeners.abort(); host.remove(); document.body.style.removeProperty('--app-right-sidebar-width'); } };
+ return { open, close, prepare, header: host.querySelector('.app-right-sidebar__header'), get restoreDismissed() { return restoreDismissed; }, get restoration() { return restoration; }, get key() { return active?.key; }, get sticky() { return Boolean(active?.sticky); }, destroy() { close({ forget: false }); loadingResize.disconnect(); listeners.abort(); host.remove(); document.body.style.removeProperty('--app-right-sidebar-width'); } };
 }

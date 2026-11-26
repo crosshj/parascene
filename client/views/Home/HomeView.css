@@ -2,6 +2,10 @@
 	display: none;
 }
 
+body.advanced-create-open .app-outlet__frame.is-home-desktop .home-hero {
+	display: none;
+}
+
 .app-outlet__frame.is-home-desktop .app-outlet__content {
 	padding: 28px 28px 40px;
 }

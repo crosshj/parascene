@@ -6,6 +6,7 @@ import { iconMarkup } from '../components/Icon/Icon.js';
 import { createSearchComposerElement } from '../components/SearchComposer/SearchComposer.js';
 import { createMessageComposerElement } from '../components/Messages/Composer.js';
 import { mountCreateComposer } from '../components/CreateComposer/CreateComposer.js';
+import { mountAdvancedCreate } from '../components/AdvancedCreate/AdvancedCreate.js';
 import '../components/CreateComposer/CreateComposer.css';
 import { refreshAutoGrowTextareas } from '../shared/autogrow.js';
 import { attachCreateComposerSuggest, isTriggeredSuggestPopupOpen } from '../shared/triggeredSuggest.js';
@@ -181,6 +182,37 @@ export function createLayout({ root, views, services } = {}) {
 	let viewportResizeTimer = 0;
 	let sidebarLayoutReady = false;
 	let creationComposerHandle = null;
+	let advancedCreateOpen = false;
+	let advancedCreateLease = 0;
+	let layoutClosing = false;
+	const advancedCreateStorageKey = 'prsn-advanced-create-open';
+
+	function readAdvancedCreateOutput() {
+		try {
+			const raw = localStorage.getItem(advancedCreateStorageKey);
+			if (!raw) return null;
+			const saved = JSON.parse(raw);
+			return saved && typeof saved.output === 'string' ? saved.output : 'image';
+		} catch {
+			return null;
+		}
+	}
+
+	function writeAdvancedCreateOpen(output) {
+		try {
+			localStorage.setItem(advancedCreateStorageKey, JSON.stringify({ output: output || 'image' }));
+		} catch { /* The pane still works if storage is blocked. */ }
+	}
+
+	function clearAdvancedCreateOpen() {
+		try { localStorage.removeItem(advancedCreateStorageKey); } catch { /* Ignore storage failures. */ }
+	}
+
+	function syncCreationComposer() {
+		creationComposer.hidden = frame.dataset.composer !== 'creation' || advancedCreateOpen;
+		document.body.classList.toggle('advanced-create-open', advancedCreateOpen);
+		measureComposer();
+	}
 	let mobileDocumentScrollLockTop = null;
 	let mobileDocumentScrollLockStyles = null;
 
@@ -274,13 +306,37 @@ export function createLayout({ root, views, services } = {}) {
 		}
 		pageIcon.innerHTML = iconMarkup(chrome.icon || 'home');
 		composer.hidden = chrome.composer !== 'message';
-		creationComposer.hidden = chrome.composer !== 'creation';
+		creationComposer.hidden = chrome.composer !== 'creation' || advancedCreateOpen;
 		searchComposer.hidden = chrome.composer !== 'search';
 		challengeNav.hidden = chrome.composer !== 'challenge';
 		frame.dataset.composer = chrome.composer || 'none';
 		measureComposer();
 		measureMessageComposer();
 		measureChallengeNav();
+	}
+
+	function openAdvancedCreate({ output = 'image' } = {}) {
+		const lease = ++advancedCreateLease;
+		advancedCreateOpen = true;
+		writeAdvancedCreateOpen(output);
+		syncCreationComposer();
+		rightSidebar.open({
+			key: 'advanced-create',
+			title: 'Create',
+			remember: false,
+			sticky: true,
+			onClose() {
+				if (lease !== advancedCreateLease) return;
+				advancedCreateOpen = false;
+				advancedCreateLease = 0;
+				// Page unload destroys the sidebar. That is not the person closing the pane.
+				if (!layoutClosing) clearAdvancedCreateOpen();
+				syncCreationComposer();
+			},
+			mount({ outlet }) {
+				return mountAdvancedCreate({ outlet, output });
+			},
+		});
 	}
 
 	async function reconcileCreationComposer(chrome, revision) {
@@ -297,6 +353,9 @@ export function createLayout({ root, views, services } = {}) {
 			attachPromptSuggest: attachCreateComposerSuggest,
 			isTriggeredSuggestPopupOpen,
 			createProvider: services.providers.create,
+			openAdvanced({ output } = {}) {
+				openAdvancedCreate({ output });
+			},
 		});
 		creationComposerHandle = result && typeof result.then === 'function' ? await result : result;
 		if (revision !== backgroundRevision) {
@@ -588,6 +647,7 @@ export function createLayout({ root, views, services } = {}) {
 	}
 
 	function destroy() {
+		layoutClosing = true;
 		conversationViewport.destroy();
 		mobileMedia.removeEventListener('change', onMobileBreakpointChange);
 		pageHeader.append(pageActions);
@@ -629,7 +689,7 @@ export function createLayout({ root, views, services } = {}) {
 		viewportResizeTimer = 0;
 		document.documentElement.classList.remove('app-overlay-route-pending');
 		overlayHost.remove();
-		document.body.classList.remove('app-layout', 'is-resizing-sidebar', 'is-resizing-viewport');
+		document.body.classList.remove('app-layout', 'advanced-create-open', 'is-resizing-sidebar', 'is-resizing-viewport');
 		document.body.style.removeProperty('--app-sidebar-width');
 		appliedComposition = null;
 	}
@@ -645,6 +705,8 @@ export function createLayout({ root, views, services } = {}) {
 	window.addEventListener('prsn:navigate', onComposerNavigate);
 	document.body.classList.add('app-layout');
 	setSidebarLayoutReady(false);
+	const savedAdvancedOutput = readAdvancedCreateOutput();
+	if (savedAdvancedOutput) openAdvancedCreate({ output: savedAdvancedOutput });
 
 	return {
 		apply,

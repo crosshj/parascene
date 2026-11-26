@@ -439,6 +439,7 @@ function mountDesktop({ outlet, actions, services }) {
 			event.preventDefault();
 			return;
 		}
+		if (event.defaultPrevented) return;
 		const link = event.target.closest('a');
 		if (!link || link.target || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
 		const target = new URL(link.href, location.origin);

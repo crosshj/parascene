@@ -53,6 +53,8 @@ export const NESTED_ESCAPE_LAYER_SELECTORS = [
 	'.comment-attach-popover',
 	'[data-create-model-popover]',
 	'[data-create-aspect-popover]',
+	'[data-advanced-create-select]',
+	'[data-advanced-create-picker]',
 	'[data-creation-more-menu]',
 	'.create-route-advanced-confirm',
 	'[data-advanced-confirm-dialog]',

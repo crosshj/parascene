@@ -3518,6 +3518,11 @@ export function mountCreateComposer(host, opts = {}) {
 		const onAdvanced = async (e) => {
 			e.preventDefault();
 			if (attachmentUploadingCount > 0) return;
+			const desktop = typeof matchMedia === 'function' && matchMedia('(min-width: 769px)').matches;
+			if (desktop && typeof opts.openAdvanced === 'function') {
+				opts.openAdvanced({ output: outputMode });
+				return;
+			}
 			const editorTarget = composerEditorTarget();
 			savePrompt();
 			saveAspectRatio(selectedAspect);

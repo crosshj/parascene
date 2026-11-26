@@ -1,0 +1,3715 @@
+{
+	"image": {
+		"models": [
+			{
+				"id": "flux",
+				"label": "Flux",
+				"serverId": 6,
+				"server": "Parascene Blue",
+				"fields": [
+					{
+						"key": "variant",
+						"type": "select",
+						"label": "Variant",
+						"options": [
+							{
+								"label": "Flux 3 Klein",
+								"value": "6-diffusion-models-flux3-image-klein-base-int8-convrot-safetensors",
+								"credits": 0.1,
+								"server": "Parascene Blue",
+								"serverId": 6,
+								"routes": {
+									"text": {
+										"method": "text2image",
+										"model": "diffusion_models/flux3-image-klein-base-int8-convrot.safetensors"
+									},
+									"image": {
+										"method": "image2image",
+										"model": "flux3_klein_i2i"
+									}
+								},
+								"fields": [
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Start image",
+										"role": "image"
+									},
+									{
+										"key": "denoise",
+										"type": "number",
+										"label": "Denoise"
+									}
+								]
+							},
+							{
+								"label": "Flux 2 Pro",
+								"value": "pro",
+								"credits": 3,
+								"server": "Parascene",
+								"serverId": 1,
+								"routes": {
+									"text": {
+										"method": "replicate",
+										"model": "black-forest-labs/flux-2-pro"
+									},
+									"image": {
+										"method": "replicate",
+										"model": "black-forest-labs/flux-2-pro"
+									}
+								},
+								"fields": [
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Start image",
+										"role": "image"
+									}
+								],
+								"section": "FLUX 2"
+							},
+							{
+								"label": "Flux 2 Max",
+								"value": "max",
+								"credits": 15,
+								"server": "Parascene",
+								"serverId": 1,
+								"routes": {
+									"text": {
+										"method": "replicatePro",
+										"model": "black-forest-labs/flux-2-max"
+									},
+									"image": {
+										"method": "replicatePro",
+										"model": "black-forest-labs/flux-2-max"
+									}
+								},
+								"fields": [
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Start image",
+										"role": "image"
+									}
+								],
+								"section": "FLUX 2"
+							},
+							{
+								"label": "Flux 2 Pro Multi-Image Edit",
+								"value": "pro-multi-image-edit",
+								"credits": 15,
+								"server": "Parascene",
+								"serverId": 1,
+								"routes": {
+									"text": {
+										"method": "replicatePro",
+										"model": "black-forest-labs/flux-2-pro"
+									},
+									"image": {
+										"method": "replicatePro",
+										"model": "black-forest-labs/flux-2-pro"
+									}
+								},
+								"fields": [
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Start image",
+										"role": "image"
+									}
+								],
+								"section": "FLUX 2"
+							},
+							{
+								"label": "Flux Kontext",
+								"value": "flux_kontext_i2i",
+								"credits": 0.1,
+								"server": "Parascene Blue",
+								"serverId": 6,
+								"routes": {
+									"image": {
+										"method": "image2image",
+										"model": "flux_kontext_i2i"
+									}
+								},
+								"fields": [
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Start image",
+										"role": "image",
+										"required": true
+									},
+									{
+										"key": "denoise",
+										"type": "number",
+										"label": "Denoise"
+									}
+								],
+								"section": "FLUX 1"
+							},
+							{
+								"label": "Flux Dev",
+								"value": "diffusion_models/flux/flux1-dev.safetensors",
+								"credits": 0.1,
+								"server": "Parascene Blue",
+								"serverId": 6,
+								"routes": {
+									"text": {
+										"method": "text2image",
+										"model": "diffusion_models/flux/flux1-dev.safetensors"
+									}
+								},
+								"section": "FLUX 1"
+							},
+							{
+								"label": "Flux Dev FP8",
+								"value": "checkpoints/FLUX1/flux1-dev-fp8.safetensors",
+								"credits": 0.1,
+								"server": "Parascene Blue",
+								"serverId": 6,
+								"routes": {
+									"text": {
+										"method": "text2image",
+										"model": "checkpoints/FLUX1/flux1-dev-fp8.safetensors"
+									}
+								},
+								"section": "FLUX 1"
+							},
+							{
+								"label": "Flux Dev Kontext",
+								"value": "diffusion_models/flux/flux1-dev-kontext_fp8_scaled.safetensors",
+								"credits": 0.1,
+								"server": "Parascene Blue",
+								"serverId": 6,
+								"routes": {
+									"text": {
+										"method": "text2image",
+										"model": "diffusion_models/flux/flux1-dev-kontext_fp8_scaled.safetensors"
+									}
+								},
+								"section": "FLUX 1"
+							},
+							{
+								"label": "Flux Schnell",
+								"value": "diffusion_models/flux/flux1-schnell.safetensors",
+								"credits": 0.1,
+								"server": "Parascene Blue",
+								"serverId": 6,
+								"routes": {
+									"text": {
+										"method": "text2image",
+										"model": "diffusion_models/flux/flux1-schnell.safetensors"
+									}
+								},
+								"section": "FLUX 1"
+							},
+							{
+								"label": "Flux Schnell FP8",
+								"value": "checkpoints/FLUX1/flux1-schnell-fp8.safetensors",
+								"credits": 0.1,
+								"server": "Parascene Blue",
+								"serverId": 6,
+								"routes": {
+									"text": {
+										"method": "text2image",
+										"model": "checkpoints/FLUX1/flux1-schnell-fp8.safetensors"
+									}
+								},
+								"section": "FLUX 1"
+							},
+							{
+								"label": "GetPhat Reality v10",
+								"value": "diffusion_models/flux/getphatFLUXReality_v10FP8.safetensors",
+								"credits": 0.1,
+								"server": "Parascene Blue",
+								"serverId": 6,
+								"routes": {
+									"text": {
+										"method": "text2image",
+										"model": "diffusion_models/flux/getphatFLUXReality_v10FP8.safetensors"
+									}
+								},
+								"section": "FLUX 1"
+							},
+							{
+								"label": "GetPhat Reality v5 Hardcore",
+								"value": "diffusion_models/flux/getphatFLUXReality_v5HardcoreFP8.safetensors",
+								"credits": 0.1,
+								"server": "Parascene Blue",
+								"serverId": 6,
+								"routes": {
+									"text": {
+										"method": "text2image",
+										"model": "diffusion_models/flux/getphatFLUXReality_v5HardcoreFP8.safetensors"
+									}
+								},
+								"section": "FLUX 1"
+							},
+							{
+								"label": "Real Dream Flux",
+								"value": "diffusion_models/flux/real-dream-flux-1-fp8.safetensors",
+								"credits": 0.1,
+								"server": "Parascene Blue",
+								"serverId": 6,
+								"routes": {
+									"text": {
+										"method": "text2image",
+										"model": "diffusion_models/flux/real-dream-flux-1-fp8.safetensors"
+									}
+								},
+								"section": "FLUX 1"
+							},
+							{
+								"label": "Stoiqo Afrodite",
+								"value": "diffusion_models/flux/STOIQOAfroditeFLUXXL_F1DAlpha.safetensors",
+								"credits": 0.1,
+								"server": "Parascene Blue",
+								"serverId": 6,
+								"routes": {
+									"text": {
+										"method": "text2image",
+										"model": "diffusion_models/flux/STOIQOAfroditeFLUXXL_F1DAlpha.safetensors"
+									}
+								},
+								"section": "FLUX 1"
+							},
+							{
+								"label": "Stoiqo Newreality",
+								"value": "diffusion_models/flux/STOIQONewrealityFLUXSD35_f1DAlphaTwo.safetensors",
+								"credits": 0.1,
+								"server": "Parascene Blue",
+								"serverId": 6,
+								"routes": {
+									"text": {
+										"method": "text2image",
+										"model": "diffusion_models/flux/STOIQONewrealityFLUXSD35_f1DAlphaTwo.safetensors"
+									}
+								},
+								"section": "FLUX 1"
+							}
+						]
+					},
+					{
+						"key": "prompt",
+						"type": "text",
+						"label": "Prompt",
+						"required": true
+					},
+					{
+						"key": "aspect_ratio",
+						"type": "select",
+						"label": "Aspect ratio",
+						"options": [
+							{
+								"label": "1:1",
+								"value": "1:1"
+							},
+							{
+								"label": "4:5",
+								"value": "4:5"
+							},
+							{
+								"label": "9:16",
+								"value": "9:16"
+							},
+							{
+								"label": "16:9",
+								"value": "16:9"
+							}
+						]
+					}
+				],
+				"section": "Quick"
+			},
+			{
+				"id": "krea",
+				"label": "Krea",
+				"serverId": 6,
+				"server": "Parascene Blue",
+				"fields": [
+					{
+						"key": "variant",
+						"type": "select",
+						"label": "Variant",
+						"options": [
+							{
+								"label": "Krea 2 Turbo",
+								"value": "krea-2-turbo",
+								"credits": 0.1,
+								"server": "Parascene Blue",
+								"serverId": 6,
+								"routes": {
+									"text": {
+										"method": "text2image",
+										"model": "diffusion_models/krea2/krea2_turbo_int8_convrot.safetensors"
+									}
+								}
+							},
+							{
+								"label": "Krea 2 Turbo FP8",
+								"value": "krea-2-turbo-fp8",
+								"credits": 0.1,
+								"server": "Parascene Blue",
+								"serverId": 6,
+								"routes": {
+									"text": {
+										"method": "text2image",
+										"model": "diffusion_models/krea2/krea2_turbo_fp8_scaled.safetensors"
+									}
+								}
+							},
+							{
+								"label": "Style reference",
+								"value": "krea-2-style-ref",
+								"credits": 0.1,
+								"server": "Parascene Blue",
+								"serverId": 6,
+								"routes": {
+									"image": {
+										"method": "image2image",
+										"model": "krea2_style_ref"
+									}
+								},
+								"fields": [
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Start image",
+										"role": "image",
+										"required": true
+									},
+									{
+										"key": "denoise",
+										"type": "number",
+										"label": "Denoise"
+									}
+								]
+							},
+							{
+								"label": "Krea Dev",
+								"value": "diffusion_models/flux/flux1-krea-dev_fp8_scaled.safetensors",
+								"credits": 0.1,
+								"server": "Parascene Blue",
+								"serverId": 6,
+								"routes": {
+									"text": {
+										"method": "text2image",
+										"model": "diffusion_models/flux/flux1-krea-dev_fp8_scaled.safetensors"
+									}
+								}
+							}
+						]
+					},
+					{
+						"key": "prompt",
+						"type": "text",
+						"label": "Prompt",
+						"required": true
+					},
+					{
+						"key": "aspect_ratio",
+						"type": "select",
+						"label": "Aspect ratio",
+						"options": [
+							{
+								"label": "1:1",
+								"value": "1:1"
+							},
+							{
+								"label": "4:5",
+								"value": "4:5"
+							},
+							{
+								"label": "9:16",
+								"value": "9:16"
+							},
+							{
+								"label": "16:9",
+								"value": "16:9"
+							}
+						]
+					}
+				],
+				"section": "Quick"
+			},
+			{
+				"id": "6-diffusion-models-moss-image-sft-int8-convrot-safetensors",
+				"label": "MOSS Image SFT",
+				"serverId": 6,
+				"server": "Parascene Blue",
+				"credits": 0.1,
+				"fields": [
+					{
+						"key": "prompt",
+						"type": "text",
+						"label": "Prompt",
+						"required": true
+					},
+					{
+						"key": "aspect_ratio",
+						"type": "select",
+						"label": "Aspect ratio",
+						"options": [
+							{
+								"label": "1:1",
+								"value": "1:1"
+							},
+							{
+								"label": "4:5",
+								"value": "4:5"
+							},
+							{
+								"label": "9:16",
+								"value": "9:16"
+							},
+							{
+								"label": "16:9",
+								"value": "16:9"
+							}
+						]
+					},
+					{
+						"key": "input_images",
+						"type": "image",
+						"label": "Start image",
+						"role": "image"
+					},
+					{
+						"key": "denoise",
+						"type": "number",
+						"label": "Denoise"
+					}
+				],
+				"routes": {
+					"text": {
+						"method": "text2image",
+						"model": "diffusion_models/moss_image_sft_int8_convrot.safetensors"
+					},
+					"image": {
+						"method": "image2image",
+						"model": "moss_image_i2i"
+					}
+				},
+				"section": "Quick"
+			},
+			{
+				"id": "qwen-image",
+				"label": "Qwen Image",
+				"serverId": 6,
+				"server": "Parascene Blue",
+				"fields": [
+					{
+						"key": "variant",
+						"type": "select",
+						"label": "Variant",
+						"options": [
+							{
+								"label": "2.1",
+								"value": "6-diffusion-models-qwen-image-2-1-int8-convrot-safetensors",
+								"credits": 0.1,
+								"server": "Parascene Blue",
+								"serverId": 6,
+								"routes": {
+									"text": {
+										"method": "text2image",
+										"model": "diffusion_models/qwen_image_2.1_int8_convrot.safetensors"
+									},
+									"image": {
+										"method": "image2image",
+										"model": "qwen_image_2_1_i2i"
+									}
+								},
+								"fields": [
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Start image",
+										"role": "image"
+									},
+									{
+										"key": "denoise",
+										"type": "number",
+										"label": "Denoise"
+									}
+								],
+								"section": "Quick"
+							},
+							{
+								"label": "2.1 Turbo",
+								"value": "qwen-image-2-1-turbo",
+								"credits": 0.1,
+								"server": "Parascene Blue",
+								"serverId": 6,
+								"section": "Quick",
+								"routes": {
+									"text": {
+										"method": "text2image",
+										"model": "diffusion_models/qwen_image_2.1_turbo_int8_convrot.safetensors"
+									},
+									"image": {
+										"method": "image2image",
+										"model": "qwen_image_2_1_turbo_i2i"
+									}
+								},
+								"fields": [
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Start image",
+										"role": "image"
+									},
+									{
+										"key": "denoise",
+										"type": "number",
+										"label": "Denoise"
+									}
+								]
+							},
+							{
+								"label": "Image Edit 4-step",
+								"value": "image-edit-4-step",
+								"credits": 0.1,
+								"server": "Parascene Blue",
+								"serverId": 6,
+								"routes": {
+									"image": {
+										"method": "image2image",
+										"model": "qwen_edit_i2i"
+									}
+								},
+								"fields": [
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Start image",
+										"role": "image",
+										"required": true
+									},
+									{
+										"key": "denoise",
+										"type": "number",
+										"label": "Denoise"
+									}
+								],
+								"section": "A–Z"
+							},
+							{
+								"label": "Image Edit",
+								"value": "qwen-image-edit-fp8-e4m3fn",
+								"credits": 0.1,
+								"server": "Parascene Blue",
+								"serverId": 6,
+								"routes": {
+									"text": {
+										"method": "text2image",
+										"model": "diffusion_models/qwen/qwen_image_edit_fp8_e4m3fn.safetensors"
+									}
+								},
+								"section": "A–Z"
+							},
+							{
+								"label": "Rapid AIO v9",
+								"value": "qwen-rapid-aio-nsfw-v9",
+								"credits": 0.1,
+								"server": "Parascene Blue",
+								"serverId": 6,
+								"routes": {
+									"text": {
+										"method": "text2image",
+										"model": "checkpoints/qwen/Qwen-Rapid-AIO-NSFW-v9.safetensors"
+									}
+								},
+								"section": "A–Z"
+							},
+							{
+								"label": "Rapid AIO edit",
+								"value": "rapid-aio-edit",
+								"credits": 0.1,
+								"server": "Parascene Blue",
+								"serverId": 6,
+								"routes": {
+									"image": {
+										"method": "image2image",
+										"model": "qwen_rapid_i2i"
+									}
+								},
+								"fields": [
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Start image",
+										"role": "image",
+										"required": true
+									},
+									{
+										"key": "denoise",
+										"type": "number",
+										"label": "Denoise"
+									}
+								],
+								"section": "A–Z"
+							},
+							{
+								"label": "Replicate",
+								"value": "replicate",
+								"credits": 3,
+								"server": "Parascene",
+								"serverId": 1,
+								"routes": {
+									"text": {
+										"method": "replicate",
+										"model": "qwen/qwen-image"
+									}
+								},
+								"section": "A–Z"
+							},
+							{
+								"label": "Replicate Edit",
+								"value": "replicate-edit",
+								"credits": 3,
+								"server": "Parascene",
+								"serverId": 1,
+								"routes": {
+									"text": {
+										"method": "replicate",
+										"model": "qwen/qwen-image-edit"
+									},
+									"image": {
+										"method": "replicate",
+										"model": "qwen/qwen-image-edit"
+									}
+								},
+								"fields": [
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Start image",
+										"role": "image"
+									}
+								],
+								"section": "A–Z"
+							}
+						]
+					},
+					{
+						"key": "prompt",
+						"type": "text",
+						"label": "Prompt",
+						"required": true
+					},
+					{
+						"key": "aspect_ratio",
+						"type": "select",
+						"label": "Aspect ratio",
+						"options": [
+							{
+								"label": "1:1",
+								"value": "1:1"
+							},
+							{
+								"label": "4:5",
+								"value": "4:5"
+							},
+							{
+								"label": "9:16",
+								"value": "9:16"
+							},
+							{
+								"label": "16:9",
+								"value": "16:9"
+							}
+						]
+					}
+				],
+				"section": "Quick"
+			},
+			{
+				"id": "z-image",
+				"label": "Z-Image",
+				"serverId": 6,
+				"server": "Parascene Blue",
+				"fields": [
+					{
+						"key": "variant",
+						"type": "select",
+						"label": "Variant",
+						"options": [
+							{
+								"label": "Turbo",
+								"value": "turbo",
+								"credits": 0.1,
+								"server": "Parascene Blue",
+								"serverId": 6,
+								"routes": {
+									"text": {
+										"method": "text2image",
+										"model": "diffusion_models/z-image/z_image_turbo_bf16.safetensors"
+									}
+								}
+							},
+							{
+								"label": "P-Image",
+								"value": "p-image",
+								"credits": 3,
+								"server": "Parascene",
+								"serverId": 1,
+								"routes": {
+									"text": {
+										"method": "replicate",
+										"model": "prunaai/p-image"
+									}
+								}
+							},
+							{
+								"label": "P-Image Edit",
+								"value": "p-image-edit",
+								"credits": 3,
+								"server": "Parascene",
+								"serverId": 1,
+								"routes": {
+									"text": {
+										"method": "replicate",
+										"model": "prunaai/p-image-edit"
+									},
+									"image": {
+										"method": "replicate",
+										"model": "prunaai/p-image-edit"
+									}
+								},
+								"fields": [
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Start image",
+										"role": "image"
+									}
+								]
+							},
+							{
+								"label": "Pruna Turbo",
+								"value": "pruna-turbo",
+								"credits": 3,
+								"server": "Parascene",
+								"serverId": 1,
+								"routes": {
+									"text": {
+										"method": "replicate",
+										"model": "prunaai/z-image-turbo"
+									}
+								}
+							}
+						]
+					},
+					{
+						"key": "prompt",
+						"type": "text",
+						"label": "Prompt",
+						"required": true
+					},
+					{
+						"key": "aspect_ratio",
+						"type": "select",
+						"label": "Aspect ratio",
+						"options": [
+							{
+								"label": "1:1",
+								"value": "1:1"
+							},
+							{
+								"label": "4:5",
+								"value": "4:5"
+							},
+							{
+								"label": "9:16",
+								"value": "9:16"
+							},
+							{
+								"label": "16:9",
+								"value": "16:9"
+							}
+						]
+					}
+				],
+				"section": "Quick"
+			},
+			{
+				"id": "1-replicate-xai-grok-imagine-image",
+				"label": "X.ai Grok Imagine Image",
+				"serverId": 1,
+				"server": "Parascene",
+				"credits": 3,
+				"fields": [
+					{
+						"key": "prompt",
+						"type": "text",
+						"label": "Prompt",
+						"required": true
+					},
+					{
+						"key": "aspect_ratio",
+						"type": "select",
+						"label": "Aspect ratio",
+						"options": [
+							{
+								"label": "1:1",
+								"value": "1:1"
+							},
+							{
+								"label": "4:5",
+								"value": "4:5"
+							},
+							{
+								"label": "9:16",
+								"value": "9:16"
+							},
+							{
+								"label": "16:9",
+								"value": "16:9"
+							}
+						]
+					},
+					{
+						"key": "input_images",
+						"type": "image",
+						"label": "Start image",
+						"role": "image"
+					}
+				],
+				"routes": {
+					"text": {
+						"method": "replicate",
+						"model": "xai/grok-imagine-image"
+					},
+					"image": {
+						"method": "replicate",
+						"model": "xai/grok-imagine-image"
+					}
+				},
+				"section": "Quick"
+			},
+			{
+				"id": "bernini-r",
+				"label": "Bernini-R",
+				"serverId": 6,
+				"server": "Parascene Blue",
+				"credits": 0.1,
+				"section": "A–Z",
+				"fields": [
+					{
+						"key": "prompt",
+						"type": "text",
+						"label": "Prompt",
+						"required": true
+					},
+					{
+						"key": "aspect_ratio",
+						"type": "select",
+						"label": "Aspect ratio",
+						"options": [
+							{
+								"label": "1:1",
+								"value": "1:1"
+							},
+							{
+								"label": "4:5",
+								"value": "4:5"
+							},
+							{
+								"label": "9:16",
+								"value": "9:16"
+							},
+							{
+								"label": "16:9",
+								"value": "16:9"
+							}
+						]
+					},
+					{
+						"key": "input_images",
+						"type": "image",
+						"label": "Start image",
+						"role": "image",
+						"required": true
+					},
+					{
+						"key": "denoise",
+						"type": "number",
+						"label": "Denoise"
+					}
+				],
+				"routes": {
+					"image": {
+						"method": "image2image",
+						"model": "bernini_r_i2i"
+					}
+				}
+			},
+			{
+				"id": "1-replicate-bytedance-seedream-4",
+				"label": "ByteDance Seedream 4",
+				"serverId": 1,
+				"server": "Parascene",
+				"credits": 3,
+				"fields": [
+					{
+						"key": "prompt",
+						"type": "text",
+						"label": "Prompt",
+						"required": true
+					},
+					{
+						"key": "aspect_ratio",
+						"type": "select",
+						"label": "Aspect ratio",
+						"options": [
+							{
+								"label": "1:1",
+								"value": "1:1"
+							},
+							{
+								"label": "4:5",
+								"value": "4:5"
+							},
+							{
+								"label": "9:16",
+								"value": "9:16"
+							},
+							{
+								"label": "16:9",
+								"value": "16:9"
+							}
+						]
+					},
+					{
+						"key": "input_images",
+						"type": "image",
+						"label": "Start image",
+						"role": "image"
+					}
+				],
+				"routes": {
+					"text": {
+						"method": "replicate",
+						"model": "bytedance/seedream-4"
+					},
+					"image": {
+						"method": "replicate",
+						"model": "bytedance/seedream-4"
+					}
+				},
+				"section": "A–Z"
+			},
+			{
+				"id": "gpt-image",
+				"label": "GPT-Image",
+				"serverId": 1,
+				"server": "Parascene",
+				"fields": [
+					{
+						"key": "variant",
+						"type": "select",
+						"label": "Variant",
+						"options": [
+							{
+								"label": "1.5",
+								"value": "1-replicatepro-openai-gpt-image-1-5",
+								"credits": 15,
+								"server": "Parascene",
+								"serverId": 1,
+								"routes": {
+									"text": {
+										"method": "replicatePro",
+										"model": "openai/gpt-image-1.5"
+									},
+									"image": {
+										"method": "replicatePro",
+										"model": "openai/gpt-image-1.5"
+									}
+								},
+								"fields": [
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Start image",
+										"role": "image"
+									}
+								]
+							},
+							{
+								"label": "2",
+								"value": "1-replicatepro-openai-gpt-image-2",
+								"credits": 15,
+								"server": "Parascene",
+								"serverId": 1,
+								"routes": {
+									"text": {
+										"method": "replicatePro",
+										"model": "openai/gpt-image-2"
+									},
+									"image": {
+										"method": "replicatePro",
+										"model": "openai/gpt-image-2"
+									}
+								},
+								"fields": [
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Start image",
+										"role": "image"
+									}
+								]
+							}
+						]
+					},
+					{
+						"key": "prompt",
+						"type": "text",
+						"label": "Prompt",
+						"required": true
+					},
+					{
+						"key": "aspect_ratio",
+						"type": "select",
+						"label": "Aspect ratio",
+						"options": [
+							{
+								"label": "1:1",
+								"value": "1:1"
+							},
+							{
+								"label": "4:5",
+								"value": "4:5"
+							},
+							{
+								"label": "9:16",
+								"value": "9:16"
+							},
+							{
+								"label": "16:9",
+								"value": "16:9"
+							}
+						]
+					}
+				],
+				"section": "A–Z"
+			},
+			{
+				"id": "1-replicate-leonardoai-lucid-origin",
+				"label": "Leonardo AI Lucid Origin",
+				"serverId": 1,
+				"server": "Parascene",
+				"credits": 3,
+				"fields": [
+					{
+						"key": "prompt",
+						"type": "text",
+						"label": "Prompt",
+						"required": true
+					},
+					{
+						"key": "aspect_ratio",
+						"type": "select",
+						"label": "Aspect ratio",
+						"options": [
+							{
+								"label": "1:1",
+								"value": "1:1"
+							},
+							{
+								"label": "4:5",
+								"value": "4:5"
+							},
+							{
+								"label": "9:16",
+								"value": "9:16"
+							},
+							{
+								"label": "16:9",
+								"value": "16:9"
+							}
+						]
+					}
+				],
+				"routes": {
+					"text": {
+						"method": "replicate",
+						"model": "leonardoai/lucid-origin"
+					}
+				},
+				"section": "A–Z"
+			},
+			{
+				"id": "1-replicate-luma-photon",
+				"label": "Luma Photon",
+				"serverId": 1,
+				"server": "Parascene",
+				"credits": 3,
+				"fields": [
+					{
+						"key": "prompt",
+						"type": "text",
+						"label": "Prompt",
+						"required": true
+					},
+					{
+						"key": "aspect_ratio",
+						"type": "select",
+						"label": "Aspect ratio",
+						"options": [
+							{
+								"label": "1:1",
+								"value": "1:1"
+							},
+							{
+								"label": "4:5",
+								"value": "4:5"
+							},
+							{
+								"label": "9:16",
+								"value": "9:16"
+							},
+							{
+								"label": "16:9",
+								"value": "16:9"
+							}
+						]
+					},
+					{
+						"key": "reference",
+						"type": "image",
+						"label": "Reference image",
+						"role": "ref"
+					}
+				],
+				"routes": {
+					"text": {
+						"method": "replicate",
+						"model": "luma/photon"
+					},
+					"ref": {
+						"method": "replicate",
+						"model": "luma/photon"
+					}
+				},
+				"section": "A–Z"
+			},
+			{
+				"id": "1-replicate-minimax-image-01",
+				"label": "MiniMax Image 01",
+				"serverId": 1,
+				"server": "Parascene",
+				"credits": 3,
+				"fields": [
+					{
+						"key": "prompt",
+						"type": "text",
+						"label": "Prompt",
+						"required": true
+					},
+					{
+						"key": "aspect_ratio",
+						"type": "select",
+						"label": "Aspect ratio",
+						"options": [
+							{
+								"label": "1:1",
+								"value": "1:1"
+							},
+							{
+								"label": "4:5",
+								"value": "4:5"
+							},
+							{
+								"label": "9:16",
+								"value": "9:16"
+							},
+							{
+								"label": "16:9",
+								"value": "16:9"
+							}
+						]
+					},
+					{
+						"key": "input_images",
+						"type": "image",
+						"label": "Start image",
+						"role": "image"
+					}
+				],
+				"routes": {
+					"text": {
+						"method": "replicate",
+						"model": "minimax/image-01"
+					},
+					"image": {
+						"method": "replicate",
+						"model": "minimax/image-01"
+					}
+				},
+				"section": "A–Z"
+			},
+			{
+				"id": "nano-banana",
+				"label": "Nano Banana",
+				"serverId": 1,
+				"server": "Parascene",
+				"fields": [
+					{
+						"key": "variant",
+						"type": "select",
+						"label": "Variant",
+						"options": [
+							{
+								"label": "2",
+								"value": "1-replicatepro-google-nano-banana-2",
+								"credits": 15,
+								"server": "Parascene",
+								"serverId": 1,
+								"routes": {
+									"text": {
+										"method": "replicatePro",
+										"model": "google/nano-banana-2"
+									},
+									"image": {
+										"method": "replicatePro",
+										"model": "google/nano-banana-2"
+									}
+								},
+								"fields": [
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Start image",
+										"role": "image"
+									}
+								]
+							},
+							{
+								"label": "Gemini 2.5",
+								"value": "1-replicate-google-nano-banana",
+								"credits": 3,
+								"server": "Parascene",
+								"serverId": 1,
+								"routes": {
+									"text": {
+										"method": "replicate",
+										"model": "google/nano-banana"
+									},
+									"image": {
+										"method": "replicate",
+										"model": "google/nano-banana"
+									}
+								},
+								"fields": [
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Start image",
+										"role": "image"
+									}
+								]
+							},
+							{
+								"label": "Pro",
+								"value": "1-replicatepro-google-nano-banana-pro",
+								"credits": 15,
+								"server": "Parascene",
+								"serverId": 1,
+								"routes": {
+									"text": {
+										"method": "replicatePro",
+										"model": "google/nano-banana-pro"
+									},
+									"image": {
+										"method": "replicatePro",
+										"model": "google/nano-banana-pro"
+									}
+								},
+								"fields": [
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Start image",
+										"role": "image"
+									}
+								]
+							}
+						]
+					},
+					{
+						"key": "prompt",
+						"type": "text",
+						"label": "Prompt",
+						"required": true
+					},
+					{
+						"key": "aspect_ratio",
+						"type": "select",
+						"label": "Aspect ratio",
+						"options": [
+							{
+								"label": "1:1",
+								"value": "1:1"
+							},
+							{
+								"label": "4:5",
+								"value": "4:5"
+							},
+							{
+								"label": "9:16",
+								"value": "9:16"
+							},
+							{
+								"label": "16:9",
+								"value": "16:9"
+							}
+						]
+					}
+				],
+				"section": "A–Z"
+			},
+			{
+				"id": "6-omnigen2-edit-i2i",
+				"label": "OmniGen2 — image edit",
+				"serverId": 6,
+				"server": "Parascene Blue",
+				"credits": 0.1,
+				"fields": [
+					{
+						"key": "prompt",
+						"type": "text",
+						"label": "Prompt",
+						"required": true
+					},
+					{
+						"key": "aspect_ratio",
+						"type": "select",
+						"label": "Aspect ratio",
+						"options": [
+							{
+								"label": "1:1",
+								"value": "1:1"
+							},
+							{
+								"label": "4:5",
+								"value": "4:5"
+							},
+							{
+								"label": "9:16",
+								"value": "9:16"
+							},
+							{
+								"label": "16:9",
+								"value": "16:9"
+							}
+						]
+					},
+					{
+						"key": "input_images",
+						"type": "image",
+						"label": "Start image",
+						"role": "image",
+						"required": true
+					},
+					{
+						"key": "denoise",
+						"type": "number",
+						"label": "Denoise"
+					}
+				],
+				"routes": {
+					"image": {
+						"method": "image2image",
+						"model": "omnigen2_edit_i2i"
+					}
+				},
+				"section": "A–Z"
+			},
+			{
+				"id": "pixellab",
+				"label": "PixelLab",
+				"serverId": 1,
+				"server": "Parascene",
+				"fields": [
+					{
+						"key": "variant",
+						"type": "select",
+						"label": "Variant",
+						"options": [
+							{
+								"label": "Bitforge",
+								"value": "bitforge",
+								"credits": 0.2,
+								"server": "Parascene",
+								"serverId": 1,
+								"routes": {
+									"text": {
+										"method": "pixelLabImage",
+										"model": "bitforge"
+									}
+								}
+							},
+							{
+								"label": "Pixflux",
+								"value": "pixflux",
+								"credits": 0.2,
+								"server": "Parascene",
+								"serverId": 1,
+								"routes": {
+									"text": {
+										"method": "pixelLabImage",
+										"model": "pixflux"
+									}
+								}
+							}
+						]
+					},
+					{
+						"key": "prompt",
+						"type": "text",
+						"label": "Prompt",
+						"required": true
+					},
+					{
+						"key": "no_background",
+						"type": "boolean",
+						"label": "No background"
+					}
+				],
+				"section": "A–Z"
+			},
+			{
+				"id": "1-replicate-recraft-ai-recraft-v4",
+				"label": "Recraft V4",
+				"serverId": 1,
+				"server": "Parascene",
+				"credits": 3,
+				"fields": [
+					{
+						"key": "prompt",
+						"type": "text",
+						"label": "Prompt",
+						"required": true
+					},
+					{
+						"key": "aspect_ratio",
+						"type": "select",
+						"label": "Aspect ratio",
+						"options": [
+							{
+								"label": "1:1",
+								"value": "1:1"
+							},
+							{
+								"label": "4:5",
+								"value": "4:5"
+							},
+							{
+								"label": "9:16",
+								"value": "9:16"
+							},
+							{
+								"label": "16:9",
+								"value": "16:9"
+							}
+						]
+					}
+				],
+				"routes": {
+					"text": {
+						"method": "replicate",
+						"model": "recraft-ai/recraft-v4"
+					}
+				},
+				"section": "A–Z"
+			},
+			{
+				"id": "stable-diffusion",
+				"label": "Stable Diffusion",
+				"serverId": 6,
+				"server": "Parascene Blue",
+				"credits": 0.1,
+				"fields": [
+					{
+						"key": "finetune",
+						"type": "select",
+						"label": "Fine tune",
+						"options": [
+							{
+								"label": "ByteDance Lightning 4-step",
+								"value": "bytedance-lightning-4-step",
+								"credits": 3,
+								"server": "Parascene",
+								"serverId": 1,
+								"routes": {
+									"text": {
+										"method": "replicate",
+										"model": "bytedance/sdxl-lightning-4step:6f7a773af6fc3e8de9d5a3c00be77c17308914bf67772726aff83496ba1e3bbe"
+									}
+								},
+								"section": "SDXL"
+							},
+							{
+								"label": "Stability AI",
+								"value": "stability-ai",
+								"credits": 3,
+								"server": "Parascene",
+								"serverId": 1,
+								"routes": {
+									"text": {
+										"method": "replicate",
+										"model": "stability-ai/sdxl:7762fd07cf82c948538e41f63f77d685e02b063e37e496e96eefd46c929f9bdc"
+									},
+									"image": {
+										"method": "replicate",
+										"model": "stability-ai/sdxl:7762fd07cf82c948538e41f63f77d685e02b063e37e496e96eefd46c929f9bdc"
+									}
+								},
+								"fields": [
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Start image",
+										"role": "image"
+									}
+								],
+								"section": "SDXL"
+							},
+							{
+								"label": "CyberRealistic Pony v1.3",
+								"value": "checkpoints/pony/cyberrealisticPony_v130.safetensors",
+								"routes": {
+									"text": {
+										"method": "text2image",
+										"model": "checkpoints/pony/cyberrealisticPony_v130.safetensors"
+									}
+								},
+								"section": "SDXL"
+							},
+							{
+								"label": "DreamShaper Turbo",
+								"value": "checkpoints/xl/dreamshaperXL_turboDpmppSDE.safetensors",
+								"fields": [
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Start image",
+										"role": "image"
+									},
+									{
+										"key": "denoise",
+										"type": "number",
+										"label": "Denoise"
+									}
+								],
+								"section": "SDXL"
+							},
+							{
+								"label": "Illustrious v2",
+								"value": "checkpoints/xl/illustriousXL20_v20.safetensors",
+								"fields": [
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Start image",
+										"role": "image"
+									},
+									{
+										"key": "denoise",
+										"type": "number",
+										"label": "Denoise"
+									}
+								],
+								"section": "SDXL"
+							},
+							{
+								"label": "Juggernaut v7",
+								"value": "checkpoints/xl/juggernautXL_v7Rundiffusion.safetensors",
+								"fields": [
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Start image",
+										"role": "image"
+									},
+									{
+										"key": "denoise",
+										"type": "number",
+										"label": "Denoise"
+									}
+								],
+								"section": "SDXL"
+							},
+							{
+								"label": "Juggernaut v9 Lightning",
+								"value": "checkpoints/xl/juggernautXL_v9Rdphoto2Lightning.safetensors",
+								"fields": [
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Start image",
+										"role": "image"
+									},
+									{
+										"key": "denoise",
+										"type": "number",
+										"label": "Denoise"
+									}
+								],
+								"section": "SDXL"
+							},
+							{
+								"label": "Protovision XL v6.6",
+								"value": "checkpoints/xl/protovisionXLHighFidelity3D_releaseV660Bakedvae.safetensors",
+								"fields": [
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Start image",
+										"role": "image"
+									},
+									{
+										"key": "denoise",
+										"type": "number",
+										"label": "Denoise"
+									}
+								],
+								"section": "SDXL"
+							},
+							{
+								"label": "RealCartoon v6",
+								"value": "checkpoints/xl/realcartoonXL_v6.safetensors",
+								"fields": [
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Start image",
+										"role": "image"
+									},
+									{
+										"key": "denoise",
+										"type": "number",
+										"label": "Denoise"
+									}
+								],
+								"section": "SDXL"
+							},
+							{
+								"label": "Real Dream Lightning",
+								"value": "checkpoints/xl/realDream_sdxlLightning1.safetensors",
+								"fields": [
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Start image",
+										"role": "image"
+									},
+									{
+										"key": "denoise",
+										"type": "number",
+										"label": "Denoise"
+									}
+								],
+								"section": "SDXL"
+							},
+							{
+								"label": "SDXL Base 1.0",
+								"value": "checkpoints/xl/sd_xl_base_1.0.safetensors",
+								"fields": [
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Start image",
+										"role": "image"
+									},
+									{
+										"key": "denoise",
+										"type": "number",
+										"label": "Denoise"
+									}
+								],
+								"section": "SDXL"
+							},
+							{
+								"label": "SDXL Turbo 1.0",
+								"value": "checkpoints/xl/sd_xl_turbo_1.0_fp16.safetensors",
+								"fields": [
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Start image",
+										"role": "image"
+									},
+									{
+										"key": "denoise",
+										"type": "number",
+										"label": "Denoise"
+									}
+								],
+								"section": "SDXL"
+							},
+							{
+								"label": "ZavyChroma v4",
+								"value": "checkpoints/xl/zavychromaxl_v40.safetensors",
+								"fields": [
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Start image",
+										"role": "image"
+									},
+									{
+										"key": "denoise",
+										"type": "number",
+										"label": "Denoise"
+									}
+								],
+								"section": "SDXL"
+							},
+							{
+								"label": "CyberRealistic v2",
+								"value": "checkpoints/1.5/cyberrealistic_v20.safetensors",
+								"section": "SD 1.5"
+							},
+							{
+								"label": "Deliberate v1.1",
+								"value": "checkpoints/1.5/deliberate_v11.safetensors",
+								"section": "SD 1.5"
+							},
+							{
+								"label": "DreamShaper v8",
+								"value": "checkpoints/1.5/dreamShaper_8_pruned.safetensors",
+								"section": "SD 1.5"
+							},
+							{
+								"label": "Liberty",
+								"value": "checkpoints/1.5/liberty_main.safetensors",
+								"section": "SD 1.5"
+							},
+							{
+								"label": "Lofi v2",
+								"value": "checkpoints/1.5/lofi_V2pre.safetensors",
+								"section": "SD 1.5"
+							},
+							{
+								"label": "QGO 10b",
+								"value": "checkpoints/1.5/qgo10b_qgo10b.safetensors",
+								"section": "SD 1.5"
+							},
+							{
+								"label": "Realistic Vision v6",
+								"value": "checkpoints/1.5/realisticVisionV60B1_v60B1VAE.safetensors",
+								"section": "SD 1.5"
+							},
+							{
+								"label": "ReV Animated v1.22",
+								"value": "checkpoints/1.5/revAnimated_v122.safetensors",
+								"section": "SD 1.5"
+							},
+							{
+								"label": "RPG v5",
+								"value": "checkpoints/1.5/rpg_v5.safetensors",
+								"section": "SD 1.5"
+							},
+							{
+								"label": "Toon Ame v2",
+								"value": "checkpoints/1.5/toonAme_version20.safetensors",
+								"section": "SD 1.5"
+							}
+						]
+					},
+					{
+						"key": "prompt",
+						"type": "text",
+						"label": "Prompt",
+						"required": true
+					},
+					{
+						"key": "aspect_ratio",
+						"type": "select",
+						"label": "Aspect ratio",
+						"options": [
+							{
+								"label": "1:1",
+								"value": "1:1"
+							},
+							{
+								"label": "4:5",
+								"value": "4:5"
+							},
+							{
+								"label": "9:16",
+								"value": "9:16"
+							},
+							{
+								"label": "16:9",
+								"value": "16:9"
+							}
+						]
+					}
+				],
+				"routes": {
+					"text": {
+						"method": "text2image",
+						"modelField": "finetune"
+					},
+					"image": {
+						"method": "image2image",
+						"modelField": "finetune"
+					}
+				},
+				"section": "A–Z"
+			},
+			{
+				"id": "shark-gens",
+				"label": "Shark Gens",
+				"serverId": 3,
+				"server": "SHARKGOD GENS",
+				"section": "Community",
+				"fields": [
+					{
+						"key": "variant",
+						"type": "select",
+						"label": "Variant",
+						"options": [
+							{
+								"label": "Para Dudes",
+								"value": "paradudes",
+								"credits": 0.25,
+								"server": "SHARKGOD GENS",
+								"serverId": 3,
+								"routes": {
+									"text": {
+										"method": "paradudes"
+									}
+								}
+							},
+							{
+								"label": "Para Acid Robots",
+								"value": "paraacidrobots",
+								"credits": 0.25,
+								"server": "SHARKGOD GENS",
+								"serverId": 3,
+								"routes": {
+									"text": {
+										"method": "paraacidrobots"
+									}
+								}
+							},
+							{
+								"label": "Para Windworlds",
+								"value": "parawindworlds",
+								"credits": 0.5,
+								"server": "SHARKGOD GENS",
+								"serverId": 3,
+								"routes": {
+									"text": {
+										"method": "parawindworlds"
+									}
+								}
+							}
+						]
+					}
+				]
+			},
+			{
+				"id": "croskie",
+				"label": "Croskie",
+				"serverId": 4,
+				"server": "Croskie",
+				"section": "Community",
+				"fields": [
+					{
+						"key": "variant",
+						"type": "select",
+						"label": "Variant",
+						"options": [
+							{
+								"label": "Abstract",
+								"value": "abstract",
+								"credits": 0.1,
+								"server": "Croskie",
+								"serverId": 4,
+								"routes": {
+									"text": {
+										"method": "abstract"
+									}
+								},
+								"fields": [
+									{
+										"key": "style",
+										"type": "select",
+										"label": "Style",
+										"options": [
+											{
+												"label": "Random",
+												"value": ""
+											},
+											{
+												"label": "Soft",
+												"value": "soft"
+											},
+											{
+												"label": "Dreamy",
+												"value": "dreamy"
+											},
+											{
+												"label": "Bold",
+												"value": "bold"
+											},
+											{
+												"label": "Neon",
+												"value": "neon"
+											},
+											{
+												"label": "Dark",
+												"value": "dark"
+											},
+											{
+												"label": "Candy",
+												"value": "candy"
+											},
+											{
+												"label": "Minimal",
+												"value": "minimal"
+											}
+										]
+									},
+									{
+										"key": "width",
+										"type": "number",
+										"label": "Width"
+									},
+									{
+										"key": "height",
+										"type": "number",
+										"label": "Height"
+									},
+									{
+										"key": "format",
+										"type": "select",
+										"label": "Format",
+										"options": [
+											{
+												"label": "PNG",
+												"value": "png"
+											},
+											{
+												"label": "SVG",
+												"value": "svg"
+											}
+										]
+									}
+								]
+							},
+							{
+								"label": "Cute Robot",
+								"value": "cuteRobot",
+								"credits": 0.1,
+								"server": "Croskie",
+								"serverId": 4,
+								"routes": {
+									"text": {
+										"method": "cuteRobot"
+									}
+								},
+								"fields": [
+									{
+										"key": "name",
+										"type": "text",
+										"label": "Name"
+									},
+									{
+										"key": "face",
+										"type": "select",
+										"label": "Face",
+										"options": [
+											{
+												"label": "Random",
+												"value": ""
+											},
+											{
+												"label": "Happy",
+												"value": "happy"
+											},
+											{
+												"label": "Sleepy",
+												"value": "sleepy"
+											},
+											{
+												"label": "Heart",
+												"value": "heart"
+											},
+											{
+												"label": "Pixel",
+												"value": "pixel"
+											},
+											{
+												"label": "Loading",
+												"value": "loading"
+											},
+											{
+												"label": "Surprised",
+												"value": "surprised"
+											},
+											{
+												"label": "Wink",
+												"value": "wink"
+											}
+										]
+									},
+									{
+										"key": "bodyType",
+										"type": "select",
+										"label": "Body type",
+										"options": [
+											{
+												"label": "Random",
+												"value": ""
+											},
+											{
+												"label": "Round",
+												"value": "round"
+											},
+											{
+												"label": "Square",
+												"value": "square"
+											},
+											{
+												"label": "Capsule",
+												"value": "capsule"
+											},
+											{
+												"label": "Tiny",
+												"value": "tiny"
+											},
+											{
+												"label": "Wide",
+												"value": "wide"
+											},
+											{
+												"label": "Stacked",
+												"value": "stacked"
+											},
+											{
+												"label": "Floating",
+												"value": "floating"
+											},
+											{
+												"label": "Tank",
+												"value": "tank"
+											}
+										]
+									},
+									{
+										"key": "accessory",
+										"type": "select",
+										"label": "Accessory",
+										"options": [
+											{
+												"label": "Random",
+												"value": ""
+											},
+											{
+												"label": "Antenna",
+												"value": "antenna"
+											},
+											{
+												"label": "Headphones",
+												"value": "headphones"
+											},
+											{
+												"label": "Flower",
+												"value": "flower"
+											},
+											{
+												"label": "Cap",
+												"value": "cap"
+											},
+											{
+												"label": "Halo",
+												"value": "halo"
+											},
+											{
+												"label": "Backpack",
+												"value": "backpack"
+											},
+											{
+												"label": "Ears",
+												"value": "ears"
+											},
+											{
+												"label": "Bow",
+												"value": "bow"
+											},
+											{
+												"label": "None",
+												"value": "none"
+											}
+										]
+									}
+								]
+							},
+							{
+								"label": "2D Sprite",
+								"value": "spriteGen",
+								"credits": 0.1,
+								"server": "Croskie",
+								"serverId": 4,
+								"routes": {
+									"text": {
+										"method": "spriteGen"
+									}
+								},
+								"fields": [
+									{
+										"key": "seed",
+										"type": "number",
+										"label": "Seed"
+									},
+									{
+										"key": "scale",
+										"type": "number",
+										"label": "Scale"
+									}
+								]
+							},
+							{
+								"label": "Tile Sheet",
+								"value": "tileSheet",
+								"credits": 0.1,
+								"server": "Croskie",
+								"serverId": 4,
+								"routes": {
+									"text": {
+										"method": "tileSheet"
+									}
+								},
+								"fields": [
+									{
+										"key": "grid",
+										"type": "number",
+										"label": "Grid"
+									},
+									{
+										"key": "seed",
+										"type": "text",
+										"label": "Seed"
+									},
+									{
+										"key": "gridLines",
+										"type": "number",
+										"label": "Grid lines"
+									}
+								]
+							},
+							{
+								"label": "Wallpaper",
+								"value": "wallpaper",
+								"credits": 0.1,
+								"server": "Croskie",
+								"serverId": 4,
+								"routes": {
+									"text": {
+										"method": "wallpaper"
+									}
+								}
+							},
+							{
+								"label": "Chibi Pixel",
+								"value": "chibiPixel",
+								"credits": 0.1,
+								"server": "Croskie",
+								"serverId": 4,
+								"routes": {
+									"text": {
+										"method": "chibiPixel"
+									}
+								}
+							},
+							{
+								"label": "Emotion Portrait",
+								"value": "emotionGen",
+								"credits": 0.1,
+								"server": "Croskie",
+								"serverId": 4,
+								"routes": {
+									"text": {
+										"method": "emotionGen"
+									}
+								},
+								"fields": [
+									{
+										"key": "emotion",
+										"type": "text",
+										"label": "Emotion"
+									},
+									{
+										"key": "seed",
+										"type": "text",
+										"label": "Seed"
+									},
+									{
+										"key": "scale",
+										"type": "number",
+										"label": "Scale"
+									}
+								]
+							},
+							{
+								"label": "Random Character",
+								"value": "personaGen",
+								"credits": 0.1,
+								"server": "Croskie",
+								"serverId": 4,
+								"routes": {
+									"text": {
+										"method": "personaGen"
+									}
+								}
+							},
+							{
+								"label": "Mutation",
+								"value": "mutationGen",
+								"credits": 0.1,
+								"server": "Croskie",
+								"serverId": 4,
+								"routes": {
+									"text": {
+										"method": "mutationGen"
+									}
+								},
+								"fields": [
+									{
+										"key": "baseType",
+										"type": "select",
+										"label": "Base type",
+										"options": [
+											{
+												"label": "Random",
+												"value": ""
+											},
+											{
+												"label": "Hero",
+												"value": "hero"
+											},
+											{
+												"label": "Creature",
+												"value": "creature"
+											},
+											{
+												"label": "Robot",
+												"value": "robot"
+											},
+											{
+												"label": "Animal",
+												"value": "animal"
+											},
+											{
+												"label": "Food",
+												"value": "food"
+											}
+										]
+									},
+									{
+										"key": "chaosLevel",
+										"type": "select",
+										"label": "Chaos level",
+										"options": [
+											{
+												"label": "Low",
+												"value": "low"
+											},
+											{
+												"label": "Medium",
+												"value": "medium"
+											},
+											{
+												"label": "Maximum",
+												"value": "max"
+											}
+										]
+									}
+								]
+							},
+							{
+								"label": "Birthday Card",
+								"value": "birthdayCard",
+								"credits": 0.1,
+								"server": "Croskie",
+								"serverId": 4,
+								"routes": {
+									"text": {
+										"method": "birthdayCard"
+									}
+								},
+								"fields": [
+									{
+										"key": "name",
+										"type": "text",
+										"label": "Name"
+									},
+									{
+										"key": "age",
+										"type": "text",
+										"label": "Age"
+									},
+									{
+										"key": "theme",
+										"type": "select",
+										"label": "Theme",
+										"options": [
+											{
+												"label": "Cute",
+												"value": "cute"
+											},
+											{
+												"label": "Elegant",
+												"value": "elegant"
+											},
+											{
+												"label": "Party",
+												"value": "party"
+											},
+											{
+												"label": "Floral",
+												"value": "floral"
+											},
+											{
+												"label": "Kids",
+												"value": "kids"
+											},
+											{
+												"label": "Pastel",
+												"value": "pastel"
+											},
+											{
+												"label": "Bold",
+												"value": "bold"
+											},
+											{
+												"label": "Minimal",
+												"value": "minimal"
+											}
+										]
+									},
+									{
+										"key": "color",
+										"type": "select",
+										"label": "Color palette",
+										"options": [
+											{
+												"label": "Pink",
+												"value": "pink"
+											},
+											{
+												"label": "Blue",
+												"value": "blue"
+											},
+											{
+												"label": "Purple",
+												"value": "purple"
+											},
+											{
+												"label": "Gold",
+												"value": "gold"
+											},
+											{
+												"label": "Rainbow",
+												"value": "rainbow"
+											},
+											{
+												"label": "Red",
+												"value": "red"
+											},
+											{
+												"label": "Green",
+												"value": "green"
+											},
+											{
+												"label": "Pastel",
+												"value": "pastel"
+											}
+										]
+									},
+									{
+										"key": "layout",
+										"type": "select",
+										"label": "Layout",
+										"options": [
+											{
+												"label": "Centered",
+												"value": "centered"
+											},
+											{
+												"label": "Split",
+												"value": "split"
+											},
+											{
+												"label": "Framed",
+												"value": "framed"
+											},
+											{
+												"label": "Confetti top",
+												"value": "confetti-top"
+											},
+											{
+												"label": "Balloon corners",
+												"value": "balloon-corners"
+											}
+										]
+									},
+									{
+										"key": "messageStyle",
+										"type": "select",
+										"label": "Message style",
+										"options": [
+											{
+												"label": "Simple",
+												"value": "simple"
+											},
+											{
+												"label": "Sweet",
+												"value": "sweet"
+											},
+											{
+												"label": "Funny",
+												"value": "funny"
+											},
+											{
+												"label": "Cheerful",
+												"value": "cheerful"
+											}
+										]
+									}
+								]
+							},
+							{
+								"label": "Fortune Cookie",
+								"value": "fortuneCookie",
+								"credits": 0.1,
+								"server": "Croskie",
+								"serverId": 4,
+								"routes": {
+									"text": {
+										"method": "fortuneCookie"
+									}
+								}
+							},
+							{
+								"label": "Website Design",
+								"value": "websiteDesign",
+								"credits": 0.1,
+								"server": "Croskie",
+								"serverId": 4,
+								"routes": {
+									"text": {
+										"method": "websiteDesign"
+									}
+								}
+							}
+						]
+					}
+				]
+			}
+		]
+	},
+	"audio": {
+		"models": [
+			{
+				"id": "1-minimax-speech-2-8-turbo",
+				"label": "MiniMax Speech 2.8 Turbo",
+				"serverId": 1,
+				"server": "Parascene",
+				"credits": 2,
+				"fields": [
+					{
+						"key": "prompt",
+						"type": "text",
+						"label": "Prompt",
+						"required": true
+					},
+					{
+						"key": "voice",
+						"type": "select",
+						"label": "Voice",
+						"options": [
+							{
+								"label": "Expressive narrator",
+								"value": "English_expressive_narrator"
+							},
+							{
+								"label": "Radiant girl",
+								"value": "English_radiant_girl"
+							},
+							{
+								"label": "Magnetic man",
+								"value": "English_magnetic_voiced_man"
+							},
+							{
+								"label": "Compelling lady",
+								"value": "English_compelling_lady1"
+							},
+							{
+								"label": "Aussie bloke",
+								"value": "English_Aussie_Bloke"
+							},
+							{
+								"label": "Captivating female",
+								"value": "English_captivating_female1"
+							},
+							{
+								"label": "Upbeat woman",
+								"value": "English_Upbeat_Woman"
+							},
+							{
+								"label": "Trustworthy man",
+								"value": "English_Trustworth_Man"
+							},
+							{
+								"label": "Calm woman",
+								"value": "English_CalmWoman"
+							},
+							{
+								"label": "Reserved young man",
+								"value": "English_ReservedYoungMan"
+							},
+							{
+								"label": "Playful girl",
+								"value": "English_PlayfulGirl"
+							},
+							{
+								"label": "Deep-voiced man",
+								"value": "English_ManWithDeepVoice"
+							},
+							{
+								"label": "Graceful lady",
+								"value": "English_Graceful_Lady"
+							},
+							{
+								"label": "Casual man",
+								"value": "English_CasualMan"
+							},
+							{
+								"label": "Custom",
+								"value": "custom"
+							}
+						]
+					},
+					{
+						"key": "emotion",
+						"type": "select",
+						"label": "Emotion",
+						"options": [
+							{
+								"label": "Auto",
+								"value": "auto"
+							},
+							{
+								"label": "Happy",
+								"value": "happy"
+							},
+							{
+								"label": "Sad",
+								"value": "sad"
+							},
+							{
+								"label": "Angry",
+								"value": "angry"
+							},
+							{
+								"label": "Fearful",
+								"value": "fearful"
+							},
+							{
+								"label": "Disgusted",
+								"value": "disgusted"
+							},
+							{
+								"label": "Surprised",
+								"value": "surprised"
+							},
+							{
+								"label": "Calm",
+								"value": "calm"
+							},
+							{
+								"label": "Fluent",
+								"value": "fluent"
+							},
+							{
+								"label": "Neutral",
+								"value": "neutral"
+							}
+						]
+					}
+				],
+				"routes": {
+					"text": {
+						"method": "replicateSpeech",
+						"model": "minimax/speech-2.8-turbo"
+					}
+				},
+				"section": "Speech"
+			},
+			{
+				"id": "1-google-gemini-3-1-flash-tts",
+				"label": "Gemini 3.1 Flash TTS",
+				"serverId": 1,
+				"server": "Parascene",
+				"credits": 2,
+				"fields": [
+					{
+						"key": "prompt",
+						"type": "text",
+						"label": "Prompt",
+						"required": true
+					},
+					{
+						"key": "voice",
+						"type": "select",
+						"label": "Voice",
+						"options": [
+							{
+								"label": "Achernar — Female; soft and understated",
+								"value": "Achernar"
+							},
+							{
+								"label": "Achird — Male; friendly and approachable",
+								"value": "Achird"
+							},
+							{
+								"label": "Algenib — Male; gravelly and textured",
+								"value": "Algenib"
+							},
+							{
+								"label": "Algieba — Male; smooth and polished",
+								"value": "Algieba"
+							},
+							{
+								"label": "Alnilam — Male; firm and authoritative",
+								"value": "Alnilam"
+							},
+							{
+								"label": "Aoede — Female; breezy and relaxed",
+								"value": "Aoede"
+							},
+							{
+								"label": "Autonoe — Female; bright and energetic",
+								"value": "Autonoe"
+							},
+							{
+								"label": "Callirrhoe — Female; easygoing and unforced",
+								"value": "Callirrhoe"
+							},
+							{
+								"label": "Charon — Male; informative and composed",
+								"value": "Charon"
+							},
+							{
+								"label": "Despina — Female; smooth and controlled",
+								"value": "Despina"
+							},
+							{
+								"label": "Enceladus — Male; breathy and intimate",
+								"value": "Enceladus"
+							},
+							{
+								"label": "Erinome — Female; clear and articulate",
+								"value": "Erinome"
+							},
+							{
+								"label": "Fenrir — Male; excitable and energetic",
+								"value": "Fenrir"
+							},
+							{
+								"label": "Gacrux — Mature female; grounded and experienced",
+								"value": "Gacrux"
+							},
+							{
+								"label": "Iapetus — Male; clear and steady",
+								"value": "Iapetus"
+							},
+							{
+								"label": "Kore — Female; firm and confident",
+								"value": "Kore"
+							},
+							{
+								"label": "Laomedeia — Female; upbeat and cheerful",
+								"value": "Laomedeia"
+							},
+							{
+								"label": "Leda — Young female; youthful and light",
+								"value": "Leda"
+							},
+							{
+								"label": "Orus — Male; firm and direct",
+								"value": "Orus"
+							},
+							{
+								"label": "Pulcherrima — Female; forward and assertive",
+								"value": "Pulcherrima"
+							},
+							{
+								"label": "Puck — Male; upbeat and playful",
+								"value": "Puck"
+							},
+							{
+								"label": "Rasalgethi — Male; informative and measured",
+								"value": "Rasalgethi"
+							},
+							{
+								"label": "Sadachbia — Male; lively and animated",
+								"value": "Sadachbia"
+							},
+							{
+								"label": "Sadaltager — Male; knowledgeable and assured",
+								"value": "Sadaltager"
+							},
+							{
+								"label": "Schedar — Male; even and balanced",
+								"value": "Schedar"
+							},
+							{
+								"label": "Sulafat — Female; warm and welcoming",
+								"value": "Sulafat"
+							},
+							{
+								"label": "Umbriel — Male; easygoing and calm",
+								"value": "Umbriel"
+							},
+							{
+								"label": "Vindemiatrix — Female; gentle and tender",
+								"value": "Vindemiatrix"
+							},
+							{
+								"label": "Zephyr — Female; bright and airy",
+								"value": "Zephyr"
+							},
+							{
+								"label": "Zubenelgenubi — Male; casual and conversational",
+								"value": "Zubenelgenubi"
+							}
+						]
+					},
+					{
+						"key": "style",
+						"type": "text",
+						"label": "Style"
+					}
+				],
+				"routes": {
+					"text": {
+						"method": "replicateSpeech",
+						"model": "google/gemini-3.1-flash-tts"
+					}
+				},
+				"section": "Speech"
+			},
+			{
+				"id": "1-voice-train",
+				"label": "Voice train",
+				"serverId": 1,
+				"server": "Parascene",
+				"credits": 175,
+				"fields": [
+					{
+						"key": "voice_file",
+						"type": "audio",
+						"label": "Voice file",
+						"role": "audio",
+						"required": true
+					}
+				],
+				"routes": {
+					"audio": {
+						"method": "replicateVoiceTrain",
+						"model": "voice-train"
+					}
+				},
+				"section": "Speech"
+			},
+			{
+				"id": "1-google-lyria-3",
+				"label": "Lyria 3",
+				"serverId": 1,
+				"server": "Parascene",
+				"credits": 10,
+				"fields": [
+					{
+						"key": "prompt",
+						"type": "text",
+						"label": "Prompt",
+						"required": true
+					},
+					{
+						"key": "lyrics",
+						"type": "text",
+						"label": "Lyrics"
+					}
+				],
+				"routes": {
+					"text": {
+						"method": "replicateMusic",
+						"model": "google/lyria-3"
+					}
+				},
+				"section": "Music"
+			},
+			{
+				"id": "minimax-music",
+				"label": "MiniMax Music",
+				"serverId": 1,
+				"server": "Parascene",
+				"fields": [
+					{
+						"key": "variant",
+						"type": "select",
+						"label": "Variant",
+						"options": [
+							{
+								"label": "2.6",
+								"value": "2.6",
+								"credits": 10,
+								"server": "Parascene",
+								"serverId": 1,
+								"routes": {
+									"text": {
+										"method": "replicateMusic",
+										"model": "minimax/music-2.6"
+									}
+								}
+							},
+							{
+								"label": "3",
+								"value": "3",
+								"credits": 1,
+								"server": "Parascene Blue",
+								"serverId": 6,
+								"routes": {
+									"text": {
+										"method": "text2audio",
+										"model": "minimax_music3"
+									}
+								}
+							}
+						]
+					},
+					{
+						"key": "prompt",
+						"type": "text",
+						"label": "Prompt",
+						"required": true
+					},
+					{
+						"key": "lyrics",
+						"type": "text",
+						"label": "Lyrics"
+					}
+				],
+				"section": "Music"
+			},
+			{
+				"id": "yue2",
+				"label": "YuE2",
+				"serverId": 6,
+				"server": "Parascene Blue",
+				"credits": 1,
+				"fields": [
+					{
+						"key": "variant",
+						"type": "select",
+						"label": "Variant",
+						"options": [
+							{
+								"label": "Song",
+								"value": "song",
+								"credits": 1,
+								"server": "Parascene Blue",
+								"serverId": 6,
+								"routes": {
+									"text": {
+										"method": "text2audio",
+										"model": "yue2"
+									}
+								},
+								"fields": [
+									{
+										"key": "abc",
+										"type": "text",
+										"label": "ABC"
+									}
+								]
+							},
+							{
+								"label": "Cover",
+								"value": "cover",
+								"credits": 1,
+								"server": "Parascene Blue",
+								"serverId": 6,
+								"routes": {
+									"audio": {
+										"method": "audio2audio",
+										"model": "yue2_cover"
+									}
+								},
+								"fields": [
+									{
+										"key": "input_audio_urls",
+										"type": "audio",
+										"label": "Audio",
+										"role": "audio",
+										"required": true
+									}
+								]
+							}
+						]
+					},
+					{
+						"key": "prompt",
+						"type": "text",
+						"label": "Prompt",
+						"required": true
+					},
+					{
+						"key": "lyrics",
+						"type": "text",
+						"label": "Lyrics"
+					}
+				],
+				"section": "Music"
+			},
+			{
+				"id": "ltx-2-5-audio",
+				"label": "LTX 2.5",
+				"serverId": 6,
+				"server": "Parascene Blue",
+				"credits": 1,
+				"fields": [
+					{
+						"key": "prompt",
+						"type": "text",
+						"label": "Prompt",
+						"required": true
+					}
+				],
+				"routes": {
+					"text": {
+						"method": "text2audio",
+						"model": "ltx25_t2a"
+					}
+				},
+				"section": "Music"
+			}
+		]
+	},
+	"video": {
+		"models": [
+			{
+				"id": "minimax-h3",
+				"label": "MiniMax H3",
+				"serverId": 6,
+				"server": "Parascene Blue",
+				"fields": [
+					{
+						"key": "variant",
+						"type": "select",
+						"label": "Variant",
+						"options": [
+							{
+								"label": "H3",
+								"value": "h3",
+								"credits": 20,
+								"server": "Parascene Blue",
+								"serverId": 6,
+								"routes": {
+									"text": {
+										"method": "text2video",
+										"model": "minimax_t2v"
+									},
+									"image": {
+										"method": "image2video",
+										"model": "minimax_i2v"
+									}
+								},
+								"fields": [
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Start image",
+										"role": "image"
+									}
+								]
+							},
+							{
+								"label": "Fast H3",
+								"value": "fast-h3",
+								"credits": 20,
+								"server": "Parascene Blue",
+								"serverId": 6,
+								"routes": {
+									"text": {
+										"method": "text2video",
+										"model": "fasth3_t2v"
+									},
+									"image": {
+										"method": "image2video",
+										"model": "fasth3_i2v"
+									}
+								},
+								"fields": [
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Start image",
+										"role": "image"
+									}
+								]
+							},
+							{
+								"label": "Reference",
+								"value": "reference",
+								"credits": 60,
+								"server": "Parascene Blue",
+								"serverId": 6,
+								"routes": {
+									"ref": {
+										"method": "reference2video",
+										"model": "minimax_r2v"
+									}
+								},
+								"fields": [
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Reference image",
+										"role": "ref"
+									},
+									{
+										"key": "input_video_urls",
+										"type": "video",
+										"label": "Reference video",
+										"role": "ref"
+									},
+									{
+										"key": "input_audio_urls",
+										"type": "audio",
+										"label": "Reference audio",
+										"role": "ref"
+									}
+								]
+							},
+							{
+								"label": "Reference Turbo",
+								"value": "reference-turbo",
+								"credits": 60,
+								"server": "Parascene Blue",
+								"serverId": 6,
+								"routes": {
+									"ref": {
+										"method": "reference2video",
+										"model": "minimax_r2v_turbo"
+									}
+								},
+								"fields": [
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Reference image",
+										"role": "ref"
+									},
+									{
+										"key": "input_video_urls",
+										"type": "video",
+										"label": "Reference video",
+										"role": "ref"
+									},
+									{
+										"key": "input_audio_urls",
+										"type": "audio",
+										"label": "Reference audio",
+										"role": "ref"
+									}
+								]
+							},
+							{
+								"label": "Reference PDD",
+								"value": "reference-pdd",
+								"credits": 60,
+								"server": "Parascene Blue",
+								"serverId": 6,
+								"routes": {
+									"ref": {
+										"method": "reference2video",
+										"model": "minimax_r2v_pdd"
+									}
+								},
+								"fields": [
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Reference image",
+										"role": "ref"
+									},
+									{
+										"key": "input_video_urls",
+										"type": "video",
+										"label": "Reference video",
+										"role": "ref"
+									},
+									{
+										"key": "input_audio_urls",
+										"type": "audio",
+										"label": "Reference audio",
+										"role": "ref"
+									}
+								]
+							}
+						]
+					},
+					{
+						"key": "prompt",
+						"type": "text",
+						"label": "Prompt",
+						"required": true
+					},
+					{
+						"key": "aspect_ratio",
+						"type": "select",
+						"label": "Aspect ratio",
+						"options": [
+							{
+								"label": "1:1",
+								"value": "1:1"
+							},
+							{
+								"label": "4:5",
+								"value": "4:5"
+							},
+							{
+								"label": "9:16",
+								"value": "9:16"
+							},
+							{
+								"label": "16:9",
+								"value": "16:9"
+							}
+						]
+					}
+				]
+			},
+			{
+				"id": "6-ltx",
+				"label": "LTX",
+				"serverId": 6,
+				"server": "Parascene Blue",
+				"fields": [
+					{
+						"key": "variant",
+						"type": "select",
+						"label": "Variant",
+						"options": [
+							{
+								"label": "2.5",
+								"value": "2.5",
+								"credits": 20,
+								"server": "Parascene Blue",
+								"serverId": 6,
+								"routes": {
+									"text": {
+										"method": "text2video",
+										"model": "ltx25_t2v"
+									},
+									"image": {
+										"method": "image2video",
+										"model": "ltx25_i2v"
+									},
+									"audio": {
+										"method": "audio2video",
+										"model": "ltx25_a2v"
+									}
+								},
+								"fields": [
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Start image",
+										"role": "image"
+									},
+									{
+										"key": "input_audio_urls",
+										"type": "audio",
+										"label": "Audio",
+										"role": "audio"
+									}
+								],
+								"section": "LTX 2.5"
+							},
+							{
+								"label": "IC-LoRA",
+								"value": "ltx25-ic-lora",
+								"credits": 60,
+								"server": "Parascene Blue",
+								"serverId": 6,
+								"routes": {
+									"video": {
+										"method": "video2video",
+										"model": "ltx25_ic_lora"
+									}
+								},
+								"fields": [
+									{
+										"key": "input_video_urls",
+										"type": "video",
+										"label": "Video",
+										"role": "video",
+										"required": true
+									},
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Start image",
+										"role": "image"
+									}
+								],
+								"section": "LTX 2.5"
+							},
+							{
+								"label": "Ingredients",
+								"value": "ltx25-ingredients",
+								"credits": 60,
+								"server": "Parascene Blue",
+								"serverId": 6,
+								"routes": {
+									"ref": {
+										"method": "reference2video",
+										"model": "ltx25_ingredients"
+									}
+								},
+								"fields": [
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Reference image",
+										"role": "ref"
+									}
+								],
+								"section": "LTX 2.5"
+							},
+							{
+								"label": "2.3",
+								"value": "2.3",
+								"credits": 20,
+								"server": "Parascene Blue",
+								"serverId": 6,
+								"routes": {
+									"text": {
+										"method": "text2video",
+										"model": "ltx_t2v"
+									},
+									"image": {
+										"method": "image2video",
+										"model": "ltx_i2v"
+									},
+									"audio": {
+										"method": "audio2video",
+										"model": "ltx_a2v"
+									}
+								},
+								"fields": [
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Start image",
+										"role": "image"
+									},
+									{
+										"key": "input_audio_urls",
+										"type": "audio",
+										"label": "Audio",
+										"role": "audio"
+									}
+								],
+								"section": "LTX 2.3"
+							},
+							{
+								"label": "ID-LoRA",
+								"value": "id-lora",
+								"credits": 20,
+								"server": "Parascene Blue",
+								"serverId": 6,
+								"routes": {
+									"audio": {
+										"method": "audio2video",
+										"model": "ltx_id_lora"
+									}
+								},
+								"fields": [
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Start image",
+										"role": "image",
+										"required": true
+									},
+									{
+										"key": "input_audio_urls",
+										"type": "audio",
+										"label": "Audio",
+										"role": "audio",
+										"required": true
+									}
+								],
+								"section": "LTX 2.3"
+							},
+							{
+								"label": "Style transition",
+								"value": "style-transition",
+								"credits": 20,
+								"server": "Parascene Blue",
+								"serverId": 6,
+								"routes": {
+									"image": {
+										"method": "image2video",
+										"model": "ltx_style_transition"
+									}
+								},
+								"fields": [
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Start image",
+										"role": "image",
+										"required": true
+									}
+								],
+								"section": "LTX 2.3"
+							},
+							{
+								"label": "IC-LoRA",
+								"value": "ic-lora",
+								"credits": 60,
+								"server": "Parascene Blue",
+								"serverId": 6,
+								"routes": {
+									"video": {
+										"method": "video2video",
+										"model": "ltx_ic_lora"
+									}
+								},
+								"fields": [
+									{
+										"key": "input_video_urls",
+										"type": "video",
+										"label": "Video",
+										"role": "video",
+										"required": true
+									},
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Start image",
+										"role": "image"
+									}
+								],
+								"section": "LTX 2.3"
+							},
+							{
+								"label": "Ingredients",
+								"value": "ingredients",
+								"credits": 60,
+								"server": "Parascene Blue",
+								"serverId": 6,
+								"routes": {
+									"ref": {
+										"method": "reference2video",
+										"model": "ltx_ingredients"
+									}
+								},
+								"fields": [
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Reference image",
+										"role": "ref"
+									}
+								],
+								"section": "LTX 2.3"
+							}
+						]
+					},
+					{
+						"key": "prompt",
+						"type": "text",
+						"label": "Prompt",
+						"required": true
+					},
+					{
+						"key": "aspect_ratio",
+						"type": "select",
+						"label": "Aspect ratio",
+						"options": [
+							{
+								"label": "1:1",
+								"value": "1:1"
+							},
+							{
+								"label": "4:5",
+								"value": "4:5"
+							},
+							{
+								"label": "9:16",
+								"value": "9:16"
+							},
+							{
+								"label": "16:9",
+								"value": "16:9"
+							}
+						]
+					}
+				]
+			},
+			{
+				"id": "6-wan",
+				"label": "Wan",
+				"serverId": 6,
+				"server": "Parascene Blue",
+				"fields": [
+					{
+						"key": "variant",
+						"type": "select",
+						"label": "Variant",
+						"options": [
+							{
+								"label": "2.2",
+								"value": "2.2",
+								"credits": 20,
+								"server": "Parascene Blue",
+								"serverId": 6,
+								"routes": {
+									"text": {
+										"method": "text2video",
+										"model": "wan_t2v"
+									},
+									"image": {
+										"method": "image2video",
+										"model": "wan_i2v"
+									}
+								},
+								"fields": [
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Start image",
+										"role": "image"
+									}
+								]
+							},
+							{
+								"label": "2.2 Fast",
+								"value": "2.2-fast",
+								"credits": 10,
+								"server": "Parascene",
+								"serverId": 1,
+								"routes": {
+									"image": {
+										"method": "replicateVideo",
+										"model": "wan-video/wan-2.2-i2v-fast"
+									}
+								},
+								"fields": [
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Start image",
+										"role": "image",
+										"required": true
+									}
+								]
+							},
+							{
+								"label": "Animate 2",
+								"value": "animate-2",
+								"credits": 60,
+								"server": "Parascene Blue",
+								"serverId": 6,
+								"routes": {
+									"video": {
+										"method": "video2video",
+										"model": "wan_animate"
+									}
+								},
+								"fields": [
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Reference image",
+										"role": "image"
+									},
+									{
+										"key": "input_video_urls",
+										"type": "video",
+										"label": "Driving video",
+										"role": "video",
+										"required": true
+									}
+								]
+							},
+							{
+								"label": "Bernini-R",
+								"value": "bernini-r",
+								"credits": 60,
+								"server": "Parascene Blue",
+								"serverId": 6,
+								"routes": {
+									"video": {
+										"method": "video2video",
+										"model": "bernini_r_v2v"
+									}
+								},
+								"fields": [
+									{
+										"key": "input_video_urls",
+										"type": "video",
+										"label": "Video",
+										"role": "video",
+										"required": true
+									}
+								]
+							},
+							{
+								"label": "SCAIL2",
+								"value": "scail2",
+								"credits": 60,
+								"server": "Parascene Blue",
+								"serverId": 6,
+								"routes": {
+									"video": {
+										"method": "video2video",
+										"model": "wan_scail"
+									}
+								},
+								"fields": [
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Reference image",
+										"role": "image"
+									},
+									{
+										"key": "input_video_urls",
+										"type": "video",
+										"label": "Driving video",
+										"role": "video",
+										"required": true
+									}
+								]
+							},
+							{
+								"label": "SCAIL2 FP16",
+								"value": "scail2-fp16",
+								"credits": 60,
+								"server": "Parascene Blue",
+								"serverId": 6,
+								"routes": {
+									"video": {
+										"method": "video2video",
+										"model": "wan_scail_fp16"
+									}
+								},
+								"fields": [
+									{
+										"key": "input_images",
+										"type": "image",
+										"label": "Reference image",
+										"role": "image"
+									},
+									{
+										"key": "input_video_urls",
+										"type": "video",
+										"label": "Driving video",
+										"role": "video",
+										"required": true
+									}
+								]
+							}
+						]
+					},
+					{
+						"key": "prompt",
+						"type": "text",
+						"label": "Prompt",
+						"required": true
+					},
+					{
+						"key": "aspect_ratio",
+						"type": "select",
+						"label": "Aspect ratio",
+						"options": [
+							{
+								"label": "1:1",
+								"value": "1:1"
+							},
+							{
+								"label": "4:5",
+								"value": "4:5"
+							},
+							{
+								"label": "9:16",
+								"value": "9:16"
+							},
+							{
+								"label": "16:9",
+								"value": "16:9"
+							}
+						]
+					}
+				]
+			}
+		]
+	},
+	"upload": {
+		"serverId": 1,
+		"server": "Parascene",
+		"credits": 0,
+		"fields": [
+			{
+				"key": "image_url",
+				"type": "image",
+				"label": "Image",
+				"role": "image",
+				"required": true
+			},
+			{
+				"key": "aspect_ratio",
+				"type": "select",
+				"label": "Aspect ratio",
+				"options": [
+					{
+						"label": "1:1",
+						"value": "1:1"
+					},
+					{
+						"label": "4:5",
+						"value": "4:5"
+					},
+					{
+						"label": "9:16",
+						"value": "9:16"
+					},
+					{
+						"label": "16:9",
+						"value": "16:9"
+					}
+				]
+			}
+		],
+		"routes": {
+			"image": {
+				"method": "uploadImage"
+			}
+		}
+	}
+}

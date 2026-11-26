@@ -79,6 +79,7 @@ export function createConversationChrome({ services, setHeaderMenu, setHeaderAcc
      if (rightSidebar.restoration) rightSidebar.close({ forget: false });
     }
     else if (rightSidebar.restoreDismissed) preference(null);
+    else if (rightSidebar.sticky) { /* The create pane stays open across pages. */ }
     else {
      const savedKey = rightSidebar.restoration?.key;
      let id = savedKey?.startsWith(`canvas:${thread.id}:`) ? Number(savedKey.split(':').at(-1)) : null; try { id ||= JSON.parse(localStorage.getItem(storageKey) || '{}')[String(thread.id)]; } catch {}
